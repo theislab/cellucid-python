@@ -1,0 +1,37 @@
+# Bytecode / cache
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# Virtual envs
+.env
+.venv
+env/
+venv/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Build / dist
+build/
+dist/
+*.egg-info/
+htmlcov/
+.coverage
+coverage.xml
+
+# Logs / dumps
+*.log
+*.tmp
+*.swp
+
+# Local data artifacts
+data/**
+!data/.gitkeep
+!data/raw/.gitkeep
+!data/experiments/.gitkeep
+exports/**
+project_context.txt

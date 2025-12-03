@@ -1,0 +1,960 @@
+#!/usr/bin/env python3
+"""
+Export raw dataframes/arrays to files used by the WebGL viewer.
+
+Includes memory/disk optimization features:
+- Quantization for continuous data (var/gene expression and obs continuous)
+- Auto dtype selection for categorical obs based on category count
+- Gzip compression for all binary files
+
+Instead of AnnData, accepts:
+- latent_space: (n_cells, n_dims) numpy/sparse array for outlier quantile calculation
+- X_umap: (n_cells, 3) numpy array for 3D UMAP coordinates
+- obs: pandas DataFrame with cell metadata columns
+- var: pandas DataFrame with gene/feature metadata
+- gene_expression: (n_cells, n_genes) numpy/sparse array for gene expression matrix
+- var_gene_id_column: column name in var containing gene identifiers, or "index" to use var.index
+- connectivities: sparse matrix with KNN connectivities
+"""
+import gzip
+import json
+import re
+import tqdm
+from pathlib import Path
+from typing import Optional, Sequence, Union, Literal
+
+import numpy as np
+import pandas as pd
+from scipy import sparse
+
+DEFAULT_EXPORT_DIR = Path.cwd() / "exports"
+DEFAULT_OBS_DIRNAME = "obs"
+DEFAULT_VAR_DIRNAME = "var"
+DEFAULT_CONNECTIVITY_DIRNAME = "connectivity"
+
+
+def _safe_filename_component(name: str) -> str:
+    """Return a filesystem-friendly version of a field key."""
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", str(name))
+    safe = safe.strip("._")
+    return safe or "field"
+
+
+def _to_dense(arr: Union[np.ndarray, sparse.spmatrix]) -> np.ndarray:
+    """Convert sparse matrix to dense numpy array if necessary."""
+    if sparse.issparse(arr):
+        return np.asarray(arr.toarray())
+    return np.asarray(arr)
+
+
+def _file_exists_skip(path: Path, description: str, force: bool = False) -> bool:
+    """Check if file exists and should be skipped. Returns True if should skip."""
+    if path.exists() and not force:
+        print(f"⚠ Skipping {description}: {path} already exists (use force=True to overwrite)")
+        return True
+    return False
+
+
+def _dir_has_files(dir_path: Path, pattern: str = "*") -> bool:
+    """Check if directory has any files matching pattern."""
+    if not dir_path.exists():
+        return False
+    return any(dir_path.glob(pattern))
+
+
+def _write_binary(
+    path: Path,
+    data: np.ndarray,
+    compression: Optional[int] = None,
+) -> None:
+    """
+    Write binary data, optionally with gzip compression.
+    
+    Parameters
+    ----------
+    path : Path
+        Output path. If compression is enabled, '.gz' will be appended.
+    data : np.ndarray
+        Data to write.
+    compression : int or None
+        Gzip compression level (1-9). None or 0 means no compression.
+        
+    Returns
+    -------
+    Path
+        Actual path written (may have .gz suffix).
+    """
+    if compression and compression > 0:
+        gz_path = Path(str(path) + ".gz")
+        with gzip.open(gz_path, 'wb', compresslevel=compression) as f:
+            f.write(data.tobytes())
+        return gz_path
+    else:
+        data.tofile(path)
+        return path
+
+
+def _quantize_continuous(
+    values: np.ndarray,
+    bits: int = 8,
+    field_name: str = "unknown",
+) -> tuple[np.ndarray, float, float, float, dict]:
+    """
+    Quantize continuous float32 values to uint8 or uint16.
+    
+    Parameters
+    ----------
+    values : np.ndarray
+        Float32 values to quantize.
+    bits : int
+        Number of bits for quantization (8 or 16).
+    field_name : str
+        Name of field for debug messages.
+        
+    Returns
+    -------
+    quantized : np.ndarray
+        Quantized values as uint8 or uint16.
+    min_val : float
+        Minimum value (for dequantization).
+    max_val : float
+        Maximum value (for dequantization).
+    scale : float
+        Scale factor (for dequantization).
+    stats : dict
+        Statistics about the quantization for debugging.
+    """
+    n_total = len(values)
+    
+    # Identify problematic values
+    nan_mask = np.isnan(values)
+    inf_mask = np.isinf(values)
+    invalid_mask = nan_mask | inf_mask
+    valid_mask = ~invalid_mask
+    
+    n_nan = int(nan_mask.sum())
+    n_inf = int(inf_mask.sum())
+    n_valid = int(valid_mask.sum())
+    
+    stats = {
+        "n_total": n_total,
+        "n_valid": n_valid,
+        "n_nan": n_nan,
+        "n_inf": n_inf,
+    }
+    
+    if n_valid == 0:
+        # All invalid values
+        min_val, max_val = 0.0, 1.0
+        stats["warning"] = "all_invalid"
+    else:
+        valid_values = values[valid_mask]
+        min_val = float(np.min(valid_values))
+        max_val = float(np.max(valid_values))
+        stats["data_min"] = min_val
+        stats["data_max"] = max_val
+    
+    # Avoid division by zero
+    if max_val == min_val:
+        max_val = min_val + 1.0
+        stats["constant_value"] = True
+    
+    if bits == 8:
+        max_quant = 254  # Reserve 255 for NaN/Inf
+        dtype = np.uint8
+        nan_value = 255
+    else:  # 16 bits
+        max_quant = 65534  # Reserve 65535 for NaN/Inf
+        dtype = np.uint16
+        nan_value = 65535
+    
+    scale = max_quant / (max_val - min_val)
+    
+    # Create output array
+    quantized = np.empty(n_total, dtype=dtype)
+    
+    # Only quantize valid values to avoid numpy warnings
+    if n_valid > 0:
+        normalized = (values[valid_mask] - min_val) * scale
+        quantized[valid_mask] = np.clip(normalized, 0, max_quant).astype(dtype)
+    
+    # Set invalid values to reserved marker
+    quantized[invalid_mask] = nan_value
+    
+    return quantized, min_val, max_val, scale, stats
+
+
+def _select_category_dtype(n_categories: int) -> tuple[np.dtype, int]:
+    """
+    Select optimal dtype for category codes based on number of categories.
+    
+    Parameters
+    ----------
+    n_categories : int
+        Number of unique categories (not counting missing).
+        
+    Returns
+    -------
+    dtype : np.dtype
+        Optimal dtype (uint8 or uint16).
+    missing_value : int
+        Value to use for missing/NaN codes.
+    """
+    if n_categories <= 254:
+        # uint8 can hold 0-254 for categories, 255 for missing
+        return np.uint8, 255
+    else:
+        # uint16 can hold 0-65534 for categories, 65535 for missing
+        return np.uint16, 65535
+
+
+def _report_quantization_stats(field_name: str, stats: dict, field_type: str = "field") -> None:
+    """
+    Report quantization statistics and warnings.
+    
+    Parameters
+    ----------
+    field_name : str
+        Name of the field being quantized.
+    stats : dict
+        Statistics from _quantize_continuous.
+    field_type : str
+        Type of field for messages (e.g., "obs field", "gene", "outlier quantiles").
+    """
+    n_nan = stats.get("n_nan", 0)
+    n_inf = stats.get("n_inf", 0)
+    n_total = stats.get("n_total", 0)
+    n_valid = stats.get("n_valid", 0)
+    
+    issues = []
+    
+    if n_nan > 0:
+        pct = 100 * n_nan / n_total if n_total > 0 else 0
+        issues.append(f"{n_nan:,} NaN values ({pct:.1f}%)")
+    
+    if n_inf > 0:
+        pct = 100 * n_inf / n_total if n_total > 0 else 0
+        issues.append(f"{n_inf:,} Inf values ({pct:.1f}%)")
+    
+    if stats.get("warning") == "all_invalid":
+        print(f"  ⚠ WARNING: {field_type} '{field_name}' has NO valid values (all NaN/Inf)")
+    elif issues:
+        print(f"  ⚠ {field_type} '{field_name}': {', '.join(issues)} → mapped to missing marker")
+    
+    if stats.get("constant_value"):
+        print(f"  ℹ {field_type} '{field_name}' has constant value (min=max)")
+
+
+def _check_data_quality(values: np.ndarray, field_name: str, field_type: str = "field") -> None:
+    """
+    Check data quality and print warnings for common issues.
+    
+    Parameters
+    ----------
+    values : np.ndarray
+        Values to check.
+    field_name : str
+        Name of the field.
+    field_type : str
+        Type of field for messages.
+    """
+    n_total = len(values)
+    if n_total == 0:
+        print(f"  ⚠ WARNING: {field_type} '{field_name}' is empty")
+        return
+    
+    n_nan = int(np.isnan(values).sum())
+    n_inf = int(np.isinf(values).sum())
+    n_neg_inf = int(np.isneginf(values).sum())
+    n_pos_inf = int(np.isposinf(values).sum())
+    
+    issues = []
+    if n_nan > 0:
+        pct = 100 * n_nan / n_total
+        issues.append(f"{n_nan:,} NaN ({pct:.1f}%)")
+    if n_neg_inf > 0:
+        issues.append(f"{n_neg_inf:,} -Inf")
+    if n_pos_inf > 0:
+        issues.append(f"{n_pos_inf:,} +Inf")
+    
+    if issues:
+        print(f"  ⚠ {field_type} '{field_name}' contains: {', '.join(issues)}")
+
+
+def _compute_centroids_for_field(
+    coords3d: np.ndarray,
+    codes: np.ndarray,
+    categories: list[str],
+    outlier_quantile: float = 0.95,
+    min_points: int = 10,
+) -> list[dict]:
+    """
+    Compute centroids per category with outlier removal (based on UMAP coords for display).
+    """
+    if coords3d.shape[0] != codes.shape[0]:
+        raise ValueError("coords3d and codes must have the same length.")
+
+    centroids: list[dict] = []
+
+    if not (0.5 < outlier_quantile < 1.0):
+        outlier_quantile = 0.95
+
+    for code, label in enumerate(categories):
+        mask = codes == code
+        idx = np.nonzero(mask)[0]
+        n = idx.size
+        if n < min_points:
+            continue
+
+        pts = coords3d[idx, :]  # (n, 3)
+        center = pts.mean(axis=0)
+
+        if n > min_points:
+            dists = np.linalg.norm(pts - center, axis=1)
+            thr = float(np.quantile(dists, outlier_quantile))
+            inlier_mask = dists <= thr
+            n_in = int(inlier_mask.sum())
+            if n_in >= min_points:
+                pts_in = pts[inlier_mask, :]
+                center = pts_in.mean(axis=0)
+                used_count = n_in
+            else:
+                used_count = n
+        else:
+            used_count = n
+
+        centroids.append(
+            {
+                "category": str(label),
+                "position": center.astype(float).tolist(),
+                "n_points": int(used_count),
+            }
+        )
+
+    return centroids
+
+
+def _compute_latent_space_quantiles(
+    latent: np.ndarray,
+    codes: np.ndarray,
+    categories: list[str],
+    min_points: int = 10,
+) -> np.ndarray:
+    """
+    Compute per-cell outlier quantiles based on latent space distances to category centroids.
+    """
+    n_cells = latent.shape[0]
+    quantiles = np.full(n_cells, np.nan, dtype=np.float32)
+    
+    for code, label in enumerate(categories):
+        mask = codes == code
+        idx = np.nonzero(mask)[0]
+        n = idx.size
+        
+        if n < min_points:
+            continue
+        
+        pts = latent[idx, :]
+        centroid = pts.mean(axis=0)
+        dists = np.linalg.norm(pts - centroid, axis=1)
+        sorted_dists = np.sort(dists)
+        ranks = np.searchsorted(sorted_dists, dists, side='right')
+        cell_quantiles = ranks.astype(np.float32) / n
+        quantiles[idx] = cell_quantiles
+    
+    return quantiles
+
+
+def export_data_for_web(
+    X_umap: np.ndarray,
+    latent_space: Union[np.ndarray, sparse.spmatrix],
+    obs: pd.DataFrame,
+    var: Optional[pd.DataFrame] = None,
+    gene_expression: Optional[Union[np.ndarray, sparse.spmatrix]] = None,
+    var_gene_id_column: str = "index",
+    gene_identifiers: Optional[Sequence[str]] = None,
+    connectivities: Optional[sparse.spmatrix] = None,
+    out_dir: Path | str = DEFAULT_EXPORT_DIR,
+    obs_keys: Optional[Sequence[str]] = None,
+    points_filename: str = "points.bin",
+    centroid_outlier_quantile: float = 0.95,
+    centroid_min_points: int = 10,
+    obs_manifest_filename: str = "obs_manifest.json",
+    obs_binary_dirname: str = DEFAULT_OBS_DIRNAME,
+    var_manifest_filename: str = "var_manifest.json",
+    var_binary_dirname: str = DEFAULT_VAR_DIRNAME,
+    connectivity_manifest_filename: str = "connectivity_manifest.json",
+    connectivity_binary_dirname: str = DEFAULT_CONNECTIVITY_DIRNAME,
+    force: bool = False,
+    # Optimization parameters (all disabled by default for backward compatibility)
+    var_quantization: Optional[int] = None,
+    obs_continuous_quantization: Optional[int] = None,
+    obs_categorical_dtype: Literal["auto", "uint8", "uint16"] = "auto",
+    compression: Optional[int] = None,
+) -> None:
+    """
+    Export raw data arrays to files used by the WebGL viewer.
+
+    Memory/Disk Optimization Options
+    --------------------------------
+    var_quantization : int or None
+        Bits for gene expression quantization (8, 16, or None for full float32).
+        8-bit reduces file size by 4x with minimal visual impact for colormapping.
+    obs_continuous_quantization : int or None
+        Bits for continuous obs field quantization (8, 16, or None for full float32).
+    obs_categorical_dtype : 'auto', 'uint8', or 'uint16'
+        - 'auto': Select based on number of categories (uint8 if ≤254, else uint16)
+        - 'uint8': Force uint8 (max 254 categories)
+        - 'uint16': Force uint16 (max 65534 categories)
+    compression : int or None
+        Gzip compression level (1-9). None or 0 disables compression.
+        Level 6 is a good balance of speed and size. Files get .gz extension.
+        
+    Standard Parameters
+    -------------------
+    X_umap : np.ndarray
+        3D UMAP coordinates, shape (n_cells, 3).
+    latent_space : np.ndarray or sparse matrix
+        Latent space for outlier quantile calculation, shape (n_cells, n_dims).
+    obs : pd.DataFrame
+        Cell metadata, shape (n_cells, n_obs_columns).
+    var : pd.DataFrame, optional
+        Gene/feature metadata. Required if gene_expression is provided.
+    gene_expression : np.ndarray or sparse matrix, optional
+        Gene expression matrix, shape (n_cells, n_genes).
+    var_gene_id_column : str
+        Column name in var containing gene identifiers, or "index" to use var.index.
+    gene_identifiers : sequence of str, optional
+        Which genes to export. If None, all genes are exported.
+    connectivities : sparse matrix, optional
+        KNN connectivity matrix from scanpy (n_cells, n_cells).
+    out_dir : Path or str
+        Output directory (default: exports/ under the current working directory).
+    obs_keys : sequence of str or None
+        Which obs columns to export. If None, all columns are exported.
+    points_filename : str
+        Name of the binary points file.
+    centroid_outlier_quantile : float
+        Quantile of distances to keep as inliers when computing centroids.
+    centroid_min_points : int
+        Minimum number of points in a category to compute a centroid.
+    force : bool
+        If True, overwrite existing files. If False, skip files that already exist.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    obs_binary_dir = out_dir / obs_binary_dirname
+    obs_binary_dir.mkdir(parents=True, exist_ok=True)
+
+    # Normalize compression parameter
+    if compression is not None and compression <= 0:
+        compression = None
+
+    # Print export settings summary
+    print("=" * 60)
+    print("Export Settings:")
+    print(f"  Output directory: {out_dir}")
+    print(f"  Compression: {'gzip level ' + str(compression) if compression else 'disabled'}")
+    print(f"  Var (gene) quantization: {str(var_quantization) + '-bit' if var_quantization else 'disabled (float32)'}")
+    print(f"  Obs continuous quantization: {str(obs_continuous_quantization) + '-bit' if obs_continuous_quantization else 'disabled (float32)'}")
+    print(f"  Obs categorical dtype: {obs_categorical_dtype}")
+    print("=" * 60)
+
+    # Validate X_umap
+    X_umap = np.asarray(X_umap, dtype=np.float32)
+    if X_umap.ndim != 2 or X_umap.shape[1] < 3:
+        raise ValueError(
+            f"X_umap has shape {X_umap.shape}, need at least (n_cells, 3) for 3D plotting."
+        )
+    coords3d = X_umap[:, :3].astype(np.float32)
+    n_cells = coords3d.shape[0]
+
+    # Validate and convert latent space
+    latent = _to_dense(latent_space).astype(np.float32)
+    if latent.shape[0] != n_cells:
+        raise ValueError(
+            f"Latent space has {latent.shape[0]} cells, but X_umap has {n_cells} cells."
+        )
+
+    # Validate obs
+    if len(obs) != n_cells:
+        raise ValueError(
+            f"obs has {len(obs)} rows, but X_umap has {n_cells} cells."
+        )
+
+    # Save points.bin (with existence check)
+    points_path = out_dir / points_filename
+    if _file_exists_skip(points_path, "points.bin", force):
+        pass
+    else:
+        actual_path = _write_binary(points_path, coords3d, compression)
+        suffix = " (gzip)" if compression else ""
+        print(f"✓ Wrote positions to {actual_path}{suffix}")
+
+    # Decide which obs columns to export
+    if obs_keys is None:
+        obs_keys = list(obs.columns)
+    else:
+        obs_keys = list(obs_keys)
+        missing = [k for k in obs_keys if k not in obs.columns]
+        if missing:
+            raise KeyError(
+                f"obs_keys contain columns not in obs: {missing}. "
+                f"Available columns: {list(obs.columns)}"
+            )
+
+    # Check if obs manifest already exists
+    obs_manifest_path = out_dir / obs_manifest_filename
+    if _file_exists_skip(obs_manifest_path, "obs manifest", force):
+        pass
+    else:
+        manifest_fields: list[dict] = []
+
+        for key in obs_keys:
+            s = obs[key]
+            safe_key = _safe_filename_component(key)
+            
+            # Decide kind: continuous vs categorical
+            if pd.api.types.is_categorical_dtype(s):
+                kind = "category"
+            elif pd.api.types.is_bool_dtype(s):
+                kind = "category"
+            elif pd.api.types.is_numeric_dtype(s):
+                kind = "continuous"
+            else:
+                kind = "category"
+
+            if kind == "continuous":
+                values = pd.to_numeric(s, errors="coerce").to_numpy(dtype=np.float32, copy=False)
+                if values.shape[0] != n_cells:
+                    raise ValueError(
+                        f"Length mismatch for obs['{key}']: {values.shape[0]} vs {n_cells}"
+                    )
+
+                # Apply quantization if requested
+                if obs_continuous_quantization is not None:
+                    quantized, min_val, max_val, scale, stats = _quantize_continuous(
+                        values, bits=obs_continuous_quantization, field_name=key
+                    )
+                    _report_quantization_stats(key, stats, "obs continuous")
+                    
+                    if obs_continuous_quantization == 8:
+                        dtype_str = "uint8"
+                        ext = "u8"
+                    else:
+                        dtype_str = "uint16"
+                        ext = "u16"
+                    
+                    value_fname = f"{safe_key}.values.{ext}"
+                    value_path = obs_binary_dir / value_fname
+                    actual_path = _write_binary(value_path, quantized, compression)
+                    
+                    # Adjust path in manifest if compressed
+                    manifest_path = f"{obs_binary_dirname}/{value_fname}"
+                    if compression:
+                        manifest_path += ".gz"
+                    
+                    manifest_fields.append(
+                        {
+                            "key": key,
+                            "kind": "continuous",
+                            "valuesPath": manifest_path,
+                            "valuesDtype": dtype_str,
+                            "quantized": True,
+                            "quantizationBits": obs_continuous_quantization,
+                            "minValue": min_val,
+                            "maxValue": max_val,
+                            "centroids": None,
+                            "outlierQuantilesPath": None,
+                        }
+                    )
+                else:
+                    # Full precision
+                    value_fname = f"{safe_key}.values.f32"
+                    value_path = obs_binary_dir / value_fname
+                    actual_path = _write_binary(value_path, values, compression)
+                    
+                    manifest_path = f"{obs_binary_dirname}/{value_fname}"
+                    if compression:
+                        manifest_path += ".gz"
+                    
+                    manifest_fields.append(
+                        {
+                            "key": key,
+                            "kind": "continuous",
+                            "valuesPath": manifest_path,
+                            "valuesDtype": "float32",
+                            "centroids": None,
+                            "outlierQuantilesPath": None,
+                        }
+                    )
+
+            else:
+                # Categorical
+                cat = s.astype("category")
+                categories = [str(c) for c in cat.cat.categories]
+                codes = cat.cat.codes.to_numpy(dtype=np.int32)  # -1 for NaN
+
+                if codes.shape[0] != n_cells:
+                    raise ValueError(
+                        f"Length mismatch for obs['{key}']: {codes.shape[0]} vs {n_cells}"
+                    )
+
+                n_categories = len(categories)
+                
+                # Select dtype based on settings
+                if obs_categorical_dtype == "auto":
+                    dtype, missing_value = _select_category_dtype(n_categories)
+                elif obs_categorical_dtype == "uint8":
+                    if n_categories > 254:
+                        raise ValueError(
+                            f"Field '{key}' has {n_categories} categories, "
+                            f"but uint8 can only hold 254. Use 'auto' or 'uint16'."
+                        )
+                    dtype, missing_value = np.uint8, 255
+                else:  # uint16
+                    dtype, missing_value = np.uint16, 65535
+                
+                codes_typed = np.full(n_cells, missing_value, dtype=dtype)
+                valid_mask = codes >= 0
+                codes_typed[valid_mask] = codes[valid_mask].astype(dtype)
+                
+                if dtype == np.uint8:
+                    codes_fname = f"{safe_key}.codes.u8"
+                    dtype_str = "uint8"
+                else:
+                    codes_fname = f"{safe_key}.codes.u16"
+                    dtype_str = "uint16"
+                
+                codes_path = obs_binary_dir / codes_fname
+                actual_path = _write_binary(codes_path, codes_typed, compression)
+                
+                manifest_codes_path = f"{obs_binary_dirname}/{codes_fname}"
+                if compression:
+                    manifest_codes_path += ".gz"
+
+                if centroid_outlier_quantile is None:
+                    centroids = []
+                else:
+                    centroids = _compute_centroids_for_field(
+                        coords3d,
+                        codes,
+                        categories,
+                        outlier_quantile=centroid_outlier_quantile,
+                        min_points=centroid_min_points,
+                    )
+
+                # Compute per-cell outlier quantiles based on latent space
+                outlier_quantiles = _compute_latent_space_quantiles(
+                    latent=latent,
+                    codes=codes,
+                    categories=categories,
+                    min_points=centroid_min_points,
+                )
+                
+                # Quantize outlier quantiles (they're always 0-1)
+                if obs_continuous_quantization is not None:
+                    oq_quantized, oq_min, oq_max, oq_scale, oq_stats = _quantize_continuous(
+                        outlier_quantiles, bits=obs_continuous_quantization, field_name=f"{key}_outliers"
+                    )
+                    _report_quantization_stats(f"{key}_outliers", oq_stats, "outlier quantiles")
+                    
+                    if obs_continuous_quantization == 8:
+                        oq_dtype_str = "uint8"
+                        oq_ext = "u8"
+                    else:
+                        oq_dtype_str = "uint16"
+                        oq_ext = "u16"
+                    
+                    outlier_fname = f"{safe_key}.outliers.{oq_ext}"
+                    outlier_path = obs_binary_dir / outlier_fname
+                    _write_binary(outlier_path, oq_quantized, compression)
+                    
+                    manifest_outlier_path = f"{obs_binary_dirname}/{outlier_fname}"
+                    if compression:
+                        manifest_outlier_path += ".gz"
+                    
+                    manifest_fields.append(
+                        {
+                            "key": key,
+                            "kind": "category",
+                            "categories": categories,
+                            "codesPath": manifest_codes_path,
+                            "codesDtype": dtype_str,
+                            "codesMissingValue": int(missing_value),
+                            "outlierQuantilesPath": manifest_outlier_path,
+                            "outlierDtype": oq_dtype_str,
+                            "outlierQuantized": True,
+                            "outlierMinValue": oq_min,
+                            "outlierMaxValue": oq_max,
+                            "centroids": centroids,
+                        }
+                    )
+                else:
+                    # Full precision outliers
+                    outlier_fname = f"{safe_key}.outliers.f32"
+                    outlier_path = obs_binary_dir / outlier_fname
+                    _write_binary(outlier_path, outlier_quantiles.astype(np.float32), compression)
+                    
+                    manifest_outlier_path = f"{obs_binary_dirname}/{outlier_fname}"
+                    if compression:
+                        manifest_outlier_path += ".gz"
+                    
+                    manifest_fields.append(
+                        {
+                            "key": key,
+                            "kind": "category",
+                            "categories": categories,
+                            "codesPath": manifest_codes_path,
+                            "codesDtype": dtype_str,
+                            "codesMissingValue": int(missing_value),
+                            "outlierQuantilesPath": manifest_outlier_path,
+                            "outlierDtype": "float32",
+                            "centroids": centroids,
+                        }
+                    )
+
+        obs_manifest_payload = {
+            "n_points": int(n_cells),
+            "centroid_outlier_quantile": float(centroid_outlier_quantile)
+            if centroid_outlier_quantile is not None
+            else None,
+            "latent_key": "latent_space",
+            "compression": compression if compression else None,
+            "fields": manifest_fields,
+        }
+        obs_manifest_path.write_text(json.dumps(obs_manifest_payload), encoding="utf-8")
+
+        print(
+            f"✓ Wrote obs manifest ({len(manifest_fields)} fields) to {obs_manifest_path} "
+            f"with binaries in {obs_binary_dirname}/"
+        )
+
+    # Process gene expression if provided
+    if gene_expression is not None:
+        if var is None:
+            raise ValueError("var DataFrame must be provided when gene_expression is given.")
+        
+        var_manifest_path = out_dir / var_manifest_filename
+        if _file_exists_skip(var_manifest_path, "var manifest", force):
+            pass
+        else:
+            var_binary_dir = out_dir / var_binary_dirname
+            var_binary_dir.mkdir(parents=True, exist_ok=True)
+            
+            gene_expr_is_sparse = sparse.issparse(gene_expression)
+            if gene_expr_is_sparse and not sparse.isspmatrix_csc(gene_expression):
+                gene_expression = gene_expression.tocsc()
+            
+            n_expr_cells = gene_expression.shape[0]
+            n_genes = gene_expression.shape[1]
+            
+            if n_expr_cells != n_cells:
+                raise ValueError(
+                    f"gene_expression has {n_expr_cells} cells, but X_umap has {n_cells} cells."
+                )
+            
+            if len(var) != n_genes:
+                raise ValueError(
+                    f"var has {len(var)} rows, but gene_expression has {n_genes} genes."
+                )
+            
+            if var_gene_id_column == "index":
+                all_gene_ids = var.index.astype(str).tolist()
+            else:
+                if var_gene_id_column not in var.columns:
+                    raise KeyError(
+                        f"var_gene_id_column '{var_gene_id_column}' not found in var. "
+                        f"Available columns: {list(var.columns)}"
+                    )
+                all_gene_ids = var[var_gene_id_column].astype(str).tolist()
+            
+            gene_id_to_idx = {gid: idx for idx, gid in enumerate(all_gene_ids)}
+            
+            if gene_identifiers is None:
+                genes_to_export = all_gene_ids
+            else:
+                genes_to_export = list(gene_identifiers)
+                missing_genes = [g for g in genes_to_export if g not in gene_id_to_idx]
+                if missing_genes:
+                    print(f"⚠ Warning: {len(missing_genes)} gene identifiers not found in var: {missing_genes[:5]}...")
+                genes_to_export = [g for g in genes_to_export if g in gene_id_to_idx]
+            
+            var_manifest_fields: list[dict] = []
+            
+            # Track problematic genes for aggregated reporting
+            genes_with_nan: list[str] = []
+            genes_with_inf: list[str] = []
+            genes_all_invalid: list[str] = []
+            
+            for gene_id in tqdm.tqdm(genes_to_export, desc="Exporting genes"):
+                gene_idx = gene_id_to_idx[gene_id]
+                safe_gene_id = _safe_filename_component(gene_id)
+                
+                if gene_expr_is_sparse:
+                    col = gene_expression.getcol(gene_idx).toarray().flatten()
+                else:
+                    col = gene_expression[:, gene_idx]
+                
+                values = np.asarray(col, dtype=np.float32)
+                
+                if values.shape[0] != n_cells:
+                    raise ValueError(
+                        f"Gene '{gene_id}' expression length mismatch: {values.shape[0]} vs {n_cells}"
+                    )
+                
+                # Apply quantization if requested
+                if var_quantization is not None:
+                    quantized, min_val, max_val, scale, stats = _quantize_continuous(
+                        values, bits=var_quantization, field_name=gene_id
+                    )
+                    
+                    # Track aggregated stats for genes (don't spam per-gene)
+                    if stats.get("n_nan", 0) > 0:
+                        genes_with_nan.append(gene_id)
+                    if stats.get("n_inf", 0) > 0:
+                        genes_with_inf.append(gene_id)
+                    if stats.get("warning") == "all_invalid":
+                        genes_all_invalid.append(gene_id)
+                    
+                    if var_quantization == 8:
+                        dtype_str = "uint8"
+                        ext = "u8"
+                    else:
+                        dtype_str = "uint16"
+                        ext = "u16"
+                    
+                    value_fname = f"{safe_gene_id}.values.{ext}"
+                    value_path = var_binary_dir / value_fname
+                    _write_binary(value_path, quantized, compression)
+                    
+                    manifest_path = f"{var_binary_dirname}/{value_fname}"
+                    if compression:
+                        manifest_path += ".gz"
+                    
+                    var_manifest_fields.append(
+                        {
+                            "key": gene_id,
+                            "kind": "continuous",
+                            "valuesPath": manifest_path,
+                            "valuesDtype": dtype_str,
+                            "quantized": True,
+                            "quantizationBits": var_quantization,
+                            "minValue": min_val,
+                            "maxValue": max_val,
+                        }
+                    )
+                else:
+                    # Full precision
+                    value_fname = f"{safe_gene_id}.values.f32"
+                    value_path = var_binary_dir / value_fname
+                    _write_binary(value_path, values, compression)
+                    
+                    manifest_path = f"{var_binary_dirname}/{value_fname}"
+                    if compression:
+                        manifest_path += ".gz"
+                    
+                    var_manifest_fields.append(
+                        {
+                            "key": gene_id,
+                            "kind": "continuous",
+                            "valuesPath": manifest_path,
+                            "valuesDtype": "float32",
+                        }
+                    )
+            
+            # Report aggregated gene stats
+            if genes_with_nan:
+                print(f"  ⚠ {len(genes_with_nan)} genes contain NaN values (mapped to missing marker)")
+                if len(genes_with_nan) <= 10:
+                    print(f"    Genes: {', '.join(genes_with_nan)}")
+                else:
+                    print(f"    First 10: {', '.join(genes_with_nan[:10])}...")
+            if genes_with_inf:
+                print(f"  ⚠ {len(genes_with_inf)} genes contain Inf values (mapped to missing marker)")
+                if len(genes_with_inf) <= 10:
+                    print(f"    Genes: {', '.join(genes_with_inf)}")
+            if genes_all_invalid:
+                print(f"  ⚠ WARNING: {len(genes_all_invalid)} genes have NO valid values (all NaN/Inf)")
+                if len(genes_all_invalid) <= 10:
+                    print(f"    Genes: {', '.join(genes_all_invalid)}")
+            
+            var_manifest_payload = {
+                "n_points": int(n_cells),
+                "var_gene_id_column": var_gene_id_column,
+                "compression": compression if compression else None,
+                "quantization": var_quantization,
+                "fields": var_manifest_fields,
+            }
+            var_manifest_path.write_text(json.dumps(var_manifest_payload), encoding="utf-8")
+            
+            compression_info = f", gzip level {compression}" if compression else ""
+            quant_info = f", {var_quantization}-bit quantized" if var_quantization else ""
+            print(
+                f"✓ Wrote var manifest ({len(var_manifest_fields)} genes{quant_info}{compression_info}) "
+                f"to {var_manifest_path}"
+            )
+    else:
+        print("INFO: No gene expression data provided, skipping var export.")
+
+    # Process connectivity data if provided
+    if connectivities is not None:
+        connectivity_manifest_path = out_dir / connectivity_manifest_filename
+        if _file_exists_skip(connectivity_manifest_path, "connectivity manifest", force):
+            pass
+        else:
+            connectivity_binary_dir = out_dir / connectivity_binary_dirname
+            connectivity_binary_dir.mkdir(parents=True, exist_ok=True)
+            
+            if not sparse.isspmatrix_csr(connectivities):
+                connectivities = sparse.csr_matrix(connectivities)
+            
+            if connectivities.shape[0] != n_cells or connectivities.shape[1] != n_cells:
+                raise ValueError(
+                    f"Connectivity matrix shape {connectivities.shape} does not match "
+                    f"number of cells {n_cells}."
+                )
+            
+            connectivities_sym = connectivities + connectivities.T
+            connectivities_sym.data[:] = 1
+            connectivities_csr = connectivities_sym.tocsr()
+            
+            indptr = connectivities_csr.indptr.astype(np.uint32)
+            indices = connectivities_csr.indices.astype(np.uint32)
+            
+            n_edges = len(indices) // 2
+            
+            indptr_fname = "indptr.u32"
+            indices_fname = "indices.u32"
+            indptr_path = connectivity_binary_dir / indptr_fname
+            indices_path = connectivity_binary_dir / indices_fname
+            
+            _write_binary(indptr_path, indptr, compression)
+            _write_binary(indices_path, indices, compression)
+            
+            manifest_indptr = f"{connectivity_binary_dirname}/{indptr_fname}"
+            manifest_indices = f"{connectivity_binary_dirname}/{indices_fname}"
+            if compression:
+                manifest_indptr += ".gz"
+                manifest_indices += ".gz"
+            
+            connectivity_manifest_payload = {
+                "n_points": int(n_cells),
+                "n_edges": int(n_edges),
+                "nnz": int(len(indices)),
+                "format": "csr",
+                "indptrPath": manifest_indptr,
+                "indicesPath": manifest_indices,
+                "dtype": "uint32",
+                "compression": compression if compression else None,
+            }
+            connectivity_manifest_path.write_text(
+                json.dumps(connectivity_manifest_payload), encoding="utf-8"
+            )
+            
+            print(
+                f"✓ Wrote connectivity manifest ({n_edges:,} unique edges, ~{len(indices)//n_cells:.1f} neighbors/cell) "
+                f"to {connectivity_manifest_path}"
+            )
+    else:
+        print("INFO: No connectivity data provided, skipping connectivity export.")

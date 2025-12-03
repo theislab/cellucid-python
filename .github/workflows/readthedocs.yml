@@ -1,0 +1,21 @@
+name: Read the Docs Trigger
+
+on:
+  push:
+    branches: ["main"]
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Trigger Read the Docs build
+        uses: readthedocs/actions@v1
+        with:
+          token: ${{ secrets.READTHEDOCS_TOKEN }}
+          project: cellucid
