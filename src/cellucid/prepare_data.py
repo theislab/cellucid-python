@@ -279,17 +279,20 @@ def _check_data_quality(values: np.ndarray, field_name: str, field_type: str = "
 
 
 def _compute_centroids_for_field(
-    coords3d: np.ndarray,
+    coords: np.ndarray,
     codes: np.ndarray,
     categories: list[str],
     outlier_quantile: float = 0.95,
     min_points: int = 10,
 ) -> list[dict]:
     """
-    Compute centroids per category with outlier removal (based on UMAP coords for display).
+    Compute centroids per category with outlier removal (based on embedding coords for display).
+
+    Works with any dimensionality (1D, 2D, 3D, etc.) - the position will have the same
+    number of dimensions as the input coords.
     """
-    if coords3d.shape[0] != codes.shape[0]:
-        raise ValueError("coords3d and codes must have the same length.")
+    if coords.shape[0] != codes.shape[0]:
+        raise ValueError("coords and codes must have the same length.")
 
     centroids: list[dict] = []
 
@@ -303,7 +306,7 @@ def _compute_centroids_for_field(
         if n < min_points:
             continue
 
-        pts = coords3d[idx, :]  # (n, 3)
+        pts = coords[idx, :]  # (n, ndim)
         center = pts.mean(axis=0)
 
         if n > min_points:
@@ -329,6 +332,26 @@ def _compute_centroids_for_field(
         )
 
     return centroids
+
+
+def _compute_centroids_for_all_dimensions(
+    embeddings: dict[int, np.ndarray],
+    codes: np.ndarray,
+    categories: list[str],
+    outlier_quantile: float = 0.95,
+    min_points: int = 10,
+) -> dict[int, list[dict]]:
+    """
+    Compute centroids for each available dimension.
+
+    Returns a dictionary keyed by dimension (1, 2, 3) with centroid lists for each.
+    """
+    centroids_by_dim = {}
+    for dim, coords in embeddings.items():
+        centroids_by_dim[dim] = _compute_centroids_for_field(
+            coords, codes, categories, outlier_quantile, min_points
+        )
+    return centroids_by_dim
 
 
 def _compute_latent_space_quantiles(
@@ -363,9 +386,9 @@ def _compute_latent_space_quantiles(
 
 
 def export_data_for_web(
-    X_umap: np.ndarray,
-    latent_space: Union[np.ndarray, sparse.spmatrix],
-    obs: pd.DataFrame,
+    X_umap: Optional[np.ndarray] = None,
+    latent_space: Optional[Union[np.ndarray, sparse.spmatrix]] = None,
+    obs: Optional[pd.DataFrame] = None,
     var: Optional[pd.DataFrame] = None,
     gene_expression: Optional[Union[np.ndarray, sparse.spmatrix]] = None,
     var_gene_id_column: str = "index",
@@ -373,7 +396,6 @@ def export_data_for_web(
     connectivities: Optional[sparse.spmatrix] = None,
     out_dir: Path | str = DEFAULT_EXPORT_DIR,
     obs_keys: Optional[Sequence[str]] = None,
-    points_filename: str = "points.bin",
     centroid_outlier_quantile: float = 0.95,
     centroid_min_points: int = 10,
     obs_manifest_filename: str = "obs_manifest.json",
@@ -395,6 +417,11 @@ def export_data_for_web(
     source_name: Optional[str] = None,
     source_url: Optional[str] = None,
     source_citation: Optional[str] = None,
+    # Multi-dimensional embedding parameters (at least one required)
+    X_umap_1d: Optional[np.ndarray] = None,
+    X_umap_2d: Optional[np.ndarray] = None,
+    X_umap_3d: Optional[np.ndarray] = None,
+    X_umap_4d: Optional[np.ndarray] = None,
 ) -> None:
     """
     Export raw data arrays to files used by the WebGL viewer.
@@ -413,11 +440,35 @@ def export_data_for_web(
     compression : int or None
         Gzip compression level (1-9). None or 0 disables compression.
         Level 6 is a good balance of speed and size. Files get .gz extension.
-        
+
+    Multi-Dimensional Embeddings
+    ----------------------------
+    At least one dimensional embedding must be provided. The viewer supports
+    switching between different dimensionalities of the same data at runtime.
+    All embeddings must have the same number of cells (rows) but different
+    column counts matching their dimensionality.
+
+    IMPORTANT: Each embedding is normalized independently to fit within the
+    [-1, 1] coordinate range. Within each dimension, the same scale factor is
+    used for all axes to preserve aspect ratios. This ensures each dimension
+    fills the viewing area optimally without requiring manual zoom adjustment.
+
+    X_umap : np.ndarray, optional (deprecated, use X_umap_3d instead)
+        Legacy 3D UMAP coordinates, shape (n_cells, 3). For backward compatibility.
+        If provided without X_umap_3d, it will be used as X_umap_3d.
+    X_umap_1d : np.ndarray, optional
+        1D embedding coordinates, shape (n_cells, 1). Stored as points_1d.bin.
+    X_umap_2d : np.ndarray, optional
+        2D embedding coordinates, shape (n_cells, 2). Stored as points_2d.bin.
+    X_umap_3d : np.ndarray, optional
+        3D embedding coordinates, shape (n_cells, 3). Stored as points_3d.bin.
+        This is the primary visualization and is used for centroid computation.
+    X_umap_4d : np.ndarray, optional
+        4D embedding coordinates, shape (n_cells, 4). Stored as points_4d.bin.
+        NOTE: 4D visualization is not yet implemented in the viewer.
+
     Standard Parameters
     -------------------
-    X_umap : np.ndarray
-        3D UMAP coordinates, shape (n_cells, 3).
     latent_space : np.ndarray or sparse matrix
         Latent space for outlier quantile calculation, shape (n_cells, n_dims).
     obs : pd.DataFrame
@@ -436,8 +487,6 @@ def export_data_for_web(
         Output directory (default: exports/ under the current working directory).
     obs_keys : sequence of str or None
         Which obs columns to export. If None, all columns are exported.
-    points_filename : str
-        Name of the binary points file.
     centroid_outlier_quantile : float
         Quantile of distances to keep as inliers when computing centroids.
     centroid_min_points : int
@@ -471,6 +520,110 @@ def export_data_for_web(
     if compression is not None and compression <= 0:
         compression = None
 
+    # =========================================================================
+    # MULTI-DIMENSIONAL EMBEDDING VALIDATION & PROCESSING
+    # =========================================================================
+    # Handle backward compatibility: X_umap maps to X_umap_3d
+    if X_umap is not None and X_umap_3d is None:
+        X_umap_3d = X_umap
+
+    # Collect all provided embeddings
+    embeddings: dict[int, np.ndarray] = {}
+    if X_umap_1d is not None:
+        embeddings[1] = np.asarray(X_umap_1d, dtype=np.float32)
+    if X_umap_2d is not None:
+        embeddings[2] = np.asarray(X_umap_2d, dtype=np.float32)
+    if X_umap_3d is not None:
+        embeddings[3] = np.asarray(X_umap_3d, dtype=np.float32)
+    if X_umap_4d is not None:
+        # 4D is a hook for future development - raise error for now
+        raise NotImplementedError(
+            "4D visualization is not yet implemented. "
+            "The X_umap_4d parameter is reserved for future development. "
+            "Please use X_umap_1d, X_umap_2d, or X_umap_3d for now."
+        )
+
+    if not embeddings:
+        raise ValueError(
+            "At least one dimensional embedding must be provided. "
+            "Use X_umap_1d, X_umap_2d, X_umap_3d, or X_umap (legacy)."
+        )
+
+    # Validate each embedding has correct dimensions
+    n_cells = None
+    for dim, arr in embeddings.items():
+        if arr.ndim != 2:
+            raise ValueError(
+                f"X_umap_{dim}d must be a 2D array, got shape {arr.shape}."
+            )
+        if arr.shape[1] != dim:
+            raise ValueError(
+                f"X_umap_{dim}d must have exactly {dim} columns, got {arr.shape[1]}. "
+                f"Shape is {arr.shape}."
+            )
+        if n_cells is None:
+            n_cells = arr.shape[0]
+        elif arr.shape[0] != n_cells:
+            raise ValueError(
+                f"All embeddings must have the same number of cells. "
+                f"First embedding has {n_cells} cells, but X_umap_{dim}d has {arr.shape[0]} cells."
+            )
+
+    # =========================================================================
+    # NORMALIZE EACH EMBEDDING INDEPENDENTLY TO FIT WITHIN [-1, 1] RANGE
+    # =========================================================================
+    # Each dimensional embedding (1D, 2D, 3D) is normalized independently so that
+    # it fills the viewing area optimally. Within each dimension, we use the same
+    # scale factor for all axes to preserve aspect ratios.
+    #
+    # This ensures that switching between dimensions doesn't require manual zoom
+    # adjustments - each dimension will fill the view appropriately.
+
+    normalization_info = {}
+    for dim, arr in embeddings.items():
+        # Find min/max for each axis
+        axis_mins = arr.min(axis=0)
+        axis_maxs = arr.max(axis=0)
+        axis_ranges = axis_maxs - axis_mins
+
+        # Use the maximum range across all axes to preserve aspect ratio
+        max_range = float(axis_ranges.max())
+        if max_range < 1e-8:
+            max_range = 1.0  # Avoid division by zero for degenerate data
+
+        # Center of the bounding box
+        center = (axis_mins + axis_maxs) / 2
+
+        # Scale to fit in [-1, 1] based on the max range (preserves aspect ratio)
+        scale_factor = 2.0 / max_range
+        embeddings[dim] = ((arr - center) * scale_factor).astype(np.float32)
+
+        # Store info for logging
+        normalization_info[dim] = {
+            'original_range': max_range,
+            'center': center.tolist(),
+        }
+
+    # Determine primary 3D coords for centroid computation
+    # Priority: 3D > 2D (padded) > 1D (padded)
+    # Note: 4D support is reserved for future development
+    if 3 in embeddings:
+        coords3d = embeddings[3]
+    elif 2 in embeddings:
+        # Pad 2D to 3D with zeros in Z
+        coords3d = np.hstack([embeddings[2], np.zeros((n_cells, 1), dtype=np.float32)])
+    elif 1 in embeddings:
+        # Pad 1D to 3D with zeros in Y and Z
+        coords3d = np.hstack([embeddings[1], np.zeros((n_cells, 2), dtype=np.float32)])
+    else:
+        raise ValueError("No usable embedding for 3D coordinates.")
+
+    # Track available dimensions for metadata
+    available_dimensions = sorted(embeddings.keys())
+
+    # Determine default dimension (priority: 3D > 2D > 1D)
+    default_dimension = 3 if 3 in embeddings else (2 if 2 in embeddings else 1)
+
     # Print export settings summary
     print("=" * 60)
     print("Export Settings:")
@@ -479,39 +632,45 @@ def export_data_for_web(
     print(f"  Var (gene) quantization: {str(var_quantization) + '-bit' if var_quantization else 'disabled (float32)'}")
     print(f"  Obs continuous quantization: {str(obs_continuous_quantization) + '-bit' if obs_continuous_quantization else 'disabled (float32)'}")
     print(f"  Obs categorical dtype: {obs_categorical_dtype}")
+    print(f"  Available dimensions: {available_dimensions}")
+    print(f"  Default dimension: {default_dimension}D")
+    print(f"  Coordinate normalization (per-dimension, aspect-ratio preserved):")
+    for dim in sorted(normalization_info.keys()):
+        info = normalization_info[dim]
+        print(f"    {dim}D: range {info['original_range']:.2f} → [-1, 1]")
     print("=" * 60)
 
-    # Validate X_umap
-    X_umap = np.asarray(X_umap, dtype=np.float32)
-    if X_umap.ndim != 2 or X_umap.shape[1] < 3:
-        raise ValueError(
-            f"X_umap has shape {X_umap.shape}, need at least (n_cells, 3) for 3D plotting."
-        )
-    coords3d = X_umap[:, :3].astype(np.float32)
-    n_cells = coords3d.shape[0]
-
     # Validate and convert latent space
+    if latent_space is None:
+        raise ValueError("latent_space is required for outlier quantile calculation.")
     latent = _to_dense(latent_space).astype(np.float32)
     if latent.shape[0] != n_cells:
         raise ValueError(
-            f"Latent space has {latent.shape[0]} cells, but X_umap has {n_cells} cells."
+            f"Latent space has {latent.shape[0]} cells, but embeddings have {n_cells} cells."
         )
 
     # Validate obs
+    if obs is None:
+        raise ValueError("obs DataFrame is required.")
     if len(obs) != n_cells:
         raise ValueError(
-            f"obs has {len(obs)} rows, but X_umap has {n_cells} cells."
+            f"obs has {len(obs)} rows, but embeddings have {n_cells} cells."
         )
 
-    # Save points.bin (with existence check)
-    points_path = out_dir / points_filename
-    check_path = Path(str(points_path) + ".gz") if compression and compression > 0 else points_path
-    if _file_exists_skip(check_path, check_path.name, force):
-        pass
-    else:
-        actual_path = _write_binary(points_path, coords3d, compression)
-        suffix = " (gzip)" if compression else ""
-        print(f"✓ Wrote positions to {actual_path}{suffix}")
+    # =========================================================================
+    # SAVE DIMENSIONAL EMBEDDING FILES
+    # =========================================================================
+    for dim, arr in embeddings.items():
+        dim_filename = f"points_{dim}d.bin"
+        dim_path = out_dir / dim_filename
+        check_path = Path(str(dim_path) + ".gz") if compression and compression > 0 else dim_path
+        if _file_exists_skip(check_path, check_path.name, force):
+            pass
+        else:
+            actual_path = _write_binary(dim_path, arr, compression)
+            suffix = " (gzip)" if compression else ""
+            print(f"✓ Wrote {dim}D positions ({arr.shape[0]:,} cells × {dim} dims) to {actual_path}{suffix}")
+
 
     # Decide which obs columns to export
     if obs_keys is None:
@@ -699,11 +858,12 @@ def export_data_for_web(
                 if compression:
                     manifest_codes_path += ".gz"
 
+                # Compute centroids for all available dimensions
                 if centroid_outlier_quantile is None:
-                    centroids = []
+                    centroids_by_dim = {dim: [] for dim in embeddings.keys()}
                 else:
-                    centroids = _compute_centroids_for_field(
-                        coords3d,
+                    centroids_by_dim = _compute_centroids_for_all_dimensions(
+                        embeddings,
                         codes,
                         categories,
                         outlier_quantile=centroid_outlier_quantile,
@@ -740,9 +900,11 @@ def export_data_for_web(
                     if compression:
                         manifest_outlier_path += ".gz"
                     
-                    # Compact format: [key, categories, codesDtype, codesMissingValue, centroids, outlierMinValue, outlierMaxValue]
+                    # Compact format: [key, categories, codesDtype, codesMissingValue, centroidsByDim, outlierMinValue, outlierMaxValue]
+                    # centroidsByDim is a dict keyed by dimension: {"1": [...], "2": [...], "3": [...]}
+                    centroids_serializable = {str(dim): cents for dim, cents in centroids_by_dim.items()}
                     obs_categorical_fields.append([
-                        key, categories, dtype_str, int(missing_value), centroids, oq_min, oq_max
+                        key, categories, dtype_str, int(missing_value), centroids_serializable, oq_min, oq_max
                     ])
                     if not categorical_dtype_info:
                         categorical_dtype_info["codesExt"] = "u8" if dtype == np.uint8 else "u16"
@@ -755,9 +917,11 @@ def export_data_for_web(
                     outlier_path = obs_binary_dir / outlier_fname
                     _write_binary(outlier_path, outlier_quantiles.astype(np.float32), compression)
 
-                    # Compact format: [key, categories, codesDtype, codesMissingValue, centroids]
+                    # Compact format: [key, categories, codesDtype, codesMissingValue, centroidsByDim]
+                    # centroidsByDim is a dict keyed by dimension: {"1": [...], "2": [...], "3": [...]}
+                    centroids_serializable = {str(dim): cents for dim, cents in centroids_by_dim.items()}
                     obs_categorical_fields.append([
-                        key, categories, dtype_str, int(missing_value), centroids
+                        key, categories, dtype_str, int(missing_value), centroids_serializable
                     ])
                     if not categorical_dtype_info:
                         categorical_dtype_info["codesExt"] = "u8" if dtype == np.uint8 else "u16"
@@ -833,7 +997,7 @@ def export_data_for_web(
                 f"var has {len(var)} rows, but gene_expression has {n_genes} genes."
             )
 
-        if var_gene_id_column == "index":
+        if var_gene_id_column == "index" or var_gene_id_column is None:
             all_gene_ids = var.index.astype(str).tolist()
         else:
             if var_gene_id_column not in var.columns:
@@ -1194,9 +1358,19 @@ def export_data_for_web(
         "obs_categorical_dtype": obs_categorical_dtype
     }
 
+    # Build embeddings metadata
+    gz_suffix = ".gz" if compression else ""
+    embeddings_meta = {
+        "available_dimensions": available_dimensions,
+        "default_dimension": default_dimension,
+        "files": {}
+    }
+    for dim in available_dimensions:
+        embeddings_meta["files"][f"{dim}d"] = f"points_{dim}d.bin{gz_suffix}"
+
     # Build identity payload
     identity_payload = {
-        "version": 1,
+        "version": 2,  # Bumped version for multi-dimensional support
         "id": dataset_id,
         "name": dataset_name,
         "description": dataset_description or "",
@@ -1211,6 +1385,7 @@ def export_data_for_web(
             "has_connectivity": connectivity_meta.get("n_edges") is not None,
             "n_edges": connectivity_meta.get("n_edges")
         },
+        "embeddings": embeddings_meta,
         "obs_fields": identity_obs_fields,
         "export_settings": export_settings
     }

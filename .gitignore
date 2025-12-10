@@ -29,9 +29,10 @@ coverage.xml
 *.swp
 
 # Local data artifacts
-data/**
+# data/**
 !data/.gitkeep
 !data/raw/.gitkeep
 !data/experiments/.gitkeep
-exports/**
+data/raw/**
+data/experiments/**
 project_context.txt
