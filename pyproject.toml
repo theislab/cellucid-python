@@ -8,8 +8,22 @@ version = "0.0.1a0"
 description = "Utilities to export data for the 3D UMAP WebGL viewer."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "Proprietary" }
-authors = [{ name = "cellucid contributors" }]
+license = "BSD-3-Clause"
+authors = [
+    { name = "Kemal Inecik", email = "k.inecik@gmail.com" },
+]
+maintainers = [
+    { name = "Kemal Inecik", email = "k.inecik@gmail.com" },
+]
+keywords = [
+    "single-cell",
+    "visualization",
+    "umap",
+    "3d",
+    "webgl",
+    "scRNA-seq",
+    "bioinformatics",
+]
 dependencies = [
     "numpy>=1.22",
     "pandas>=1.5",
@@ -17,18 +31,42 @@ dependencies = [
     "tqdm>=4.66",
 ]
 classifiers = [
+    "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "License :: Other/Proprietary License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Visualization",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Typing :: Typed",
 ]
 
 [project.optional-dependencies]
 analysis = [
     "anndata>=0.10",
     "scanpy>=1.10",
+]
+server = [
+    "websockets>=12.0",
+]
+jupyter = [
+    "ipython>=8.0",
+    "websockets>=12.0",
+]
+all = [
+    "cellucid[analysis,server,jupyter]",
+]
+dev = [
+    "cellucid[all,docs]",
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+    "pre-commit>=3.0",
 ]
 docs = [
     "sphinx>=7.2",
@@ -37,8 +75,58 @@ docs = [
     "sphinx_rtd_theme>=1.3",
 ]
 
+[project.scripts]
+cellucid = "cellucid.server:main"
+
 [project.urls]
-Repository = "https://github.com/theislab/cellucid-data"
+Homepage = "https://github.com/theislab/cellucid-python"
+Repository = "https://github.com/theislab/cellucid-python"
+Documentation = "https://cellucid.readthedocs.io"
+Issues = "https://github.com/theislab/cellucid-python/issues"
+Changelog = "https://github.com/theislab/cellucid-python/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["cellucid"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["src/cellucid"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
