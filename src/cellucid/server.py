@@ -1,7 +1,7 @@
 """
 Cellucid Data Server
 
-A lightweight HTTP/WebSocket server for serving cellucid datasets.
+A lightweight HTTP server for serving pre-exported cellucid datasets.
 Supports both local and remote access patterns:
 
 1. Local mode: Run on your machine, open browser locally
@@ -18,47 +18,40 @@ Or via CLI:
 The server provides:
 - Static file serving for dataset files
 - CORS headers for cross-origin access (needed for web viewer)
-- WebSocket endpoint for live updates (future)
 - Health check endpoint for connection validation
+
+For serving AnnData directly (without pre-export), use:
+    from cellucid import serve_anndata
+    serve_anndata("/path/to/data.h5ad")
 """
 
 from __future__ import annotations
 
-import asyncio
-import gzip
 import json
 import logging
-import mimetypes
-import os
-import signal
-import socket
-import sys
 import threading
 import webbrowser
 from functools import partial
-from http import HTTPStatus
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from typing import Any, Callable
 from urllib.parse import unquote, urlparse
-
-try:
-    import websockets
-    from websockets.server import serve as ws_serve
-    HAS_WEBSOCKETS = True
-except ImportError:
-    HAS_WEBSOCKETS = False
 
 logger = logging.getLogger("cellucid.server")
 
-# Default configuration
-DEFAULT_PORT = 8765
-DEFAULT_HOST = "127.0.0.1"  # localhost only by default for security
-CELLUCID_WEB_URL = "https://www.cellucid.com"
+# Import shared configuration from _server_base to avoid duplication
+from ._server_base import (
+    CORSMixin,
+    DEFAULT_PORT,
+    DEFAULT_HOST,
+    CELLUCID_WEB_URL,
+    ensure_port_available,
+)
 
 
-class CORSRequestHandler(SimpleHTTPRequestHandler):
+class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
     """HTTP handler with CORS support for serving dataset files."""
+
+    allow_caching = True  # Static files can be cached
 
     def __init__(self, *args, data_dir: Path, server_info: dict, **kwargs):
         self.data_dir = data_dir
@@ -68,18 +61,15 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         """Add CORS headers to every response."""
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Range")
-        self.send_header("Access-Control-Expose-Headers", "Content-Length, Content-Range")
-        # Allow caching for static files
-        self.send_header("Cache-Control", "public, max-age=3600")
+        self.add_cors_headers()
         super().end_headers()
 
-    def do_OPTIONS(self):
-        """Handle CORS preflight requests."""
-        self.send_response(HTTPStatus.NO_CONTENT)
-        self.end_headers()
+    def do_POST(self):
+        """Handle POST requests (events from frontend)."""
+        if self.handle_event_post():
+            return
+        # No other POST endpoints - return 404
+        self.send_error_response(404, f"POST not supported for path: {self.path}")
 
     def do_GET(self):
         """Handle GET requests with special endpoints."""
@@ -88,8 +78,9 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
 
         # Health check endpoint
         if path == "/_cellucid/health":
-            self._send_json({
+            self.send_json({
                 "status": "ok",
+                "type": "exported",
                 "version": self.server_info.get("version", "unknown"),
                 "data_dir": str(self.data_dir),
             })
@@ -97,26 +88,17 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
 
         # Server info endpoint
         if path == "/_cellucid/info":
-            self._send_json(self.server_info)
+            self.send_json(self.server_info)
             return
 
         # Datasets list endpoint
         if path == "/_cellucid/datasets":
             datasets = self._list_datasets()
-            self._send_json({"datasets": datasets})
+            self.send_json({"datasets": datasets})
             return
 
         # Regular file serving
         super().do_GET()
-
-    def _send_json(self, data: dict):
-        """Send a JSON response."""
-        body = json.dumps(data).encode("utf-8")
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", len(body))
-        self.end_headers()
-        self.wfile.write(body)
 
     def _list_datasets(self) -> list[dict]:
         """List available datasets in the data directory."""
@@ -247,17 +229,6 @@ class CellucidServer:
         """Get the full URL to open the viewer with this server's data."""
         return f"{CELLUCID_WEB_URL}?remote={self.url}"
 
-    def _find_free_port(self, start_port: int = DEFAULT_PORT) -> int:
-        """Find a free port starting from start_port."""
-        for port in range(start_port, start_port + 100):
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.bind((self.host, port))
-                    return port
-            except OSError:
-                continue
-        raise RuntimeError(f"Could not find a free port starting from {start_port}")
-
     def start(self, blocking: bool = True):
         """
         Start the server.
@@ -269,16 +240,9 @@ class CellucidServer:
             logger.warning("Server is already running")
             return
 
-        # Find a free port if the requested one is in use
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind((self.host, self.port))
-        except OSError:
-            old_port = self.port
-            self.port = self._find_free_port(self.port + 1)
-            self.server_info["port"] = self.port
-            if not self.quiet:
-                logger.info(f"Port {old_port} in use, using {self.port}")
+        # Ensure port is available (finds new one if needed)
+        self.port = ensure_port_available(self.host, self.port, self.quiet)
+        self.server_info["port"] = self.port
 
         # Create handler with data directory
         handler = partial(
@@ -347,188 +311,6 @@ class CellucidServer:
                 self.stop()
 
 
-class CellucidServerAsync:
-    """
-    Async version of the server with WebSocket support.
-
-    This is used for Jupyter integration where we need async support
-    and WebSocket communication for live updates.
-    """
-
-    def __init__(
-        self,
-        data_dir: str | Path,
-        port: int = DEFAULT_PORT,
-        host: str = DEFAULT_HOST,
-        quiet: bool = False,
-    ):
-        self.data_dir = Path(data_dir).resolve()
-        self.port = port
-        self.host = host
-        self.quiet = quiet
-
-        if not self.data_dir.exists():
-            raise FileNotFoundError(f"Data directory not found: {self.data_dir}")
-
-        self._http_server: HTTPServer | None = None
-        self._ws_server = None
-        self._running = False
-        self._clients: set = set()
-        self._message_handlers: list[Callable] = []
-
-        # Version
-        try:
-            from . import __version__
-        except ImportError:
-            __version__ = "0.0.0"
-
-        self.server_info = {
-            "version": __version__,
-            "data_dir": str(self.data_dir),
-            "host": self.host,
-            "port": self.port,
-            "ws_port": self.port + 1,
-            "mode": "async",
-        }
-
-    @property
-    def url(self) -> str:
-        return f"http://{self.host}:{self.port}"
-
-    @property
-    def ws_url(self) -> str:
-        return f"ws://{self.host}:{self.server_info['ws_port']}"
-
-    async def _ws_handler(self, websocket):
-        """Handle WebSocket connections."""
-        self._clients.add(websocket)
-        try:
-            # Send initial connection info
-            await websocket.send(json.dumps({
-                "type": "connected",
-                "server_info": self.server_info,
-            }))
-
-            async for message in websocket:
-                try:
-                    data = json.loads(message)
-                    await self._handle_message(websocket, data)
-                except json.JSONDecodeError:
-                    await websocket.send(json.dumps({
-                        "type": "error",
-                        "message": "Invalid JSON",
-                    }))
-        finally:
-            self._clients.discard(websocket)
-
-    async def _handle_message(self, websocket, data: dict):
-        """Handle incoming WebSocket messages."""
-        msg_type = data.get("type")
-
-        if msg_type == "ping":
-            await websocket.send(json.dumps({"type": "pong"}))
-        elif msg_type == "list_datasets":
-            datasets = self._list_datasets()
-            await websocket.send(json.dumps({
-                "type": "datasets",
-                "datasets": datasets,
-            }))
-        else:
-            # Pass to registered handlers
-            for handler in self._message_handlers:
-                try:
-                    await handler(websocket, data)
-                except Exception as e:
-                    logger.error(f"Handler error: {e}")
-
-    def _list_datasets(self) -> list[dict]:
-        """List available datasets."""
-        datasets = []
-
-        # Check if data_dir itself is a dataset
-        if self._is_dataset_dir(self.data_dir):
-            datasets.append({
-                "id": self.data_dir.name,
-                "path": "/",
-            })
-        else:
-            for subdir in self.data_dir.iterdir():
-                if subdir.is_dir() and self._is_dataset_dir(subdir):
-                    datasets.append({
-                        "id": subdir.name,
-                        "path": f"/{subdir.name}/",
-                    })
-
-        return datasets
-
-    def _is_dataset_dir(self, path: Path) -> bool:
-        if not (path / "obs_manifest.json").exists():
-            return False
-        for dim in ["1d", "2d", "3d", "4d"]:
-            if (path / f"points_{dim}.bin").exists():
-                return True
-            if (path / f"points_{dim}.bin.gz").exists():
-                return True
-        return False
-
-    def add_message_handler(self, handler: Callable):
-        """Register a handler for WebSocket messages."""
-        self._message_handlers.append(handler)
-
-    async def broadcast(self, message: dict):
-        """Broadcast a message to all connected clients."""
-        if not self._clients:
-            return
-
-        msg = json.dumps(message)
-        await asyncio.gather(
-            *[client.send(msg) for client in self._clients],
-            return_exceptions=True,
-        )
-
-    async def start(self):
-        """Start both HTTP and WebSocket servers."""
-        if not HAS_WEBSOCKETS:
-            raise ImportError(
-                "WebSocket support requires the 'websockets' package. "
-                "Install with: pip install websockets"
-            )
-
-        self._running = True
-
-        # Start HTTP server in a thread
-        handler = partial(
-            CORSRequestHandler,
-            data_dir=self.data_dir,
-            server_info=self.server_info,
-        )
-        self._http_server = HTTPServer((self.host, self.port), handler)
-        http_thread = threading.Thread(target=self._http_server.serve_forever, daemon=True)
-        http_thread.start()
-
-        # Start WebSocket server
-        ws_port = self.server_info["ws_port"]
-        self._ws_server = await ws_serve(self._ws_handler, self.host, ws_port)
-
-        if not self.quiet:
-            print(f"Cellucid server running:")
-            print(f"  HTTP: {self.url}")
-            print(f"  WebSocket: {self.ws_url}")
-
-    async def stop(self):
-        """Stop the servers."""
-        self._running = False
-
-        if self._http_server:
-            self._http_server.shutdown()
-            self._http_server = None
-
-        if self._ws_server:
-            self._ws_server.close()
-            await self._ws_server.wait_closed()
-            self._ws_server = None
-
-
 def serve(
     data_dir: str | Path,
     port: int = DEFAULT_PORT,
@@ -568,7 +350,7 @@ def serve(
 
 
 def main():
-    """CLI entry point for cellucid serve."""
+    """CLI entry point for cellucid serve (legacy, kept for direct imports)."""
     import argparse
 
     parser = argparse.ArgumentParser(

@@ -1,0 +1,22 @@
+/* Custom styles for Cellucid documentation - PyData Theme */
+
+/* Slightly adjust card styling */
+.sd-card {
+    border-radius: 0.5rem;
+}
+
+/* Improve code block readability */
+div.highlight pre {
+    font-size: 0.9rem;
+}
+
+/* Better spacing for grid cards */
+.sd-card-body {
+    padding: 1rem;
+}
+
+/* Notebook cell output styling */
+.cell_output {
+    border-radius: 4px;
+    margin-top: 8px;
+}

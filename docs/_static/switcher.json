@@ -1,0 +1,13 @@
+[
+    {
+        "name": "dev",
+        "version": "dev",
+        "url": "https://cellucid.readthedocs.io/en/latest/"
+    },
+    {
+        "name": "0.0.1a2 (stable)",
+        "version": "0.0.1a2",
+        "url": "https://cellucid.readthedocs.io/en/stable/",
+        "preferred": true
+    }
+]

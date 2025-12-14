@@ -23,6 +23,10 @@ htmlcov/
 .coverage
 coverage.xml
 
+# Documentation build
+docs/_build/
+docs/_autosummary/
+
 # Logs / dumps
 *.log
 *.tmp

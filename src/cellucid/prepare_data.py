@@ -385,7 +385,7 @@ def _compute_latent_space_quantiles(
     return quantiles
 
 
-def export_data_for_web(
+def prepare(
     X_umap: Optional[np.ndarray] = None,
     latent_space: Optional[Union[np.ndarray, sparse.spmatrix]] = None,
     obs: Optional[pd.DataFrame] = None,
@@ -511,6 +511,8 @@ def export_data_for_web(
     source_citation : str, optional
         Citation text for the data source.
     """
+    import warnings
+
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     obs_binary_dir = out_dir / obs_binary_dirname
@@ -525,6 +527,12 @@ def export_data_for_web(
     # =========================================================================
     # Handle backward compatibility: X_umap maps to X_umap_3d
     if X_umap is not None and X_umap_3d is None:
+        warnings.warn(
+            "The 'X_umap' parameter is deprecated and will be removed in a future version. "
+            "Use 'X_umap_3d' instead for 3D UMAP coordinates.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         X_umap_3d = X_umap
 
     # Collect all provided embeddings
