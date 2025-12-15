@@ -21,11 +21,22 @@ try:
 except _metadata.PackageNotFoundError:  # pragma: no cover - handled in dev installs
     __version__ = "0.0.0"
 
-from .prepare_data import prepare
-from .server import serve, CellucidServer
-
-# Lazy imports for modules with optional dependencies or heavy imports
+# All imports are lazy to ensure fast CLI startup.
+# Heavy dependencies (numpy, scipy, pandas) are only loaded when needed.
 def __getattr__(name):
+    # Core export functionality (imports numpy, pandas, scipy)
+    if name == "prepare":
+        from .prepare_data import prepare
+        return prepare
+
+    # Server for pre-exported data (lightweight, no heavy deps)
+    if name == "serve":
+        from .server import serve
+        return serve
+    if name == "CellucidServer":
+        from .server import CellucidServer
+        return CellucidServer
+
     # Jupyter integration
     if name == "CellucidViewer":
         from .jupyter import CellucidViewer

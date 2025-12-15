@@ -127,25 +127,21 @@ Cellucid supports 6 deployment modes, each with support for pre-exported binary 
 | Mode | Best For | Command/Function |
 |------|----------|------------------|
 | **Jupyter** | Interactive analysis | `show_anndata(adata)` |
-| **Local server** | Development | `cellucid serve ./export` |
-| **Remote + SSH** | Team access | `cellucid serve-anndata data.h5ad` |
+| **Local server** | Development | `cellucid serve ./data` |
+| **Remote + SSH** | Team access | `cellucid serve data.h5ad` |
 | **Browser** | Quick preview | [cellucid.com](https://cellucid.com) file picker |
 | **Static hosting** | Public sharing | GitHub Pages |
 
 ### CLI Commands
 
 ```bash
-# Serve h5ad file directly (lazy loading, no export needed)
-cellucid serve-anndata /path/to/data.h5ad
-
-# Serve zarr store directly (lazy loading, no export needed)
-cellucid serve-anndata /path/to/data.zarr
-
-# Serve pre-exported data (fastest)
-cellucid serve /path/to/export
+# Serve any data - format auto-detected
+cellucid serve /path/to/data.h5ad      # h5ad file
+cellucid serve /path/to/data.zarr      # zarr store
+cellucid serve /path/to/export         # pre-exported data
 
 # With options
-cellucid serve-anndata data.h5ad --port 9000 --no-browser
+cellucid serve data.h5ad --port 9000 --no-browser
 
 # Show version
 cellucid --version
@@ -155,7 +151,7 @@ cellucid --version
 
 ```bash
 # On remote server
-cellucid serve-anndata /data/cells.h5ad --no-browser
+cellucid serve /data/cells.h5ad --no-browser
 
 # On local machine (SSH tunnel)
 ssh -L 8765:localhost:8765 user@server

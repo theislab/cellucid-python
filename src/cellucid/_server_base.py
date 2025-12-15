@@ -26,6 +26,41 @@ DEFAULT_PORT = 8765
 DEFAULT_HOST = "127.0.0.1"
 CELLUCID_WEB_URL = "https://www.cellucid.com"
 
+
+# =============================================================================
+# CLI Output Helpers
+# =============================================================================
+# These functions provide consistent, professional CLI output across all servers.
+
+def print_step(step: int, total: int, title: str):
+    """Print a step header like [1/4] Title..."""
+    print(f"\n[{step}/{total}] {title}...")
+
+
+def print_detail(label: str, value: str):
+    """Print an indented detail line."""
+    print(f"      {label}: {value}")
+
+
+def print_success(message: str = "Done"):
+    """Print a success indicator with checkmark."""
+    print(f"      ✓ {message}")
+
+
+def print_server_banner(url: str, viewer_url: str):
+    """Print the final server ready banner."""
+    print(f"\n{'═' * 60}")
+    print("  CELLUCID SERVER RUNNING")
+    print(f"{'═' * 60}")
+    print()
+    print(f"  Local URL:    {url}")
+    print(f"  Viewer URL:   {viewer_url}")
+    print()
+    print("  Press Ctrl+C to stop")
+    print()
+    print(f"{'═' * 60}")
+
+
 # Global registry for event callbacks (viewer_id -> callback function)
 # This allows HTTP event handlers to route events to the correct viewer
 _event_callbacks: dict[str, Callable[[dict], None]] = {}
@@ -143,7 +178,7 @@ class CORSMixin:
     def do_OPTIONS(self):
         """Handle CORS preflight requests."""
         self.send_response(HTTPStatus.NO_CONTENT)
-        self.add_cors_headers()
+        # Note: CORS headers are added by end_headers() override in subclasses
         self.end_headers()
 
     def send_json(self, data: dict, head_only: bool = False):
@@ -152,7 +187,7 @@ class CORSMixin:
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", len(body))
-        self.add_cors_headers()
+        # Note: CORS headers are added by end_headers() override in subclasses
         self.end_headers()
         if not head_only:
             self.wfile.write(body)
@@ -170,7 +205,7 @@ class CORSMixin:
         self.send_header("Content-Length", len(data))
         if compressed:
             self.send_header("Content-Encoding", "gzip")
-        self.add_cors_headers()
+        # Note: CORS headers are added by end_headers() override in subclasses
         self.end_headers()
         if not head_only:
             self.wfile.write(data)
@@ -181,7 +216,7 @@ class CORSMixin:
         self.send_header("Content-Type", "text/plain")
         body = message.encode("utf-8")
         self.send_header("Content-Length", len(body))
-        self.add_cors_headers()
+        # Note: CORS headers are added by end_headers() override in subclasses
         self.end_headers()
         self.wfile.write(body)
 

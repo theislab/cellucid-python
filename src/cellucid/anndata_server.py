@@ -43,6 +43,10 @@ from ._server_base import (
     DEFAULT_HOST,
     CELLUCID_WEB_URL,
     ensure_port_available,
+    print_step,
+    print_detail,
+    print_success,
+    print_server_banner,
 )
 
 if TYPE_CHECKING:
@@ -74,9 +78,10 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
 
     allow_caching = False  # Data is dynamic, don't cache
 
-    def __init__(self, *args, adapter: AnnDataAdapter, server_info: dict, **kwargs):
+    def __init__(self, *args, adapter: AnnDataAdapter, server_info: dict, dataset_id: str = "", **kwargs):
         self.adapter = adapter
         self.server_info = server_info
+        self.dataset_id = dataset_id  # Cached for path prefix stripping
         # Don't call super().__init__ with directory since we're serving virtual files
         super(SimpleHTTPRequestHandler, self).__init__(*args, **kwargs)
 
@@ -101,21 +106,44 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = unquote(parsed.path).lstrip("/")
 
+        # Strip dataset ID prefix if present (frontend may include it)
+        # e.g., "my_dataset/points_3d.bin" -> "points_3d.bin"
+        if self.dataset_id and path.startswith(f"{self.dataset_id}/"):
+            path = path[len(self.dataset_id) + 1:]
+
         # Check for gzip support
         accept_encoding = self.headers.get("Accept-Encoding", "")
         supports_gzip = "gzip" in accept_encoding
 
         try:
+            # Root path - redirect to viewer
+            if path == "" or path == "index.html":
+                viewer_url = f"{CELLUCID_WEB_URL}?remote=http://{self.server_info['host']}:{self.server_info['port']}&anndata=true"
+                self.send_response(302)
+                self.send_header("Location", viewer_url)
+                self.end_headers()
+                return
+
             if path == "_cellucid/health":
                 self.send_json({
                     "status": "ok",
                     "type": "anndata",
                     "version": self.server_info.get("version", "unknown"),
+                    "data_source": self.server_info.get("data_source", "unknown"),
                     "n_cells": self.adapter.n_cells,
                     "n_genes": self.adapter.n_genes,
                 }, head_only)
             elif path == "_cellucid/info":
                 self.send_json(self.server_info, head_only)
+            elif path == "_cellucid/datasets":
+                # Return a single dataset entry for the loaded AnnData
+                identity = self.adapter.get_dataset_identity()
+                datasets = [{
+                    "id": identity.get("id", "anndata"),
+                    "path": "/",
+                    "name": identity.get("name", "AnnData"),
+                }]
+                self.send_json({"datasets": datasets}, head_only)
             elif path == "dataset_identity.json":
                 self.send_json(self.adapter.get_dataset_identity(), head_only)
             elif path == "obs_manifest.json":
@@ -359,13 +387,46 @@ class AnnDataServer:
         self.open_browser = open_browser
         self.quiet = quiet
 
-        # Create adapter
+        # Step 1: Detect format
+        if isinstance(data, (str, Path)):
+            data_path = Path(data)
+            is_zarr = str(data).endswith('.zarr') or data_path.is_dir()
+            format_name = "zarr" if is_zarr else "h5ad"
+            self.data_source = str(data)
+
+            if not quiet:
+                print_step(1, 4, "Detecting format")
+                print_detail("Path", str(data))
+                print_detail("Format", format_name)
+                print_success("Format detected")
+        else:
+            # In-memory AnnData
+            self.data_source = "in-memory AnnData"
+            if not quiet:
+                print_step(1, 4, "Detecting format")
+                print_detail("Source", "in-memory AnnData")
+                print_success("Format detected")
+
+        # Step 2: Load file
+        if not quiet:
+            print_step(2, 4, "Loading AnnData")
+            backed = adapter_kwargs.get("backed", True)
+            mode = "backed (lazy loading)" if backed else "in-memory"
+            print_detail("Mode", mode)
+
         if isinstance(data, (str, Path)):
             self.adapter = AnnDataAdapter.from_file(data, **adapter_kwargs)
-            self.data_source = str(data)
         else:
             self.adapter = AnnDataAdapter(data, **adapter_kwargs)
-            self.data_source = "in-memory AnnData"
+
+        if not quiet:
+            print_success("File opened")
+
+        # Step 3: Analyze dataset
+        if not quiet:
+            print_step(3, 4, "Analyzing dataset")
+            self._print_dataset_info()
+            print_success("Analysis complete")
 
         self._server: Optional[HTTPServer] = None
         self._thread: Optional[threading.Thread] = None
@@ -388,6 +449,34 @@ class AnnDataServer:
             "is_backed": self.adapter.is_backed,
         }
 
+    def _print_dataset_info(self):
+        """Print information about the loaded dataset."""
+        print_detail("Cells", f"{self.adapter.n_cells:,}")
+        print_detail("Genes", f"{self.adapter.n_genes:,}")
+
+        # Get embedding info
+        dims = self.adapter._available_dimensions
+        dim_str = ", ".join(f"{d}D" for d in sorted(dims)) if dims else "none"
+        print_detail("Embeddings", dim_str)
+
+        # Count obs field types
+        obs_keys = self.adapter.get_obs_keys()
+        n_categorical = sum(1 for k in obs_keys if self.adapter.get_obs_field_kind(k) == "category")
+        n_continuous = sum(1 for k in obs_keys if self.adapter.get_obs_field_kind(k) == "continuous")
+        print_detail("Obs fields", f"{n_categorical} categorical, {n_continuous} continuous")
+
+        # Check connectivity
+        has_conn = self.adapter.has_connectivity()
+        if has_conn:
+            try:
+                _, _, n_edges, _ = self.adapter.get_connectivity_edges(compress=False)
+                conn_str = f"yes ({n_edges:,} edges)"
+            except Exception:
+                conn_str = "yes"
+        else:
+            conn_str = "no"
+        print_detail("Connectivity", conn_str)
+
     @property
     def url(self) -> str:
         """Get the server URL."""
@@ -404,40 +493,30 @@ class AnnDataServer:
             logger.warning("Server is already running")
             return
 
+        # Step 4: Start server
+        if not self.quiet:
+            print_step(4, 4, "Starting server")
+
         # Ensure port is available (finds new one if needed)
         self.port = ensure_port_available(self.host, self.port, self.quiet)
         self.server_info["port"] = self.port
 
         # Create handler with adapter
+        # Cache dataset_id for efficient path prefix stripping
+        dataset_id = self.adapter.get_dataset_identity().get("id", "")
         handler = partial(
             AnnDataRequestHandler,
             adapter=self.adapter,
             server_info=self.server_info,
+            dataset_id=dataset_id,
         )
 
         self._server = HTTPServer((self.host, self.port), handler)
         self._running = True
 
         if not self.quiet:
-            print(f"\n{'=' * 60}")
-            print(f"  Cellucid AnnData Server")
-            print(f"{'=' * 60}")
-            print(f"  Data source:    {self.data_source}")
-            print(f"  Cells:          {self.adapter.n_cells:,}")
-            print(f"  Genes:          {self.adapter.n_genes:,}")
-            print(f"  Dimensions:     {self.adapter._available_dimensions}")
-            print(f"  Backed mode:    {self.adapter.is_backed}")
-            print(f"  Server URL:     {self.url}")
-            print(f"")
-            print(f"  Open viewer at:")
-            print(f"    {self.viewer_url}")
-            print(f"")
-            print(f"  NOTE: Loading data directly from AnnData is slower than")
-            print(f"  using prepare. For production use, consider")
-            print(f"  exporting your data first.")
-            print(f"")
-            print(f"  Press Ctrl+C to stop the server")
-            print(f"{'=' * 60}\n")
+            print_success("Server ready")
+            print_server_banner(self.url, self.viewer_url)
 
         if self.open_browser:
             webbrowser.open(self.viewer_url)
@@ -448,7 +527,16 @@ class AnnDataServer:
             except KeyboardInterrupt:
                 if not self.quiet:
                     print("\nShutting down server...")
-                self.stop()
+                # Don't call shutdown() here - it would deadlock since we're in the same thread
+                # Just close the server and cleanup
+                self._running = False
+                if self._server:
+                    self._server.server_close()
+                    self._server = None
+                if hasattr(self, 'adapter') and self.adapter:
+                    self.adapter.close()
+                if not self.quiet:
+                    print("AnnData server stopped")
         else:
             self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
             self._thread.start()
@@ -459,17 +547,21 @@ class AnnDataServer:
 
     def stop(self):
         """Stop the server and cleanup resources."""
-        if self._server:
-            self._server.shutdown()
-            self._server = None
         self._running = False
+
+        if self._server:
+            # shutdown() tells serve_forever() to stop, but we also need
+            # server_close() to release the socket immediately
+            self._server.shutdown()
+            self._server.server_close()
+            self._server = None
 
         # IMPORTANT: Close the adapter to release memory and file handles
         if hasattr(self, 'adapter') and self.adapter:
             self.adapter.close()
 
         if not self.quiet:
-            logger.info("AnnData server stopped")
+            print("AnnData server stopped")
 
     def is_running(self) -> bool:
         """Check if the server is running."""

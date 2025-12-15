@@ -45,6 +45,10 @@ from ._server_base import (
     DEFAULT_HOST,
     CELLUCID_WEB_URL,
     ensure_port_available,
+    print_step,
+    print_detail,
+    print_success,
+    print_server_banner,
 )
 
 
@@ -75,6 +79,14 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         """Handle GET requests with special endpoints."""
         parsed = urlparse(self.path)
         path = unquote(parsed.path)
+
+        # Root path - redirect to viewer
+        if path == "/" or path == "/index.html":
+            viewer_url = f"{CELLUCID_WEB_URL}?remote=http://{self.server_info['host']}:{self.server_info['port']}"
+            self.send_response(302)
+            self.send_header("Location", viewer_url)
+            self.end_headers()
+            return
 
         # Health check endpoint
         if path == "/_cellucid/health":
@@ -196,8 +208,22 @@ class CellucidServer:
         self.open_browser = open_browser
         self.quiet = quiet
 
+        # Step 1: Validate dataset
+        if not quiet:
+            print_step(1, 3, "Validating dataset")
+            print_detail("Path", str(self.data_dir))
+
         if not self.data_dir.exists():
             raise FileNotFoundError(f"Data directory not found: {self.data_dir}")
+
+        if not quiet:
+            print_success("Dataset valid")
+
+        # Step 2: Load dataset info
+        if not quiet:
+            print_step(2, 3, "Loading dataset info")
+            self._print_dataset_info()
+            print_success("Dataset loaded")
 
         self._server: HTTPServer | None = None
         self._thread: threading.Thread | None = None
@@ -218,6 +244,24 @@ class CellucidServer:
             "port": self.port,
             "mode": "standalone",
         }
+
+    def _print_dataset_info(self):
+        """Print information about the dataset."""
+        # Try to load dataset identity for more info
+        identity_file = self.data_dir / "dataset_identity.json"
+        if identity_file.exists():
+            try:
+                with open(identity_file) as f:
+                    identity = json.load(f)
+                stats = identity.get("stats", {})
+                if "n_cells" in stats:
+                    print_detail("Cells", f"{stats['n_cells']:,}")
+                if "n_genes" in stats:
+                    print_detail("Genes", f"{stats['n_genes']:,}")
+                if "has_connectivity" in stats:
+                    print_detail("Connectivity", "yes" if stats["has_connectivity"] else "no")
+            except Exception:
+                pass
 
     @property
     def url(self) -> str:
@@ -240,6 +284,10 @@ class CellucidServer:
             logger.warning("Server is already running")
             return
 
+        # Step 3: Start server
+        if not self.quiet:
+            print_step(3, 3, "Starting server")
+
         # Ensure port is available (finds new one if needed)
         self.port = ensure_port_available(self.host, self.port, self.quiet)
         self.server_info["port"] = self.port
@@ -255,20 +303,8 @@ class CellucidServer:
         self._running = True
 
         if not self.quiet:
-            print(f"\n{'=' * 60}")
-            print(f"  Cellucid Data Server")
-            print(f"{'=' * 60}")
-            print(f"  Data directory: {self.data_dir}")
-            print(f"  Server URL:     {self.url}")
-            print(f"")
-            print(f"  Open viewer at:")
-            print(f"    {self.viewer_url}")
-            print(f"")
-            print(f"  For SSH tunnel access, run on your local machine:")
-            print(f"    ssh -L {self.port}:localhost:{self.port} <remote-host>")
-            print(f"")
-            print(f"  Press Ctrl+C to stop the server")
-            print(f"{'=' * 60}\n")
+            print_success("Server ready")
+            print_server_banner(self.url, self.viewer_url)
 
         if self.open_browser:
             webbrowser.open(self.viewer_url)
@@ -279,7 +315,14 @@ class CellucidServer:
             except KeyboardInterrupt:
                 if not self.quiet:
                     print("\nShutting down server...")
-                self.stop()
+                # Don't call shutdown() here - it would deadlock since we're in the same thread
+                # Just close the server directly
+                self._running = False
+                if self._server:
+                    self._server.server_close()
+                    self._server = None
+                if not self.quiet:
+                    print("Server stopped")
         else:
             self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
             self._thread.start()
@@ -290,12 +333,17 @@ class CellucidServer:
 
     def stop(self):
         """Stop the server."""
-        if self._server:
-            self._server.shutdown()
-            self._server = None
         self._running = False
+
+        if self._server:
+            # shutdown() tells serve_forever() to stop, but we also need
+            # server_close() to release the socket immediately
+            self._server.shutdown()
+            self._server.server_close()
+            self._server = None
+
         if not self.quiet:
-            logger.info("Server stopped")
+            print("Server stopped")
 
     def is_running(self) -> bool:
         """Check if the server is running."""

@@ -8,6 +8,36 @@ Functions and classes for running a local HTTP visualization server.
 
 ---
 
+## CLI Command
+
+The unified `cellucid serve` command auto-detects the data format:
+
+```bash
+# Serve any data - format auto-detected
+cellucid serve /path/to/data.h5ad      # h5ad file
+cellucid serve /path/to/data.zarr      # zarr store
+cellucid serve /path/to/export         # pre-exported data
+
+# With options
+cellucid serve data.h5ad --port 9000 --no-browser
+
+# Show help
+cellucid serve --help
+```
+
+### CLI Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--port, -p` | Port to serve on | 8765 |
+| `--host, -H` | Host to bind to | 127.0.0.1 |
+| `--no-browser` | Don't auto-open browser | False |
+| `--quiet, -q` | Suppress info messages | False |
+| `--no-backed` | Load entire file into memory (h5ad/zarr) | False |
+| `--latent-key` | Key in obsm for latent space | Auto-detected |
+
+---
+
 ## Functions
 
 ### serve_anndata

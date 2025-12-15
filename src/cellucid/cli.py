@@ -67,24 +67,67 @@ def _create_common_server_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _detect_data_format(path: Path) -> str:
+    """
+    Detect the format of the data at the given path.
+
+    Returns:
+        'h5ad' - HDF5-based AnnData file
+        'zarr' - Zarr-based AnnData store
+        'exported' - Pre-exported cellucid dataset
+        'unknown' - Unable to detect format
+    """
+    # Check file extension first (before exists check for better error messages)
+    path_str = str(path).lower()
+    if path_str.endswith('.h5ad'):
+        return 'h5ad' if path.exists() else 'unknown'
+    if path_str.endswith('.zarr'):
+        return 'zarr' if path.exists() else 'unknown'
+
+    if not path.exists():
+        return 'unknown'
+
+    # For directories, check contents
+    if path.is_dir():
+        # Check for pre-exported dataset (has dataset_identity.json - always created by prepare())
+        if (path / 'dataset_identity.json').exists():
+            return 'exported'
+        # Check for zarr structure (.zattrs or .zgroup at root)
+        if (path / '.zattrs').exists() or (path / '.zgroup').exists():
+            return 'zarr'
+
+    return 'unknown'
+
+
 def _add_serve_subparser(subparsers, common_parser: argparse.ArgumentParser) -> None:
-    """Add the 'serve' subcommand for pre-exported datasets."""
+    """Add the 'serve' subcommand with auto-detection."""
     serve_parser = subparsers.add_parser(
         "serve",
         parents=[common_parser],
-        help="Serve a pre-exported cellucid dataset",
-        description="Serve a pre-exported cellucid dataset directory over HTTP.",
+        help="Serve data (auto-detects h5ad, zarr, or pre-exported)",
+        description="Serve data for visualization. Automatically detects format.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
+Auto-detection:
+    - .h5ad files → served directly via AnnData
+    - .zarr directories → served directly via AnnData
+    - Directories with dataset_identity.json → served as pre-exported data
+
 Examples:
-    # Serve a local dataset
-    cellucid serve /path/to/my_dataset
+    # Serve an h5ad file (auto-detected)
+    cellucid serve /path/to/data.h5ad
+
+    # Serve a zarr store (auto-detected)
+    cellucid serve /path/to/data.zarr
+
+    # Serve pre-exported data (auto-detected)
+    cellucid serve /path/to/exported_dataset
 
     # Serve on a different port
     cellucid serve /path/to/data --port 9000
 
-    # Serve on all interfaces (for remote access)
-    cellucid serve /path/to/data --host 0.0.0.0
+    # Load entire AnnData into memory (disable lazy loading)
+    cellucid serve /path/to/data.h5ad --no-backed
 
     # For SSH tunnel access from remote server:
     # On the server: cellucid serve /path/to/data
@@ -94,47 +137,45 @@ Examples:
     )
 
     serve_parser.add_argument(
-        "data_dir",
+        "data_path",
         type=str,
-        help="Path to the pre-exported dataset directory",
+        help="Path to h5ad file, zarr directory, or pre-exported dataset",
+    )
+    # AnnData-specific options (ignored for pre-exported data)
+    serve_parser.add_argument(
+        "--no-backed",
+        action="store_true",
+        help="Load entire AnnData into memory (default: lazy loading for h5ad)",
+    )
+    serve_parser.add_argument(
+        "--latent-key",
+        type=str,
+        default=None,
+        metavar="KEY",
+        help="Key in obsm for latent space (AnnData only, auto-detected if not specified)",
     )
 
     serve_parser.set_defaults(func=_run_serve)
 
 
 def _add_serve_anndata_subparser(subparsers, common_parser: argparse.ArgumentParser) -> None:
-    """Add the 'serve-anndata' subcommand for direct AnnData serving."""
+    """Add the 'serve-anndata' subcommand (deprecated, kept for backwards compatibility)."""
     anndata_parser = subparsers.add_parser(
         "serve-anndata",
         parents=[common_parser],
-        help="Serve AnnData (h5ad or zarr) directly",
-        description="Serve AnnData (h5ad file or zarr directory) directly for visualization.",
+        help="[Deprecated] Use 'cellucid serve' instead (auto-detects format)",
+        description="Serve AnnData directly. DEPRECATED: Use 'cellucid serve' instead.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
+DEPRECATED: This command is deprecated. Use 'cellucid serve' instead.
+The 'serve' command now auto-detects h5ad, zarr, and pre-exported formats.
+
 Examples:
-    # Serve an h5ad file
+    # Old way (deprecated):
     cellucid serve-anndata /path/to/data.h5ad
 
-    # Serve a zarr store
-    cellucid serve-anndata /path/to/data.zarr
-
-    # Serve on a different port
-    cellucid serve-anndata /path/to/data.h5ad --port 9000
-
-    # Load entire file into memory (disable lazy loading)
-    cellucid serve-anndata /path/to/data.h5ad --no-backed
-
-Supported formats:
-    - .h5ad files: HDF5-based AnnData files
-    - .zarr directories: Zarr-based AnnData stores
-
-Note:
-    Serving data directly from AnnData is convenient but slower than using
-    pre-exported data. For production use, consider exporting first:
-        # Export to optimized format (coming soon)
-        # cellucid prepare /path/to/data.h5ad -o /path/to/export/
-        # Then serve the exported directory
-        cellucid serve /path/to/export/
+    # New way (recommended):
+    cellucid serve /path/to/data.h5ad
 """,
     )
 
@@ -160,20 +201,58 @@ Note:
 
 
 def _run_serve(args: argparse.Namespace) -> None:
-    """Execute the 'serve' subcommand."""
+    """Execute the 'serve' subcommand with auto-detection."""
     # Configure logging based on args
     _configure_logging(args)
 
-    # Import here to avoid circular imports and speed up CLI startup
-    from .server import serve
+    if not args.quiet:
+        try:
+            from . import __version__
+        except ImportError:
+            __version__ = "0.0.0"
+        print(f"cellucid v{__version__}")
 
-    serve(
-        data_dir=args.data_dir,
-        port=args.port,
-        host=args.host,
-        open_browser=not args.no_browser,
-        quiet=args.quiet,
-    )
+    # Detect format
+    data_path = Path(args.data_path)
+    data_format = _detect_data_format(data_path)
+
+    if data_format == 'unknown':
+        if not data_path.exists():
+            print(f"Error: Path not found: {data_path}", file=sys.stderr)
+        else:
+            print(f"Error: Unable to detect format for: {data_path}", file=sys.stderr)
+            print("Expected: .h5ad file, .zarr directory, or pre-exported directory (with dataset_identity.json)", file=sys.stderr)
+        sys.exit(1)
+
+    if data_format == 'exported':
+        # Pre-exported dataset - use standard server
+        from .server import serve
+        serve(
+            data_dir=str(data_path),
+            port=args.port,
+            host=args.host,
+            open_browser=not args.no_browser,
+            quiet=args.quiet,
+        )
+    else:
+        # AnnData (h5ad or zarr) - use AnnData server
+        if not args.quiet:
+            print("\nImporting dependencies (anndata, numpy, scipy)...", end=" ", flush=True)
+
+        from .anndata_server import serve_anndata
+
+        if not args.quiet:
+            print("done")
+
+        serve_anndata(
+            data=str(data_path),
+            port=args.port,
+            host=args.host,
+            open_browser=not args.no_browser,
+            quiet=args.quiet,
+            backed=not args.no_backed,
+            latent_key=args.latent_key,
+        )
 
 
 def _run_serve_anndata(args: argparse.Namespace) -> None:
@@ -181,8 +260,20 @@ def _run_serve_anndata(args: argparse.Namespace) -> None:
     # Configure logging based on args
     _configure_logging(args)
 
+    if not args.quiet:
+        try:
+            from . import __version__
+        except ImportError:
+            __version__ = "0.0.0"
+        print(f"cellucid v{__version__}")
+        print("\nImporting dependencies (anndata, numpy, scipy)...", end=" ", flush=True)
+
     # Import here to avoid circular imports and speed up CLI startup
+    # This import is slow because it loads anndata/numpy/scipy
     from .anndata_server import serve_anndata
+
+    if not args.quiet:
+        print("done")
 
     serve_anndata(
         data=args.anndata_path,
@@ -234,13 +325,12 @@ For more information, see:
     https://github.com/theislab/cellucid-python
 
 Quick start:
-    # Serve pre-exported data
+    # Serve any data (format auto-detected)
+    cellucid serve /path/to/data.h5ad
+    cellucid serve /path/to/data.zarr
     cellucid serve /path/to/exported_data
 
-    # Serve AnnData directly (slower, but no export needed)
-    cellucid serve-anndata /path/to/data.h5ad
-
-Use 'cellucid <command> --help' for more information on a specific command.
+Use 'cellucid serve --help' for more options.
 """,
     )
 
@@ -332,7 +422,6 @@ def main_serve_legacy() -> int:
     .. deprecated::
         Use 'cellucid serve <path>' instead.
     """
-    import warnings
     import sys
 
     # If we have arguments, inject 'serve' as the command
