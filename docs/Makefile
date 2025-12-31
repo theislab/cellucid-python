@@ -26,7 +26,7 @@ html:
 
 clean:
 	rm -rf $(BUILDDIR)
-	rm -rf api/_autosummary
+	rm -rf user_guide/python_package/api/_autosummary
 	@echo "Cleaned build artifacts."
 
 serve: html

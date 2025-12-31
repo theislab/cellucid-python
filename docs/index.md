@@ -2,9 +2,9 @@
 
 **Interactive Single-Cell Data Visualization**
 
-Cellucid renders millions of cells in real-time 3D, enabling interactive exploration of UMAP/tSNE embeddings with gene expression overlays, filtering, and KNN connectivity visualization.
+Cellucid is a **GPU-accelerated**, browser-first single-cell viewer for exploring massive datasets in real time — fly through 2D/3D embeddings, color by genes or metadata, filter and compare populations, and share reproducible annotations with collaborators.
 
-::::{grid} 1 1 3 3
+::::{grid} 1 1 1 1
 :gutter: 2
 
 :::{grid-item}
@@ -12,169 +12,78 @@ Cellucid renders millions of cells in real-time 3D, enabling interactive explora
 :color: primary
 :expand:
 
-{octicon}`play;1em` Live Demo
+{octicon}`browser;1em` Cellucid App
 ```
 :::
 
-:::{grid-item}
-```{button-link} https://github.com/theislab/cellucid-python
-:color: secondary
-:expand:
-
-{octicon}`mark-github;1em` GitHub
-```
-:::
-
-:::{grid-item}
-```{button-link} https://pypi.org/project/cellucid/
-:color: secondary
-:expand:
-
-{octicon}`package;1em` PyPI
-```
-:::
-
-::::
-
----
-
-## Installation
-
-```bash
-pip install cellucid
-```
-
-## Quick Start
-
-::::{grid} 1 2 2 2
-:gutter: 3
-
-:::{grid-item-card} Jupyter Notebook
-```python
-from cellucid import show_anndata
-
-# In-memory, h5ad, or zarr
-show_anndata(adata)
-show_anndata("data.h5ad")
-show_anndata("data.zarr")
-```
-:::
-
-:::{grid-item-card} Pre-exported Data
-```python
-from cellucid import prepare, show
-
-# Export once (recommended for large datasets / sharing)
-X_umap = adata.obsm["X_umap"]  # shape: (n_cells, 2) or (n_cells, 3)
-
-prepare(
-    latent_space=adata.obsm.get("X_pca", X_umap),
-    obs=adata.obs,
-    var=adata.var,
-    gene_expression=adata.X,
-    connectivities=adata.obsp.get("connectivities"),
-    X_umap_2d=adata.obsm.get("X_umap_2d", X_umap if X_umap.shape[1] == 2 else None),
-    X_umap_3d=adata.obsm.get("X_umap_3d", X_umap if X_umap.shape[1] == 3 else None),
-    out_dir="./export",
-    compression=6,
-    var_quantization=8,
-    obs_continuous_quantization=8,
-)
-
-show("./export")
-```
-:::
-::::
-
----
-
-## Documentation
-
-::::{grid} 1 2 2 3
-:gutter: 3
-
-:::{grid-item-card} {octicon}`book;1.5em;sd-mr-1` User Guide
-:link: user_guide/index
-:link-type: doc
-
-Step-by-step tutorials covering all 14 loading options (h5ad, zarr, pre-exported) from local demos to Jupyter integration.
-:::
-
-:::{grid-item-card} {octicon}`code;1.5em;sd-mr-1` API Reference
-:link: api/index
-:link-type: doc
-
-Complete reference for all functions and classes in the Cellucid Python package.
-:::
-
-:::{grid-item-card} {octicon}`beaker;1.5em;sd-mr-1` Examples
-:link: examples/index
-:link-type: doc
-
-Real-world examples with various single-cell datasets ready for visualization.
-:::
-
-:::{grid-item-card} {octicon}`people;1.5em;sd-mr-1` Contributing
-:link: contributing
-:link-type: doc
-
-Guidelines for contributing to Cellucid development.
-:::
-
-:::{grid-item-card} {octicon}`history;1.5em;sd-mr-1` Changelog
-:link: changelog
-:link-type: doc
-
-Version history and release notes.
-:::
-
-:::{grid-item-card} {octicon}`mark-github;1.5em;sd-mr-1` GitHub
-:link: https://github.com/theislab/cellucid-python
-
-Source code, issues, and discussions.
-:::
 ::::
 
 ---
 
 ## Features
 
-- **Real-time 3D rendering** - Millions of cells with adaptive LOD
-- **Gene expression overlays** - Efficient sparse matrix handling
-- **Cell metadata coloring** - Categorical and continuous fields
-- **Interactive filtering** - Cell selection and hiding
-- **KNN connectivity** - Edge visualization
-- **Multi-dimensional** - 1D timelines, 2D, 3D support
-- **14 loading options** - h5ad, zarr, pre-exported binary formats
+- **GPU-accelerated 2D/3D rendering** - Smooth navigation through millions of cells
+- **Genes + metadata overlays** - Fast coloring for sparse/dense expression and `obs` fields
+- **Filtering + selection workflows** - Highlight, subset, and compare populations interactively
+- **Connectivity + vector overlays** - KNN edges and velocity/drift-style fields
+- **Shareable exports** - Static folders you can host locally, on GitHub, or behind a server
+- **Works everywhere** - Web app, local server mode, and Jupyter notebook embedding
 
-## AnnData Requirements
+---
 
-Your AnnData needs UMAP coordinates in `obsm`:
+## User Guide
 
-```python
-# Required: one of these
-adata.obsm['X_umap_3d']  # shape (n_cells, 3) - recommended
-adata.obsm['X_umap_2d']  # shape (n_cells, 2)
-adata.obsm['X_umap']     # shape (n_cells, 2 or 3)
+Step-by-step tutorials to get you started with Cellucid visualization.
 
-# Optional
-adata.obs                # Cell metadata
-adata.X                  # Gene expression (dense or sparse)
-adata.obsp['connectivities']  # KNN edges
+::::{grid} 1 1 3 3
+:gutter: 2
+
+:::{grid-item-card} {octicon}`browser;1.5em;sd-mr-1` Web App
+:link: user_guide/web_app/index
+:link-type: doc
+
+Viewer basics, filtering, highlighting, analysis, figure export, sessions, performance, and troubleshooting.
+:::
+
+:::{grid-item-card} {octicon}`package;1.5em;sd-mr-1` Python Package
+:link: user_guide/python_package/index
+:link-type: doc
+
+Installation, data prep, `prepare()`/export, viewing modes, notebook integration, hooks/events, and troubleshooting.
+:::
+
+:::{grid-item-card} {octicon}`beaker;1.5em;sd-mr-1` R Export (Preview)
+:link: user_guide/r_package/index
+:link-type: doc
+
+Exporting data with `cellucid-r` (Seurat/SCE recipes) into the same format used by the Cellucid web app.
+:::
+
+::::
+
+## Installation
+
+Python:
+
+```bash
+pip install cellucid
 ```
 
-## License
+R (export package):
 
-BSD-3-Clause
+```r
+install.packages("remotes")
+remotes::install_github("theislab/cellucid-r")
+```
 
 ```{toctree}
 :maxdepth: 2
 :hidden:
-:caption: Documentation
+:caption: Sections
 
-user_guide/index
-api/index
-examples/index
+Web app <user_guide/web_app/index>
+Python <user_guide/python_package/index>
+R <user_guide/r_package/index>
 contributing
 changelog
 ```

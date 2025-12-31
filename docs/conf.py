@@ -94,32 +94,39 @@ html_logo = "_static/cellucid-logo.svg"
 html_favicon = "_static/cellucid-logo.svg"
 
 html_theme_options = {
+    # Note: analytics config removed due to pydata-sphinx-theme bug causing duplicate scripts
+    # Using custom template in _templates/layout.html instead
     "logo": {
         "text": "Cellucid",
     },
     "header_links_before_dropdown": 5,
     "navbar_align": "left",
-    "navbar_end": ["version-switcher", "theme-switcher", "navbar-icon-links"],
+    "navbar_end": ["theme-switcher", "navbar-icon-links", "version-switcher"],
     "icon_links": [
         {
-            "name": "Live Demo",
+            "name": "Cellucid App",
             "url": "https://cellucid.com",
             "icon": "fa-solid fa-globe",
         },
         {
-            "name": "GitHub (Python)",
-            "url": "https://github.com/theislab/cellucid-python",
-            "icon": "fa-brands fa-python",
-        },
-        {
-            "name": "GitHub (Web)",
+            "name": "GitHub: cellucid",
             "url": "https://github.com/theislab/cellucid",
             "icon": "fa-brands fa-github",
         },
         {
-            "name": "PyPI",
-            "url": "https://pypi.org/project/cellucid/",
-            "icon": "fa-solid fa-box",
+            "name": "GitHub: cellucid-annotation",
+            "url": "https://github.com/theislab/cellucid-annotation",
+            "icon": "fa-solid fa-pen-to-square",
+        },
+        {
+            "name": "GitHub: cellucid-python",
+            "url": "https://github.com/theislab/cellucid-python",
+            "icon": "fa-brands fa-python",
+        },
+        {
+            "name": "GitHub: cellucid-r",
+            "url": "https://github.com/theislab/cellucid-r",
+            "icon": "fa-brands fa-r-project",
         },
     ],
     "show_version_warning_banner": True,

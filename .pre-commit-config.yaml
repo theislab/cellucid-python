@@ -1,0 +1,26 @@
+# Local-only pre-commit hooks (no network fetch required).
+#
+# These hooks assume you installed the dev extras:
+#   pip install -e ".[dev]"
+#
+# Then:
+#   pre-commit install
+#
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff (lint)
+        entry: ruff check --fix
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff (format)
+        entry: ruff format
+        language: system
+        types_or: [python, pyi]
+      - id: mypy
+        name: mypy
+        entry: mypy src/cellucid
+        language: system
+        types_or: [python, pyi]

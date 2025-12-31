@@ -469,13 +469,14 @@ def prepare(
 
     vector_fields : dict[str, np.ndarray] or None
         Optional per-cell displacement vectors aligned to the embedding space.
-        Keys follow the same naming convention as AnnData `obsm`:
-        - Explicit: `<field>_umap_<dim>d` (e.g. `velocity_umap_2d`, `T_fwd_umap_3d`)
-        - Implicit: `<field>_umap` with shape `(n_cells, 1|2|3)`
+        Keys follow the same naming convention as AnnData ``obsm``:
+
+        - Explicit: ``<field>_umap_<dim>d`` (e.g. ``velocity_umap_2d``, ``T_fwd_umap_3d``)
+        - Implicit: ``<field>_umap`` with shape ``(n_cells, 1|2|3)``
           (used only if the explicit key for that dim is not provided)
 
-        Each value must be shaped `(n_cells, dim)` (or `(n_cells,)` for 1D).
-        Vectors are scaled by the SAME per-dimension normalization scale as points.
+        Each value must be shaped ``(n_cells, dim)`` (or ``(n_cells,)`` for 1D).
+        Vectors are scaled by the same per-dimension normalization scale as points.
 
     Standard Parameters
     -------------------

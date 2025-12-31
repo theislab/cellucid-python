@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-label="Screenshot placeholder">
+  <rect x="0" y="0" width="1200" height="675" fill="#f3f4f6" stroke="#9ca3af" stroke-width="6" />
+  <rect x="48" y="48" width="1104" height="579" fill="#ffffff" stroke="#d1d5db" stroke-width="4" />
+  <text x="600" y="320" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="38" fill="#6b7280">
+    Screenshot Placeholder
+  </text>
+  <text x="600" y="372" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="20" fill="#6b7280">
+    Replace this with a real Cellucid UI screenshot.
+  </text>
+</svg>

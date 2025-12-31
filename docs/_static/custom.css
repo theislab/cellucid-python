@@ -15,6 +15,23 @@ div.highlight pre {
     padding: 1rem;
 }
 
+/* Minify the version switcher (rarely used) */
+.bd-header .version-switcher__button {
+    border-radius: 999px;
+    font-size: 0.75rem;
+    line-height: 1.1;
+    max-width: 6rem;
+    overflow: hidden;
+    padding: 0.125rem 0.4rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bd-header .version-switcher__button.dropdown-toggle::after,
+.bd-header .version-switcher__button .caret {
+    display: none;
+}
+
 /* Notebook cell output styling */
 .cell_output {
     border-radius: 4px;
