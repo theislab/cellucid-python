@@ -81,7 +81,8 @@ It provides:
   "name": "PBMC demo",
   "description": "",
   "created_at": "2026-01-01T00:00:00Z",
-  "cellucid_data_version": "0.0.1a2",
+  "_cellucid_version_marker": "CELLUCID_VERSION",
+  "cellucid_data_version": "0.0.9",
   "stats": {
     "n_cells": 10000,
     "n_genes": 2000,

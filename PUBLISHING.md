@@ -114,7 +114,7 @@ python -m twine check dist/*
 ### 3.0 Publish via GitHub Actions (recommended)
 
 If `PYPI_API_TOKEN` is configured (Section 1.3):
-1) Push a tag like `v0.0.1a3` (Section 2.3.1).
+1) Push a tag like `v0.0.9` (Section 2.3.1). <!-- CELLUCID_VERSION -->
 2) Watch the GitHub Actions run: **Actions → Publish to PyPI**.
 
 That workflow builds and uploads both wheel and sdist.

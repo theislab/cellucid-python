@@ -41,4 +41,4 @@ If the repo has GitHub Actions workflows, typical checks include:
 - `BiocCheck` for Bioconductor readiness
 
 See the publishing guide for workflow expectations:
-- `cellucid-r/docs/publishing.md`
+- `cellucid-r/PUBLISHING.md`

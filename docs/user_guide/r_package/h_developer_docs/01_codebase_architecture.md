@@ -13,7 +13,7 @@
   - unit tests validating core files, normalization, quantization, connectivity, vector fields
 - `cellucid-r/vignettes/cellucid.Rmd`
   - minimal vignette showing a small export workflow
-- `cellucid-r/docs/publishing.md`
+- `cellucid-r/PUBLISHING.md`
   - release/publishing checklist
 
 ## Data export pipeline (what happens in `cellucid_prepare()`)

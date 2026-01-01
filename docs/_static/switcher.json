@@ -5,8 +5,9 @@
         "url": "https://cellucid.readthedocs.io/en/latest/"
     },
     {
-        "name": "0.0.1a2 (stable)",
-        "version": "0.0.1a2",
+        "name": "0.0.9 (stable)",
+        "version": "0.0.9",
+        "cellucid_version_marker": "CELLUCID_VERSION",
         "url": "https://cellucid.readthedocs.io/en/stable/",
         "preferred": true
     }

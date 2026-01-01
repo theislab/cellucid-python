@@ -3,7 +3,7 @@
 This page summarizes the intended release/publishing flow for `cellucid-r`.
 
 The full step-by-step checklist lives in:
-- `cellucid-r/docs/publishing.md`
+- `cellucid-r/PUBLISHING.md`
 
 ## Recommended release flow (high level)
 

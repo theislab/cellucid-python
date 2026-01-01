@@ -67,7 +67,7 @@ pip install -U cellucid
 Pin a specific version (recommended for paper pipelines):
 
 ```bash
-pip install "cellucid==0.0.1a2"
+pip install "cellucid==0.0.9"  # CELLUCID_VERSION
 ```
 
 ### Optional dependencies (what you might need next)

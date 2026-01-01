@@ -11,10 +11,10 @@ It assumes you are a maintainer with access to:
 
 ## Versioning policy (current)
 
-`cellucid` is currently in alpha (`0.0.1a2`).
+`cellucid` is currently in alpha (`0.0.9`). <!-- CELLUCID_VERSION -->
 
 Practical guidance:
-- keep versions monotonic and tagged as `v<version>` (e.g. `v0.0.1a3`)
+- keep versions monotonic and tagged as `v<version>` (e.g. `v0.0.9`) <!-- CELLUCID_VERSION -->
 - document user-facing changes in `CHANGELOG.md`
 - avoid breaking export format compatibility without a coordinated web app change
 
@@ -60,8 +60,8 @@ make -C docs clean html
 Create a git tag with a `v` prefix (required for CI trigger):
 
 ```bash
-git tag v0.0.1a3
-git push origin v0.0.1a3
+git tag v0.0.9  # CELLUCID_VERSION
+git push origin v0.0.9  # CELLUCID_VERSION
 ```
 
 ### Step 5 — Watch CI publish to PyPI
@@ -94,7 +94,7 @@ Docs are built in two ways:
 
 ### Tag/version mismatch
 
-If you tag `v0.0.1a3` but `pyproject.toml` still says `0.0.1a2`:
+If you tag `v0.0.9` but `pyproject.toml` still says a different version: <!-- CELLUCID_VERSION -->
 - your published package will have the old version,
 - and PyPI publishing may fail if that version already exists.
 

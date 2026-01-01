@@ -39,7 +39,7 @@ packageVersion("cellucid")
 
 You should see:
 - No error on `library(cellucid)`
-- A version like `0.99.0` (or similar) from `packageVersion`
+- A version like `0.9.0` (or similar) from `packageVersion` <!-- CELLUCID_VERSION -->
 
 ## Optional dependencies (recommended)
 
