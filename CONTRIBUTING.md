@@ -4,6 +4,12 @@ Contributions are welcome — code, docs, bug reports, design feedback, and repr
 
 This file focuses on `cellucid-python` (the Python package + CLI), but also helps you route issues/PRs to the correct repo in the Cellucid ecosystem.
 
+By participating, you agree to follow the project’s Code of Conduct:
+- `CODE_OF_CONDUCT.md`
+
+If you’re reporting a security issue, please follow:
+- `SECURITY.md`
+
 ---
 
 ## Which repo should I contribute to?

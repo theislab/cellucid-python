@@ -1,6 +1,7 @@
 ![Cellucid](https://raw.githubusercontent.com/theislab/cellucid-python/main/cellucid-logo.svg)
 
 [![PyPI version](https://img.shields.io/pypi/v/cellucid.svg)](https://pypi.org/project/cellucid/)
+[![Conda Version](https://img.shields.io/conda/vn/conda-forge/cellucid.svg)](https://anaconda.org/conda-forge/cellucid)
 [![Python versions](https://img.shields.io/pypi/pyversions/cellucid.svg)](https://pypi.org/project/cellucid/)
 [![Documentation Status](https://readthedocs.org/projects/cellucid/badge/?version=latest)](https://cellucid.readthedocs.io/en/latest/)
 [![License](https://img.shields.io/pypi/l/cellucid.svg)](https://pypi.org/project/cellucid/)
@@ -52,6 +53,14 @@ show_anndata(adata)  # or: show_anndata("dataset.h5ad")
 - Web viewer: https://github.com/theislab/cellucid
 - Annotation template: https://github.com/theislab/cellucid-annotation
 - Issues: https://github.com/theislab/cellucid-python/issues
+
+## Community
+
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Code of Conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- Security: [SECURITY.md](SECURITY.md)
+- Support: [SUPPORT.md](SUPPORT.md)
+- Citation: [CITATION.cff](CITATION.cff)
 
 ## License
 

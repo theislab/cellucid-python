@@ -11,7 +11,7 @@ It assumes you are a maintainer with access to:
 
 ## Versioning policy (current)
 
-`cellucid` is currently in alpha (`0.0.9`). <!-- CELLUCID_VERSION -->
+`cellucid` is currently in beta (`0.0.9`). <!-- CELLUCID_VERSION -->
 
 Practical guidance:
 - keep versions monotonic and tagged as `v<version>` (e.g. `v0.0.9`) <!-- CELLUCID_VERSION -->
