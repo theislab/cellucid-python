@@ -64,6 +64,14 @@ def __getattr__(name):
         from .anndata_adapter import AnnDataAdapter
         return AnnDataAdapter
 
+    # Session bundles + AnnData mutation
+    if name == "CellucidSessionBundle":
+        from .session_bundle import CellucidSessionBundle
+        return CellucidSessionBundle
+    if name == "apply_cellucid_session_to_anndata":
+        from .anndata_session import apply_cellucid_session_to_anndata
+        return apply_cellucid_session_to_anndata
+
     # Vector field utilities (CellRank drift, etc.)
     if name == "compute_transition_drift":
         from .vector_fields import compute_transition_drift
@@ -92,6 +100,10 @@ __all__ = [
     "serve_anndata",
     "AnnDataServer",
     "AnnDataAdapter",
+
+    # Sessions
+    "CellucidSessionBundle",
+    "apply_cellucid_session_to_anndata",
 
     # Vector field utilities
     "compute_transition_drift",

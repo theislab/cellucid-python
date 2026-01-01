@@ -62,7 +62,7 @@ Multi-dimensional UMAP export for the Suo dataset.
 :link: prepare_cellrank_pseudotime_test
 :link-type: doc
 
-Real dataset from CellRank with a pseudotime-kernel drift vector field exported to `assets/exports/_test`.
+Real dataset from CellRank with a pseudotime-kernel drift vector field exported to an `exports/_test` folder.
 :::
 
 ::::

@@ -147,7 +147,7 @@ cellucid serve /path/to/data.h5ad
 Then open:
 
 ```text
-https://www.cellucid.com?remote=http://localhost:8765
+http://127.0.0.1:8765/
 ```
 
 ### `.h5ad` minimum requirements

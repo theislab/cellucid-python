@@ -33,6 +33,7 @@ Handled by:
 | `github` | `?github=owner/repo/path` | Connects to a GitHub-hosted exports path and loads its first dataset |
 
 Notes:
+- **Mixed content:** when the viewer origin is HTTPS (e.g. `https://www.cellucid.com`), browsers will block `remote=http://127.0.0.1:<port>` (HTTPS page fetching HTTP). For local servers, prefer opening the server-backed viewer URL (`http://127.0.0.1:<port>/`) served by `cellucid-python`.
 - For **local-user** (browser file picker), the URL is intentionally kept clean (no local paths in the URL).
 - `url-state.js` uses `history.replaceState()` so UI changes don’t spam browser history.
 

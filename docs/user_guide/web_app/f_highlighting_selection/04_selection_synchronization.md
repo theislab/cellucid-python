@@ -147,9 +147,12 @@ These commands identify cells by **cell index**. That means they only make sense
 - indices are aligned with your Python object (AnnData ordering).
 
 ### UI → Python (events / hooks)
-The intended model is that UI interactions can POST events to the Python server (e.g. selection, click, hover), so hooks like `@viewer.on_selection` can fire.
+UI interactions POST events to the Python server (`/_cellucid/events`), so hooks like `@viewer.on_selection` can fire.
 
-Depending on your build and deployment, parts of this may still be in active development.
+Important nuance for selection:
+- In notebooks, the **selection event is emitted when you confirm a selection** (i.e. when it becomes a real highlight group),
+  not while you are mid-dragging with a preview highlight.
+- Hover/click events are high-frequency; hover is debounced.
 
 If you are debugging Python synchronization, start from:
 - `cellucid/markdown/HOOKS_DEVELOPMENT.md`
@@ -157,8 +160,11 @@ If you are debugging Python synchronization, start from:
 ### Common failure modes (Python/Jupyter)
 - Wrong `viewerId` (messages routed to the wrong embedded viewer)
 - Dataset mismatch (indices don’t refer to the same cells)
-- Cross-origin restrictions (if running outside the expected loopback/Jupyter setup)
-- Feature not wired/enabled in your app build (no events sent; no commands applied)
+- Server unreachable from the viewer (remote/HPC notebook without tunneling/proxying)
+- Embedded UI assets blocked (hosted-asset proxy blocked and no cached copy available)
+
+First-line diagnostic:
+- `viewer.debug_connection()` (server probes + ping/pong + frontend debug snapshot + forwarded console errors)
 
 ---
 

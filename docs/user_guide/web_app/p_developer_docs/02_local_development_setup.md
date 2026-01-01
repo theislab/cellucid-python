@@ -78,7 +78,11 @@ What this does:
 
 ### Option A: Use built-in demo datasets (fastest)
 
-If the app can see `cellucid/assets/exports/`, the dataset dropdown will populate from the **local-demo** source.
+If the app can fetch `datasets.json` from the configured exports base URL, the dataset dropdown will populate from the **local-demo** source.
+
+Configure the exports base URL via:
+- `<meta name="cellucid-exports-base-url" ...>` in `cellucid/index.html`, or
+- `?exportsBaseUrl=...` as a runtime override (useful in development).
 
 This is best for:
 - UI work

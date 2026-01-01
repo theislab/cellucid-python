@@ -27,10 +27,15 @@ If you are not in a notebook environment, start with {doc}`04_server_tutorial`.
 - `pip install cellucid`
 
 ```{important}
-**Network requirement (important):** the embedded viewer is loaded from `https://www.cellucid.com` inside an iframe.
+**Network requirement (important):** Cellucid serves the viewer UI via a **hosted-asset proxy**.
 
-That means Jupyter embedding requires network access to Cellucid.
-If your environment cannot load `https://www.cellucid.com` (air-gapped, corporate restrictions, blocked iframes), jump to {ref}`troubleshooting`.
+- On first run (or after the website changes), the Python server downloads `https://www.cellucid.com/index.html` + `/assets/*` and caches them on disk.
+- Cache invalidation is driven by the web app’s `<meta name="cellucid-web-build-id" ...>` stamp.
+- Notebook embeds then load the UI from your local Cellucid server (`http://127.0.0.1:<port>/`), avoiding HTTPS→HTTP mixed-content blocking.
+- If you are offline and no cached UI is available, the iframe will show a “Cellucid viewer UI could not be loaded” page with next steps.
+- In Jupyter mode, Cellucid intentionally does **not** fall back to demo data if it cannot reach the Python-side server; it shows a connectivity error so you don’t accidentally analyze the wrong dataset.
+
+Configure the cache location with `CELLUCID_WEB_PROXY_CACHE_DIR`.
 ```
 
 ## Minimal Cells (Copy/Paste)
@@ -76,17 +81,18 @@ When you call `show(...)` or `show_anndata(...)`, Cellucid does two things:
    - This server reads your data and exposes a small HTTP API (e.g. `/points_3d.bin`, `/obs_manifest.json`, `/dataset_identity.json`).
    - The server is intentionally **localhost-bound** in Jupyter mode for safety (it is not meant to be public).
 
-2) Displays an **iframe** in your notebook pointing at:
+2) Displays an **iframe** in your notebook pointing at the **same server**:
 
    ```text
-   https://www.cellucid.com?remote=http://127.0.0.1:<port>&jupyter=true&viewerId=<id>
+   http://127.0.0.1:<port>/?jupyter=true&viewerId=<id>&viewerToken=<token>
    ```
 
-The viewer (running in your browser, served from `cellucid.com`) fetches data from your local server using `remote=...`.
+The viewer UI and the dataset API share the same origin, so the viewer loads data from relative paths (no mixed-content).
 
 ### Why this matters
 
 - If your notebook kernel is **local**, `127.0.0.1:<port>` is your laptop and everything “just works”.
+- In **Google Colab**, the kernel runs on a remote VM; Cellucid uses Colab’s built-in HTTPS port proxy so the embed still works (your `viewer.viewer_url` won’t look like `127.0.0.1` in that case).
 - If your notebook kernel is **remote (HPC / cloud)**, `127.0.0.1` in the viewer URL refers to **your laptop**, not the remote machine.
   - In that case you must use SSH port forwarding (see {ref}`remote-hpc`).
 
@@ -96,7 +102,7 @@ Once `viewer` exists:
 
 ```python
 print(viewer.server_url)  # e.g. http://127.0.0.1:8765
-print(viewer.viewer_url)  # the full https://www.cellucid.com?... URL
+print(viewer.viewer_url)  # the embedded viewer URL (usually same as server_url + query params)
 ```
 
 Then try:
@@ -350,6 +356,57 @@ def debug(event):
 
 For more about hooks, see {doc}`../../python_package/e_jupyter_hooks/index`.
 
+## Pulling State into Python (No-Download Sessions)
+
+Hooks are great when you want reactive code. For “pull-style” workflows, Cellucid also exposes:
+
+### `viewer.state` (live snapshot)
+
+`viewer.state` is a small, thread-safe snapshot of the latest events:
+
+```python
+viewer.wait_for_ready(timeout=60)
+print(viewer.state.selection)  # last selection event (or None)
+print(viewer.state.hover)      # last hover event (or None)
+print(viewer.state.click)      # last click event (or None)
+```
+
+### Session bundle (durable saved state → AnnData)
+
+In Jupyter, you can request the current `.cellucid-session` **as a Python object**:
+
+```python
+viewer.wait_for_ready(timeout=60)
+bundle = viewer.get_session_bundle(timeout=60)
+
+# Apply to AnnData (adds obs/var columns; stores metadata in adata.uns["cellucid"])
+adata2 = bundle.apply_to_anndata(adata, inplace=False)
+```
+
+Convenience one-liner:
+
+```python
+adata2 = viewer.apply_session_to_anndata(adata, inplace=False)
+```
+
+```{important}
+Session application is currently **index-based** (cell identity is the row position).
+
+Only apply a session to an `AnnData` whose row order matches the dataset that produced the session.
+```
+
+### Debugging: `viewer.debug_connection()`
+
+If hooks/session capture seem “stuck”, run:
+
+```python
+report = viewer.debug_connection()
+report
+```
+
+This checks server endpoints (`/_cellucid/health`, `/_cellucid/info`), performs a ping/pong roundtrip, and includes recent frontend console warnings/errors forwarded to Python.
+It also includes a frontend “debug snapshot” (the iframe’s `location.href`, origin, and user agent), which is useful in proxied notebook environments.
+
 <!-- SCREENSHOT PLACEHOLDER
 ID: data-loading-jupyter-embedded-viewer
 Suggested filename: data_loading/09_jupyter-embedded-viewer.png
@@ -395,6 +452,10 @@ finally:
     viewer.stop()  # stop server + cleanup
 ```
 
+```{note}
+`viewer.stop()` freezes the viewer frame (best-effort) so the notebook output stays visually identical to the last interactive state, but becomes non-interactive.
+```
+
 ### Stop everything created in this kernel
 
 ```python
@@ -415,7 +476,7 @@ cleanup_all()
 (remote-hpc)=
 ## Remote / HPC Notebooks (SSH Tunneling Guide)
 
-If your kernel runs on a remote machine (HPC/JupyterHub/cloud VM) but your browser is on your laptop, you must ensure that the viewer can still reach the data server at `http://127.0.0.1:<port>` **on your laptop**.
+If your kernel runs on a remote machine (HPC/JupyterHub/cloud VM) but your browser is on your laptop, you must ensure the browser can reach the remote kernel’s Cellucid server.
 
 The robust solution is SSH local port forwarding:
 
@@ -434,8 +495,8 @@ The robust solution is SSH local port forwarding:
    ssh -N -L 8765:127.0.0.1:8765 <user>@<remote-host>
    ```
 
-Now, when your browser loads `https://www.cellucid.com?remote=http://127.0.0.1:8765&...`,
-the viewer will connect to your laptop’s `127.0.0.1:8765`, which SSH forwards to the remote server.
+Now, when your browser loads `http://127.0.0.1:8765/?jupyter=true&...`,
+it hits your laptop’s `127.0.0.1:8765`, which SSH forwards to the remote kernel’s Cellucid server.
 
 ```{important}
 If you do **not** set a fixed port, Cellucid will pick the first available port (8765, 8766, ...).
@@ -458,7 +519,7 @@ That makes remote tunneling awkward because you need to update your SSH forwardi
 
 ## Common Edge Cases
 
-- **No internet access**: the iframe loads from `https://www.cellucid.com`.
+- **No internet access**: the first time the viewer UI loads (or after a web UI update), the server must fetch `https://www.cellucid.com/index.html` + `/assets/*`. If the cache is empty, the iframe shows a “what to do” page; run once while online (or use a persistent `CELLUCID_WEB_PROXY_CACHE_DIR`).
 - **Notebook blocks iframes** (security policy): you may need to open `viewer.viewer_url` in a new browser tab.
 - **Port exhaustion**: if many ports are in use, Cellucid may fail to find a free one.
 - **Corporate proxies / ad blockers**: can block cross-origin requests or event POSTs (hooks).
@@ -474,7 +535,7 @@ This section is intentionally redundant and explicit: it is designed for “I ne
 **Likely causes (ordered)**
 1) You are not actually running in a Jupyter environment (e.g. plain Python script).
 2) The notebook blocks iframes (security policy).
-3) Your environment cannot reach `https://www.cellucid.com`.
+3) The viewer UI assets could not be loaded (hosted-asset proxy blocked and no cached copy available).
 
 **How to confirm**
 - Print the viewer URL:
@@ -487,7 +548,8 @@ This section is intentionally redundant and explicit: it is designed for “I ne
 
 **Fix**
 - Ensure you are using Jupyter/JupyterLab/VSCode notebooks.
-- Confirm you can load `https://www.cellucid.com`.
+- If you have outbound HTTPS, confirm the kernel/runtime can reach `https://www.cellucid.com` (used by the hosted-asset proxy).
+- If you are offline, run once while online to populate the hosted-asset proxy cache (and consider setting `CELLUCID_WEB_PROXY_CACHE_DIR` to a persistent path).
 - If iframes are blocked, open the URL manually in a new tab.
 
 ### Symptom: “The viewer loads, but it says it cannot connect / everything is empty”

@@ -41,7 +41,6 @@ from ._server_base import (
     CORSMixin,
     DEFAULT_PORT,
     DEFAULT_HOST,
-    CELLUCID_WEB_URL,
     ensure_port_available,
     print_step,
     print_detail,
@@ -79,10 +78,19 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
 
     allow_caching = False  # Data is dynamic, don't cache
 
-    def __init__(self, *args, adapter: AnnDataAdapter, server_info: dict, dataset_id: str = "", **kwargs):
+    def __init__(
+        self,
+        *args,
+        adapter: AnnDataAdapter,
+        server_info: dict,
+        dataset_id: str = "",
+        web_proxy: bool = False,
+        **kwargs,
+    ):
         self.adapter = adapter
         self.server_info = server_info
         self.dataset_id = dataset_id  # Cached for path prefix stripping
+        self.web_proxy = bool(web_proxy)
         # Don't call super().__init__ with directory since we're serving virtual files
         super(SimpleHTTPRequestHandler, self).__init__(*args, **kwargs)
 
@@ -95,6 +103,8 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         """Handle POST requests (events from frontend)."""
         if self.handle_event_post():
             return
+        if self.handle_session_bundle_post():
+            return
         # No other POST endpoints - return 404
         self.send_error_response(404, f"POST not supported for path: {self.path}")
 
@@ -105,7 +115,14 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
     def do_GET(self, head_only: bool = False):
         """Handle GET requests."""
         parsed = urlparse(self.path)
-        path = unquote(parsed.path).lstrip("/")
+        raw_path = unquote(parsed.path)
+
+        # Proxy the hosted viewer UI assets so the viewer runs on the same
+        # origin as the AnnData server (avoids mixed-content).
+        if self.web_proxy and self.handle_web_proxy_get(raw_path, head_only=head_only):
+            return
+
+        path = raw_path.lstrip("/")
 
         # Strip dataset ID prefix if present (frontend may include it)
         # e.g., "my_dataset/points_3d.bin" -> "points_3d.bin"
@@ -119,10 +136,10 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         try:
             # Root path - redirect to viewer
             if path == "" or path == "index.html":
-                viewer_url = f"{CELLUCID_WEB_URL}?remote=http://{self.server_info['host']}:{self.server_info['port']}&anndata=true"
-                self.send_response(302)
-                self.send_header("Location", viewer_url)
-                self.end_headers()
+                # Always serve the viewer UI from this server via the hosted-asset proxy.
+                if self.handle_web_proxy_get("/index.html", head_only=head_only):
+                    return
+                self.send_error_response(503, "Cellucid viewer UI unavailable")
                 return
 
             if path == "_cellucid/health":
@@ -416,6 +433,9 @@ class AnnDataServer:
         self.host = host
         self.open_browser = open_browser
         self.quiet = quiet
+        # Local web assets and the legacy hosted-viewer mode are intentionally disabled in dev.
+        # We always serve the UI from this server via the hosted-asset proxy to avoid mixed-content.
+        self.web_proxy = True
 
         # Step 1: Detect format
         if isinstance(data, (str, Path)):
@@ -517,7 +537,7 @@ class AnnDataServer:
     @property
     def viewer_url(self) -> str:
         """Get the full URL to open the viewer."""
-        return f"{CELLUCID_WEB_URL}?remote={self.url}&anndata=true"
+        return f"{self.url}/?anndata=true"
 
     def start(self, blocking: bool = True):
         """Start the server."""
@@ -541,6 +561,7 @@ class AnnDataServer:
             adapter=self.adapter,
             server_info=self.server_info,
             dataset_id=dataset_id,
+            web_proxy=self.web_proxy,
         )
 
         self._server = HTTPServer((self.host, self.port), handler)

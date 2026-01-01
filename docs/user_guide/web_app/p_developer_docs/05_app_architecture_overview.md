@@ -76,7 +76,7 @@ Cellucid supports multiple data sources through a single coordinator:
   - Produces a **dataset base URL** (`baseUrl`) used by the low-level loaders.
 
 Common sources:
-- **local-demo**: datasets shipped as static exports under `cellucid/assets/exports/`
+- **local-demo**: datasets loaded from an exports base URL (configured via `<meta name="cellucid-exports-base-url" ...>` or `?exportsBaseUrl=...`; in production this typically points at a separate `cellucid-datasets` host)
 - **local-user**: browser file picker source (user selects folder/h5ad/zarr)
 - **remote**: connects to a `cellucid-python` server (lazy loading; best for large h5ad/zarr)
 - **github-repo**: reads exports from a GitHub repo/path (sharing; no server)

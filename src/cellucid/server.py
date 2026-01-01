@@ -43,7 +43,6 @@ from ._server_base import (
     CORSMixin,
     DEFAULT_PORT,
     DEFAULT_HOST,
-    CELLUCID_WEB_URL,
     ensure_port_available,
     print_step,
     print_detail,
@@ -57,9 +56,17 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
 
     allow_caching = True  # Static files can be cached
 
-    def __init__(self, *args, data_dir: Path, server_info: dict, **kwargs):
+    def __init__(
+        self,
+        *args,
+        data_dir: Path,
+        server_info: dict,
+        web_proxy: bool = False,
+        **kwargs,
+    ):
         self.data_dir = data_dir
         self.server_info = server_info
+        self.web_proxy = bool(web_proxy)
         # Must call super().__init__ last because it calls do_GET immediately
         super().__init__(*args, directory=str(data_dir), **kwargs)
 
@@ -72,6 +79,8 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         """Handle POST requests (events from frontend)."""
         if self.handle_event_post():
             return
+        if self.handle_session_bundle_post():
+            return
         # No other POST endpoints - return 404
         self.send_error_response(404, f"POST not supported for path: {self.path}")
 
@@ -80,12 +89,17 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = unquote(parsed.path)
 
+        # Proxy the hosted viewer UI assets so the viewer runs on the same
+        # origin as the dataset server (avoids mixed-content).
+        if self.web_proxy and self.handle_web_proxy_get(path):
+            return
+
         # Root path - redirect to viewer
         if path == "/" or path == "/index.html":
-            viewer_url = f"{CELLUCID_WEB_URL}?remote=http://{self.server_info['host']}:{self.server_info['port']}"
-            self.send_response(302)
-            self.send_header("Location", viewer_url)
-            self.end_headers()
+            # Always serve the viewer UI from this server via the hosted-asset proxy.
+            if self.handle_web_proxy_get("/index.html"):
+                return
+            self.send_error_response(503, "Cellucid viewer UI unavailable")
             return
 
         # Health check endpoint
@@ -206,6 +220,9 @@ class CellucidServer:
         self.host = host
         self.open_browser = open_browser
         self.quiet = quiet
+        # Local web assets and the legacy hosted-viewer mode are intentionally disabled in dev.
+        # We always serve the UI from this server via the hosted-asset proxy to avoid mixed-content.
+        self.web_proxy = True
 
         # Step 1: Validate dataset
         if not quiet:
@@ -267,7 +284,7 @@ class CellucidServer:
     @property
     def viewer_url(self) -> str:
         """Get the full URL to open the viewer with this server's data."""
-        return f"{CELLUCID_WEB_URL}?remote={self.url}"
+        return f"{self.url}/"
 
     def start(self, blocking: bool = True):
         """
@@ -293,6 +310,7 @@ class CellucidServer:
             CORSRequestHandler,
             data_dir=self.data_dir,
             server_info=self.server_info,
+            web_proxy=self.web_proxy,
         )
 
         self._server = HTTPServer((self.host, self.port), handler)

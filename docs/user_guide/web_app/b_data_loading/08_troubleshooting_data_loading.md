@@ -14,7 +14,8 @@ Before deep-diving, answer:
 1) Are you loading:
    - an **export folder** (recommended),
    - a **`.h5ad` / `.zarr`** file,
-   - a **remote server** (`?remote=...`),
+   - a **server-backed URL** (e.g. `http://127.0.0.1:<port>/` from `cellucid serve ...`),
+   - a **remote server** (`?remote=...`, only when the viewer origin can fetch that scheme),
    - or a **GitHub exports root** (`?github=...`)?
 2) Is it **browser-only** (no Python running) or **server-backed** (Python process running)?
 

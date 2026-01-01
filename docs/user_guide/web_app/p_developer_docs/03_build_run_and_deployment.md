@@ -68,6 +68,10 @@ If you load a dataset hosted at `https://example.org/my_export/` from `https://w
 
 For a development or internal server, you may choose to allow `*` (public datasets only).
 
+Exception (GitHub Pages):
+- GitHub Pages does not allow custom CORS headers.
+- Cellucid can still load GitHub Pages exports via the `cellucid-datasets/bridge.html` iframe bridge (no CORS headers required).
+
 ### 2) Don’t “helpfully” auto-decompress `.gz` exports
 
 Cellucid’s data loader treats URLs ending in `.gz` as **gzip-compressed files** and transparently decompresses them in the browser (using `DecompressionStream`).

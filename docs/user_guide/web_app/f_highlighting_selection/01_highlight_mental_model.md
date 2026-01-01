@@ -254,14 +254,26 @@ If you zoom/pan and see “visible highlighted” change, you may be seeing LOD 
 For session bundles, highlight memberships are stored as dataset-dependent chunks and compressed (delta-encoded indices + varint + gzip).
 This is efficient for typical selections but can still be large for very big groups.
 
-### Python/Jupyter synchronization status
-Cellucid has a Jupyter bridge (`cellucid-python`) with a design for:
-- Python → frontend commands (e.g. `viewer.highlight_cells(...)`), and
-- frontend → Python hooks (`on_selection`, `on_click`, etc.).
+### Python/Jupyter synchronization (implemented)
 
-Depending on the app build you are using, some of this may still be in active development.
-If you’re trying to drive highlighting from Python, start from:
-- `cellucid/markdown/HOOKS_DEVELOPMENT.md`
+Cellucid has a notebook bridge (`cellucid-python`) that supports:
+- **Python → UI commands** (e.g. `viewer.highlight_cells(...)`, `viewer.set_color_by(...)`)
+- **UI → Python hooks** (e.g. `@viewer.on_selection`, `@viewer.on_click`, `@viewer.on_hover`)
+- **No-download session capture**: pull the current `.cellucid-session` into Python as an object and apply it onto an `AnnData`
+
+Recommended patterns:
+- If you want to react immediately, use hooks.
+- If you want a durable, reproducible artifact (and to mutate an `AnnData`), use a session bundle:
+
+  ```python
+  viewer.wait_for_ready()
+  bundle = viewer.get_session_bundle(timeout=60)
+  adata2 = bundle.apply_to_anndata(adata, inplace=False)
+  ```
+
+Important constraint: selections/highlights in sessions are currently **index-based** (cell identity is the row position), so only apply sessions to an `AnnData` with the same row order.
+
+Developer reference: `cellucid/markdown/HOOKS_DEVELOPMENT.md`
 
 ---
 

@@ -181,7 +181,7 @@ generate_datasets_manifest("./exports", default_dataset="pbmc_demo")
 Before publishing, verify that your export loads:
 
 - **Fastest validation:** open Cellucid and use the **Folder** file picker (Option #3).
-- **Most realistic validation:** run the CLI server (Option #6) and open `?remote=...`.
+- **Most realistic validation:** run the CLI server (Option #6) and open the printed viewer URL (`http://127.0.0.1:<port>/`).
 
 This avoids debugging “GitHub problems” that are actually export problems.
 
@@ -286,21 +286,23 @@ Caption:
 Connect Cellucid to a public GitHub repo by entering `owner/repo/path-to-exports`.
 ```
 
-## Optional: “Local Demo” (Run the Web App Locally With Your Exports)
+## Optional: “Local Demo” (Run the Web App Locally With Demo Exports)
 
-This is useful if you want:
-- an offline demo
-- a self-hosted instance of Cellucid
-- a “known-good” environment where you control the exact viewer version
+The web app’s `local-demo` source loads from an **exports base URL** (it does not have to be inside the web app repo).
 
-**High-level idea**
-- You clone the Cellucid web app repo.
-- You copy your exported dataset folder(s) into the web app’s `assets/exports/`.
-- You ensure `assets/exports/datasets.json` is updated.
-- You run a simple static server.
+In production, Cellucid’s sample datasets are intended to live in a separate repository/site (e.g. `cellucid-datasets`) and the web app is configured via:
+- `<meta name="cellucid-exports-base-url" content="...">` in `cellucid/index.html`, or
+- `?exportsBaseUrl=...` as a runtime override.
 
-Because this mixes repositories (web + python), we keep it high-level here.
-If you want, we can expand this into a dedicated, fully scripted tutorial.
+High-level local-dev workflow:
+- Run the web app locally.
+- Point `exportsBaseUrl` at any static host that serves `exports/datasets.json` + dataset folders.
+
+```{note}
+If your exports host is a different origin, you normally need CORS headers so the browser can `fetch()` JSON/binaries.
+
+GitHub Pages does not allow custom CORS headers, so Cellucid uses a tiny iframe bridge (`cellucid-datasets/bridge.html`) to load `exports/*` without CORS.
+```
 
 ## Edge Cases
 

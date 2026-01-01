@@ -61,6 +61,7 @@ At startup, `cellucid/assets/js/app/main.js`:
 3) Applies URL overrides (if present):
    - `?remote=...` connects remote server
    - `?github=...` connects GitHub exports
+   - `?exportsBaseUrl=...` (or `?exports=...`) overrides the demo exports base URL
    - `?dataset=...&source=...` selects a specific dataset from a registered source
 4) Chooses the active dataset and sets `EXPORT_BASE_URL` to the active `baseUrl`.
 
@@ -81,17 +82,26 @@ All sources implement a similar interface:
 - `getMetadata(datasetId)`
 - `getBaseUrl(datasetId)`
 
-### `local-demo` (static exports shipped with the app)
+### `local-demo` (exports base URL)
 
 Code:
 - `cellucid/assets/js/data/local-demo-source.js`
 
 Behavior:
-- Reads `datasets.json` under the exports base URL (default `assets/exports/`).
+- Reads `datasets.json` under the exports base URL (`DATA_CONFIG.EXPORTS_BASE_URL`).
+- `DATA_CONFIG.EXPORTS_BASE_URL` resolves in this order:
+  1) `?exportsBaseUrl=...` / `?exports=...` query param
+  2) `<meta name="cellucid-exports-base-url" content="...">` in `index.html`
 - Uses `dataset_identity.json` inside each dataset folder as the required metadata anchor.
 
 Common failure mode:
 - `datasets.json` missing or invalid → local demo source is “not available”.
+
+GitHub Pages note (no CORS headers):
+- GitHub Pages doesn’t let you configure `Access-Control-Allow-Origin`, so direct `fetch()` from `https://www.cellucid.com` will usually fail.
+- Cellucid supports GitHub Pages by using a small iframe bridge page hosted alongside `exports/`:
+  - `bridge.html` + `bridge.js` (in the `cellucid-datasets` repo)
+  - frontend entry point: `fetchWithExportsBridge()` in `cellucid/assets/js/data/data-source.js`
 
 ### `github-repo` (public GitHub-hosted exports)
 

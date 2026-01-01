@@ -5,9 +5,9 @@ Server Mode is the most reliable way to view **large** `.h5ad` / `.zarr` dataset
 You run a small local Python server that:
 - reads your data efficiently (often lazily)
 - serves only what the viewer needs, on demand
-- adds the right CORS headers so the web viewer can fetch from it
+- serves the viewer UI on the same origin (hosted-asset proxy)
 
-Then you open Cellucid with a `?remote=...` URL.
+Then you open the **viewer URL printed by the server** (usually `http://127.0.0.1:<port>/`).
 
 This tutorial covers options **#6–#11** from the “14 loading options” list.
 
@@ -52,7 +52,7 @@ cellucid serve /path/to/data.h5ad
 2) Open the viewer:
 
 ```text
-https://www.cellucid.com?remote=http://127.0.0.1:8765
+http://127.0.0.1:8765/
 ```
 
 3) Keep the terminal running while you use the viewer.
@@ -224,13 +224,13 @@ Leave that SSH session open.
 ### Step 3 — Open Cellucid locally
 
 ```text
-https://www.cellucid.com?remote=http://localhost:8765
+http://127.0.0.1:8765/
 ```
 
 Why this works well:
 - Your browser talks only to `localhost`.
 - You avoid exposing the server to the public internet.
-- You avoid mixed-content blocks for non-localhost HTTP.
+- You avoid HTTPS→HTTP mixed-content blocking because the viewer UI and data API are served from the same origin.
 
 ## Edge Cases
 
@@ -245,9 +245,9 @@ Why this works well:
   - Can cause huge RAM use.
 
 - **Mixed content**:
-  - `https://www.cellucid.com` loading from `http://localhost:...` is usually OK.
-  - Loading from `http://remote-host:...` may be blocked by the browser.
-  - Prefer an SSH tunnel.
+  - Opening `https://www.cellucid.com?remote=http://127.0.0.1:<port>` is blocked by browsers (HTTPS page fetching HTTP).
+  - Always open the local server viewer URL (`http://127.0.0.1:<port>/`) which serves the UI via the hosted-asset proxy.
+  - Prefer an SSH tunnel when the kernel/server is remote.
 
 - **Vector fields only exist in one dimension**:
   - If you have `*_umap_2d` vectors but no `*_umap_3d`, the overlay dropdown will be empty in 3D.
@@ -273,7 +273,7 @@ Why this works well:
 - Then open:
 
   ```text
-  https://www.cellucid.com?remote=http://127.0.0.1:9000
+  http://127.0.0.1:9000/
   ```
 
 ---
@@ -289,7 +289,7 @@ Why this works well:
 - Open the server URL directly in your browser:
 
   ```text
-  http://127.0.0.1:8765/health
+  http://127.0.0.1:8765/_cellucid/health
   ```
 
   (If the server is running locally, you should get a small JSON response.)

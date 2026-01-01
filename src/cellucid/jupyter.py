@@ -45,7 +45,11 @@ import json
 import logging
 import os
 import secrets
+import threading
+import time
+from urllib.parse import urlparse
 import weakref
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -54,7 +58,14 @@ if TYPE_CHECKING:
     import anndata
 
 from .server import CellucidServer, DEFAULT_PORT
-from ._server_base import register_event_callback, unregister_event_callback
+from ._server_base import (
+    CELLUCID_WEB_URL,
+    _extract_web_build_id,
+    _web_proxy_cache_dir,
+    register_event_callback,
+    register_session_bundle_request,
+    unregister_event_callback,
+)
 
 logger = logging.getLogger("cellucid.jupyter")
 
@@ -181,6 +192,25 @@ class HookRegistry:
             return callback
         return decorator
 
+
+@dataclass
+class ViewerState:
+    """
+    Thread-safe (read-mostly) snapshot of the latest viewer → Python events.
+
+    This is intentionally small: it stores *the latest* payload per event type.
+    For awaiting new events, use `viewer.wait_for_event(...)`.
+    """
+
+    ready: dict[str, Any] | None = None
+    selection: dict[str, Any] | None = None
+    hover: dict[str, Any] | None = None
+    click: dict[str, Any] | None = None
+
+    last_event_type: str | None = None
+    last_event: dict[str, Any] | None = None
+    last_updated_at: float | None = None
+
 # Track active viewers for cleanup
 _active_viewers: weakref.WeakSet = weakref.WeakSet()
 
@@ -225,27 +255,6 @@ def _detect_jupyter_context() -> dict:
     return context
 
 
-def _get_notebook_url() -> str | None:
-    """Try to get the notebook server URL."""
-    try:
-        from notebook import notebookapp
-        servers = list(notebookapp.list_running_servers())
-        if servers:
-            return servers[0].get("url")
-    except Exception:
-        pass
-
-    try:
-        from jupyter_server import serverapp
-        servers = list(serverapp.list_running_servers())
-        if servers:
-            return servers[0].get("url")
-    except Exception:
-        pass
-
-    return None
-
-
 class BaseViewer:
     """
     Base class for Cellucid viewers in Jupyter notebooks.
@@ -288,11 +297,21 @@ class BaseViewer:
 
         self._server = None  # Subclass sets the appropriate server type
         self._viewer_id = secrets.token_hex(8)
+        self._viewer_token = secrets.token_hex(16)
         self._context = _detect_jupyter_context()
         self._displayed = False
+        self._client_server_url_cache: str | None = None
+        self._client_server_port_cache: int | None = None
 
         # Initialize hooks system
         self._hooks = HookRegistry()
+
+        # Latest-state snapshot + event waiting primitives.
+        self.state = ViewerState()
+        self._state_lock = threading.Lock()
+        self._event_cv = threading.Condition(self._state_lock)
+        self._event_seq = 0
+        self._recent_events: deque[tuple[int, str, dict[str, Any]]] = deque(maxlen=512)
 
         # Register this viewer for receiving messages
         _register_viewer_for_messages(self)
@@ -310,7 +329,7 @@ class BaseViewer:
 
         Event data:
             - cells: list[int] - indices of selected cells
-            - source: str - selection method ('lasso', 'click', 'range')
+            - source: str - selection method ('lasso', 'knn', 'proximity', 'annotation', ...)
 
         Example:
             @viewer.on_selection
@@ -368,7 +387,7 @@ class BaseViewer:
 
         Event data:
             - n_cells: int - number of cells in dataset
-            - dimensions: int - embedding dimensionality (2 or 3)
+            - dimensions: int - embedding dimensionality (1, 2, or 3)
 
         Example:
             @viewer.on_ready
@@ -466,7 +485,348 @@ class BaseViewer:
         # Remove internal fields before passing to callbacks
         data = {k: v for k, v in message.items() if k not in ('type', 'viewerId')}
 
+        self._record_event(event, data)
         self._hooks.trigger(event, data)
+
+    def _record_event(self, event: str, data: dict[str, Any]):
+        """Update `viewer.state` and notify any `wait_for_event(...)` callers."""
+        now = time.monotonic()
+        with self._event_cv:
+            self._event_seq += 1
+            seq = self._event_seq
+            self._recent_events.append((seq, event, data))
+
+            # Update "latest" snapshot.
+            self.state.last_event_type = event
+            self.state.last_event = data
+            self.state.last_updated_at = now
+            if event == "ready":
+                self.state.ready = data
+            elif event == "selection":
+                self.state.selection = data
+            elif event == "hover":
+                self.state.hover = data
+            elif event == "click":
+                self.state.click = data
+
+            self._event_cv.notify_all()
+
+    def wait_for_event(
+        self,
+        event: str,
+        timeout: float | None = 30.0,
+        *,
+        predicate: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Block until the next event of the given type arrives.
+
+        Parameters
+        ----------
+        event
+            Event type (e.g. "ready", "selection", "session_bundle").
+        timeout
+            Seconds to wait. None means wait forever.
+        predicate
+            Optional filter on the event payload.
+        """
+        deadline = None if timeout is None else (time.monotonic() + float(timeout))
+        with self._event_cv:
+            start_seq = self._event_seq
+            while True:
+                for seq, ev_type, payload in self._recent_events:
+                    if seq <= start_seq:
+                        continue
+                    if ev_type != event:
+                        continue
+                    if predicate is not None and not predicate(payload):
+                        continue
+                    return payload
+
+                if deadline is not None and time.monotonic() >= deadline:
+                    raise TimeoutError(f"Timed out waiting for event '{event}'")
+
+                remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+                self._event_cv.wait(timeout=remaining)
+
+    def wait_for_ready(self, timeout: float | None = 30.0) -> dict[str, Any]:
+        """Convenience: wait for the viewer's first `ready` event."""
+        if self.state.ready is not None:
+            return self.state.ready
+        return self.wait_for_event("ready", timeout=timeout)
+
+    def get_session_bundle(self, timeout: float | None = 60.0):
+        """
+        Request the current `.cellucid-session` bundle and return it as an object.
+
+        This is the "no browser download" workflow: Python triggers a bundle export
+        in the frontend, the frontend uploads bytes back to the local server, and
+        Python receives a handle to the resulting temp file.
+        """
+        from .session_bundle import CellucidSessionBundle
+
+        if self._context.get("in_jupyter") and not self._displayed:
+            # Best-effort: make the viewer visible if the user calls this directly.
+            self.display()
+
+        # Ensure the frontend has finished wiring session bundle export.
+        # We treat `timeout` as an overall deadline for ready+upload.
+        deadline = None if timeout is None else (time.monotonic() + float(timeout))
+        if self.state.ready is None:
+            ready_timeout = None if deadline is None else max(0.0, deadline - time.monotonic())
+            self.wait_for_ready(timeout=ready_timeout)
+
+        remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+        if remaining is not None and remaining <= 0:
+            raise TimeoutError("Timed out before requesting the session bundle (viewer not ready)")
+
+        request_id = secrets.token_hex(16)
+        register_session_bundle_request(
+            self._viewer_id,
+            request_id,
+            ttl_seconds=(3600.0 if remaining is None else remaining),
+        )
+        self.send_message({"type": "requestSessionBundle", "requestId": request_id})
+
+        event = self.wait_for_event(
+            "session_bundle",
+            timeout=remaining,
+            predicate=lambda e: e.get("requestId") == request_id,
+        )
+
+        if event.get("status") != "ok":
+            raise RuntimeError(event.get("error") or "Failed to capture session bundle")
+
+        path = event.get("path")
+        if not path:
+            raise RuntimeError("Session bundle upload succeeded but no temp path was returned")
+
+        return CellucidSessionBundle(Path(path))
+
+    def apply_session_to_anndata(
+        self,
+        adata: "Any",
+        *,
+        inplace: bool = False,
+        timeout: float | None = 60.0,
+        cleanup_bundle: bool = True,
+        **kwargs,
+    ):
+        """
+        Convenience wrapper: capture a session bundle and apply it to an AnnData.
+
+        Notes
+        -----
+        - If you want to keep the artifact, call `bundle = viewer.get_session_bundle()`
+          and `bundle.save(...)` before applying.
+        - By default, the temporary bundle file created by the server is deleted
+          after applying (best-effort).
+        """
+        bundle = self.get_session_bundle(timeout=timeout)
+        try:
+            if "expected_dataset_id" not in kwargs:
+                server = self._server
+                adapter = getattr(server, "adapter", None)
+                if adapter is not None and hasattr(adapter, "get_dataset_identity"):
+                    try:
+                        ident = adapter.get_dataset_identity()
+                        if isinstance(ident, dict):
+                            dataset_id = ident.get("id")
+                            if isinstance(dataset_id, str) and dataset_id:
+                                kwargs["expected_dataset_id"] = dataset_id
+                    except Exception:
+                        pass
+            return bundle.apply_to_anndata(adata, inplace=inplace, **kwargs)
+        finally:
+            if cleanup_bundle:
+                try:
+                    bundle.path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+    def debug_connection(self, timeout: float | None = 5.0, *, max_console_events: int = 50) -> dict[str, Any]:
+        """
+        Return a structured connectivity/debug report for this viewer.
+
+        Includes:
+        - server health/info probes
+        - Python→Frontend ping/pong roundtrip (postMessage + HTTP events)
+        - frontend debug snapshot (URL/origin/userAgent as seen by the iframe)
+        - recent frontend console warnings/errors forwarded to Python
+        """
+        report: dict[str, Any] = {
+            "viewer_id": self._viewer_id,
+            "viewer_url": self.viewer_url,
+            "server_url": self.server_url,
+            "displayed": self._displayed,
+            "notebook_context": dict(self._context),
+            "server_running": bool(self._server and getattr(self._server, "is_running", lambda: True)()),
+            "web_ui": {
+                "proxy_cache_dir": str(_web_proxy_cache_dir()),
+                "proxy_source": CELLUCID_WEB_URL,
+            },
+            "state": {
+                "ready": self.state.ready,
+                "last_event_type": self.state.last_event_type,
+                "last_updated_at": self.state.last_updated_at,
+            },
+        }
+
+        try:
+            report["client_server_url"] = self._get_client_server_url().rstrip("/")
+        except Exception as e:
+            report["client_server_url_error"] = str(e)
+
+        # Web proxy cache introspection (helps debug offline / stale-cache issues).
+        try:
+            cache_dir = _web_proxy_cache_dir()
+            index_path = cache_dir / "index.html"
+            cache_info: dict[str, Any] = {
+                "cache_dir_exists": cache_dir.exists(),
+                "index_html_exists": index_path.is_file(),
+            }
+            if index_path.is_file():
+                data = index_path.read_bytes()
+                cache_info["index_html_bytes"] = len(data)
+                cache_info["index_html_build_id"] = _extract_web_build_id(data)
+                try:
+                    cache_info["index_html_mtime"] = index_path.stat().st_mtime
+                except Exception:
+                    pass
+            report["web_ui"]["cache"] = cache_info
+        except Exception as e:
+            report["web_ui"]["cache_error"] = str(e)
+
+        # ------------------------------------------------------------------
+        # Server probes (no browser needed)
+        # ------------------------------------------------------------------
+        try:
+            import urllib.request
+
+            with urllib.request.urlopen(f"{self.server_url}/_cellucid/health", timeout=2) as f:
+                report["server_health"] = json.loads(f.read().decode("utf-8"))
+        except Exception as e:
+            report["server_health_error"] = str(e)
+
+        try:
+            import urllib.request
+
+            with urllib.request.urlopen(f"{self.server_url}/_cellucid/info", timeout=2) as f:
+                report["server_info"] = json.loads(f.read().decode("utf-8"))
+        except Exception as e:
+            report["server_info_error"] = str(e)
+
+        datasets: list[dict[str, Any]] | None = None
+        try:
+            import urllib.request
+
+            with urllib.request.urlopen(f"{self.server_url}/_cellucid/datasets", timeout=2) as f:
+                payload = json.loads(f.read().decode("utf-8"))
+                raw = payload.get("datasets") if isinstance(payload, dict) else None
+                if isinstance(raw, list):
+                    datasets = [d for d in raw if isinstance(d, dict)]
+                report["server_datasets"] = datasets
+        except Exception as e:
+            report["server_datasets_error"] = str(e)
+
+        # Best-effort: fetch a dataset_identity.json using the first dataset entry.
+        if datasets:
+            try:
+                import urllib.request
+
+                first = datasets[0]
+                rel = first.get("path") if isinstance(first, dict) else None
+                if isinstance(rel, str) and rel:
+                    base = f"{self.server_url.rstrip('/')}{rel}"
+                    if not base.endswith("/"):
+                        base += "/"
+                    url = f"{base}dataset_identity.json"
+                    with urllib.request.urlopen(url, timeout=2) as f:
+                        report["dataset_identity_url"] = url
+                        report["dataset_identity"] = json.loads(f.read().decode("utf-8"))
+            except Exception as e:
+                report["dataset_identity_error"] = str(e)
+
+        # Best-effort: verify that the hosted-asset proxy is serving an index.html.
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(
+                f"{self.server_url}/index.html",
+                headers={"User-Agent": "cellucid-python (debug_connection)"},
+            )
+            with urllib.request.urlopen(req, timeout=2) as f:
+                data = f.read()
+                report["viewer_index_probe"] = {
+                    "bytes": len(data),
+                    "content_type": f.headers.get("Content-Type"),
+                    "build_id": _extract_web_build_id(data),
+                }
+        except Exception as e:
+            report["viewer_index_probe_error"] = str(e)
+
+        # ------------------------------------------------------------------
+        # Recent event summary (helps debug “stuck” hooks)
+        # ------------------------------------------------------------------
+        try:
+            with self._event_cv:
+                by_type: dict[str, int] = {}
+                for _seq, ev_type, _payload in self._recent_events:
+                    by_type[ev_type] = by_type.get(ev_type, 0) + 1
+                report["recent_events"] = {
+                    "count": len(self._recent_events),
+                    "by_type": by_type,
+                }
+        except Exception as e:
+            report["recent_events_error"] = str(e)
+
+        # ------------------------------------------------------------------
+        # Frontend roundtrip probe (requires the viewer iframe to be alive)
+        # ------------------------------------------------------------------
+        if not self._displayed:
+            report["frontend_roundtrip"] = {"ok": False, "error": "Viewer not displayed (call viewer.display())"}
+            report["frontend_debug_snapshot"] = {"ok": False, "error": "Viewer not displayed (call viewer.display())"}
+        else:
+            req_id = secrets.token_hex(8)
+            try:
+                self.send_message({"type": "ping", "requestId": req_id})
+                pong = self.wait_for_event(
+                    "pong",
+                    timeout=timeout,
+                    predicate=lambda e: e.get("requestId") == req_id,
+                )
+                report["frontend_roundtrip"] = {"ok": True, "pong": pong}
+            except Exception as e:
+                report["frontend_roundtrip"] = {"ok": False, "error": str(e)}
+
+            snap_id = secrets.token_hex(8)
+            try:
+                self.send_message({"type": "debug_snapshot", "requestId": snap_id})
+                snap = self.wait_for_event(
+                    "debug_snapshot",
+                    timeout=timeout,
+                    predicate=lambda e: e.get("requestId") == snap_id,
+                )
+                report["frontend_debug_snapshot"] = {"ok": True, "snapshot": snap}
+            except Exception as e:
+                report["frontend_debug_snapshot"] = {"ok": False, "error": str(e)}
+
+        # ------------------------------------------------------------------
+        # Recent frontend console warnings/errors (best-effort)
+        # ------------------------------------------------------------------
+        console_events: list[dict[str, Any]] = []
+        with self._event_cv:
+            for _seq, ev_type, payload in reversed(self._recent_events):
+                if ev_type != "console":
+                    continue
+                if isinstance(payload, dict):
+                    console_events.append(payload)
+                if len(console_events) >= max_console_events:
+                    break
+        console_events.reverse()
+        report["frontend_console"] = console_events
+
+        return report
 
     # =========================================================================
     # DISPLAY & SERVER
@@ -487,17 +847,68 @@ class BaseViewer:
     @property
     def server_url(self) -> str:
         """Get the data server URL."""
+        if self._server is not None and getattr(self._server, "url", None):
+            return str(self._server.url)
         return f"http://127.0.0.1:{self.port}"
+
+    def _get_client_server_url(self) -> str:
+        """
+        Get the URL the browser should use to reach the data server.
+
+        Most notebook environments can reach the server directly at `server_url`
+        (loopback). Some environments (notably Google Colab) run the kernel on a
+        remote VM; in that case, the browser must use Colab's HTTPS port proxy.
+        """
+        override = os.getenv("CELLUCID_CLIENT_SERVER_URL")
+        if override:
+            return override.rstrip("/")
+
+        try:
+            parsed = urlparse(self.server_url)
+            port = int(parsed.port or self.port)
+        except Exception:
+            port = int(self.port)
+
+        if self._context.get("in_jupyter") and self._context.get("notebook_type") == "colab":
+            if self._client_server_port_cache == port and self._client_server_url_cache:
+                return self._client_server_url_cache
+            try:
+                from google.colab.output import eval_js  # type: ignore
+
+                proxy_url = eval_js(f"google.colab.kernel.proxyPort({port})")
+                if isinstance(proxy_url, str) and proxy_url:
+                    proxy_url = proxy_url.rstrip("/")
+                    self._client_server_port_cache = port
+                    self._client_server_url_cache = proxy_url
+                    return proxy_url
+            except Exception:
+                # Fall back to direct loopback URL.
+                pass
+
+        return self.server_url.rstrip("/")
+
+    @property
+    def viewer_origin(self) -> str:
+        """Origin (scheme+host+port) for postMessage targetOrigin."""
+        parsed = urlparse(self.viewer_url)
+        return f"{parsed.scheme}://{parsed.netloc}"
 
     @property
     def viewer_url(self) -> str:
         """Get the full viewer URL. Subclasses can override to add extra params."""
-        params = [
-            f"remote={self.server_url}",
-            f"jupyter=true",
-            f"viewerId={self._viewer_id}",
-        ]
-        return f"https://www.cellucid.com?{'&'.join(params)}"
+        from urllib.parse import urlencode
+
+        # We always serve the UI from the same server that serves the dataset
+        # (hosted-asset proxy), avoiding mixed-content.
+        base = self._get_client_server_url().rstrip("/")
+        query = urlencode(
+            {
+                "jupyter": "true",
+                "viewerId": self._viewer_id,
+                "viewerToken": self._viewer_token,
+            }
+        )
+        return f"{base}/?{query}"
 
     def _get_pre_display_html(self) -> str | None:
         """Override to add HTML before the viewer (e.g., warnings)."""
@@ -539,6 +950,10 @@ class BaseViewer:
         <script>
         (function() {{
             var viewerId = '{self._viewer_id}';
+            var viewerToken = '{self._viewer_token}';
+            // We use '*' because notebook frontends can proxy/transform iframe
+            // origins (e.g. Colab), and we authenticate messages with viewerToken.
+            var targetOrigin = '*';
 
             // Set up message passing infrastructure
             window.cellucidViewers = window.cellucidViewers || {{}};
@@ -547,8 +962,8 @@ class BaseViewer:
                     var iframe = document.getElementById('cellucid-iframe-' + viewerId);
                     if (iframe && iframe.contentWindow) {{
                         iframe.contentWindow.postMessage(
-                            {{...msg, viewerId: viewerId}},
-                            'https://www.cellucid.com'
+                            {{...msg, viewerId: viewerId, viewerToken: viewerToken}},
+                            targetOrigin
                         );
                     }}
                 }}
@@ -565,7 +980,7 @@ class BaseViewer:
         Send a message to the viewer iframe.
 
         This is the low-level API for sending commands to the frontend.
-        Messages are sent via postMessage to the cellucid.com iframe.
+        Messages are sent via postMessage to the embedded viewer iframe.
 
         Args:
             message: Dict with 'type' key and message-specific data
@@ -662,6 +1077,14 @@ class BaseViewer:
 
         Safe to call multiple times.
         """
+        # Best-effort: freeze the frontend before the server disappears so the
+        # notebook output stays visually reproducible.
+        if self._displayed:
+            try:
+                self.send_message({"type": "freeze"})
+            except Exception:
+                pass
+
         if self._server:
             try:
                 self._server.stop()
@@ -701,7 +1124,7 @@ class BaseViewer:
 #
 # Bidirectional communication works in ALL environments via HTTP POST:
 #
-# 1. The viewer iframe on cellucid.com POSTs events to the local data server
+# 1. The viewer iframe POSTs events to the local data server
 # 2. The data server (running on localhost) receives the POST at /_cellucid/events
 # 3. The event is routed to the appropriate viewer via _handle_frontend_message
 # 4. Hooks fire (on_selection, on_hover, on_click, etc.)
@@ -713,10 +1136,6 @@ class BaseViewer:
 #
 # =============================================================================
 
-# Global registry of viewers by ID for message routing
-_viewer_registry: dict[str, weakref.ref[BaseViewer]] = {}
-
-
 def _register_viewer_for_messages(viewer: BaseViewer):
     """
     Register a viewer to receive messages from frontend.
@@ -725,42 +1144,23 @@ def _register_viewer_for_messages(viewer: BaseViewer):
     The frontend POSTs events to /_cellucid/events on the data server,
     which routes them to the appropriate viewer.
     """
-    _viewer_registry[viewer._viewer_id] = weakref.ref(viewer)
+    viewer_ref = weakref.ref(viewer)
 
-    # Register HTTP event callback - this works in ALL environments!
-    # The data server (which is already running) will route POSTed events here.
-    register_event_callback(
-        viewer._viewer_id,
-        viewer._handle_frontend_message
-    )
+    def _deliver(event: dict) -> None:
+        resolved = viewer_ref()
+        if resolved is None:
+            return
+        resolved._handle_frontend_message(event)
+
+    # Register HTTP event callback - this works in ALL environments.
+    # The data server routes POSTed events here.
+    register_event_callback(viewer._viewer_id, _deliver)
     logger.debug(f"Registered HTTP event callback for viewer {viewer._viewer_id}")
 
 
 def _unregister_viewer_for_messages(viewer: BaseViewer):
     """Unregister a viewer from message routing."""
-    _viewer_registry.pop(viewer._viewer_id, None)
     unregister_event_callback(viewer._viewer_id)
-
-
-def _route_message_to_viewer(viewer_id: str, message: dict):
-    """Route a message from frontend to the appropriate viewer."""
-    viewer_ref = _viewer_registry.get(viewer_id)
-    if viewer_ref:
-        viewer = viewer_ref()
-        if viewer:
-            viewer._handle_frontend_message(message)
-
-
-def _check_hook_support(context: dict) -> bool:
-    """
-    Check if the current environment supports frontend → Python hooks.
-
-    Returns True if hooks like on_selection will actually fire.
-    With HTTP-based event routing, this now returns True for all
-    Jupyter environments since the local data server can receive events.
-    """
-    # HTTP-based routing works in all Jupyter environments
-    return context.get('in_jupyter', False)
 
 
 class CellucidViewer(BaseViewer):
@@ -954,13 +1354,18 @@ class AnnDataViewer(BaseViewer):
     @property
     def viewer_url(self) -> str:
         """Get the full viewer URL with anndata flag."""
-        params = [
-            f"remote={self.server_url}",
-            f"anndata=true",
-            f"jupyter=true",
-            f"viewerId={self._viewer_id}",
-        ]
-        return f"https://www.cellucid.com?{'&'.join(params)}"
+        from urllib.parse import urlencode
+
+        base = self._get_client_server_url().rstrip("/")
+        query = urlencode(
+            {
+                "jupyter": "true",
+                "viewerId": self._viewer_id,
+                "viewerToken": self._viewer_token,
+                "anndata": "true",
+            }
+        )
+        return f"{base}/?{query}"
 
     def _get_pre_display_html(self) -> str | None:
         """Show warning about AnnData mode being slower."""
