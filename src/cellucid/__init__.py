@@ -71,6 +71,12 @@ def __getattr__(name):
     if name == "apply_cellucid_session_to_anndata":
         from .anndata_session import apply_cellucid_session_to_anndata
         return apply_cellucid_session_to_anndata
+    if name == "clear_web_cache":
+        from .web_cache import clear_web_cache
+        return clear_web_cache
+    if name == "get_web_cache_dir":
+        from .web_cache import get_web_cache_dir
+        return get_web_cache_dir
 
     # Vector field utilities (CellRank drift, etc.)
     if name == "compute_transition_drift":
@@ -104,6 +110,8 @@ __all__ = [
     # Sessions
     "CellucidSessionBundle",
     "apply_cellucid_session_to_anndata",
+    "clear_web_cache",
+    "get_web_cache_dir",
 
     # Vector field utilities
     "compute_transition_drift",

@@ -383,7 +383,24 @@ class AnnDataAdapter:
                     f"Zarr path must be a directory: {path}. "
                     f"Zarr stores are directories, not single files."
                 )
-            adata = ad.read_zarr(path)
+            try:
+                adata = ad.read_zarr(path)
+            except ModuleNotFoundError as e:
+                # `anndata.read_zarr` requires the optional `zarr` dependency.
+                if getattr(e, "name", None) == "zarr":
+                    raise ModuleNotFoundError(
+                        "Loading `.zarr` stores requires the optional `zarr` dependency. "
+                        "Install it with: pip install zarr"
+                    ) from e
+                raise
+            except ImportError as e:
+                # Some environments may raise a generic ImportError instead.
+                if "zarr" in str(e).lower():
+                    raise ImportError(
+                        "Loading `.zarr` stores requires the optional `zarr` dependency. "
+                        "Install it with: pip install zarr"
+                    ) from e
+                raise
             source_type = "zarr"
             is_lazy = True  # Zarr provides lazy array access
             logger.info(f"Loaded zarr store: {path} (lazy array access)")
@@ -391,13 +408,22 @@ class AnnDataAdapter:
             # h5ad file
             if not path.is_file():
                 raise ValueError(f"h5ad path must be a file: {path}")
-            if backed:
-                backed_mode = backed if isinstance(backed, str) else "r"
-                adata = ad.read_h5ad(path, backed=backed_mode)
-                is_lazy = True
-            else:
-                adata = ad.read_h5ad(path)
-                is_lazy = False
+            try:
+                if backed:
+                    backed_mode = backed if isinstance(backed, str) else "r"
+                    adata = ad.read_h5ad(path, backed=backed_mode)
+                    is_lazy = True
+                else:
+                    adata = ad.read_h5ad(path)
+                    is_lazy = False
+            except ModuleNotFoundError as e:
+                # `anndata.read_h5ad` requires `h5py` in practice.
+                if getattr(e, "name", None) == "h5py":
+                    raise ModuleNotFoundError(
+                        "Loading `.h5ad` files requires the `h5py` dependency. "
+                        "Install it with: pip install h5py"
+                    ) from e
+                raise
             source_type = "h5ad"
             logger.info(f"Loaded h5ad file: {path} (backed={backed}, lazy={is_lazy})")
 

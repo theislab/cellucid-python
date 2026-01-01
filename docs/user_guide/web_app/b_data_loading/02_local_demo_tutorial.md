@@ -227,8 +227,11 @@ The repo must include:
 ### 4.3 GitHub constraints (do not skip)
 
 - **Public repo only**: Cellucid’s GitHub loader fetches data via `raw.githubusercontent.com`.
-- **Branch names**: the loader recognizes only these branch names if you include a branch in the path:
-  - `main`, `master`, `develop`, `dev`, `gh-pages`
+- **Branches**:
+  - If you don’t specify a branch, Cellucid will try common defaults (`main`, `master`, `gh-pages`, `develop`, `dev`).
+  - If your exports live on a different branch, pin it explicitly (recommended):
+    - `owner/repo@my-branch/exports`
+    - or `https://github.com/owner/repo/tree/my-branch/exports`
 - **File size limits**:
   - GitHub blocks individual files > 100 MB in normal git.
   - Git LFS is often not usable for direct “raw file” fetch workflows.
@@ -243,6 +246,7 @@ In the Cellucid UI (GitHub connection), you will enter one of these:
 - `owner/repo` (if `datasets.json` is at repo root)
 - `owner/repo/exports` (if your exports root is in a folder)
 - `owner/repo/gh-pages/exports` (if using `gh-pages` branch)
+- `owner/repo@my-branch/exports` (if your exports root is on a custom branch)
 
 Cellucid will then:
 - fetch `datasets.json`
@@ -309,7 +313,7 @@ GitHub Pages does not allow custom CORS headers, so Cellucid uses a tiny iframe 
 - **Changed dataset IDs after publishing**: links break; collaborators load the wrong dataset.
 - **Missing `datasets.json`**: GitHub loader cannot discover datasets.
 - **Wrong repo path**: the loader fetches `datasets.json` from the wrong folder (404).
-- **Non-standard branch name**: the GitHub loader currently recognizes only common branch names.
+- **Wrong branch**: your exports root is on a different branch than you think (pin the branch in the repo path).
 - **Large files**: GitHub may reject pushes, or raw fetch may be blocked by a corporate proxy.
 - **Vector fields “missing” after publish**:
   - You didn’t export them (no `vectors/` directory and no `vector_fields` block in `dataset_identity.json`).

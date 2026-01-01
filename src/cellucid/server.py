@@ -131,25 +131,30 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
 
         # Check if data_dir itself is a dataset
         if self._is_dataset_dir(self.data_dir):
+            ds_id, ds_name = self._get_dataset_identity_fields(self.data_dir)
             datasets.append({
-                "id": self.data_dir.name,
+                "id": ds_id,
                 "path": "/",
-                "name": self._get_dataset_name(self.data_dir),
+                "name": ds_name,
             })
         else:
             # Look for subdirectories that are datasets
             for subdir in self.data_dir.iterdir():
                 if subdir.is_dir() and self._is_dataset_dir(subdir):
+                    ds_id, ds_name = self._get_dataset_identity_fields(subdir)
                     datasets.append({
-                        "id": subdir.name,
+                        "id": ds_id,
                         "path": f"/{subdir.name}/",
-                        "name": self._get_dataset_name(subdir),
+                        "name": ds_name,
                     })
 
         return datasets
 
     def _is_dataset_dir(self, path: Path) -> bool:
         """Check if a directory is a valid cellucid dataset."""
+        # Dev-phase strictness: dataset_identity.json is required by the frontend.
+        if not (path / "dataset_identity.json").exists():
+            return False
         # Must have obs_manifest.json
         if not (path / "obs_manifest.json").exists():
             return False
@@ -161,17 +166,19 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
                 return True
         return False
 
-    def _get_dataset_name(self, path: Path) -> str:
-        """Get the display name for a dataset."""
+    def _get_dataset_identity_fields(self, path: Path) -> tuple[str, str]:
+        """Return (dataset_id, dataset_name) for a dataset directory."""
         identity_file = path / "dataset_identity.json"
         if identity_file.exists():
             try:
                 with open(identity_file) as f:
                     identity = json.load(f)
-                    return identity.get("name", path.name)
+                    dataset_id = identity.get("id", path.name)
+                    dataset_name = identity.get("name", path.name)
+                    return str(dataset_id or path.name), str(dataset_name or path.name)
             except Exception:
                 pass
-        return path.name
+        return path.name, path.name
 
     def log_message(self, format: str, *args):
         """Override to use Python logging instead of stderr."""
@@ -300,6 +307,19 @@ class CellucidServer:
         # Step 3: Start server
         if not self.quiet:
             print_step(3, 3, "Starting server")
+
+        # Pre-warm the hosted-asset proxy cache so first browser load has a
+        # visible progress indicator and doesn't surprise users later with
+        # missing lazily-loaded assets.
+        if self.web_proxy and not self.quiet:
+            try:
+                from .web_cache import ensure_web_ui_cached
+
+                print_detail("Viewer UI cache", "prefetching (one-time per web build)")
+                ensure_web_ui_cached(force=False, show_progress=True)
+                print_success("Viewer UI cached")
+            except Exception as e:
+                print_detail("Viewer UI cache", f"prefetch failed: {e}")
 
         # Ensure port is available (finds new one if needed)
         self.port = ensure_port_available(self.host, self.port, self.quiet)

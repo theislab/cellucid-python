@@ -98,6 +98,7 @@ Example:
 
 Recommendation:
 - ensure `obs` column names and gene IDs are unique *after sanitization*.
+- `cellucid-r` aborts export with an error if it detects a collision.
 
 ## Quick “preflight” checks (copy/paste)
 

@@ -56,7 +56,7 @@ Notes:
 - If you load a folder and Cellucid says “not a valid export”, it usually means `dataset_identity.json` is missing or malformed.
 
 See also:
-- Export API reference + high-level format: {doc}`../../python_package/api/export`
+- Export API reference + high-level format: {doc}`../../python_package/g_api_reference_coverage/api/export`
 - Why identity matters: {doc}`06_dataset_identity_why_it_matters`
 
 ---

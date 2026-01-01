@@ -73,6 +73,30 @@ def _detect_data_format(path: Path) -> str:
         'exported' - Pre-exported cellucid dataset
         'unknown' - Unable to detect format
     """
+    def _looks_like_exported_dataset_dir(candidate_dir: Path) -> bool:
+        if not candidate_dir.is_dir():
+            return False
+        # Dev-phase strictness: exported datasets must include identity metadata.
+        if not (candidate_dir / "dataset_identity.json").exists():
+            return False
+        if not (candidate_dir / "obs_manifest.json").exists():
+            return False
+        for dim in ("1d", "2d", "3d", "4d"):
+            if (candidate_dir / f"points_{dim}.bin").exists() or (candidate_dir / f"points_{dim}.bin.gz").exists():
+                return True
+        return False
+
+    def _looks_like_exported_root_dir(candidate_dir: Path) -> bool:
+        if _looks_like_exported_dataset_dir(candidate_dir):
+            return True
+        try:
+            for subdir in candidate_dir.iterdir():
+                if subdir.is_dir() and _looks_like_exported_dataset_dir(subdir):
+                    return True
+        except Exception:
+            pass
+        return False
+
     # Check file extension first (before exists check for better error messages)
     path_str = str(path).lower()
     if path_str.endswith('.h5ad'):
@@ -85,12 +109,12 @@ def _detect_data_format(path: Path) -> str:
 
     # For directories, check contents
     if path.is_dir():
-        # Check for pre-exported dataset (has dataset_identity.json - always created by prepare())
-        if (path / 'dataset_identity.json').exists():
-            return 'exported'
         # Check for zarr structure (.zattrs or .zgroup at root)
         if (path / '.zattrs').exists() or (path / '.zgroup').exists():
             return 'zarr'
+        # Check for pre-exported dataset or multi-dataset exports root.
+        if (path / 'dataset_identity.json').exists() or _looks_like_exported_root_dir(path):
+            return 'exported'
 
     return 'unknown'
 
@@ -107,7 +131,7 @@ def _add_serve_subparser(subparsers, common_parser: argparse.ArgumentParser) -> 
 Auto-detection:
     - .h5ad files → served directly via AnnData
     - .zarr directories → served directly via AnnData
-    - Directories with dataset_identity.json → served as pre-exported data
+    - Export directories (or exports roots with multiple datasets) → served as pre-exported data
 
 Examples:
     # Serve an h5ad file (auto-detected)
@@ -174,7 +198,11 @@ def _run_serve(args: argparse.Namespace) -> None:
             print(f"Error: Path not found: {data_path}", file=sys.stderr)
         else:
             print(f"Error: Unable to detect format for: {data_path}", file=sys.stderr)
-            print("Expected: .h5ad file, .zarr directory, or pre-exported directory (with dataset_identity.json)", file=sys.stderr)
+            print(
+                "Expected: .h5ad file, .zarr directory, or an export directory containing "
+                "dataset_identity.json (or an exports root with exported subfolders)",
+                file=sys.stderr,
+            )
         sys.exit(1)
 
     if data_format == 'exported':
@@ -197,15 +225,22 @@ def _run_serve(args: argparse.Namespace) -> None:
         if not args.quiet:
             print("done")
 
-        serve_anndata(
-            data=str(data_path),
-            port=args.port,
-            host=args.host,
-            open_browser=not args.no_browser,
-            quiet=args.quiet,
-            backed=not args.no_backed,
-            latent_key=args.latent_key,
-        )
+        try:
+            serve_anndata(
+                data=str(data_path),
+                port=args.port,
+                host=args.host,
+                open_browser=not args.no_browser,
+                quiet=args.quiet,
+                backed=not args.no_backed,
+                latent_key=args.latent_key,
+            )
+        except ImportError as e:
+            msg = str(e).strip()
+            if "pip install zarr" in msg or "pip install h5py" in msg:
+                print(f"Error: {msg}", file=sys.stderr)
+                sys.exit(1)
+            raise
 
 
 def _configure_logging(args: argparse.Namespace) -> None:

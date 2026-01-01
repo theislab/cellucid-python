@@ -9,7 +9,7 @@ Every export folder includes:
 - `dataset_identity.json`
 
 This file is the viewer’s “source of truth” for:
-- how many cells/genes exist,
+- how many cells exist (and how many genes were exported; respects `gene_identifiers`),
 - which embeddings are available (1D/2D/3D),
 - what obs fields exist (categorical vs continuous),
 - whether connectivity/vector fields are present,

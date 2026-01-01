@@ -48,7 +48,7 @@ The manifests record the correct suffixes. The viewer should follow manifests.
 
 **Likely causes**
 - gene identifiers in `var` aren’t what you expect (`rownames(var)` missing)
-- filename sanitization collisions overwrote files
+- filename sanitization collisions (older exports), or manual overwrites/renames (current `cellucid-r` rejects collisions)
 
 **How to confirm**
 - inspect `var_manifest.json` and compare the gene IDs listed to what you expect.

@@ -74,8 +74,7 @@ For filenames, the exporter sanitizes gene IDs:
 - leading/trailing dots/underscores are removed
 
 ```{warning}
-If two different gene IDs sanitize to the same filename, one will overwrite the other.
-`cellucid-r` does not currently detect this collision for you.
+If two different gene IDs sanitize to the same filename, export fails with an error (to prevent silent overwrites).
 ```
 
 Practical recommendation:

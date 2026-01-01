@@ -91,8 +91,11 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         self.server_info = server_info
         self.dataset_id = dataset_id  # Cached for path prefix stripping
         self.web_proxy = bool(web_proxy)
-        # Don't call super().__init__ with directory since we're serving virtual files
-        super(SimpleHTTPRequestHandler, self).__init__(*args, **kwargs)
+        # We serve "virtual" files via explicit route handlers, but still want
+        # the normal BaseHTTPRequestHandler lifecycle (parse_request, etc.).
+        # `directory` is unused because we never call the default file-serving
+        # paths for AnnData mode.
+        super().__init__(*args, **kwargs)
 
     def end_headers(self):
         """Add CORS headers to every response."""
@@ -548,6 +551,19 @@ class AnnDataServer:
         # Step 4: Start server
         if not self.quiet:
             print_step(4, 4, "Starting server")
+
+        # Pre-warm the hosted-asset proxy cache so the first browser load has a
+        # visible progress indicator and offline/airgapped sessions are less
+        # likely to hit missing lazily-loaded assets.
+        if self.web_proxy and not self.quiet:
+            try:
+                from .web_cache import ensure_web_ui_cached
+
+                print_detail("Viewer UI cache", "prefetching (one-time per web build)")
+                ensure_web_ui_cached(force=False, show_progress=True)
+                print_success("Viewer UI cached")
+            except Exception as e:
+                print_detail("Viewer UI cache", f"prefetch failed: {e}")
 
         # Ensure port is available (finds new one if needed)
         self.port = ensure_port_available(self.host, self.port, self.quiet)

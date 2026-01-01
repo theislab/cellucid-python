@@ -160,7 +160,7 @@ If you are debugging Python synchronization, start from:
 ### Common failure modes (Python/Jupyter)
 - Wrong `viewerId` (messages routed to the wrong embedded viewer)
 - Dataset mismatch (indices don’t refer to the same cells)
-- Server unreachable from the viewer (remote/HPC notebook without tunneling/proxying)
+- Server unreachable from the viewer (HTTPS/remote notebooks without Jupyter Server Proxy, or remote/HPC without tunneling)
 - Embedded UI assets blocked (hosted-asset proxy blocked and no cached copy available)
 
 First-line diagnostic:

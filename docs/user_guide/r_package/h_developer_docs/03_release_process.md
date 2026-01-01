@@ -8,12 +8,13 @@ The full step-by-step checklist lives in:
 ## Recommended release flow (high level)
 
 1) Update `DESCRIPTION` version.
-2) Update `NEWS.md` with user-visible changes.
-3) Ensure tests pass (`devtools::test()` / `R CMD check`).
-4) Merge to main.
-5) Create a GitHub Release tag (e.g. `v0.99.1`).
-6) Use CI to build a source tarball (`cellucid_<version>.tar.gz`).
-7) Publish targets (depending on maturity):
+2) Update `CITATION.cff` (if present) to match the new version.
+3) Update `NEWS.md` with user-visible changes.
+4) Ensure tests pass (`devtools::test()` / `R CMD check`).
+5) Merge to main.
+6) Create a GitHub Release tag (e.g. `v0.99.1`).
+7) Use CI to build a source tarball (`cellucid_<version>.tar.gz`).
+8) Publish targets (depending on maturity):
    - GitHub (source of truth)
    - r-universe (easy binaries)
    - CRAN (manual submission)

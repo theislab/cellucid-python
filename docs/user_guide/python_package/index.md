@@ -81,17 +81,10 @@ Symptom → diagnosis → fix for installation, exports, servers, Jupyter embedd
 :::
 
 :::{grid-item-card} {octicon}`code;1.5em;sd-mr-1` API Reference
-:link: api/index
+:link: g_api_reference_coverage/api/index
 :link-type: doc
 
 Complete reference for all functions and classes in the Cellucid Python package.
-:::
-
-:::{grid-item-card} {octicon}`beaker;1.5em;sd-mr-1` Examples
-:link: examples/index
-:link-type: doc
-
-Real-world examples with various single-cell datasets ready for visualization.
 :::
 
 ::::
@@ -105,10 +98,9 @@ b_concepts_mental_models/index
 c_data_preparation_api/index
 d_viewing_apis/index
 e_jupyter_hooks/index
+examples/index
 f_notebooks_tutorials/index
 g_api_reference_coverage/index
 h_developer_docs/index
 i_troubleshooting_index/index
-api/index
-examples/index
 ```

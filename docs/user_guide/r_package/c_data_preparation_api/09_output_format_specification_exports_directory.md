@@ -188,7 +188,7 @@ Important keys (high level):
 - `id`, `name`, `description`
 - `created_at`
 - `cellucid_data_version` (R package version)
-- `stats` (counts: cells, genes, fields, edges)
+- `stats` (counts: cells, exported genes, fields, edges; `n_genes` respects `gene_identifiers`)
 - `embeddings`:
   - `available_dimensions`
   - `default_dimension`

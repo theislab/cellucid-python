@@ -672,6 +672,14 @@ class BaseViewer:
             },
         }
 
+        # Jupyter proxy support (recommended for HTTPS/remote notebooks).
+        try:
+            import jupyter_server_proxy  # type: ignore
+
+            report["jupyter_server_proxy"] = {"installed": True, "module": getattr(jupyter_server_proxy, "__name__", None)}
+        except Exception as e:
+            report["jupyter_server_proxy"] = {"installed": False, "error": str(e)}
+
         try:
             report["client_server_url"] = self._get_client_server_url().rstrip("/")
         except Exception as e:
@@ -696,6 +704,17 @@ class BaseViewer:
             report["web_ui"]["cache"] = cache_info
         except Exception as e:
             report["web_ui"]["cache_error"] = str(e)
+
+        # Prefetch marker (written by `cellucid.web_cache.ensure_web_ui_cached()`).
+        try:
+            import json as _json
+
+            cache_dir = _web_proxy_cache_dir()
+            meta_path = cache_dir / ".cellucid-web-prefetch.json"
+            if meta_path.is_file():
+                report["web_ui"]["prefetch"] = _json.loads(meta_path.read_text("utf-8"))
+        except Exception as e:
+            report["web_ui"]["prefetch_error"] = str(e)
 
         # ------------------------------------------------------------------
         # Server probes (no browser needed)
@@ -829,6 +848,31 @@ class BaseViewer:
         return report
 
     # =========================================================================
+    # WEB UI CACHE UTILITIES
+    # =========================================================================
+
+    def clear_web_cache(self) -> Path:
+        """
+        Clear the hosted-asset web UI cache.
+
+        This forces the next viewer/server run to re-download the web UI assets.
+        """
+        from .web_cache import clear_web_cache
+
+        return clear_web_cache()
+
+    def ensure_web_ui_cached(self, *, force: bool = False, show_progress: bool = True):
+        """
+        Best-effort: prefetch the viewer UI assets into the local cache.
+
+        This makes first-load UX clearer (progress bar) and reduces later
+        surprises from lazily-loaded assets when offline.
+        """
+        from .web_cache import ensure_web_ui_cached
+
+        return ensure_web_ui_cached(force=force, show_progress=show_progress)
+
+    # =========================================================================
     # DISPLAY & SERVER
     # =========================================================================
 
@@ -922,6 +966,23 @@ class BaseViewer:
 
         from IPython.display import display, HTML
 
+        # Ensure the viewer UI assets are available locally (one-time download).
+        # This prints a progress bar (tqdm) on first run, which is important UX
+        # for beginners in notebook contexts.
+        try:
+            summary = self.ensure_web_ui_cached(force=False, show_progress=True)
+            if getattr(summary, "downloaded_files", 0) or getattr(summary, "errors", None):
+                print(
+                    f"Cellucid web UI cache: {summary.downloaded_files} file(s), "
+                    f"{summary.downloaded_bytes} byte(s) downloaded to {summary.cache_dir}"
+                )
+                for err in (summary.errors or [])[:5]:
+                    print(f"  - {err}")
+        except Exception as e:
+            # The iframe will still show a more detailed error page if the UI
+            # can't be fetched and no cached copy exists; keep notebook output clean.
+            logger.warning("Failed to prefetch Cellucid web UI assets: %s", e)
+
         # Show any pre-display HTML (e.g., warnings)
         pre_html = self._get_pre_display_html()
         if pre_html:
@@ -935,11 +996,19 @@ class BaseViewer:
 
     def _generate_viewer_html(self) -> str:
         """Generate HTML for embedding the viewer with message passing support."""
+        # Important: the initial iframe `src` is set by the script below.
+        # This allows us to choose the best URL per notebook frontend:
+        # - direct loopback in local classic/JupyterLab
+        # - Jupyter Server Proxy when the notebook runs on HTTPS/remote
+        # - Colab's HTTPS port proxy (computed on Python side)
+        direct_src = self.viewer_url
+        port = int(self.port)
+
         return f"""
         <div id="cellucid-viewer-{self._viewer_id}" style="width:100%; height:{self.height}px;">
             <iframe
                 id="cellucid-iframe-{self._viewer_id}"
-                src="{self.viewer_url}"
+                src="about:blank"
                 width="100%"
                 height="100%"
                 frameborder="0"
@@ -951,9 +1020,60 @@ class BaseViewer:
         (function() {{
             var viewerId = '{self._viewer_id}';
             var viewerToken = '{self._viewer_token}';
+            var directSrc = {json.dumps(direct_src)};
+            var port = {port};
+
             // We use '*' because notebook frontends can proxy/transform iframe
             // origins (e.g. Colab), and we authenticate messages with viewerToken.
             var targetOrigin = '*';
+
+            function getNotebookBaseUrl() {{
+                try {{
+                    var baseUrl =
+                        (document.body && document.body.dataset && document.body.dataset.baseUrl) ||
+                        (document.body && document.body.getAttribute && document.body.getAttribute('data-base-url')) ||
+                        '/';
+                    if (!baseUrl) baseUrl = '/';
+                    if (!baseUrl.endsWith('/')) baseUrl = baseUrl + '/';
+                    return baseUrl;
+                }} catch (e) {{
+                    return '/';
+                }}
+            }}
+
+            function buildProxySrc() {{
+                // Requires jupyter-server-proxy (common in JupyterHub and many local installs).
+                var baseUrl = getNotebookBaseUrl();
+                if (!(window.location.protocol === 'http:' || window.location.protocol === 'https:')) {{
+                    return null;
+                }}
+                if (!baseUrl.startsWith('/')) {{
+                    return null;
+                }}
+                var q = '';
+                try {{
+                    var idx = directSrc.indexOf('?');
+                    q = idx >= 0 ? directSrc.slice(idx + 1) : '';
+                }} catch (e) {{
+                    q = '';
+                }}
+                var root = window.location.origin + baseUrl + 'proxy/' + port + '/';
+                return q ? (root + '?' + q) : root;
+            }}
+
+            async function probeHealth(url) {{
+                try {{
+                    var u = new URL(url);
+                    u.search = '';
+                    u.hash = '';
+                    if (!u.pathname.endsWith('/')) u.pathname = u.pathname + '/';
+                    u.pathname = u.pathname + '_cellucid/health';
+                    var res = await fetch(u.toString(), {{ cache: 'no-store' }});
+                    return !!(res && res.ok);
+                }} catch (e) {{
+                    return false;
+                }}
+            }}
 
             // Set up message passing infrastructure
             window.cellucidViewers = window.cellucidViewers || {{}};
@@ -962,15 +1082,65 @@ class BaseViewer:
                     var iframe = document.getElementById('cellucid-iframe-' + viewerId);
                     if (iframe && iframe.contentWindow) {{
                         iframe.contentWindow.postMessage(
-                            {{...msg, viewerId: viewerId, viewerToken: viewerToken}},
+                            Object.assign({{}}, msg, {{ viewerId: viewerId, viewerToken: viewerToken }}),
                             targetOrigin
                         );
                     }}
                 }}
             }};
 
+            // Choose an iframe URL that avoids HTTPS→HTTP mixed-content blocking.
+            (async function() {{
+                var iframe = document.getElementById('cellucid-iframe-' + viewerId);
+                if (!iframe) return;
+
+                // If Python already provided an HTTPS-capable URL (e.g. Colab proxy),
+                // use it directly.
+                var isHttp = (typeof directSrc === 'string') && directSrc.startsWith('http://');
+                var notebookIsHttps = (window.location && window.location.protocol === 'https:');
+                var directIsLoopback = false;
+                try {{
+                    directIsLoopback = /^http:\\/\\/(127\\.0\\.0\\.1|localhost)(:|\\/)/.test(directSrc);
+                }} catch (e) {{
+                    directIsLoopback = false;
+                }}
+                var hostIsLoopback = false;
+                try {{
+                    var hn = window.location && window.location.hostname;
+                    hostIsLoopback = (hn === '127.0.0.1' || hn === 'localhost');
+                }} catch (e) {{
+                    hostIsLoopback = false;
+                }}
+                // Prefer Jupyter Server Proxy when direct loopback is unlikely to work:
+                // - HTTPS notebook blocks HTTP loopback (mixed content)
+                // - Remote notebooks cannot reach kernel loopback directly
+                var shouldPreferProxy = directIsLoopback && (notebookIsHttps || !hostIsLoopback);
+
+                var proxySrc = buildProxySrc();
+                if (proxySrc && (shouldPreferProxy || !(window.location && window.location.protocol === 'file:'))) {{
+                    var ok = await probeHealth(proxySrc);
+                    if (ok) {{
+                        iframe.src = proxySrc;
+                        return;
+                    }}
+                    if (shouldPreferProxy) {{
+                        iframe.srcdoc = [
+                          '<div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; padding: 18px;">',
+                          '<h3 style="margin: 0 0 8px; font-size: 16px;">Cellucid: notebook proxy required</h3>',
+                          '<p style="margin: 0 0 10px; line-height: 1.35;">This notebook is served from a secure/remote origin, so the viewer cannot load an HTTP loopback server directly.</p>',
+                          '<p style="margin: 0 0 10px; line-height: 1.35;"><strong>Fix:</strong> install/enable <code>jupyter-server-proxy</code> (recommended) or set <code>CELLUCID_CLIENT_SERVER_URL</code> to a browser-reachable HTTPS URL for the Cellucid server.</p>',
+                          '<p style="margin: 0; line-height: 1.35;">In Python, run <code>viewer.debug_connection()</code> for a detailed report.</p>',
+                          '</div>'
+                        ].join('');
+                        return;
+                    }}
+                }}
+
+                iframe.src = directSrc;
+            }})();
+
             // Note: Frontend → Python communication uses HTTP POST to /_cellucid/events.
-            // The postMessage listener is no longer needed for event routing.
+            // The postMessage listener is not used for event routing.
         }})();
         </script>
         """
@@ -1224,6 +1394,10 @@ class CellucidViewer(BaseViewer):
             quiet=True,
         )
         self._server.start_background()
+        try:
+            self.port = int(getattr(self._server, "port", self.port))
+        except Exception:
+            pass
         logger.info(f"Started cellucid server at {self._server.url}")
 
     def __repr__(self) -> str:
@@ -1349,6 +1523,10 @@ class AnnDataViewer(BaseViewer):
             **adapter_kwargs,
         )
         self._server.start_background()
+        try:
+            self.port = int(getattr(self._server, "port", self.port))
+        except Exception:
+            pass
         logger.info(f"Started AnnData server at {self._server.url}")
 
     @property

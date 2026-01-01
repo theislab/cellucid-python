@@ -38,7 +38,7 @@ The frontend separates data loading into two layers:
    - Output: typed arrays + field loaders attached to `DataState`.
 
 The base URL is the critical bridge:
-- UI code should never hardcode “assets/exports/…” paths.
+- UI code should never hardcode demo-exports paths; it should always flow through an exports **base URL**.
 - Loader code should never assume “GitHub raw URL…”.
 
 Code pointers:

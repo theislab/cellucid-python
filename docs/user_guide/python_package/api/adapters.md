@@ -1,40 +1,17 @@
-# Data Adapters
-
-```{eval-rst}
-.. currentmodule:: cellucid
-```
-
-Adapter classes for reading and transforming AnnData into the Cellucid format. These are used internally by the server and viewer classes.
-
+---
+orphan: true
 ---
 
-## AnnDataAdapter
+# Adapters (moved)
 
-Adapter for reading AnnData objects and providing data in the format expected by the Cellucid viewer. Handles lazy loading for `.h5ad` and `.zarr` files.
+This legacy page is kept for backward-compatible links.
 
-```python
-from cellucid import AnnDataAdapter
+New location:
+- {doc}`../g_api_reference_coverage/api/adapters`
 
-# Create adapter from various sources
-adapter = AnnDataAdapter(adata)           # In-memory
-adapter = AnnDataAdapter("data.h5ad")     # HDF5 file
-adapter = AnnDataAdapter("data.zarr")     # Zarr store
+```{toctree}
+:maxdepth: 1
+:hidden:
 
-# Access data
-positions = adapter.get_positions()
-metadata = adapter.get_metadata()
-expression = adapter.get_gene_expression("CD3D")
+../g_api_reference_coverage/api/adapters
 ```
-
-```{eval-rst}
-.. autoclass:: AnnDataAdapter
-   :members:
-   :show-inheritance:
-```
-
----
-
-## See Also
-
-- {func}`~cellucid.prepare` - Export AnnData to static files
-- {class}`~cellucid.AnnDataServer` - Uses adapter internally for serving

@@ -145,6 +145,10 @@ def _normalize_web_path(url_path: str) -> str | None:
         return None
     if not url_path.startswith("/"):
         url_path = "/" + url_path
+    if any(ch.isspace() for ch in url_path):
+        return None
+    if "*" in url_path or "`" in url_path:
+        return None
 
     norm = posixpath.normpath(url_path)
     if not norm.startswith("/"):
@@ -160,10 +164,6 @@ def _is_proxyable_web_path(url_path: str) -> bool:
     if url_path == "/" or url_path == "/index.html":
         return True
     if url_path.startswith("/assets/"):
-        # Do not proxy large demo dataset exports through the web-proxy layer.
-        # Demo datasets live outside the web app repo (see cellucid-datasets).
-        if url_path.startswith("/assets/exports/") or url_path == "/assets/exports":
-            return False
         return True
     if url_path in _WEB_PROXY_ROOT_FILES:
         return True
@@ -347,7 +347,14 @@ class CORSMixin:
     allow_caching: bool = True
 
     def _get_allowed_origin(self) -> str | None:
-        origin = self.headers.get("Origin")
+        # `BaseHTTPRequestHandler` only populates `.headers` after successfully
+        # parsing a request. If parsing fails, `send_error()` may call our
+        # overridden `end_headers()` while `.headers` is still unset.
+        headers = getattr(self, "headers", None)
+        if headers is None:
+            return None
+
+        origin = headers.get("Origin")
         if not origin:
             return None
 
