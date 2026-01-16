@@ -8,7 +8,7 @@ set -euo pipefail
 password_file="${password_file:-/path/to/password.txt}"
 
 # Where to put everything on your LOCAL machine
-local_target_dir="/Users/kemalinecik/git_nosync/_/cellucid-data/data/raw"
+local_target_dir="/Users/kemalinecik/git_nosync/master_cellucid/cellucid-data/data/raw"
 
 # Remote login
 remote_user="kemal.inecik"
