@@ -77,7 +77,7 @@ Diagnostics / utilities (also useful for debugging):
 |---|---|---|
 | `viewer.debug_connection()` | End-to-end connectivity report | `"ping"`, `"debug_snapshot"` (internal) |
 | `viewer.get_session_bundle()` | Request a session bundle upload | `"requestSessionBundle"` |
-| `viewer.stop()` | Freeze the view (best-effort) then stop server | `"freeze"` (best-effort) |
+| `viewer.stop()` | Freeze the view, stop the server, unregister hooks, and report any failure | `"freeze"` |
 
 ## Message schema (what actually crosses the boundary)
 
@@ -101,7 +101,7 @@ You normally send only the message-specific fields below.
 
 Notes:
 - `cells` should be a list of 0-based integer indices.
-- `color` should be a hex string (`#RRGGBB`). If the UI ignores custom colors, it may fall back to a default highlight style.
+- `color` must be a hex string (`#RRGGBB`); invalid colors are rejected.
 
 ### `clearHighlights`
 
@@ -116,8 +116,8 @@ Notes:
 ```
 
 Notes:
-- In notebooks, the safest assumption is that `field` refers to an **obs column**.
-- If the field does not exist, the UI may ignore the command or surface a warning toast.
+- `field` is the exact current field ID exposed by the loaded dataset.
+- Use an existing field ID; the command does not translate aliases.
 
 ### `setVisibility`
 
@@ -126,7 +126,8 @@ Notes:
 ```
 
 Notes:
-- `cells=null` can be used to target “all cells” (depends on UI support).
+- `"cells": null` targets all cells and is what
+  `viewer.set_visibility(None, visible=...)` emits.
 - If you need reproducible filtering, prefer the UI’s filter system; cell-level visibility is best treated as an interactive convenience.
 
 ### `resetCamera`
@@ -161,8 +162,9 @@ Notes:
 ## Edge cases and footguns
 
 - **Indexing is positional**: indices refer to row positions, not stable cell IDs.
-- **Out-of-range indices** may be ignored or may trigger errors in the frontend (depends on UI version).
-- **Viewer not displayed**: `viewer.send_message(...)` warns and does nothing.
+- **Out-of-range indices** violate the current command contract; validate
+  indices against the dataset cell count before sending them.
+- **Viewer not displayed**: `viewer.send_message(...)` raises `RuntimeError`.
 - **Multiple viewers**: make sure you are sending commands to the same `viewer` instance that rendered the iframe you are looking at.
 
 ## Troubleshooting
@@ -179,7 +181,7 @@ If “nothing happens” when sending commands:
    ```
    - If ping/pong fails, you have a connectivity/proxy problem.
 3. If ping/pong succeeds but a specific command is ignored:
-   - Clear/update the cached web UI (offline caches can pin older UI behavior):
+   - Re-establish the exact configured source generation:
      ```python
      viewer.clear_web_cache()
      ```
@@ -191,4 +193,3 @@ If “nothing happens” when sending commands:
 - Viewer → Python events: {doc}`07_frontend_to_python_events`
 - Robust callback patterns: {doc}`08_writing_robust_callbacks`
 - Full reference: {doc}`16_reference`
-

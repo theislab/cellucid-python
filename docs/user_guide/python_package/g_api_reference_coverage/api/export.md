@@ -33,20 +33,21 @@ If you want the long-form, user-guide style walkthroughs, see:
 ```python
 from cellucid import prepare
 
-X_umap = adata.obsm["X_umap"]  # shape: (n_cells, 2) or (n_cells, 3)
+X_umap_2d = adata.obsm["X_umap_2d"]
 
 prepare(
-    latent_space=adata.obsm.get("X_pca", X_umap),
+    latent_space=adata.obsm["X_pca"],
     obs=adata.obs,
     var=adata.var,
     gene_expression=adata.X,
     connectivities=adata.obsp.get("connectivities"),
 
-    # Provide at least one embedding (1D/2D/3D). 4D is reserved (not implemented yet).
-    X_umap_2d=adata.obsm.get("X_umap_2d", X_umap if X_umap.shape[1] == 2 else None),
-    X_umap_3d=adata.obsm.get("X_umap_3d", X_umap if X_umap.shape[1] == 3 else None),
+    X_umap_2d=X_umap_2d,
 
     out_dir="./my_export",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    obs_categorical_dtype="uint16",
     compression=6,
     var_quantization=8,
     obs_continuous_quantization=8,
@@ -81,45 +82,19 @@ If you need *exact* values preserved:
 
 Vector fields are optional, but powerful:
 - They are **per-cell displacement vectors in embedding space** (not “3D arrows in physical space”).
-- Naming convention:
-  - Explicit: `<field>_umap_<dim>d` (recommended)
-  - Implicit: `<field>_umap` (only if explicit keys aren’t provided)
+- Naming convention: `<field>_umap_<dim>d`.
 
 See {doc}`vector_fields` for helper functions and naming conventions.
 
 ---
 
-## Screenshot placeholder (optional)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: export-loaded-in-web-app
-Where it appears: Export / Data Preparation → Fast path
-Capture:
-  - UI location: the Cellucid web app dataset loader after successfully loading an exported folder
-  - State prerequisites: you have a working export folder created by `prepare(...)`
-  - Action to reach state:
-    - start a server: `cellucid serve ./my_export`
-    - open the viewer URL in your browser
-Crop:
-  - Include: dataset name + point count + one visible embedding view
-  - Exclude: private dataset path, browser bookmarks, user accounts
-Redact:
-  - Remove: sample IDs, lab-internal dataset names (if private)
-Annotations:
-  - Callouts:
-    - (1) dataset name / identity indicator
-    - (2) points visible (success state)
-    - (3) field selector / legend (to confirm metadata loaded)
-Alt text:
-  - Cellucid web viewer showing an exported dataset loaded successfully, with points visible in an embedding.
-Caption:
-  - After exporting with `prepare(...)`, serving the folder and opening the viewer URL loads the dataset with metadata and embeddings ready for exploration.
--->
-```{figure} ../../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Cellucid web viewer showing an exported dataset loaded successfully, with points visible in an embedding.
+```{figure} ../../../../_static/screenshots/web_app/app-overview-cell-type.png
+:alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
 :width: 100%
 
-After exporting with `prepare(...)`, serving the folder and opening the viewer URL loads the dataset with metadata and embeddings ready for exploration.
+A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
 ```
 
 ---
@@ -145,7 +120,6 @@ my_export/
 
 Notes:
 - You must provide at least one of `points_1d/2d/3d`.
-- 4D (`points_4d`) is reserved for future development.
 
 ---
 
@@ -161,29 +135,33 @@ Notes:
 
 ### Missing embeddings
 - If none of `X_umap_1d`, `X_umap_2d`, `X_umap_3d` are provided, export fails.
-- If you pass `X_umap_4d`, export raises `NotImplementedError` (reserved for future viewer support).
+- Only `X_umap_1d`, `X_umap_2d`, and `X_umap_3d` are accepted keyword names.
 
 ### Shape mismatches
 - All inputs must agree on `n_cells` (rows).
 - `gene_expression` must be `(n_cells, n_genes)` and `var` must describe those genes.
 
 ### Required inputs (common surprises)
-- `latent_space` is required (used for outlier quantiles); if you don’t have PCA, you can often reuse an embedding as a fallback.
+- `latent_space` is required and must be supplied explicitly.
 - `obs` is required and must be aligned to the same cell order as embeddings.
 - If you provide `gene_expression`, you must also provide `var` (to name/describe genes).
 
-### File overwrites vs “skip existing”
-- By default, `prepare(...)` skips writing files that already exist (to avoid accidental overwrites).
-- Use `force=True` if you intentionally want to regenerate files.
+### Existing export directories
+- A non-empty target directory raises `FileExistsError` when `force=False`.
+- `force=True` publishes one complete replacement generation.
 
 ### Vector field validation
 - `vector_fields` must be a dict of arrays (or sparse matrices).
 - Each vector field must be 1D or 2D and have 1/2/3 components (for 1D/2D/3D overlays).
-- Keys should follow naming conventions so the viewer can find the right dimension.
+- Keys must match `<field>_umap_1d`, `<field>_umap_2d`, or
+  `<field>_umap_3d`, and the matching embedding dimension must exist.
 
 ### NaN/Inf and constant-value fields
-- Continuous quantization reserves a missing-value marker; NaN/Inf will be mapped to “missing”.
-- Constant-value fields are allowed, but are not informative for coloring/filtering.
+- Scientific arrays must contain real finite values representable as
+  `float32`; invalid values reject before publication.
+- Constant continuous fields are valid without quantization. Quantization
+  rejects a constant field because the current compact contract requires
+  `minValue < maxValue`.
 
 ### Very large datasets
 - Export size scales with:
@@ -226,7 +204,6 @@ Fix:
 - Common choices:
   - `adata.obsm["X_pca"]`
   - `adata.obsm["X_scvi"]`
-  - as a fallback: reuse `X_umap_2d`/`X_umap_3d` (less ideal, but workable)
 
 ---
 
@@ -236,19 +213,18 @@ Fix:
 
 ---
 
-### Symptom: “4D visualization is not yet implemented”
+### Symptom: an unsupported embedding keyword is rejected
 Fix:
-- Do not pass `X_umap_4d`.
-- Use `X_umap_1d`, `X_umap_2d`, or `X_umap_3d`.
+- Pass only `X_umap_1d`, `X_umap_2d`, or `X_umap_3d`.
 
 ---
 
-### Symptom: “⚠ Skipping … already exists”
+### Symptom: “non-empty export directory”
 What’s happening:
-- `prepare(...)` avoids overwriting existing files by default.
+- `prepare(...)` refuses to mix a new generation with existing artifacts.
 
 Fix:
-- If you want to overwrite, call `prepare(..., force=True)`.
+- If you want one complete replacement, call `prepare(..., force=True)`.
 - If you want a clean export, write to a new `out_dir`.
 
 ---
@@ -266,7 +242,8 @@ Likely causes:
 - Compression level is very high.
 
 Fix:
-- Export fewer genes (`gene_identifiers=`) or skip gene expression entirely for metadata-only exports.
+- Export fewer genes (`gene_identifiers=`) or omit gene expression for a
+  metadata-only export.
 - Use quantization (`var_quantization=8`) and moderate compression (`compression=6`).
 
 ---

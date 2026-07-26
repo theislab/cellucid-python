@@ -77,7 +77,7 @@ By default, `prepare()` exports **all** columns in `obs`.
 
 You can (and often should) export only a curated set:
 
-```python
+```text
 obs_keys = ["leiden", "cell_type", "sample", "n_counts", "pct_mito"]
 
 prepare(
@@ -108,9 +108,9 @@ If you set:
 - `obs_continuous_quantization=16`, values are stored as `uint16`
 
 Encoding rules (current exporter):
-- valid values map to `0..254` (8-bit) or `0..65534` (16-bit)
-- invalid values (`NaN`, `Inf`, `-Inf`) map to the reserved missing marker:
-  - `255` (8-bit) or `65535` (16-bit)
+- every continuous input must be real, finite, and representable as `float32`;
+  otherwise the complete candidate is rejected before publication
+- validated values map to `0..254` (8-bit) or `0..65534` (16-bit)
 - per-field `minValue`/`maxValue` are recorded in the manifest and used to dequantize in the browser.
 
 Dequantization in the web app is:
@@ -138,20 +138,18 @@ Missing values:
   - `255` for `uint8`
   - `65535` for `uint16`
 
-#### `obs_categorical_dtype` (auto vs forcing)
+#### `obs_categorical_dtype` (required storage choice)
 
 `obs_categorical_dtype` controls how codes are stored:
 
-- `auto` (recommended):
-  - if `n_categories ≤ 254` → `uint8` codes
-  - else → `uint16` codes
 - `uint8`:
-  - forces `uint8` and errors if `n_categories > 254`
+  - stores up to 255 categories and errors above that count
 - `uint16`:
-  - forces `uint16` (useful if you want stable dtype across datasets)
+  - stores up to 65,535 categories
 
 Practical guidance:
-- Leave this on `auto` unless you are building a pipeline that needs strict consistency.
+- Choose the storage mode explicitly for every export; use `uint16` when one
+  stable choice is more important than the smaller `uint8` payload.
 - Treat fields with tens of thousands of categories as a design smell; the UI will not be usable.
 
 ### Outlier quantiles for categorical fields (why `latent_space` is required)
@@ -222,11 +220,11 @@ The web app expands this into a verbose “fields array” at load time.
 ### Binary payloads under `obs/`
 
 Per continuous field:
-- `obs/<safe_key>.values.f32` (or `.values.u8` / `.values.u16`)
+- `obs/<key>.values.f32` (or `.values.u8` / `.values.u16`)
 
 Per categorical field:
-- `obs/<safe_key>.codes.u8` (or `.codes.u16`)
-- `obs/<safe_key>.outliers.f32` (or `.outliers.u8` / `.outliers.u16`)
+- `obs/<key>.codes.u8` (or `.codes.u16`)
+- `obs/<key>.outliers.f32` (or `.outliers.u8` / `.outliers.u16`)
 
 All files may have a `.gz` suffix if `compression` is enabled.
 
@@ -260,10 +258,11 @@ Datetimes become categorical unless you convert them. If you want time as contin
 Object columns that mix numbers and strings can produce confusing categories.
 Make them consistent before export.
 
-### Duplicate column names (or collisions after sanitization)
+### Unsafe or colliding column names
 
-Two different keys can map to the same safe filename key and overwrite files.
-Avoid this.
+Keys must already be exact portable filename components and must be unique
+under case-insensitive comparison. `prepare()` rejects the complete candidate
+before publication when either invariant fails.
 
 ---
 
@@ -273,8 +272,8 @@ Avoid this.
 
 Likely causes:
 - It wasn’t exported because you passed `obs_keys` and forgot it.
-- You reused an `out_dir` and `obs_manifest.json` was skipped (`force=False`).
-- The key name collides after sanitization and another field overwrote it.
+- The complete export failed before publication.
+- The selected field key was not present in the validated manifest.
 
 How to confirm:
 - Open `<out_dir>/obs_manifest.json` and search for the key.

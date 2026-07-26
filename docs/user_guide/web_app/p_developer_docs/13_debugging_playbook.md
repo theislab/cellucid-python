@@ -134,7 +134,7 @@ Fix:
 ### Symptom: “Unexpected token `<`” during load
 
 Likely cause:
-- server returned HTML for a JSON/binary request (SPA fallback or error page).
+- the server returned an HTML document for a JSON or binary request.
 
 Fix:
 - Open the failed request URL in a new tab; verify it’s real JSON/binary and returns correct status codes.
@@ -150,7 +150,7 @@ Deep dive:
 
 Likely causes (ordered):
 1) `obs_manifest.json` missing/unreadable.
-2) Dataset loaded with “empty obs” fallback (dev-phase behavior).
+2) `obs_manifest.json` contains no usable fields.
 3) You are in a snapshot view with a different view context.
 
 How to confirm:

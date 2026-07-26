@@ -15,7 +15,9 @@ If you remember one sentence:
 > `cellucid` turns your data (often AnnData) into something the **Cellucid web app** can load, and it can also **serve/embed** the web app so you can use it from the CLI and notebooks.
 
 ```{note}
-Cellucid itself is a **web app** (the viewer UI). `cellucid-python` and `cellucid-annotation` are helper repos. `cellucid-r` is planned but not ready yet.
+Cellucid itself is a **web app** (the viewer UI). `cellucid-python`,
+`cellucid-r`, and `cellucid-annotation` provide language and workflow
+integrations around that viewer.
 ```
 
 ## What `cellucid` (Python) does (today)
@@ -23,8 +25,9 @@ Cellucid itself is a **web app** (the viewer UI). `cellucid-python` and `celluci
 At a high level, the Python package supports three related workflows:
 
 1) **View immediately (no export): AnnData → viewer**  
-   - Notebook: `show_anndata(adata)` (or `show_anndata("data.h5ad")`)
-   - Browser: `cellucid serve data.h5ad` (auto-detects `.h5ad` / `.zarr`)
+   - Notebook: `show_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")`
+     (or use the same required identity arguments with `"data.h5ad"`)
+   - Browser: `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`
 
 2) **Export for speed + sharing: arrays → export folder → viewer**  
    - Python: `prepare(..., out_dir="exports/my_dataset")`
@@ -40,7 +43,8 @@ At a high level, the Python package supports three related workflows:
 - **Cellucid web app**: the browser UI you click around in (rendering, filters, highlights, analysis, figure export, sessions).
 - **`cellucid` (cellucid-python)**: export/serve/embed data + hooks/events for notebooks.
 - **`cellucid-annotation`**: community annotation workflows (multi-user, GitHub-backed collaboration).
-- **`cellucid-r`**: planned export helper for R; not ready yet.
+- **`cellucid-r`**: prepares Seurat, SingleCellExperiment, matrices, and data
+  frames as Cellucid export folders; see {doc}`../../r_package/index`.
 
 ## Fast path (wet lab / beginner / non-technical)
 
@@ -57,31 +61,11 @@ If you’re a wet lab scientist or a non-technical collaborator, it helps to thi
 3) Select a population
 4) Compare groups / export a figure / save a session
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-landing-what-is-webapp-orientation
-Where it appears: What is cellucid-python? → Fast path
-Capture:
-  - UI location: Cellucid web app (browser)
-  - State prerequisites: any small-ish dataset loaded; a categorical field selected for color-by; left sidebar visible
-  - Action to reach state: load a dataset → pick a field → optionally create a small selection
-Crop:
-  - Include: embedding canvas + left sidebar panels + dataset name/point count
-  - Exclude: browser bookmarks, personal accounts, private dataset/sample IDs
-Redact:
-  - Remove: any private filenames/paths, sample IDs, patient IDs, emails
-Annotations:
-  - Callouts: (1) dataset load location, (2) color-by control, (3) selection tool, (4) “what success looks like” area
-  - Style: 2–4 callouts max; consistent color; readable at 100% width
-Alt text:
-  - Cellucid web app with a dataset loaded and colored by a categorical field.
-Caption:
-  - Orientation: where to load a dataset, choose a field for coloring, and confirm the dataset is loaded.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Cellucid web app with a dataset loaded and colored by a categorical field.
+```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
+:alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
 :width: 100%
 
-Orientation: where to load a dataset, choose a field for coloring, and confirm the dataset is loaded.
+A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
 ```
 
 ## Practical path (computational users)
@@ -95,12 +79,13 @@ Use this when:
 - you’re working interactively and don’t care about a shareable on-disk artifact *yet*.
 
 Typical entry points:
-- Notebook: `show_anndata(adata)` or `show_anndata("data.h5ad")`
-- Browser: `cellucid serve data.h5ad`
+- Notebook: direct AnnData viewing with required `dataset_name` and
+  `dataset_id`
+- Browser: `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`
 
 Tradeoffs:
 - Very little setup
-- Can be lazy-loading for `.h5ad` / `.zarr`
+- `.h5ad` uses read-only backed access; `.zarr` is loaded eagerly in Python.
 - Slower than exports for repeated use and large datasets
 - Not a deterministic “artifact” you can hand to collaborators
 
@@ -126,7 +111,7 @@ Tradeoffs:
 Cellucid-python supports viewing from:
 - **In-memory AnnData** (notebook/server)
 - **`.h5ad` file** (server and notebook; default: lazy loading via backed mode)
-- **`.zarr` store** (server and notebook; array access is chunked/lazy)
+- **`.zarr` store** (server and notebook; loaded eagerly in Python)
 - **Pre-exported directory** created by `prepare(...)`
 
 ## Deep path (developer / maintainer)
@@ -137,9 +122,9 @@ The architecture is intentionally simple:
   - files in an **export folder**, or
   - “virtual files” generated from **AnnData** on demand.
 - The **viewer UI** is a web app.
-  - In CLI/notebook/server workflows, the Python server runs in **hosted-asset proxy** mode:
-    it fetches `index.html` + `/assets/*` from `https://www.cellucid.com` and caches them locally,
-    then serves them from the **same origin** as the dataset.
+  - In CLI/notebook/server workflows, the Python server establishes the exact
+    complete UI generation declared by the configured source inventory, then
+    serves it from the **same origin** as the dataset.
 - Notebook embedding uses an **iframe**.  
   This matters because browser security rules differ across Jupyter/VSCode/Colab.
 - Bidirectional communication:
@@ -154,7 +139,7 @@ If you maintain or extend `cellucid`, the “mental model” to keep in mind is:
 
 - **Export folder**: a directory of `.json` manifests + binary files that the web app loads.
 - **Dataset identity**: `dataset_identity.json` (name/id/metadata; helps reproducibility).
-- **Embedding**: `points_1d.bin`, `points_2d.bin`, `points_3d.bin` (and future `4d`).
+- **Embedding**: `points_1d.bin`, `points_2d.bin`, or `points_3d.bin`.
 - **`obs` fields**: per-cell metadata (categorical or continuous).
 - **`var` / gene expression**: per-gene metadata + expression values (optional).
 - **Viewer**: a notebook object that embeds the UI and exposes hooks/commands (`CellucidViewer` / `AnnDataViewer`).
@@ -162,11 +147,12 @@ If you maintain or extend `cellucid`, the “mental model” to keep in mind is:
 
 ## Edge cases and limitations (high-level)
 
-- **Web UI availability**: the notebook/server UI is downloaded from `https://www.cellucid.com` on first use and cached.
-  If you are offline the first time, you’ll see an explicit “Viewer UI unavailable” page.
+- **Web UI availability**: every viewer-serving startup establishes the complete
+  exact generation published by the configured web source. Source failure is
+  raised before the server binds.
 - **HTTPS notebooks**: if your notebook is served from `https://...`, your browser may block an `http://127.0.0.1:<port>` iframe (mixed content).
-  The notebook embed tries to use `jupyter-server-proxy` when available; see {doc}`03_compatibility_matrix_must_be_explicit`.
-- **4D is reserved**: exports can write `points_4d.bin`, but 4D visualization is not supported in the web app yet.
+  Expose the port through an HTTPS proxy and pass its exact base as
+  `client_server_url=`; see {doc}`03_compatibility_matrix_must_be_explicit`.
 
 ## Troubleshooting (common misconceptions)
 
@@ -176,13 +162,18 @@ No by default:
 - When you run `cellucid serve ...`, your data is served from your machine (default: `127.0.0.1` only).
 - When you use `show_anndata(...)` in a notebook, the dataset is served locally by a background server.
 
-The one thing that may use the public internet is the **viewer UI assets** (HTML/JS/CSS), which are fetched from `https://www.cellucid.com` and cached locally.
+The viewer startup also fetches the declared **viewer UI assets**
+(HTML/JavaScript/CSS and related static files) from its configured source and
+publishes them locally only after complete verification.
 
 ### “I installed `cellucid` but I don’t see anything”
 
 Most common causes:
-- you ran `show(...)` or `show_anndata(...)` **outside** a notebook environment (it will print a URL instead),
-- the viewer UI could not be fetched (offline / firewall), so the iframe shows an error page,
+- you ran `show(...)` or `show_anndata(...)` **outside** a notebook environment;
+  the helper returns a viewer without displaying or printing it, so open
+  `viewer.viewer_url` explicitly,
+- the exact viewer generation could not be established, so viewer construction
+  raised,
 - your notebook is served from HTTPS and blocks HTTP loopback iframes.
 
 Start with:

@@ -14,28 +14,11 @@ If you prefer to learn by definition-first, read `a_orientation/04_ui_glossary_t
 
 This tour references UI areas by name (the app labels). A single annotated screenshot makes the rest of the docs much easier to follow.
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: quick-tour-ui-map
-Where it appears: Quick tour → One screenshot “map”
-Capture:
-  - Load any small demo dataset
-  - Make sure the left sidebar is open
-  - Show: Session accordion, Coloring & Filtering, Compare Views, Navigation controls, Highlighting, Analysis, Figure Export
-Crop:
-  - Include: full left sidebar + enough of the plot canvas to orient the reader
-  - Exclude: browser bookmarks, personal tabs, any private dataset names
-Annotations:
-  - Add 6–10 numbered callouts matching the tour steps below (1=Session, 2=Coloring, 3=Compare Views, ...)
-Alt text:
-  - Cellucid UI with the main sidebar sections labeled.
-Caption:
-  - The main Cellucid sidebar sections used in this quick tour.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for an annotated Cellucid UI map.
+```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
+:alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
 :width: 100%
 
-The main Cellucid sidebar sections used in this quick tour.
+A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
 ```
 
 ---
@@ -54,7 +37,9 @@ The main Cellucid sidebar sections used in this quick tour.
 - The dataset info panel shows non‑zero counts.
 
 :::{note}
-You can also load your own data from **Local data** (H5AD/Zarr/Prepared) or from a **Remote server**, but those workflows are documented in `b_data_loading/index`.
+You can also load your own data from **Local data** (Prepared, H5AD, or Zarr
+ZIP) or from a **Remote server**, but those workflows are documented in
+`b_data_loading/index`.
 :::
 
 ### 2) Move the camera (don’t skip this)

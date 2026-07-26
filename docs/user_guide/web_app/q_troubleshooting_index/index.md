@@ -40,10 +40,9 @@ If you can load a demo dataset but not yours, it’s usually **data loading / da
 - Fields & legends: {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends`
 - Filtering: {doc}`../e_filtering/07_troubleshooting_filtering`
 - Highlighting & selection: {doc}`../f_highlighting_selection/06_troubleshooting_highlighting`
-- Cross-highlighting (if enabled in your build): {doc}`../g_cross_highlighting/05_troubleshooting_cross_highlighting`
 - Analysis: {doc}`../h_analysis/10_troubleshooting_analysis`
 - Vector field / velocity overlay: {doc}`../i_vector_field_velocity/07_troubleshooting_velocity_overlay`
-- Sessions (save/load/auto-restore): {doc}`../l_sessions_sharing/10_troubleshooting_sessions`
+- Sessions (save/load): {doc}`../l_sessions_sharing/10_troubleshooting_sessions`
 - Figure export: {doc}`../k_figure_export/07_troubleshooting_figure_export`
 - Bug-report / developer playbook: {doc}`../p_developer_docs/13_debugging_playbook`
 
@@ -72,7 +71,7 @@ Use this section when Cellucid doesn’t start, your environment blocks required
 
 **Fast checks**
 
-1) Try a modern desktop browser (Chrome/Edge are often the least frustrating).  
+1) Use a current stable Chrome, Edge, Firefox, or Safari release.
 2) Confirm WebGL2 works: {doc}`../a_orientation/02_system_requirements`  
 3) Try a private window (rules out extensions and stale cached state).  
 4) If embedded in an iframe/Jupyter, open Cellucid in a standalone tab (iframes can block file access, pointer lock, fullscreen).  
@@ -167,7 +166,6 @@ Selection/highlighting problems are often mismatches between:
 **Go to the deep dives**
 
 - Highlighting/selection (primary): {doc}`../f_highlighting_selection/06_troubleshooting_highlighting`
-- Cross-highlighting (analysis plots → highlights, if enabled): {doc}`../g_cross_highlighting/05_troubleshooting_cross_highlighting`
 
 ---
 
@@ -253,5 +251,5 @@ If you’re asking for help (or filing an issue), include:
 5) **Exact steps to reproduce** (numbered; include whether snapshots/filters/highlights were involved)  
 6) **First Console error** + any failing Network request (status code + URL)
 
-Developer-focused capture checklist:
+Developer-focused diagnostic checklist:
 - {doc}`../p_developer_docs/13_debugging_playbook`

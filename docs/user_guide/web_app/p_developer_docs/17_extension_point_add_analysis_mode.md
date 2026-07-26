@@ -107,7 +107,7 @@ Steps (high level):
 2) Implement the handler in:
    - `analysis/compute/operation-handlers.js` (or a specialized module)
 3) Decide where it can run:
-   - GPU-capable? Worker-capable? CPU-only fallback?
+   - GPU-capable, Worker-capable, or CPU-capable?
 4) Add validation for payload schemas (avoid silent corruption).
 5) Update UI factories to use the new operation through the compute manager.
 

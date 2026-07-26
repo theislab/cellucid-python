@@ -11,12 +11,15 @@ This page is the R-export-focused shortcut.
 ## Symptom: “I can’t select a folder / the picker doesn’t show folders”
 
 **Likely causes**
-- Browser limitations (some browsers don’t support folder picking well).
-- You are on mobile (not recommended for large datasets).
+- You denied directory access.
+- An embedded or managed-browser policy blocked directory selection.
+- You are on mobile; Cellucid's supported loading workflows are desktop
+  workflows.
 
 **Fix**
-- Try Chrome or Firefox on desktop.
-- Use server mode (Python) if folder picker is unreliable:
+- Open the standalone app in a supported current desktop browser and click
+  **Prepared**.
+- If organizational policy forbids directory selection, choose server mode:
   {doc}`../../web_app/b_data_loading/04_server_tutorial`
 
 ## Symptom: “Dataset loads forever / spinner never stops”
@@ -37,7 +40,8 @@ This page is the R-export-focused shortcut.
 - Dataset too large for GPU memory
 
 **Fix**
-- Try a different browser/GPU.
+- Confirm hardware acceleration and WebGL2 are enabled, then update the browser,
+  operating system, and GPU driver when applicable.
 - Reduce dataset size (subset cells, reduce layers).
 - See system requirements: {doc}`../../web_app/a_orientation/02_system_requirements`
 

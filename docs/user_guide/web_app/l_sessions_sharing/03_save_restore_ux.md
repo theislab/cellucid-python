@@ -133,48 +133,17 @@ Workflow:
 
 ---
 
-## Screenshots (placeholders)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: sessions-session-controls-ui-save-load
-Suggested filename: sessions_sharing/03_save-load-buttons.png
-Where it appears: Sessions → Where the session controls live
-Capture:
-  - Show User data accordion with Session state block visible
-Alt text:
-  - Save State and Load State buttons in the Session state block.
-Caption:
-  - Session controls live under User data → Session state.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Save State / Load State buttons.
+```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
+:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
 :width: 100%
 
-Session controls live under User data → Session state.
-```
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: sessions-load-file-picker
-Suggested filename: sessions_sharing/04_load-file-picker.png
-Where it appears: Sessions → Load State
-Capture:
-  - Trigger the file picker (any OS is fine)
-  - If your OS reveals private paths/usernames, blur or crop
-Alt text:
-  - File picker dialog filtering for .cellucid-session files.
-Caption:
-  - Load State opens a file picker restricted to `.cellucid-session` bundles.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Load State file picker.
-:width: 100%
-
-Load State opens a file picker restricted to `.cellucid-session` bundles.
+The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```
 
 ---
 
 ## Next steps
 
-- {doc}`04_auto_restore_latest_from_dataset_exports` (auto-loading sessions from `state-snapshots.json`)
 - {doc}`05_share_workflows_links_bundles_exports` (how to send sessions to humans safely)

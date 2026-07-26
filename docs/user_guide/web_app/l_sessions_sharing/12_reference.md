@@ -6,7 +6,6 @@
 - The `.cellucid-session` container format (high level)
 - The manifest schema (what metadata is stored)
 - Chunk inventory (what chunk IDs you may see)
-- The `state-snapshots.json` manifest schema used for auto-restore
 
 ---
 
@@ -31,10 +30,7 @@ A `.cellucid-session` file is a single binary container:
    - `chunkByteLength` (u32 little-endian)
    - `chunkBytes` (raw stored payload; may be gzip-compressed; decoded based on manifest metadata)
 
-Dev-phase constraints:
-- no backward compatibility guarantees
-- no migration/version fields
-- sessions treated as untrusted input (strict bounds + size guards)
+Session bundles are treated as untrusted input and pass strict bounds and size checks before restore.
 
 ---
 
@@ -43,7 +39,7 @@ Dev-phase constraints:
 The manifest is a JSON object that includes:
 
 - `createdAt`: ISO timestamp
-- `dataSource`: a snapshot of the active data source selection (debug/provenance; not used to auto-load the dataset)
+- `dataSource`: a snapshot of the active data source selection for debug and provenance
 - `datasetFingerprint`: used to detect dataset mismatches on restore
 - `chunks`: array of chunk metadata entries
 
@@ -112,24 +108,7 @@ These are the chunk IDs used by the current session system:
 | `highlights/cells/<groupId>` | lazy | yes | highlight group membership indices (binary) |
 | `analysis/artifacts/*` | lazy | yes | analysis caches/artifacts (binary) |
 
-Notes:
-- the presence and exact contents of chunks are dev-phase and can change across builds
-- missing contributors are skipped (best-effort robustness)
-
----
-
-## `state-snapshots.json` (auto-restore manifest)
-
-Auto-restore reads `state-snapshots.json` from the dataset exports directory and finds entries whose filename ends with `.cellucid-session`.
-
-Supported shapes:
-
-- `{ "states": [ "file.cellucid-session", ... ] }` (recommended)
-- `[ "file.cellucid-session", ... ]` (also accepted)
-
-The **last** matching entry is auto-restored on app startup.
-
-Deep dive: {doc}`04_auto_restore_latest_from_dataset_exports`
+Unknown or invalid chunks are rejected without applying their payload.
 
 ---
 
@@ -143,6 +122,3 @@ Container format framing:
 
 What is saved/restored (developer-facing list):
 - `cellucid/assets/js/app/state-serializer/README.md`
-
-Design plan:
-- `cellucid/markdown/session-serializer-plan.md`

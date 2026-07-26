@@ -39,28 +39,11 @@ Each category row contains:
 - a **cell count** (how many cells are visible/available)
 - optional tools: **rename** (pencil) and **delete** (trash)
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: categorical-legend-anatomy
-Suggested filename: web_app/fields_legends/30_categorical-legend-anatomy.png
-Where it appears: User Guide → Web App → Fields, Coloring, and Legends → 04_legend_behavior.md
-Capture:
-  - Select a categorical field with at least ~10 categories
-  - Make sure some other filter is active so at least one row shows “visible / available”
-  - Ensure rename (pencil) and delete (trash) icons are visible
-Crop:
-  - Include: the categorical legend section including Show All / Hide All
-Annotations:
-  - Call out: checkbox, swatch, label, count, rename icon, delete icon, Show All/Hide All
-Alt text:
-  - Categorical legend with category rows, checkboxes, color swatches, counts, and edit icons.
-Caption:
-  - Explain the meaning of each row control and that category visibility is a real filter.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for categorical legend anatomy.
+```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
+:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
 :width: 100%
 
-Categorical legends let you hide/show categories, adjust colors, and edit labels directly from the legend.
+Selecting a categorical observation field colors the embedding and exposes its complete category legend.
 ```
 
 ### Show All / Hide All
@@ -143,29 +126,6 @@ Cellucid creates a merged bucket label like:
 
 The merged bucket color comes from the **dragged** category.
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: categorical-merge-confirm-dialog
-Suggested filename: web_app/fields_legends/31_categorical-merge-confirm.png
-Where it appears: User Guide → Web App → Fields, Coloring, and Legends → 04_legend_behavior.md
-Capture:
-  - Start a drag from one category label and drop onto another
-  - Capture the confirm dialog (“Merge categories”)
-Crop:
-  - Include: the dialog + enough background legend rows to show what was merged
-Annotations:
-  - Call out: from-label, to-label, and the “this will create a new column vs edit in place” explanation text
-Alt text:
-  - Confirmation dialog for merging two categorical labels.
-Caption:
-  - Emphasize that merges are reversible via Deleted Fields (for source fields) and may edit in place for derived fields.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the merge categories confirmation dialog.
-:width: 100%
-
-Merging categories prompts for confirmation and explains whether the edit will create a new derived field or edit in place.
-```
-
 ### Delete a category label (merge into “unassigned”)
 
 Click the trash icon to “delete” a label.
@@ -199,29 +159,6 @@ Click the gradient bar to open the **colormap menu**, then click a palette to ap
 Practical guidance:
 - Prefer **Viridis** / **Cividis** for scientific readability (especially colorblind-friendly workflows).
 - Use diverging palettes (e.g., **RdBu**) only when your values have a meaningful “center” (like 0).
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: continuous-legend-colormap-menu
-Suggested filename: web_app/fields_legends/32_continuous-colormap-menu.png
-Where it appears: User Guide → Web App → Fields, Coloring, and Legends → 04_legend_behavior.md
-Capture:
-  - Select a continuous field
-  - Click the gradient bar so the colormap menu opens (show several options)
-Crop:
-  - Include: “Color scale (…)” header + gradient bar + the open colormap menu list
-Annotations:
-  - Call out: gradient bar click target, one palette option, and the active palette highlight
-Alt text:
-  - Continuous legend with the colormap menu open showing selectable palettes.
-Caption:
-  - Explain how to change palettes and why the palette choice matters for interpretation.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the continuous colormap menu.
-:width: 100%
-
-Click the gradient bar in a continuous legend to open the colormap menu and choose a palette.
-```
 
 ### Log scale toggle
 

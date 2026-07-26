@@ -160,51 +160,13 @@ See {doc}`../l_sessions_sharing/index` for session semantics.
 
 ---
 
-## Screenshot placeholders (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: analysis-ui-overview-panel
-Suggested filename: analysis/02_analysis-ui-overview-panel.png
-Where it appears: User Guide → Web App → Analysis → 02_analysis_ui_overview.md
-Capture:
-  - UI location: sidebar → Analysis section open
-  - State prerequisites: at least one highlight page exists
-  - Action to reach state: open Highlighted Cells → create a page; then open Analysis
-Crop:
-  - Include: Analysis mode accordion + at least one mode’s input controls
-  - Exclude: private dataset names/IDs if needed
-Alt text:
-  - Sidebar with the Analysis section open, showing the list of analysis modes.
-Caption:
-  - Analysis compares highlight pages using selected variables; start by creating pages in Highlighted Cells.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Analysis section overview.
+```{figure} ../../../_static/screenshots/analysis/analysis-panel-tabs.png
+:alt: Analysis panel listing Quick, Detailed, Correlation, Differential Expression, Gene Signature, and Marker Genes modes.
 :width: 100%
 
-Analysis compares highlight pages using selected variables; start by creating pages in Highlighted Cells, then choose a mode here.
-```
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: analysis-ui-copy-window
-Suggested filename: analysis/03_analysis-copy-window.png
-Where it appears: User Guide → Web App → Analysis → 02_analysis_ui_overview.md
-Capture:
-  - UI location: a floating analysis window created via “Copy”
-  - State prerequisites: one analysis already configured so the copied window is meaningful
-  - Action to reach state: open any mode → configure inputs → click Copy → arrange both visible
-Crop:
-  - Include: the sidebar Analysis mode and the floating analysis window
-Alt text:
-  - A floating analysis window shown alongside the sidebar Analysis panel.
-Caption:
-  - Copy creates an independent floating window with copied settings; results recompute so you can compare configurations side-by-side.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for a copied/floating analysis window.
-:width: 100%
-
-Copy creates an independent floating window with copied settings; results recompute so you can compare configurations side-by-side.
+The Analysis panel exposes six explicit modes, each with its own validated inputs and result area.
 ```
 
 ---

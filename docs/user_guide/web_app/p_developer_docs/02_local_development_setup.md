@@ -16,7 +16,7 @@ Because the app is shipped as **native ES modules** (no bundler required), the s
 - 10–20 minutes if you also want to test remote server + Jupyter workflows
 
 **Prerequisites**
-- A modern desktop browser with WebGL2 (Chrome/Edge/Firefox recommended)
+- A current stable Chrome, Edge, Firefox, or Safari release with WebGL2
 - Python 3 (for a simple local static server), or any equivalent local server
 
 ---
@@ -105,16 +105,16 @@ This is best for:
 Run (in another terminal) from your `cellucid-python` environment:
 
 ```bash
-cellucid serve /path/to/dataset.h5ad
+cellucid serve /path/to/dataset.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 # or
-cellucid serve /path/to/dataset.zarr
+cellucid serve /path/to/dataset.zarr --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
 Then in the Cellucid UI, use the “Remote server” connection and point it at:
 - `http://127.0.0.1:<port>`
 
 This is best for:
-- large datasets (lazy loading)
+- large H5AD datasets (read-only backed access)
 - reproducible debugging (server logs + client logs)
 
 :::{note}
@@ -126,7 +126,6 @@ Most modern browsers allow `https://…` pages to talk to `http://localhost` / `
 
 If you are developing the Python↔frontend hooks system:
 - Read the Python docs section: {doc}`../../python_package/e_jupyter_hooks/index`
-- And the frontend development guide: `cellucid/markdown/HOOKS_DEVELOPMENT.md`
 
 ---
 
@@ -166,7 +165,8 @@ How to confirm:
 - DevTools → Network: reload and look for `404` or blocked requests.
 
 Fix:
-- Try a different browser (Chrome/Edge first).
+- Confirm the current browser exposes WebGL2 with
+  `document.createElement("canvas").getContext("webgl2") !== null`.
 - Ensure you are serving from the `cellucid/` directory.
 - Enable debug logs and reload (Step 2).
 

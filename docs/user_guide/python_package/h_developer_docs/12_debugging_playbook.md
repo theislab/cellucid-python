@@ -23,7 +23,9 @@ Pick the closest match:
 ### Mode B: AnnData server
 
 - you are serving `.h5ad`/`.zarr` or an in-memory AnnData.
-- you start the viewer with `cellucid serve ./data.h5ad` or `cellucid.show_anndata(...)`.
+- you start the viewer with
+  `cellucid serve ./data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`
+  or `cellucid.show_anndata(...)`.
 
 ### Mode C: Notebook embedding
 
@@ -53,16 +55,14 @@ If the port differs, find it in:
 
 ## Step 2 — Confirm the viewer UI assets can load
 
-Open:
-- `http://127.0.0.1:<port>/`
-
-If you see an error page “viewer UI could not be loaded”:
-- the hosted-asset proxy could not fetch the UI and no cached copy exists.
+Start the viewer/server. Source-generation errors occur before the HTTP server
+binds and identify the failing inventory, object, verification, or filesystem
+operation.
 
 Fix options:
-1) ensure network access to `https://www.cellucid.com`,
-2) run once while online to populate the cache,
-3) set `CELLUCID_WEB_PROXY_CACHE_DIR` to a writable/persistent directory.
+1) ensure access to the configured `web_source_url`,
+2) correct the exact source response or inventory contract, and
+3) pass a writable `web_cache_dir`.
 
 See: {doc}`09_server_mode_architecture_endpoints_and_security` and {doc}`06_configuration_env_vars_and_logging`.
 
@@ -129,29 +129,6 @@ In browser DevTools → Network:
 4) look for CORS errors:
    - “CORS blocked” usually means origin mismatch or a proxy issue
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: devtools-network-failing-request
-Suggested filename: developer/devtools-network-failing-request.png
-Where it appears: Python Package → Developer Docs → Debugging playbook
-Capture:
-  - UI location: browser DevTools Network tab
-  - State prerequisites: a failing load (404/500/CORS) reproduced
-  - Action to reach state: reload viewer, reproduce the failure
-Crop:
-  - Include: request URL, status code, and the failing response/headers panel
-  - Exclude: unrelated tabs, personal extensions, account avatars
-Alt text:
-  - Browser DevTools Network tab showing a failed request to a Cellucid dataset endpoint with status and headers visible.
-Caption:
-  - The Network tab reveals whether a failure is a missing file (404), a server exception (500), or an origin/CORS problem.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for browser DevTools Network debugging.
-:width: 100%
-
-Use the browser Network tab to separate “server/format” problems from “UI” problems.
-```
-
 ### 4.2 Console tab checklist
 
 In DevTools → Console:
@@ -191,29 +168,6 @@ import json
 print(json.dumps(report, indent=2, default=str))
 ```
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: notebook-debug-connection-report
-Suggested filename: developer/notebook-debug-connection-report.png
-Where it appears: Python Package → Developer Docs → Debugging playbook
-Capture:
-  - UI location: notebook output cell showing the printed JSON report
-  - State prerequisites: viewer created (even if broken)
-  - Action to reach state: run `print(json.dumps(viewer.debug_connection(), indent=2, default=str))`
-Crop:
-  - Include: the top of the report (viewer_url/server_url) and one failing section (e.g. viewer_index_probe_error)
-  - Exclude: tokens (viewerToken) if present, private hostnames/paths if sensitive
-Alt text:
-  - Notebook output showing a structured JSON connectivity report produced by viewer.debug_connection.
-Caption:
-  - `viewer.debug_connection()` produces a single structured report that captures the most common notebook failure modes (proxy, cache, server reachability, hook roundtrip).
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for viewer.debug_connection output.
-:width: 100%
-
-Notebook debugging: `viewer.debug_connection()` consolidates server reachability, cache status, and frontend roundtrip checks into one report.
-```
-
 ---
 
 ## Common failure patterns (fast diagnosis)
@@ -222,7 +176,7 @@ Notebook debugging: `viewer.debug_connection()` consolidates server reachability
 
 Export folder mode:
 - manifests might reference files that don’t exist (partial export)
-- safe-key mismatch (field names vs filenames)
+- exact identifier/path mismatch
 - `.gz` mismatch (exported compressed, but viewer requests uncompressed or vice versa)
 
 AnnData server mode:
@@ -260,7 +214,8 @@ Likely causes:
 
 Fix:
 - prefer SSH tunneling over public binding,
-- or provide a stable reverse proxy and set `CELLUCID_CLIENT_SERVER_URL`.
+- or provide a stable reverse proxy and pass its exact base as
+  `client_server_url=`.
 
 ---
 

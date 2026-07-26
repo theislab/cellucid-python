@@ -63,21 +63,23 @@ from cellucid import prepare, show
 
 out_dir = Path("exports") / "my_dataset"
 
-X_umap_2d = np.asarray(adata.obsm["X_umap"])  # adjust if your key differs
+X_umap_2d = np.asarray(adata.obsm["X_umap_2d"])
+latent_space = np.asarray(adata.obsm["X_pca"])
 connectivities = adata.obsp["connectivities"] if "connectivities" in adata.obsp else None
 
 prepare(
+    latent_space=latent_space,
     obs=adata.obs,
     var=adata.var,
     gene_expression=adata.X,
-    var_gene_id_column="index",
+    var_gene_id_column=None,
     connectivities=connectivities,
     X_umap_2d=X_umap_2d,
     out_dir=out_dir,
     # Practical defaults (tune later):
     var_quantization=8,
     obs_continuous_quantization=8,
-    obs_categorical_dtype="auto",
+    obs_categorical_dtype="uint16",
     compression=6,
     dataset_name="My dataset",
     dataset_id="my_dataset",
@@ -87,7 +89,8 @@ viewer = show(out_dir, height=650)
 viewer
 ```
 
-If any key names differ (`X_umap`, connectivities location, gene IDs), continue with the step-by-step sections below.
+If the connectivity or gene-id locations differ, continue with the step-by-step
+sections below.
 
 ---
 
@@ -122,8 +125,8 @@ Best practice:
 
 ### Required: at least one embedding
 
-Most datasets have 2D UMAP in:
-- `adata.obsm["X_umap"]` with shape `(n_cells, 2)`
+The exact 2D UMAP key is:
+- `adata.obsm["X_umap_2d"]` with shape `(n_cells, 2)`
 
 If your UMAP is 3D, you might have:
 - `adata.obsm["X_umap_3d"]` with shape `(n_cells, 3)`
@@ -133,7 +136,7 @@ Extract safely:
 ```python
 import numpy as np
 
-X_umap_2d = np.asarray(adata.obsm["X_umap"])  # (n_cells, 2)
+X_umap_2d = np.asarray(adata.obsm["X_umap_2d"])  # (n_cells, 2)
 ```
 
 ```{note}
@@ -157,7 +160,7 @@ var_gene_id_column = "gene_symbols"  # example; use your actual column name
 Otherwise:
 
 ```python
-var_gene_id_column = "index"  # use var.index (often equals adata.var_names)
+var_gene_id_column = None  # use var.index (often equals adata.var_names)
 ```
 
 ### Optional: connectivity graph
@@ -195,10 +198,15 @@ Quantization reduces file size by storing continuous values as integers with a s
 - `None` stores full float32 (largest)
 
 Important details:
-- reserved “missing” codes are used for NaN/Inf:
-  - 8-bit reserves `255`
-  - 16-bit reserves `65535`
-- constant-valued fields are handled (scale is adjusted to avoid divide-by-zero)
+- gene and continuous-observation inputs must be finite and real
+  `float32`-representable values; `NaN` and infinities reject the complete
+  candidate
+- compact quantization maps finite values to `0..254` (8-bit) or
+  `0..65534` (16-bit)
+- constant-valued fields cannot satisfy the compact `minValue < maxValue`
+  contract and are rejected when quantization is enabled
+- only generated categorical outlier quantiles use `255`/`65535` as a missing
+  marker
 
 ### Compression (gzip)
 
@@ -214,7 +222,7 @@ Compression adds a `.gz` suffix to the written files.
 For most users:
 - `var_quantization=8`
 - `obs_continuous_quantization=8`
-- `obs_categorical_dtype="auto"`
+- `obs_categorical_dtype="uint16"`
 - `compression=6`
 
 If you are doing extremely subtle continuous gradients and care about smoothness:
@@ -239,7 +247,7 @@ prepare(
     force=False,
     var_quantization=8,
     obs_continuous_quantization=8,
-    obs_categorical_dtype="auto",
+    obs_categorical_dtype="uint16",
     compression=6,
     dataset_name="My dataset",
     dataset_description="Exported from AnnData for Cellucid viewing",
@@ -281,29 +289,13 @@ cellucid serve exports/my_dataset
 
 ---
 
-## Screenshot placeholder (optional: show export loaded successfully)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-notebooks-export-opened-success
-Suggested filename: data_loading/01_export-folder-opened-success.png
-Where it appears: User Guide → Python Package → Notebooks/Tutorials → 21_prepare_exports_with_quantization_and_compression.md
-Capture:
-  - UI location: browser (or notebook) showing a successfully loaded export folder
-  - State prerequisites: exported dataset opened; points visible; a field selected
-  - Action to reach state: run `show("./exports/<id>")` or `cellucid serve ./exports/<id>` and open the URL
-Crop:
-  - Include: dataset name + point count area (if shown) and a visible embedding
-  - Exclude: personal paths/usernames
-Alt text:
-  - Cellucid viewer showing a loaded exported dataset with points visible.
-Caption:
-  - After `prepare(...)`, you can open the export folder directly; this is the fastest and most reproducible viewing mode.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for opening an exported dataset successfully.
+```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
+:alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
 :width: 100%
 
-An exported dataset opened successfully (points visible and interactive).
+A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
 ```
 
 ---
@@ -329,34 +321,32 @@ print("umap shape:", X_umap_2d.shape)
 
 ### Too many categories for uint8
 
-If you force `obs_categorical_dtype="uint8"`, you can represent at most **254** categories (plus one missing sentinel).
+`obs_categorical_dtype="uint8"` can represent at most **255** categories; code
+`255` is reserved for missing values.
 
 If you have more categories, use:
-- `obs_categorical_dtype="auto"` (safe)
-- or `obs_categorical_dtype="uint16"`
+- `obs_categorical_dtype="uint16"`
 
 ### Gene IDs not searchable / confusing
 
 If the viewer’s gene search feels wrong:
 - you probably picked the wrong `var_gene_id_column`
-- or you have duplicates/aliases
+- or gene IDs are duplicated or are not exact portable filename components
 
 Confirm:
 ```python
 var_gene_id_column
-var[var_gene_id_column].head()
+var.index[:5] if var_gene_id_column is None else var[var_gene_id_column].head()
 ```
 
-### “prepare skipped files” surprises
+### Existing output generations
 
-By default, `force=False` means:
-- if a file already exists, it is **not overwritten**
+With `force=False`, a non-empty target raises `FileExistsError`; no file is
+skipped and no mixed generation is published.
 
-This is safe, but can surprise you during iteration.
-
-If you are intentionally re-exporting:
-- set `force=True`
-- or delete the export directory and re-run
+If you intentionally want to replace the generation, set `force=True`.
+Cellucid builds and validates a complete sibling stage before atomically
+publishing it. A failed replacement preserves the previous generation.
 
 ---
 

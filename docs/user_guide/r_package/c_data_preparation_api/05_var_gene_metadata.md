@@ -24,11 +24,11 @@ This is the reverse of many R containers where expression is stored as genes × 
 
 The exporter needs a **gene ID string** for each column in `gene_expression`.
 
-### Default: `"index"` uses `rownames(var)`
+### `NULL` uses `rownames(var)`
 
-If `var_gene_id_column = "index"` (default):
+If `var_gene_id_column = NULL`:
 - gene IDs are taken from `rownames(var)`
-- if `rownames(var)` is `NULL`, gene IDs fall back to `"0".."n_genes-1"`
+- `rownames(var)` must contain exact non-empty strings
 
 Recommendation:
 - always set `rownames(var)` to the gene ID you want users to search in the viewer
@@ -69,20 +69,23 @@ Gene IDs are used in two places:
 1) In the manifest (`var_manifest.json`) as the **true gene key**
 2) As part of the output filename under `var/`
 
-For filenames, the exporter sanitizes gene IDs:
-- unsupported characters become underscores
-- leading/trailing dots/underscores are removed
+The exporter uses each gene ID exactly. It must already satisfy the portable
+identifier contract and be unique under case-insensitive filesystem
+comparison.
 
 ```{warning}
-If two different gene IDs sanitize to the same filename, export fails with an error (to prevent silent overwrites).
+An unsafe ID or case-insensitive collision rejects the complete candidate
+before publication.
 ```
 
 Practical recommendation:
-- ensure `unique(safe_gene_ids)` is true, where `safe_gene_ids` is your gene IDs after sanitization
-- avoid gene IDs containing `/`, `\\`, whitespace, or trailing punctuation
+- avoid gene IDs containing `/`, `\\`, whitespace, trailing `.`, or non-ASCII
+  characters
+- check `anyDuplicated(tolower(gene_ids)) == 0`
 
 ## Troubleshooting pointers
 
 - “var has X rows but gene_expression has Y genes” → your expression orientation is wrong or var is mismatched.
-- “My gene search is missing genes” → check `var_gene_id_column`, duplicates, and sanitization collisions.
+- “My gene IDs are rejected” → check `var_gene_id_column`, portability,
+  duplicates, and case-insensitive collisions.
 - See also: {doc}`06_gene_expression_matrix` and {doc}`11_troubleshooting_prepare_export`

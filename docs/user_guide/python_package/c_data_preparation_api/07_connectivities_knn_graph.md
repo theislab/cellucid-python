@@ -33,37 +33,54 @@ Add it later once the rest of your export pipeline is stable.
 ```
 
 It can be:
-- a scipy sparse matrix (recommended), or
-- any array-like that can be converted to CSR.
+- a SciPy sparse matrix (recommended), or
+- a dense real numeric or boolean array.
 
 Row/column order must match your embeddings and `obs`.
 
-### How the exporter interprets the matrix (important)
+The matrix is accepted only when all of these conditions hold:
 
-The current Python exporter:
+- its shape is exactly `(n_cells, n_cells)`;
+- every value is finite and non-negative;
+- topology and weights are exactly symmetric;
+- every diagonal value is exactly `0`.
 
-1) Converts to CSR (if not already).
-2) **Symmetrizes** the matrix: `C_sym = C + C.T`
-3) **Binarizes** edges by setting all nonzero values to `1`
-4) Extracts unique undirected edges by keeping only pairs where `src < dst`
-5) Sorts edges by `(src, dst)` for better gzip compression
-6) Writes two parallel arrays:
+Sparse inputs must not store explicit zero entries or duplicate coordinates.
+Cellucid does not symmetrize, binarize, drop weights, coalesce coordinates,
+remove self-edges, or otherwise reinterpret the graph. Asymmetric, directed,
+negative, non-finite, nonzero-diagonal, and structurally ambiguous inputs fail
+before export. Boolean `True` is the explicitly supported unit edge and is
+written as the exact Float64 weight `1.0`.
+
+### Exact exported representation
+
+After validation, the exporter:
+
+1) extracts each undirected edge once from the upper triangle (`src < dst`);
+2) sorts edges lexicographically by `(src, dst)`;
+3) writes three aligned arrays:
    - `edges.src.bin(.gz)`
    - `edges.dst.bin(.gz)`
+   - `edges.weights.f64.bin(.gz)`
 
-Important implications:
-- Any original edge **weights are discarded** (graph becomes unweighted).
-- Directionality is discarded (graph becomes undirected).
-- Self-edges are not exported.
+The weight payload is little-endian Float64 and preserves each accepted input
+weight exactly. The source matrix is not modified. A valid graph with zero
+edges remains a present graph: its manifest reports `n_edges: 0` and
+`max_neighbors: 0`, and all three payloads are zero length.
 
 ### Dtype and scaling limits
 
 Edge indices are stored using the smallest integer dtype that fits `n_cells`:
-- `uint16` if `n_cells ≤ 65,535`
-- `uint32` if `n_cells ≤ 4,294,967,295`
-- `uint64` otherwise (practically unrealistic for interactive visualization)
 
-The web app converts indices to `uint32` internally.
+- `uint16` for `1 ≤ n_cells ≤ 65,536` (indices `0..65,535`);
+- `uint32` for `65,537 ≤ n_cells ≤ 4,294,967,296`;
+- larger cell axes are rejected because the current format has no `uint64`
+  connectivity representation.
+
+The mathematical `uint32` ceiling does not imply that a browser can hold a
+graph of that size. Cellucid preflights the required working set and directs
+oversized interactive workloads to server-backed loading instead of attempting
+an unsafe allocation.
 
 ### Output files
 
@@ -74,7 +91,8 @@ out_dir/
 ├── connectivity_manifest.json
 └── connectivity/
     ├── edges.src.bin(.gz)
-    └── edges.dst.bin(.gz)
+    ├── edges.dst.bin(.gz)
+    └── edges.weights.f64.bin(.gz)
 ```
 
 Full format spec: {doc}`09_output_format_specification_exports_directory`
@@ -87,8 +105,6 @@ Export time scales roughly with:
 - number of cells (`n_cells`),
 - and number of nonzero neighbor entries (`nnz`).
 
-The exporter currently iterates through neighbors in Python to extract unique edges.
-
 Practical tips:
 - Prefer a sparse matrix input.
 - Keep K reasonably sized (typical KNN graphs have 10–50 neighbors).
@@ -100,8 +116,12 @@ Practical tips:
 
 - **Wrong shape**: any non-square matrix fails.
 - **Row/col order mismatch**: graph edges connect the wrong cells (hard to detect visually).
+- **Negative weights, asymmetry, directionality, or self-edges**: rejected
+  instead of transformed.
+- **Sparse stored zeros or duplicate coordinates**: rejected instead of
+  coalesced or discarded.
 - **Very dense graphs**: huge `nnz` → export time and output size explode.
-- **Disconnected graphs**: valid export, but some features may behave unexpectedly.
+- **Disconnected or empty graphs**: valid when the exact matrix contract holds.
 
 ---
 
@@ -123,10 +143,11 @@ Meaning:
 
 How to confirm:
 - check for `<out_dir>/connectivity_manifest.json`
-- check that `connectivity/edges.src.bin(.gz)` exists
+- check that the manifest-declared source, destination, and Float64 weight
+  payloads all exist
 
 Fix:
-- export connectivities and re-export with `force=True`.
+- pass a valid graph and export to a fresh output directory.
 
 ---
 

@@ -33,17 +33,17 @@ list.files(out_dir)
 
 Open the Cellucid web app in a desktop browser.
 
-```{tip}
-If you have trouble loading large datasets, try Chrome or Firefox first.
-```
+Use a current stable desktop release of Chrome, Edge, Firefox, or Safari with
+WebGL2. This workflow uses the **Prepared** directory control; H5AD and Zarr ZIP
+have separate single-file controls.
 
 ### 2) Find the “load dataset” controls
 
 In the left sidebar, look for the data loading panel (often called something like “Dataset Connections”).
 
-### 3) Choose the local folder picker
+### 3) Choose **Prepared**
 
-Select the option that lets you browse local data / pick a folder.
+Select the **Prepared** button in Local data.
 
 ### 4) Select your export folder (`out_dir`)
 

@@ -51,21 +51,26 @@ Calling `viewer.stop()`:
 - and frees memory used by internal caches.
 
 ```{note}
-Cellucid registers a best-effort cleanup handler at interpreter exit, but you should not rely on it during an interactive notebook session.
+Cellucid registers an interpreter-exit cleanup handler that logs shutdown
+failures. Call `viewer.stop()` explicitly so your workflow can observe and
+handle any failure before interpreter teardown.
 ```
 
 ## Ports: defaults, auto-selection, and “port already in use”
 
-### Default port
+### Defaults
 
-The default starting port is `8765`.
+- CLI/server functions and classes default to the exact port `8765`.
+- Notebook viewer classes default to `port=None`, which requests one
+  operating-system-assigned port.
 
 ### What happens if the port is already in use?
 
-- In CLI/server mode, Cellucid checks if the port is free. If not, it auto-selects the next available port and prints a message.
-- In notebook mode, the viewer picks a free port automatically (starting at `8765`).
+- CLI/server mode binds the requested port exactly and raises if it is unavailable.
+- Notebook viewers use an operating-system-selected free port when `port=None`.
 
-**Rule:** always use the printed URL (or `viewer.viewer_url`), not “I assume it’s 8765”.
+**Rule:** use the CLI/server banner for blocking server mode and
+`viewer.viewer_url` for notebook viewer objects; never assume port `8765`.
 
 ### Choosing a fixed port (useful for SSH tunnels)
 
@@ -75,7 +80,13 @@ If you need a fixed port, instantiate the viewer class:
 ```python
 from cellucid import AnnDataViewer
 
-viewer = AnnDataViewer("data.h5ad", port=8765, height=600)
+viewer = AnnDataViewer(
+    "data.h5ad",
+    port=8765,
+    height=600,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 viewer.display()
 ```
 
@@ -96,7 +107,8 @@ viewer.display()
 ### Risky patterns (common footguns)
 
 - Creating many viewers in a loop without calling `stop()` → lots of servers, lots of open sockets, possible file-handle exhaustion.
-- Using `show_anndata(adata)` on a huge in-memory `AnnData` repeatedly → repeated conversions/caches can spike memory.
+- Using `show_anndata(adata, dataset_name=..., dataset_id=...)` on a huge
+  in-memory `AnnData` repeatedly → repeated conversions/caches can spike memory.
 
 ## Cleanup strategies in notebooks
 
@@ -105,12 +117,13 @@ viewer.display()
 Keep the viewer in a single variable and stop it before creating a new one:
 
 ```python
-try:
-    viewer.stop()
-except Exception:
-    pass
+viewer.stop()
 
-viewer = show_anndata("data.h5ad")
+viewer = show_anndata(
+    "data.h5ad",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 ```
 
 ### If you lost the reference

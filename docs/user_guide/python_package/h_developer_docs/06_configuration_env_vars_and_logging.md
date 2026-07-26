@@ -1,6 +1,8 @@
 # Configuration, environment variables, and logging
 
-This page lists the **configuration knobs** available in `cellucid-python`: CLI flags, function arguments, environment variables, and logging behavior.
+This page lists the exact **configuration knobs** available in
+`cellucid-python`: CLI flags, function arguments, defaults, and logging
+behavior.
 
 ---
 
@@ -10,8 +12,19 @@ In general, configuration flows like this:
 
 1) **Function arguments** (e.g. `serve(..., host=..., port=...)`)
 2) **CLI flags** (e.g. `cellucid serve ... --host ... --port ...`)
-3) **Environment variables** (only for a small set of notebook/web-cache behaviors)
-4) **Defaults** in code (`DEFAULT_HOST`, `DEFAULT_PORT`)
+3) **Defaults** in code (`DEFAULT_HOST`, `DEFAULT_PORT`)
+
+---
+
+## Environment variables
+
+Cellucid has no environment-variable configuration layer. Values such as host,
+port, web source, cache directory, and browser-facing URL must come from the
+documented CLI flags or function/class arguments.
+
+`VSCODE_PID` and `JPY_PARENT_PID` may be read only to label the current
+notebook context in diagnostics; they do not configure routing. Variables such
+as `CELLUCID_CLIENT_SERVER_URL` are ignored.
 
 ---
 
@@ -27,28 +40,22 @@ For remote access, explicitly bind:
 
 ---
 
-## Environment variables
+## Viewer and notebook URL arguments
 
-### `CELLUCID_WEB_PROXY_CACHE_DIR`
+### `web_cache_dir`
 
-Controls where the **hosted-asset proxy** stores cached web UI files (downloaded from `https://www.cellucid.com`).
-
-Why it matters:
-- offline/airgapped environments,
-- persistent caching across notebook restarts,
-- avoiding re-downloading large UI bundles repeatedly.
-
-Example:
+Selects the directory where one verified viewer generation is published.
+Configure it explicitly:
 
 ```bash
-export CELLUCID_WEB_PROXY_CACHE_DIR="$HOME/.cache/cellucid-web"
+cellucid serve /path/to/data --web-cache-dir /path/to/cache
 ```
 
-Related APIs:
-- `cellucid.get_web_cache_dir()`
-- `cellucid.clear_web_cache()`
+Python APIs accept `web_cache_dir=...`. Use `cellucid.get_web_cache_dir()` to
+inspect the default temporary location and `cellucid.clear_web_cache()` to
+remove its current generation.
 
-### `CELLUCID_CLIENT_SERVER_URL`
+### `client_server_url`
 
 Overrides the URL that the **browser** should use to reach the Python server.
 
@@ -56,13 +63,21 @@ This is primarily for remote notebook environments where:
 - the kernel runs on a remote VM,
 - and `http://127.0.0.1:<port>` is not reachable from your browser.
 
-If you have an HTTPS reverse proxy for the server (or a stable tunnel URL), set:
+If you have an HTTPS reverse proxy for the server (or a stable tunnel URL),
+pass the exact browser-reachable base URL:
 
-```bash
-export CELLUCID_CLIENT_SERVER_URL="https://<your-proxy-host>/proxy/<port>"
+```python
+from cellucid import show_anndata
+viewer = show_anndata(
+    adata,
+    dataset_name="Example",
+    dataset_id="example",
+    client_server_url="https://notebooks.example/proxy/8765",
+)
 ```
 
-The notebook embedder will use this as the base for `viewer.viewer_url`.
+The value must be an absolute HTTP or HTTPS URL with no credentials, query,
+fragment, trailing slash, or surrounding whitespace.
 
 See details in: {doc}`10_jupyter_embedding_architecture`
 
@@ -117,17 +132,19 @@ Cause:
 
 Fix options (ordered):
 1) Use `jupyter-server-proxy` (recommended).
-2) Use a tunnel/reverse proxy and set `CELLUCID_CLIENT_SERVER_URL`.
+2) Use a tunnel/reverse proxy and pass its exact base as
+   `client_server_url=`.
 
 See: {doc}`10_jupyter_embedding_architecture`
 
-### Symptom: “Viewer UI can’t be loaded (offline)”
+### Symptom: viewer startup cannot establish the UI generation
 
 Cause:
-- hosted UI couldn’t be fetched,
-- and no cached UI exists.
+- the source inventory or a declared object could not be fetched or verified,
+- or the selected generation directory cannot be written.
 
 Fix:
-- run once while online to populate the cache,
-- ensure `CELLUCID_WEB_PROXY_CACHE_DIR` is writable and persistent,
-- or clear a corrupted cache via `cellucid.clear_web_cache()`.
+- confirm the configured `web_source_url` is reachable,
+- pass a writable `web_cache_dir`, and
+- use `cellucid.clear_web_cache()` only when you intentionally want to remove
+  the selected generation before establishing it again.

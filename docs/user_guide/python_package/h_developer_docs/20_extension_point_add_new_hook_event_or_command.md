@@ -20,7 +20,7 @@ Pick:
 
 Define:
 - required keys (minimum needed to be useful)
-- optional keys (safe to add later)
+- schema-optional keys and their exact meaning
 - payload size expectations (avoid megabytes)
 
 ### Step A2 — Implement frontend emission (web app)
@@ -37,25 +37,24 @@ POST /_cellucid/events
 }
 ```
 
-### Step A3 — Decide if Python needs explicit mapping
+### Step A3 — Add the Python schema
 
-Python already maps:
-- `"selection"`, `"hover"`, `"click"`, `"ready"`
+Add the new type and its complete required-field set to
+`_require_inbound_jupyter_event` in
+`cellucid-python/src/cellucid/jupyter.py`. Implement exact value checks there.
+Until this exists, Python rejects the event before hook dispatch.
 
-For any other `type`:
-- the Python hook name becomes the raw `type`.
-
-If you want a convenience decorator `@viewer.on_<event>`:
-- add a new property on `BaseViewer` similar to `on_selection`.
+If the event needs a convenience decorator, add a property on `BaseViewer`
+similar to `on_selection`.
 
 ### Step A4 — Update Python event handling if needed
 
 File:
 - `cellucid-python/src/cellucid/jupyter.py`
 
-Possible changes:
-- extend `event_map` in `BaseViewer._handle_frontend_message`
-- extend `ViewerState` if you want it stored as a “latest snapshot”
+Required changes:
+- extend the closed inbound validator
+- extend `ViewerState` only if the event owns a latest-state snapshot
 
 ### Step A5 — Document + test
 
@@ -68,6 +67,7 @@ Tests:
 - call `_handle_frontend_message({...})` and assert:
   - hooks fire
   - state updates
+  - missing and undeclared fields fail before either action
 
 ---
 
@@ -79,8 +79,8 @@ Pick:
 - `type`: a stable command string (e.g. `"setThreshold"`)
 
 Define:
-- required parameters
-- default values (if any)
+- the complete required parameter set
+- exact value constraints
 - behavior when called before `ready`
 
 ### Step B2 — Implement frontend handler (web app)
@@ -96,7 +96,8 @@ Important:
 File:
 - `cellucid-python/src/cellucid/jupyter.py`
 
-Add a method on the viewer, e.g.:
+Add the command to `_require_frontend_message`, then add a method on the
+viewer, e.g.:
 
 - `def set_threshold(self, value: float): self.send_message({"type": "setThreshold", "value": value})`
 

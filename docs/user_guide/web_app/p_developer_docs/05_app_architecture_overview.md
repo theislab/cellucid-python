@@ -63,7 +63,6 @@ The high-level startup flow is:
    - points buffers (embedding positions, colors, outlier quantiles, etc.)
    - optional connectivity (KNN graph edges)
 7) The app initializes the UI coordinator (`initUI`) which wires the sidebar modules to state/viewer.
-8) The session serializer may auto-restore a “latest session” from the dataset exports directory (if configured).
 
 ---
 
@@ -77,7 +76,8 @@ Cellucid supports multiple data sources through a single coordinator:
 
 Common sources:
 - **local-demo**: datasets loaded from an exports base URL (configured via `<meta name="cellucid-exports-base-url" ...>` or `?exportsBaseUrl=...`; in production this typically points at a separate `cellucid-datasets` host)
-- **local-user**: browser file picker source (user selects folder/h5ad/zarr)
+- **local-user**: the three browser controls for a prepared directory, one
+  H5AD file, or one portable Zarr ZIP
 - **remote**: connects to a `cellucid-python` server (lazy loading; best for large h5ad/zarr)
 - **github-repo**: reads exports from a GitHub repo/path (sharing; no server)
 - **jupyter**: a special source used when running inside an embedded notebook viewer
@@ -162,7 +162,9 @@ These are the most common sources of accidental regressions:
 - **No per-frame DOM work**: the render loop should not query or update DOM every frame.
 - **No hot-path allocations**: avoid allocating arrays/objects in per-point loops; reuse typed-array scratch buffers.
 - **State → viewer updates should be explicit**: prefer `viewer.update*` methods rather than “implicit” coupling.
-- **Batch expensive recomputations**: when restoring filters or applying many changes, use `DataState.beginBatch()` / `endBatch()` when available.
+- **Batch expensive recomputations**: when restoring filters or applying many
+  changes, bracket the mutation with `DataState.beginBatch()` and
+  `DataState.endBatch()`.
 
 ---
 

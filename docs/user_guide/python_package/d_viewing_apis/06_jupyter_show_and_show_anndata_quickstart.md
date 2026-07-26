@@ -13,7 +13,8 @@ If you are not in a notebook environment, start with {doc}`04_cli_cellucid_serve
 
 **Audience**
 - Wet lab / non-technical: copy/paste “Minimal cells”, stop at “What success looks like”.
-- Computational: focus on `.h5ad` backed mode, `.zarr`, and remote notebook caveats.
+- Computational: focus on read-only-backed `.h5ad`, eagerly loaded `.zarr`,
+  and remote notebook caveats.
 - Power users: focus on HTTPS notebooks, proxies, and `viewer.debug_connection()`.
 
 **Time**
@@ -24,16 +25,18 @@ If you are not in a notebook environment, start with {doc}`04_cli_cellucid_serve
 - `pip install cellucid`
 - A notebook environment (classic, JupyterLab, VSCode notebooks, Colab)
 
-## Read once: hosted-asset proxy + caching (network requirement)
+## Read once: exact web-generation startup (network requirement)
 
 ```{important}
 Notebook embeds load the viewer UI from the same local server that serves your dataset.
 
-If the UI assets are not already cached, Cellucid will download `index.html` + `/assets/*`
-from `https://www.cellucid.com` and cache them on disk (one-time per web build).
+At startup Cellucid establishes the complete source generation declared by
+`cellucid-web-assets.json`, including `index.html`, root browser metadata, and
+`/assets/*`. Every declared byte is verified before the server publishes the UI.
 
-Offline use is supported *after* you have a cached copy.
-Configure the cache directory with `CELLUCID_WEB_PROXY_CACHE_DIR`.
+Startup requires access to the configured source. It never substitutes a stale
+cached generation after a source failure.
+Configure the generation directory with `web_cache_dir=...`.
 ```
 
 ## Minimal cells (copy/paste)
@@ -43,17 +46,27 @@ Configure the cache directory with `CELLUCID_WEB_PROXY_CACHE_DIR`.
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata(adata, height=600)
+viewer = show_anndata(
+    adata,
+    height=600,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 viewer  # (optional) display again in some notebook UIs
 ```
 
-### B) Show a `.h5ad` / `.zarr` (recommended for large datasets)
+### B) Show a `.h5ad` read-only-backed or an eagerly loaded `.zarr`
 
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata("data.h5ad", height=600)  # backed (lazy) by default
-# viewer = show_anndata("data.zarr", height=600)
+viewer = show_anndata(
+    "data.h5ad",
+    height=600,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
+# A .zarr path uses the same call shape and is loaded eagerly.
 ```
 
 ### C) Show a pre-exported directory (fastest + most reproducible)
@@ -70,37 +83,12 @@ viewer = show("./export_dir", height=600)
 - You can pan/zoom and select cells.
 - The terminal/kernel stays running (the viewer needs the local server).
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: notebook-embed-success
-Suggested filename: web_app/notebook_01_embed-success.png
-Where it appears: Python Package Guide → Viewing APIs → Jupyter quickstart → What success looks like
-Capture:
-  - UI location: notebook output area
-  - State prerequisites: viewer rendered; dataset loaded; side panel visible
-  - Action to reach state: run `viewer = show_anndata(...)`
-Crop:
-  - Include: the iframe area + a small amount of notebook context (cell input + output)
-  - Exclude: private dataset names, browser tabs, personal info
-Annotations:
-  - Callouts: (1) the embedded viewer frame, (2) the dataset name / point count, (3) the URL bar is optional
-Alt text:
-  - Notebook cell output showing an embedded Cellucid viewer.
-Caption:
-  - A successful notebook embed: the viewer appears as an iframe and is backed by a local Cellucid server.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for a successful Cellucid notebook embed.
-:width: 100%
-
-A successful Cellucid embed inside a notebook output cell.
-```
-
 ## `show()` vs `show_anndata()` (how to choose)
 
 | Function | You pass | Best for | Tradeoffs |
 |---|---|---|---|
 | `show(export_dir)` | export folder | fastest + reproducible + sharing | requires export step |
-| `show_anndata(data)` | `AnnData` / `.h5ad` / `.zarr` | convenience in analysis | slower than exports; requires UMAP keys |
+| `show_anndata(data, dataset_name=..., dataset_id=...)` | `AnnData` / `.h5ad` / `.zarr` | convenience in analysis | slower than exports; requires exact embedding keys |
 
 ## How the embed works (so you can debug it)
 
@@ -119,37 +107,13 @@ Frontend → Python events (hooks) are delivered via HTTP POST to:
 http://127.0.0.1:<port>/_cellucid/events
 ```
 
-## HTTPS / remote notebooks: the “proxy required” case
+## HTTPS / remote notebooks: browser reachability
 
 Some notebook environments (JupyterHub, cloud notebooks) serve the notebook over HTTPS or from a remote origin.
 In those cases, a direct `http://127.0.0.1:<port>` iframe may be blocked or unreachable.
 
-Cellucid will try to use **jupyter-server-proxy** automatically (recommended).
-
-If it cannot, you may see an in-iframe error message telling you to install/enable `jupyter-server-proxy`
-or set `CELLUCID_CLIENT_SERVER_URL`.
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: notebook-proxy-required-error
-Suggested filename: web_app/notebook_02_proxy-required.png
-Where it appears: Python Package Guide → Viewing APIs → Jupyter quickstart → HTTPS / remote notebooks
-Capture:
-  - UI location: embedded iframe
-  - State prerequisites: notebook served over HTTPS; jupyter-server-proxy missing/disabled
-  - Action to reach state: run `show_anndata(...)` in a JupyterHub/HTTPS notebook without jupyter-server-proxy
-Crop:
-  - Include: the error message in the iframe
-Alt text:
-  - Embedded Cellucid iframe showing a “notebook proxy required” message.
-Caption:
-  - When the notebook is served from HTTPS/remote origins, the embed may require jupyter-server-proxy (or an explicit client server URL) to avoid mixed-content and reach the kernel’s server.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Cellucid “proxy required” iframe message.
-:width: 100%
-
-Notebook embeds may require `jupyter-server-proxy` in HTTPS/remote environments.
-```
+For a remote notebook, pass the one browser-reachable base URL explicitly with
+`client_server_url=...`. Cellucid otherwise uses the local server URL exactly.
 
 Deep dive + fixes: {doc}`10_notebook_widget_mode_advanced`.
 

@@ -48,44 +48,25 @@ Ask a computational collaborator (or your pipeline) to create an export folder u
 
 What you should receive is a directory that contains at least:
 - `dataset_identity.json`
-- `points_2d.bin` or `points_3d.bin` (optionally with `.gz`)
+- `obs_manifest.json`
+- `points_1d.bin`, `points_2d.bin`, or `points_3d.bin` (optionally with `.gz`)
 
 ### Step 2 — Load the folder in the Cellucid web app
 
 Use the browser file picker workflow:
 - Web App docs: {doc}`../../web_app/b_data_loading/03_browser_file_picker_tutorial`
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: prepare-overview-webapp-file-picker
-Where it appears: User Guide → Python Package → Data Preparation API → prepare/export overview
-Capture:
-  - Open Cellucid web app
-  - Navigate to the dataset loading panel
-  - Choose the “folder picker / local export folder” option
-  - Show the OS folder picker with an exported folder highlighted (do NOT select private directories)
-Crop:
-  - Include: the loader UI + the picker action button OR the OS picker dialog with the export folder selected
-  - Exclude: personal usernames/home paths if sensitive
-Redact:
-  - Remove: any private dataset names, patient IDs, repo URLs, account info
-Annotations:
-  - Callouts: (1) the loader action/button, (2) the export folder name, (3) the “Select/Choose” confirmation button
-Alt text:
-  - Cellucid dataset loader showing the option to pick an exported dataset folder from the local computer.
-Caption:
-  - Load a pre-exported folder created by `cellucid.prepare(...)` using the browser file picker.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for loading an export folder via the web app file picker.
+```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
+:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
 :width: 100%
 
-Load a pre-exported folder created by `cellucid.prepare(...)` using the browser file picker.
+The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```
 
 ### Step 3 — Confirm “success”
 
 You should see:
-- points rendered (2D or 3D),
+- points rendered (1D, 2D, or 3D),
 - metadata fields available to color/filter (if exported),
 - optional: gene search available (if gene expression was exported),
 - optional: vector overlay controls available (if vector fields were exported).
@@ -108,7 +89,8 @@ Use **exports** when you want:
 
 Use **direct viewing** when you want:
 - zero export step while iterating,
-- lazy gene expression loading from `.h5ad`/`.zarr` via server mode,
+- browser requests for gene expression on demand; `.h5ad` remains
+  read-only-backed while `.zarr` is materialized eagerly in Python,
 - notebook-first workflows where the dataset changes often.
 
 Start here for non-export viewing paths:
@@ -119,7 +101,8 @@ Start here for non-export viewing paths:
 At minimum, you provide:
 - `latent_space`: `(n_cells, n_latent_dims)` (required)
 - `obs`: a DataFrame with `n_cells` rows (required)
-- at least one embedding: `X_umap_2d` or `X_umap_3d` (required)
+- at least one embedding: `X_umap_1d`, `X_umap_2d`, or `X_umap_3d`
+  (required)
 
 Optionally, you also provide:
 - `gene_expression` + `var` (for gene overlays/search)
@@ -136,24 +119,29 @@ And you always choose:
 from cellucid import prepare
 
 # Required: at least one embedding
+X_umap_1d = adata.obsm.get("X_umap_1d")
 X_umap_3d = adata.obsm.get("X_umap_3d")
 X_umap_2d = adata.obsm.get("X_umap_2d")
-X_umap = adata.obsm.get("X_umap")  # common key (2D or 3D)
-
-if X_umap_3d is None and X_umap is not None and X_umap.shape[1] == 3:
-    X_umap_3d = X_umap
-if X_umap_2d is None and X_umap is not None and X_umap.shape[1] == 2:
-    X_umap_2d = X_umap
+embeddings = (X_umap_3d, X_umap_2d, X_umap_1d)
+if all(embedding is None for embedding in embeddings):
+    raise ValueError(
+        "Provide adata.obsm['X_umap_1d'], "
+        "adata.obsm['X_umap_2d'], or adata.obsm['X_umap_3d']."
+    )
 
 # Required: latent_space (used for outlier quantiles on categorical fields)
-latent = adata.obsm.get("X_pca", X_umap_3d if X_umap_3d is not None else X_umap_2d)
+latent = adata.obsm.get(
+    "X_pca",
+    next(embedding for embedding in embeddings if embedding is not None),
+)
 if latent is None:
     raise ValueError("Provide adata.obsm['X_pca'] or an embedding to use as latent_space.")
 
 # Optional: vector fields (velocity/drift) in embedding space
 vector_fields = {
-    "velocity_umap_2d": adata.obsm.get("velocity_umap_2d"),
-    "velocity_umap_3d": adata.obsm.get("velocity_umap_3d"),
+    key: adata.obsm[key]
+    for key in ("velocity_umap_1d", "velocity_umap_2d", "velocity_umap_3d")
+    if key in adata.obsm
 }
 
 prepare(
@@ -169,6 +157,7 @@ prepare(
     vector_fields=vector_fields,
 
     # Embeddings (provide any/all of 1D/2D/3D)
+    X_umap_1d=X_umap_1d,
     X_umap_2d=X_umap_2d,
     X_umap_3d=X_umap_3d,
 
@@ -176,6 +165,7 @@ prepare(
     out_dir="./exports/pbmc_demo",
     dataset_name="PBMC demo",
     dataset_id="pbmc_demo",
+    obs_categorical_dtype="uint16",
     compression=6,
     var_quantization=8,
     obs_continuous_quantization=8,
@@ -192,7 +182,9 @@ Minimum:
 ```text
 out_dir/
 ├── dataset_identity.json
-└── points_2d.bin(.gz)  or  points_3d.bin(.gz)
+├── obs_manifest.json
+├── obs/
+└── points_1d.bin(.gz)  or  points_2d.bin(.gz)  or  points_3d.bin(.gz)
 ```
 
 Typical full export:
@@ -228,7 +220,7 @@ On a successful run, `prepare()` prints an “Export Settings” summary and the
 
 - In the browser (no Python running): {doc}`../../web_app/b_data_loading/03_browser_file_picker_tutorial`
 - With a local server: run `cellucid serve ./exports/pbmc_demo` and open the printed URL
-- In Jupyter (embedded): see {doc}`../api/jupyter` and {doc}`../d_viewing_apis/index`
+- In Jupyter (embedded): see {doc}`../g_api_reference_coverage/api/jupyter` and {doc}`../d_viewing_apis/index`
 
 ---
 
@@ -269,11 +261,15 @@ Web app context:
 ## Edge cases and common footguns
 
 - **Row-order mismatch** (most common): embeddings/obs/gene_expression were not aligned after filtering/concatenation.
-- **NaN/Inf in embeddings**: normalization will produce NaN outputs → viewer may fail or render nothing.
-- **“It didn’t update”**: existing files were skipped because `force=False` (or you reused an `out_dir`).
+- **NaN/Inf in embeddings**: the candidate is rejected before output
+  publication.
+- **“It didn’t update”**: a non-empty target with `force=False` raises
+  `FileExistsError`; use `force=True` only when you intend a complete
+  replacement.
 - **Gene export explosion**: exporting many genes writes *one file per gene* and can create huge folders + slow file systems.
 - **Too many categories**: categorical fields with very large category counts are unusable in the UI and may exceed dtype limits.
-- **Vector dims don’t match**: providing a 3D vector field but only exporting 2D points (or vice versa) causes the field to be skipped.
+- **Vector dims don’t match**: the candidate is rejected; every declared
+  `<field>_umap_<dimension>d` vector requires the matching embedding dimension.
 
 ## Troubleshooting (overview)
 

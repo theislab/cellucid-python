@@ -19,29 +19,26 @@ This glossary is written to match the app UI language, even when a “technical�
 
 ## UI map (one screenshot you’ll reuse everywhere)
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: ui-glossary-ui-map
-Where it appears: UI glossary → UI map
-Capture:
-  - Any dataset loaded
-  - Left sidebar open
-  - Show: plot canvas + sidebar accordions (Session, Coloring & Filtering, Compare Views, Navigation, Highlighting, Analysis, Figure Export)
-Crop:
-  - Include: full sidebar + ~60% of canvas
-  - Exclude: browser chrome and private dataset identifiers
-Annotations:
-  - 6–12 callouts naming the core UI regions (sidebar, canvas, view badges, legend)
-Alt text:
-  - Cellucid interface showing the canvas and main sidebar sections.
-Caption:
-  - Cellucid UI overview: the left sidebar controls state; the canvas renders the active view(s).
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for a Cellucid UI overview.
+```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
+:alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
 :width: 100%
 
-Cellucid UI overview: the left sidebar controls state; the canvas renders the active view(s).
+A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
 ```
+
+---
+
+## Compact help (`i`) buttons
+
+- **`i` help button**: opens supplemental guidance for the nearby control. It
+  does not replace the control's visible action label or current-state text.
+- Click the button, or focus it with {kbd}`Tab` and press {kbd}`Enter` or
+  {kbd}`Space`, to open its help dialog. Only one help dialog opens at a time.
+- Press {kbd}`Escape`, move focus outside the dialog, or click elsewhere to
+  close it.
+
+See {doc}`../o_accessibility_privacy_security/01_accessibility` for the complete
+keyboard and screen-reader behavior.
 
 ---
 
@@ -52,7 +49,6 @@ Cellucid UI overview: the left sidebar controls state; the canvas renders the ac
 - **Gene / feature**: one variable/feature; used for gene expression coloring and some analyses.
 - **Embedding**: coordinates for points in 1D/2D/3D (UMAP/tSNE/PCA/etc).
 - **Dimension (1D / 2D / 3D)**: which embedding dimensionality you are currently viewing for a given view.
-  - **4D**: present in some UI lists as “reserved”; not currently supported.
 - **Connectivity**: a neighbor graph (edges). When enabled, edges are drawn between visible points only.
 - **Vector field / velocity overlay**: an optional overlay that visualizes per-cell vectors (dimension-specific).
 

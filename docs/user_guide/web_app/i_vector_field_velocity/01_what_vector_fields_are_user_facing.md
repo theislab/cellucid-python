@@ -110,7 +110,8 @@ This is why the overlay exposes a **Flow speed** multiplier: it lets you tune vi
 Vector fields can arrive via multiple data loading workflows:
 
 - **Prepared exports**: vector field binaries live under `vectors/` and the dataset’s `dataset_identity.json` contains a `vector_fields` metadata block.
-- **AnnData in the browser / server / Jupyter**: vector fields are detected from `adata.obsm` keys using Cellucid conventions (UMAP-based naming).
+- **AnnData in the browser / server / Jupyter**: vector fields are detected from
+  exact dimension-suffixed `adata.obsm` keys such as `velocity_umap_2d`.
 
 ---
 
@@ -138,8 +139,8 @@ Start with conservative settings (shorter trails, low turbulence) and verify row
 
 ---
 
-## Related internal references (implementation/spec)
+## Implementation references
 
-- `cellucid/markdown/VECTOR_FIELD_OVERLAY_CONVENTIONS.md`
-- `cellucid/markdown/VELOCITY_OVERLAY_PLAN.md`
-- `cellucid/markdown/VELOCITY_OVERLAY_IMPLEMENTATION_PLAN.md`
+- `cellucid/assets/js/data/vector-field-manager.js`
+- `cellucid/assets/js/app/ui/modules/velocity-overlay-controls.js`
+- `cellucid/assets/js/rendering/overlays/velocity/velocity-overlay.js`

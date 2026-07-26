@@ -68,13 +68,14 @@ bundle.save("./my-session.cellucid-session")
 
 When you call `viewer.get_session_bundle()`:
 
-1. Python ensures the viewer is displayed/ready (best effort).
+1. Python displays the viewer when needed and waits for its exact ready event;
+   display or readiness failure is propagated.
 2. Python registers an expected `(viewerId, requestId)` pair on the local server with a TTL.
 3. Python sends a command into the iframe:
    - `{ "type": "requestSessionBundle", "requestId": "..." }`
 4. The frontend creates a Blob (`.cellucid-session` bytes).
 5. The frontend uploads the bytes back to:
-   - `POST /_cellucid/session_bundle?viewerId=...&requestId=...`
+   - `POST /_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
 6. The server validates + streams the upload to a temp file and emits a `session_bundle` event back to Python.
 7. `get_session_bundle()` unblocks and returns `CellucidSessionBundle(Path(path))`.
 
@@ -86,8 +87,10 @@ When you call `viewer.get_session_bundle()`:
 
 ## Edge cases
 
-- **Viewer not displayed**: `get_session_bundle()` will try to display the viewer (best effort in Jupyter).
-- **Offline / no cached UI**: the iframe may show “viewer UI could not be loaded”, so no session capture can occur.
+- **Viewer not displayed**: in Jupyter, `get_session_bundle()` displays it and
+  propagates any display failure.
+- **Viewer generation unavailable**: viewer construction/startup raises, so no
+  session request is issued.
 - **Stale iframe after kernel restart**: viewerId mismatch; re-run the viewer cell.
 - **Very large sessions**: you can hit the 512MB cap; reduce stored state (fewer highlight groups, etc.).
 
@@ -119,4 +122,3 @@ Fix:
 
 - Apply session bundles back to AnnData: {doc}`11_session_bundles_apply_session_to_anndata`
 - Full troubleshooting: {doc}`14_troubleshooting_hooks`
-

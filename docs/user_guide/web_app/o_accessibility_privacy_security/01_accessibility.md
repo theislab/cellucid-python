@@ -108,27 +108,7 @@ Step-by-step:
 The simulation is meant to catch *obvious* issues quickly. It is not a substitute for a formal accessibility audit of a final figure (especially for print).
 :::
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: accessibility-colorblind-preview-dropdown
-Where it appears: User Guide → Web App → Accessibility → Colorblind simulation
-Capture:
-  - Open Figure Export panel
-  - Show the Colorblind preview dropdown with a non-Normal mode selected (e.g., Deuteranopia)
-Crop:
-  - Include: dropdown + a visible part of the preview
-Redact:
-  - Remove: dataset ids/names if sensitive
-Alt text:
-  - Figure export preview controls showing the colorblind preview dropdown.
-Caption:
-  - Use the colorblind preview dropdown to catch palette problems before exporting figures.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the figure export colorblind preview dropdown.
-:width: 100%
 
-Use the colorblind preview dropdown in the export preview to catch palette problems before you publish a figure.
-```
 
 ---
 
@@ -152,6 +132,25 @@ Common failure mode:
 
 Cellucid has global keyboard shortcuts intended to make basic navigation and “getting unstuck” easier.
 
+### Compact `i` help dialogs
+
+Small `i` buttons provide explanatory guidance without hiding the nearby
+action label or current-state text.
+
+- Click an `i`, or focus it with {kbd}`Tab` and press {kbd}`Enter` or
+  {kbd}`Space`, to open its dialog. Focus moves into the dialog.
+- {kbd}`Tab` reaches any links, then closes the dialog and continues to the
+  control after the `i`.
+- {kbd}`Shift+Tab` or {kbd}`Escape` closes the dialog and returns focus to the
+  `i`. Clicking or moving focus elsewhere closes it without moving focus.
+- Only one help dialog can be open.
+
+For screen readers, every `i` is a named button with
+`aria-controls`, `aria-haspopup="dialog"`, and an accurate `aria-expanded`
+state. Its controlled panel is a labeled `role="dialog"`, so the button,
+relationship, and open state are announced without removing the visible
+control label.
+
 ### Global shortcuts (works when focus is not inside a text input)
 
 | Key | Action |
@@ -168,26 +167,11 @@ Cellucid has global keyboard shortcuts intended to make basic navigation and “
 Important focus rule:
 - If you are typing in a search box/dropdown (`input`, `textarea`, `select`), shortcuts are intentionally ignored so you can type normally.
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: accessibility-keyboard-shortcuts-section
-Where it appears: User Guide → Web App → Accessibility → Keyboard accessibility
-Capture:
-  - Press `?` to open the Keyboard Shortcuts accordion/section
-  - Make sure the shortcuts list is visible
-Crop:
-  - Include: the shortcuts section + enough UI to orient where it lives
-Redact:
-  - Remove: dataset ids/names if sensitive
-Alt text:
-  - Sidebar section listing global keyboard shortcuts.
-Caption:
-  - Press `?` to open the in-app shortcuts list; use it when teaching or when keyboard focus gets confusing.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the keyboard shortcuts section.
+```{figure} ../../../_static/screenshots/web_app/keyboard-shortcuts.png
+:alt: Keyboard Shortcuts panel listing camera, dimension, navigation, and highlighting shortcuts.
 :width: 100%
 
-Press `?` to open the in-app keyboard shortcuts section.
+The Keyboard Shortcuts panel documents camera, dimension, navigation, and highlighting controls.
 ```
 
 ### What keyboard cannot do (yet)
@@ -195,7 +179,7 @@ Press `?` to open the in-app keyboard shortcuts section.
 Even with shortcuts, some core interactions still require a pointer device:
 - lasso/area selection
 - fine-grained orbit/planar navigation on the canvas
-- dragging sliders quickly (though you can often tab + arrow-key in HTML sliders if exposed)
+- dragging sliders quickly (HTML sliders also accept Tab plus arrow-key input)
 
 If you need a keyboard-only workflow, treat Cellucid as:
 - a viewer for “set state → export figure”, and
@@ -237,7 +221,7 @@ Related:
 **Fix**
 1) Collapse categories (coarser grouping) or export only a subset.
 2) Switch viewer/export background to white and re-check.
-3) Increase point size and legend font/size via export settings (if exposed).
+3) Increase point size and legend font size in the export settings.
 
 **Prevention**
 - Design figures with ≤ ~10–20 categorical colors per panel when possible.

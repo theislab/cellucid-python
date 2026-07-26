@@ -97,7 +97,8 @@ Large datasets and GPU-heavy modes allocate big GPU buffers. If the browser/GPU 
    - fewer views,
    - disable overlays or lower density,
    - smaller window.
-3) If it persists on moderate data: try a different browser and update GPU drivers.
+3) If it persists on moderate data: confirm hardware acceleration and WebGL2,
+   then update the browser, operating system, and GPU driver when applicable.
 
 ### Prevention
 - Keep a “laptop-safe preset” (points mode + fewer views + no heavy overlays).
@@ -123,7 +124,7 @@ Smoke mode is a ray-marched volumetric rendering:
 
 ### Fix
 - Lower grid density and ray quality.
-- Lower render resolution (if exposed).
+- Lower render resolution in the benchmark controls.
 - Return to points mode when doing scientific work; use smoke selectively.
 
 ### Prevention
@@ -314,15 +315,17 @@ Extensions and policies can:
 - or interfere with file APIs.
 
 ### How to confirm
-- Try a private window (no extensions) or a different browser profile.
-- Check `chrome://gpu` (hardware acceleration).
+- Use a clean/private profile with extensions disabled.
+- Confirm WebGL2 from the console with
+  `document.createElement("canvas").getContext("webgl2") !== null`.
 
 ### Fix
 - Disable interfering extensions for the site.
 - In corporate environments, ask IT to allow hardware acceleration and required origins.
 
 ### Prevention
-- For enterprise deployments: document supported browsers and required policies.
+- For enterprise deployments: document the required WebGL2, hardware
+  acceleration, download, storage, and origin policies.
 
 Related docs:
 - {doc}`../a_orientation/02_system_requirements`

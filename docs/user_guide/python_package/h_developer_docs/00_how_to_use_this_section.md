@@ -17,7 +17,7 @@ If you’re debugging UI state/rendering/modules, start here instead: {doc}`../.
 
 ## How these pages are meant to be read
 
-Cellucid’s docs are intentionally layered (see `cellucid/markdown/DOCUMENTATION_MASTER_GUIDE.md`):
+Cellucid’s docs are intentionally layered (see {doc}`15_docs_development_and_style_guide`):
 
 1) **Fast path**: minimal steps to do the thing safely.
 2) **Practical path**: parameters, performance, and reproducibility.
@@ -67,31 +67,17 @@ Screenshots are often more helpful than logs for:
 - “What does success look like?”
 - “What error message did you see exactly?”
 
-In this doc site (Sphinx + MyST), use the screenshot placeholder style from:
-- `cellucid/markdown/DOCUMENTATION_SCREENSHOTS_AND_FIGURES_GUIDE.md`
+In this doc site (Sphinx + MyST), commit only captures from a reproduced,
+visually inspected state.
 
 Rule of thumb:
-- If a page contains *click-by-click steps*, add at least one screenshot placeholder (“orientation” + “success state”).
-- If a page contains *a common failure mode*, add a screenshot placeholder for that failure.
 
-You will see blocks like:
-
-````md
-<!-- SCREENSHOT PLACEHOLDER
-ID: unique-id
-Capture: exact steps to reach state
-Alt text: one sentence
-Caption: one sentence
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot.
-:width: 100%
-
-<caption text>
-```
-````
-
-When you’re ready, replace the placeholder SVG path with your real PNG/SVG and keep the comment block as the “production spec”.
+- For click-by-click steps, include an orientation or success-state capture when
+  it materially clarifies the workflow.
+- For a common failure mode, include the exact visible failure only when it has
+  been reproduced safely with public or synthetic data.
+- Write alt text for the visible controls and a caption that states what the
+  reader should verify.
 
 ---
 

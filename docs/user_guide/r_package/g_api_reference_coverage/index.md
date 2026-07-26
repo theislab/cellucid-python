@@ -3,7 +3,6 @@
 `cellucid-r` intentionally exposes a very small public API:
 
 - `cellucid_prepare()`
-- `prepare()` (alias)
 
 This section maps:
 - what is exported,

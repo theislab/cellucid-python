@@ -5,7 +5,7 @@
 ## Repository layout (high level)
 
 - `cellucid-r/R/cellucid_prepare.R`
-  - exports `cellucid_prepare()` and `prepare()`
+  - exports `cellucid_prepare()`
   - contains the exporter implementation and helper functions
 - `cellucid-r/man/cellucid_prepare.Rd`
   - R help page generated/maintained for Bioconductor-style docs
@@ -34,7 +34,7 @@ At a high level:
    - write one dense vector per gene under `var/`
    - write `var_manifest.json`
 7) Export **connectivities** (optional):
-   - symmetrize and binarize
+   - validate exact finite binary values, symmetry, and zero diagonal
    - write edge pairs under `connectivity/`
    - write `connectivity_manifest.json`
 8) Write `dataset_identity.json` (summary + pointers to files).

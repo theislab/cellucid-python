@@ -47,7 +47,6 @@ my_export/
   points_1d.bin(.gz)                   # optional
   points_2d.bin(.gz)                   # optional
   points_3d.bin(.gz)                   # optional
-  points_4d.bin(.gz)                   # optional (viewer may not support yet)
   obs/
     <field>.values.f32(.gz)            # continuous, not quantized
     <field>.values.u8(.gz)             # continuous, quantized 8-bit
@@ -64,6 +63,7 @@ my_export/
   connectivity/
     edges.src.bin(.gz)                 # integer indices
     edges.dst.bin(.gz)
+    edges.weights.f64.bin(.gz)         # little-endian Float64 weights
   vectors/
     <field_id>_1d.bin(.gz)
     <field_id>_2d.bin(.gz)
@@ -71,29 +71,23 @@ my_export/
 ```
 
 Notes:
-- `<field>` and `<gene>` are “safe filename components” derived from keys (see below).
+- `<field>` and `<gene>` are exact portable identifiers validated before
+  publication (see below).
 - `.gz` files are **raw gzip files** (the viewer decompresses them; servers typically do not set `Content-Encoding` for these).
 
 ---
 
-## Safe filenames: how keys map to paths
+## Exact portable identifiers
 
-`prepare` uses a conservative safe-name function:
+`prepare` does not sanitize contract identifiers. Observation keys, gene IDs,
+dataset IDs, and vector-field IDs must already be 1–180-byte portable ASCII
+filename components: they start with a letter or digit, contain only letters,
+digits, `.`, `_`, or `-`, do not end with `.`, are not dot segments or Windows
+device names, and are unique under case-insensitive comparison.
 
-- allow: `A–Z`, `a–z`, `0–9`, `.`, `_`, `-`
-- replace anything else with `_`
-- strip leading/trailing `.` and `_`
-
-Implications:
-- the *file name* for an obs field or gene may not match the original key exactly,
-- collisions are possible if two different keys sanitize to the same safe name.
-
-Developer recommendation:
-- avoid obs field names that differ only by punctuation/whitespace,
-- and consider adding collision detection if you extend the format.
-
-Vector field IDs are stricter:
-- vector field ids must already be safe; unsafe ids raise.
+The exact validated identifier is used in both the manifest and path. Any
+unsafe identifier or collision rejects the complete candidate before
+publication.
 
 ---
 
@@ -147,7 +141,8 @@ Continuous field values, either:
 - quantized `uint8` (`.values.u8`) or `uint16` (`.values.u16`)
 
 Quantized encoding:
-- reserve max value for missing (NaN/Inf):
+- reserve max value for an explicitly absent quantized value (for example, an
+  undefined categorical outlier quantile):
   - u8: `255` is missing; `0..254` are valid quantized values
   - u16: `65535` is missing; `0..65534` are valid quantized values
 - manifests store `minValue` and `maxValue` for dequantization
@@ -172,12 +167,20 @@ Gene expression values (one file per gene):
 - either `float32` or quantized `uint8/uint16`
 - quantized variants use the same missing-marker rules as continuous obs values
 
-### `connectivity/edges.src.bin` and `edges.dst.bin`
+### Connectivity edge payloads
 
-Two parallel integer arrays of equal length:
-- dtype: `uint16` / `uint32` / `uint64` (see manifest)
+Three aligned arrays of equal length:
+- dtype: `uint16` for at most 65,536 cells or `uint32` for at most
+  4,294,967,296 cells (see manifest); `uint64` is not part of the current
+  contract
 - semantics: undirected edges stored once as `(src, dst)` with `src < dst`
-- arrays are sorted by `(src, dst)` to improve gzip compression
+- arrays are sorted lexicographically by `(src, dst)`
+- `edges.weights.f64.bin(.gz)` stores the corresponding exact little-endian
+  Float64 weight
+- the source graph must already be finite, non-negative, exactly symmetric in
+  topology and weight, and exactly zero on the diagonal
+- sparse inputs must contain neither stored zeros nor duplicate coordinates;
+  producers reject rather than reinterpret them
 
 ---
 
@@ -231,7 +234,7 @@ Fields:
 
 - `_format`: `"compact_v1"`
 - `n_points`: number of cells
-- `var_gene_id_column`: `"index"` or a column name
+- `var_gene_id_column`: `null` for `var.index`, otherwise an exact column name
 - `compression`: gzip level or null
 - `quantization`: `8`, `16`, or null
 - `_varSchema`: schema object with path patterns
@@ -245,9 +248,13 @@ Fields:
 
 - `format`: `"edge_pairs"`
 - `n_cells`, `n_edges`, `max_neighbors`
-- `index_dtype` (`uint16`/`uint32`/`uint64`) and `index_bytes`
+- `index_dtype` (`uint16`/`uint32`) and `index_bytes`
 - `sourcesPath`, `destinationsPath`
 - `compression`: gzip level or null
+
+An explicitly supplied, validated zero-edge graph has `n_edges: 0`,
+`max_neighbors: 0`, and two zero-length edge arrays. It is distinct from absent
+connectivity.
 
 ---
 
@@ -286,13 +293,10 @@ key = field[0]
 codes_dtype = field[2]  # "uint8" or "uint16"
 codes_ext = "u8" if codes_dtype == "uint8" else "u16"
 
-safe = key  # careful: actual filename uses safe-key transformation
-path = export_dir / "obs" / f"{safe}.codes.{codes_ext}"
+path = export_dir / "obs" / f"{key}.codes.{codes_ext}"
 raw = gzip.open(str(path) + ".gz", "rb").read() if (path.with_suffix(path.suffix + ".gz")).exists() else path.read_bytes()
 codes = np.frombuffer(raw, dtype=np.uint8 if codes_ext == "u8" else np.uint16)
 ```
-
-(In real tooling, you should apply the same safe-key transformation as `prepare`.)
 
 ---
 
@@ -300,7 +304,9 @@ codes = np.frombuffer(raw, dtype=np.uint8 if codes_ext == "u8" else np.uint16)
 
 1) `n_points` must match the number of rows in all per-cell binaries.
 2) Category codes must be stable and match the `categories` list in the manifest.
-3) Missing markers must be respected (especially for quantized values).
+3) Categorical codes and generated nullable categorical outlier quantiles must
+   respect their declared missing markers. Gene and continuous-observation
+   values are finite-only.
 4) If you change any schema/filenames, coordinate with the web app.
 5) `.gz` means “raw gzip bytes”, not HTTP `Content-Encoding`.
 
@@ -312,7 +318,7 @@ codes = np.frombuffer(raw, dtype=np.uint8 if codes_ext == "u8" else np.uint16)
 
 Likely causes:
 - `obs_manifest.json` references a file that isn’t present (partial export),
-- safe-key mismatch (field name sanitization),
+- identifier/path mismatch,
 - compression mismatch (`.gz` expected but missing).
 
 Fix:
@@ -321,8 +327,9 @@ Fix:
 ### Symptom: “Continuous field looks blank”
 
 Likely causes:
-- values are mostly NaN/Inf and got mapped to missing marker,
-- min/max range is extreme (everything clips).
+- the valid finite values occupy a very narrow portion of the declared
+  min/max range,
+- the active filters hide the cells carrying the visible range.
 
 Confirm:
 - inspect min/max in the manifest for that field,

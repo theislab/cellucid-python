@@ -10,7 +10,8 @@
 
 **Prerequisites:**
 - A dataset you can load in Cellucid
-- Recommended: Chrome/Edge (best devtools ergonomics)
+- A current stable Chrome, Edge, Firefox, or Safari release; use the same
+  browser version for before/after comparisons
 
 ---
 
@@ -177,9 +178,12 @@ Write down the time. Repeat 5×.
 
 ---
 
-### Option B — Chrome/Edge built-in tooling (recommended)
+### Option B — Browser performance tooling
 
-**Chrome Task Manager (tab-level CPU/GPU/memory)**  
+Chrome and Edge expose a tab-level task manager (`Shift+Esc`), a Performance
+Monitor, and the Network panel:
+
+**Chrome/Edge Task Manager (tab-level CPU/GPU/memory)**
 Open with `Shift+Esc`.
 
 Use it to confirm:
@@ -200,6 +204,12 @@ Use the Network tab to see:
 - request waterfalls,
 - bytes transferred,
 - long-latency outliers.
+
+Firefox and Safari expose the same core evidence through their developer
+tools: record a performance/timeline trace for CPU and frame activity, and use
+the Network panel for request timing and transferred bytes. Record the browser
+name and version with every result; never compare numbers from different
+engines as if they were the same benchmark environment.
 
 ---
 
@@ -281,35 +291,8 @@ Next step:
 
 ---
 
-## Screenshot placeholder (you will replace later)
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: benchmarking-performance-monitor
-Suggested filename: benchmarking_performance/04_devtools-performance-monitor.png
-Where it appears: User Guide → Web App → Benchmarking and Performance → 04_benchmarking_methodology_and_metrics.md
-Capture:
-  - Show DevTools Performance Monitor (or Chrome Task Manager) next to Cellucid
-  - Include visible FPS/CPU/memory indicators if possible
-Crop:
-  - Exclude: browser bookmarks, personal account avatars
-Redact:
-  - Remove: private dataset identifiers
-Alt text:
-  - Browser performance monitoring tool showing FPS, CPU, and memory while Cellucid is running.
-Caption:
-  - Use browser tooling to distinguish GPU-bound (low FPS), CPU-bound (hitching/high CPU), and I/O-bound (slow requests) performance issues.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for benchmarking with a browser performance monitor.
-:width: 100%
-
-Use browser tooling to distinguish GPU-bound (low FPS), CPU-bound (hitching/high CPU), and I/O-bound (slow requests) performance issues.
-```
-
----
-
 ## Next steps
 
-- {doc}`05_benchmark_tools_if_exposed` (if your build exposes in-app benchmark tooling)
+- {doc}`05_benchmark_tools` (in-app synthetic benchmark and situation report)
 - {doc}`07_troubleshooting_performance` (turn symptoms into diagnoses)
 - {doc}`09_reporting_performance_bugs` (what to include when filing a performance issue)

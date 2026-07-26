@@ -60,7 +60,7 @@ If it never resolves, see {doc}`10_troubleshooting_sessions`.
 
 ### “Session restore finished, but analysis results are missing”
 
-Expected behavior (dev-phase):
+Expected behavior:
 - analysis windows restore (settings + geometry),
 - analysis results are not treated as authoritative artifacts and may need recomputation,
 - some caches may restore lazily to accelerate recomputation.
@@ -104,8 +104,7 @@ Symptoms:
 Mitigations:
 - save milestone sessions (not every minute),
 - keep highlight groups coarse and meaningful,
-- reduce snapshots before saving if you don’t need them,
-- consider stripping analysis caches (future/advanced; not always available).
+- reduce snapshots before saving if you don’t need them.
 
 ---
 
@@ -118,27 +117,14 @@ If you load a session into an export where:
 - a gene is missing,
 - obs/var schema changed,
 
-then active field restore may fall back to a default field.
+then that field selection is not applied.
 
 Expected behavior:
-- best-effort restore; missing fields cannot be magically restored.
+- the current field remains active and the console records the missing key.
 
 Fix:
 - load the export version that matches the session,
 - or update the session (set a new active field and resave).
-
----
-
-## Auto-restore edge cases (`state-snapshots.json`)
-
-### `state-snapshots.json` exists but is ignored
-
-Common causes:
-- it contains no `.cellucid-session` filenames,
-- filenames don’t end with `.cellucid-session`,
-- it is served as HTML instead of JSON (SPA fallback).
-
-See {doc}`04_auto_restore_latest_from_dataset_exports`.
 
 ---
 

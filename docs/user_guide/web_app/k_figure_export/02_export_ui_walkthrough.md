@@ -80,9 +80,11 @@ Figure export is controlled from the **Figure Export** panel in the left sidebar
 
 - It renders from the current view buffers and camera matrices.
 - It applies your chosen format and strategy (SVG full/optimized/hybrid or PNG).
-- It can show dialogs/warnings:
-  - a **Large Dataset Export** chooser when exporting large SVGs with “Ask” strategy,
-  - **Export Fidelity Warnings** when something cannot match the on-screen view exactly (e.g., 3D shader-accurate points cannot be represented as pure SVG circles, or WebGL2 is unavailable).
+- SVG has no preselected strategy. You must explicitly choose **Full vector**,
+  **Optimized vector**, or **Hybrid**; Cellucid never changes that choice.
+- **Export blocked** lists an exact missing requirement, such as WebGL2/camera
+  matrices for PNG or Hybrid, or a visible connectivity layer that the current
+  exporter does not include.
 
 :::{tip}
 If your preview looks wrong, click **Refresh** in the preview controls (especially after changing views, fields, or filters).
@@ -209,9 +211,13 @@ In the **Download** section you can choose:
 
 - **SVG**: one SVG export.
 - **PNG**: one PNG export at the selected DPI.
-- **SVG + PNG**: exports both formats (useful when you want an editable SVG *and* a WYSIWYG raster).
-- **PNG (150/300/600)**: exports three PNGs at common DPIs.
-- **All**: exports SVG plus PNGs at 150/300/600.
+- **SVG + PNG**: one ZIP containing both native files.
+- **PNG (150/300/600)**: one ZIP containing three PNGs at the named DPIs.
+- **All**: one ZIP containing the SVG plus PNGs at 150/300/600.
+
+Cellucid renders and validates every batch member before creating the ZIP or
+starting the single browser download. If any member fails, no archive is
+downloaded.
 
 ### DPI (for PNG)
 
@@ -222,25 +228,25 @@ Higher DPI means:
 - more pixels (larger files, more time),
 - but better raster fidelity for printing and zooming.
 
-### Large dataset strategy (for SVG exports)
+### Explicit SVG point strategy
 
 SVG export can become impractical when you have tens/hundreds of thousands of visible points.
-Cellucid gives you control via **Large dataset strategy**:
+When the selected download includes SVG, choose exactly one strategy:
 
-- **Large data: Ask** *(recommended default)*  
-  If visible points exceed the threshold (default ~50k), Cellucid prompts you to choose.
 - **Full vector**  
   Exports every point as an SVG circle (maximum editability; can be huge/slow).
 - **Optimized vector**  
-  Uses density-preserving reduction to keep approximately the **Keep** point count (default ~100k).  
+  Uses deterministic density-preserving reduction with the explicit **Keep**
+  target (initially 100,000; if fewer points are visible, all visible points
+  remain available).
   Good for medium datasets when you need a fully-vector plot but can tolerate approximation.
-- **Hybrid** *(recommended for 3D and very large datasets)*  
+- **Hybrid**
   Rasterizes points (WYSIWYG, including 3D shading) but keeps annotations vector.
-- **Raster (PNG)**  
-  Exports PNG even if you requested SVG (maximum compatibility; no editable SVG points).
 
 :::{note}
-If the current view uses shader-accurate 3D point rendering, pure SVG circles cannot reproduce it. Cellucid may automatically switch SVG exports to **Hybrid** and show an export fidelity warning.
+Full and Optimized vector deliberately encode points as SVG circles. Hybrid
+deliberately embeds the shader-rendered point pass. Cellucid executes the
+strategy you selected and never substitutes another strategy or format.
 :::
 
 ---
@@ -315,66 +321,13 @@ If you want all panels to be directly comparable, lock cameras across views (see
 
 ---
 
-## Screenshot placeholders (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: figure-export-preview-vs-export-controls
-Suggested filename: figure_export/05_preview-vs-export-controls.png
-Where it appears: User Guide → Web App → Figure Export → 02_export_ui_walkthrough.md
-Capture:
-  - UI location: Figure Export panel with both Preview and Export controls visible
-  - State prerequisites: dataset loaded; non-empty canvas; legend visible
-Crop:
-  - Include: preview/export buttons + relevant size/mode controls
-Alt text:
-  - Figure Export panel showing preview and export controls.
-Caption:
-  - Preview is for sanity-checking crop and layout; Export produces the final artifact and may show warnings for large figures.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for preview vs export controls.
+```{figure} ../../../_static/screenshots/figure_export/preview.png
+:alt: Cellucid Figure Export preview showing the configured embedding and sidebar controls.
 :width: 100%
 
-Use preview to confirm crop/layout, then export the final SVG/PNG artifact.
-```
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: figure-export-framing-overlay
-Suggested filename: figure_export/06_framing-overlay.png
-Where it appears: User Guide → Web App → Figure Export → 02_export_ui_walkthrough.md
-Capture:
-  - Enable the framing/crop overlay and show resize handles on top of the canvas
-  - Prefer a state where the crop visibly excludes some content (so the effect is obvious)
-Alt text:
-  - Framing overlay used to crop the exported region.
-Caption:
-  - Use the framing overlay to crop the exported region without changing the camera view.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the framing overlay.
-:width: 100%
-
-The framing overlay lets you control the exported crop independently of camera navigation.
-```
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: figure-export-exported-artifact-example
-Suggested filename: figure_export/07_exported-artifact-opened.png
-Where it appears: User Guide → Web App → Figure Export → 02_export_ui_walkthrough.md
-Capture:
-  - Export one SVG and one PNG, then open at least one outside the app (Preview, browser, Inkscape, Illustrator)
-Redact:
-  - Remove: private dataset ids/names and local file paths
-Alt text:
-  - An exported figure opened outside the web app.
-Caption:
-  - Always open the exported SVG/PNG outside Cellucid to confirm it is shareable and renders correctly in downstream tools.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for an exported artifact opened outside the app.
-:width: 100%
-
-Open the exported file outside the app to confirm it renders correctly in the tools you’ll actually use.
+Preview exposes the current framing and visual state before a file is written.
 ```
 
 ---

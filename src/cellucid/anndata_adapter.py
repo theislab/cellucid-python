@@ -7,9 +7,9 @@ expects. This allows users to visualize AnnData directly without running
 prepare first.
 
 Key features:
-- Works with in-memory AnnData, backed h5ad files, and zarr stores
+- Works with in-memory AnnData, backed h5ad files, and eagerly loaded zarr stores
 - Handles sparse matrices (CSR/CSC) transparently with automatic format conversion
-- Auto-detects UMAP dimensions from explicit obsm keys (X_umap_1d, X_umap_2d, X_umap_3d) or X_umap
+- Reads UMAP dimensions only from explicit obsm keys (X_umap_1d, X_umap_2d, X_umap_3d)
 - Computes centroids and outlier quantiles on-demand with caching
 - Lazy loading: gene expression and obs data are loaded on-demand
 - No quantization (full float32 precision, gzip compression for network transfer)
@@ -18,9 +18,7 @@ Lazy Loading Behavior:
 ----------------------
 - h5ad (backed='r'): Uses HDF5 memory-mapping. Arrays are loaded only when accessed.
   Gene expression columns are fetched individually, minimizing memory usage.
-- zarr: Arrays are stored as separate files. Reading is inherently lazy - only
-  requested array chunks are loaded into memory. Note: zarr does not support
-  backed mode like h5ad; the AnnData structure is loaded but data arrays are lazy.
+- zarr: ``anndata.read_zarr`` materializes the AnnData arrays in memory.
 - in-memory: All data is already in RAM. No lazy loading.
 
 Memory Management:
@@ -32,7 +30,11 @@ The adapter maintains several caches for performance:
 - CSC cache: For CSR matrices, a CSC copy is created for efficient column access
 
 IMPORTANT: Always use the context manager or call close() when done:
-    with AnnDataAdapter.from_file("data.h5ad") as adapter:
+    with AnnDataAdapter.from_file(
+        "data.h5ad",
+        dataset_name="Example",
+        dataset_id="example",
+    ) as adapter:
         # use adapter
     # resources are automatically released
 
@@ -40,18 +42,34 @@ Usage:
     from cellucid.anndata_adapter import AnnDataAdapter
 
     # From h5ad file (lazy loading via backed mode)
-    with AnnDataAdapter.from_file("/path/to/data.h5ad") as adapter:
+    with AnnDataAdapter.from_file(
+        "/path/to/data.h5ad",
+        dataset_name="Example",
+        dataset_id="example",
+    ) as adapter:
         manifest = adapter.get_obs_manifest()
 
-    # From zarr store (lazy array access)
-    adapter = AnnDataAdapter.from_file("/path/to/data.zarr")
+    # From a zarr store (materialized by anndata.read_zarr)
+    adapter = AnnDataAdapter.from_file(
+        "/path/to/data.zarr",
+        dataset_name="Example",
+        dataset_id="example",
+    )
 
     # From in-memory AnnData
-    adapter = AnnDataAdapter(adata)
+    adapter = AnnDataAdapter(
+        adata,
+        dataset_name="Example",
+        dataset_id="example",
+    )
 
     # Use with server
     from cellucid import show_anndata
-    show_anndata(adata)  # or show_anndata("/path/to/data.h5ad")
+    show_anndata(
+        adata,
+        dataset_name="Example",
+        dataset_id="example",
+    )
 """
 
 from __future__ import annotations
@@ -59,32 +77,154 @@ from __future__ import annotations
 import gzip
 import json
 import logging
-import re
-import weakref
+import math
 from collections import OrderedDict
 from datetime import datetime, timezone
+from numbers import Integral, Real
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
 import pandas as pd
 from scipy import sparse
+
+from .connectivity_contract import (
+    ConnectivityEdgePairs,
+    build_connectivity_manifest,
+    validate_connectivity_edges,
+)
+from .prepare_data import (
+    _assert_unique_filename_components,
+    _normalize_finite_float32_embedding,
+    _require_continuous_obs_values,
+    _require_finite_float32_array,
+    _require_native_boolean,
+    _require_nonempty_string,
+    _require_positive_native_integer,
+    _require_string_identifiers,
+)
+from .vector_fields import (
+    is_vector_field_declaration_key,
+    scale_vector_field,
+    validate_vector_fields,
+)
 
 if TYPE_CHECKING:
     import anndata
 
 logger = logging.getLogger("cellucid.anndata_adapter")
 
-# Import shared utilities from prepare_data to avoid duplication
-# If running standalone, define locally
-try:
-    from .prepare_data import _safe_filename_component
-except ImportError:
-    def _safe_filename_component(name: str) -> str:
-        """Return a filesystem-friendly version of a field key."""
-        safe = re.sub(r"[^A-Za-z0-9._-]+", "_", str(name))
-        safe = safe.strip("._")
-        return safe or "field"
+
+def _require_dimension(value: object) -> int:
+    """Require one native 1D, 2D, or 3D dimension."""
+    if type(value) is not int:
+        raise TypeError("dim must be a native integer dimension.")
+    if value not in (1, 2, 3):
+        raise ValueError(f"Invalid dimension {value}. Expected 1, 2, or 3.")
+    return value
+
+
+def _classify_anndata_path(path: str | Path) -> Literal["h5ad", "zarr"]:
+    """Classify one explicitly declared AnnData file or materialized Zarr store."""
+    resolved_path = Path(path).resolve()
+    if not resolved_path.exists():
+        raise FileNotFoundError(f"Path not found: {resolved_path}")
+
+    if resolved_path.is_file():
+        if resolved_path.suffix != ".h5ad":
+            raise ValueError(f"AnnData files must use the exact .h5ad extension: {resolved_path}")
+        return "h5ad"
+
+    if not resolved_path.is_dir():
+        raise ValueError(
+            f"AnnData path must be an .h5ad file or a materialized Zarr directory: {resolved_path}"
+        )
+
+    zarr_v2_group = resolved_path / ".zgroup"
+    zarr_v2_attrs = resolved_path / ".zattrs"
+    zarr_v3_metadata = resolved_path / "zarr.json"
+    has_v2_marker = zarr_v2_group.exists() or zarr_v2_attrs.exists()
+
+    if zarr_v3_metadata.exists():
+        raise ValueError(
+            f"AnnData Zarr input must use the exact Zarr v2 root contract "
+            f"(.zgroup and .zattrs, without zarr.json): {resolved_path}"
+        )
+
+    if has_v2_marker:
+        if not zarr_v2_group.is_file() or not zarr_v2_attrs.is_file():
+            raise ValueError(
+                f"Zarr v2 directory must contain both .zgroup and .zattrs files: {resolved_path}"
+            )
+        try:
+            group_metadata = json.loads(zarr_v2_group.read_text(encoding="utf-8"))
+            attributes = json.loads(zarr_v2_attrs.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise ValueError(
+                f"Zarr v2 root metadata must be readable UTF-8 JSON: {resolved_path}"
+            ) from error
+        if group_metadata != {"zarr_format": 2}:
+            raise ValueError(f"Zarr v2 .zgroup must declare exactly zarr_format 2: {resolved_path}")
+        if not isinstance(attributes, dict):
+            raise ValueError(f"Zarr v2 .zattrs must contain a JSON object: {resolved_path}")
+        return "zarr"
+
+    raise ValueError(
+        f"AnnData path must be an .h5ad file or a complete Zarr v2 directory: {resolved_path}"
+    )
+
+
+def _validate_manifest_field_keys(keys: list[str], *, label: str) -> None:
+    _assert_unique_filename_components(keys, label=label)
+
+
+def _json_category_values(values: Any, *, field_key: str) -> list[str | bool | int | float]:
+    categories: list[str | bool | int | float] = []
+    seen: set[tuple[str, Any]] = set()
+    for raw_value in values:
+        value = raw_value.item() if isinstance(raw_value, np.generic) else raw_value
+        token: tuple[str, object]
+        if isinstance(value, bool):
+            token = ("boolean", value)
+        elif isinstance(value, str):
+            token = ("string", value)
+        elif isinstance(value, Integral):
+            integer_value = int(value)
+            if abs(integer_value) > 9_007_199_254_740_991:
+                raise ValueError(
+                    f"Categorical field {field_key!r} contains integer label "
+                    f"{integer_value!r} outside JavaScript's exact integer range"
+                )
+            value = integer_value
+            token = ("number", value)
+        elif isinstance(value, Real) and math.isfinite(value):
+            value = float(value)
+            token = ("number", value)
+        else:
+            raise ValueError(f"Categorical field {field_key!r} labels must be finite JSON scalars")
+        if token in seen:
+            raise ValueError(
+                f"Categorical field {field_key!r} labels must be unique "
+                "after exact JSON representation"
+            )
+        seen.add(token)
+        categories.append(value)
+    return categories
+
+
+def _categorical_storage(
+    n_categories: int,
+    *,
+    field_key: str,
+) -> tuple[type[np.uint8] | type[np.uint16], str, int]:
+    if n_categories > 65_535:
+        raise ValueError(
+            f"Categorical field {field_key!r} has {n_categories:,} categories; "
+            "the current contract supports at most 65,535"
+        )
+    if n_categories <= 255:
+        return np.uint8, "uint8", 255
+    return np.uint16, "uint16", 65_535
 
 
 class LRUCache:
@@ -107,7 +247,7 @@ class LRUCache:
         self._cache: OrderedDict[str, Any] = OrderedDict()
         self._max_size = max_size
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         """Get item and move to end (most recently used)."""
         if key in self._cache:
             self._cache.move_to_end(key)
@@ -139,20 +279,20 @@ class LRUCache:
         return self._max_size
 
 
-def _to_dense_1d(arr: Union[np.ndarray, sparse.spmatrix]) -> np.ndarray:
+def _to_dense_1d(arr: np.ndarray | sparse.spmatrix) -> np.ndarray:
     """Convert sparse vector to dense numpy array."""
     if sparse.issparse(arr):
-        return np.asarray(arr.toarray()).flatten()
+        return np.asarray(cast(sparse.spmatrix, arr).toarray()).flatten()
     arr = np.asarray(arr)
     if arr.ndim > 1:
         return arr.flatten()
     return arr
 
 
-def _to_dense_2d(arr: Union[np.ndarray, sparse.spmatrix]) -> np.ndarray:
+def _to_dense_2d(arr: np.ndarray | sparse.spmatrix) -> np.ndarray:
     """Convert sparse matrix to dense numpy array."""
     if sparse.issparse(arr):
-        return np.asarray(arr.toarray())
+        return np.asarray(cast(sparse.spmatrix, arr).toarray())
     return np.asarray(arr)
 
 
@@ -167,15 +307,17 @@ class AnnDataAdapter:
 
     def __init__(
         self,
-        adata: "anndata.AnnData",
-        latent_key: Optional[str] = None,
-        gene_id_column: str = "index",
+        adata: anndata.AnnData,
+        latent_key: str | None = None,
+        gene_id_column: str | None = None,
         normalize_embeddings: bool = True,
         centroid_outlier_quantile: float = 0.95,
         centroid_min_points: int = 10,
-        dataset_name: Optional[str] = None,
-        dataset_id: Optional[str] = None,
-    ):
+        *,
+        dataset_name: str,
+        dataset_id: str,
+        vector_field_default: str | None = None,
+    ) -> None:
         """
         Initialize the adapter.
 
@@ -185,49 +327,95 @@ class AnnDataAdapter:
             AnnData object to adapt. Can be in-memory or backed (h5ad file).
         latent_key : str, optional
             Key in obsm for latent space used for outlier quantile calculation.
-            If None, attempts to find: 'X_pca', 'X_scvi', 'scanvi', 'scvi', or first obsm.
-        gene_id_column : str
-            Column in var for gene identifiers. Use "index" for var.index.
+            If None, outlier quantiles are explicitly unavailable.
+        gene_id_column : str, optional
+            Exact column in ``var`` containing gene identifiers. If None,
+            identifiers come from ``var.index``.
         normalize_embeddings : bool
             If True, normalize embeddings to [-1, 1] range (recommended).
         centroid_outlier_quantile : float
             Quantile for outlier removal in centroid computation.
         centroid_min_points : int
             Minimum points per category for centroid computation.
-        dataset_name : str, optional
-            Human-readable dataset name.
-        dataset_id : str, optional
-            Dataset identifier.
+        dataset_name : str
+            Explicit human-readable dataset name.
+        dataset_id : str
+            Explicit dataset identifier.
+        vector_field_default : str, optional
+            Exact field id to select when multiple UMAP vector fields exist.
         """
-        self.adata = adata
-        self.latent_key = latent_key
-        self.gene_id_column = gene_id_column
-        self.normalize_embeddings = normalize_embeddings
-
-        # Validate centroid parameters
-        if not (0.5 < centroid_outlier_quantile < 1.0):
-            logger.warning(
-                f"centroid_outlier_quantile={centroid_outlier_quantile} is outside "
-                f"recommended range (0.5, 1.0). Using default 0.95."
+        self.adata: anndata.AnnData = adata
+        if adata.isbacked and adata.file._filemode != "r":
+            raise ValueError(
+                "Backed AnnData inputs must be opened read-only. Pass the .h5ad path "
+                "to Cellucid so it can own the exact read-only backing handle."
             )
-            centroid_outlier_quantile = 0.95
-        self.centroid_outlier_quantile = centroid_outlier_quantile
-
-        if centroid_min_points < 1:
-            logger.warning(
-                f"centroid_min_points={centroid_min_points} must be positive. Using default 10."
+        if adata.n_obs <= 0:
+            raise ValueError("AnnData datasets must contain at least one observation")
+        self.latent_key: str | None = latent_key
+        if latent_key is not None:
+            if not isinstance(latent_key, str) or not latent_key:
+                raise ValueError("latent_key must be None or one non-empty string")
+            if latent_key not in adata.obsm:
+                raise ValueError(f"latent_key {latent_key!r} was not found in adata.obsm")
+        self.gene_id_column: str | None
+        if gene_id_column is None:
+            self.gene_id_column = None
+        else:
+            self.gene_id_column = _require_nonempty_string(
+                gene_id_column,
+                label="gene_id_column",
             )
-            centroid_min_points = 10
-        self.centroid_min_points = centroid_min_points
+            if not self.gene_id_column.strip():
+                raise ValueError("gene_id_column must be None or a non-blank string.")
+        self.normalize_embeddings = _require_native_boolean(
+            normalize_embeddings,
+            label="normalize_embeddings",
+        )
 
-        # Dataset metadata
-        self.dataset_name = dataset_name or "AnnData Dataset"
-        self.dataset_id = dataset_id or _safe_filename_component(self.dataset_name)
+        if (
+            type(centroid_outlier_quantile) is not float
+            or not math.isfinite(centroid_outlier_quantile)
+            or not (0.5 < centroid_outlier_quantile < 1.0)
+        ):
+            raise ValueError(
+                "centroid_outlier_quantile must be a finite number strictly between 0.5 and 1.0"
+            )
+        self.centroid_outlier_quantile: float = centroid_outlier_quantile
 
-        # Source tracking (set by from_file, defaults for in-memory)
-        self._source_path: Optional[str] = None
+        self.centroid_min_points = _require_positive_native_integer(
+            centroid_min_points,
+            label="centroid_min_points",
+        )
+
+        self.dataset_name: str = _require_nonempty_string(
+            dataset_name,
+            label="dataset_name",
+        )
+        self.dataset_id: str = _require_nonempty_string(
+            dataset_id,
+            label="dataset_id",
+        )
+
+        if self.gene_id_column is None:
+            raw_gene_ids = self.adata.var.index.tolist()
+            gene_label = "var index"
+        else:
+            if self.gene_id_column not in self.adata.var.columns:
+                raise KeyError(
+                    f"gene_id_column {self.gene_id_column!r} not found in var. "
+                    f"Available columns: {list(self.adata.var.columns)}"
+                )
+            raw_gene_ids = self.adata.var[self.gene_id_column].tolist()
+            gene_label = f"var column {self.gene_id_column!r}"
+        gene_ids = _require_string_identifiers(
+            raw_gene_ids,
+            label=gene_label,
+        )
+        _assert_unique_filename_components(gene_ids, label="Gene")
+
+        # Public source attribution never includes the local filesystem path.
         self._source_type: str = "memory"
-        self._is_lazy: bool = False  # Set by from_file for backed h5ad/zarr
 
         # Caches for computed data
         self._embedding_cache: dict[int, np.ndarray] = {}
@@ -237,76 +425,94 @@ class AnnDataAdapter:
 
         # Optional per-cell vector fields (e.g. velocity, CellRank drift).
         # Structure matches dataset_identity.json: {"default_field": ..., "fields": {...}}.
-        self._vector_fields_metadata: Optional[dict[str, Any]] = None
+        self._vector_fields_metadata: dict[str, Any] | None = None
+        self._vector_field_obsm_keys: dict[str, dict[int, str]] = {}
         self._vector_field_cache: dict[tuple[str, int], np.ndarray] = {}
-        self._centroid_cache: dict[str, dict] = {}
+        self._centroid_cache: dict[str, list[dict[str, Any]]] = {}
         self._outlier_quantile_cache: dict[str, np.ndarray] = {}
-        self._latent_space: Optional[np.ndarray] = None
-        self._gene_ids_cache: Optional[list[str]] = None
-        self._gene_id_to_idx_cache: Optional[dict[str, int]] = None
+        self._latent_space: np.ndarray | None = None
+        self._gene_ids_cache: list[str] | None = gene_ids
+        self._gene_id_to_idx_cache: dict[str, int] | None = {
+            gene_id: index for index, gene_id in enumerate(gene_ids)
+        }
 
-        # Connectivity cache: (sources, destinations, n_edges, max_neighbors)
-        self._connectivity_cache: Optional[tuple[np.ndarray, np.ndarray, int, int]] = None
+        self._connectivity_cache: ConnectivityEdgePairs | None = None
+        self._connectivity_manifest: dict[str, Any] | None = None
+        self._has_connectivity: bool = False
 
         # CSC cache for efficient column access on CSR matrices
         # Note: This doubles memory for sparse matrices, but is necessary for O(1) gene access
         # Set to None initially; created lazily only when needed
-        self._X_csc_cache: Optional[sparse.csc_matrix] = None
+        self._X_csc_cache: sparse.csc_matrix | None = None
 
         # LRU cache for gene expression values using O(1) OrderedDict
-        self._gene_expression_cache = LRUCache(max_size=100)
+        self._gene_expression_cache: LRUCache = LRUCache(max_size=100)
 
         # UMAP embedding key resolution (dimension -> obsm key)
         self._umap_embedding_key_by_dim: dict[int, str] = {}
-        # Optional metadata for UI notifications about X_umap aliasing/clashes
-        self._umap_resolution: Optional[dict[str, Any]] = None
-
         # Track if adapter has been closed
-        self._closed = False
+        self._closed: bool = False
+        self._close_complete: bool = False
+
+        obs_keys = _require_string_identifiers(
+            self.adata.obs.columns.tolist(),
+            label="obs columns",
+        )
+        _assert_unique_filename_components(
+            obs_keys,
+            label="Observation field",
+        )
+        for key in obs_keys:
+            series = self.adata.obs[key]
+            if (
+                not isinstance(series.dtype, pd.CategoricalDtype)
+                and not pd.api.types.is_bool_dtype(series)
+                and pd.api.types.is_numeric_dtype(series)
+            ):
+                _require_continuous_obs_values(
+                    series.to_numpy(),
+                    key=key,
+                    n_cells=int(self.adata.n_obs),
+                )
 
         # Auto-detect available dimensions
-        self._available_dimensions = self._detect_dimensions()
-        self._default_dimension = self._select_default_dimension()
+        self._available_dimensions: list[int] = self._detect_dimensions()
+        self._default_dimension: int = self._select_default_dimension()
 
         # Detect optional per-cell vector fields aligned to UMAP.
-        self._vector_fields_metadata = self._detect_vector_fields()
+        self._vector_fields_metadata = self._detect_vector_fields(
+            vector_field_default=vector_field_default,
+        )
 
-        # Auto-detect latent space
-        if self.latent_key is None:
-            self.latent_key = self._detect_latent_key()
+        # Connectivity is an advertised scientific capability, so validate and
+        # materialize its exact edge contract before this adapter can be used.
+        self._initialize_connectivity()
 
-        logger.info(f"AnnDataAdapter initialized: {self.n_cells:,} cells, "
-                   f"{self.n_genes:,} genes, dimensions: {self._available_dimensions}")
+        logger.info(
+            f"AnnDataAdapter initialized: {self.n_cells:,} cells, "
+            f"{self.n_genes:,} genes, dimensions: {self._available_dimensions}"
+        )
 
     @classmethod
     def from_file(
         cls,
-        path: Union[str, Path],
-        backed: Union[bool, Literal["r", "r+"]] = "r",
-        **kwargs
-    ) -> "AnnDataAdapter":
+        path: str | Path,
+        *,
+        latent_key: str | None = None,
+        gene_id_column: str | None = None,
+        normalize_embeddings: bool = True,
+        centroid_outlier_quantile: float = 0.95,
+        centroid_min_points: int = 10,
+        dataset_name: str,
+        dataset_id: str,
+        vector_field_default: str | None = None,
+    ) -> AnnDataAdapter:
         """
-        Create adapter from h5ad file or zarr store with lazy loading.
+        Create an adapter from an h5ad file or a materialized zarr store.
 
         Supports both:
         - .h5ad files: HDF5-based, supports true backed mode with memory-mapping
-        - .zarr directories: Directory-based, arrays are loaded on-demand
-
-        Lazy Loading Behavior
-        ---------------------
-
-        h5ad (backed mode):
-            When backed='r', the file is memory-mapped. Only accessed data is
-            loaded into RAM. This is ideal for large datasets. The X matrix and
-            layer arrays support lazy column/row access.
-
-        zarr:
-            Zarr stores individual arrays as separate files on disk. While
-            anndata.read_zarr() loads the AnnData structure (obs, var metadata),
-            the actual X matrix data is loaded lazily when accessed. This is
-            because zarr's internal chunking mechanism defers loading until
-            data is requested. Note: zarr does not support the same backed mode
-            API as h5ad, but achieves similar lazy behavior through its design.
+        - .zarr directories: loaded eagerly by ``anndata.read_zarr``
 
         Parameters
         ----------
@@ -314,20 +520,23 @@ class AnnDataAdapter:
             Path to h5ad file or zarr directory.
             - For h5ad: path/to/file.h5ad
             - For zarr: path/to/store.zarr (must be a directory)
-        backed : bool or 'r' or 'r+'
-            For h5ad only:
-            - 'r': Read-only backed mode (recommended for visualization)
-            - 'r+': Read-write backed mode
-            - True: Same as 'r'
-            - False: Load entire file into memory
-            For zarr: This parameter is ignored (zarr is always lazy).
-        **kwargs
-            Additional arguments passed to AnnDataAdapter.__init__:
-            - latent_key: Key in obsm for latent space
-            - gene_id_column: Column in var for gene IDs
-            - normalize_embeddings: Normalize UMAP to [-1,1]
-            - dataset_name: Human-readable name
-
+        latent_key : str, optional
+            Explicit key in ``obsm`` for the latent space.
+        gene_id_column : str, optional
+            Exact column in ``var`` containing gene identifiers. If None,
+            identifiers come from ``var.index``.
+        normalize_embeddings : bool
+            Whether to normalize embeddings into the viewer coordinate range.
+        centroid_outlier_quantile : float
+            Quantile used when computing categorical centroids.
+        centroid_min_points : int
+            Minimum category size used for centroid computation.
+        dataset_name : str
+            Explicit human-readable dataset name.
+        dataset_id : str
+            Explicit stable dataset identifier.
+        vector_field_default : str, optional
+            Exact field id required when multiple UMAP vector fields exist.
         Returns
         -------
         AnnDataAdapter
@@ -342,134 +551,85 @@ class AnnDataAdapter:
 
         Examples
         --------
-        >>> # Load h5ad with lazy loading (default)
-        >>> adapter = AnnDataAdapter.from_file("data.h5ad")
-        >>> # Load h5ad fully into memory
-        >>> adapter = AnnDataAdapter.from_file("data.h5ad", backed=False)
-        >>> # Load zarr store
-        >>> adapter = AnnDataAdapter.from_file("data.zarr")
+        >>> # H5AD is always opened in read-only backed mode
+        >>> adapter = AnnDataAdapter.from_file(
+        ...     "data.h5ad",
+        ...     dataset_name="Example",
+        ...     dataset_id="example",
+        ... )
         """
         import anndata as ad
 
+        dataset_name = _require_nonempty_string(
+            dataset_name,
+            label="dataset_name",
+        )
+        dataset_id = _require_nonempty_string(
+            dataset_id,
+            label="dataset_id",
+        )
         path = Path(path).resolve()
 
-        if not path.exists():
-            raise FileNotFoundError(f"Path not found: {path}")
-
-        # Detect format based on path structure
-        # Zarr stores are directories containing .zgroup or .zattrs files
-        is_zarr = (
-            path.suffix == ".zarr"
-            or (path.is_dir() and (path / ".zgroup").exists())
-            or (path.is_dir() and (path / ".zattrs").exists())
-        )
-
-        # Additional check: if it's a directory without h5ad extension, likely zarr
-        if path.is_dir() and not is_zarr:
-            # Check for zarr indicators
-            if any((path / f).exists() for f in [".zgroup", ".zattrs", ".zarray"]):
-                is_zarr = True
-            elif path.suffix != ".h5ad":
-                # If directory doesn't look like zarr and isn't h5ad, warn
-                logger.warning(
-                    f"Directory '{path}' does not appear to be a zarr store. "
-                    f"Expected .zgroup or .zattrs file."
-                )
-
-        if is_zarr:
-            # Zarr store - data arrays are loaded lazily by zarr's chunking
-            if not path.is_dir():
-                raise ValueError(
-                    f"Zarr path must be a directory: {path}. "
-                    f"Zarr stores are directories, not single files."
-                )
-            try:
-                adata = ad.read_zarr(path)
-            except ModuleNotFoundError as e:
-                # `anndata.read_zarr` requires the optional `zarr` dependency.
-                if getattr(e, "name", None) == "zarr":
-                    raise ModuleNotFoundError(
-                        "Loading `.zarr` stores requires the optional `zarr` dependency. "
-                        "Install it with: pip install zarr"
-                    ) from e
-                raise
-            except ImportError as e:
-                # Some environments may raise a generic ImportError instead.
-                if "zarr" in str(e).lower():
-                    raise ImportError(
-                        "Loading `.zarr` stores requires the optional `zarr` dependency. "
-                        "Install it with: pip install zarr"
-                    ) from e
-                raise
-            source_type = "zarr"
-            is_lazy = True  # Zarr provides lazy array access
-            logger.info(f"Loaded zarr store: {path} (lazy array access)")
+        source_type = _classify_anndata_path(path)
+        if source_type == "zarr":
+            adata = ad.read_zarr(path)
+            logger.info("Loaded zarr store eagerly: %s", path)
         else:
-            # h5ad file
-            if not path.is_file():
-                raise ValueError(f"h5ad path must be a file: {path}")
-            try:
-                if backed:
-                    backed_mode = backed if isinstance(backed, str) else "r"
-                    adata = ad.read_h5ad(path, backed=backed_mode)
-                    is_lazy = True
-                else:
-                    adata = ad.read_h5ad(path)
-                    is_lazy = False
-            except ModuleNotFoundError as e:
-                # `anndata.read_h5ad` requires `h5py` in practice.
-                if getattr(e, "name", None) == "h5py":
-                    raise ModuleNotFoundError(
-                        "Loading `.h5ad` files requires the `h5py` dependency. "
-                        "Install it with: pip install h5py"
-                    ) from e
-                raise
-            source_type = "h5ad"
-            logger.info(f"Loaded h5ad file: {path} (backed={backed}, lazy={is_lazy})")
+            adata = ad.read_h5ad(path, backed="r")
+            logger.info(
+                "Loaded h5ad file: %s (is_backed=%s)",
+                path,
+                bool(adata.isbacked),
+            )
 
-        # Use filename/dirname as default name
-        if "dataset_name" not in kwargs:
-            kwargs["dataset_name"] = path.stem if path.is_file() else path.name
-
-        # Create adapter and store source info
-        adapter = cls(adata, **kwargs)
-        adapter._source_path = str(path)
+        # Create adapter and store non-sensitive source info. A failed adapter
+        # construction must not leave a backed file handle open.
+        try:
+            adapter = cls(
+                adata,
+                latent_key=latent_key,
+                gene_id_column=gene_id_column,
+                normalize_embeddings=normalize_embeddings,
+                centroid_outlier_quantile=centroid_outlier_quantile,
+                centroid_min_points=centroid_min_points,
+                dataset_name=dataset_name,
+                dataset_id=dataset_id,
+                vector_field_default=vector_field_default,
+            )
+        except BaseException:
+            if getattr(adata, "isbacked", False):
+                try:
+                    adata.file.close()
+                except BaseException:
+                    logger.exception(
+                        "Failed to close the owned AnnData file after adapter construction failed"
+                    )
+            raise
         adapter._source_type = source_type
-        adapter._is_lazy = is_lazy
         return adapter
 
     def _check_closed(self) -> None:
         """Raise error if adapter has been closed."""
         if self._closed:
-            raise RuntimeError(
-                "AnnDataAdapter has been closed. Create a new adapter instance."
-            )
+            raise RuntimeError("AnnDataAdapter has been closed. Create a new adapter instance.")
 
     @property
     def n_cells(self) -> int:
         """Number of cells."""
         self._check_closed()
-        return self.adata.n_obs
+        return cast(int, self.adata.n_obs)
 
     @property
     def n_genes(self) -> int:
         """Number of genes."""
         self._check_closed()
-        return self.adata.n_vars
+        return cast(int, self.adata.n_vars)
 
     @property
     def is_backed(self) -> bool:
-        """
-        Whether the AnnData is backed (lazy loading from disk).
-
-        Returns False if the adapter is closed or if adata is None.
-        """
-        if self._closed or self.adata is None:
-            return False
-        try:
-            return self.adata.isbacked
-        except Exception:
-            return False
+        """Whether the live AnnData object reports an active backed store."""
+        self._check_closed()
+        return cast(bool, self.adata.isbacked)
 
     # =========================================================================
     # DIMENSION DETECTION
@@ -477,11 +637,7 @@ class AnnDataAdapter:
 
     def _detect_dimensions(self) -> list[int]:
         """
-        Detect available UMAP dimensions from obsm keys.
-
-        Looks for embeddings in this order:
-        1. Explicit dimension keys: X_umap_1d, X_umap_2d, X_umap_3d
-        2. Generic key: X_umap (interpreted as 1D/2D/3D if shape matches and no clash)
+        Validate and resolve the exact supported UMAP keys in ``obsm``.
 
         Returns
         -------
@@ -491,271 +647,108 @@ class AnnDataAdapter:
         Raises
         ------
         ValueError
-            If no valid UMAP embeddings are found in obsm.
+            If a declared embedding is malformed, ambiguous, or absent.
         """
-        # Edge case: empty AnnData
-        if self.n_cells == 0:
-            logger.warning("AnnData has 0 cells. Visualization may not work correctly.")
-
-        # Reset resolution metadata on each detection pass
         self._umap_embedding_key_by_dim = {}
-        self._umap_resolution = None
-
         available: list[int] = []
 
-        def _shape_of(arr: Any) -> tuple[int, ...]:
-            if sparse.issparse(arr):
-                return tuple(arr.shape)
-            try:
-                shape = arr.shape  # type: ignore[attr-defined]
-                return tuple(shape)
-            except Exception:
-                return tuple(np.asarray(arr).shape)
-
-        # Check for explicit dimension keys first
         for dim in [1, 2, 3]:
             key = f"X_umap_{dim}d"
-            if key in self.adata.obsm:
-                arr = self.adata.obsm[key]
-                # Handle sparse obsm (rare but possible)
-                arr_shape = _shape_of(arr)
-
-                if len(arr_shape) != 2:
-                    logger.warning(f"Key '{key}' is not 2D (shape: {arr_shape}), skipping")
-                    continue
-                if arr_shape[0] != self.n_cells:
-                    logger.warning(
-                        f"Key '{key}' has {arr_shape[0]} rows but AnnData has {self.n_cells} cells"
-                    )
-                    continue
-                if arr_shape[1] == dim:
-                    available.append(dim)
-                    self._umap_embedding_key_by_dim[dim] = key
-                else:
-                    logger.warning(
-                        f"Key '{key}' has {arr_shape[1]} columns, expected {dim}"
-                    )
-
-        # Optional fallback: interpret X_umap as a dimensioned embedding when unambiguous.
-        if "X_umap" in self.adata.obsm:
-            arr = self.adata.obsm["X_umap"]
-            arr_shape = _shape_of(arr)
-
-            if len(arr_shape) != 2:
-                self._umap_resolution = {
-                    "source_key": "X_umap",
-                    "action": "ignored",
-                    "reason": "invalid_shape",
-                    "shape": list(arr_shape),
-                }
-            elif arr_shape[0] != self.n_cells:
-                self._umap_resolution = {
-                    "source_key": "X_umap",
-                    "action": "ignored",
-                    "reason": "row_count_mismatch",
-                    "shape": list(arr_shape),
-                    "expected_rows": self.n_cells,
-                }
-            else:
-                n_dims = int(arr_shape[1])
-                alias_key = f"X_umap_{n_dims}d"
-                if n_dims not in (1, 2, 3):
-                    self._umap_resolution = {
-                        "source_key": "X_umap",
-                        "action": "ignored",
-                        "reason": "unsupported_dim",
-                        "n_dims": n_dims,
-                    }
-                elif n_dims in self._umap_embedding_key_by_dim:
-                    # Clash: explicit key for this dimension exists; ignore X_umap.
-                    self._umap_resolution = {
-                        "source_key": "X_umap",
-                        "action": "ignored",
-                        "reason": "explicit_key_present",
-                        "dim": n_dims,
-                        "alias_key": alias_key,
-                    }
-                else:
-                    available.append(n_dims)
-                    self._umap_embedding_key_by_dim[n_dims] = "X_umap"
-                    self._umap_resolution = {
-                        "source_key": "X_umap",
-                        "action": "used_as",
-                        "dim": n_dims,
-                        "alias_key": alias_key,
-                    }
+            if key not in self.adata.obsm:
+                continue
+            embedding = _require_finite_float32_array(
+                self.adata.obsm[key],
+                label=f"Embedding {key!r}",
+            )
+            if embedding.ndim != 2:
+                raise ValueError(
+                    f"Embedding {key!r} must be a 2D array; got shape {embedding.shape}."
+                )
+            if embedding.shape[0] != self.n_cells:
+                raise ValueError(
+                    f"Embedding {key!r} must have exactly {self.n_cells} rows; "
+                    f"got {embedding.shape[0]}."
+                )
+            if embedding.shape[1] != dim:
+                raise ValueError(
+                    f"Embedding {key!r} must have exactly {dim} columns; got {embedding.shape[1]}."
+                )
+            if self.normalize_embeddings:
+                _normalize_finite_float32_embedding(
+                    embedding,
+                    label=f"Embedding {key!r}",
+                )
+            available.append(dim)
+            self._umap_embedding_key_by_dim[dim] = key
 
         if not available:
             raise ValueError(
-                "No valid UMAP embeddings found in adata.obsm. "
-                "Expected keys: 'X_umap_1d', 'X_umap_2d', 'X_umap_3d', or 'X_umap' (1D/2D/3D). "
-                f"Available obsm keys: {list(self.adata.obsm.keys())}. "
-                "Please add UMAP coordinates to your AnnData object using scanpy.tl.umap() "
-                "and then store explicit embeddings under X_umap_1d / X_umap_2d / X_umap_3d."
+                "No supported UMAP embedding was declared in adata.obsm. "
+                "Declare exactly one or more of 'X_umap_1d', 'X_umap_2d', "
+                "or 'X_umap_3d'. "
+                f"Available obsm keys: {list(self.adata.obsm.keys())}."
             )
 
-        # Ensure uniqueness and stable ordering.
-        return sorted(set(available))
+        return sorted(available)
 
     def _select_default_dimension(self) -> int:
-        """Select default dimension (prefer 3D > 2D > 1D)."""
-        for dim in [3, 2, 1]:
-            if dim in self._available_dimensions:
-                return dim
-        return self._available_dimensions[0]
+        """Select the highest declared dimension."""
+        return max(self._available_dimensions)
 
-    def _detect_vector_fields(self) -> Optional[dict[str, Any]]:
-        """
-        Detect per-cell vector fields in `adata.obsm` aligned to UMAP.
+    def _detect_vector_fields(
+        self,
+        *,
+        vector_field_default: object,
+    ) -> dict[str, Any] | None:
+        """Validate UMAP vectors; each field defaults to its highest dimension."""
+        candidates: dict[object, object] = {}
+        for key in self.adata.obsm:
+            if not isinstance(key, str):
+                raise TypeError("AnnData obsm keys must be native strings.")
+            if not key:
+                raise ValueError("AnnData obsm keys must be non-empty strings.")
+            if key in {
+                "X_umap",
+                "X_umap_1d",
+                "X_umap_2d",
+                "X_umap_3d",
+            }:
+                continue
+            if is_vector_field_declaration_key(key):
+                candidates[key] = self.adata.obsm[key]
 
-        Naming convention (UMAP basis):
-        - Explicit: `<field>_umap_<dim>d` (preferred)
-          - Examples: `velocity_umap_2d`, `T_fwd_umap_3d`
-        - Implicit: `<field>_umap` with shape `(n_cells, 1|2|3)`
-          - Used only if the explicit key for that dim is not present (clash-safe)
-
-        Returns a structure suitable for dataset_identity.json under `vector_fields`,
-        including per-field `files` entries pointing at server-served binaries:
-        `vectors/<fieldId>_<dim>d.bin`.
-        """
-        keys = list(self.adata.obsm.keys())
-        if not keys:
+        validated = validate_vector_fields(
+            candidates,
+            n_cells=self.n_cells,
+            available_dimensions=self._available_dimensions,
+            vector_field_default=vector_field_default,
+        )
+        self._vector_field_obsm_keys = validated.source_keys
+        if not validated.fields:
             return None
 
-        def _shape_of(arr: Any) -> tuple[int, ...]:
-            if sparse.issparse(arr):
-                return tuple(arr.shape)
-            try:
-                shape = arr.shape  # type: ignore[attr-defined]
-                return tuple(shape)
-            except Exception:
-                return tuple(np.asarray(arr).shape)
-
-        suffix_re = re.compile(r"^(.*)_([123])d$")
-
-        # Internal working structure: fieldId -> {dims:set, explicit:set, obsm_keys:dict[str,str]}
         fields: dict[str, dict[str, Any]] = {}
-
-        def _ensure(field_id: str) -> dict[str, Any]:
-            if field_id not in fields:
-                fields[field_id] = {"dims": set(), "explicit": set(), "obsm_keys": {}}
-            return fields[field_id]
-
-        # 1) Explicit per-dimension keys.
-        for key in keys:
-            match = suffix_re.match(key)
-            if not match:
-                continue
-            field_id = match.group(1)
-            dim = int(match.group(2))
-
-            if not field_id.endswith("_umap"):
-                continue
-            if field_id.startswith("X_"):
-                continue  # reserved for embeddings
-            if dim not in (1, 2, 3):
-                continue
-            if dim not in self._available_dimensions:
-                continue  # can't render a dim that doesn't exist in points
-
-            arr = self.adata.obsm.get(key)
-            if arr is None:
-                continue
-            shape = _shape_of(arr)
-            if len(shape) != 2 or shape[0] != self.n_cells or shape[1] != dim:
-                continue
-
-            entry = _ensure(field_id)
-            entry["obsm_keys"][f"{dim}d"] = key
-            entry["dims"].add(dim)
-            entry["explicit"].add(dim)
-
-        # 2) Implicit keys (<field>_umap), shape-derived, clash-safe.
-        for key in keys:
-            field_id = key
-            if not field_id.endswith("_umap"):
-                continue
-            if field_id.startswith("X_"):
-                continue
-            if suffix_re.match(field_id):
-                continue  # skip explicit keys
-
-            arr = self.adata.obsm.get(field_id)
-            if arr is None:
-                continue
-            shape = _shape_of(arr)
-            if len(shape) == 1:
-                if shape[0] != self.n_cells:
-                    continue
-                dim = 1
-            elif len(shape) == 2:
-                if shape[0] != self.n_cells:
-                    continue
-                dim = int(shape[1])
-            else:
-                continue
-
-            if dim not in (1, 2, 3):
-                continue
-            if dim not in self._available_dimensions:
-                continue
-
-            entry = _ensure(field_id)
-            if dim in entry["explicit"]:
-                continue  # clash-safe: explicit wins
-            slot = f"{dim}d"
-            if slot not in entry["obsm_keys"]:
-                entry["obsm_keys"][slot] = field_id
-                entry["dims"].add(dim)
-
-        if not fields:
-            return None
-
-        def _label_for(field_id: str) -> str:
-            base = field_id[:-5] if field_id.endswith("_umap") else field_id
-            base = base.replace("_", " ").strip()
-            titled = (base[:1].upper() + base[1:]) if base else field_id
-            return f"{titled} (UMAP)" if field_id.endswith("_umap") else titled
-
-        fields_out: dict[str, Any] = {}
-        for field_id, entry in fields.items():
-            dims = sorted(entry["dims"])
-            if not dims:
-                continue
-            files = {f"{d}d": f"vectors/{field_id}_{d}d.bin" for d in dims}
-            fields_out[field_id] = {
-                "label": _label_for(field_id),
+        _assert_unique_filename_components(
+            list(validated.fields),
+            label="Vector field",
+        )
+        for field_id, vectors_by_dimension in validated.fields.items():
+            dimensions = sorted(vectors_by_dimension)
+            fields[field_id] = {
+                "label": field_id,
                 "basis": "umap",
-                "available_dimensions": dims,
-                "default_dimension": max(dims),
-                "files": files,
-                "obsm_keys": entry["obsm_keys"],
+                "available_dimensions": dimensions,
+                "default_dimension": max(dimensions),
+                "files": {
+                    f"{dimension}d": (f"vectors/{field_id}_{dimension}d.bin")
+                    for dimension in dimensions
+                },
             }
 
-        if not fields_out:
-            return None
-
-        default_field = "velocity_umap" if "velocity_umap" in fields_out else sorted(fields_out.keys())[0]
-        return {"default_field": default_field, "fields": fields_out}
-
-    def _detect_latent_key(self) -> Optional[str]:
-        """Auto-detect latent space key from obsm."""
-        # Priority order for latent space detection
-        candidates = ["scanvi", "scvi", "X_scvi", "X_pca", "harmony", "X_harmony"]
-
-        for key in candidates:
-            if key in self.adata.obsm:
-                logger.info(f"Auto-detected latent space: '{key}'")
-                return key
-
-        # Fall back to first available obsm that's not a UMAP
-        for key in self.adata.obsm.keys():
-            if not key.startswith("X_umap"):
-                logger.info(f"Using '{key}' as latent space (first non-UMAP obsm)")
-                return key
-
-        logger.warning("No latent space found in obsm, centroid outlier computation will be skipped")
-        return None
+        return {
+            "default_field": validated.default_field,
+            "fields": fields,
+        }
 
     # =========================================================================
     # EMBEDDING DATA
@@ -768,9 +761,12 @@ class AnnDataAdapter:
         Returns normalized Float32 array of shape (n_cells, dim).
         """
         self._check_closed()
+        dim = _require_dimension(dim)
 
         if dim not in self._available_dimensions:
-            raise ValueError(f"Dimension {dim}D not available. Available: {self._available_dimensions}")
+            raise ValueError(
+                f"Dimension {dim}D not available. Available: {self._available_dimensions}"
+            )
 
         if dim in self._embedding_cache:
             return self._embedding_cache[dim]
@@ -782,23 +778,23 @@ class AnnDataAdapter:
                 f"Could not find embedding for dimension {dim}. "
                 f"Expected an embedding resolved for {dim}D. Available obsm keys: {list(self.adata.obsm.keys())}"
             )
-        raw = _to_dense_2d(self.adata.obsm[key])
-
-        raw = raw.astype(np.float32)
+        raw = _require_finite_float32_array(
+            self.adata.obsm[key],
+            label=f"Embedding {key!r}",
+        )
+        if raw.ndim != 2 or raw.shape != (self.n_cells, dim):
+            raise ValueError(
+                f"Embedding {key!r} changed after adapter initialization; "
+                f"expected shape ({self.n_cells}, {dim}), got {raw.shape}."
+            )
 
         if self.normalize_embeddings:
-            # Normalize to [-1, 1] range (same as prepare)
-            axis_mins = raw.min(axis=0)
-            axis_maxs = raw.max(axis=0)
-            axis_ranges = axis_maxs - axis_mins
-            max_range = float(axis_ranges.max())
-            if max_range < 1e-8:
-                max_range = 1.0
-            center = (axis_mins + axis_maxs) / 2
-            scale_factor = 2.0 / max_range
-            raw = ((raw - center) * scale_factor).astype(np.float32)
+            raw, center, scale_factor, _max_range = _normalize_finite_float32_embedding(
+                raw,
+                label=f"Embedding {key!r}",
+            )
             self._embedding_norm[dim] = {
-                "center": center.astype(np.float32),
+                "center": center,
                 "scale_factor": float(scale_factor),
             }
         else:
@@ -836,6 +832,7 @@ class AnnDataAdapter:
 
     def get_points_binary(self, dim: int, compress: bool = False) -> bytes:
         """Get embedding as binary data (for HTTP response)."""
+        compress = _require_native_boolean(compress, label="compress")
         embedding = self.get_embedding(dim)
         data = embedding.astype(np.float32).tobytes()
 
@@ -853,40 +850,46 @@ class AnnDataAdapter:
         """
         self._check_closed()
 
-        field = str(field_id or "")
-        d = int(dim)
-        if d not in (1, 2, 3):
-            raise ValueError(f"Invalid dimension {dim}. Expected 1, 2, or 3.")
+        field = _require_nonempty_string(field_id, label="field_id")
+        dimension = _require_dimension(dim)
+        compress = _require_native_boolean(compress, label="compress")
 
-        meta = self._vector_fields_metadata or {}
-        fields = meta.get("fields") or {}
-        entry = fields.get(field)
-        if not entry:
+        if self._vector_fields_metadata is None:
+            raise ValueError(f"Vector field {field!r} not available.")
+        fields = self._vector_fields_metadata["fields"]
+        if field not in fields:
             raise ValueError(f"Vector field '{field}' not available")
 
-        obsm_keys = entry.get("obsm_keys") or {}
-        obsm_key = obsm_keys.get(f"{d}d")
-        if not obsm_key or obsm_key not in self.adata.obsm:
-            raise ValueError(f"Vector field '{field}' does not provide {d}D data")
+        source_keys = self._vector_field_obsm_keys[field]
+        if dimension not in source_keys:
+            raise ValueError(f"Vector field {field!r} does not provide {dimension}D data.")
+        obsm_key = source_keys[dimension]
+        if obsm_key not in self.adata.obsm:
+            raise ValueError(f"Vector field source {obsm_key!r} no longer exists.")
 
-        cache_key = (field, d)
+        cache_key = (field, dimension)
         if cache_key not in self._vector_field_cache:
-            # Ensure embedding normalization scale is computed.
-            self.get_embedding(d)
-            scale_factor = float(self._embedding_norm.get(d, {}).get("scale_factor", 1.0))
-
-            raw = _to_dense_2d(self.adata.obsm[obsm_key]).astype(np.float32)
-            if raw.ndim == 1:
-                raw = raw.reshape(-1, 1)
-            if raw.ndim != 2 or raw.shape[0] != self.n_cells or raw.shape[1] != d:
+            raw = _require_finite_float32_array(
+                self.adata.obsm[obsm_key],
+                label=f"Vector field {obsm_key!r}",
+            )
+            expected_shape = (self.n_cells, dimension)
+            if raw.ndim != 2 or raw.shape != expected_shape:
                 raise ValueError(
-                    f"Vector field '{obsm_key}' has shape {tuple(raw.shape)}, expected ({self.n_cells}, {d})"
+                    f"Vector field {obsm_key!r} changed after adapter "
+                    f"initialization; expected shape {expected_shape}, "
+                    f"got {raw.shape}."
                 )
 
-            if self.normalize_embeddings and scale_factor != 1.0:
-                raw *= scale_factor
-
-            self._vector_field_cache[cache_key] = raw
+            self.get_embedding(dimension)
+            if dimension not in self._embedding_norm:
+                raise RuntimeError(f"Missing normalization state for {dimension}D embedding.")
+            scale_factor = self._embedding_norm[dimension]["scale_factor"]
+            self._vector_field_cache[cache_key] = scale_vector_field(
+                raw,
+                scale_factor=scale_factor,
+                label=f"Vector field {obsm_key!r}",
+            )
 
         data = self._vector_field_cache[cache_key].tobytes()
         if compress:
@@ -897,7 +900,7 @@ class AnnDataAdapter:
     # LATENT SPACE FOR OUTLIER COMPUTATION
     # =========================================================================
 
-    def _get_latent_space(self) -> Optional[np.ndarray]:
+    def _get_latent_space(self) -> np.ndarray | None:
         """Get latent space for outlier quantile computation."""
         if self._latent_space is not None:
             return self._latent_space
@@ -905,7 +908,16 @@ class AnnDataAdapter:
         if self.latent_key is None or self.latent_key not in self.adata.obsm:
             return None
 
-        self._latent_space = _to_dense_2d(self.adata.obsm[self.latent_key]).astype(np.float32)
+        latent = _require_finite_float32_array(
+            self.adata.obsm[self.latent_key],
+            label=f"Latent field {self.latent_key!r}",
+        )
+        if latent.ndim != 2 or latent.shape[0] != self.n_cells:
+            raise ValueError(
+                f"Latent field {self.latent_key!r} must have shape "
+                f"({self.n_cells}, n_dimensions), got {latent.shape}."
+            )
+        self._latent_space = latent
         return self._latent_space
 
     # =========================================================================
@@ -931,41 +943,25 @@ class AnnDataAdapter:
         self._check_closed()
 
         if key not in self.adata.obs.columns:
-            raise KeyError(f"Field '{key}' not found in obs. Available: {list(self.adata.obs.columns)}")
+            raise KeyError(
+                f"Field '{key}' not found in obs. Available: {list(self.adata.obs.columns)}"
+            )
 
         s = self.adata.obs[key]
 
-        # Handle empty series
-        if len(s) == 0:
-            logger.warning(f"obs field '{key}' is empty, treating as categorical")
-            return "category"
-
-        # Check categorical dtype (pandas 2.0+ compatible)
-        try:
-            is_cat = isinstance(s.dtype, pd.CategoricalDtype)
-        except AttributeError:
-            # Fallback for older pandas versions
-            is_cat = hasattr(s, 'cat')
-
-        if is_cat:
-            return "category"
-        elif pd.api.types.is_bool_dtype(s):
+        if isinstance(s.dtype, pd.CategoricalDtype) or pd.api.types.is_bool_dtype(s):
             return "category"
         elif pd.api.types.is_numeric_dtype(s):
-            # Check if all values are NaN - still treat as continuous
             return "continuous"
         elif pd.api.types.is_string_dtype(s) or pd.api.types.is_object_dtype(s):
             return "category"
-        else:
-            # Unknown dtype - safe default is categorical
-            logger.warning(f"obs field '{key}' has unknown dtype {s.dtype}, treating as categorical")
-            return "category"
+        raise TypeError(f"obs field {key!r} has unsupported dtype {s.dtype!r}.")
 
     def get_obs_continuous_values(self, key: str, compress: bool = False) -> bytes:
         """
         Get continuous obs field as binary float32 data.
 
-        NaN/Inf values are preserved in the output (client handles visualization).
+        Values must remain finite after float32 representation.
 
         Raises
         ------
@@ -973,28 +969,30 @@ class AnnDataAdapter:
             If the field is not found in obs.
         """
         self._check_closed()
+        compress = _require_native_boolean(compress, label="compress")
 
         if key not in self.adata.obs.columns:
             raise KeyError(
                 f"obs field '{key}' not found. Available fields: {list(self.adata.obs.columns)}"
             )
 
-        s = self.adata.obs[key]
-        values = pd.to_numeric(s, errors="coerce").to_numpy(dtype=np.float32)
+        values = _require_continuous_obs_values(
+            self.adata.obs[key].to_numpy(),
+            key=key,
+            n_cells=self.n_cells,
+        )
 
-        # Log warning for problematic data
-        n_nan = np.isnan(values).sum()
-        n_inf = np.isinf(values).sum()
-        if n_nan > 0 or n_inf > 0:
-            logger.debug(f"obs field '{key}': {n_nan} NaN, {n_inf} Inf values")
-
-        data = values.tobytes()
+        data = cast(bytes, values.tobytes())
 
         if compress:
             return gzip.compress(data, compresslevel=6)
         return data
 
-    def get_obs_categorical_codes(self, key: str, compress: bool = False) -> tuple[bytes, list[str], int]:
+    def get_obs_categorical_codes(
+        self,
+        key: str,
+        compress: bool = False,
+    ) -> tuple[bytes, list[str | bool | int | float], int]:
         """
         Get categorical obs field as binary codes.
 
@@ -1010,6 +1008,7 @@ class AnnDataAdapter:
             If the field is not found in obs.
         """
         self._check_closed()
+        compress = _require_native_boolean(compress, label="compress")
 
         if key not in self.adata.obs.columns:
             raise KeyError(
@@ -1018,29 +1017,17 @@ class AnnDataAdapter:
 
         s = self.adata.obs[key]
         cat = s.astype("category")
-        categories = [str(c) for c in cat.cat.categories]
+        categories = _json_category_values(
+            cat.cat.categories,
+            field_key=key,
+        )
         codes = cat.cat.codes.to_numpy(dtype=np.int32)
 
-        # Handle edge case: empty categories
         n_categories = len(categories)
-        if n_categories == 0:
-            logger.warning(f"obs field '{key}' has no categories (all values are NaN/missing)")
-            # Return all missing values
-            dtype = np.uint8
-            missing_value = 255
-            codes_typed = np.full(self.n_cells, missing_value, dtype=dtype)
-            data = codes_typed.tobytes()
-            if compress:
-                data = gzip.compress(data, compresslevel=6)
-            return data, [], int(missing_value)
-
-        # Select dtype based on number of categories
-        if n_categories <= 254:
-            dtype = np.uint8
-            missing_value = 255
-        else:
-            dtype = np.uint16
-            missing_value = 65535
+        dtype, _dtype_str, missing_value = _categorical_storage(
+            n_categories,
+            field_key=key,
+        )
 
         # Convert codes (-1 for NaN -> missing_value)
         codes_typed = np.full(self.n_cells, missing_value, dtype=dtype)
@@ -1075,10 +1062,13 @@ class AnnDataAdapter:
         coords = self.get_embedding(dim)
         s = self.adata.obs[key]
         cat = s.astype("category")
-        categories = [str(c) for c in cat.cat.categories]
+        categories = _json_category_values(
+            cat.cat.categories,
+            field_key=key,
+        )
         codes = cat.cat.codes.to_numpy(dtype=np.int32)
 
-        centroids = []
+        centroids: list[dict[str, Any]] = []
         for code, label in enumerate(categories):
             mask = codes == code
             idx = np.nonzero(mask)[0]
@@ -1105,11 +1095,13 @@ class AnnDataAdapter:
             else:
                 used_count = n
 
-            centroids.append({
-                "category": str(label),
-                "position": center.astype(float).tolist(),
-                "n_points": int(used_count),
-            })
+            centroids.append(
+                {
+                    "category": label,
+                    "position": center.astype(float).tolist(),
+                    "n_points": int(used_count),
+                }
+            )
 
         self._centroid_cache[cache_key] = centroids
         return centroids
@@ -1129,19 +1121,22 @@ class AnnDataAdapter:
 
         latent = self._get_latent_space()
         if latent is None:
-            # Return all zeros if no latent space
-            result = np.zeros(self.n_cells, dtype=np.float32)
-            self._outlier_quantile_cache[key] = result
-            return result
+            raise ValueError(
+                f"Cannot compute outlier quantiles for {key!r}: "
+                "the dataset has no declared latent space"
+            )
 
         s = self.adata.obs[key]
         cat = s.astype("category")
-        categories = [str(c) for c in cat.cat.categories]
+        categories = _json_category_values(
+            cat.cat.categories,
+            field_key=key,
+        )
         codes = cat.cat.codes.to_numpy(dtype=np.int32)
 
         quantiles = np.full(self.n_cells, np.nan, dtype=np.float32)
 
-        for code, label in enumerate(categories):
+        for code, _label in enumerate(categories):
             mask = codes == code
             idx = np.nonzero(mask)[0]
             n = idx.size
@@ -1153,7 +1148,7 @@ class AnnDataAdapter:
             centroid = pts.mean(axis=0)
             dists = np.linalg.norm(pts - centroid, axis=1)
             sorted_dists = np.sort(dists)
-            ranks = np.searchsorted(sorted_dists, dists, side='right')
+            ranks = np.searchsorted(sorted_dists, dists, side="right")
             cell_quantiles = ranks.astype(np.float32) / n
             quantiles[idx] = cell_quantiles
 
@@ -1162,6 +1157,8 @@ class AnnDataAdapter:
 
     def get_obs_outlier_quantiles(self, key: str, compress: bool = False) -> bytes:
         """Get outlier quantiles as binary float32 data."""
+        self._check_closed()
+        compress = _require_native_boolean(compress, label="compress")
         quantiles = self._compute_outlier_quantiles(key)
         data = quantiles.tobytes()
 
@@ -1180,15 +1177,23 @@ class AnnDataAdapter:
         if self._gene_ids_cache is not None:
             return self._gene_ids_cache
 
-        if self.gene_id_column == "index" or self.gene_id_column is None:
-            self._gene_ids_cache = self.adata.var.index.astype(str).tolist()
+        if self.gene_id_column is None:
+            values = self.adata.var.index.tolist()
+            label = "var index"
         else:
             if self.gene_id_column not in self.adata.var.columns:
                 raise KeyError(
                     f"gene_id_column '{self.gene_id_column}' not found in var. "
                     f"Available columns: {list(self.adata.var.columns)}"
                 )
-            self._gene_ids_cache = self.adata.var[self.gene_id_column].astype(str).tolist()
+            values = self.adata.var[self.gene_id_column].tolist()
+            label = f"var column {self.gene_id_column!r}"
+
+        self._gene_ids_cache = _require_string_identifiers(
+            values,
+            label=label,
+        )
+        _assert_unique_filename_components(self._gene_ids_cache, label="Gene")
 
         # Build index for O(1) lookup
         self._gene_id_to_idx_cache = {gid: idx for idx, gid in enumerate(self._gene_ids_cache)}
@@ -1199,11 +1204,14 @@ class AnnDataAdapter:
         # Ensure cache is populated
         if self._gene_id_to_idx_cache is None:
             self.get_gene_ids()
+        gene_id_to_idx = self._gene_id_to_idx_cache
+        if gene_id_to_idx is None:
+            raise RuntimeError("Gene identifier index was not initialized")
 
-        if gene_id not in self._gene_id_to_idx_cache:
+        if gene_id not in gene_id_to_idx:
             raise KeyError(f"Gene '{gene_id}' not found in var")
 
-        return self._gene_id_to_idx_cache[gene_id]
+        return gene_id_to_idx[gene_id]
 
     def _get_gene_column(self, gene_idx: int) -> np.ndarray:
         """
@@ -1214,7 +1222,7 @@ class AnnDataAdapter:
         - CSC sparse matrices: Efficient column access O(nnz/n_cols)
         - CSR sparse matrices: Convert to CSC and cache for repeated access
         - Other sparse formats (COO, DOK, etc.): Convert to CSC and cache
-        - None: Returns zeros (edge case for AnnData without X matrix)
+        - None: Rejected because no expression payload exists
         - Backed/chunked arrays: Direct slicing (no caching to preserve lazy loading)
 
         Memory-Speed Tradeoff:
@@ -1241,10 +1249,8 @@ class AnnDataAdapter:
 
         X = self.adata.X
 
-        # Edge case: no expression matrix
         if X is None:
-            logger.warning("AnnData has no X matrix. Returning zeros for gene expression.")
-            return np.zeros(self.n_cells, dtype=np.float32)
+            raise ValueError("AnnData has no X expression matrix; gene expression is unavailable")
 
         # Edge case: invalid gene index
         if gene_idx < 0 or gene_idx >= self.n_genes:
@@ -1253,7 +1259,7 @@ class AnnDataAdapter:
         # CRITICAL: For backed h5ad files, avoid creating CSC cache to preserve
         # lazy loading behavior. The memory cost of CSC cache would defeat the
         # purpose of backed mode for large datasets.
-        if self._is_lazy and self._source_type == "h5ad":
+        if self._source_type == "h5ad" and self.is_backed:
             # For backed h5ad, use direct slicing (slower but memory-efficient)
             # Note: backed h5ad matrices support slicing but may be slower
             col = X[:, gene_idx]
@@ -1286,19 +1292,31 @@ class AnnDataAdapter:
             # Dense matrix - direct column access
             return np.asarray(X[:, gene_idx]).flatten()
 
-    def get_gene_expression(self, gene_id: str, compress: bool = False) -> bytes:
-        """Get expression values for a single gene as binary float32."""
-        # Check LRU cache first (O(1) operations)
+    def _get_validated_gene_values(self, gene_id: str) -> np.ndarray:
+        """Return one exact finite Float32 per-cell gene vector."""
+        if self.adata.X is None:
+            raise ValueError("AnnData has no X expression matrix; gene expression is unavailable")
         values = self._gene_expression_cache.get(gene_id)
         if values is None:
-            # Fetch from data
             gene_idx = self._get_gene_idx(gene_id)
             col = self._get_gene_column(gene_idx)
-            values = col.astype(np.float32)
-
-            # Add to LRU cache (handles eviction automatically)
+            values = _require_finite_float32_array(
+                col,
+                label=f"Gene {gene_id!r} expression",
+            )
+            if values.ndim != 1 or values.shape[0] != self.n_cells:
+                raise ValueError(
+                    f"Gene {gene_id!r} expression must have shape ({self.n_cells},), "
+                    f"got {values.shape}."
+                )
             self._gene_expression_cache.put(gene_id, values)
+        return values
 
+    def get_gene_expression(self, gene_id: str, compress: bool = False) -> bytes:
+        """Get expression values for a single gene as binary float32."""
+        self._check_closed()
+        compress = _require_native_boolean(compress, label="compress")
+        values = self._get_validated_gene_values(gene_id)
         data = values.tobytes()
         if compress:
             return gzip.compress(data, compresslevel=6)
@@ -1306,30 +1324,48 @@ class AnnDataAdapter:
 
     def get_gene_min_max(self, gene_id: str) -> tuple[float, float]:
         """Get min/max values for a gene (for colormap scaling)."""
-        gene_idx = self._get_gene_idx(gene_id)
-        col = self._get_gene_column(gene_idx)
-        valid = col[np.isfinite(col)]
-        if len(valid) == 0:
-            return 0.0, 1.0
-        return float(valid.min()), float(valid.max())
+        values = self._get_validated_gene_values(gene_id)
+        return float(values.min()), float(values.max())
 
     # =========================================================================
     # CONNECTIVITY DATA
     # =========================================================================
 
+    def _initialize_connectivity(self) -> None:
+        """Validate the complete optional connectivity capability atomically."""
+        try:
+            self._has_connectivity = "connectivities" in self.adata.obsp
+        except Exception as exc:
+            raise ValueError("Could not inspect adata.obsp for 'connectivities'") from exc
+
+        if not self._has_connectivity:
+            self._connectivity_manifest = None
+            return
+
+        try:
+            edges = self._compute_connectivity_edges()
+        except Exception as exc:
+            raise ValueError(
+                "Invalid adata.obsp['connectivities']; the direct server was not "
+                f"initialized: {exc}"
+            ) from exc
+
+        self._connectivity_manifest = build_connectivity_manifest(
+            n_cells=self.n_cells,
+            n_edges=edges.n_edges,
+            max_neighbors=edges.max_neighbors,
+            index_bytes=edges.index_bytes,
+            index_dtype=edges.index_dtype,
+            compression=None,
+        )
+
     def has_connectivity(self) -> bool:
         """Check if connectivity data is available."""
-        if self._closed:
-            return False
-        return "connectivities" in self.adata.obsp
+        self._check_closed()
+        return self._has_connectivity
 
-    def _compute_connectivity_edges(self) -> tuple[np.ndarray, np.ndarray, int, int]:
-        """
-        Compute connectivity edges (cached).
-
-        Returns:
-            (sources_array, destinations_array, n_edges, max_neighbors)
-        """
+    def _compute_connectivity_edges(self) -> ConnectivityEdgePairs:
+        """Validate and cache one aligned weighted edge payload."""
         self._check_closed()
 
         if self._connectivity_cache is not None:
@@ -1338,79 +1374,43 @@ class AnnDataAdapter:
         if not self.has_connectivity():
             raise ValueError("No connectivity data in adata.obsp['connectivities']")
 
-        connectivities = self.adata.obsp["connectivities"]
-
-        if not sparse.isspmatrix_csr(connectivities):
-            connectivities = sparse.csr_matrix(connectivities)
-
-        # Symmetrize and binarize (make a copy to avoid modifying original)
-        connectivities_sym = (connectivities + connectivities.T).tocsr()
-        connectivities_sym.data = np.ones_like(connectivities_sym.data)
-
-        indptr = connectivities_sym.indptr
-        indices = connectivities_sym.indices
-
-        # Pre-allocate arrays for edges (upper bound: nnz/2)
-        max_edges = connectivities_sym.nnz // 2 + 1
-        edge_sources = np.empty(max_edges, dtype=np.int64)
-        edge_destinations = np.empty(max_edges, dtype=np.int64)
-        edge_count = 0
-        max_neighbors = 0
-
-        for cell_idx in range(self.n_cells):
-            start = indptr[cell_idx]
-            end = indptr[cell_idx + 1]
-            neighbor_count = end - start
-            if neighbor_count > max_neighbors:
-                max_neighbors = neighbor_count
-
-            for j in range(start, end):
-                neighbor_idx = indices[j]
-                if cell_idx < neighbor_idx:
-                    edge_sources[edge_count] = cell_idx
-                    edge_destinations[edge_count] = neighbor_idx
-                    edge_count += 1
-
-        # Trim to actual size
-        edge_sources = edge_sources[:edge_count]
-        edge_destinations = edge_destinations[:edge_count]
-
-        # Select dtype based on cell count
-        if self.n_cells <= 65535:
-            dtype = np.uint16
-        elif self.n_cells <= 4294967295:
-            dtype = np.uint32
-        else:
-            dtype = np.uint64
-
-        sources = edge_sources.astype(dtype)
-        destinations = edge_destinations.astype(dtype)
-
-        # Sort for better compression
-        sort_idx = np.lexsort((destinations, sources))
-        sources = sources[sort_idx]
-        destinations = destinations[sort_idx]
-
-        self._connectivity_cache = (sources, destinations, edge_count, int(max_neighbors))
+        self._connectivity_cache = validate_connectivity_edges(
+            self.adata.obsp["connectivities"],
+            n_cells=self.n_cells,
+        )
         return self._connectivity_cache
 
-    def get_connectivity_edges(self, compress: bool = False) -> tuple[bytes, bytes, int, int]:
+    def get_connectivity_edges(
+        self,
+        compress: bool = False,
+    ) -> tuple[bytes, bytes, bytes, int, int]:
         """
-        Get connectivity edges as binary data.
+        Get aligned endpoint and Float64 weight payloads.
 
         Returns:
-            (sources_binary, destinations_binary, n_edges, max_neighbors)
+            (sources_binary, destinations_binary, weights_binary,
+            n_edges, max_neighbors)
         """
-        sources, destinations, n_edges, max_neighbors = self._compute_connectivity_edges()
+        self._check_closed()
+        compress = _require_native_boolean(compress, label="compress")
+        edges = self._compute_connectivity_edges()
 
-        sources_data = sources.tobytes()
-        destinations_data = destinations.tobytes()
+        sources_data = edges.sources.tobytes()
+        destinations_data = edges.destinations.tobytes()
+        weights_data = edges.weights.tobytes()
 
         if compress:
             sources_data = gzip.compress(sources_data, compresslevel=6)
             destinations_data = gzip.compress(destinations_data, compresslevel=6)
+            weights_data = gzip.compress(weights_data, compresslevel=6)
 
-        return sources_data, destinations_data, n_edges, max_neighbors
+        return (
+            sources_data,
+            destinations_data,
+            weights_data,
+            edges.n_edges,
+            edges.max_neighbors,
+        )
 
     # =========================================================================
     # MANIFEST GENERATION
@@ -1418,40 +1418,33 @@ class AnnDataAdapter:
 
     def get_dataset_identity(self) -> dict:
         """Generate dataset_identity.json content."""
-        # Count obs fields
-        obs_keys = self.get_obs_keys()
-        n_categorical = sum(1 for k in obs_keys if self.get_obs_field_kind(k) == "category")
-        n_continuous = sum(1 for k in obs_keys if self.get_obs_field_kind(k) == "continuous")
+        obs_manifest = self.get_obs_manifest()
+        continuous_fields = obs_manifest["_continuousFields"]
+        categorical_fields = obs_manifest["_categoricalFields"]
+        obs_fields = [{"key": field[0], "kind": "continuous"} for field in continuous_fields] + [
+            {
+                "key": field[0],
+                "kind": "category",
+                "n_categories": len(field[1]),
+            }
+            for field in categorical_fields
+        ]
+        n_continuous = len(continuous_fields)
+        n_categorical = len(categorical_fields)
 
-        # Check connectivity
         has_conn = self.has_connectivity()
-        n_edges = None
-        if has_conn:
-            try:
-                _, _, n_edges, _ = self.get_connectivity_edges(compress=False)
-            except Exception:
-                pass
+        n_edges = (
+            self._connectivity_manifest["n_edges"]
+            if self._connectivity_manifest is not None
+            else None
+        )
 
         # Build embeddings metadata
         embeddings_meta = {
             "available_dimensions": self._available_dimensions,
             "default_dimension": self._default_dimension,
-            "files": {f"{dim}d": f"points_{dim}d.bin" for dim in self._available_dimensions}
+            "files": {f"{dim}d": f"points_{dim}d.bin" for dim in self._available_dimensions},
         }
-        if self._umap_resolution is not None:
-            embeddings_meta["umap_resolution"] = self._umap_resolution
-
-        # Build obs field summaries
-        obs_fields = []
-        for key in obs_keys:
-            kind = self.get_obs_field_kind(key)
-            entry = {"key": key, "kind": kind}
-            if kind == "category":
-                s = self.adata.obs[key]
-                cat = s.astype("category")
-                entry["n_categories"] = len(cat.cat.categories)
-            obs_fields.append(entry)
-
         identity = {
             "version": 2,
             "id": self.dataset_id,
@@ -1461,8 +1454,8 @@ class AnnDataAdapter:
             "cellucid_data_version": "anndata_adapter",
             "stats": {
                 "n_cells": self.n_cells,
-                "n_genes": self.n_genes,
-                "n_obs_fields": len(obs_keys),
+                "n_genes": 0 if self.adata.X is None else self.n_genes,
+                "n_obs_fields": len(obs_fields),
                 "n_categorical_fields": n_categorical,
                 "n_continuous_fields": n_continuous,
                 "has_connectivity": has_conn,
@@ -1478,16 +1471,17 @@ class AnnDataAdapter:
                 # This ensures no data loss but increases network transfer size
                 "var_quantization": None,
                 "obs_continuous_quantization": None,
+                # Each categorical field declares its exact uint8/uint16 storage
+                # in obs_manifest.json according to its category count.
                 "obs_categorical_dtype": "auto",
             },
             "source": {
-                "type": "anndata_adapter",
-                "format": self._source_type,  # "h5ad", "zarr", or "memory"
-                "path": self._source_path,
-                "is_backed": self.is_backed,
+                "name": {
+                    "h5ad": "H5AD file",
+                    "zarr": "Zarr store",
+                    "memory": "In-memory AnnData",
+                }[self._source_type],
             },
-            # Special flag to indicate this is from AnnData adapter
-            "_anndata_adapter": True,
         }
 
         if self._vector_fields_metadata:
@@ -1498,58 +1492,68 @@ class AnnDataAdapter:
     def get_obs_manifest(self) -> dict:
         """Generate obs_manifest.json content."""
         obs_keys = self.get_obs_keys()
+        _validate_manifest_field_keys(obs_keys, label="Observation field")
 
         continuous_fields = []
         categorical_fields = []
 
         for key in obs_keys:
-            safe_key = _safe_filename_component(key)
             kind = self.get_obs_field_kind(key)
 
             if kind == "continuous":
-                s = self.adata.obs[key]
-                values = pd.to_numeric(s, errors="coerce").to_numpy(dtype=np.float32)
-                valid = values[np.isfinite(values)]
-                min_val = float(valid.min()) if len(valid) > 0 else 0.0
-                max_val = float(valid.max()) if len(valid) > 0 else 1.0
-                continuous_fields.append([key, min_val, max_val])
+                continuous_fields.append([key])
             else:
                 # Categorical
                 s = self.adata.obs[key]
                 cat = s.astype("category")
-                categories = [str(c) for c in cat.cat.categories]
+                categories = _json_category_values(
+                    cat.cat.categories,
+                    field_key=key,
+                )
                 n_categories = len(categories)
 
-                dtype_str = "uint8" if n_categories <= 254 else "uint16"
-                missing_value = 255 if n_categories <= 254 else 65535
+                _dtype, dtype_str, missing_value = _categorical_storage(
+                    n_categories,
+                    field_key=key,
+                )
 
                 # Get centroids for all dimensions
                 centroids_by_dim = self.get_centroids_for_field(key)
 
                 # Outlier quantile min/max (always 0-1 since it's a quantile)
-                categorical_fields.append([
-                    key, categories, dtype_str, missing_value, centroids_by_dim, 0.0, 1.0
-                ])
+                categorical_fields.append(
+                    [key, categories, dtype_str, missing_value, centroids_by_dim]
+                )
 
         # Build compact manifest format
         # Path patterns must match prepare format for consistency
         # Note: We don't use compression (.gz) in adapter mode - gzip is applied
         # at the HTTP level when client supports Accept-Encoding: gzip
-        obs_schemas = {
-            "continuous": {
+        obs_schemas = {}
+        if continuous_fields:
+            obs_schemas["continuous"] = {
                 "pathPattern": "obs/{key}.values.f32",
                 "ext": "f32",
                 "dtype": "float32",
                 "quantized": False,
-            },
-            "categorical": {
-                "codesPathPattern": "obs/{key}.codes.{ext}",
-                "outlierPathPattern": "obs/{key}.outliers.f32",
-                "outlierExt": "f32",
-                "outlierDtype": "float32",
-                "outlierQuantized": False,
             }
-        }
+        if categorical_fields:
+            if self.latent_key is None:
+                obs_schemas["categorical"] = {
+                    "codesPathPattern": "obs/{key}.codes.{ext}",
+                    "outlierPathPattern": None,
+                    "outlierExt": None,
+                    "outlierDtype": None,
+                    "outlierQuantized": False,
+                }
+            else:
+                obs_schemas["categorical"] = {
+                    "codesPathPattern": "obs/{key}.codes.{ext}",
+                    "outlierPathPattern": "obs/{key}.outliers.f32",
+                    "outlierExt": "f32",
+                    "outlierDtype": "float32",
+                    "outlierQuantized": False,
+                }
 
         return {
             "_format": "compact_v1",
@@ -1564,12 +1568,12 @@ class AnnDataAdapter:
 
     def get_var_manifest(self) -> dict:
         """Generate var_manifest.json content."""
-        gene_ids = self.get_gene_ids()
-
-        # Build field list with min/max values
-        # Note: Computing min/max for all genes upfront would be slow
-        # We'll compute on-demand and cache, or use a placeholder
-        fields = [[gid] for gid in gene_ids]  # No min/max by default
+        if self.adata.X is None:
+            fields = []
+        else:
+            gene_ids = self.get_gene_ids()
+            _validate_manifest_field_keys(gene_ids, label="Gene")
+            fields = [[gid] for gid in gene_ids]
 
         # Path pattern must match prepare format for consistency
         # Note: We don't use compression (.gz) in adapter mode - gzip is applied
@@ -1592,39 +1596,12 @@ class AnnDataAdapter:
             "fields": fields,
         }
 
-    def get_connectivity_manifest(self) -> Optional[dict]:
+    def get_connectivity_manifest(self) -> dict | None:
         """Generate connectivity_manifest.json content."""
-        if not self.has_connectivity():
+        self._check_closed()
+        if self._connectivity_manifest is None:
             return None
-
-        try:
-            _, _, n_edges, max_neighbors = self.get_connectivity_edges(compress=False)
-        except Exception as e:
-            logger.error(f"Failed to compute connectivity: {e}")
-            return None
-
-        # Determine index dtype
-        if self.n_cells <= 65535:
-            index_dtype = "uint16"
-            index_bytes = 2
-        elif self.n_cells <= 4294967295:
-            index_dtype = "uint32"
-            index_bytes = 4
-        else:
-            index_dtype = "uint64"
-            index_bytes = 8
-
-        return {
-            "format": "edge_pairs",
-            "n_cells": self.n_cells,
-            "n_edges": n_edges,
-            "max_neighbors": max_neighbors,
-            "index_bytes": index_bytes,
-            "index_dtype": index_dtype,
-            "sourcesPath": "connectivity/edges.src.bin",
-            "destinationsPath": "connectivity/edges.dst.bin",
-            "compression": None,
-        }
+        return dict(self._connectivity_manifest)
 
     # =========================================================================
     # CLEANUP AND CONTEXT MANAGER
@@ -1642,7 +1619,11 @@ class AnnDataAdapter:
         Safe to call multiple times. Always call this method when done with the
         adapter, or use the context manager::
 
-            with AnnDataAdapter.from_file("data.h5ad") as adapter:
+            with AnnDataAdapter.from_file(
+                "data.h5ad",
+                dataset_name="Example",
+                dataset_id="example",
+            ) as adapter:
                 # use adapter
             # automatically cleaned up
 
@@ -1657,19 +1638,11 @@ class AnnDataAdapter:
         - Latent space array
         - Gene ID lookup indices
         """
-        if self._closed:
+        if self._close_complete:
             return
 
-        # Check if backed BEFORE setting _closed flag
-        # (is_backed property returns False after _closed is True)
-        was_backed = False
-        file_to_close = None
-        try:
-            was_backed = self.adata.isbacked
-            if was_backed and hasattr(self.adata, 'file'):
-                file_to_close = self.adata.file
-        except Exception:
-            pass  # adata may already be in invalid state
+        # Capture the backed file before marking the adapter closed.
+        file_to_close = self.adata.file if self.adata.isbacked else None
 
         self._closed = True
 
@@ -1677,40 +1650,34 @@ class AnnDataAdapter:
         self._embedding_cache.clear()
         self._embedding_norm.clear()
         self._vector_field_cache.clear()
+        self._vector_field_obsm_keys.clear()
         self._vector_fields_metadata = None
         self._centroid_cache.clear()
         self._outlier_quantile_cache.clear()
         self._gene_expression_cache.clear()
         self._latent_space = None
         self._connectivity_cache = None
+        self._connectivity_manifest = None
+        self._has_connectivity = False
         self._gene_ids_cache = None
         self._gene_id_to_idx_cache = None
 
-        # Clear CSC cache (can be large for sparse matrices)
-        # This is critical for memory management - CSC cache can double memory usage
-        if self._X_csc_cache is not None:
-            try:
-                # For very large sparse matrices, explicit deletion helps GC
-                del self._X_csc_cache
-            except Exception:
-                pass
-            self._X_csc_cache = None
+        # Clear CSC cache (can be large for sparse matrices).
+        self._X_csc_cache = None
 
         # Close backed file handle if applicable
         if file_to_close is not None:
-            try:
-                file_to_close.close()
-                logger.debug(f"Closed backed file handle for {self.dataset_name}")
-            except Exception as e:
-                logger.warning(f"Error closing backed AnnData file: {e}")
+            file_to_close.close()
+            logger.debug(f"Closed backed file handle for {self.dataset_name}")
 
         # Clear reference to adata to help garbage collection
         # (do this last since we needed it for is_backed check)
         self.adata = None
+        self._close_complete = True
 
         logger.debug(f"AnnDataAdapter closed: {self.dataset_name}")
 
-    def __enter__(self) -> "AnnDataAdapter":
+    def __enter__(self) -> AnnDataAdapter:
         """Context manager entry."""
         return self
 
@@ -1718,25 +1685,12 @@ class AnnDataAdapter:
         """Context manager exit - ensures cleanup."""
         self.close()
 
-    def __del__(self):
-        """
-        Cleanup on garbage collection.
-
-        Note: Using __del__ is an anti-pattern but kept for safety.
-        Users should prefer:
-        - Using context manager: `with AnnDataAdapter(...) as adapter:`
-        - Explicitly calling close(): `adapter.close()`
-        """
-        try:
-            self.close()
-        except Exception:
-            # Ignore errors during GC - object may be partially destroyed
-            pass
-
     def __repr__(self) -> str:
         if self._closed:
-            return f"AnnDataAdapter(closed)"
+            return "AnnDataAdapter(closed)"
         backed_str = " (backed)" if self.is_backed else ""
         source_str = f" from {self._source_type}" if self._source_type != "memory" else ""
-        return (f"AnnDataAdapter({self.n_cells:,} cells, {self.n_genes:,} genes, "
-                f"dims={self._available_dimensions}{backed_str}{source_str})")
+        return (
+            f"AnnDataAdapter({self.n_cells:,} cells, {self.n_genes:,} genes, "
+            f"dims={self._available_dimensions}{backed_str}{source_str})"
+        )

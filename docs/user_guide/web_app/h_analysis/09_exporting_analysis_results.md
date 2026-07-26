@@ -210,7 +210,8 @@ Likely causes:
 Fix:
 - re-run the analysis and open the expanded view,
 - allow downloads for the site,
-- try a different browser if corporate policies block downloads.
+- if a managed-browser policy blocks downloads, ask the administrator to allow
+  downloads from the Cellucid origin.
 
 ### Symptom: “The CSV is empty”
 
@@ -227,49 +228,13 @@ Fix:
 
 ---
 
-## Screenshot placeholders (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: analysis-export-controls
-Suggested filename: analysis/20_export-controls.png
-Where it appears: User Guide → Web App → Analysis → 09_exporting_analysis_results.md
-Capture:
-  - UI location: expanded analysis modal showing the `Export: PNG SVG CSV` controls
-  - State prerequisites: analysis has produced a result with exportable outputs
-  - Action to reach state: run analysis → open expanded view → locate export controls
-Crop:
-  - Include: export buttons/menus + a small portion of the result they export
-Alt text:
-  - Export controls for downloading analysis results.
-Caption:
-  - Use the analysis export controls to save tables and plots; prefer tables when you need downstream re-analysis.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for analysis export controls.
+```{figure} ../../../_static/screenshots/analysis/marker-genes-expanded.png
+:alt: Expanded Marker Genes result with heatmap, summary statistics, export controls, and top-marker table.
 :width: 100%
 
-Analysis results can be exported as tables and/or plots (depending on mode); export tables when you need downstream computation.
-```
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: analysis-export-artifact-example
-Suggested filename: analysis/21_export-artifact-example.png
-Where it appears: User Guide → Web App → Analysis → 09_exporting_analysis_results.md
-Capture:
-  - Export one artifact (CSV/PNG/SVG) and open it in an external viewer/editor
-  - If possible, keep the app visible in the background for provenance context
-Redact:
-  - Remove: private dataset identifiers, sample names, file paths if sensitive
-Alt text:
-  - An exported analysis artifact opened outside the web app.
-Caption:
-  - Exported artifacts are the most shareable form of analysis output; they remain usable outside Cellucid.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for an exported analysis artifact example.
-:width: 100%
-
-Open exported CSV/PNG/SVG artifacts outside the app to confirm they are shareable and self-contained.
+The expanded Marker Genes result combines the heatmap, method summary, ranked table, and PDF, PNG, and CSV export actions.
 ```
 
 ---

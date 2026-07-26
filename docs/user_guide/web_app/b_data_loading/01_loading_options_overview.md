@@ -43,13 +43,12 @@ Cellucid understands your data in three high-level ways:
      - via a Python server (recommended for large datasets)
      - inside Jupyter (recommended for analysis workflows)
 
-3) **AnnData `.zarr` directory**
-   - A directory-based format (chunked arrays).
-   - Typically better than `.h5ad` for lazy loading.
-   - Can be loaded:
-     - directly in the browser (often feasible; still depends on dataset size)
-     - via a Python server (best reliability)
-     - inside Jupyter
+3) **AnnData Zarr v2 store**
+   - A directory-based format made of chunked arrays.
+   - The browser UI accepts one portable `.zarr.zip` (or `.zip`) archive
+     containing the complete store.
+   - Python server and Jupyter APIs accept the Zarr directory itself and
+     materialize it eagerly with `anndata.read_zarr`.
 
 **Rule of thumb:** if you care about smooth interaction and reproducibility, **export once** using `prepare()`.
 
@@ -99,8 +98,8 @@ If you expect vector fields but don’t see the overlay toggle or dropdown:
 - first check your data format/naming: {doc}`07_folder_file_format_expectations_high_level_link_to_spec`
 - then check the overlay section: {doc}`../i_vector_field_velocity/index`
 
-Internal reference (naming conventions):
-- `cellucid/markdown/VECTOR_FIELD_OVERLAY_CONVENTIONS.md`
+Naming conventions:
+- {doc}`../i_vector_field_velocity/01_what_vector_fields_are_user_facing`
 
 ## Fast Path: Choose A Workflow (Decision Tree)
 
@@ -131,20 +130,22 @@ This is the canonical list used throughout the documentation.
 | 2 | Cellucid web app (public GitHub) | Connect to a public repo (or `?github=...`) | Exported | ✅ | Sharing a dataset publicly, no server |
 | 3 | Cellucid web app | Browser **Folder** picker | Exported | ✅ | Fast local viewing of prepared exports |
 | 4 | Cellucid web app | Browser **.h5ad** picker | `.h5ad` | ❌* | Quick preview of small `.h5ad` |
-| 5 | Cellucid web app | Browser **.zarr** folder picker | `.zarr` | ✅† | Quick preview of `.zarr` without Python |
+| 5 | Cellucid web app | Browser **Zarr ZIP** picker | `.zarr.zip` / `.zip` containing one Zarr v2 store | ✅† | Portable Zarr viewing without Python |
 | 6 | Terminal CLI | `cellucid serve <export_dir>` | Exported | ✅ | Reliable viewing of large exports |
-| 7 | Terminal CLI | `cellucid serve <data.h5ad>` | `.h5ad` | ✅ | Large `.h5ad` with true lazy loading |
-| 8 | Terminal CLI | `cellucid serve <data.zarr>` | `.zarr` | ✅ | Large `.zarr` with true lazy loading |
+| 7 | Terminal CLI | `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset` | `.h5ad` | ✅ | Large `.h5ad` with read-only backed access |
+| 8 | Terminal CLI | `cellucid serve data.zarr --dataset-name "My dataset" --dataset-id my-dataset` | `.zarr` | ✅ | Eager Python load with on-demand browser gene requests |
 | 9 | Python | `cellucid.serve(<export_dir>)` | Exported | ✅ | Scripting server startup |
-| 10 | Python | `cellucid.serve_anndata(<data.h5ad>)` | `.h5ad` | ✅ | Scripting server startup |
-| 11 | Python | `cellucid.serve_anndata(<data.zarr>)` | `.zarr` | ✅ | Scripting server startup |
+| 10 | Python | `cellucid.serve_anndata(<data.h5ad>, dataset_name="My dataset", dataset_id="my-dataset")` | `.h5ad` | ✅ | Scripting server startup |
+| 11 | Python | `cellucid.serve_anndata(<data.zarr>, dataset_name="My dataset", dataset_id="my-dataset")` | `.zarr` | ✅ | Scripting server startup |
 | 12 | Jupyter | `cellucid.show(<export_dir>)` | Exported | ✅ | Notebook-based exploration of exports |
-| 13 | Jupyter | `cellucid.show_anndata(<data.h5ad>)` | `.h5ad` | ✅ | Notebook-based exploration of `.h5ad` |
-| 14 | Jupyter | `cellucid.show_anndata(<data.zarr or AnnData>)` | `.zarr` / in-memory | ✅ | Notebook-based exploration of `.zarr` or in-memory |
+| 13 | Jupyter | `cellucid.show_anndata(<data.h5ad>, dataset_name="My dataset", dataset_id="my-dataset")` | `.h5ad` | ✅ | Notebook-based exploration of `.h5ad` |
+| 14 | Jupyter | `cellucid.show_anndata(<data.zarr or AnnData>, dataset_name="My dataset", dataset_id="my-dataset")` | `.zarr` / in-memory | ✅ | Notebook-based exploration of `.zarr` or in-memory |
 
 \* Browser `.h5ad` loading is **not truly lazy**: the whole file is loaded into browser memory before use.
 
-† Browser `.zarr` loading can be **effectively lazy** for gene expression (chunked storage), but still needs to read metadata up front.
+† Browser Zarr ZIP loading indexes and validates archive metadata before
+adoption, then reads gene-expression chunks on demand. Archive extraction and
+decoded chunk memory remain subject to the documented browser limits.
 
 ## Minimal Commands (Copy/Paste)
 
@@ -172,8 +173,12 @@ from cellucid import prepare
 ### 2) Serve any data (auto-detected)
 
 ```bash
-cellucid serve /path/to/data.h5ad
-cellucid serve /path/to/data.zarr
+cellucid serve /path/to/data.h5ad \
+  --dataset-name "My study" \
+  --dataset-id my-study-v1
+cellucid serve /path/to/data.zarr \
+  --dataset-name "My study" \
+  --dataset-id my-study-v1
 cellucid serve /path/to/export_dir
 ```
 
@@ -182,7 +187,11 @@ cellucid serve /path/to/export_dir
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata("data.h5ad")
+viewer = show_anndata(
+    "data.h5ad",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 ```
 
 ```python
@@ -208,11 +217,11 @@ except Exception as e:  # pragma: no cover
 def summarize_anndata(path: str | Path) -> dict:
     path = Path(path)
     adata = ad.read_h5ad(path, backed="r")  # doesn't load full X into memory
-    # Vector fields (if present) are stored in obsm and are NOT prefixed with X_.
-    # Common naming pattern: <field>_umap_<dim>d (e.g., velocity_umap_2d).
+    # Vector fields use exact dimension-suffixed obsm keys and no X_ prefix:
+    # <field>_umap_<dim>d (for example, velocity_umap_2d).
     import re
 
-    vector_field_re = re.compile(r"^(?!X_).+_umap(?:_[123]d)?$")
+    vector_field_re = re.compile(r"^(?!X_).+_umap_[123]d$")
     vector_field_obsm_keys = sorted(
         [k for k in adata.obsm.keys() if vector_field_re.match(k)]
     )
@@ -232,69 +241,26 @@ def summarize_anndata(path: str | Path) -> dict:
 # print(summarize_anndata("/path/to/data.h5ad"))
 ```
 
-## Screenshot Placeholders (Add Later)
+## Interface reference
 
-The next notebooks are extremely step-by-step. This overview page still benefits from a few “orientation” images.
-For a capture checklist, see {doc}`09_screenshots`.
+For the complete verified loading gallery, see {doc}`09_screenshots`.
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: data-loading-overview-loader-panel
-Suggested filename: data_loading/02_overview-loader-panel.png
-Where it appears: Data Loading → 01_loading_options_overview → Screenshot Placeholders
-Capture:
-  - UI location: left sidebar → Dataset Connections / Load Data area
-  - State prerequisites: Cellucid open; no dataset loaded
-  - Action to reach state: open Cellucid, then ensure you are in the default/empty state
-Crop:
-  - Include: left sidebar + top-left of the canvas (so readers can orient)
-  - Exclude: personal bookmarks/extensions
-Redact:
-  - Remove: private dataset names and local paths
-Annotations:
-  - Callouts: highlight the 3 main paths: Local, Remote server, GitHub repo
-Alt text:
-  - Left sidebar with the data loading controls highlighted.
-Caption:
-  - Explain what this panel is for.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Cellucid data loading controls.
+```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
+:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
 :width: 100%
 
-The left sidebar is where you choose how to load data (local files, a server, or a public GitHub repo).
-```
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: data-loading-overview-success-state
-Suggested filename: data_loading/03_overview-success-state.png
-Where it appears: Data Loading → 01_loading_options_overview → Screenshot Placeholders
-Capture:
-  - UI location: main canvas + dataset name/summary area
-  - State prerequisites: a dataset successfully loaded
-  - Action to reach state: load any small demo dataset
-Crop:
-  - Include: dataset name + point count + one visible embedding
-  - Exclude: unrelated browser chrome
-Redact:
-  - Remove: private dataset identifiers
-Alt text:
-  - Cellucid canvas showing a loaded embedding with a visible legend.
-Caption:
-  - Describe what “loaded successfully” looks like.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for a successful dataset load.
-:width: 100%
-
-A successful load shows a populated embedding and a field/legend you can color by.
+The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```
 
 ## Edge Cases (Read This If Something Feels “Weird”)
 
 ### Data edge cases
-- **No UMAP / embedding keys**: your AnnData is missing required `obsm` entries (`X_umap`, `X_umap_2d`, or `X_umap_3d`).
-- **NaN/Inf in embeddings**: points may disappear, render at the origin, or crash WebGL shaders.
-- **Duplicate cell IDs**: selection/highlighting can behave unpredictably.
+- **No UMAP / embedding keys**: your AnnData is missing `X_umap_1d`,
+  `X_umap_2d`, or `X_umap_3d` in `obsm`.
+- **NaN/Inf in embeddings**: current readers reject the dataset before it can
+  replace the active dataset.
+- **Duplicate variable names**: direct AnnData readers reject them because a
+  gene request must identify exactly one column.
 - **Huge categorical fields** (e.g., 100k unique categories): legends and color assignment become unusable.
 
 ### Scale edge cases
@@ -302,7 +268,8 @@ A successful load shows a populated embedding and a field/legend you can color b
 - **Millions of cells + dense gene matrix**: even with lazy loading, gene queries can be slow or memory-heavy.
 
 ### Environment edge cases
-- **Safari / older browsers**: directory picking and File System Access APIs may be limited.
+- **Prepared directory picker**: it requires the browser's directory-input
+  capability. H5AD and Zarr ZIP use ordinary single-file inputs.
 - **Corporate environments**: content blockers can break `raw.githubusercontent.com` (GitHub-hosted exports).
 
 ## Troubleshooting (Quick Index)
@@ -320,14 +287,15 @@ This is a compact troubleshooting index. Each follow-up notebook contains a **mu
 - Try loading a built-in demo dataset: if demos load, your environment is probably fine
 
 **Fix**
-- Prefer `cellucid serve data.h5ad` (server mode) for large `.h5ad`
+- Prefer `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`
+  for large `.h5ad`
 - Prefer exports created by `prepare()` for best performance
 
 ---
 
 ### Symptom: “I don’t see any embedding / it says no UMAP”
 **Likely causes**
-- AnnData missing `obsm['X_umap']` (or 2d/3d variants)
+- AnnData missing `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` in `obsm`
 
 **How to confirm**
 - In Python: `print(adata.obsm.keys())`

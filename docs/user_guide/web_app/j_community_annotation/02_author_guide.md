@@ -56,19 +56,15 @@ Read everything, but pay special attention to:
 
 ---
 
-## Screenshot Placeholders (How to Replace Them)
+## Starting point in the sidebar
 
-This guide includes screenshot placeholders to help you build a visual, step-by-step walkthrough.
+```{figure} ../../../_static/screenshots/community_annotation/disconnected-panel.png
+:alt: Community Annotation panel before an annotation repository is connected.
+:width: 60%
 
-- Placeholder file: `cellucid-python/docs/_static/screenshots/placeholder-screenshot.svg`
-- Recommended screenshot folder: `cellucid-python/docs/_static/screenshots/community_annotation/`
-
-Each placeholder is preceded by an HTML comment that tells you:
-
-- what to capture,
-- what to crop/highlight,
-- what to redact,
-- what to write as the caption and alt text.
+Before repository setup, the Community Annotation panel reports that no
+repository is connected and presents the explicit Connect repo action.
+```
 
 ---
 
@@ -196,6 +192,7 @@ prepare(
     out_dir="./my_export",
     dataset_id="my_atlas_v1",  # keep this stable for the entire annotation round
     dataset_name="My Atlas (v1)",
+    obs_categorical_dtype="uint16",
 )
 ```
 
@@ -215,36 +212,7 @@ Treat dataset id like a **contract**:
 
 In Cellucid, the Community Annotation status panel displays the dataset id (this is the id your `annotations/config.json` must match).
 
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (UI status panel)
-Suggested filename: community_annotation/02_status_panel_dataset_id.png
 
-Capture:
-- The Community Annotation accordion open.
-- The status panel showing "Dataset: <datasetId>" and "Repo: owner/repo@branch" (if connected).
-
-Goal:
-- Teach authors (and readers) where to look to confirm the dataset id and repo/branch.
-
-Crop / framing:
-- Prefer a tight crop around the status panel; include the accordion title so readers know where they are.
-
-Redact:
-- Private dataset ids (if sensitive).
-- Private repo/org names (if sensitive).
-
-Figure caption:
-- Example: "The status panel shows the dataset id that must match annotations/config.json."
-
-Alt text:
-- Example: "Community Annotation status panel showing dataset id and connected repo."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Community Annotation status panel showing dataset id and repo.
-:width: 100%
-
-The status panel shows the dataset id that must match `annotations/config.json`.
-```
 
 ---
 
@@ -496,36 +464,6 @@ Cellucid’s UI lists only repositories where the **Cellucid GitHub App is insta
 Org repos often require an org admin to approve the installation.
 :::
 
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (GitHub sync wizard - install step)
-Suggested filename: community_annotation/03_github_sync_install_app_step.png
-
-Capture:
-- The GitHub sync modal on the step that prompts you to install/add the GitHub App.
-- Include the "Add repo" / "Install app" button and the "Reload" button if present.
-
-Goal:
-- Show authors where the install step lives in the Cellucid UI (many users assume repo discovery is “automatic”).
-
-Crop / framing:
-- Tight crop around the modal; include the step indicator so readers see it’s a multi-step wizard.
-
-Redact:
-- Any private repo names shown in the background list (if visible).
-
-Figure caption:
-- Example: "If your repo doesn’t appear, install the GitHub App and then Reload."
-
-Alt text:
-- Example: "GitHub sync modal showing the install GitHub App step."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the GitHub sync wizard install step.
-:width: 100%
-
-If your repo doesn’t appear, install the GitHub App and then Reload.
-```
-
 ### Optional: self-host the GitHub OAuth + API proxy (org deployments)
 
 Cellucid’s community annotation UI uses a small server component (typically a Cloudflare Worker) to:
@@ -574,36 +512,6 @@ See also:
 4) Complete sign-in, pick the repo, then **Pull latest**.
 5) Confirm you see author-only controls (e.g. **MANAGE ANNOTATION**).
 
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (GitHub sync modal - pull/publish)
-Suggested filename: community_annotation/04_github_sync_pull_publish.png
-
-Capture:
-- GitHub sync modal showing repo selection and the "Pull latest" / "Publish" buttons.
-
-Goal:
-- Show authors where Pull and Publish live (and that the modal is the source of truth for sync actions).
-
-Crop / framing:
-- Include the selected repo (owner/repo@branch).
-- Include Pull latest + Publish buttons.
-
-Redact:
-- Private repo/org names (if needed).
-
-Figure caption:
-- Example: "Use Pull latest to download current files; Publish to share your author settings and merges."
-
-Alt text:
-- Example: "GitHub sync modal showing repo selection and Pull/Publish buttons."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the GitHub sync modal showing Pull and Publish.
-:width: 100%
-
-Use Pull latest to download current files; Publish to share your author settings and merges.
-```
-
 ### Dataset mismatch (the most common “why can’t annotators Pull?” issue)
 
 If the dataset loaded in Cellucid is not present in `annotations/config.json`:
@@ -643,38 +551,6 @@ To stop annotation on a field:
 
 - **Close** locks voting/suggestions/comments for annotators (you can reopen later).
 - **Remove** removes it from the annotatable list entirely.
-
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (MANAGE ANNOTATION controls)
-Suggested filename: community_annotation/05_manage_annotation_controls.png
-
-Capture:
-- MANAGE ANNOTATION accordion open, showing:
-  - the "Categorical obs" dropdown
-  - Add/Remove/Close/Reopen buttons
-  - (if visible) the Threshold slider and Min annotators controls
-
-Goal:
-- Show authors where the author-only controls live and what they look like.
-
-Crop / framing:
-- Tight crop around the MANAGE ANNOTATION section; include the section header.
-
-Redact:
-- Private dataset/repo names if visible.
-
-Figure caption:
-- Example: "Authors enable/disable annotatable columns and can close a column to freeze voting."
-
-Alt text:
-- Example: "MANAGE ANNOTATION section showing column dropdown and add/remove/close controls."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Manage Annotation author controls.
-:width: 100%
-
-Authors enable/disable annotatable columns and can close a column to freeze voting.
-```
 
 :::{warning}
 Once annotation is enabled for a categorical field:
@@ -754,35 +630,6 @@ If you expect disagreement (hard biology, rare types):
 - use comments as evidence,
 - accept that some clusters will remain Disputed and require manual review.
 
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (Consensus settings controls)
-Suggested filename: community_annotation/06_consensus_settings_controls.png
-
-Capture:
-- The Threshold slider, Min annotators input, Apply/Reset buttons for an annotatable column.
-
-Goal:
-- Show authors exactly what control adjusts threshold/minAnnotators and where Apply/Reset is.
-
-Crop / framing:
-- Tight crop around the settings controls (include the field name label if present).
-
-Redact:
-- None usually needed (but remove private repo names if visible elsewhere in the sidebar).
-
-Figure caption:
-- Example: "Tune consensus per column using Threshold and Min annotators, then Publish to share."
-
-Alt text:
-- Example: "Consensus settings UI with Threshold slider and Min annotators input."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for consensus settings controls (threshold and min annotators).
-:width: 100%
-
-Tune consensus per column using Threshold and Min annotators, then Publish to share.
-```
-
 ---
 
 ## 10) Merge Duplicate Suggestions (Moderation)
@@ -815,38 +662,6 @@ Do not merge when meaning differs:
 - “CD4 T cell” vs “T cell” (one is more specific)
 - “Doublet” vs “Cycling T cell” (different biological claims)
 - unresolved debates (leave Disputed; use comments)
-
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (Moderation merge gesture)
-Suggested filename: community_annotation/07_merge_drag_drop.png
-
-Capture:
-- Voting modal with multiple suggestion cards.
-- Ideally show the drag interaction (or the merge confirmation dialog).
-
-Goal:
-- Teach authors the drag-to-merge action and what “merge note” means.
-
-Crop / framing:
-- Include the suggestion cards and the merge confirmation UI.
-- Keep enough context so readers recognize they are inside the voting modal.
-
-Redact:
-- Private dataset/repo names if visible.
-- Sensitive labels if needed.
-
-Figure caption:
-- Example: "Merge duplicates by dragging one suggestion card onto another."
-
-Alt text:
-- Example: "Voting modal showing suggestion cards and merge confirmation."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for moderation merges (drag-to-merge) in the voting modal.
-:width: 100%
-
-Merge duplicates by dragging one suggestion card onto another.
-```
 
 ### What is stored in `merges.json` (advanced)
 
@@ -968,7 +783,8 @@ cluster_consensus = cluster.astype(str).map(mapping)
 
 Notes:
 
-- For disputed/pending buckets you can choose a placeholder (e.g. `"Disputed"`), or leave as missing.
+- For disputed or pending buckets, choose an explicit display label such as
+  `"Disputed"`, or leave the value missing.
 - If your cluster labels are integers, cast consistently to strings.
 
 ---

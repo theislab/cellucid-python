@@ -241,34 +241,6 @@ If any of these match, start with {doc}`../a_orientation/02_system_requirements`
 
 ---
 
-## Screenshot placeholder (you will replace later)
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: performance-three-bottlenecks-diagram
-Suggested filename: benchmarking_performance/01_three-bottlenecks-diagram.png
-Where it appears: User Guide → Web App → Benchmarking and Performance → 01_performance_mental_model.md
-Capture:
-  - Asset type: diagram (SVG preferred) or annotated screenshot
-  - Content: GPU-bound vs CPU-bound vs I/O-bound, with “what it feels like” examples
-  - Goal: give non-technical users a quick decision tree
-Crop:
-  - Include only the diagram (no browser chrome)
-Redact:
-  - Use generic labels (no private dataset names)
-Alt text:
-  - Diagram explaining GPU-, CPU-, and I/O-bound performance bottlenecks in Cellucid.
-Caption:
-  - Cellucid performance triage: decide whether you are GPU-bound, CPU-bound, or I/O-bound, then change the one knob that targets that bottleneck.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder diagram for performance bottlenecks.
-:width: 100%
-
-Cellucid performance triage: decide whether you are GPU-bound, CPU-bound, or I/O-bound, then change the one knob that targets that bottleneck.
-```
-
----
-
 ## Next steps
 
 - {doc}`02_performance_considerations_what_gets_slow_and_why` (the concrete cost model + “which knob helps which problem”)

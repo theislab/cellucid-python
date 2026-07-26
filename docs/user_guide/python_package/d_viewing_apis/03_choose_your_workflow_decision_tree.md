@@ -22,7 +22,7 @@ pip install cellucid
 2) Run (terminal):
 
 ```bash
-cellucid serve /path/to/data.h5ad
+cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
 3) Open the printed **Viewer URL** in your browser.
@@ -38,7 +38,9 @@ That’s it. If you get stuck, go to {doc}`15_troubleshooting_viewing`.
 1) If you already have an **export directory** (from `prepare`):
    - Use `show(export_dir)` → {doc}`06_jupyter_show_and_show_anndata_quickstart`
 2) If you have a `.h5ad` or `.zarr`:
-   - Use `show_anndata("data.h5ad")` / `show_anndata("data.zarr")` → {doc}`06_jupyter_show_and_show_anndata_quickstart`
+   - Use `show_anndata("data.h5ad", dataset_name="My dataset", dataset_id="my-dataset")`
+     or the same exact identity arguments with `"data.zarr"` →
+     {doc}`06_jupyter_show_and_show_anndata_quickstart`
 3) If your notebook is served over **HTTPS** (JupyterHub, cloud):
    - Read the proxy section before debugging: {doc}`10_notebook_widget_mode_advanced`
 
@@ -47,7 +49,9 @@ That’s it. If you get stuck, go to {doc}`15_troubleshooting_viewing`.
 1) Easiest:
    - `cellucid serve <path>` (auto-detects format) → {doc}`04_cli_cellucid_serve_quickstart`
 2) If you want to start a server from Python:
-   - `serve(export_dir)` or `serve_anndata(h5ad/zarr/AnnData)` → {doc}`05_python_serve_and_serve_anndata_quickstart`
+   - `serve(export_dir)` or
+     `serve_anndata(data, dataset_name=..., dataset_id=...)` →
+     {doc}`05_python_serve_and_serve_anndata_quickstart`
 
 ### Step 2 — What data format do you have?
 
@@ -64,26 +68,26 @@ You can also load exports directly in the web app with a folder picker:
 #### I have a `.h5ad`
 
 Prefer:
-- Terminal: `cellucid serve /path/to/data.h5ad`
-- Notebook: `show_anndata("data.h5ad")`
+- Terminal: `cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`
+- Notebook: `show_anndata("data.h5ad", dataset_name="My dataset", dataset_id="my-dataset")`
 
-This uses **backed mode** (lazy loading) by default. Avoid `--no-backed` unless you know why.
+The H5AD is opened in read-only backed mode.
 
 #### I have a `.zarr`
 
 Prefer:
-- Terminal: `cellucid serve /path/to/data.zarr`
-- Notebook: `show_anndata("data.zarr")`
+- Terminal: `cellucid serve /path/to/data.zarr --dataset-name "My dataset" --dataset-id my-dataset`
+- Notebook: `show_anndata("data.zarr", dataset_name="My dataset", dataset_id="my-dataset")`
 
-Zarr is naturally chunked and works well for large datasets.
+Zarr input is loaded eagerly in Python, so confirm that it fits memory.
 
 #### I only have an in-memory `AnnData`
 
 Use:
-- Notebook: `show_anndata(adata)` (best experience)
-- Script: `serve_anndata(adata)` (works, but think about memory)
+- Notebook: `show_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")`
+- Script: `serve_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")`
 
-If your dataset is large, it’s often better to view from a file (`.h5ad` or `.zarr`) so you can use lazy loading.
+For a large dataset, use a read-only-backed `.h5ad` or create a Cellucid export.
 
 ### Step 3 — Are you on a remote machine (HPC / cloud)?
 

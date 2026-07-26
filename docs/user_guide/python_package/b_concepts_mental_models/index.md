@@ -119,11 +119,11 @@ The fastest path to diagnosing viewer/server/hook issues, with concrete checks a
 
 ---
 
-## Screenshots and figure placeholders
+## Screenshots and figures
 
-When this chapter references a UI step in the Cellucid web app, it uses **screenshot placeholders** with explicit capture instructions.
-If you want to add images, follow the playbook in:
-- `cellucid/markdown/DOCUMENTATION_SCREENSHOTS_AND_FIGURES_GUIDE.md`
+UI figures in this chapter use reproduced, visually reviewed application
+captures. Alt text describes the visible state, and captions state the contract
+the reader should verify.
 
 ```{toctree}
 :maxdepth: 1

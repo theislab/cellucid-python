@@ -120,13 +120,13 @@ If these do not resolve it, jump to the symptom that matches what you see.
 ### How to confirm
 - Click the **Lasso** mode button again.
 - Hold `Alt` and look for the cursor change (crosshair) or lasso overlay.
-- Try in a different browser window with no extensions.
+- Verify in a clean/private window with extensions disabled.
 
 ### Fix
 - Use `Alt+drag` (not plain drag).
-- If your OS/browser conflicts with `Alt`, try:
-  - a different browser (Chrome/Edge/Firefox),
-  - disabling extensions that capture keyboard shortcuts.
+- If `Alt`/`Option` is captured, disable the extension or operating-system
+  shortcut that owns the gesture, then activate **Lasso** and use
+  `Alt`/`Option`+drag again.
 
 ### Prevention
 - Learn the mental split:
@@ -287,7 +287,7 @@ If these do not resolve it, jump to the symptom that matches what you see.
 ### Likely causes (ordered)
 1) Dataset mismatch: session restore skipped dataset-dependent highlights.
 2) Session file is still loading lazy chunks (large highlight memberships can load later).
-3) You never saved highlights into the session you loaded (you loaded an older session).
+3) The exact current session you loaded did not contain those highlights.
 
 ### How to confirm
 - Look for a notification about “dataset mismatch”.
@@ -310,19 +310,17 @@ If these do not resolve it, jump to the symptom that matches what you see.
 1) You are not actually in Jupyter-embedded mode (no Jupyter bridge active).
 2) Viewer ID mismatch (messages go to a different iframe).
 3) Dataset/index mismatch (Python indices refer to different cells than the viewer).
-4) The particular command/event wiring is not enabled in your app build yet.
-5) Browser blocked cross-origin communication (non-loopback origin).
+4) Browser blocked cross-origin communication (non-loopback origin).
 
 ### How to confirm
 - Confirm you are using the Jupyter workflow (Cellucid opened with Jupyter-specific URL params).
 - In Python, print/log the viewer URL and verify it is the one embedded.
 - Try a simple command that is known to be wired (e.g., `set_color_by`) to validate communication.
-- If nothing works, check `cellucid/markdown/HOOKS_DEVELOPMENT.md` (developer-facing).
+- Follow the connection checks in {doc}`../../python_package/e_jupyter_hooks/14_troubleshooting_hooks`.
 
 ### Fix
 - Ensure you are running the server locally/loopback and using the correct viewer URL.
 - Ensure the dataset order in Python matches the dataset loaded in the viewer.
-- If the feature is not wired in your build, use session-based workflows instead.
 
 ### Prevention
 - When using Python control, treat “cell index = identity” and keep ordering stable.

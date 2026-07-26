@@ -18,7 +18,8 @@ This page documents:
 
 ## Mental model (beginner-friendly)
 
-- You have an embedding like UMAP: `X_umap` with shape `(n_cells, 2)` or `(n_cells, 3)`.
+- You have an explicitly dimensioned embedding such as `X_umap_2d` with shape
+  `(n_cells, 2)`.
 - You compute (or already have) vectors with the *same* shape.
 - Cellucid visualizes those vectors as an animated overlay on top of the embedding.
 
@@ -33,12 +34,12 @@ Vectors are not “absolute positions”; they are **arrows attached to each cel
 ```python
 from cellucid import compute_transition_drift
 
-drift = compute_transition_drift(T, adata.obsm["X_umap"], normalize_rows=True)
+drift = compute_transition_drift(T, adata.obsm["X_umap_2d"], normalize_rows=True)
 ```
 
 Where:
 - `T` is `(n_cells, n_cells)` (dense or sparse)
-- `adata.obsm["X_umap"]` is `(n_cells, dim)`
+- `adata.obsm["X_umap_2d"]` is `(n_cells, 2)`
 
 ### 2) Store drift in `adata.obsm` using Cellucid naming conventions
 
@@ -50,6 +51,7 @@ key = add_transition_drift_to_obsm(
     T,
     basis="umap",
     field_prefix="T_fwd",
+    normalize_rows=True,
 )
 print("Wrote vector field to:", key)
 ```
@@ -67,12 +69,15 @@ prepare(
     obs=adata.obs,
     var=adata.var,
     gene_expression=adata.X,
-    X_umap_2d=adata.obsm.get("X_umap_2d", adata.obsm["X_umap"]),
+    X_umap_2d=adata.obsm["X_umap_2d"],
     vector_fields={
         # You can pass the new obsm entry directly
         key: adata.obsm[key],
     },
     out_dir="./my_export",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    obs_categorical_dtype="uint16",
 )
 ```
 
@@ -80,14 +85,9 @@ prepare(
 
 ## Naming conventions (important)
 
-Cellucid’s recommended keys for vector fields follow:
-- Explicit: `<field>_<basis>_<dim>d`
-  - examples: `velocity_umap_2d`, `T_fwd_umap_3d`
-- Implicit: `<field>_<basis>` (only if you’re sure there’s no ambiguity)
-
-Why explicit keys are recommended:
-- it avoids clashes when you have both 2D and 3D embeddings,
-- it makes export/serve behavior deterministic.
+Every vector-field declaration key must follow
+`<field>_<basis>_<dim>d`, for example `velocity_umap_2d` or
+`T_fwd_umap_3d`. Unsuffixed keys are not discovered as vector fields.
 
 ---
 
@@ -106,7 +106,9 @@ Why explicit keys are recommended:
 ## Edge cases (do not skip)
 
 ### Row normalization (transition matrices)
-- If your transition matrix is not row-stochastic, set `normalize_rows=True` (default).
+- Choose `normalize_rows=True` to divide each transition row by its sum, or
+  `normalize_rows=False` when the matrix already has the exact row semantics you
+  intend. The choice is required.
 - Rows with sum 0 are handled safely (division-by-zero is avoided), but the resulting drift can be zero/undefined depending on the matrix.
 
 ### Shape mismatches
@@ -142,7 +144,8 @@ How to confirm:
 
 Fix:
 - Export vectors via `prepare(..., vector_fields={...})`.
-- Prefer explicit keys like `velocity_umap_2d` and `velocity_umap_3d` if you use multiple dimensions.
+- Use exact dimension-suffixed keys such as `velocity_umap_2d` and
+  `velocity_umap_3d`.
 
 ---
 

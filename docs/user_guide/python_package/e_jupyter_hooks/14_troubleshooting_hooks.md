@@ -17,7 +17,7 @@ This report includes:
 - server probes (`/_cellucid/health`, `/_cellucid/info`, `/_cellucid/datasets`)
 - ping/pong roundtrip (Python → iframe → Python)
 - a frontend “debug snapshot” (iframe URL/origin/user agent)
-- recent frontend warnings/errors forwarded to Python (`console` events)
+- recent accepted-event counts grouped by exact event type
 
 If you include this report when asking for help, debugging is usually 10× faster.
 
@@ -29,75 +29,56 @@ If you include this report when asking for help, debugging is usually 10× faste
 The iframe loads an error page saying the viewer UI could not be loaded.
 
 ### Likely causes (ordered)
-1. No outbound network access to `https://www.cellucid.com` (first run).
-2. You are offline and the UI cache is empty.
-3. Cache directory is not writable/persistent.
+1. No outbound network access to the configured web source.
+2. The source inventory or one declared asset failed exact validation.
+3. The selected generation directory is not writable.
 
 ### How to confirm
 - In the debug report, check:
   - `report["web_ui"]["cache"]`
-  - `report["viewer_index_probe_error"]` (proxy fetch failure)
+  - `report["viewer_index_probe_error"]` (browser-facing index probe failure)
 - Try opening in a browser:
   - `<viewer.server_url>/index.html`
 
 ### Fix
-- If you can go online once:
-  - re-run the cell; Cellucid will prefetch UI assets with a progress bar.
-- If you need a persistent cache directory:
-  - set `CELLUCID_WEB_PROXY_CACHE_DIR` to a writable location.
-- If you suspect a bad cache:
-  - `viewer.clear_web_cache()` and retry.
+- Ensure the Python runtime can reach the configured `web_source_url`.
+- Correct the exact inventory, object, MIME, length, hash, or build error shown.
+- Pass a writable `web_cache_dir` when the default temporary location is not
+  suitable.
 
 ### Prevention
-- On shared/HPC environments, set `CELLUCID_WEB_PROXY_CACHE_DIR` to a persistent path.
-- Prefetch once in a “setup notebook”:
-  - `viewer.ensure_web_ui_cached()`
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: jupyter-hooks-ui-unavailable-error
-Suggested filename: jupyter_hooks/10_ui-unavailable-error-page.png
-Where it appears: Python Package → Jupyter Hooks → Troubleshooting → UI unavailable
-Capture:
-  - UI location: iframe inside notebook output
-  - State prerequisites: run a viewer in an offline environment with no cached UI
-  - Action to reach state: clear cache, disable internet, run show/show_anndata
-Crop:
-  - Include: the full error message text (so users can match it)
-  - Exclude: private paths
-Alt text:
-  - Embedded viewer showing an error page stating the Cellucid viewer UI could not be loaded.
-Caption:
-  - When the notebook cannot download or find cached viewer UI assets, the iframe shows a clear error page with next steps.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the “viewer UI unavailable” error page in the notebook iframe.
-:width: 100%
-
-If UI assets cannot be fetched or found in the cache, the iframe shows an error page with next steps.
-```
+- Before a shared session, exercise the exact startup source with
+  `viewer.ensure_web_ui_cached(force=True)`.
+- Remember that the real viewer startup establishes the source generation
+  again; the check does not provide an offline mode.
 
 ---
 
-## Symptom: iframe shows “notebook proxy required”
+## Symptom: remote or HTTPS notebook iframe is blank or blocked
 
 ### Symptom
-The iframe shows a page saying a notebook proxy is required (or similar messaging).
+The iframe is blank, browser developer tools report mixed content, or the
+browser cannot reach the kernel-side loopback URL.
 
 ### Likely causes
 1. Your notebook frontend is served over HTTPS (or is remote), so direct `http://127.0.0.1:<port>` is blocked/unreachable.
-2. `jupyter-server-proxy` is not installed/enabled.
+2. No browser-reachable proxy or tunnel has been configured for the selected
+   port.
 
 ### How to confirm
 - In browser devtools console/network, look for mixed-content blocking.
-- In the debug report, check `report["jupyter_server_proxy"]`.
+- In the debug report, inspect `client_server_url`, `viewer_url`,
+  `viewer_index_probe`, and any corresponding error keys.
 
 ### Fix (recommended order)
-1. Install/enable `jupyter-server-proxy` on the Jupyter server.
-2. If your kernel is remote and your browser is local: use SSH port forwarding.
-3. Advanced: set `CELLUCID_CLIENT_SERVER_URL` to a browser-reachable HTTPS URL for the server.
+1. Configure an HTTPS proxy route for the fixed Cellucid port, or use SSH port
+   forwarding when the browser is local.
+2. Pass that exact browser-reachable HTTP(S) base as `client_server_url=...`.
 
 ### Prevention
-- On JupyterHub, treat `jupyter-server-proxy` as part of the standard environment.
+- Validate the proxy/tunnel URL before a shared remote-notebook workflow.
+- The Cellucid package already depends on `jupyter-server-proxy`, but Cellucid
+  does not detect, configure, or select a proxy URL.
 
 ---
 
@@ -175,7 +156,8 @@ Calling `viewer.highlight_cells(...)` / `viewer.set_color_by(...)` / `viewer.res
 1. Viewer not displayed (commands are sent via notebook JS injection).
 2. The iframe is stale or not the one tied to this Python viewer.
 3. Connectivity/proxy issues prevent the iframe from fully initializing Jupyter mode.
-4. You are offline with a cached UI build that doesn’t support the command (rare, but possible).
+4. The frontend and Python package did not come from the same exact current
+   generation.
 
 ### How to confirm
 - If `viewer._displayed` is False (notebooks): you didn’t display the viewer.
@@ -190,12 +172,13 @@ Calling `viewer.highlight_cells(...)` / `viewer.set_color_by(...)` / `viewer.res
    ```python
    viewer.display()
    ```
-2. Re-run the viewer creation cell.
-3. Clear UI cache and retry:
+2. If the iframe is stale, stop that viewer:
    ```python
-   viewer.clear_web_cache()
+   viewer.stop()
    ```
-4. Use {doc}`13_security_cors_origins_and_mixed_content` to fix proxy/mixed-content failures.
+   Then construct and display one current viewer.
+3. Use {doc}`13_security_cors_origins_and_mixed_content` to configure the exact
+   browser-reachable URL.
 
 ### Prevention
 - Always `viewer.wait_for_ready()` before sending commands in scripts/notebooks.
@@ -214,21 +197,25 @@ Calling `viewer.highlight_cells(...)` / `viewer.set_color_by(...)` / `viewer.res
 
 ### How to confirm
 - Browser devtools → Network:
-  - look for `/_cellucid/session_bundle?viewerId=...&requestId=...`
+  - look for
+    `/_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
   - check status code and response text
 - In Python, inspect the debug report for recent `session_bundle` events.
 
 ### Fix
-- Retry `viewer.get_session_bundle()` (generates a fresh requestId).
+- Resolve any reported connectivity failure. An expired request is invalid;
+  one subsequent `viewer.get_session_bundle()` call creates a new exact
+  request ID.
 - Reduce session size (fewer highlight groups / less state).
 - Fix connectivity issues (proxy/mixed content).
 
 ---
 
-## Symptom: “Port already in use” / ports keep incrementing
+## Symptom: “Port already in use” / the viewer port changed
 
 ### Symptom
-You see the viewer using ports like 8765, 8766, 8767… and remote workflows break.
+An explicitly requested port is busy, or an automatically assigned viewer port
+does not match a tunnel configured earlier.
 
 ### Likely causes
 - You created multiple viewers and didn’t stop them.
@@ -241,7 +228,14 @@ You see the viewer using ports like 8765, 8766, 8767… and remote workflows bre
   ```
 - For remote/HPC workflows, choose a fixed port:
   ```python
-  viewer = show_anndata("data.h5ad", port=8765)
+  from cellucid import AnnDataViewer
+
+  viewer = AnnDataViewer(
+      "data.h5ad",
+      port=8765,
+      dataset_name="My study",
+      dataset_id="my-study-v1",
+  )
   ```
 
 ### Prevention
@@ -270,5 +264,3 @@ In a browser:
 ## Next steps
 
 - Reference (schemas + env vars): {doc}`16_reference`
-- Screenshot/diagram checklist for docs: {doc}`15_screenshots_and_diagrams`
-

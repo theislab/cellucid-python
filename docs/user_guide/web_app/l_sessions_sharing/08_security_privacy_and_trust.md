@@ -79,8 +79,7 @@ This is meant to protect you from:
 
 :::{important}
 Even with safety checks, best practice is still:
-- only open sessions from sources you trust, and
-- avoid auto-loading sessions from untrusted datasets.
+- only open sessions from sources you trust.
 :::
 
 ---
@@ -107,8 +106,7 @@ Prefer:
 ### 3) Don’t publish sessions by accident
 
 If you are distributing an export folder publicly:
-- do not include session bundles unless you intend them to be opened by anyone,
-- be careful with `state-snapshots.json` (auto-restore makes sessions “execute on open”).
+- do not include session bundles unless you intend them to be opened by anyone.
 
 ### 4) For high-sensitivity environments, share encrypted archives
 

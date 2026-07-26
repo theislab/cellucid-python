@@ -49,20 +49,17 @@ See {doc}`02_local_demo_tutorial` for the exact required layout.
 
 When you serve or display AnnData directly, Cellucid still generates a `dataset_identity.json` payload—dynamically—via the AnnData adapter.
 
-Default behavior:
-- `dataset_name` defaults to the file name (e.g. `mydata.h5ad` → `mydata`) or “AnnData Dataset”.
-- `dataset_id` defaults to a URL-safe slug derived from `dataset_name`.
+Exact behavior:
+- `dataset_name` and `dataset_id` are required non-empty strings for
+  `serve_anndata(...)`, `show_anndata(...)`, and `AnnDataViewer(...)`.
+- `cellucid serve <h5ad-or-zarr>` requires both `--dataset-name` and
+  `--dataset-id`.
+- Cellucid does not derive either value from a filename or silently create a
+  slug.
 
-Best practice (recommended when you care about persistence/sharing):
-- Pass an explicit `dataset_id=...` (and optionally `dataset_name=...`) when using:
-  - Python server mode (`serve_anndata(..., dataset_id="...")`)
-  - Jupyter (`show_anndata(..., dataset_id="...")`)
-
-Note: `cellucid serve ...` currently derives dataset identity from the path/filename; if you need a stable dataset id for sharing/sessions, prefer exports (`prepare`) or the Python API.
-
-Why this matters:
-- If you rename a `.h5ad` file, the default dataset id changes.
-- Your saved sessions / caches / annotation links may no longer match.
+Use the same exact `dataset_id` whenever you reopen the same dataset
+generation. Changing it intentionally creates a different dataset identity,
+which prevents a session for the old identity from being applied implicitly.
 
 ---
 

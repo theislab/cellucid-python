@@ -1,17 +1,20 @@
-# Privacy, security, and offline vs online
+# Privacy, security, and network requirements
 
 **Audience:** everyone (especially anyone handling sensitive data)  
 **Time:** 15–25 minutes  
 **What you’ll learn:**
 - When your data stays local vs when it can be exposed
 - What the Python server is doing with `cellucid.com` (hosted UI assets)
-- How to make Cellucid predictable in offline / firewalled environments
+- What source access the viewer requires in firewalled environments
 
 ---
 
 ## Mental model (one sentence)
 
-Cellucid is a web app UI, but with `cellucid-python` your **dataset is served by your Python process** — the main privacy/security decisions are about *where you host the server* and *whether the viewer UI assets are cached for offline use*.
+Cellucid is a web app UI, but with `cellucid-python` your **dataset is served
+by your Python process**. The main privacy/security decisions are where you
+host that server and whether the Python runtime may reach the configured
+viewer source.
 
 ---
 
@@ -21,7 +24,7 @@ Cellucid is a web app UI, but with `cellucid-python` your **dataset is served by
 
 By default:
 - your dataset is served by a local Python server (usually `127.0.0.1:<port>`),
-- the viewer UI is served from the same origin via a hosted-asset proxy + local cache,
+- the exact verified viewer generation is served from that same origin,
 - the browser loads data from your local server.
 
 Your dataset is **not uploaded** anywhere automatically.
@@ -81,29 +84,36 @@ Start debugging at: {doc}`08_debugging_mental_model_where_to_look`.
 
 ---
 
-## Offline vs online: hosted-asset proxy and the UI cache
+## Viewer-source access and the local generation
 
-### Why the viewer UI is “downloaded once”
+### Why the viewer UI is established at startup
 
 In notebook/server modes, Cellucid serves the web app UI from your Python server so:
 - the viewer and dataset share the same origin (avoids mixed-content),
 - your notebook embed is more reliable across environments.
 
-If the UI is not packaged locally, the server runs in **hosted-asset proxy mode**:
-- it fetches `index.html` and `/assets/...` from `https://www.cellucid.com`,
-- caches them on disk,
-- and then serves them locally.
+Before binding its HTTP server, Cellucid:
 
-### What this means for offline environments
+1. fetches `cellucid-web-assets.json` from the configured source,
+2. downloads every declared object into a staging directory,
+3. verifies the complete file set, MIME types, byte lengths, SHA-256 hashes,
+   and build identity, and
+4. atomically publishes that generation locally.
 
-- First run in a new environment may require internet access to populate the cache.
-- After the cache is populated, you can often run fully offline (the server serves cached UI assets).
+### What this means without source access
+
+- `cellucid serve`, `show(...)`, and `show_anndata(...)` require the configured
+  source at each startup when they serve the viewer UI.
+- Source or inventory failure stops startup. A previous local generation is
+  kept intact but is not served as a substitute.
+- `cellucid serve ... --no-web-ui` is the explicit data-endpoint-only mode and
+  does not require viewer-source access.
 
 ### Where the cache lives
 
-The cache directory is:
-- `CELLUCID_WEB_PROXY_CACHE_DIR` if set, else
-- a temp directory (platform-dependent).
+The default cache is a process-independent temporary directory
+(platform-dependent). Select another location explicitly with
+`--web-cache-dir PATH` or the `web_cache_dir=` Python argument.
 
 In Python:
 
@@ -112,19 +122,30 @@ from cellucid import get_web_cache_dir
 get_web_cache_dir()
 ```
 
-### Prefetch the UI intentionally (recommended for workshops / offline HPC)
+### Establish or verify the UI generation intentionally
 
-Run once while online:
+Establish the complete configured source generation:
 
 ```python
-from cellucid import show_anndata
+from cellucid import AnnDataViewer
 
-viewer = show_anndata("data.h5ad", auto_open=False)
-viewer.ensure_web_ui_cached(force=False, show_progress=True)
+viewer = AnnDataViewer(
+    "data.h5ad",
+    auto_open=False,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
+viewer.ensure_web_ui_cached(force=True, show_progress=True)
 viewer.stop()
 ```
 
-Or clear and re-download (useful when debugging stale caches):
+Verify the selected existing generation without network access or mutation:
+
+```python
+viewer.ensure_web_ui_cached(force=False, show_progress=True)
+```
+
+Or clear the selected generation:
 
 ```python
 from cellucid import clear_web_cache
@@ -132,8 +153,8 @@ clear_web_cache()
 ```
 
 ```{important}
-If you rely on offline use, set `CELLUCID_WEB_PROXY_CACHE_DIR` to a persistent, writable location.
-Otherwise a system temp directory may be cleared between sessions.
+`force=False` is verification-only. Viewer/server startup always establishes
+the configured source generation and reports source failure directly.
 ```
 
 ---
@@ -151,46 +172,19 @@ Treat session bundles as data artifacts:
 
 ---
 
-## Screenshot placeholder: offline UI-unavailable error page
+## Troubleshooting (privacy/network/security)
 
-If you want to help beginners, capture the UI error page shown when the UI cannot be fetched and no cache exists.
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: offline-web-ui-unavailable
-Suggested filename: web_app/offline-web-ui-unavailable.png
-Where it appears: Python Package → Concepts → Privacy/offline → Offline vs online
-Capture:
-  - UI location: browser tab or notebook iframe
-  - State prerequisites: run Cellucid in a fresh environment with no cached UI while offline
-  - Action to reach state: start a viewer; it fails to load the UI and shows an error page
-Crop:
-  - Include: the main error message + suggested fixes (run once online, set cache dir)
-  - Exclude: private dataset names and local paths if shown
-Alt text:
-  - Error page indicating the Cellucid viewer UI could not be loaded and suggesting caching steps.
-Caption:
-  - The Python server proxies and caches the web UI assets; when offline with no cache, you’ll see this page—run once online or set a persistent cache directory.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the offline viewer UI unavailable page.
-:width: 100%
-
-When offline and the viewer UI is not cached, the Python server cannot serve the web app UI until you run once online or configure a persistent cache.
-```
-
----
-
-## Troubleshooting (privacy/offline/security)
-
-### Symptom: “I’m offline and the viewer UI won’t load”
+### Symptom: viewer startup cannot establish the UI generation
 
 Likely causes:
-- no cached copy of the viewer UI exists yet,
-- cache directory is not writable or not persistent.
+- the configured source is unreachable or blocked,
+- an inventory or declared object fails exact verification, or
+- the selected cache directory is not writable.
 
 Fix:
-- run once while online to populate the cache, or
-- set `CELLUCID_WEB_PROXY_CACHE_DIR` to a persistent location and prefetch the UI.
+- allow the Python runtime to reach the configured `web_source_url`,
+- correct the exact response error reported by Cellucid, and
+- pass a writable `web_cache_dir` or `--web-cache-dir`.
 
 ### Symptom: “Someone else on my network can see my dataset”
 

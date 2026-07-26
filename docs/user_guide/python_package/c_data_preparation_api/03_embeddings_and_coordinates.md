@@ -26,13 +26,9 @@ assert X_umap_2d.ndim == 2 and X_umap_2d.shape[1] == 2
 assert np.isfinite(X_umap_2d).all()  # no NaN/Inf
 ```
 
-If you only have `adata.obsm["X_umap"]`, map it to the right argument based on its column count:
-
-```python
-X_umap = adata.obsm["X_umap"]
-X_umap_2d = X_umap if X_umap.shape[1] == 2 else None
-X_umap_3d = X_umap if X_umap.shape[1] == 3 else None
-```
+AnnData input must declare the dimension in its key. Store each embedding as
+`X_umap_1d`, `X_umap_2d`, or `X_umap_3d`; Cellucid does not infer a dimension
+from a generic key.
 
 ---
 
@@ -45,7 +41,6 @@ X_umap_3d = X_umap if X_umap.shape[1] == 3 else None
 | `X_umap_1d` | `(n_cells, 1)` | `points_1d.bin(.gz)` |
 | `X_umap_2d` | `(n_cells, 2)` | `points_2d.bin(.gz)` |
 | `X_umap_3d` | `(n_cells, 3)` | `points_3d.bin(.gz)` |
-| `X_umap_4d` | `(n_cells, 4)` | **Not supported** (raises `NotImplementedError`) |
 
 All embeddings you provide must:
 - be 2D arrays (`ndim == 2`),
@@ -84,29 +79,11 @@ In the web app, users can switch between available dimensions.
 Related UI docs:
 - Dimension switching: {doc}`../../web_app/c_core_interactions/05_dimension_switching_1d_2d_3d`
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: embeddings-dimension-switch-badge
-Where it appears: User Guide → Python Package → Data Preparation API → Embeddings and coordinates
-Capture:
-  - Load an exported dataset that has both 2D and 3D points
-  - Show the dimension badge/control (e.g., “2D/3D”) in the viewer UI
-  - Capture a before/after pair if possible (2D view and 3D view)
-Crop:
-  - Include: the dimension badge + enough of the plot to show the change
-Redact:
-  - Remove: sensitive dataset names/IDs if needed
-Annotations:
-  - Callouts: (1) the dimension badge, (2) what changed (camera/plot appearance)
-Alt text:
-  - Viewer UI showing the dimension switch control for 2D and 3D embeddings.
-Caption:
-  - If you export multiple embedding dimensionalities, users can switch between them in the viewer.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the dimension switch control.
+```{figure} ../../../_static/screenshots/web_app/dimension-navigation-controls-2d.png
+:alt: Cellucid Compare Views controls showing 2D dimension and Planar navigation selected.
 :width: 100%
 
-If you export multiple embedding dimensionalities, users can switch between them in the viewer.
+For a 2D embedding, Cellucid selects 2D with Planar navigation; both settings remain explicit if the user chooses another valid configuration.
 ```
 
 ### “UMAP” naming vs what you can actually use
@@ -160,7 +137,6 @@ If you recompute UMAP (stochastic), you will get a different export even if ever
 - **Wrong shape**: `(n_cells,)` is not accepted; use `(n_cells, 1)`.
 - **Mismatched rows**: embeddings computed on a subset but `obs`/`X` not subset identically.
 - **Collapsed embedding**: all points identical → viewer shows a single point; export is “valid” but useless.
-- **4D temptation**: `X_umap_4d` exists for future work, but is explicitly not supported today.
 
 ---
 

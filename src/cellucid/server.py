@@ -22,37 +22,473 @@ The server provides:
 
 For serving AnnData directly (without pre-export), use:
     from cellucid import serve_anndata
-    serve_anndata("/path/to/data.h5ad")
+    serve_anndata(
+        "/path/to/data.h5ad",
+        dataset_name="Example",
+        dataset_id="example",
+    )
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
+import re
+import stat
 import threading
 import webbrowser
+from dataclasses import dataclass
 from functools import partial
+from http import HTTPStatus
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
+
+from ._server_base import (
+    CELLUCID_WEB_URL,
+    DEFAULT_HOST,
+    DEFAULT_PORT,
+    WEB_ASSET_INVENTORY_FILENAME,
+    CORSMixin,
+    _web_cache_dir,
+    print_detail,
+    print_server_banner,
+    print_step,
+    print_success,
+    require_server_port,
+)
+from .prepare_data import (
+    _require_nonempty_string,
+    _require_portable_filename_component,
+)
 
 logger = logging.getLogger("cellucid.server")
 
-# Import shared configuration from _server_base to avoid duplication
-from ._server_base import (
-    CORSMixin,
-    DEFAULT_PORT,
-    DEFAULT_HOST,
-    ensure_port_available,
-    print_step,
-    print_detail,
-    print_success,
-    print_server_banner,
-)
+
+def _read_exported_dataset_entry(
+    dataset_dir: Path,
+    *,
+    public_path: str,
+) -> dict[str, str]:
+    """Validate one complete prepared-dataset root and return its catalog entry."""
+    required_files = (
+        dataset_dir / "dataset_identity.json",
+        dataset_dir / "obs_manifest.json",
+    )
+    point_files: list[Path] = []
+    for dimension in (1, 2, 3):
+        candidates = [
+            dataset_dir / f"points_{dimension}d.bin",
+            dataset_dir / f"points_{dimension}d.bin.gz",
+        ]
+        existing = [candidate for candidate in candidates if candidate.exists()]
+        if len(existing) > 1:
+            raise ValueError(
+                f"{dataset_dir.name!r} is not a complete exported dataset: "
+                f"both compressed and uncompressed {dimension}D points exist."
+            )
+        point_files.extend(existing)
+
+    if (
+        not dataset_dir.is_dir()
+        or any(not path.is_file() for path in required_files)
+        or not point_files
+        or any(path.stat().st_size == 0 for path in point_files)
+    ):
+        raise ValueError(
+            f"{dataset_dir.name!r} is not a complete exported dataset."
+        )
+
+    try:
+        identity = json.loads(required_files[0].read_text(encoding="utf-8"))
+        obs_manifest = json.loads(required_files[1].read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError(
+            f"{dataset_dir.name!r} is not a complete exported dataset with "
+            "readable UTF-8 JSON metadata."
+        ) from error
+    if not isinstance(identity, dict):
+        raise TypeError("dataset_identity.json must contain a JSON object.")
+    if not isinstance(obs_manifest, dict):
+        raise TypeError("obs_manifest.json must contain a JSON object.")
+    if type(identity.get("version")) is not int or identity["version"] != 2:
+        raise ValueError("dataset_identity.json version must be exactly 2.")
+
+    dataset_id = _require_nonempty_string(
+        identity.get("id"),
+        label="dataset_id",
+    )
+    dataset_name = _require_nonempty_string(
+        identity.get("name"),
+        label="dataset_name",
+    )
+    for label, value in (("dataset_id", dataset_id), ("dataset_name", dataset_name)):
+        if value != value.strip() or any(ord(character) < 32 or ord(character) == 127 for character in value):
+            raise ValueError(
+                f"{label} must be exact text without surrounding whitespace "
+                "or control characters."
+            )
+
+    return {
+        "id": dataset_id,
+        "path": public_path,
+        "name": dataset_name,
+    }
+
+
+def _list_exported_datasets(data_dir: Path) -> list[dict[str, str]]:
+    """Classify one exact prepared dataset or a root containing only datasets."""
+    data_dir = Path(data_dir)
+    if not data_dir.is_dir():
+        raise NotADirectoryError(f"Prepared-data path must be a directory: {data_dir}")
+
+    direct_markers = (
+        data_dir / "dataset_identity.json",
+        data_dir / "obs_manifest.json",
+        *data_dir.glob("points_*d.bin"),
+        *data_dir.glob("points_*d.bin.gz"),
+    )
+    if any(path.exists() for path in direct_markers):
+        return [_read_exported_dataset_entry(data_dir, public_path="/")]
+
+    subdirectories = sorted(path for path in data_dir.iterdir() if path.is_dir())
+    if not subdirectories:
+        return []
+
+    candidate_flags = [
+        any(
+            marker.exists()
+            for marker in (
+                subdir / "dataset_identity.json",
+                subdir / "obs_manifest.json",
+                *subdir.glob("points_*d.bin"),
+                *subdir.glob("points_*d.bin.gz"),
+            )
+        )
+        for subdir in subdirectories
+    ]
+    if not any(candidate_flags):
+        return []
+
+    entries: list[dict[str, str]] = []
+    seen_ids: set[str] = set()
+    for subdir in subdirectories:
+        _require_portable_filename_component(
+            subdir.name,
+            label="Dataset directory",
+        )
+        entry = _read_exported_dataset_entry(
+            subdir,
+            public_path=f"/{subdir.name}/",
+        )
+        if entry["id"] in seen_ids:
+            raise ValueError(f"duplicate dataset id {entry['id']!r}.")
+        seen_ids.add(entry["id"])
+        entries.append(entry)
+    return entries
+
+
+@dataclass(frozen=True)
+class _PreparedArtifact:
+    path: Path
+    size: int
+    mtime_ns: int
+    device: int
+    inode: int
+    content_type: str
+
+
+def _require_artifact_path(value: object, *, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise TypeError(f"{label} must be a non-empty string.")
+    if value != value.strip() or value.startswith("/") or "\\" in value:
+        raise ValueError(f"{label} must be one exact relative POSIX path.")
+    parts = value.split("/")
+    if any(
+        part in {"", ".", ".."}
+        or any(ord(character) < 32 or ord(character) == 127 for character in part)
+        for part in parts
+    ):
+        raise ValueError(f"{label} must be one exact relative POSIX path.")
+    return value
+
+
+def _read_json_object(path: Path, *, label: str) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"{label} must contain readable UTF-8 JSON.") from error
+    if not isinstance(value, dict):
+        raise TypeError(f"{label} must contain a JSON object.")
+    return value
+
+
+def _expand_artifact_pattern(
+    pattern: object,
+    *,
+    key: str,
+    label: str,
+    extension: str | None = None,
+) -> str:
+    pattern_value = _require_artifact_path(pattern, label=label)
+    value = pattern_value.replace("{key}", key)
+    if extension is not None:
+        value = value.replace("{ext}", extension)
+    if "{" in value or "}" in value:
+        raise ValueError(f"{label} contains an unsupported placeholder.")
+    return _require_artifact_path(value, label=label)
+
+
+def _declared_dataset_artifacts(dataset_dir: Path) -> set[str]:
+    """Return every artifact declared by one current prepared generation."""
+    identity_path = dataset_dir / "dataset_identity.json"
+    obs_manifest_path = dataset_dir / "obs_manifest.json"
+    identity = _read_json_object(identity_path, label="dataset_identity.json")
+    obs_manifest = _read_json_object(obs_manifest_path, label="obs_manifest.json")
+    paths = {"dataset_identity.json", "obs_manifest.json"}
+
+    embeddings = identity.get("embeddings")
+    if not isinstance(embeddings, dict) or not isinstance(embeddings.get("files"), dict):
+        raise ValueError("dataset_identity.json embeddings.files must be a JSON object.")
+    for dimension, artifact_path in embeddings["files"].items():
+        paths.add(
+            _require_artifact_path(
+                artifact_path,
+                label=f"dataset_identity.json embeddings.files.{dimension}",
+            )
+        )
+
+    schemas = obs_manifest.get("_obsSchemas")
+    continuous_fields = obs_manifest.get("_continuousFields")
+    categorical_fields = obs_manifest.get("_categoricalFields")
+    if (
+        not isinstance(schemas, dict)
+        or not isinstance(continuous_fields, list)
+        or not isinstance(categorical_fields, list)
+    ):
+        raise ValueError("obs_manifest.json must declare exact compact field schemas.")
+
+    continuous_schema = schemas.get("continuous")
+    if continuous_fields and not isinstance(continuous_schema, dict):
+        raise ValueError("Continuous observation fields require their exact schema.")
+    if not continuous_fields and continuous_schema is not None:
+        raise ValueError("Continuous observation schema exists without any fields.")
+    continuous_schema_values = (
+        continuous_schema if isinstance(continuous_schema, dict) else {}
+    )
+    for index, field in enumerate(continuous_fields):
+        if not isinstance(field, list) or not field:
+            raise ValueError(f"obs_manifest.json continuous field {index} is invalid.")
+        key = _require_portable_filename_component(
+            field[0],
+            label=f"Observation field {index}",
+        )
+        paths.add(
+            _expand_artifact_pattern(
+                continuous_schema_values.get("pathPattern"),
+                key=key,
+                label="obs continuous pathPattern",
+            )
+        )
+
+    categorical_schema = schemas.get("categorical")
+    if categorical_fields and not isinstance(categorical_schema, dict):
+        raise ValueError("Categorical observation fields require their exact schema.")
+    if not categorical_fields and categorical_schema is not None:
+        raise ValueError("Categorical observation schema exists without any fields.")
+    categorical_schema_values = (
+        categorical_schema if isinstance(categorical_schema, dict) else {}
+    )
+    dtype_extensions = {"uint8": "u8", "uint16": "u16"}
+    for index, field in enumerate(categorical_fields):
+        if not isinstance(field, list) or len(field) < 3:
+            raise ValueError(f"obs_manifest.json categorical field {index} is invalid.")
+        key = _require_portable_filename_component(
+            field[0],
+            label=f"Observation field {index}",
+        )
+        dtype = field[2]
+        if dtype not in dtype_extensions:
+            raise ValueError(
+                f"obs_manifest.json categorical field {index} has an invalid dtype."
+            )
+        paths.add(
+            _expand_artifact_pattern(
+                categorical_schema_values.get("codesPathPattern"),
+                key=key,
+                extension=dtype_extensions[dtype],
+                label="obs categorical codesPathPattern",
+            )
+        )
+        outlier_pattern = categorical_schema_values.get("outlierPathPattern")
+        if outlier_pattern is not None:
+            paths.add(
+                _expand_artifact_pattern(
+                    outlier_pattern,
+                    key=key,
+                    label="obs categorical outlierPathPattern",
+                )
+            )
+
+    stats = identity.get("stats")
+    if not isinstance(stats, dict):
+        raise ValueError("dataset_identity.json stats must be a JSON object.")
+    n_genes = stats.get("n_genes")
+    if type(n_genes) is not int or n_genes < 0:
+        raise ValueError("dataset_identity.json stats.n_genes must be non-negative.")
+    var_manifest_path = dataset_dir / "var_manifest.json"
+    if n_genes > 0:
+        paths.add("var_manifest.json")
+        var_manifest = _read_json_object(var_manifest_path, label="var_manifest.json")
+        var_schema = var_manifest.get("_varSchema")
+        fields = var_manifest.get("fields")
+        if not isinstance(var_schema, dict) or not isinstance(fields, list):
+            raise ValueError("var_manifest.json must declare one exact field schema.")
+        for index, field in enumerate(fields):
+            if not isinstance(field, list) or not field:
+                raise ValueError(f"var_manifest.json field {index} is invalid.")
+            key = _require_portable_filename_component(
+                field[0],
+                label=f"Gene field {index}",
+            )
+            paths.add(
+                _expand_artifact_pattern(
+                    var_schema.get("pathPattern"),
+                    key=key,
+                    label="var pathPattern",
+                )
+            )
+        if len(fields) != n_genes:
+            raise ValueError(
+                "var_manifest.json field count must match identity stats.n_genes."
+            )
+    elif var_manifest_path.exists():
+        raise ValueError(
+            "var_manifest.json is present while identity stats.n_genes is zero."
+        )
+
+    has_connectivity = stats.get("has_connectivity")
+    if type(has_connectivity) is not bool:
+        raise ValueError(
+            "dataset_identity.json stats.has_connectivity must be a boolean."
+        )
+    connectivity_manifest_path = dataset_dir / "connectivity_manifest.json"
+    if has_connectivity:
+        paths.add("connectivity_manifest.json")
+        connectivity = _read_json_object(
+            connectivity_manifest_path,
+            label="connectivity_manifest.json",
+        )
+        for key in ("sourcesPath", "destinationsPath", "weightsPath"):
+            paths.add(
+                _require_artifact_path(
+                    connectivity.get(key),
+                    label=f"connectivity_manifest.json {key}",
+                )
+            )
+    elif connectivity_manifest_path.exists():
+        raise ValueError(
+            "connectivity_manifest.json is present while connectivity is disabled."
+        )
+
+    vector_fields = identity.get("vector_fields")
+    if vector_fields is not None:
+        if not isinstance(vector_fields, dict) or not isinstance(
+            vector_fields.get("fields"),
+            dict,
+        ):
+            raise ValueError("dataset_identity.json vector_fields.fields must be an object.")
+        for field_id, field in vector_fields["fields"].items():
+            if not isinstance(field, dict) or not isinstance(field.get("files"), dict):
+                raise ValueError(
+                    f"dataset_identity.json vector field {field_id!r} is invalid."
+                )
+            for dimension, artifact_path in field["files"].items():
+                paths.add(
+                    _require_artifact_path(
+                        artifact_path,
+                        label=f"vector field {field_id!r} file {dimension}",
+                    )
+                )
+    return paths
+
+
+def _build_prepared_artifact_inventory(
+    data_dir: Path,
+    datasets: list[dict[str, str]],
+) -> dict[str, _PreparedArtifact]:
+    root = data_dir.resolve(strict=True)
+    inventory: dict[str, _PreparedArtifact] = {}
+    for dataset in datasets:
+        public_path = dataset["path"]
+        prefix = "" if public_path == "/" else public_path.strip("/")
+        dataset_dir = root if not prefix else root / prefix
+        for relative_path in sorted(_declared_dataset_artifacts(dataset_dir)):
+            request_path = relative_path if not prefix else f"{prefix}/{relative_path}"
+            candidate = dataset_dir / relative_path
+            current = dataset_dir
+            for part in Path(relative_path).parts:
+                current = current / part
+                if current.is_symlink():
+                    raise ValueError(
+                        f"Declared artifact must not traverse a symbolic link: "
+                        f"{request_path}"
+                    )
+            try:
+                resolved = candidate.resolve(strict=True)
+                resolved.relative_to(root)
+            except (FileNotFoundError, ValueError) as error:
+                raise ValueError(
+                    f"Declared artifact is missing or outside the export root: "
+                    f"{request_path}"
+                ) from error
+            metadata = resolved.stat()
+            if not stat.S_ISREG(metadata.st_mode):
+                raise ValueError(
+                    f"Declared artifact must be a regular file: {request_path}"
+                )
+            if request_path in inventory:
+                raise ValueError(f"Prepared artifact path is duplicated: {request_path}")
+            inventory[request_path] = _PreparedArtifact(
+                path=resolved,
+                size=metadata.st_size,
+                mtime_ns=metadata.st_mtime_ns,
+                device=metadata.st_dev,
+                inode=metadata.st_ino,
+                content_type=(
+                    "application/json"
+                    if relative_path.endswith(".json")
+                    else "application/octet-stream"
+                ),
+            )
+    return inventory
+
+
+def _parse_byte_range(value: str | None, size: int) -> tuple[int, int] | None:
+    if value is None:
+        return None
+    if type(size) is not int or size < 0:
+        raise ValueError("Artifact size must be a non-negative integer.")
+    match = re.fullmatch(r"bytes=(\d{0,20})-(\d{0,20})", value)
+    if match is None or (not match.group(1) and not match.group(2)):
+        raise ValueError("Range must contain one exact byte interval.")
+    if size == 0:
+        raise ValueError("An empty artifact has no satisfiable byte range.")
+    if match.group(1):
+        start = int(match.group(1))
+        end = int(match.group(2)) if match.group(2) else size - 1
+        if start >= size or end < start:
+            raise ValueError("Range is outside the artifact.")
+        return start, min(end, size - 1)
+    suffix_length = int(match.group(2))
+    if suffix_length <= 0:
+        raise ValueError("Range suffix length must be positive.")
+    return max(0, size - suffix_length), size - 1
 
 
 class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
-    """HTTP handler with CORS support for serving dataset files."""
+    """Serve only endpoints and immutable prepared artifacts in the active contract."""
 
     allow_caching = True  # Static files can be cached
 
@@ -61,12 +497,18 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         *args,
         data_dir: Path,
         server_info: dict,
-        web_proxy: bool = False,
+        datasets: list[dict[str, str]],
+        artifact_inventory: dict[str, _PreparedArtifact],
+        serve_web_ui: bool,
+        web_cache_dir: Path,
         **kwargs,
     ):
         self.data_dir = data_dir
         self.server_info = server_info
-        self.web_proxy = bool(web_proxy)
+        self.datasets = datasets
+        self.artifact_inventory = artifact_inventory
+        self.serve_web_ui = serve_web_ui
+        self.web_cache_dir = web_cache_dir
         # Must call super().__init__ last because it calls do_GET immediately
         super().__init__(*args, directory=str(data_dir), **kwargs)
 
@@ -85,100 +527,214 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         self.send_error_response(404, f"POST not supported for path: {self.path}")
 
     def do_GET(self):
-        """Handle GET requests with special endpoints."""
-        parsed = urlparse(self.path)
-        path = unquote(parsed.path)
+        """Serve one exact GET endpoint or prepared artifact."""
+        self._handle_read_request(head_only=False)
 
-        # Proxy the hosted viewer UI assets so the viewer runs on the same
-        # origin as the dataset server (avoids mixed-content).
-        if self.web_proxy and self.handle_web_proxy_get(path):
+    def do_HEAD(self):
+        """Serve GET metadata without a response body."""
+        self._handle_read_request(head_only=True)
+
+    def _handle_read_request(self, *, head_only: bool) -> None:
+        path = self._canonical_request_path()
+        if path is None:
+            self.send_error_response(404, "Request path is not in the active contract")
             return
 
-        # Root path - redirect to viewer
-        if path == "/" or path == "/index.html":
-            # Always serve the viewer UI from this server via the hosted-asset proxy.
-            if self.handle_web_proxy_get("/index.html"):
-                return
+        if path == "/_cellucid/health":
+            self.send_json(
+                {
+                    "status": "ok",
+                    "type": "exported",
+                    "version": self.server_info["version"],
+                },
+                head_only=head_only,
+            )
+            return
+
+        if path == "/_cellucid/info":
+            self.send_json(self.server_info, head_only=head_only)
+            return
+
+        if path == "/_cellucid/datasets":
+            self.send_json({"datasets": self.datasets}, head_only=head_only)
+            return
+
+        if self.serve_web_ui and self.handle_web_asset_get(path, head_only=head_only):
+            return
+        if self.serve_web_ui and (
+            path == f"/{WEB_ASSET_INVENTORY_FILENAME}"
+            or path == "/assets"
+            or path.startswith("/assets/")
+        ):
+            self.send_error_response(404, "Web asset is not declared by the active build")
+            return
+
+        if path in {"/", "/index.html"}:
             self.send_error_response(503, "Cellucid viewer UI unavailable")
             return
 
-        # Health check endpoint
-        if path == "/_cellucid/health":
-            self.send_json({
-                "status": "ok",
-                "type": "exported",
-                "version": self.server_info.get("version", "unknown"),
-            })
+        self._serve_prepared_artifact(path[1:], head_only=head_only)
+
+    def _canonical_request_path(self) -> str | None:
+        """Return one exact ASCII origin-form path without decoding aliases."""
+        parsed = urlparse(self.path)
+        exact_target = parsed.path
+        if parsed.query:
+            exact_target += f"?{parsed.query}"
+        if (
+            parsed.scheme
+            or parsed.netloc
+            or parsed.params
+            or parsed.fragment
+            or exact_target != self.path
+            or (parsed.query and parsed.path != "/")
+            or not parsed.path.startswith("/")
+            or "\\" in parsed.path
+            or "%" in parsed.path
+        ):
+            return None
+        try:
+            parsed.path.encode("ascii")
+        except UnicodeEncodeError:
+            return None
+        if any(
+            ord(character) < 33 or ord(character) == 127
+            for character in parsed.path
+            if character != "/"
+        ):
+            return None
+        if parsed.path != "/":
+            parts = parsed.path[1:].split("/")
+            if any(part in {"", ".", ".."} for part in parts):
+                return None
+        return parsed.path
+
+    @staticmethod
+    def _artifact_metadata_matches(
+        metadata: os.stat_result,
+        artifact: _PreparedArtifact,
+    ) -> bool:
+        return (
+            stat.S_ISREG(metadata.st_mode)
+            and metadata.st_size == artifact.size
+            and metadata.st_mtime_ns == artifact.mtime_ns
+            and metadata.st_dev == artifact.device
+            and metadata.st_ino == artifact.inode
+        )
+
+    def _open_prepared_artifact(self, artifact: _PreparedArtifact) -> int:
+        """Open one unchanged regular artifact without following its final symlink."""
+        try:
+            if artifact.path.is_symlink() or artifact.path.resolve(strict=True) != artifact.path:
+                raise OSError("Prepared artifact path changed.")
+            before = artifact.path.stat()
+            if not self._artifact_metadata_matches(before, artifact):
+                raise OSError("Prepared artifact metadata changed.")
+
+            flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
+            nofollow = getattr(os, "O_NOFOLLOW", 0)
+            if nofollow:
+                flags |= nofollow
+            descriptor = os.open(artifact.path, flags)
+        except (OSError, RuntimeError):
+            raise
+
+        try:
+            opened = os.fstat(descriptor)
+            after = artifact.path.stat()
+            if (
+                not self._artifact_metadata_matches(opened, artifact)
+                or not self._artifact_metadata_matches(after, artifact)
+            ):
+                raise OSError("Prepared artifact changed while it was opened.")
+        except BaseException:
+            os.close(descriptor)
+            raise
+        return descriptor
+
+    def _serve_prepared_artifact(self, request_path: str, *, head_only: bool) -> None:
+        artifact = self.artifact_inventory.get(request_path)
+        if artifact is None:
+            self.send_error_response(404, "Prepared artifact is not declared")
             return
 
-        # Server info endpoint
-        if path == "/_cellucid/info":
-            self.send_json(self.server_info)
+        range_values = self._request_headers().get_all("Range", [])
+        if len(range_values) > 1:
+            self._send_range_error(artifact.size)
+            return
+        try:
+            interval = _parse_byte_range(
+                range_values[0] if range_values else None,
+                artifact.size,
+            )
+        except ValueError:
+            self._send_range_error(artifact.size)
             return
 
-        # Datasets list endpoint
-        if path == "/_cellucid/datasets":
-            datasets = self._list_datasets()
-            self.send_json({"datasets": datasets})
+        try:
+            descriptor = self._open_prepared_artifact(artifact)
+        except OSError:
+            self.send_error_response(
+                HTTPStatus.CONFLICT,
+                "Prepared artifact changed after server validation",
+            )
             return
 
-        # Regular file serving
-        super().do_GET()
+        start, end = interval if interval is not None else (0, artifact.size - 1)
+        content_length = 0 if artifact.size == 0 else end - start + 1
+        self.send_response(
+            HTTPStatus.PARTIAL_CONTENT if interval is not None else HTTPStatus.OK
+        )
+        self.send_header("Content-Type", artifact.content_type)
+        self.send_header("Content-Length", str(content_length))
+        self.send_header("Accept-Ranges", "bytes")
+        if interval is not None:
+            self.send_header(
+                "Content-Range",
+                f"bytes {start}-{end}/{artifact.size}",
+            )
+        self.end_headers()
+
+        try:
+            if not head_only and content_length:
+                os.lseek(descriptor, start, os.SEEK_SET)
+                remaining = content_length
+                while remaining:
+                    chunk = os.read(descriptor, min(1024 * 1024, remaining))
+                    if not chunk:
+                        raise OSError("Prepared artifact ended during response.")
+                    self._response_writer().write(chunk)
+                    remaining -= len(chunk)
+        finally:
+            os.close(descriptor)
+
+    def _send_range_error(self, artifact_size: int) -> None:
+        body = b"Requested byte range is not satisfiable"
+        self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Range", f"bytes */{artifact_size}")
+        self.send_header("Accept-Ranges", "bytes")
+        self.end_headers()
+        if self.command != "HEAD":
+            self._response_writer().write(body)
 
     def _list_datasets(self) -> list[dict]:
-        """List available datasets in the data directory."""
-        datasets = []
-
-        # Check if data_dir itself is a dataset
-        if self._is_dataset_dir(self.data_dir):
-            ds_id, ds_name = self._get_dataset_identity_fields(self.data_dir)
-            datasets.append({
-                "id": ds_id,
-                "path": "/",
-                "name": ds_name,
-            })
-        else:
-            # Look for subdirectories that are datasets
-            for subdir in self.data_dir.iterdir():
-                if subdir.is_dir() and self._is_dataset_dir(subdir):
-                    ds_id, ds_name = self._get_dataset_identity_fields(subdir)
-                    datasets.append({
-                        "id": ds_id,
-                        "path": f"/{subdir.name}/",
-                        "name": ds_name,
-                    })
-
-        return datasets
+        """Validate and return the prepared datasets under ``data_dir``."""
+        return _list_exported_datasets(self.data_dir)
 
     def _is_dataset_dir(self, path: Path) -> bool:
         """Check if a directory is a valid cellucid dataset."""
-        # Dev-phase strictness: dataset_identity.json is required by the frontend.
-        if not (path / "dataset_identity.json").exists():
+        try:
+            _read_exported_dataset_entry(path, public_path="/")
+        except (OSError, TypeError, ValueError):
             return False
-        # Must have obs_manifest.json
-        if not (path / "obs_manifest.json").exists():
-            return False
-        # Must have at least one points file
-        for dim in ["1d", "2d", "3d", "4d"]:
-            if (path / f"points_{dim}.bin").exists():
-                return True
-            if (path / f"points_{dim}.bin.gz").exists():
-                return True
-        return False
+        return True
 
     def _get_dataset_identity_fields(self, path: Path) -> tuple[str, str]:
         """Return (dataset_id, dataset_name) for a dataset directory."""
-        identity_file = path / "dataset_identity.json"
-        if identity_file.exists():
-            try:
-                with open(identity_file) as f:
-                    identity = json.load(f)
-                    dataset_id = identity.get("id", path.name)
-                    dataset_name = identity.get("name", path.name)
-                    return str(dataset_id or path.name), str(dataset_name or path.name)
-            except Exception:
-                pass
-        return path.name, path.name
+        entry = _read_exported_dataset_entry(path, public_path="/")
+        return entry["id"], entry["name"]
 
     def log_message(self, format: str, *args):
         """Override to use Python logging instead of stderr."""
@@ -211,6 +767,10 @@ class CellucidServer:
         host: str = DEFAULT_HOST,
         open_browser: bool = False,
         quiet: bool = False,
+        *,
+        serve_web_ui: bool = True,
+        web_source_url: str = CELLUCID_WEB_URL,
+        web_cache_dir: str | Path | None = None,
     ):
         """
         Initialize the server.
@@ -221,15 +781,28 @@ class CellucidServer:
             host: Host to bind to (default: 127.0.0.1 for localhost only)
             open_browser: Whether to open the browser on start
             quiet: Suppress info messages
+            serve_web_ui: Establish and serve the exact current web build.
+            web_source_url: Origin publishing the web asset inventory.
+            web_cache_dir: Directory holding the active verified web build.
         """
         self.data_dir = Path(data_dir).resolve()
-        self.port = port
+        self.port = require_server_port(port)
         self.host = host
+        if type(open_browser) is not bool:
+            raise TypeError("open_browser must be a boolean")
+        if type(quiet) is not bool:
+            raise TypeError("quiet must be a boolean")
         self.open_browser = open_browser
         self.quiet = quiet
-        # Local web assets and the legacy hosted-viewer mode are intentionally disabled in dev.
-        # We always serve the UI from this server via the hosted-asset proxy to avoid mixed-content.
-        self.web_proxy = True
+        if type(serve_web_ui) is not bool:
+            raise TypeError("serve_web_ui must be a boolean")
+        self.serve_web_ui = serve_web_ui
+        self.web_source_url = web_source_url
+        self.web_cache_dir = (
+            Path(web_cache_dir).expanduser().resolve()
+            if web_cache_dir is not None
+            else _web_cache_dir()
+        )
 
         # Step 1: Validate dataset
         if not quiet:
@@ -238,6 +811,18 @@ class CellucidServer:
 
         if not self.data_dir.exists():
             raise FileNotFoundError(f"Data directory not found: {self.data_dir}")
+        if not self.data_dir.is_dir():
+            raise NotADirectoryError(f"Prepared-data path must be a directory: {self.data_dir}")
+
+        self._datasets = _list_exported_datasets(self.data_dir)
+        if not self._datasets:
+            raise ValueError(
+                "Prepared-data path does not contain one complete current dataset."
+            )
+        self._artifact_inventory = _build_prepared_artifact_inventory(
+            self.data_dir,
+            self._datasets,
+        )
 
         if not quiet:
             print_success("Dataset valid")
@@ -251,12 +836,12 @@ class CellucidServer:
         self._server: HTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._running = False
+        self._started = False
+        self._closed = False
+        self._serving = False
+        self._background_error: BaseException | None = None
 
-        # Version from package
-        try:
-            from . import __version__
-        except ImportError:
-            __version__ = "0.0.0"
+        from . import __version__
 
         self.server_info = {
             "version": __version__,
@@ -267,25 +852,38 @@ class CellucidServer:
 
     def _print_dataset_info(self):
         """Print information about the dataset."""
-        # Try to load dataset identity for more info
-        identity_file = self.data_dir / "dataset_identity.json"
-        if identity_file.exists():
-            try:
-                with open(identity_file) as f:
-                    identity = json.load(f)
-                stats = identity.get("stats", {})
-                if "n_cells" in stats:
-                    print_detail("Cells", f"{stats['n_cells']:,}")
-                if "n_genes" in stats:
-                    print_detail("Genes", f"{stats['n_genes']:,}")
-                if "has_connectivity" in stats:
-                    print_detail("Connectivity", "yes" if stats["has_connectivity"] else "no")
-            except Exception:
-                pass
+        if len(self._datasets) != 1 or self._datasets[0]["path"] != "/":
+            print_detail("Datasets", str(len(self._datasets)))
+            return
+        identity = _read_json_object(
+            self.data_dir / "dataset_identity.json",
+            label="dataset_identity.json",
+        )
+        stats = identity.get("stats")
+        if not isinstance(stats, dict):
+            raise TypeError("dataset_identity.json stats must be a JSON object.")
+        n_cells = stats.get("n_cells")
+        n_genes = stats.get("n_genes")
+        has_connectivity = stats.get("has_connectivity")
+        if type(n_cells) is not int or n_cells < 0:
+            raise ValueError("dataset_identity.json stats.n_cells must be non-negative.")
+        if type(n_genes) is not int or n_genes < 0:
+            raise ValueError("dataset_identity.json stats.n_genes must be non-negative.")
+        if type(has_connectivity) is not bool:
+            raise ValueError(
+                "dataset_identity.json stats.has_connectivity must be a boolean."
+            )
+        print_detail("Cells", f"{n_cells:,}")
+        print_detail("Genes", f"{n_genes:,}")
+        print_detail("Connectivity", "yes" if has_connectivity else "no")
 
     @property
     def url(self) -> str:
-        """Get the server URL."""
+        """Get the URL of the currently running server."""
+        if not self._running or self._server is None:
+            raise RuntimeError(
+                "CellucidServer URL is unavailable because the server is not running"
+            )
         return f"http://{self.host}:{self.port}"
 
     @property
@@ -294,103 +892,227 @@ class CellucidServer:
         return f"{self.url}/"
 
     def start(self, blocking: bool = True):
-        """
-        Start the server.
-
-        Args:
-            blocking: If True, block until interrupted. If False, start in background.
-        """
+        """Start this single-use server."""
+        if type(blocking) is not bool:
+            raise TypeError("blocking must be a boolean")
         if self._running:
-            logger.warning("Server is already running")
-            return
+            raise RuntimeError("Server is already running.")
+        if self._started or self._closed:
+            raise RuntimeError(
+                "CellucidServer is single-use and has been closed. "
+                "Create a new server instance."
+            )
+        self._started = True
 
-        # Step 3: Start server
-        if not self.quiet:
-            print_step(3, 3, "Starting server")
+        try:
+            # Step 3: Start server
+            if not self.quiet:
+                print_step(3, 3, "Starting server")
 
-        # Pre-warm the hosted-asset proxy cache so first browser load has a
-        # visible progress indicator and doesn't surprise users later with
-        # missing lazily-loaded assets.
-        if self.web_proxy and not self.quiet:
-            try:
+            if self.serve_web_ui:
                 from .web_cache import ensure_web_ui_cached
 
-                print_detail("Viewer UI cache", "prefetching (one-time per web build)")
-                ensure_web_ui_cached(force=False, show_progress=True)
-                print_success("Viewer UI cached")
-            except Exception as e:
-                print_detail("Viewer UI cache", f"prefetch failed: {e}")
+                if not self.quiet:
+                    print_detail(
+                        "Viewer UI generation",
+                        "establishing exact configured source",
+                    )
+                ensure_web_ui_cached(
+                    cache_dir=self.web_cache_dir,
+                    source_url=self.web_source_url,
+                    force=True,
+                    show_progress=not self.quiet,
+                )
+                if not self.quiet:
+                    print_success("Viewer UI generation established")
 
-        # Ensure port is available (finds new one if needed)
-        self.port = ensure_port_available(self.host, self.port, self.quiet)
-        self.server_info["port"] = self.port
+            handler = partial(
+                CORSRequestHandler,
+                data_dir=self.data_dir,
+                server_info=self.server_info,
+                datasets=self._datasets,
+                artifact_inventory=self._artifact_inventory,
+                serve_web_ui=self.serve_web_ui,
+                web_cache_dir=self.web_cache_dir,
+            )
 
-        # Create handler with data directory
-        handler = partial(
-            CORSRequestHandler,
-            data_dir=self.data_dir,
-            server_info=self.server_info,
-            web_proxy=self.web_proxy,
-        )
+            self._server = HTTPServer((self.host, self.port), handler)
+            self.port = require_server_port(self._server.server_address[1])
+            self.server_info["port"] = self.port
+            self._running = True
 
-        self._server = HTTPServer((self.host, self.port), handler)
-        self._running = True
+            if not self.quiet:
+                print_success("Server ready")
+                print_server_banner(self.url, self.viewer_url)
 
-        if not self.quiet:
-            print_success("Server ready")
-            print_server_banner(self.url, self.viewer_url)
+            if blocking:
+                if self.open_browser and webbrowser.open(self.viewer_url) is not True:
+                    raise RuntimeError(
+                        f"Could not open the browser for {self.viewer_url}"
+                    )
+                self._serving = True
+                try:
+                    self._server.serve_forever()
+                finally:
+                    self._serving = False
+                self._finish_serving()
+            else:
+                self._serve_entered = threading.Event()
+                self._thread = threading.Thread(
+                    target=self._serve_in_background,
+                    daemon=True,
+                )
+                self._thread.start()
+                self._serve_entered.wait()
+                if self.open_browser and webbrowser.open(self.viewer_url) is not True:
+                    raise RuntimeError(
+                        f"Could not open the browser for {self.viewer_url}"
+                    )
+        except BaseException:
+            self._rollback_failed_start(shutdown=self._thread is not None)
+            raise
 
-        if self.open_browser:
-            webbrowser.open(self.viewer_url)
-
-        if blocking:
+    def _serve_in_background(self) -> None:
+        """Run the bound server and retain an exact asynchronous failure."""
+        self._serving = True
+        self._serve_entered.set()
+        serving_error: BaseException | None = None
+        try:
+            server = self._server
+            if server is None:
+                raise RuntimeError(
+                    "CellucidServer lost its bound HTTP server before serving"
+                )
+            server.serve_forever()
+        except BaseException as error:
+            serving_error = error
+        finally:
+            self._serving = False
             try:
-                self._server.serve_forever()
-            except KeyboardInterrupt:
-                if not self.quiet:
-                    print("\nShutting down server...")
-                # Don't call shutdown() here - it would deadlock since we're in the same thread
-                # Just close the server directly
-                self._running = False
-                if self._server:
-                    self._server.server_close()
-                    self._server = None
-                if not self.quiet:
-                    print("Server stopped")
-        else:
-            self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
-            self._thread.start()
+                self._finish_serving()
+            except BaseException as cleanup_error:
+                if serving_error is None:
+                    serving_error = cleanup_error
+                else:
+                    logger.exception(
+                        "Prepared-data server cleanup also failed after its "
+                        "serving loop failed"
+                    )
+        self._background_error = serving_error
+        if serving_error is not None:
+            logger.error(
+                "Prepared-data background server failed",
+                exc_info=(
+                    type(serving_error),
+                    serving_error,
+                    serving_error.__traceback__,
+                ),
+            )
+
+    def _finish_serving(self) -> None:
+        """Close the socket after the serving loop has ended."""
+        self._running = False
+        server = self._server
+        self._server = None
+        self._closed = True
+        if server is not None:
+            try:
+                server.server_close()
+            except BaseException as error:
+                raise RuntimeError(
+                    f"Prepared-data server cleanup failed: "
+                    f"{type(error).__name__}: {error}"
+                ) from error
+
+    def _rollback_failed_start(self, *, shutdown: bool) -> None:
+        """Release acquired resources without replacing the startup exception."""
+        self._running = False
+        server = self._server
+        if server is not None and shutdown and self._serving:
+            try:
+                server.shutdown()
+            except BaseException:
+                logger.exception(
+                    "Failed to shut down the prepared-data server after "
+                    "startup failed"
+                )
+        if server is not None:
+            try:
+                server.server_close()
+            except BaseException:
+                logger.exception(
+                    "Failed to close the prepared-data socket after startup failed"
+                )
+        thread = self._thread
+        if (
+            thread is not None
+            and thread is not threading.current_thread()
+            and thread.is_alive()
+        ):
+            thread.join()
+        self._server = None
+        self._thread = None
+        self._serving = False
+        self._closed = True
 
     def start_background(self):
         """Start the server in a background thread."""
         self.start(blocking=False)
 
     def stop(self):
-        """Stop the server."""
+        """Stop this server and release its socket."""
         self._running = False
+        failures: list[BaseException] = []
+        server = self._server
+        thread = self._thread
 
-        if self._server:
-            # shutdown() tells serve_forever() to stop, but we also need
-            # server_close() to release the socket immediately
-            self._server.shutdown()
-            self._server.server_close()
-            self._server = None
+        if server is not None and self._serving:
+            try:
+                server.shutdown()
+            except BaseException as error:
+                failures.append(error)
+        if server is not None:
+            try:
+                server.server_close()
+            except BaseException as error:
+                failures.append(error)
+        self._server = None
+
+        if (
+            thread is not None
+            and thread is not threading.current_thread()
+            and thread.is_alive()
+        ):
+            thread.join()
+        self._thread = None
+        self._serving = False
+        self._closed = True
 
         if not self.quiet:
             print("Server stopped")
+        if failures:
+            details = "; ".join(
+                f"{type(error).__name__}: {error}" for error in failures
+            )
+            raise RuntimeError(
+                f"Prepared-data server shutdown failed: {details}"
+            ) from failures[0]
 
     def is_running(self) -> bool:
         """Check if the server is running."""
         return self._running
 
     def wait(self):
-        """Wait for the server to stop (blocks until Ctrl+C or stop())."""
-        if self._thread:
+        """Wait for the background server to stop."""
+        thread = self._thread
+        if thread is not None:
             try:
-                while self._running:
-                    self._thread.join(timeout=1)
-            except KeyboardInterrupt:
+                thread.join()
+            except BaseException:
                 self.stop()
+                raise
+        if self._background_error is not None:
+            raise self._background_error
 
 
 def serve(
@@ -399,6 +1121,10 @@ def serve(
     host: str = DEFAULT_HOST,
     open_browser: bool = True,
     quiet: bool = False,
+    *,
+    serve_web_ui: bool = True,
+    web_source_url: str = CELLUCID_WEB_URL,
+    web_cache_dir: str | Path | None = None,
 ):
     """
     Serve a cellucid dataset directory.
@@ -412,6 +1138,9 @@ def serve(
         host: Host to bind to (default: 127.0.0.1)
         open_browser: Whether to open the viewer in browser (default: True)
         quiet: Suppress info messages
+        serve_web_ui: Establish and serve the exact current web build.
+        web_source_url: Origin publishing the web asset inventory.
+        web_cache_dir: Directory holding the active verified web build.
 
     Example:
         >>> from cellucid import serve
@@ -427,5 +1156,8 @@ def serve(
         host=host,
         open_browser=open_browser,
         quiet=quiet,
+        serve_web_ui=serve_web_ui,
+        web_source_url=web_source_url,
+        web_cache_dir=web_cache_dir,
     )
     server.start()

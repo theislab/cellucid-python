@@ -93,6 +93,10 @@ if (isTRUE(ident$stats$has_connectivity)) {
   stopifnot(file.exists(file.path(out_dir, "connectivity_manifest.json")))
   stopifnot(file.exists(file.path(out_dir, "connectivity", "edges.src.bin")) ||
               file.exists(file.path(out_dir, "connectivity", "edges.src.bin.gz")))
+  stopifnot(file.exists(file.path(out_dir, "connectivity", "edges.dst.bin")) ||
+              file.exists(file.path(out_dir, "connectivity", "edges.dst.bin.gz")))
+  stopifnot(file.exists(file.path(out_dir, "connectivity", "edges.weights.f64.bin")) ||
+              file.exists(file.path(out_dir, "connectivity", "edges.weights.f64.bin.gz")))
 }
 ```
 

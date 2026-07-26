@@ -5,7 +5,6 @@
 **What you’ll learn:**
 - A symptom → diagnosis → fix map for session saving/restoring
 - How to distinguish “expected exclusions” from real restore failures
-- How to debug auto-restore (`state-snapshots.json`) problems using DevTools
 
 ---
 
@@ -16,7 +15,6 @@
 | “Load State did nothing” | dataset mismatch or no dataset loaded | load dataset first; watch for mismatch warning | {doc}`07_versioning_compatibility_and_dataset_identity` |
 | “File picker didn’t open” | browser/iframe restriction | try in a standalone tab; try another browser | “Load State button does nothing” below |
 | “Session loaded but looks different” | dataset changed, missing fields, or lazy restore not finished | wait for progress; check Active filters + active field | “Partial restore” below |
-| “Auto-restore didn’t happen” | missing/invalid `state-snapshots.json` | check Network for `state-snapshots.json` | {doc}`04_auto_restore_latest_from_dataset_exports` |
 | “Restore says dataset mismatch” | different dataset id or load method | load the exact dataset (same source type + id) | {doc}`07_versioning_compatibility_and_dataset_identity` |
 | “Save State is extremely slow / huge files” | huge highlights/caches | save milestone sessions; reduce groups/snapshots | {doc}`09_edge_cases` |
 
@@ -212,44 +210,6 @@ Related: {doc}`../f_highlighting_selection/index`, {doc}`../e_filtering/index`
 
 ---
 
-## Auto-restore problems (`state-snapshots.json`)
-
-### Symptom: “I opened the dataset but no session auto-loaded”
-
-**Likely causes (ordered)**
-- `state-snapshots.json` is missing.
-- `state-snapshots.json` exists but has no `.cellucid-session` entries.
-- `state-snapshots.json` is served as HTML (SPA fallback) and fails JSON parse.
-- The `.cellucid-session` file URL 404s or is blocked by CORS.
-
-**How to confirm**
-1) DevTools → Network:
-   - find `state-snapshots.json`
-   - confirm status `200` and JSON content
-2) DevTools → Console:
-   - look for “No session bundle auto-loaded…” or state-snapshots parse warnings
-
-**Fix**
-- Follow the debugging steps in {doc}`04_auto_restore_latest_from_dataset_exports`.
-
----
-
-### Symptom: “Auto-restore finds the manifest but session fetch fails”
-
-**Likely causes**
-- The session filename in `state-snapshots.json` is wrong.
-- The relative path resolves incorrectly.
-- Hosting requires auth (sessions must be accessible to the browser).
-
-**How to confirm**
-- In Network tab, click the `.cellucid-session` request and inspect the resolved URL.
-
-**Fix**
-1) Correct the entry in `state-snapshots.json`.
-2) Prefer relative paths that are correct relative to the manifest URL.
-
----
-
 ## Dataset mismatch warning problems
 
 ### Symptom: “Session dataset mismatch (…) Restoring only dataset-agnostic layout.”
@@ -286,4 +246,4 @@ If you think you found a session bug, collect these before reporting:
 ## Next steps
 
 - {doc}`09_edge_cases` (expected weirdness and how to avoid it)
-- {doc}`12_reference` (format notes and supported `state-snapshots.json` schemas)
+- {doc}`12_reference` (session bundle format and chunk inventory)

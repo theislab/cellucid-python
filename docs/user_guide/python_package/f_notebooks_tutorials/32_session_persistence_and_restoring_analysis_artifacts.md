@@ -40,7 +40,9 @@ In Python, it is represented by:
 - `cellucid.CellucidSessionBundle`
 
 ```{note}
-Session bundles are treated as **untrusted input** in Python: the reader and AnnData-applier do bounds checks and have dataset mismatch policies.
+Session bundles are treated as **untrusted input** in Python: the reader and
+AnnData applier validate bounds, shapes, and exact dataset identity before
+mutation.
 ```
 
 ---
@@ -67,7 +69,12 @@ Cellucid can request the session from the iframe and receive it back over HTTP.
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata(adata, height=650)
+viewer = show_anndata(
+    adata,
+    height=650,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 viewer
 ```
 
@@ -124,7 +131,7 @@ The current Python applier focuses on data that is meaningful in analysis contex
 
 - **Highlights** → new boolean `adata.obs` columns
   - one column per highlight group
-- **User-defined categorical fields** → new categorical columns in `adata.obs` and/or `adata.var`
+- **User-defined categorical and continuous fields** → new cell-aligned columns in `adata.obs`
 
 Other session state (camera position, UI layout, etc.) is not applied to AnnData (it’s UI state, not analysis state).
 
@@ -143,16 +150,14 @@ from cellucid import apply_cellucid_session_to_anndata
 adata2, summary = apply_cellucid_session_to_anndata(
     bundle,
     adata,
+    expected_dataset_id="my-study-v1",
     inplace=False,
-    dataset_mismatch="warn_skip",          # "error" | "warn_skip" | "skip"
-    expected_dataset_id=None,             # set if you want strict dataset-id matching
     add_highlights=True,
     highlights_prefix="cellucid_highlight__",
     add_user_defined_fields=True,
     user_defined_prefix="",
     include_deleted_user_defined_fields=False,
     store_uns=True,                       # store manifest + chunk metadata under adata.uns['cellucid']
-    column_conflict="suffix",             # "error" | "overwrite" | "suffix"
     return_summary=True,
 )
 
@@ -177,45 +182,22 @@ selected
 
 ---
 
-## Dataset mismatch policies (read this!)
+## Exact dataset identity (read this!)
 
 Session bundles include a dataset fingerprint (cell count, var count, dataset id).
 
-If you apply a session to the “wrong” dataset, one of these should happen:
-- **error**: stop immediately (strict)
-- **warn_skip** (default): warn and skip dataset-dependent chunks
-- **skip**: silently skip dataset-dependent chunks
-
-Best practice:
-- when you care about reproducibility, set `expected_dataset_id` and use `dataset_mismatch="error"`
+`expected_dataset_id` is required. If the ID, cell count, or variable count
+does not match, application raises before mutating the target.
 
 ---
 
-## Screenshot placeholders (optional but helpful)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-notebooks-session-highlight-groups-before-capture
-Suggested filename: sessions_sharing/00_highlight-groups-before-session-capture.png
-Where it appears: User Guide → Python Package → Notebooks/Tutorials → 32_session_persistence_and_restoring_analysis_artifacts.md
-Capture:
-  - UI location: highlight UI panel (pages/groups visible)
-  - State prerequisites: at least two highlight groups exist (created from selections)
-  - Action to reach state: create two highlight groups and open the highlight panel
-Crop:
-  - Include: highlight page/group list and group names/colors
-  - Include: enough canvas to show highlighted cells
-Redact:
-  - Remove: private dataset names
-Alt text:
-  - Highlight panel showing multiple named highlight groups before capturing a session bundle.
-Caption:
-  - Session bundles can include highlight groups; capturing the session lets you bring those groups back into Python as `adata.obs` columns.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for highlight groups before session capture.
+```{figure} ../../../_static/screenshots/highlighting_selection/highlighting-selected-page.png
+:alt: Highlighting panel showing a named page with highlighted cells.
 :width: 100%
 
-Highlight groups created in the UI (these can be captured in a session bundle).
+Highlighted cells are stored on a named page that can be used by analysis and session workflows.
 ```
 
 ---
@@ -241,7 +223,7 @@ Fix:
 
 Likely causes:
 - the session did not contain highlight groups or user-defined fields
-- dataset mismatch caused dataset-dependent chunks to be skipped
+- exact dataset identity or dimensions did not match
 
 How to confirm:
 ```python
@@ -251,15 +233,13 @@ bundle.dataset_fingerprint
 
 Fix:
 - create highlight groups in the UI before capturing
-- use `dataset_mismatch="error"` while developing to catch mismatch early
+- pass the exact dataset ID used to create the viewer
 
-### Symptom: “Column names look weird / got suffixed”
+### Symptom: “Column already exists”
 
-This is expected when a column name already exists:
-- policy `column_conflict="suffix"` creates `name__2`, `name__3`, ...
-
-If you want strict behavior:
-- use `column_conflict="error"`
+Cellucid rejects an existing target column. Choose distinct
+`highlights_prefix` and `user_defined_prefix` values or remove the conflicting
+column explicitly before applying.
 
 ---
 

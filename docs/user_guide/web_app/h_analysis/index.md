@@ -47,31 +47,13 @@ If you’re here because “analysis is empty / missing results”, start with {
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: analysis-panel-overview
-Suggested filename: analysis/01_analysis-panel-overview.png
-Where it appears: User Guide → Web App → Analysis → index.md
-Capture:
-  - UI location: Analysis panel open (show the mode toggle and at least one result area)
-  - State prerequisites: dataset loaded; at least one highlight group or selection available
-  - Action to reach state: select a group of cells, open Analysis, run any mode once
-Crop:
-  - Include: the Analysis panel + enough canvas to show the selected/colored points
-  - Exclude: private dataset names, file paths, browser bookmarks, personal avatars
-Redact:
-  - Remove: any identifying dataset IDs if private
-Alt text:
-  - Analysis panel open in the left sidebar with mode selector visible.
-Caption:
-  - Analysis starts from the current view and your defined groups; confirm you are in the expected state before interpreting results.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Analysis panel overview.
+```{figure} ../../../_static/screenshots/analysis/analysis-panel-tabs.png
+:alt: Analysis panel listing Quick, Detailed, Correlation, Differential Expression, Gene Signature, and Marker Genes modes.
 :width: 100%
 
-The Analysis panel summarizes and compares groups defined by selection/highlights, and depends on the active view and current filtering state.
+The Analysis panel exposes six explicit modes, each with its own validated inputs and result area.
 ```
 
 ---
@@ -83,7 +65,7 @@ The Analysis panel summarizes and compares groups defined by selection/highlight
 3) Mode pages (`03`–`08`) for the specific analysis you need
 4) `09_exporting_analysis_results` (tables/plots, what is reproducible)
 5) `10_troubleshooting_analysis` (symptom → diagnosis → fix)
-6) `11_screenshots` (capture checklist)
+6) `11_screenshots` (verified result captures)
 
 ```{toctree}
 :maxdepth: 1

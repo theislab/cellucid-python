@@ -61,15 +61,18 @@ Notebook environments differ:
 - Local classic/JupyterLab: browser can usually reach `http://127.0.0.1:<port>`.
 - Remote kernels (JupyterHub, SSH to server, etc.): browser cannot reach kernel loopback.
 - HTTPS notebooks: browser blocks HTTP loopback as mixed content.
-- Colab: uses a special HTTPS port proxy (`google.colab.kernel.proxyPort`).
+- Colab exposes a special HTTPS port proxy
+  (`google.colab.kernel.proxyPort`), which the caller must invoke and pass
+  explicitly.
 
-Cellucid tries to pick a URL that “actually works” by:
-- preferring a proxy URL when direct loopback is unlikely,
-- probing `/_cellucid/health` before committing to an iframe src,
-- and showing an explicit inline error (iframe `srcdoc`) when a proxy is required.
+Cellucid selects one URL:
 
-Config override:
-- `CELLUCID_CLIENT_SERVER_URL` can force the client URL (see {doc}`06_configuration_env_vars_and_logging`).
+- the exact `client_server_url=` argument, when supplied, or
+- the bound data-server URL otherwise.
+
+It does not infer or probe a notebook proxy. Remote/HTTPS callers must expose
+the port and pass the exact browser-reachable HTTP(S) base (see
+{doc}`06_configuration_env_vars_and_logging`).
 
 ---
 
@@ -131,7 +134,7 @@ Flow:
    - `{type: "requestSessionBundle", requestId: "..."}`
 2) The frontend serializes a `.cellucid-session` bundle in-memory.
 3) The frontend uploads bytes to:
-   - `POST /_cellucid/session_bundle?viewerId=...&requestId=...`
+   - `POST /_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
 4) The server:
    - validates the bundle magic header,
    - streams the upload to a temp file,
@@ -145,32 +148,11 @@ This design keeps:
 
 ---
 
-## When things go wrong: the “proxy required” inline message
+## When things go wrong: browser cannot reach the server
 
-If the notebook is served from HTTPS/remote and direct loopback will not work, the iframe may show a “proxy required” message.
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: notebook-proxy-required-message
-Suggested filename: developer/notebook-proxy-required.png
-Where it appears: Python Package → Developer Docs → Jupyter embedding architecture
-Capture:
-  - UI location: notebook output cell (iframe area)
-  - State prerequisites: run notebook in an HTTPS environment without server proxy enabled
-  - Action to reach state: create viewer, iframe tries proxy, fails health probe, shows srcdoc message
-Crop:
-  - Include: the full inline message and the recommended fixes
-  - Exclude: personal notebook names, dataset identifiers
-Alt text:
-  - Notebook output showing an inline message stating that a proxy is required to load the viewer from a secure or remote notebook environment.
-Caption:
-  - When the browser cannot reach the kernel’s loopback server directly, Cellucid shows an inline “proxy required” message with concrete fixes (jupyter-server-proxy or CELLUCID_CLIENT_SERVER_URL).
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the inline notebook proxy-required message.
-:width: 100%
-
-Notebook proxy-required message: Cellucid explains how to make the server reachable from a secure/remote notebook origin.
-```
+If the notebook is served from HTTPS or the kernel is remote, direct loopback
+may produce a blank iframe, a mixed-content error, or a failed network request.
+Cellucid does not render a special proxy-selection page.
 
 ---
 
@@ -179,7 +161,7 @@ Notebook proxy-required message: Cellucid explains how to make the server reacha
 ### Symptom: “The viewer iframe is blank”
 
 Likely causes (ordered):
-1) the web UI assets could not be loaded (offline + no cache),
+1) the exact source generation could not be established,
 2) mixed-content/proxy URL mismatch,
 3) the server is not reachable from the browser (remote kernel),
 4) the server died (port conflict, exception).
@@ -189,8 +171,10 @@ How to confirm:
   - `server_health`, `viewer_index_probe`, `frontend_roundtrip`.
 
 Fix:
-- set up `jupyter-server-proxy` or provide `CELLUCID_CLIENT_SERVER_URL`,
-- ensure the UI cache is available (see {doc}`09_server_mode_architecture_endpoints_and_security`),
+- expose the port through a proxy/tunnel and pass its base as
+  `client_server_url=`,
+- ensure the exact UI source generation can be established (see
+  {doc}`09_server_mode_architecture_endpoints_and_security`),
 - check server logs for exceptions.
 
 ### Symptom: “Hooks worked once, then stopped”

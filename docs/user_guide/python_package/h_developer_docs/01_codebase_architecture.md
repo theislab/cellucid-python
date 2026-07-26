@@ -31,7 +31,8 @@ This page explains the **architecture of the `cellucid` Python package** (repo f
 - Rendering, UI state machines, analysis panels, figure export internals live in the **web app repo** (`cellucid/`).
   Start with: {doc}`../../web_app/p_developer_docs/index`.
 - Community annotation workflows are primarily web-app-driven (repo template lives in `cellucid-annotation/`).
-- R export (`cellucid-r`) is planned but not yet the authoritative path.
+- R export is owned by `cellucid-r`; it writes the same current export contract
+  consumed by the web app.
 
 ---
 
@@ -52,7 +53,7 @@ Most of the public API lives in `cellucid-python/src/cellucid/`:
 | `src/cellucid/session_codecs.py` | session chunk codecs (varint, delta-varint, RLE codes) | want to add/align codecs with the web app |
 | `src/cellucid/anndata_session.py` | apply session bundle → AnnData | want to change “sessions to AnnData bridge” semantics |
 | `src/cellucid/vector_fields.py` | CellRank drift → vector fields | want to add helpers for velocity/drift conventions |
-| `src/cellucid/web_cache.py` | hosted viewer UI asset caching (offline-safe notebooks) | want to change caching, invalidation, prefetch behavior |
+| `src/cellucid/web_cache.py` | exact inventory-driven viewer generation establishment and verification | want to change source, staging, verification, or atomic publication behavior |
 
 ---
 
@@ -102,28 +103,6 @@ This contract is documented in detail here:
 
 If you want a single figure you can refer to in bug reports and onboarding, add an architecture diagram.
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-architecture-overview
-Suggested filename: developer/python-architecture-overview.svg
-Where it appears: Python Package → Developer Docs → Codebase architecture
-Capture:
-  - This is a diagram (not a screenshot). Export as SVG if possible.
-Content:
-  - Boxes: prepare/export, exported server, AnnData adapter/server, Jupyter viewer, web app
-  - Arrows: HTTP file fetches, postMessage commands, HTTP POST events
-  - Note: show “hosted-asset proxy cache” as a separate box (because it explains offline behavior)
-Alt text:
-  - Block diagram showing how cellucid-python exports/serves data and embeds the web app in notebooks.
-Caption:
-  - High-level architecture: the browser viewer always speaks the export-format protocol; Python either serves files from disk or synthesizes them from AnnData.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder for a high-level cellucid-python architecture diagram.
-:width: 100%
-
-High-level architecture: the viewer loads the export-format contract; Python serves it from disk or synthesizes it from AnnData.
-```
-
 ---
 
 ## Invariants (do not break these without a coordinated frontend change)
@@ -160,8 +139,8 @@ Do not assume:
 - or that iframes preserve a stable origin.
 
 Notebook constraints drive the existence of:
-- the hosted-asset proxy,
-- `CELLUCID_CLIENT_SERVER_URL`,
+- same-origin local viewer generation delivery,
+- the explicit `client_server_url` argument,
 - and the debugging helpers in `viewer.debug_connection()`.
 
 ---
@@ -172,7 +151,7 @@ Notebook constraints drive the existence of:
 
 Likely causes:
 - you broke an invariant in the export format (paths, gzip flags, types),
-- the viewer is still using cached assets (stale UI build),
+- Python and the configured web source publish different current contracts,
 - you introduced a CORS/origin mismatch.
 
 Start with:

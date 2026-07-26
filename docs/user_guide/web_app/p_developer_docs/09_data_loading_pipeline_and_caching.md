@@ -61,7 +61,8 @@ At startup, `cellucid/assets/js/app/main.js`:
 3) Applies URL overrides (if present):
    - `?remote=...` connects remote server
    - `?github=...` connects GitHub exports
-   - `?exportsBaseUrl=...` (or `?exports=...`) overrides the demo exports base URL
+   - exactly one canonical `?exportsBaseUrl=...` may replace the configured
+     demo exports base URL for that launch
    - `?dataset=...&source=...` selects a specific dataset from a registered source
 4) Chooses the active dataset and sets `EXPORT_BASE_URL` to the active `baseUrl`.
 
@@ -90,18 +91,19 @@ Code:
 Behavior:
 - Reads `datasets.json` under the exports base URL (`DATA_CONFIG.EXPORTS_BASE_URL`).
 - `DATA_CONFIG.EXPORTS_BASE_URL` resolves in this order:
-  1) `?exportsBaseUrl=...` / `?exports=...` query param
+  1) exactly one `?exportsBaseUrl=...` query field
   2) `<meta name="cellucid-exports-base-url" content="...">` in `index.html`
 - Uses `dataset_identity.json` inside each dataset folder as the required metadata anchor.
 
 Common failure mode:
 - `datasets.json` missing or invalid → local demo source is “not available”.
 
-GitHub Pages note (no CORS headers):
-- GitHub Pages doesn’t let you configure `Access-Control-Allow-Origin`, so direct `fetch()` from `https://www.cellucid.com` will usually fail.
-- Cellucid supports GitHub Pages by using a small iframe bridge page hosted alongside `exports/`:
-  - `bridge.html` + `bridge.js` (in the `cellucid-datasets` repo)
-  - frontend entry point: `fetchWithExportsBridge()` in `cellucid/assets/js/data/data-source.js`
+Cross-origin transport contract:
+- Every sample request is one canonical absolute URL below the configured
+  exports root.
+- The exports host must permit the viewer origin with CORS.
+- Credentials are omitted and redirects are rejected; an HTTP, CORS, URL, or
+  payload failure terminates that dataset load.
 
 ### `github-repo` (public GitHub-hosted exports)
 
@@ -126,14 +128,16 @@ Code:
 
 Behavior:
 - Lets the user pick:
-  - an exports folder
-  - an `.h5ad` file
-  - a `.zarr` directory
+  - one prepared export directory with **Prepared**
+  - one `.h5ad` file with **H5AD**
+  - one `.zarr.zip` or `.zip` archive with **Zarr ZIP**
 - Internally, the source resolves reads to “local-user URLs” (not real HTTP URLs) and the loaders know how to fetch them.
 
 Common failure modes:
-- Browser permissions (file picker APIs vary)
-- Very large `.h5ad`/`.zarr` loaded directly in the browser can exhaust memory (no lazy loading)
+- denied or policy-blocked local-file permissions
+- H5AD larger than the 512 MiB browser limit
+- malformed current AnnData identity or non-finite scientific payloads
+- invalid/multi-root Zarr ZIPs or archive/chunk memory limits
 
 ### `remote` (cellucid-python server)
 
@@ -147,10 +151,13 @@ High-level behavior:
   - `GET /_cellucid/info`
 - Enumerates datasets (endpoint is server-defined; the client caches dataset paths).
 - Loads dataset files via HTTP from the server base URL.
-- Optionally opens a WebSocket for live updates (dev-phase / optional).
+- Opens a WebSocket for live updates when the server advertises a WebSocket URL.
 
 Why remote is important:
-- It enables **lazy loading** for large h5ad/zarr and avoids “load entire file into browser memory”.
+- H5AD remains read-only-backed on the Python side while the browser requests
+  fields and genes on demand.
+- Zarr is materialized eagerly by `anndata.read_zarr`; browser requests remain
+  on demand, but the Python process must have memory for the store.
 
 Common failure modes:
 - mixed-content blocking (https app trying to fetch non-local http server)
@@ -161,7 +168,7 @@ Common failure modes:
 
 Code:
 - `cellucid/assets/js/data/jupyter-source.js`
-- Design guide: `cellucid/markdown/HOOKS_DEVELOPMENT.md`
+- Protocol architecture: {doc}`../../python_package/e_jupyter_hooks/05_architecture_message_routing_http_vs_postmessage`
 
 Behavior:
 - In Jupyter, Cellucid often runs inside an iframe and exchanges messages/events with a local server.
@@ -260,7 +267,7 @@ When something “doesn’t load”, do the following in order:
 
 4) **Confirm manifest parsing**
    - `obs_manifest.json` is required for most UI behavior.
-   - If it is missing, the app may intentionally fall back to “empty obs”.
+   - If it is missing or invalid, loading terminates with that manifest error.
 
 5) **Confirm point buffer sizes**
    - After load, check:
@@ -268,8 +275,8 @@ When something “doesn’t load”, do the following in order:
      - `window._cellucidState.positionsArray.length === pointCount * 3`
 
 6) **Check gzip support**
-   - Cellucid uses `DecompressionStream` when available.
-   - If neither `DecompressionStream` nor `pako` is available, `.gz` files will not load.
+   - Cellucid requires native `DecompressionStream('gzip')` for `.gz` files.
+   - A browser without that API receives a terminal capability error before the data request.
 
 ---
 
@@ -280,7 +287,6 @@ When something “doesn’t load”, do the following in order:
 Likely causes (ordered):
 1) A required manifest request is hanging or blocked (CORS/mixed content).
 2) A binary file fetch is large and the server is slow (or throttled).
-3) The app is retrying `.gz` then falling back to non-gz (double work).
 
 How to confirm:
 - Network tab: which request is pending?
@@ -289,12 +295,14 @@ How to confirm:
 Fix:
 - For remote datasets: validate CORS + protocol (https vs http).
 - For GitHub datasets: verify raw URLs are reachable from the target environment.
-- For large local files: use remote server mode (lazy loading).
+- For large H5AD files: choose remote server mode for read-only-backed access.
+- For Zarr directories: choose server mode only when the Python process can
+  materialize the store.
 
 ### Symptom: “Unexpected token `<`” during loading
 
 Likely cause:
-- The server returned HTML (often an SPA fallback page) for a JSON file.
+- The server returned an HTML document for a JSON request.
 
 Fix:
 - Fetch the URL in a new tab; confirm it’s real JSON and returns `404` when missing.
@@ -302,11 +310,11 @@ Fix:
 ### Symptom: “Gzip decompression not supported”
 
 Likely cause:
-- Browser lacks `DecompressionStream` and the optional `pako` fallback is not loaded.
+- The browser does not provide native `DecompressionStream('gzip')`.
 
 Fix:
-- Use a modern browser (Chrome/Edge are best here).
-- Or host uncompressed assets (dev-only; not recommended for large datasets).
+- Update to the current stable release of Chrome, Edge, Firefox, or Safari.
+- Re-export without compression only when gzip transport is not required.
 
 ---
 

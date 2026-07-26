@@ -14,19 +14,47 @@ or binary and may be gzip-compressed.
 
 from __future__ import annotations
 
-import gzip
 import json
+import re
 import shutil
 import struct
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
-
 
 SESSION_BUNDLE_MAGIC = b"CELLUCID_SESSION\n"
 U32_BYTES = 4
 MAX_MANIFEST_BYTES = 16 * 1024 * 1024
 DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES = 512 * 1024 * 1024
+MAX_STORED_CHUNK_BYTES = 512 * 1024 * 1024
+
+_MANIFEST_KEYS = {
+    "createdAt",
+    "dataSource",
+    "datasetFingerprint",
+    "summary",
+    "chunks",
+}
+_FINGERPRINT_KEYS = {"sourceType", "datasetId", "cellCount", "varCount"}
+_CHUNK_REQUIRED_KEYS = {
+    "id",
+    "contributorId",
+    "priority",
+    "kind",
+    "codec",
+    "label",
+    "datasetDependent",
+    "storedBytes",
+    "uncompressedBytes",
+}
+_CHUNK_OPTIONAL_KEYS = {"dependsOn"}
+_CHUNK_ID_RE = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
+)
+_UTC_TIMESTAMP_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"
+)
 
 
 @dataclass(frozen=True)
@@ -45,7 +73,220 @@ def _read_exact(fp: BinaryIO, n: int) -> bytes:
 
 
 def _read_u32_le(fp: BinaryIO) -> int:
-    return struct.unpack("<I", _read_exact(fp, U32_BYTES))[0]
+    return int(struct.unpack("<I", _read_exact(fp, U32_BYTES))[0])
+
+
+def _require_exact_nonnegative_int(value: Any, *, label: str, maximum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"Invalid session manifest ({label} must be an integer)")
+    if value < 0:
+        raise ValueError(
+            f"Invalid session manifest ({label} must be non-negative)"
+        )
+    if value > maximum:
+        raise ValueError(
+            f"Invalid session manifest ({label} exceeds the {maximum}-byte limit)"
+        )
+    return int(value)
+
+
+def _validate_fingerprint(value: Any) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        raise ValueError("Invalid session manifest (datasetFingerprint must be an object)")
+    unknown = set(value) - _FINGERPRINT_KEYS
+    if unknown:
+        raise ValueError(
+            "Invalid session manifest (unknown datasetFingerprint fields: "
+            + ", ".join(sorted(unknown))
+            + ")"
+        )
+    if "sourceType" not in value or "datasetId" not in value:
+        raise ValueError(
+            "Invalid session manifest (datasetFingerprint requires sourceType and datasetId)"
+        )
+    for key in ("sourceType", "datasetId"):
+        item = value[key]
+        if item is not None and (not isinstance(item, str) or not item):
+            raise ValueError(
+                f"Invalid session manifest (datasetFingerprint.{key} must be "
+                "a non-empty string or null)"
+            )
+    for key in ("cellCount", "varCount"):
+        if key in value:
+            _require_exact_nonnegative_int(
+                value[key],
+                label=f"datasetFingerprint.{key}",
+                maximum=(1 << 32) - 1,
+            )
+
+
+def _validate_manifest(manifest: Any) -> list[dict[str, Any]]:
+    if not isinstance(manifest, dict):
+        raise ValueError("Invalid session manifest (expected an object)")
+    if set(manifest) != _MANIFEST_KEYS:
+        root_missing = sorted(_MANIFEST_KEYS - set(manifest))
+        root_unknown = sorted(set(manifest) - _MANIFEST_KEYS)
+        root_details: list[str] = []
+        if root_missing:
+            root_details.append("missing " + ", ".join(root_missing))
+        if root_unknown:
+            root_details.append("unknown " + ", ".join(root_unknown))
+        raise ValueError(
+            "Invalid session manifest fields (" + "; ".join(root_details) + ")"
+        )
+    created_at = manifest["createdAt"]
+    if not isinstance(created_at, str) or _UTC_TIMESTAMP_RE.fullmatch(created_at) is None:
+        raise ValueError(
+            "Invalid session manifest (createdAt must be an exact UTC millisecond timestamp)"
+        )
+    if manifest["dataSource"] is not None and not isinstance(
+        manifest["dataSource"], dict
+    ):
+        raise ValueError("Invalid session manifest (dataSource must be an object or null)")
+    if manifest["summary"] is not None and not isinstance(manifest["summary"], dict):
+        raise ValueError("Invalid session manifest (summary must be an object or null)")
+    _validate_fingerprint(manifest["datasetFingerprint"])
+
+    chunks = manifest["chunks"]
+    if not isinstance(chunks, list):
+        raise ValueError("Invalid session manifest (chunks must be an array)")
+
+    validated: list[dict[str, Any]] = []
+    chunk_ids: set[str] = set()
+    lazy_seen = False
+    for position, raw in enumerate(chunks):
+        if not isinstance(raw, dict):
+            raise ValueError(
+                f"Invalid session manifest (chunk #{position} must be an object)"
+            )
+        allowed = _CHUNK_REQUIRED_KEYS | _CHUNK_OPTIONAL_KEYS
+        chunk_missing = _CHUNK_REQUIRED_KEYS - set(raw)
+        chunk_unknown = set(raw) - allowed
+        if chunk_missing or chunk_unknown:
+            chunk_details: list[str] = []
+            if chunk_missing:
+                chunk_details.append("missing " + ", ".join(sorted(chunk_missing)))
+            if chunk_unknown:
+                chunk_details.append("unknown " + ", ".join(sorted(chunk_unknown)))
+            raise ValueError(
+                f"Invalid session manifest (chunk #{position} fields: "
+                + "; ".join(chunk_details)
+                + ")"
+            )
+
+        chunk_id = raw["id"]
+        if not isinstance(chunk_id, str) or _CHUNK_ID_RE.fullmatch(chunk_id) is None:
+            raise ValueError(
+                f"Invalid session manifest (chunk #{position} has an invalid id)"
+            )
+        if chunk_id in chunk_ids:
+            raise ValueError(f"Invalid session manifest (duplicate chunk id {chunk_id!r})")
+        chunk_ids.add(chunk_id)
+
+        contributor_id = raw["contributorId"]
+        if (
+            not isinstance(contributor_id, str)
+            or _CHUNK_ID_RE.fullmatch(contributor_id) is None
+            or "/" in contributor_id
+        ):
+            raise ValueError(
+                f"Invalid session manifest (chunk {chunk_id!r} contributorId)"
+            )
+        priority = raw["priority"]
+        if priority not in {"eager", "lazy"}:
+            raise ValueError(
+                f"Invalid session manifest (chunk {chunk_id!r} priority)"
+            )
+        if priority == "lazy":
+            lazy_seen = True
+        elif lazy_seen:
+            raise ValueError(
+                "Invalid session manifest (all eager chunks must precede lazy chunks)"
+            )
+        if raw["kind"] not in {"json", "binary"}:
+            raise ValueError(f"Invalid session manifest (chunk {chunk_id!r} kind)")
+        if raw["codec"] not in {"none", "gzip"}:
+            raise ValueError(f"Invalid session manifest (chunk {chunk_id!r} codec)")
+        if not isinstance(raw["label"], str) or not raw["label"]:
+            raise ValueError(f"Invalid session manifest (chunk {chunk_id!r} label)")
+        if type(raw["datasetDependent"]) is not bool:
+            raise ValueError(
+                f"Invalid session manifest (chunk {chunk_id!r} datasetDependent)"
+            )
+        stored_bytes = _require_exact_nonnegative_int(
+            raw["storedBytes"],
+            label=f"chunk {chunk_id!r} storedBytes",
+            maximum=MAX_STORED_CHUNK_BYTES,
+        )
+        uncompressed_bytes = _require_exact_nonnegative_int(
+            raw["uncompressedBytes"],
+            label=f"chunk {chunk_id!r} uncompressedBytes",
+            maximum=DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES,
+        )
+        if raw["codec"] == "none" and stored_bytes != uncompressed_bytes:
+            raise ValueError(
+                f"Invalid session manifest (chunk {chunk_id!r} storedBytes and "
+                "uncompressedBytes must match for codec 'none')"
+            )
+
+        depends_on = raw.get("dependsOn")
+        if depends_on is not None:
+            if (
+                not isinstance(depends_on, list)
+                or any(not isinstance(item, str) or not item for item in depends_on)
+                or len(depends_on) != len(set(depends_on))
+            ):
+                raise ValueError(
+                    f"Invalid session manifest (chunk {chunk_id!r} dependsOn)"
+                )
+            unavailable = [item for item in depends_on if item not in chunk_ids]
+            if unavailable:
+                raise ValueError(
+                    f"Invalid session manifest (chunk {chunk_id!r} depends on "
+                    "a missing or later chunk)"
+                )
+
+        validated.append(raw)
+    return validated
+
+
+def _decompress_gzip_exact(stored: bytes, expected_bytes: int) -> bytes:
+    decompressor = zlib.decompressobj(wbits=16 + zlib.MAX_WBITS)
+    output = bytearray()
+    remaining_input = stored
+    while True:
+        remaining_capacity = expected_bytes - len(output)
+        decoded = decompressor.decompress(remaining_input, remaining_capacity + 1)
+        output.extend(decoded)
+        if len(output) > expected_bytes:
+            raise ValueError(
+                "Session chunk uncompressedBytes is smaller than the gzip payload"
+            )
+        if decompressor.unconsumed_tail:
+            remaining_input = decompressor.unconsumed_tail
+            if remaining_capacity == 0:
+                continue
+            continue
+        break
+
+    remaining_capacity = expected_bytes - len(output)
+    output.extend(decompressor.flush(remaining_capacity + 1))
+    if len(output) > expected_bytes:
+        raise ValueError(
+            "Session chunk uncompressedBytes is smaller than the gzip payload"
+        )
+    if not decompressor.eof:
+        raise ValueError("Invalid gzip session chunk (truncated stream)")
+    if decompressor.unused_data:
+        raise ValueError("Invalid gzip session chunk (trailing or concatenated stream)")
+    if len(output) != expected_bytes:
+        raise ValueError(
+            "Session chunk uncompressedBytes does not match the decoded payload "
+            f"({expected_bytes} declared, {len(output)} decoded)"
+        )
+    return bytes(output)
 
 
 class CellucidSessionBundle:
@@ -71,15 +312,36 @@ class CellucidSessionBundle:
         shutil.copyfile(self.path, dest_path)
         return dest_path
 
-    def apply_to_anndata(self, adata: Any, *, inplace: bool = False, **kwargs):
-        """
-        Apply this bundle to an AnnData.
-
-        See `cellucid.anndata_session.apply_cellucid_session_to_anndata`.
-        """
+    def apply_to_anndata(
+        self,
+        adata: Any,
+        *,
+        expected_dataset_id: str,
+        inplace: bool = False,
+        add_highlights: bool = True,
+        highlights_prefix: str = "cellucid_highlight__",
+        add_user_defined_fields: bool = True,
+        user_defined_prefix: str = "",
+        include_deleted_user_defined_fields: bool = False,
+        store_uns: bool = True,
+        return_summary: bool = False,
+    ) -> Any:
+        """Apply this exact bundle atomically to its matching AnnData dataset."""
         from .anndata_session import apply_cellucid_session_to_anndata
 
-        return apply_cellucid_session_to_anndata(self, adata, inplace=inplace, **kwargs)
+        return apply_cellucid_session_to_anndata(
+            self,
+            adata,
+            expected_dataset_id=expected_dataset_id,
+            inplace=inplace,
+            add_highlights=add_highlights,
+            highlights_prefix=highlights_prefix,
+            add_user_defined_fields=add_user_defined_fields,
+            user_defined_prefix=user_defined_prefix,
+            include_deleted_user_defined_fields=include_deleted_user_defined_fields,
+            store_uns=store_uns,
+            return_summary=return_summary,
+        )
 
     @property
     def manifest(self) -> dict[str, Any]:
@@ -127,14 +389,10 @@ class CellucidSessionBundle:
         """Iterate chunks in manifest order."""
         self._ensure_indexed()
         assert self._chunks_by_id is not None
-        chunks = self.manifest.get("chunks") or []
+        chunks = self.manifest["chunks"]
         for entry in chunks:
-            chunk_id = entry.get("id")
-            if not isinstance(chunk_id, str) or not chunk_id:
-                continue
-            ref = self._chunks_by_id.get(chunk_id)
-            if ref is None:
-                continue
+            chunk_id = entry["id"]
+            ref = self._chunks_by_id[chunk_id]
             if not decode:
                 yield ref
             else:
@@ -160,26 +418,29 @@ class CellucidSessionBundle:
             manifest_bytes = _read_exact(f, manifest_len)
             try:
                 manifest = json.loads(manifest_bytes.decode("utf-8"))
-            except Exception as e:
+            except (UnicodeDecodeError, json.JSONDecodeError) as e:
                 raise ValueError(f"Invalid session manifest JSON: {e}") from e
-
-            chunks_meta = manifest.get("chunks")
-            if not isinstance(chunks_meta, list):
-                raise ValueError("Invalid session manifest (missing chunks list)")
+            chunks_meta = _validate_manifest(manifest)
 
             chunks_by_id: dict[str, SessionChunkRef] = {}
+            file_size = self.path.stat().st_size
             for meta in chunks_meta:
-                if not isinstance(meta, dict):
-                    raise ValueError("Invalid session manifest (chunk meta must be object)")
-                chunk_id = meta.get("id")
-                if not isinstance(chunk_id, str) or not chunk_id:
-                    raise ValueError("Invalid session manifest (chunk id missing)")
-
+                chunk_id = meta["id"]
                 stored_len = _read_u32_le(f)
+                if stored_len != meta["storedBytes"]:
+                    raise ValueError(
+                        f"Invalid session chunk {chunk_id!r}: storedBytes declares "
+                        f"{meta['storedBytes']}, frame contains {stored_len}"
+                    )
+                if stored_len > MAX_STORED_CHUNK_BYTES:
+                    raise ValueError(
+                        f"Invalid session chunk {chunk_id!r}: storedBytes exceeds limit"
+                    )
                 offset = f.tell()
-                # Bounds check without trusting meta.
-                if stored_len < 0:
-                    raise ValueError(f"Invalid chunk length for {chunk_id}: {stored_len}")
+                if offset + stored_len > file_size:
+                    raise ValueError(
+                        f"Invalid session chunk {chunk_id!r}: frame exceeds file size"
+                    )
                 f.seek(stored_len, 1)
                 chunks_by_id[chunk_id] = SessionChunkRef(
                     id=chunk_id,
@@ -187,30 +448,26 @@ class CellucidSessionBundle:
                     offset=offset,
                     stored_bytes=stored_len,
                 )
+            if f.tell() != file_size:
+                raise ValueError("Invalid session bundle (trailing bytes after final chunk)")
 
         self._manifest = manifest
         self._chunks_by_id = chunks_by_id
 
     def _decode_payload(self, meta: dict[str, Any], stored: bytes) -> Any:
-        codec = meta.get("codec")
-        kind = meta.get("kind")
-
-        if codec not in ("none", "gzip"):
-            raise ValueError(f"Unsupported session chunk codec: {codec!r}")
-        if kind not in ("json", "binary"):
-            raise ValueError(f"Unsupported session chunk kind: {kind!r}")
+        codec = meta["codec"]
+        kind = meta["kind"]
+        expected_bytes = meta["uncompressedBytes"]
 
         if codec == "gzip":
-            uncompressed = gzip.decompress(stored)
-            max_bytes = meta.get("uncompressedBytes")
-            if isinstance(max_bytes, int) and max_bytes > 0:
-                if len(uncompressed) > max_bytes:
-                    raise ValueError(
-                        f"Chunk decompressed larger than expected ({len(uncompressed)} > {max_bytes})"
-                    )
-            elif len(uncompressed) > DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES:
-                raise ValueError("Chunk decompressed too large (missing uncompressedBytes guard)")
+            if expected_bytes > DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES:
+                raise ValueError("Session chunk uncompressedBytes exceeds the limit")
+            uncompressed = _decompress_gzip_exact(stored, expected_bytes)
         else:
+            if len(stored) != expected_bytes:
+                raise ValueError(
+                    "Session chunk uncompressedBytes does not match the stored payload"
+                )
             uncompressed = stored
 
         if kind == "binary":
@@ -219,5 +476,5 @@ class CellucidSessionBundle:
         # kind == "json"
         try:
             return json.loads(uncompressed.decode("utf-8"))
-        except Exception as e:
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
             raise ValueError(f"Invalid JSON chunk: {e}") from e

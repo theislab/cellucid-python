@@ -47,7 +47,7 @@ make -C docs clean html
 
 ## Writing style: layered pages for mixed audiences
 
-Cellucid docs intentionally use layered writing (see `cellucid/markdown/DOCUMENTATION_MASTER_GUIDE.md`):
+Cellucid docs use layered writing:
 
 1) **Fast path**: minimal steps, minimal theory, “what to click / what to run”.
 2) **Practical path**: parameters, data requirements, performance.
@@ -88,36 +88,24 @@ Cellucid is a UI-heavy project. Screenshots are often the difference between:
 Recommended:
 - `cellucid-python/docs/_static/screenshots/<topic>/<filename>.png`
 
-### How to add a screenshot placeholder
+### How to add a verified screenshot
 
-Use the MyST `{figure}` directive + an HTML comment production spec.
+Use the MyST `{figure}` directive with a committed, visually reviewed image.
 
 Example:
 
 ````md
-<!-- SCREENSHOT PLACEHOLDER
-ID: unique-id
-Capture:
-  - UI location: ...
-  - Action to reach state: ...
-Alt text:
-  - ...
-Caption:
-  - ...
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot.
+```{figure} ../../../_static/screenshots/figure_export/style.png
+:alt: Figure Export Style controls for background, typography, and text sizes.
 :width: 100%
 
-Caption text.
+Style controls expose background, typography, and text sizing.
 ```
 ````
 
-The placeholder file used throughout the docs is:
-- `cellucid-python/docs/_static/screenshots/placeholder-screenshot.svg`
-
-Detailed guidance for captions/alt text/redaction:
-- `cellucid/markdown/DOCUMENTATION_SCREENSHOTS_AND_FIGURES_GUIDE.md`
+Before committing, reproduce the documented state, inspect the image at full
+resolution, remove private identifiers, and confirm that the caption describes
+only what is visibly present.
 
 ---
 

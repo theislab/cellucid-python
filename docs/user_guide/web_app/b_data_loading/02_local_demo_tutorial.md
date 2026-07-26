@@ -112,19 +112,19 @@ export_dir = Path("./exports/pbmc_demo")
 # }
 
 # Example sketch (fill in your own AnnData parts):
-# X_umap = adata.obsm["X_umap"]
 # prepare(
-#     latent_space=adata.obsm.get("X_pca", X_umap),
+#     latent_space=adata.obsm["X_pca"],
 #     obs=adata.obs,
 #     var=adata.var,
 #     gene_expression=adata.X,
 #     connectivities=adata.obsp.get("connectivities"),
-#     X_umap_2d=adata.obsm.get("X_umap_2d", X_umap if X_umap.shape[1] == 2 else None),
-#     X_umap_3d=adata.obsm.get("X_umap_3d", X_umap if X_umap.shape[1] == 3 else None),
+#     X_umap_2d=adata.obsm["X_umap_2d"],
+#     X_umap_3d=adata.obsm.get("X_umap_3d"),
 #     vector_fields=vector_fields,          # optional: velocity/drift overlays
 #     out_dir=export_dir,
 #     dataset_id="pbmc_demo",              # stable ID (important for sharing)
 #     dataset_name="PBMC demo",            # human-readable
+#     obs_categorical_dtype="uint16",       # exact categorical-code storage
 #     dataset_description="PBMC scRNA-seq (example)",
 #     compression=6,                        # gzip level (tradeoff: size vs CPU)
 #     var_quantization=8,                   # smaller, lossy; good default
@@ -155,7 +155,7 @@ export_dir = Path("./exports/pbmc_demo")
   - Per-cell displacement vectors visualized by the vector field / velocity overlay.
   - Must be provided per-dimension (`*_umap_2d`, `*_umap_3d`) and match the same cell order as the embedding.
   - If you export them, you’ll see a vector-field dropdown in the UI after loading.
-  - See {doc}`../i_vector_field_velocity/index` and the naming conventions in `cellucid/markdown/VECTOR_FIELD_OVERLAY_CONVENTIONS.md`.
+  - See {doc}`../i_vector_field_velocity/index` for naming and UI controls.
 
 If you want the full, parameter-by-parameter specification, see the Python package guide section:
 - {doc}`../../python_package/c_data_preparation_api/index`
@@ -185,29 +185,11 @@ Before publishing, verify that your export loads:
 
 This avoids debugging “GitHub problems” that are actually export problems.
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: data-loading-github-validate-local-file-picker
-Suggested filename: data_loading/04_github-validate-export-folder.png
-Where it appears: Data Loading → 02_local_demo_tutorial → Step 3 — Validate Locally
-Capture:
-  - UI location: left sidebar → file picker
-  - State prerequisites: you have an exports folder on disk
-  - Action to reach state: click “Browse local data…” and select the exported folder
-Crop:
-  - Include: the picker entry point + the loaded dataset name in the UI
-  - Exclude: your home directory path in the picker UI (privacy)
-Redact:
-  - Remove: any sensitive dataset names
-Alt text:
-  - Cellucid showing a successfully loaded exported folder.
-Caption:
-  - Explain that this is how you validate exports before publishing.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for validating an export using the browser folder picker.
+```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
+:alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
 :width: 100%
 
-Validate your export locally with the folder picker before publishing it to GitHub.
+A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
 ```
 
 ## Step 4 — Publish to a Public GitHub Repo (Remote Demo)
@@ -263,33 +245,6 @@ https://www.cellucid.com?github=owner/repo/exports
 
 (Replace `owner/repo/exports` with your chosen path.)
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: data-loading-github-connect
-Suggested filename: data_loading/05_github-connect.png
-Where it appears: Data Loading → 02_local_demo_tutorial → Step 4.4
-Capture:
-  - UI location: left sidebar → GitHub repo connection
-  - State prerequisites: none
-  - Action to reach state: open Cellucid, locate GitHub repo input
-Crop:
-  - Include: GitHub repo input + Connect button + success message (if possible)
-  - Exclude: any private owner/repo names
-Redact:
-  - Replace: repo path with a public example like `theislab/cellucid/exports`
-Annotations:
-  - Callouts: #1 the repo path format, #2 Connect button, #3 dataset dropdown after connect
-Alt text:
-  - GitHub repo connection input with a repository path entered.
-Caption:
-  - Explain the exact format expected.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the GitHub repo connection input.
-:width: 100%
-
-Connect Cellucid to a public GitHub repo by entering `owner/repo/path-to-exports`.
-```
-
 ## Optional: “Local Demo” (Run the Web App Locally With Demo Exports)
 
 The web app’s `local-demo` source loads from an **exports base URL** (it does not have to be inside the web app repo).
@@ -303,9 +258,10 @@ High-level local-dev workflow:
 - Point `exportsBaseUrl` at any static host that serves `exports/datasets.json` + dataset folders.
 
 ```{note}
-If your exports host is a different origin, you normally need CORS headers so the browser can `fetch()` JSON/binaries.
-
-GitHub Pages does not allow custom CORS headers, so Cellucid uses a tiny iframe bridge (`cellucid-datasets/bridge.html`) to load `exports/*` without CORS.
+If your exports host is a different origin, it must authorize the Cellucid
+origin with CORS headers so the browser can fetch the JSON and binary files.
+There is no alternate browser-side transport for a host that rejects the
+cross-origin requests.
 ```
 
 ## Edge Cases

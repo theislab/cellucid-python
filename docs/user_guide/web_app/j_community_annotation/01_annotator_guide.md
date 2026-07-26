@@ -72,63 +72,11 @@ If you clear browser site data before publishing, you can lose unpublished work.
    - choose the repo (and branch, if your group uses a non-default branch)
    - click **Pull latest**
 
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (Entry point)
-Suggested filename: community_annotation/10_connect_github_button.png
-
-Capture:
-- Community Annotation accordion with the "Connect GitHub…" button visible (or "Choose repo…" / "GitHub sync…" depending on state).
-
-Goal:
-- Make it obvious where to start.
-
-Crop / framing:
-- Include the left sidebar and the Community Annotation section header.
-
-Redact:
-- Private dataset ids or repo names if visible.
-
-Figure caption:
-- Example: "Start from the Community Annotation accordion and click Connect GitHub…"
-
-Alt text:
-- Example: "Community Annotation section in the sidebar with the Connect GitHub button."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot showing the Connect GitHub button in the Community Annotation section.
+```{figure} ../../../_static/screenshots/community_annotation/disconnected-panel.png
+:alt: Community Annotation panel before an annotation repository is connected.
 :width: 100%
 
-Start from the Community Annotation accordion and click Connect GitHub…
-```
-
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (GitHub sync modal - repo selection and Pull)
-Suggested filename: community_annotation/11_github_sync_repo_pull.png
-
-Capture:
-- GitHub sync modal after sign-in.
-- Repo list visible (or a selected repo card), and the "Pull latest" button visible.
-
-Goal:
-- Show how to pick a repo + branch and Pull.
-
-Crop / framing:
-- Crop to the modal; include the branch selector if present (important for groups using non-default branches).
-
-Redact:
-- Private repo/org names if needed.
-
-Figure caption:
-- Example: "Use Pull latest to download the current community files from GitHub."
-
-Alt text:
-- Example: "GitHub sync modal showing repo selection and Pull latest."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot showing repo selection and Pull latest in the GitHub sync modal.
-:width: 100%
-
-Use Pull latest to download the current community files from GitHub.
+The Community Annotation entry point reports that no repository is connected and offers the explicit Connect repo action.
 ```
 
 ### If you were given a pre-filled link
@@ -195,36 +143,6 @@ After you Pull, the author-configured annotatable columns appear as a 🗳️ ba
 - 🗳️ = annotation is enabled for this column
 - 🗳️🏁 = the author has **closed** the column (voting disabled for annotators)
 
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (Field dropdown with 🗳️)
-Suggested filename: community_annotation/12_field_dropdown_ballot_badge.png
-
-Capture:
-- The categorical field dropdown open, showing at least one field with a 🗳️ prefix.
-- If possible, also show a 🗳️🏁 closed field to teach the difference.
-
-Goal:
-- Teach annotators how to identify annotatable columns.
-
-Crop / framing:
-- Tight crop around the dropdown and its labels.
-
-Redact:
-- Sensitive field names if needed.
-
-Figure caption:
-- Example: "Annotatable categorical columns are marked with a 🗳️ badge."
-
-Alt text:
-- Example: "Dropdown list of categorical fields with a ballot icon marking annotatable fields."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot showing the 🗳️ badge in the categorical field dropdown.
-:width: 100%
-
-Annotatable categorical columns are marked with a 🗳️ badge.
-```
-
 ---
 
 ## 5) Open the Voting Modal for a Category (Cluster)
@@ -244,38 +162,6 @@ If a category is not clickable, check:
 - whether you are signed in and still connected to the repo
 - whether the category currently has **0 cells** (after filters) — categories with no available cells are disabled
 :::
-
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (Legend in annotation mode)
-Suggested filename: community_annotation/13_legend_annotation_mode.png
-
-Capture:
-- Categorical legend in annotation mode showing:
-  - a consensus summary (Pending/Disputed/Consensus)
-  - ▲/▼ counts (or a visible vote summary)
-  - at least one clickable category label
-
-Goal:
-- Show annotators where to click to open the voting modal.
-
-Crop / framing:
-- Include the legend and the active field label, so readers know which column they are annotating.
-
-Redact:
-- Sensitive cluster labels if needed.
-
-Figure caption:
-- Example: "In annotation mode, click a category label to open the voting modal."
-
-Alt text:
-- Example: "Categorical legend showing vote counts and clickable category labels."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot showing the annotating categorical legend.
-:width: 100%
-
-In annotation mode, click a category label to open the voting modal.
-```
 
 ---
 
@@ -376,40 +262,6 @@ Buttons you may see:
 - **Add**: create the suggestion (saved locally until Publish)
 - **Clear**: reset the form
 - **Search CAP / Search Ontology / Search Markers**: helper searches (network-dependent)
-
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (New suggestion form)
-Suggested filename: community_annotation/14_new_suggestion_form.png
-
-Capture:
-- The "New suggestion" section showing:
-  - Label input
-  - Ontology id input (if present)
-  - Marker genes input
-  - Evidence input
-  - Add/Clear buttons (and CAP search buttons if visible)
-
-Goal:
-- Make it easy for annotators to fill in the form correctly.
-
-Crop / framing:
-- Tight crop around the new suggestion form; include field labels.
-
-Redact:
-- None usually needed, but remove private labels if present.
-
-Figure caption:
-- Example: "Use New suggestion to propose a label with optional ontology/markers/evidence."
-
-Alt text:
-- Example: "New suggestion form with label, ontology id, markers, evidence, and Add button."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot showing the New suggestion form.
-:width: 100%
-
-Use New suggestion to propose a label with optional ontology/markers/evidence.
-```
 
 ### Best practices to avoid duplicates (high impact)
 

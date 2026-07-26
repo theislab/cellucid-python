@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,8 @@ version = "0.0.9"  # CELLUCID_VERSION
 description = "Interactive Single-Cell Data Visualization"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { file = "LICENSE" }
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
 authors = [
     { name = "Kemal Inecik", email = "k.inecik@gmail.com" },
 ]
@@ -31,14 +32,14 @@ dependencies = [
     "pandas>=1.4",
     "scipy>=1.7",
     "tqdm>=4.45",
-    "anndata>=0.8",
+    "anndata>=0.11.4,<0.12",
+    "zarr>=2.18.3,<3",
     "ipython>=7.23",
     "jupyter-server-proxy>=4.1",
 ]
 
 classifiers = [
     "Development Status :: 4 - Beta",
-    "License :: OSI Approved :: BSD License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Operating System :: OS Independent",
@@ -115,7 +116,6 @@ testpaths = ["tests"]
 addopts = "-v --tb=short"
 
 [tool.mypy]
-python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true

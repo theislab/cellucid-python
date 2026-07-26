@@ -3,7 +3,7 @@
 The `cellucid` command-line interface is a **single entry point** for common workflows.
 
 Right now, the main user-facing command is:
-- `cellucid serve` (auto-detects `.h5ad`, `.zarr`, or an exported dataset directory)
+- the `serve` subcommand, which auto-detects direct AnnData input or an exported dataset directory
 
 If you prefer Python APIs, see {doc}`server` and {doc}`jupyter`.
 
@@ -13,8 +13,8 @@ If you prefer Python APIs, see {doc}`server` and {doc}`jupyter`.
 
 ```bash
 # Serve anything (auto-detected)
-cellucid serve /path/to/data.h5ad
-cellucid serve /path/to/data.zarr
+cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
+cellucid serve /path/to/data.zarr --dataset-name "My dataset" --dataset-id my-dataset
 cellucid serve /path/to/exported_dataset
 ```
 
@@ -48,8 +48,9 @@ cellucid serve <data_path> [--port 8765] [--host 127.0.0.1] [--no-browser] [--qu
 | `--no-browser` | Don’t auto-open a browser tab | Helpful on remote servers |
 | `--quiet, -q` | Minimal output | |
 | `--verbose, -v` | Debug logging | Useful for troubleshooting |
-| `--no-backed` | Load AnnData fully into memory | AnnData-only; disables lazy/backed mode |
-| `--latent-key KEY` | Choose latent key in `obsm` | AnnData-only; otherwise auto-detected |
+| `--latent-key KEY` | Choose the exact latent key in `obsm` | AnnData-only |
+| `--dataset-name NAME` | Set the display name | Required for direct AnnData input |
+| `--dataset-id ID` | Set the stable dataset identifier | Required for direct AnnData input |
 
 ---
 
@@ -60,7 +61,7 @@ cellucid serve <data_path> [--port 8765] [--host 127.0.0.1] [--no-browser] [--qu
 On the remote machine:
 
 ```bash
-cellucid serve /path/to/data.h5ad --no-browser --host 127.0.0.1 --port 8765
+cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset --no-browser --host 127.0.0.1 --port 8765
 ```
 
 On your laptop:
@@ -101,7 +102,7 @@ Fix:
 Fix:
 - Ensure the package is installed in the current environment: `pip install cellucid`
 - If you’re inside a virtualenv/conda env, activate it before running `cellucid`.
-- As a fallback: `python -m cellucid.cli --version`
+- The equivalent module invocation is `python -m cellucid.cli --version`.
 
 ---
 

@@ -142,6 +142,30 @@ This matters for interpretation:
 
 ---
 
+## Statistical interpretation and assumptions
+
+Cellucid’s statistical results are exploratory comparisons of the cells represented by the selected pages.
+
+Keep these scope limits in mind:
+
+- Missing or non-finite values are removed according to each analysis mode, so the effective sample size can differ by variable.
+- Overlapping pages are not independent because the same cell can appear in more than one group.
+- Cells from the same donor or sample are not independent biological replicates. The interactive tests do not model donor, batch, condition, or other covariates.
+- P-values are not globally adjusted unless a mode explicitly reports an adjustment, such as Benjamini–Hochberg values in Differential Expression or Marker Genes.
+
+For categorical comparisons, Cellucid uses Pearson’s chi-squared test only
+when every expected cell count is at least 5. It automatically switches a
+sparse 2×2 table to a two-sided Fisher exact test. A larger sparse table is
+reported as **N/A** because Cellucid does not implement the corresponding
+general exact test; combine scientifically compatible sparse categories or
+use a suitable exact workflow outside Cellucid.
+
+For two-page continuous-distribution comparisons, Cellucid reports Welch’s t-test and Mann–Whitney U. Mann–Whitney uses an exact two-sided p-value when both groups contain fewer than 50 finite values and there are no ties; otherwise it reports a tie- and continuity-corrected asymptotic p-value. The result card shows which method was used. Multi-page Kruskal–Wallis inference corrects for tied ranks.
+
+Interpret plots and effect sizes alongside p-values. For confirmatory inference, use a replicate-aware statistical workflow that models the experimental design.
+
+---
+
 ## Common pitfalls (read this once; it saves hours)
 
 - **Pages overlap**: the same cell can exist in multiple pages. Comparisons are then not independent.

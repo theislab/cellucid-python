@@ -102,12 +102,13 @@ If you truly need “all genes at very large cell counts”, consider the Python
 - Avoid paths synced by cloud clients (Dropbox/OneDrive) during export.
 - If you hit “too many files” limits on some filesystems, export fewer genes or split datasets.
 
-## Avoiding “stale export” confusion
+## Replacing an output generation
 
-If you re-export to the same `out_dir` with `force=FALSE` (default), the exporter may skip writing files.
+If you re-export to an existing `out_dir` with `force=FALSE`, the exporter
+rejects the complete candidate.
 
 Recommendations:
-- set `force=TRUE` while iterating, or
+- set `force=TRUE` for an intentional complete atomic replacement, or
 - export to a new `out_dir` each time (best for reproducibility)
 
 ## Troubleshooting pointers

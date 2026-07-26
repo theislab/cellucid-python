@@ -1,315 +1,945 @@
-"""
-Apply a Cellucid `.cellucid-session` bundle to an `anndata.AnnData`.
-
-Session bundles are treated as untrusted input:
-- bounds checks on indices/codes
-- dataset mismatch policies
-- opt-in destructive mutations
-"""
+"""Apply one exact Cellucid session contract to :class:`anndata.AnnData`."""
 
 from __future__ import annotations
 
-import logging
+import copy
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from pathlib import Path
+from typing import Any, cast
+from urllib.parse import quote, unquote_to_bytes
 
 import numpy as np
+import pandas as pd
+from scipy import sparse
 
 from .session_bundle import CellucidSessionBundle
 from .session_codecs import decode_delta_uvarint, decode_user_defined_codes
 
-logger = logging.getLogger("cellucid.anndata_session")
+_WIRE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,179}$")
+_FIELD_KEY_MAX_LENGTH = 256
+_CATEGORY_LABEL_MAX_LENGTH = 256
 
-DatasetMismatchPolicy = Literal["error", "warn_skip", "skip"]
-ColumnConflictPolicy = Literal["error", "overwrite", "suffix"]
-
-
-def _ensure_cellucid_uns(uns: dict[str, Any]) -> dict[str, Any]:
-    root = uns.setdefault("cellucid", {})
-    if not isinstance(root, dict):
-        raise TypeError("adata.uns['cellucid'] must be a dict if present")
-    return root
-
-
-def _safe_key(s: str) -> str:
-    key = re.sub(r"[^0-9a-zA-Z_]+", "_", (s or "").strip())
-    key = re.sub(r"_+", "_", key).strip("_")
-    if not key:
-        return "cellucid"
-    if key[0].isdigit():
-        return f"_{key}"
-    return key
-
-
-def _resolve_column_name(
-    existing: set[str],
-    name: str,
-    policy: ColumnConflictPolicy,
-) -> str:
-    if name not in existing:
-        return name
-
-    if policy == "error":
-        raise ValueError(f"Column already exists: {name}")
-    if policy == "overwrite":
-        return name
-    if policy != "suffix":
-        raise ValueError(f"Unknown column conflict policy: {policy}")
-
-    i = 2
-    while True:
-        candidate = f"{name}__{i}"
-        if candidate not in existing:
-            return candidate
-        i += 1
+_HIGHLIGHT_ROOT_KEYS = {"pages", "activePageId", "activePageName"}
+_HIGHLIGHT_PAGE_KEYS = {"id", "name", "color", "highlightedGroups"}
+_HIGHLIGHT_GROUP_REQUIRED_KEYS = {
+    "id",
+    "type",
+    "label",
+    "enabled",
+    "cellCount",
+}
+_HIGHLIGHT_GROUP_OPTIONAL_KEYS = {
+    "fieldKey",
+    "fieldIndex",
+    "fieldSource",
+    "categoryIndex",
+    "categoryName",
+    "rangeMin",
+    "rangeMax",
+}
+_OVERLAY_ROOT_KEYS = {"renames", "deletedFields", "userDefinedFields"}
+_FIELD_COMMON_KEYS = {
+    "id",
+    "source",
+    "kind",
+    "key",
+    "isDeleted",
+    "isPurged",
+    "sourceField",
+    "operation",
+    "createdAt",
+}
+_CATEGORY_FIELD_KEYS = _FIELD_COMMON_KEYS | {
+    "categories",
+    "codesLength",
+    "codesType",
+    "centroidsByDim",
+    "normalizedDims",
+    "sourcePages",
+    "overlapStrategy",
+    "overlapLabel",
+    "intersectionLabels",
+    "uncoveredLabel",
+}
+_CONTINUOUS_FIELD_KEYS = _FIELD_COMMON_KEYS
+_OVERLAP_STRATEGIES = {"first", "last", "overlap-label", "intersections"}
+_CURRENT_EXACT_CHUNK_CONTRIBUTORS = {
+    "analysis/windows": "analysis-windows",
+    "cinematic/camera": "cinematic-camera",
+    "core/field-overlays": "field-overlays",
+    "core/state": "core-state",
+    "highlights/meta": "highlights-meta",
+    "ui/dockable-layout": "dockable-layout",
+}
+_ANALYSIS_ARTIFACT_PREFIX = "analysis/artifacts/bulk-gene/"
+_HIGHLIGHT_CELLS_PREFIX = "highlights/cells/"
+_USER_DEFINED_CODES_PREFIX = "user-defined/codes/"
+_JAVASCRIPT_URI_COMPONENT_SAFE = "-_.!~*'()"
 
 
 @dataclass(frozen=True)
 class ApplySummary:
+    """Columns materialized by one successful, atomic session application."""
+
     added_obs_columns: list[str]
-    added_var_columns: list[str]
-    skipped_due_to_mismatch: bool
-    mismatch_reasons: list[str]
+
+
+@dataclass(frozen=True)
+class _ColumnPlan:
+    name: str
+    values: pd.Series
+    metadata: dict[str, Any]
+
+
+def _require_exact_bool(value: Any, *, label: str) -> bool:
+    if type(value) is not bool:
+        raise TypeError(f"{label} must be exactly True or False")
+    return value
+
+
+def _require_nonempty_string(value: Any, *, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise TypeError(f"{label} must be a non-empty string")
+    return value
+
+
+def _require_wire_id(value: Any, *, label: str) -> str:
+    identifier = _require_nonempty_string(value, label=label)
+    if _WIRE_ID_RE.fullmatch(identifier) is None:
+        raise ValueError(
+            f"{label} must use only ASCII letters, digits, '.', '_', or '-' "
+            "and be at most 180 characters"
+        )
+    return identifier
+
+
+def _require_nonnegative_int(value: Any, *, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{label} must be an integer")
+    if value < 0:
+        raise ValueError(f"{label} must be non-negative")
+    return int(value)
+
+
+def _require_exact_keys(value: Any, expected: set[str], *, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise TypeError(f"{label} must be an object")
+    if set(value) != expected:
+        missing = sorted(expected - set(value))
+        unknown = sorted(set(value) - expected)
+        details: list[str] = []
+        if missing:
+            details.append("missing " + ", ".join(missing))
+        if unknown:
+            details.append("unknown " + ", ".join(unknown))
+        raise ValueError(f"{label} has invalid fields ({'; '.join(details)})")
+    return value
+
+
+def _expected_chunk_contributor(chunk_id: str) -> str | None:
+    exact = _CURRENT_EXACT_CHUNK_CONTRIBUTORS.get(chunk_id)
+    if exact is not None:
+        return exact
+    if chunk_id.startswith(_HIGHLIGHT_CELLS_PREFIX):
+        group_id = chunk_id.removeprefix(_HIGHLIGHT_CELLS_PREFIX)
+        return "highlights-cells" if _WIRE_ID_RE.fullmatch(group_id) is not None else None
+    if chunk_id.startswith(_USER_DEFINED_CODES_PREFIX):
+        field_id = chunk_id.removeprefix(_USER_DEFINED_CODES_PREFIX)
+        return "user-defined-codes" if _WIRE_ID_RE.fullmatch(field_id) is not None else None
+    if chunk_id.startswith(_ANALYSIS_ARTIFACT_PREFIX):
+        identity = chunk_id.removeprefix(_ANALYSIS_ARTIFACT_PREFIX).split("/")
+        if len(identity) == 3 and all(_is_canonical_uri_component(segment) for segment in identity):
+            return "analysis-artifacts"
+    return None
+
+
+def _is_canonical_uri_component(value: str) -> bool:
+    if not value:
+        return False
+    try:
+        decoded = unquote_to_bytes(value).decode("utf-8", errors="strict")
+    except UnicodeDecodeError:
+        return False
+    return (
+        bool(decoded)
+        and quote(
+            decoded,
+            safe=_JAVASCRIPT_URI_COMPONENT_SAFE,
+            encoding="utf-8",
+            errors="strict",
+        )
+        == value
+    )
+
+
+def _validate_current_chunk_inventory(
+    bundle: Any,
+    raw_chunk_ids: list[str],
+) -> set[str]:
+    manifest = bundle.manifest
+    if not isinstance(manifest, dict):
+        raise TypeError("bundle.manifest must be an object")
+    manifest_chunks = manifest.get("chunks")
+    if not isinstance(manifest_chunks, list):
+        raise TypeError("bundle.manifest.chunks must be an array")
+    if len(manifest_chunks) != len(raw_chunk_ids):
+        raise ValueError("bundle.manifest.chunks must exactly match bundle.list_chunk_ids()")
+
+    for index, raw_meta in enumerate(manifest_chunks):
+        if not isinstance(raw_meta, dict):
+            raise TypeError(f"bundle.manifest.chunks[{index}] must be an object")
+        if "id" not in raw_meta or "contributorId" not in raw_meta:
+            raise ValueError(f"bundle.manifest.chunks[{index}] must declare id and contributorId")
+        chunk_id = _require_nonempty_string(
+            raw_meta["id"],
+            label=f"bundle.manifest.chunks[{index}].id",
+        )
+        if chunk_id != raw_chunk_ids[index]:
+            raise ValueError("bundle.manifest.chunks must preserve the exact list_chunk_ids order")
+        expected_contributor = _expected_chunk_contributor(chunk_id)
+        if expected_contributor is None:
+            raise ValueError(f"Unknown current session chunk {chunk_id!r}")
+        contributor_id = _require_nonempty_string(
+            raw_meta["contributorId"],
+            label=f"bundle.manifest.chunks[{index}].contributorId",
+        )
+        if contributor_id != expected_contributor:
+            raise ValueError(
+                f"Session chunk {chunk_id!r} requires contributor "
+                f"{expected_contributor!r}, received {contributor_id!r}"
+            )
+    return set(raw_chunk_ids)
+
+
+def _require_field_key(value: Any, *, label: str) -> str:
+    key = _require_nonempty_string(value, label=label)
+    if key.strip() != key:
+        raise ValueError(f"{label} cannot have leading or trailing whitespace")
+    if len(key) > _FIELD_KEY_MAX_LENGTH:
+        raise ValueError(f"{label} exceeds {_FIELD_KEY_MAX_LENGTH} Unicode code points")
+    if ":" in key:
+        raise ValueError(f"{label} cannot contain ':'")
+    return key
+
+
+def _validate_fingerprint(
+    fingerprint: Any,
+    adata: Any,
+    *,
+    expected_dataset_id: str,
+) -> dict[str, Any]:
+    expected_keys = {"sourceType", "datasetId", "cellCount", "varCount"}
+    fp = _require_exact_keys(
+        fingerprint,
+        expected_keys,
+        label="session datasetFingerprint",
+    )
+    _require_nonempty_string(fp["sourceType"], label="datasetFingerprint.sourceType")
+    dataset_id = _require_nonempty_string(
+        fp["datasetId"],
+        label="datasetFingerprint.datasetId",
+    )
+    cell_count = _require_nonnegative_int(
+        fp["cellCount"],
+        label="datasetFingerprint.cellCount",
+    )
+    var_count = _require_nonnegative_int(
+        fp["varCount"],
+        label="datasetFingerprint.varCount",
+    )
+
+    mismatches: list[str] = []
+    if dataset_id != expected_dataset_id:
+        mismatches.append(
+            f"datasetId {dataset_id!r} != expected_dataset_id {expected_dataset_id!r}"
+        )
+    n_obs = getattr(adata, "n_obs", None)
+    n_vars = getattr(adata, "n_vars", None)
+    if cell_count != n_obs:
+        mismatches.append(f"cellCount {cell_count} != adata.n_obs {n_obs}")
+    if var_count != n_vars:
+        mismatches.append(f"varCount {var_count} != adata.n_vars {n_vars}")
+    if mismatches:
+        raise ValueError("Dataset fingerprint mismatch: " + "; ".join(mismatches))
+    return copy.deepcopy(fp)
+
+
+def _reserve_column(existing: set[str], name: str) -> None:
+    if name in existing:
+        raise ValueError(f"Column already exists: {name}")
+    existing.add(name)
+
+
+def _require_optional_string(value: Any, *, label: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise TypeError(f"{label} must be a string or null")
+    return value
+
+
+def _require_string_list(
+    value: Any,
+    *,
+    label: str,
+    nonempty: bool,
+) -> list[str]:
+    if not isinstance(value, list):
+        raise TypeError(f"{label} must be an array")
+    if nonempty and not value:
+        raise ValueError(f"{label} must be a non-empty array")
+    output: list[str] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, str):
+            raise TypeError(f"{label}[{index}] must be a string")
+        if len(item) > _CATEGORY_LABEL_MAX_LENGTH:
+            raise ValueError(
+                f"{label}[{index}] exceeds {_CATEGORY_LABEL_MAX_LENGTH} Unicode code points"
+            )
+        output.append(item)
+    if len(set(output)) != len(output):
+        raise ValueError(f"{label} must contain unique exact labels")
+    return output
+
+
+def _validate_highlight_group_metadata(group: dict[str, Any], *, label: str) -> None:
+    allowed = _HIGHLIGHT_GROUP_REQUIRED_KEYS | _HIGHLIGHT_GROUP_OPTIONAL_KEYS
+    missing = _HIGHLIGHT_GROUP_REQUIRED_KEYS - set(group)
+    unknown = set(group) - allowed
+    if missing or unknown:
+        details: list[str] = []
+        if missing:
+            details.append("missing " + ", ".join(sorted(missing)))
+        if unknown:
+            details.append("unknown " + ", ".join(sorted(unknown)))
+        raise ValueError(f"{label} has invalid fields ({'; '.join(details)})")
+    _require_wire_id(group["id"], label=f"{label}.id")
+    _require_nonempty_string(group["type"], label=f"{label}.type")
+    _require_nonempty_string(group["label"], label=f"{label}.label")
+    _require_exact_bool(group["enabled"], label=f"{label}.enabled")
+    _require_nonnegative_int(group["cellCount"], label=f"{label}.cellCount")
+
+
+def _plan_highlights(
+    bundle: Any,
+    chunk_ids: set[str],
+    *,
+    n_obs: int,
+    obs_index: pd.Index,
+    prefix: str,
+    existing_columns: set[str],
+    materialize: bool,
+) -> tuple[list[_ColumnPlan], dict[str, Any] | None, Any | None]:
+    membership_prefix = "highlights/cells/"
+    membership_ids = {chunk_id for chunk_id in chunk_ids if chunk_id.startswith(membership_prefix)}
+    if "highlights/meta" not in chunk_ids:
+        if membership_ids:
+            raise ValueError("Session contains highlight membership chunks without highlights/meta")
+        return [], None, None
+
+    raw_meta = bundle.decode_chunk("highlights/meta")
+    meta = _require_exact_keys(
+        raw_meta,
+        _HIGHLIGHT_ROOT_KEYS,
+        label="highlights/meta",
+    )
+    pages = meta["pages"]
+    if not isinstance(pages, list):
+        raise TypeError("highlights/meta.pages must be an array")
+    _require_optional_string(meta["activePageId"], label="highlights/meta.activePageId")
+    _require_optional_string(
+        meta["activePageName"],
+        label="highlights/meta.activePageName",
+    )
+
+    plans: list[_ColumnPlan] = []
+    referenced_memberships: set[str] = set()
+    page_ids: set[str] = set()
+    group_ids: set[str] = set()
+    highlights_uns: dict[str, Any] = {"groups": {}}
+
+    for page_index, raw_page in enumerate(pages):
+        page = _require_exact_keys(
+            raw_page,
+            _HIGHLIGHT_PAGE_KEYS,
+            label=f"highlights/meta.pages[{page_index}]",
+        )
+        page_id = _require_wire_id(
+            page["id"],
+            label=f"highlights/meta.pages[{page_index}].id",
+        )
+        if page_id in page_ids:
+            raise ValueError(f"Duplicate highlight page id: {page_id}")
+        page_ids.add(page_id)
+        page_name = _require_nonempty_string(
+            page["name"],
+            label=f"highlights/meta.pages[{page_index}].name",
+        )
+        _require_optional_string(
+            page["color"],
+            label=f"highlights/meta.pages[{page_index}].color",
+        )
+        groups = page["highlightedGroups"]
+        if not isinstance(groups, list):
+            raise TypeError(
+                f"highlights/meta.pages[{page_index}].highlightedGroups must be an array"
+            )
+
+        for group_index, raw_group in enumerate(groups):
+            if not isinstance(raw_group, dict):
+                raise TypeError(
+                    f"highlights/meta.pages[{page_index}].highlightedGroups"
+                    f"[{group_index}] must be an object"
+                )
+            group_label = f"highlights/meta.pages[{page_index}].highlightedGroups[{group_index}]"
+            _validate_highlight_group_metadata(raw_group, label=group_label)
+            group_id = raw_group["id"]
+            if group_id in group_ids:
+                raise ValueError(f"Duplicate highlight group id: {group_id}")
+            group_ids.add(group_id)
+            membership_chunk_id = f"{membership_prefix}{group_id}"
+            cell_count = raw_group["cellCount"]
+
+            if cell_count == 0:
+                if membership_chunk_id in chunk_ids:
+                    raise ValueError(
+                        f"Empty highlight group {group_id!r} must not contain "
+                        f"{membership_chunk_id!r}"
+                    )
+                indices = np.empty(0, dtype=np.uint32)
+            else:
+                if membership_chunk_id not in chunk_ids:
+                    raise ValueError(
+                        f"Highlight group {group_id!r} is missing required chunk "
+                        f"{membership_chunk_id!r}"
+                    )
+                raw_membership = bundle.decode_chunk(membership_chunk_id)
+                if not isinstance(raw_membership, bytes | bytearray | memoryview):
+                    raise TypeError(f"{membership_chunk_id} must decode to binary bytes")
+                indices = decode_delta_uvarint(
+                    raw_membership,
+                    max_count=n_obs,
+                    max_index=n_obs - 1,
+                )
+                if len(indices) != cell_count:
+                    raise ValueError(
+                        f"{membership_chunk_id} contains {len(indices)} indices, "
+                        f"but metadata declares {cell_count}"
+                    )
+                referenced_memberships.add(membership_chunk_id)
+
+            column_name = f"{prefix}{group_id}"
+            if materialize:
+                _reserve_column(existing_columns, column_name)
+                mask = np.zeros(n_obs, dtype=bool)
+                mask[indices] = True
+                plans.append(
+                    _ColumnPlan(
+                        name=column_name,
+                        values=pd.Series(mask, index=obs_index, copy=False),
+                        metadata={
+                            "kind": "highlight",
+                            "group_id": group_id,
+                            "page_id": page_id,
+                        },
+                    )
+                )
+            highlights_uns["groups"][group_id] = {
+                "obs_column": column_name if materialize else None,
+                "page_id": page_id,
+                "page_name": page_name,
+                "group": copy.deepcopy(raw_group),
+            }
+
+    if membership_ids != referenced_memberships:
+        unexpected = sorted(membership_ids - referenced_memberships)
+        raise ValueError(
+            "Session contains undeclared highlight membership chunks: " + ", ".join(unexpected)
+        )
+    return plans, highlights_uns, copy.deepcopy(meta)
+
+
+def _validate_source_field(value: Any, *, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise TypeError(f"{label} must be an object")
+    allowed = {"sourceKey", "sourceIndex", "kind"}
+    if "sourceKey" not in value or set(value) - allowed:
+        raise ValueError(f"{label} has invalid fields")
+    source_key = _require_nonempty_string(
+        value["sourceKey"],
+        label=f"{label}.sourceKey",
+    )
+    output: dict[str, Any] = {"sourceKey": source_key}
+    if "sourceIndex" in value:
+        output["sourceIndex"] = _require_nonnegative_int(
+            value["sourceIndex"],
+            label=f"{label}.sourceIndex",
+        )
+    if "kind" in value:
+        output["kind"] = _require_nonempty_string(
+            value["kind"],
+            label=f"{label}.kind",
+        )
+    return output
+
+
+def _validate_operation(value: Any, *, label: str) -> None:
+    if value is None:
+        return
+    if not isinstance(value, dict):
+        raise TypeError(f"{label} must be an object or null")
+    _require_nonempty_string(value.get("type"), label=f"{label}.type")
+
+
+def _numeric_series(
+    values: Any,
+    *,
+    n_obs: int,
+    obs_index: pd.Index,
+    label: str,
+) -> pd.Series:
+    array = np.asarray(values.toarray()) if sparse.issparse(values) else np.asarray(values)
+    if array.ndim == 2 and array.shape[1] == 1:
+        array = array[:, 0]
+    if array.ndim != 1 or array.shape[0] != n_obs:
+        raise ValueError(f"{label} must contain exactly {n_obs} cell values")
+    if (
+        not np.issubdtype(array.dtype, np.number)
+        or np.issubdtype(array.dtype, np.bool_)
+        or np.issubdtype(array.dtype, np.complexfloating)
+    ):
+        raise TypeError(f"{label} must contain real numeric values")
+    if not np.isfinite(array).all():
+        raise ValueError(f"{label} must contain only finite values")
+    return pd.Series(array.copy(), index=obs_index)
+
+
+def _materialize_continuous_alias(
+    adata: Any,
+    *,
+    source: str,
+    source_field: dict[str, Any],
+    label: str,
+) -> pd.Series:
+    source_key = source_field["sourceKey"]
+    n_obs = int(adata.n_obs)
+    obs_index = adata.obs_names
+    if source == "obs":
+        matching = [index for index, key in enumerate(adata.obs.columns) if key == source_key]
+        if len(matching) != 1:
+            raise ValueError(f"{label} source obs field {source_key!r} must exist exactly once")
+        source_index = matching[0]
+        values = adata.obs.iloc[:, source_index].to_numpy(copy=True)
+    else:
+        matching = [index for index, key in enumerate(adata.var_names) if key == source_key]
+        if len(matching) != 1:
+            raise ValueError(f"{label} source gene {source_key!r} must exist exactly once")
+        source_index = matching[0]
+        if getattr(adata, "X", None) is None:
+            raise ValueError(f"{label} cannot copy gene values because adata.X is absent")
+        values = adata.X[:, source_index]
+
+    declared_index = source_field.get("sourceIndex")
+    if declared_index is not None and declared_index != source_index:
+        raise ValueError(
+            f"{label} sourceIndex {declared_index} does not match exact source "
+            f"{source_key!r} at index {source_index}"
+        )
+    return _numeric_series(
+        values,
+        n_obs=n_obs,
+        obs_index=obs_index,
+        label=label,
+    )
+
+
+def _validate_category_metadata(field: dict[str, Any], *, label: str) -> list[str]:
+    categories = _require_string_list(
+        field["categories"],
+        label=f"{label}.categories",
+        nonempty=True,
+    )
+    codes_length = _require_nonnegative_int(
+        field["codesLength"],
+        label=f"{label}.codesLength",
+    )
+    codes_type = field["codesType"]
+    if codes_type not in {"Uint8Array", "Uint16Array"}:
+        raise ValueError(f"{label}.codesType must be Uint8Array or Uint16Array")
+    if not isinstance(field["centroidsByDim"], dict):
+        raise TypeError(f"{label}.centroidsByDim must be an object")
+    normalized_dims = field["normalizedDims"]
+    if (
+        not isinstance(normalized_dims, list)
+        or any(
+            isinstance(item, bool) or not isinstance(item, int) or item not in {1, 2, 3}
+            for item in normalized_dims
+        )
+        or len(normalized_dims) != len(set(normalized_dims))
+    ):
+        raise ValueError(f"{label}.normalizedDims must be unique dimensions 1, 2, or 3")
+    if not isinstance(field["sourcePages"], list):
+        raise TypeError(f"{label}.sourcePages must be an array")
+    if field["overlapStrategy"] not in _OVERLAP_STRATEGIES:
+        raise ValueError(f"{label}.overlapStrategy is invalid")
+    _require_optional_string(field["overlapLabel"], label=f"{label}.overlapLabel")
+    if field["intersectionLabels"] is not None and not isinstance(
+        field["intersectionLabels"], dict
+    ):
+        raise TypeError(f"{label}.intersectionLabels must be an object or null")
+    _require_optional_string(field["uncoveredLabel"], label=f"{label}.uncoveredLabel")
+    if field["sourceField"] is not None:
+        _validate_source_field(field["sourceField"], label=f"{label}.sourceField")
+    _validate_operation(field["operation"], label=f"{label}.operation")
+    if codes_length > 0 and codes_type == "Uint8Array" and len(categories) > 255:
+        raise ValueError(f"{label} has too many categories for Uint8Array codes")
+    return categories
+
+
+def _validate_field_created_at(value: Any, *, label: str) -> None:
+    if value is None:
+        return
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise TypeError(f"{label} must be a finite non-negative number or null")
+    if not np.isfinite(value) or value < 0:
+        raise ValueError(f"{label} must be a finite non-negative number or null")
+
+
+def _plan_user_defined_fields(
+    bundle: Any,
+    chunk_ids: set[str],
+    adata: Any,
+    *,
+    prefix: str,
+    existing_columns: set[str],
+    materialize: bool,
+    include_deleted: bool,
+) -> tuple[list[_ColumnPlan], Any | None]:
+    codes_prefix = "user-defined/codes/"
+    code_chunk_ids = {chunk_id for chunk_id in chunk_ids if chunk_id.startswith(codes_prefix)}
+    if "core/field-overlays" not in chunk_ids:
+        if code_chunk_ids:
+            raise ValueError(
+                "Session contains user-defined code chunks without core/field-overlays"
+            )
+        return [], None
+
+    raw_overlays = bundle.decode_chunk("core/field-overlays")
+    overlays = _require_exact_keys(
+        raw_overlays,
+        _OVERLAY_ROOT_KEYS,
+        label="core/field-overlays",
+    )
+    if overlays["renames"] is not None and not isinstance(overlays["renames"], dict):
+        raise TypeError("core/field-overlays.renames must be an object or null")
+    if overlays["deletedFields"] is not None and not isinstance(overlays["deletedFields"], dict):
+        raise TypeError("core/field-overlays.deletedFields must be an object or null")
+    fields = overlays["userDefinedFields"]
+    if not isinstance(fields, list):
+        raise TypeError("core/field-overlays.userDefinedFields must be an array")
+
+    plans: list[_ColumnPlan] = []
+    field_ids: set[str] = set()
+    referenced_code_chunks: set[str] = set()
+    n_obs = int(adata.n_obs)
+    for index, raw_field in enumerate(fields):
+        if not isinstance(raw_field, dict):
+            raise TypeError(f"core/field-overlays.userDefinedFields[{index}] must be an object")
+        label = f"core/field-overlays.userDefinedFields[{index}]"
+        kind = raw_field.get("kind")
+        expected_keys = _CATEGORY_FIELD_KEYS if kind == "category" else _CONTINUOUS_FIELD_KEYS
+        field = _require_exact_keys(raw_field, expected_keys, label=label)
+        if kind not in {"category", "continuous"}:
+            raise ValueError(f"{label}.kind must be 'category' or 'continuous'")
+        field_id = _require_wire_id(field["id"], label=f"{label}.id")
+        if field_id in field_ids:
+            raise ValueError(f"Duplicate user-defined field id: {field_id}")
+        field_ids.add(field_id)
+        source = field["source"]
+        if source not in {"obs", "var"}:
+            raise ValueError(f"{label}.source must be 'obs' or 'var'")
+        field_key = _require_field_key(field["key"], label=f"{label}.key")
+        is_deleted = _require_exact_bool(
+            field["isDeleted"],
+            label=f"{label}.isDeleted",
+        )
+        is_purged = _require_exact_bool(
+            field["isPurged"],
+            label=f"{label}.isPurged",
+        )
+        _validate_field_created_at(field["createdAt"], label=f"{label}.createdAt")
+        should_materialize = materialize and (include_deleted or not is_deleted) and not is_purged
+
+        column_name = f"{prefix}{field_key}"
+        if kind == "continuous":
+            source_field = _validate_source_field(
+                field["sourceField"],
+                label=f"{label}.sourceField",
+            )
+            _validate_operation(field["operation"], label=f"{label}.operation")
+            if should_materialize:
+                _reserve_column(existing_columns, column_name)
+                values = _materialize_continuous_alias(
+                    adata,
+                    source=source,
+                    source_field=source_field,
+                    label=f"Continuous field {field_id!r}",
+                )
+                plans.append(
+                    _ColumnPlan(
+                        name=column_name,
+                        values=values,
+                        metadata={
+                            "kind": "continuous",
+                            "field_id": field_id,
+                            "source": source,
+                            "source_field": source_field,
+                        },
+                    )
+                )
+            continue
+
+        categories = _validate_category_metadata(field, label=label)
+        codes_length = field["codesLength"]
+        codes_type = field["codesType"]
+        code_chunk_id = f"{codes_prefix}{field_id}"
+        if is_purged:
+            if codes_length != 0 or code_chunk_id in chunk_ids:
+                raise ValueError(f"Purged user-defined field {field_id!r} must not retain codes")
+            continue
+        if codes_length != n_obs:
+            raise ValueError(
+                f"User-defined categorical field {field_id!r} has codesLength "
+                f"{codes_length}, expected {n_obs} cell-aligned codes"
+            )
+        if n_obs == 0:
+            if code_chunk_id in chunk_ids:
+                raise ValueError(
+                    f"Empty user-defined field {field_id!r} must not contain a codes chunk"
+                )
+            codes = np.empty(0, dtype=np.uint8 if codes_type == "Uint8Array" else np.uint16)
+        else:
+            if code_chunk_id not in chunk_ids:
+                raise ValueError(
+                    f"User-defined categorical field {field_id!r} is missing "
+                    f"required chunk {code_chunk_id!r}"
+                )
+            raw_codes = bundle.decode_chunk(code_chunk_id)
+            if not isinstance(raw_codes, bytes | bytearray | memoryview):
+                raise TypeError(f"{code_chunk_id} must decode to binary bytes")
+            codes = decode_user_defined_codes(raw_codes)
+            referenced_code_chunks.add(code_chunk_id)
+            expected_dtype = np.dtype(np.uint8 if codes_type == "Uint8Array" else np.uint16)
+            if codes.dtype != expected_dtype:
+                raise ValueError(f"{code_chunk_id} dtype {codes.dtype} does not match {codes_type}")
+            if len(codes) != codes_length:
+                raise ValueError(
+                    f"{code_chunk_id} contains {len(codes)} codes, expected {codes_length}"
+                )
+
+        category_codes = codes.astype(np.int64, copy=True)
+        missing_sentinel = (
+            (255 if codes_type == "Uint8Array" else 65_535)
+            if field["uncoveredLabel"] is None
+            else None
+        )
+        if missing_sentinel is not None:
+            category_codes[category_codes == missing_sentinel] = -1
+        invalid = np.flatnonzero((category_codes < -1) | (category_codes >= len(categories)))
+        if invalid.size:
+            position = int(invalid[0])
+            code = int(category_codes[position])
+            raise ValueError(
+                f"User-defined categorical field {field_id!r} contains code "
+                f"{code} at position {position}, but declares {len(categories)} categories"
+            )
+
+        if should_materialize:
+            _reserve_column(existing_columns, column_name)
+            categorical = pd.Categorical.from_codes(
+                cast("Sequence[int]", category_codes),
+                categories=pd.Index(categories),
+                ordered=False,
+            )
+            plans.append(
+                _ColumnPlan(
+                    name=column_name,
+                    values=pd.Series(categorical, index=adata.obs_names),
+                    metadata={
+                        "kind": "category",
+                        "field_id": field_id,
+                        "source": source,
+                    },
+                )
+            )
+
+    if code_chunk_ids != referenced_code_chunks:
+        unexpected = sorted(code_chunk_ids - referenced_code_chunks)
+        raise ValueError(
+            "Session contains undeclared user-defined code chunks: " + ", ".join(unexpected)
+        )
+    return plans, copy.deepcopy(overlays)
+
+
+def _build_uns(
+    adata: Any,
+    *,
+    bundle: Any,
+    fingerprint: dict[str, Any],
+    expected_dataset_id: str,
+    highlight_meta: Any | None,
+    highlights_uns: dict[str, Any] | None,
+    overlays: Any | None,
+    plans: list[_ColumnPlan],
+) -> dict[str, Any]:
+    raw_uns = getattr(adata, "uns", None)
+    if not isinstance(raw_uns, dict):
+        raise TypeError("adata.uns must be a dictionary")
+    next_uns = copy.deepcopy(raw_uns)
+    cellucid = next_uns.get("cellucid")
+    if cellucid is None:
+        cellucid = {}
+        next_uns["cellucid"] = cellucid
+    if not isinstance(cellucid, dict):
+        raise TypeError("adata.uns['cellucid'] must be a dictionary if present")
+    session = cellucid.get("session")
+    if session is not None and not isinstance(session, dict):
+        raise TypeError("adata.uns['cellucid']['session'] must be a dictionary if present")
+    next_session: dict[str, Any] = {
+        "manifest": copy.deepcopy(bundle.manifest),
+        "dataset_fingerprint": fingerprint,
+        "applied": {
+            "expected_dataset_id": expected_dataset_id,
+            "contract": "exact",
+        },
+        "materialized_fields": {plan.name: copy.deepcopy(plan.metadata) for plan in plans},
+        "chunks": {},
+    }
+    if highlight_meta is not None:
+        next_session["chunks"]["highlights/meta"] = highlight_meta
+    if overlays is not None:
+        next_session["chunks"]["core/field-overlays"] = overlays
+    if highlights_uns is not None:
+        next_session["highlights"] = highlights_uns
+    cellucid["session"] = next_session
+    return next_uns
 
 
 def apply_cellucid_session_to_anndata(
-    bundle: CellucidSessionBundle | str,
-    adata: "Any",
+    bundle: CellucidSessionBundle | str | Path,
+    adata: Any,
     *,
+    expected_dataset_id: str,
     inplace: bool = False,
-    dataset_mismatch: DatasetMismatchPolicy = "warn_skip",
-    expected_dataset_id: str | None = None,
     add_highlights: bool = True,
     highlights_prefix: str = "cellucid_highlight__",
     add_user_defined_fields: bool = True,
     user_defined_prefix: str = "",
     include_deleted_user_defined_fields: bool = False,
     store_uns: bool = True,
-    column_conflict: ColumnConflictPolicy = "suffix",
     return_summary: bool = False,
-) -> "Any" | tuple["Any", ApplySummary]:
-    """
-    Apply a `.cellucid-session` bundle onto an AnnData object.
-
-    By default returns the (possibly copied) `adata`.
-    If `return_summary=True`, returns `(adata, summary)`.
-    """
-    try:
-        import pandas as pd  # type: ignore
-    except Exception as e:  # pragma: no cover
-        raise ImportError("apply_cellucid_session_to_anndata requires pandas") from e
-
-    if isinstance(bundle, str):
-        bundle = CellucidSessionBundle(bundle)
-
-    if not inplace:
-        adata = adata.copy()
-
-    mismatch_reasons: list[str] = []
-    fp = bundle.dataset_fingerprint or {}
-
-    fp_cells = fp.get("cellCount")
-    fp_vars = fp.get("varCount")
-    fp_dataset_id = fp.get("datasetId")
-
-    if isinstance(fp_cells, int) and fp_cells != getattr(adata, "n_obs", None):
-        mismatch_reasons.append(f"cellCount {fp_cells} != adata.n_obs {getattr(adata, 'n_obs', None)}")
-    if isinstance(fp_vars, int) and fp_vars != getattr(adata, "n_vars", None):
-        mismatch_reasons.append(f"varCount {fp_vars} != adata.n_vars {getattr(adata, 'n_vars', None)}")
-    if expected_dataset_id is not None and fp_dataset_id is not None and fp_dataset_id != expected_dataset_id:
-        mismatch_reasons.append(f"datasetId {fp_dataset_id!r} != expected_dataset_id {expected_dataset_id!r}")
-
-    has_mismatch = len(mismatch_reasons) > 0
-    skip_dataset_dependent = False
-
-    if has_mismatch:
-        if dataset_mismatch == "error":
-            raise ValueError("Dataset fingerprint mismatch: " + "; ".join(mismatch_reasons))
-        if dataset_mismatch == "warn_skip":
-            logger.warning("Dataset fingerprint mismatch; skipping dataset-dependent chunks: %s", mismatch_reasons)
-            skip_dataset_dependent = True
-        elif dataset_mismatch == "skip":
-            skip_dataset_dependent = True
-        else:
-            raise ValueError(f"Unknown dataset_mismatch policy: {dataset_mismatch}")
-
-    added_obs: list[str] = []
-    added_var: list[str] = []
-
-    if store_uns:
-        cellucid_uns = _ensure_cellucid_uns(adata.uns)
-        session_uns = cellucid_uns.setdefault("session", {})
-        if not isinstance(session_uns, dict):
-            raise TypeError("adata.uns['cellucid']['session'] must be a dict if present")
-        session_uns["manifest"] = bundle.manifest
-        session_uns["dataset_fingerprint"] = fp
-        session_uns["applied"] = {
-            "dataset_mismatch_policy": dataset_mismatch,
-            "expected_dataset_id": expected_dataset_id,
-            "skip_dataset_dependent": skip_dataset_dependent,
-        }
-
-    chunk_ids = set(bundle.list_chunk_ids())
-
-    # ---------------------------------------------------------------------
-    # Highlights → adata.obs boolean columns
-    # ---------------------------------------------------------------------
-    if add_highlights and not skip_dataset_dependent and "highlights/meta" in chunk_ids:
-        meta = bundle.decode_chunk("highlights/meta")
-        if store_uns:
-            _ensure_cellucid_uns(adata.uns).setdefault("session", {}).setdefault("chunks", {})["highlights/meta"] = meta
-
-        pages = meta.get("pages") if isinstance(meta, dict) else None
-        if isinstance(pages, list):
-            existing_cols = set(adata.obs.columns)
-            highlights_uns = None
-            if store_uns:
-                session = _ensure_cellucid_uns(adata.uns).setdefault("session", {})
-                highlights_uns = session.setdefault("highlights", {})
-                if not isinstance(highlights_uns, dict):
-                    highlights_uns = None
-
-            for page in pages:
-                if not isinstance(page, dict):
-                    continue
-                page_id = page.get("id")
-                page_name = page.get("name")
-                groups = page.get("highlightedGroups") or []
-                if not isinstance(groups, list):
-                    continue
-
-                for group in groups:
-                    if not isinstance(group, dict):
-                        continue
-                    group_id = group.get("id")
-                    if not isinstance(group_id, str) or not group_id:
-                        continue
-
-                    membership_chunk_id = f"highlights/cells/{group_id}"
-                    if membership_chunk_id in chunk_ids:
-                        raw = bundle.decode_chunk(membership_chunk_id)
-                        indices = decode_delta_uvarint(
-                            raw,
-                            max_count=int(getattr(adata, "n_obs", 0)),
-                            max_index=int(getattr(adata, "n_obs", 0)) - 1,
-                        )
-                    else:
-                        indices = np.empty(0, dtype=np.uint32)
-
-                    base_name = f"{highlights_prefix}{_safe_key(group_id)}"
-                    col_name = _resolve_column_name(existing_cols, base_name, column_conflict)
-                    existing_cols.add(col_name)
-
-                    mask = np.zeros(int(getattr(adata, "n_obs", 0)), dtype=bool)
-                    if indices.size > 0:
-                        mask[indices] = True
-                    adata.obs[col_name] = pd.Series(mask, index=adata.obs_names)
-                    added_obs.append(col_name)
-
-                    if isinstance(highlights_uns, dict):
-                        highlights_uns.setdefault("groups", {})[group_id] = {
-                            "obs_column": col_name,
-                            "page_id": page_id,
-                            "page_name": page_name,
-                            "group": group,
-                        }
-
-    # ---------------------------------------------------------------------
-    # User-defined categorical fields → adata.obs/adata.var
-    # ---------------------------------------------------------------------
-    if add_user_defined_fields and not skip_dataset_dependent and "core/field-overlays" in chunk_ids:
-        overlays = bundle.decode_chunk("core/field-overlays")
-        if store_uns:
-            _ensure_cellucid_uns(adata.uns).setdefault("session", {}).setdefault("chunks", {})[
-                "core/field-overlays"
-            ] = overlays
-
-        udf = overlays.get("userDefinedFields") if isinstance(overlays, dict) else None
-        if isinstance(udf, list):
-            existing_obs = set(adata.obs.columns)
-            existing_var = set(getattr(adata, "var", pd.DataFrame()).columns)
-            for field in udf:
-                if not isinstance(field, dict):
-                    continue
-                if field.get("kind") != "category":
-                    continue
-                if field.get("isDeleted") is True and not include_deleted_user_defined_fields:
-                    continue
-
-                field_id = field.get("id")
-                if not isinstance(field_id, str) or not field_id:
-                    continue
-
-                source = field.get("source")
-                target = "var" if source == "var" else "obs"
-
-                codes_chunk_id = f"user-defined/codes/{field_id}"
-                if codes_chunk_id not in chunk_ids:
-                    continue
-
-                raw = bundle.decode_chunk(codes_chunk_id)
-                codes = decode_user_defined_codes(raw)
-
-                if target == "obs":
-                    expected_len = int(getattr(adata, "n_obs", 0))
-                    if codes.shape[0] != expected_len:
-                        logger.warning(
-                            "Skipping user-defined field %s: codes length %s != adata.n_obs %s",
-                            field_id,
-                            codes.shape[0],
-                            expected_len,
-                        )
-                        continue
-                else:
-                    expected_len = int(getattr(adata, "n_vars", 0))
-                    if codes.shape[0] != expected_len:
-                        logger.warning(
-                            "Skipping user-defined var field %s: codes length %s != adata.n_vars %s",
-                            field_id,
-                            codes.shape[0],
-                            expected_len,
-                        )
-                        continue
-
-                categories = field.get("categories") if isinstance(field.get("categories"), list) else []
-                categories = [str(c) for c in categories]
-
-                base_key = str(field.get("key") or field_id)
-                col_base = f"{user_defined_prefix}{_safe_key(base_key)}"
-
-                if target == "obs":
-                    col_name = _resolve_column_name(existing_obs, col_base, column_conflict)
-                    existing_obs.add(col_name)
-                else:
-                    col_name = _resolve_column_name(existing_var, col_base, column_conflict)
-                    existing_var.add(col_name)
-
-                # Pandas uses -1 for NA in categorical codes; sanitize out-of-range codes.
-                codes_i32 = codes.astype(np.int32, copy=False)
-                if categories:
-                    invalid = (codes_i32 < 0) | (codes_i32 >= len(categories))
-                    if invalid.any():
-                        codes_i32 = codes_i32.copy()
-                        codes_i32[invalid] = -1
-                    cat = pd.Categorical.from_codes(codes_i32, categories=categories, ordered=False)
-                else:
-                    # No categories list; store raw codes as integers.
-                    cat = pd.Series(codes_i32)
-
-                if target == "obs":
-                    adata.obs[col_name] = pd.Series(cat, index=adata.obs_names)
-                    added_obs.append(col_name)
-                else:
-                    adata.var[col_name] = pd.Series(cat, index=adata.var_names)
-                    added_var.append(col_name)
-
-    summary = ApplySummary(
-        added_obs_columns=added_obs,
-        added_var_columns=added_var,
-        skipped_due_to_mismatch=skip_dataset_dependent,
-        mismatch_reasons=mismatch_reasons,
+) -> Any | tuple[Any, ApplySummary]:
+    """Apply a validated session atomically to the exact matching AnnData dataset."""
+    expected_dataset_id = _require_nonempty_string(
+        expected_dataset_id,
+        label="expected_dataset_id",
     )
+    _require_exact_bool(inplace, label="inplace")
+    _require_exact_bool(add_highlights, label="add_highlights")
+    _require_exact_bool(add_user_defined_fields, label="add_user_defined_fields")
+    _require_exact_bool(
+        include_deleted_user_defined_fields,
+        label="include_deleted_user_defined_fields",
+    )
+    _require_exact_bool(store_uns, label="store_uns")
+    _require_exact_bool(return_summary, label="return_summary")
+    if not isinstance(highlights_prefix, str):
+        raise TypeError("highlights_prefix must be a string")
+    if not isinstance(user_defined_prefix, str):
+        raise TypeError("user_defined_prefix must be a string")
+
+    if isinstance(bundle, str | Path):
+        bundle = CellucidSessionBundle(bundle)
+    for attribute in (
+        "dataset_fingerprint",
+        "manifest",
+        "list_chunk_ids",
+        "decode_chunk",
+    ):
+        if not hasattr(bundle, attribute):
+            raise TypeError(f"bundle must expose {attribute!r}")
+    if not hasattr(adata, "obs") or not hasattr(adata, "var") or not hasattr(adata, "uns"):
+        raise TypeError("adata must be an AnnData-compatible object")
+    is_backed = getattr(adata, "isbacked", None)
+    if type(is_backed) is not bool:
+        raise TypeError("adata.isbacked must be exactly True or False")
+    if is_backed and not inplace:
+        raise ValueError(
+            "A backed AnnData target cannot be applied with inplace=False; "
+            "pass an explicitly materialized AnnData object or choose inplace=True"
+        )
+
+    fingerprint = _validate_fingerprint(
+        bundle.dataset_fingerprint,
+        adata,
+        expected_dataset_id=expected_dataset_id,
+    )
+    raw_chunk_ids = bundle.list_chunk_ids()
+    if not isinstance(raw_chunk_ids, list) or any(
+        not isinstance(item, str) for item in raw_chunk_ids
+    ):
+        raise TypeError("bundle.list_chunk_ids() must return a list of strings")
+    if len(raw_chunk_ids) != len(set(raw_chunk_ids)):
+        raise ValueError("Session bundle contains duplicate chunk ids")
+    chunk_ids = _validate_current_chunk_inventory(bundle, raw_chunk_ids)
+
+    existing_columns = set(adata.obs.columns)
+    highlight_plans, highlights_uns, highlight_meta = _plan_highlights(
+        bundle,
+        chunk_ids,
+        n_obs=int(adata.n_obs),
+        obs_index=adata.obs_names,
+        prefix=highlights_prefix,
+        existing_columns=existing_columns,
+        materialize=add_highlights,
+    )
+    field_plans, overlays = _plan_user_defined_fields(
+        bundle,
+        chunk_ids,
+        adata,
+        prefix=user_defined_prefix,
+        existing_columns=existing_columns,
+        materialize=add_user_defined_fields,
+        include_deleted=include_deleted_user_defined_fields,
+    )
+    plans = [*highlight_plans, *field_plans]
+
+    next_obs = adata.obs.copy(deep=True)
+    for plan in plans:
+        next_obs[plan.name] = plan.values
+    next_uns = (
+        _build_uns(
+            adata,
+            bundle=bundle,
+            fingerprint=fingerprint,
+            expected_dataset_id=expected_dataset_id,
+            highlight_meta=highlight_meta,
+            highlights_uns=highlights_uns,
+            overlays=overlays,
+            plans=plans,
+        )
+        if store_uns
+        else None
+    )
+
+    target = adata if inplace else adata.copy()
+    target.obs = next_obs
+    if next_uns is not None:
+        target.uns = next_uns
+
+    summary = ApplySummary(added_obs_columns=[plan.name for plan in plans])
     if return_summary:
-        return adata, summary
-    return adata
+        return target, summary
+    return target

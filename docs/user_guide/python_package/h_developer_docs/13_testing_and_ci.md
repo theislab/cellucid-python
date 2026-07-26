@@ -74,11 +74,11 @@ Workflows live under:
 Current workflows:
 
 - `docs-check.yml`: builds Sphinx docs on PRs and pushes to `main`
+- `test.yml`: runs the complete pytest suite, Ruff, mypy, and distribution
+  checks across Python 3.10–3.14 on Ubuntu, representative Python versions on
+  macOS, and representative Python versions on Windows
 - `pypi-publish.yml`: builds and publishes distributions to PyPI on tags `v*`
 - `readthedocs.yml`: triggers a ReadTheDocs build via API
-
-Important current limitation:
-- There is not (yet) a dedicated “run pytest in CI” workflow. If you add tests for critical behavior, consider adding CI coverage in a future change.
 
 ---
 
@@ -90,7 +90,7 @@ General principles:
 - Test behavior and error messages for edge cases (shape mismatch, NaN handling, dtype selection).
 - Avoid tests that require network access (hosted UI proxy) or browsers.
 
-Suggested “test categories” for future expansion:
+Core test categories:
 
 1) Export format:
    - `prepare(...)` produces required files

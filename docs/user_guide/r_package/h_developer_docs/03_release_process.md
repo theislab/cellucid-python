@@ -8,7 +8,7 @@ The full step-by-step checklist lives in:
 ## Recommended release flow (high level)
 
 1) Update `DESCRIPTION` version.
-2) Update `CITATION.cff` (if present) to match the new version.
+2) Update `CITATION.cff` to match the new version.
 3) Update `NEWS.md` with user-visible changes.
 4) Ensure tests pass (`devtools::test()` / `R CMD check`).
 5) Merge to main.
@@ -24,7 +24,9 @@ The full step-by-step checklist lives in:
 
 - The R package is an exporter that must remain compatible with the viewer format.
 - Changes to file formats should be documented and tested.
-- Prefer backwards-compatible changes unless a format bump is intentional.
+- Apply format changes atomically across the R writer, Python writer/server, web
+  reader, validators, tests, and format documentation; retain only the exact
+  current schema.
 
 ## Where to update docs
 

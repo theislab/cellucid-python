@@ -88,24 +88,36 @@ The summary table is meant to be “readable truth” even when plots are ambigu
 If you select at least 2 pages, Detailed shows statistical tests appropriate to the variable kind:
 
 #### If the variable is categorical
-- **Chi-squared test** for difference in distributions
-- effect size: **Cramér’s V**
+- **Pearson chi-squared test** for a general difference in distributions when every expected cell count is at least 5 (effect size: **Cramér’s V**)
+- **Fisher’s exact test** is selected automatically for a 2×2 table when any expected cell count is below 5
+  - Fisher reports a two-sided exact p-value and a sample odds ratio whose group/category contrast is shown on the result card
+- A larger sparse table is shown as **N/A** rather than given a potentially misleading Pearson p-value; combine scientifically compatible sparse categories or use an appropriate exact test outside Cellucid
 
 #### If the variable is continuous (including genes)
 
 If you selected exactly 2 pages:
-- **Welch’s t-test** (effect size: **Cohen’s d**)
+- **Welch’s t-test** with Welch–Satterthwaite degrees of freedom (effect size: **Cohen’s d**)
 - **Mann–Whitney U** (effect size: **rank-biserial r**)
+  - exact two-sided p-value when both groups have fewer than 50 finite values and there are no ties
+  - otherwise a tie- and continuity-corrected asymptotic p-value
+  - the result card reports the p-value method
+  - rank-biserial direction is reported as group 1 versus group 2
 
 If you selected 3+ pages:
 - **One-way ANOVA** (effect size: **η²**)
-- **Kruskal–Wallis** (effect size: **ε²**)
+- **Kruskal–Wallis** with tied-rank correction and a chi-squared reference tail (effect size: **ε²**)
+
+Non-finite values are excluded before continuous tests. If all remaining
+values are identical, variance- or rank-based inference is undefined and the
+affected result is shown as **N/A**, rather than as evidence for no difference.
 
 :::{important}
 These tests are meant for exploratory, interactive comparison.
 
-They do not model batch covariates, do not correct for running many variables, and some p-values use normal-approximation formulas.
+They treat the supplied cell values as observations, do not model donors or batch covariates, and do not correct for running many variables.
 For publication-grade inference, export data and use a dedicated statistical workflow.
+
+For analysis-wide scope and assumptions, see {doc}`01_analysis_mental_model`.
 :::
 
 ---
@@ -206,28 +218,13 @@ Fix:
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: analysis-detailed-analysis-success
-Suggested filename: analysis/11_detailed-success.png
-Where it appears: User Guide → Web App → Analysis → 04_analysis_mode_detailed_analysis.md
-Capture:
-  - UI location: Analysis → Detailed mode
-  - State prerequisites: at least 2 pages selected; a continuous variable selected
-  - Action to reach state: pick pages → pick a variable → open expanded/modal view so plot + stats are visible
-Crop:
-  - Include: variable selector + Compare pages tabs + plot + statistical annotations area
-Alt text:
-  - Detailed analysis showing a variable comparison plot across multiple pages with summary statistics.
-Caption:
-  - Detailed mode compares a chosen variable across selected pages, with plots, summary stats, and statistical tests in the expanded view.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for Detailed mode success state.
+```{figure} ../../../_static/screenshots/analysis/detailed-categorical.png
+:alt: Detailed analysis configured for a categorical observation field with a bar plot.
 :width: 100%
 
-Detailed mode compares a chosen variable across selected pages, with plots, summary stats, and statistical tests in the expanded view.
+Detailed analysis displays a categorical observation field as a bar plot for the selected page.
 ```
 
 ---

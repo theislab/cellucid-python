@@ -16,7 +16,8 @@ And two big “data shapes”:
 
 **Audience**
 - Wet lab / non-technical: copy/paste the quickstarts and use the decision tree.
-- Computational: focus on data format tradeoffs (`exported` vs `h5ad` vs `zarr`) and lazy loading.
+- Computational: focus on data format tradeoffs: exported directories,
+  read-only-backed `.h5ad`, and eagerly loaded `.zarr`.
 - Power user / developer: focus on networking (SSH tunnels), caching, and debug endpoints.
 
 **Time**
@@ -41,8 +42,10 @@ And two big “data shapes”:
 
 ```bash
 pip install cellucid
-cellucid serve /path/to/data.h5ad
-# or: cellucid serve /path/to/data.zarr
+cellucid serve /path/to/data.h5ad \
+  --dataset-name "My study" \
+  --dataset-id my-study-v1
+# For .zarr, use the same required identity flags.
 # or: cellucid serve /path/to/export_dir
 ```
 
@@ -53,7 +56,12 @@ Open the printed **Viewer URL** in your browser. Stop with **Ctrl+C**.
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata("data.h5ad", height=600)  # lazy loading by default
+viewer = show_anndata(
+    "data.h5ad",
+    height=600,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 ```
 
 ### Exported dataset (fastest + most reproducible)
@@ -64,7 +72,7 @@ from cellucid import show
 viewer = show("./export_dir", height=600)
 ```
 
-## Read once: how the viewer UI is served (hosted-asset proxy)
+## Read once: how the exact viewer generation is served
 
 ```{important}
 By design, the Python server serves **both**:
@@ -72,13 +80,14 @@ By design, the Python server serves **both**:
 1) your dataset API (e.g. `/dataset_identity.json`, `/points_3d.bin`, `/var/*.values.f32`), and
 2) the **viewer UI** (HTML/JS/CSS) by downloading it from `https://www.cellucid.com` and caching it locally.
 
-This “hosted-asset proxy” approach:
+This verified same-origin generation approach:
 - avoids HTTPS→HTTP mixed-content problems in notebooks and in strict browsers,
 - keeps the UI and data on the **same origin** (simplifies networking),
-- but means the first run may need internet access to populate the UI cache.
+- and requires the configured viewer source at every server startup.
 
-If you are offline and have no cached UI, the browser will show a “viewer UI unavailable” page with exact next steps.
-Configure the cache directory with `CELLUCID_WEB_PROXY_CACHE_DIR`.
+If the source generation cannot be fetched and verified, startup reports the
+exact failure and does not bind the viewer server. Configure the generation
+directory with `web_cache_dir=...`.
 ```
 
 ## Relationship to the web app + other repos
@@ -86,7 +95,9 @@ Configure the cache directory with `CELLUCID_WEB_PROXY_CACHE_DIR`.
 - **Cellucid (web app)** is the UI you interact with.
 - **cellucid-python** (this documentation) is how you run servers, export data, and embed the viewer in notebooks.
 - **cellucid-annotation** is a separate repo for community annotation workflows (publish/vote/audit).
-- **cellucid-R** is planned but not ready yet; for now, use the CLI/Python APIs for viewing.
+- **cellucid-r** writes export folders that load in the web app. Python owns the
+  server, notebook-embedding, and programmatic viewer APIs documented in this
+  chapter; see {doc}`../../r_package/index` for R workflows.
 
 ## Related docs
 

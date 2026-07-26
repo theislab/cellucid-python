@@ -8,7 +8,11 @@ Usage:
     from cellucid.jupyter import CellucidViewer, show, show_anndata
 
     # Quick visualization
-    viewer = show_anndata(adata)
+    viewer = show_anndata(
+        adata,
+        dataset_name="Example",
+        dataset_id="example",
+    )
 
     # Control the viewer from Python
     viewer.highlight_cells([100, 200, 300], color="#ff0000")
@@ -41,33 +45,398 @@ Communication (bidirectional, works in all environments):
 
 from __future__ import annotations
 
+import atexit
+import html
 import json
 import logging
+import math
 import os
 import secrets
 import threading
 import time
-from urllib.parse import urlparse
 import weakref
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Protocol
+from urllib.parse import urlparse
 
 if TYPE_CHECKING:
     import anndata
 
-from .server import CellucidServer, DEFAULT_PORT
 from ._server_base import (
     CELLUCID_WEB_URL,
     _extract_web_build_id,
-    _web_proxy_cache_dir,
+    _web_cache_dir,
+    cancel_session_bundle_request,
     register_event_callback,
     register_session_bundle_request,
+    require_server_port,
     unregister_event_callback,
 )
+from .server import CellucidServer
 
 logger = logging.getLogger("cellucid.jupyter")
+
+
+class _ViewerServer(Protocol):
+    """Exact lifecycle surface shared by notebook-owned data servers."""
+
+    port: int
+
+    @property
+    def url(self) -> str: ...
+
+    def start_background(self) -> None: ...
+
+    def stop(self) -> None: ...
+
+    def is_running(self) -> bool: ...
+
+
+def _require_client_server_url(value: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError("client_server_url must be a string")
+    if not value or value != value.strip() or any(character.isspace() for character in value):
+        raise ValueError("client_server_url must be a non-empty URL without surrounding whitespace")
+    if value.endswith("/"):
+        raise ValueError("client_server_url must not end with '/'")
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("client_server_url must be an absolute HTTP or HTTPS URL")
+    try:
+        if parsed.hostname is None:
+            raise ValueError("client_server_url must contain a hostname")
+        _ = parsed.port
+    except ValueError as error:
+        raise ValueError("client_server_url contains an invalid host or port") from error
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("client_server_url must not contain credentials")
+    if parsed.query or parsed.fragment:
+        raise ValueError("client_server_url must not contain a query or fragment")
+    return value
+
+
+def _require_exact_message_text(
+    value: object,
+    *,
+    label: str,
+    allow_whitespace: bool = False,
+) -> str:
+    if (
+        type(value) is not str
+        or not value
+        or value != value.strip()
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+        or (not allow_whitespace and any(character.isspace() for character in value))
+    ):
+        raise TypeError(f"{label} must be exact non-empty text")
+    return value
+
+
+def _require_exact_json_value(
+    value: object,
+    *,
+    label: str,
+    ancestors: set[int] | None = None,
+) -> None:
+    if value is None or type(value) in {str, bool, int}:
+        return
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise ValueError(f"{label} numbers must be finite JSON numbers")
+        return
+    if ancestors is None:
+        ancestors = set()
+    identity = id(value)
+    if identity in ancestors:
+        raise ValueError(f"{label} must not contain JSON cycles")
+    ancestors.add(identity)
+    try:
+        if type(value) is list:
+            for index, entry in enumerate(value):
+                _require_exact_json_value(
+                    entry,
+                    label=f"{label}[{index}]",
+                    ancestors=ancestors,
+                )
+            return
+        if type(value) is dict:
+            for key, entry in value.items():
+                if type(key) is not str:
+                    raise TypeError(f"{label} object keys must be native strings")
+                _require_exact_json_value(
+                    entry,
+                    label=f"{label}.{key}",
+                    ancestors=ancestors,
+                )
+            return
+        raise TypeError(f"{label} must contain only exact JSON values")
+    finally:
+        ancestors.remove(identity)
+
+
+def _require_cell_indices(value: object, *, label: str = "cell_indices") -> list[int]:
+    if type(value) is not list:
+        raise TypeError(f"{label} must be a native list")
+    seen: set[int] = set()
+    for index, cell_index in enumerate(value):
+        if type(cell_index) is not int or cell_index < 0:
+            raise TypeError(f"{label}[{index}] must be a non-negative native integer")
+        if cell_index in seen:
+            raise ValueError(f"{label} must not contain duplicate cell indices")
+        seen.add(cell_index)
+    return value
+
+
+def _require_frontend_message(message: object) -> str:
+    if type(message) is not dict:
+        raise TypeError("message must be a native dictionary")
+    _require_exact_json_value(message, label="message")
+    message_type = _require_exact_message_text(
+        message.get("type"),
+        label="message type",
+    )
+    if "viewerId" in message or "viewerToken" in message:
+        raise TypeError("message must not supply viewer routing credentials")
+
+    expected_keys: dict[str, set[str]] = {
+        "ping": {"type", "requestId"},
+        "debug_snapshot": {"type", "requestId"},
+        "requestSessionBundle": {"type", "requestId"},
+        "highlight": {"type", "cells", "color"},
+        "clearHighlights": {"type"},
+        "setColorBy": {"type", "field"},
+        "setVisibility": {"type", "cells", "visible"},
+        "resetCamera": {"type"},
+        "freeze": {"type"},
+    }
+    expected = expected_keys.get(message_type)
+    if expected is None:
+        raise ValueError(f"Unknown current Jupyter command type {message_type!r}")
+    if set(message) != expected:
+        fields = ", ".join(sorted(expected_keys[message_type]))
+        raise TypeError(f"{message_type} message must contain exactly {fields}")
+
+    if message_type in {"ping", "debug_snapshot", "requestSessionBundle"}:
+        _require_exact_message_text(
+            message["requestId"],
+            label=f"{message_type} requestId",
+        )
+    elif message_type == "highlight":
+        highlight_cells = _require_cell_indices(
+            message["cells"],
+            label="highlight cells",
+        )
+        if not highlight_cells:
+            raise ValueError("highlight cells must be a non-empty list")
+        color = message["color"]
+        if (
+            type(color) is not str
+            or len(color) != 7
+            or color[0] != "#"
+            or any(character not in "0123456789abcdefABCDEF" for character in color[1:])
+        ):
+            raise ValueError("highlight color must be an exact six-digit hex color")
+    elif message_type == "setColorBy":
+        _require_exact_message_text(
+            message["field"],
+            label="setColorBy field",
+            allow_whitespace=True,
+        )
+    elif message_type == "setVisibility":
+        cells = message["cells"]
+        if cells is not None:
+            _require_cell_indices(cells, label="setVisibility cells")
+        if type(message["visible"]) is not bool:
+            raise TypeError("setVisibility visible must be exactly True or False")
+
+    return json.dumps(
+        message,
+        ensure_ascii=True,
+        allow_nan=False,
+        separators=(",", ":"),
+    )
+
+
+def _require_nonnegative_event_integer(value: object, *, label: str) -> int:
+    if type(value) is not int:
+        raise TypeError(f"{label} must be a native integer")
+    if value < 0:
+        raise ValueError(f"{label} must be non-negative")
+    return value
+
+
+def _require_exact_event_fields(
+    message: dict[str, Any],
+    expected: set[str],
+    *,
+    event_type: str,
+) -> None:
+    missing = sorted(expected - set(message))
+    unknown = sorted(set(message) - expected)
+    if missing or unknown:
+        details: list[str] = []
+        if missing:
+            details.append("missing " + ", ".join(missing))
+        if unknown:
+            details.append("unknown " + ", ".join(unknown))
+        raise ValueError(
+            f"Inbound Jupyter {event_type} event has invalid fields ({'; '.join(details)})"
+        )
+
+
+def _require_inbound_jupyter_event(
+    message: object,
+    *,
+    expected_viewer_id: str,
+) -> tuple[str, dict[str, Any]]:
+    if type(message) is not dict:
+        raise TypeError("Inbound Jupyter event must be a native dictionary")
+    _require_exact_json_value(message, label="Inbound Jupyter event")
+    event_type = _require_exact_message_text(
+        message.get("type"),
+        label="Inbound Jupyter event type",
+    )
+    viewer_id = _require_exact_message_text(
+        message.get("viewerId"),
+        label="Inbound Jupyter event viewerId",
+    )
+    if viewer_id != expected_viewer_id:
+        raise ValueError("Inbound Jupyter event viewerId does not match this viewer")
+
+    fields_by_type: dict[str, set[str]] = {
+        "selection": {"type", "viewerId", "cells", "source"},
+        "hover": {"type", "viewerId", "cell", "position"},
+        "click": {
+            "type",
+            "viewerId",
+            "cell",
+            "button",
+            "shift",
+            "ctrl",
+        },
+        "ready": {"type", "viewerId", "n_cells", "dimensions"},
+        "pong": {"type", "viewerId", "requestId", "t"},
+        "debug_snapshot": {
+            "type",
+            "viewerId",
+            "requestId",
+            "ts",
+            "locationHref",
+            "origin",
+            "serverUrl",
+            "connected",
+            "parentOrigin",
+            "userAgent",
+        },
+        "session_bundle": {
+            "type",
+            "viewerId",
+            "requestId",
+            "status",
+            "bytes",
+            "path",
+        },
+    }
+    expected_fields = fields_by_type.get(event_type)
+    if expected_fields is None:
+        raise ValueError(f"Unknown inbound Jupyter event type {event_type!r}")
+    _require_exact_event_fields(
+        message,
+        expected_fields,
+        event_type=event_type,
+    )
+
+    if event_type == "selection":
+        _require_cell_indices(message["cells"], label="selection cells")
+        _require_exact_message_text(
+            message["source"],
+            label="selection source",
+        )
+    elif event_type == "hover":
+        cell = message["cell"]
+        if cell is not None:
+            _require_nonnegative_event_integer(cell, label="hover cell")
+        position = message["position"]
+        if position is not None:
+            if type(position) is not dict:
+                raise TypeError("hover position must be a native dictionary or None")
+            _require_exact_event_fields(
+                position,
+                {"x", "y", "z"},
+                event_type="hover position",
+            )
+            for axis in ("x", "y", "z"):
+                coordinate = position[axis]
+                if type(coordinate) not in {int, float} or not math.isfinite(coordinate):
+                    raise TypeError(f"hover position {axis} must be a finite number")
+    elif event_type == "click":
+        _require_nonnegative_event_integer(message["cell"], label="click cell")
+        button = message["button"]
+        if type(button) is not int or button not in {0, 1, 2}:
+            raise TypeError("click button must be the native integer 0, 1, or 2")
+        if type(message["shift"]) is not bool or type(message["ctrl"]) is not bool:
+            raise TypeError("click shift and ctrl must be native booleans")
+    elif event_type == "ready":
+        _require_nonnegative_event_integer(message["n_cells"], label="ready n_cells")
+        if type(message["dimensions"]) is not int or message["dimensions"] not in {
+            1,
+            2,
+            3,
+        }:
+            raise TypeError("ready dimensions must be the native integer 1, 2, or 3")
+    elif event_type == "pong":
+        _require_exact_message_text(
+            message["requestId"],
+            label="pong requestId",
+        )
+        _require_nonnegative_event_integer(message["t"], label="pong t")
+    elif event_type == "debug_snapshot":
+        for key in (
+            "requestId",
+            "ts",
+            "locationHref",
+            "origin",
+            "serverUrl",
+            "parentOrigin",
+        ):
+            _require_exact_message_text(
+                message[key],
+                label=f"debug_snapshot {key}",
+                allow_whitespace=True,
+            )
+        if type(message["connected"]) is not bool:
+            raise TypeError("debug_snapshot connected must be a native boolean")
+        user_agent = message["userAgent"]
+        if user_agent is not None:
+            _require_exact_message_text(
+                user_agent,
+                label="debug_snapshot userAgent",
+                allow_whitespace=True,
+            )
+    else:
+        if message["status"] != "ok":
+            raise ValueError("session_bundle status must equal 'ok'")
+        _require_exact_message_text(
+            message["requestId"],
+            label="session_bundle requestId",
+        )
+        _require_nonnegative_event_integer(
+            message["bytes"],
+            label="session_bundle bytes",
+        )
+        _require_exact_message_text(
+            message["path"],
+            label="session_bundle path",
+            allow_whitespace=True,
+        )
+
+    return (
+        event_type,
+        {key: value for key, value in message.items() if key not in {"type", "viewerId"}},
+    )
 
 
 # =============================================================================
@@ -164,19 +533,16 @@ class HookRegistry:
             event: Event name to trigger
             data: Event data dict passed to callbacks
         """
-        # Always trigger 'message' handlers for any event
-        for cb in self._callbacks.get('message', []):
-            try:
-                cb({'event': event, **data})
-            except Exception as e:
-                logger.error(f"Error in message hook callback: {e}")
+        message_callbacks = list(self._callbacks.get("message", ()))
+        for callback in message_callbacks:
+            callback({"event": event, **data})
 
-        # Trigger specific event handlers
-        for cb in self._callbacks.get(event, []):
-            try:
-                cb(data)
-            except Exception as e:
-                logger.error(f"Error in {event} hook callback: {e}")
+        if event == "message":
+            return
+
+        event_callbacks = list(self._callbacks.get(event, ()))
+        for callback in event_callbacks:
+            callback(data)
 
     def on(self, event: str) -> Callable[[HookCallback], HookCallback]:
         """
@@ -187,9 +553,11 @@ class HookRegistry:
             def handle_selection(event):
                 print(event['cells'])
         """
+
         def decorator(callback: HookCallback) -> HookCallback:
             self.register(event, callback)
             return callback
+
         return decorator
 
 
@@ -211,6 +579,7 @@ class ViewerState:
     last_event: dict[str, Any] | None = None
     last_updated_at: float | None = None
 
+
 # Track active viewers for cleanup
 _active_viewers: weakref.WeakSet = weakref.WeakSet()
 
@@ -227,6 +596,7 @@ def _detect_jupyter_context() -> dict:
 
     try:
         from IPython import get_ipython
+
         ipython = get_ipython()
         if ipython is None:
             return context
@@ -290,18 +660,31 @@ class BaseViewer:
         self,
         port: int | None = None,
         height: int = 600,
+        *,
+        client_server_url: str | None = None,
+        web_source_url: str = CELLUCID_WEB_URL,
+        web_cache_dir: str | Path | None = None,
     ):
         """Initialize common viewer properties."""
-        self.port = port or self._find_free_port()
+        self.port = 0 if port is None else require_server_port(port)
         self.height = height
+        self._client_server_url = (
+            _require_client_server_url(client_server_url) if client_server_url is not None else None
+        )
+        self.web_source_url = web_source_url
+        self.web_cache_dir = (
+            Path(web_cache_dir).expanduser().resolve()
+            if web_cache_dir is not None
+            else _web_cache_dir()
+        )
 
-        self._server = None  # Subclass sets the appropriate server type
+        self._server: _ViewerServer | None = None
         self._viewer_id = secrets.token_hex(8)
         self._viewer_token = secrets.token_hex(16)
         self._context = _detect_jupyter_context()
         self._displayed = False
-        self._client_server_url_cache: str | None = None
-        self._client_server_port_cache: int | None = None
+        self._message_routing_registered = False
+        self._routing_finalizer: weakref.finalize | None = None
 
         # Initialize hooks system
         self._hooks = HookRegistry()
@@ -313,8 +696,37 @@ class BaseViewer:
         self._event_seq = 0
         self._recent_events: deque[tuple[int, str, dict[str, Any]]] = deque(maxlen=512)
 
-        # Register this viewer for receiving messages
+    def _activate(self) -> None:
+        """Publish this fully started viewer to the routing registries."""
         _register_viewer_for_messages(self)
+        try:
+            _active_viewers.add(self)
+        except BaseException:
+            _unregister_viewer_for_messages(self)
+            raise
+
+    def _rollback_failed_construction(self) -> None:
+        """Undo every resource acquired during an unsuccessful constructor."""
+        failures: list[BaseException] = []
+        server = self._server
+        if server is not None:
+            try:
+                server.stop()
+            except BaseException as error:
+                failures.append(error)
+            else:
+                self._server = None
+        try:
+            _unregister_viewer_for_messages(self)
+        except BaseException as error:
+            failures.append(error)
+        _active_viewers.discard(self)
+        self._hooks.clear()
+        if failures:
+            details = "; ".join(f"{type(error).__name__}: {error}" for error in failures)
+            raise RuntimeError(
+                f"Failed viewer construction could not be rolled back: {details}"
+            ) from failures[0]
 
     # =========================================================================
     # HOOK DECORATORS
@@ -337,7 +749,7 @@ class BaseViewer:
                 selected = adata[event['cells']]
                 sc.pl.violin(selected, 'gene1')
         """
-        return self._hooks.on('selection')
+        return self._hooks.on("selection")
 
     @property
     def on_hover(self) -> Callable[[HookCallback], HookCallback]:
@@ -356,7 +768,7 @@ class BaseViewer:
                 if event['cell'] is not None:
                     print(f"Cell {event['cell']}: {adata.obs.iloc[event['cell']]}")
         """
-        return self._hooks.on('hover')
+        return self._hooks.on("hover")
 
     @property
     def on_click(self) -> Callable[[HookCallback], HookCallback]:
@@ -376,7 +788,7 @@ class BaseViewer:
             def handle(event):
                 print(f"Clicked cell {event['cell']}")
         """
-        return self._hooks.on('click')
+        return self._hooks.on("click")
 
     @property
     def on_ready(self) -> Callable[[HookCallback], HookCallback]:
@@ -394,15 +806,15 @@ class BaseViewer:
             def handle(event):
                 print(f"Loaded {event['n_cells']} cells")
         """
-        return self._hooks.on('ready')
+        return self._hooks.on("ready")
 
     @property
     def on_message(self) -> Callable[[HookCallback], HookCallback]:
         """
         Decorator to register a raw message handler.
 
-        Called for ALL messages from the viewer. Use for debugging
-        or handling custom message types.
+        Called for every validated current-schema message from the viewer.
+        Use it to observe the complete event stream while debugging.
 
         Event data:
             - event: str - the event type
@@ -413,7 +825,7 @@ class BaseViewer:
             def handle(event):
                 print(f"Got message: {event}")
         """
-        return self._hooks.on('message')
+        return self._hooks.on("message")
 
     # =========================================================================
     # HOOK MANAGEMENT METHODS
@@ -460,7 +872,7 @@ class BaseViewer:
         """
         self._hooks.clear(event)
 
-    def _handle_frontend_message(self, message: dict):
+    def _handle_frontend_message(self, message: dict[str, Any]) -> None:
         """
         Handle a message received from the frontend.
 
@@ -470,23 +882,12 @@ class BaseViewer:
         Args:
             message: Message dict from frontend
         """
-        msg_type = message.get('type', '')
-
-        # Map frontend message types to hook events
-        event_map = {
-            'selection': 'selection',
-            'hover': 'hover',
-            'click': 'click',
-            'ready': 'ready',
-        }
-
-        event = event_map.get(msg_type, msg_type)
-
-        # Remove internal fields before passing to callbacks
-        data = {k: v for k, v in message.items() if k not in ('type', 'viewerId')}
-
-        self._record_event(event, data)
+        event, data = _require_inbound_jupyter_event(
+            message,
+            expected_viewer_id=self._viewer_id,
+        )
         self._hooks.trigger(event, data)
+        self._record_event(event, data)
 
     def _record_event(self, event: str, data: dict[str, Any]):
         """Update `viewer.state` and notify any `wait_for_event(...)` callers."""
@@ -566,7 +967,6 @@ class BaseViewer:
         from .session_bundle import CellucidSessionBundle
 
         if self._context.get("in_jupyter") and not self._displayed:
-            # Best-effort: make the viewer visible if the user calls this directly.
             self.display()
 
         # Ensure the frontend has finished wiring session bundle export.
@@ -583,16 +983,28 @@ class BaseViewer:
         request_id = secrets.token_hex(16)
         register_session_bundle_request(
             self._viewer_id,
+            self._viewer_token,
             request_id,
             ttl_seconds=(3600.0 if remaining is None else remaining),
         )
-        self.send_message({"type": "requestSessionBundle", "requestId": request_id})
-
-        event = self.wait_for_event(
-            "session_bundle",
-            timeout=remaining,
-            predicate=lambda e: e.get("requestId") == request_id,
-        )
+        try:
+            self.send_message(
+                {
+                    "type": "requestSessionBundle",
+                    "requestId": request_id,
+                }
+            )
+            event = self.wait_for_event(
+                "session_bundle",
+                timeout=remaining,
+                predicate=lambda e: e.get("requestId") == request_id,
+            )
+        finally:
+            cancel_session_bundle_request(
+                self._viewer_id,
+                self._viewer_token,
+                request_id,
+            )
 
         if event.get("status") != "ok":
             raise RuntimeError(event.get("error") or "Failed to capture session bundle")
@@ -605,12 +1017,19 @@ class BaseViewer:
 
     def apply_session_to_anndata(
         self,
-        adata: "Any",
+        adata: Any,
         *,
+        expected_dataset_id: str | None = None,
         inplace: bool = False,
         timeout: float | None = 60.0,
         cleanup_bundle: bool = True,
-        **kwargs,
+        add_highlights: bool = True,
+        highlights_prefix: str = "cellucid_highlight__",
+        add_user_defined_fields: bool = True,
+        user_defined_prefix: str = "",
+        include_deleted_user_defined_fields: bool = False,
+        store_uns: bool = True,
+        return_summary: bool = False,
     ):
         """
         Convenience wrapper: capture a session bundle and apply it to an AnnData.
@@ -620,31 +1039,44 @@ class BaseViewer:
         - If you want to keep the artifact, call `bundle = viewer.get_session_bundle()`
           and `bundle.save(...)` before applying.
         - By default, the temporary bundle file created by the server is deleted
-          after applying (best-effort).
+          after applying.
         """
+        if type(cleanup_bundle) is not bool:
+            raise TypeError("cleanup_bundle must be exactly True or False")
         bundle = self.get_session_bundle(timeout=timeout)
         try:
-            if "expected_dataset_id" not in kwargs:
+            resolved_dataset_id = expected_dataset_id
+            if resolved_dataset_id is None:
                 server = self._server
                 adapter = getattr(server, "adapter", None)
-                if adapter is not None and hasattr(adapter, "get_dataset_identity"):
-                    try:
-                        ident = adapter.get_dataset_identity()
-                        if isinstance(ident, dict):
-                            dataset_id = ident.get("id")
-                            if isinstance(dataset_id, str) and dataset_id:
-                                kwargs["expected_dataset_id"] = dataset_id
-                    except Exception:
-                        pass
-            return bundle.apply_to_anndata(adata, inplace=inplace, **kwargs)
+                if adapter is None or not hasattr(adapter, "get_dataset_identity"):
+                    raise ValueError(
+                        "expected_dataset_id is required when the viewer is not "
+                        "served directly from AnnData"
+                    )
+                identity = adapter.get_dataset_identity()
+                if not isinstance(identity, dict):
+                    raise TypeError("AnnData adapter identity must be a dictionary.")
+                resolved_dataset_id = identity.get("id")
+                if not isinstance(resolved_dataset_id, str) or not resolved_dataset_id:
+                    raise ValueError("AnnData adapter identity must contain a non-empty id.")
+            return bundle.apply_to_anndata(
+                adata,
+                expected_dataset_id=resolved_dataset_id,
+                inplace=inplace,
+                add_highlights=add_highlights,
+                highlights_prefix=highlights_prefix,
+                add_user_defined_fields=add_user_defined_fields,
+                user_defined_prefix=user_defined_prefix,
+                include_deleted_user_defined_fields=include_deleted_user_defined_fields,
+                store_uns=store_uns,
+                return_summary=return_summary,
+            )
         finally:
             if cleanup_bundle:
-                try:
-                    bundle.path.unlink(missing_ok=True)
-                except Exception:
-                    pass
+                bundle.path.unlink(missing_ok=True)
 
-    def debug_connection(self, timeout: float | None = 5.0, *, max_console_events: int = 50) -> dict[str, Any]:
+    def debug_connection(self, timeout: float | None = 5.0) -> dict[str, Any]:
         """
         Return a structured connectivity/debug report for this viewer.
 
@@ -652,7 +1084,6 @@ class BaseViewer:
         - server health/info probes
         - Python→Frontend ping/pong roundtrip (postMessage + HTTP events)
         - frontend debug snapshot (URL/origin/userAgent as seen by the iframe)
-        - recent frontend console warnings/errors forwarded to Python
         """
         report: dict[str, Any] = {
             "viewer_id": self._viewer_id,
@@ -660,10 +1091,12 @@ class BaseViewer:
             "server_url": self.server_url,
             "displayed": self._displayed,
             "notebook_context": dict(self._context),
-            "server_running": bool(self._server and getattr(self._server, "is_running", lambda: True)()),
+            "server_running": bool(
+                self._server and getattr(self._server, "is_running", lambda: True)()
+            ),
             "web_ui": {
-                "proxy_cache_dir": str(_web_proxy_cache_dir()),
-                "proxy_source": CELLUCID_WEB_URL,
+                "cache_dir": str(self.web_cache_dir),
+                "source": self.web_source_url,
             },
             "state": {
                 "ready": self.state.ready,
@@ -672,22 +1105,16 @@ class BaseViewer:
             },
         }
 
-        # Jupyter proxy support (recommended for HTTPS/remote notebooks).
         try:
-            import jupyter_server_proxy  # type: ignore
-
-            report["jupyter_server_proxy"] = {"installed": True, "module": getattr(jupyter_server_proxy, "__name__", None)}
-        except Exception as e:
-            report["jupyter_server_proxy"] = {"installed": False, "error": str(e)}
-
-        try:
-            report["client_server_url"] = self._get_client_server_url().rstrip("/")
+            report["client_server_url"] = self._get_client_server_url()
         except Exception as e:
             report["client_server_url_error"] = str(e)
 
-        # Web proxy cache introspection (helps debug offline / stale-cache issues).
+        # Exact cache introspection.
         try:
-            cache_dir = _web_proxy_cache_dir()
+            from .web_cache import verify_web_ui_cache
+
+            cache_dir = self.web_cache_dir
             index_path = cache_dir / "index.html"
             cache_info: dict[str, Any] = {
                 "cache_dir_exists": cache_dir.exists(),
@@ -697,24 +1124,16 @@ class BaseViewer:
                 data = index_path.read_bytes()
                 cache_info["index_html_bytes"] = len(data)
                 cache_info["index_html_build_id"] = _extract_web_build_id(data)
-                try:
-                    cache_info["index_html_mtime"] = index_path.stat().st_mtime
-                except Exception:
-                    pass
+                cache_info["index_html_mtime"] = index_path.stat().st_mtime
+                inventory = verify_web_ui_cache(
+                    cache_dir,
+                    expected_source_url=self.web_source_url,
+                )
+                cache_info["verified_build_id"] = inventory.build_id
+                cache_info["verified_asset_count"] = len(inventory.assets)
             report["web_ui"]["cache"] = cache_info
         except Exception as e:
             report["web_ui"]["cache_error"] = str(e)
-
-        # Prefetch marker (written by `cellucid.web_cache.ensure_web_ui_cached()`).
-        try:
-            import json as _json
-
-            cache_dir = _web_proxy_cache_dir()
-            meta_path = cache_dir / ".cellucid-web-prefetch.json"
-            if meta_path.is_file():
-                report["web_ui"]["prefetch"] = _json.loads(meta_path.read_text("utf-8"))
-        except Exception as e:
-            report["web_ui"]["prefetch_error"] = str(e)
 
         # ------------------------------------------------------------------
         # Server probes (no browser needed)
@@ -748,7 +1167,7 @@ class BaseViewer:
         except Exception as e:
             report["server_datasets_error"] = str(e)
 
-        # Best-effort: fetch a dataset_identity.json using the first dataset entry.
+        # Probe dataset identity using the first declared dataset entry.
         if datasets:
             try:
                 import urllib.request
@@ -766,7 +1185,7 @@ class BaseViewer:
             except Exception as e:
                 report["dataset_identity_error"] = str(e)
 
-        # Best-effort: verify that the hosted-asset proxy is serving an index.html.
+        # Inspect the locally served, inventory-verified index.
         try:
             import urllib.request
 
@@ -803,8 +1222,14 @@ class BaseViewer:
         # Frontend roundtrip probe (requires the viewer iframe to be alive)
         # ------------------------------------------------------------------
         if not self._displayed:
-            report["frontend_roundtrip"] = {"ok": False, "error": "Viewer not displayed (call viewer.display())"}
-            report["frontend_debug_snapshot"] = {"ok": False, "error": "Viewer not displayed (call viewer.display())"}
+            report["frontend_roundtrip"] = {
+                "ok": False,
+                "error": "Viewer not displayed (call viewer.display())",
+            }
+            report["frontend_debug_snapshot"] = {
+                "ok": False,
+                "error": "Viewer not displayed (call viewer.display())",
+            }
         else:
             req_id = secrets.token_hex(8)
             try:
@@ -830,21 +1255,6 @@ class BaseViewer:
             except Exception as e:
                 report["frontend_debug_snapshot"] = {"ok": False, "error": str(e)}
 
-        # ------------------------------------------------------------------
-        # Recent frontend console warnings/errors (best-effort)
-        # ------------------------------------------------------------------
-        console_events: list[dict[str, Any]] = []
-        with self._event_cv:
-            for _seq, ev_type, payload in reversed(self._recent_events):
-                if ev_type != "console":
-                    continue
-                if isinstance(payload, dict):
-                    console_events.append(payload)
-                if len(console_events) >= max_console_events:
-                    break
-        console_events.reverse()
-        report["frontend_console"] = console_events
-
         return report
 
     # =========================================================================
@@ -852,41 +1262,25 @@ class BaseViewer:
     # =========================================================================
 
     def clear_web_cache(self) -> Path:
-        """
-        Clear the hosted-asset web UI cache.
-
-        This forces the next viewer/server run to re-download the web UI assets.
-        """
+        """Clear this viewer's selected web UI cache."""
         from .web_cache import clear_web_cache
 
-        return clear_web_cache()
+        return clear_web_cache(cache_dir=self.web_cache_dir)
 
-    def ensure_web_ui_cached(self, *, force: bool = False, show_progress: bool = True):
-        """
-        Best-effort: prefetch the viewer UI assets into the local cache.
-
-        This makes first-load UX clearer (progress bar) and reduces later
-        surprises from lazily-loaded assets when offline.
-        """
+    def ensure_web_ui_cached(self, *, force: bool = True, show_progress: bool = True):
+        """Establish one complete verified web build in this viewer's cache."""
         from .web_cache import ensure_web_ui_cached
 
-        return ensure_web_ui_cached(force=force, show_progress=show_progress)
+        return ensure_web_ui_cached(
+            cache_dir=self.web_cache_dir,
+            source_url=self.web_source_url,
+            force=force,
+            show_progress=show_progress,
+        )
 
     # =========================================================================
     # DISPLAY & SERVER
     # =========================================================================
-
-    def _find_free_port(self, start: int = DEFAULT_PORT) -> int:
-        """Find an available port."""
-        import socket
-        for port in range(start, start + 100):
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.bind(("127.0.0.1", port))
-                    return port
-            except OSError:
-                continue
-        raise RuntimeError(f"Could not find a free port starting from {start}")
 
     @property
     def server_url(self) -> str:
@@ -896,40 +1290,12 @@ class BaseViewer:
         return f"http://127.0.0.1:{self.port}"
 
     def _get_client_server_url(self) -> str:
-        """
-        Get the URL the browser should use to reach the data server.
-
-        Most notebook environments can reach the server directly at `server_url`
-        (loopback). Some environments (notably Google Colab) run the kernel on a
-        remote VM; in that case, the browser must use Colab's HTTPS port proxy.
-        """
-        override = os.getenv("CELLUCID_CLIENT_SERVER_URL")
-        if override:
-            return override.rstrip("/")
-
-        try:
-            parsed = urlparse(self.server_url)
-            port = int(parsed.port or self.port)
-        except Exception:
-            port = int(self.port)
-
-        if self._context.get("in_jupyter") and self._context.get("notebook_type") == "colab":
-            if self._client_server_port_cache == port and self._client_server_url_cache:
-                return self._client_server_url_cache
-            try:
-                from google.colab.output import eval_js  # type: ignore
-
-                proxy_url = eval_js(f"google.colab.kernel.proxyPort({port})")
-                if isinstance(proxy_url, str) and proxy_url:
-                    proxy_url = proxy_url.rstrip("/")
-                    self._client_server_port_cache = port
-                    self._client_server_url_cache = proxy_url
-                    return proxy_url
-            except Exception:
-                # Fall back to direct loopback URL.
-                pass
-
-        return self.server_url.rstrip("/")
+        """Return the one browser URL selected for this viewer."""
+        if self._client_server_url is not None:
+            return self._client_server_url
+        if self._server is None:
+            raise RuntimeError("The Cellucid data server has not started")
+        return _require_client_server_url(str(self._server.url))
 
     @property
     def viewer_origin(self) -> str:
@@ -942,9 +1308,7 @@ class BaseViewer:
         """Get the full viewer URL. Subclasses can override to add extra params."""
         from urllib.parse import urlencode
 
-        # We always serve the UI from the same server that serves the dataset
-        # (hosted-asset proxy), avoiding mixed-content.
-        base = self._get_client_server_url().rstrip("/")
+        base = self._get_client_server_url()
         query = urlencode(
             {
                 "jupyter": "true",
@@ -964,24 +1328,14 @@ class BaseViewer:
             print(f"Not in Jupyter environment. Open manually: {self.viewer_url}")
             return
 
-        from IPython.display import display, HTML
+        from IPython.display import HTML, display
 
-        # Ensure the viewer UI assets are available locally (one-time download).
-        # This prints a progress bar (tqdm) on first run, which is important UX
-        # for beginners in notebook contexts.
-        try:
-            summary = self.ensure_web_ui_cached(force=False, show_progress=True)
-            if getattr(summary, "downloaded_files", 0) or getattr(summary, "errors", None):
-                print(
-                    f"Cellucid web UI cache: {summary.downloaded_files} file(s), "
-                    f"{summary.downloaded_bytes} byte(s) downloaded to {summary.cache_dir}"
-                )
-                for err in (summary.errors or [])[:5]:
-                    print(f"  - {err}")
-        except Exception as e:
-            # The iframe will still show a more detailed error page if the UI
-            # can't be fetched and no cached copy exists; keep notebook output clean.
-            logger.warning("Failed to prefetch Cellucid web UI assets: %s", e)
+        from .web_cache import verify_web_ui_cache
+
+        verify_web_ui_cache(
+            self.web_cache_dir,
+            expected_source_url=self.web_source_url,
+        )
 
         # Show any pre-display HTML (e.g., warnings)
         pre_html = self._get_pre_display_html()
@@ -996,19 +1350,14 @@ class BaseViewer:
 
     def _generate_viewer_html(self) -> str:
         """Generate HTML for embedding the viewer with message passing support."""
-        # Important: the initial iframe `src` is set by the script below.
-        # This allows us to choose the best URL per notebook frontend:
-        # - direct loopback in local classic/JupyterLab
-        # - Jupyter Server Proxy when the notebook runs on HTTPS/remote
-        # - Colab's HTTPS port proxy (computed on Python side)
-        direct_src = self.viewer_url
-        port = int(self.port)
+        viewer_src = self.viewer_url
+        target_origin = self.viewer_origin
 
         return f"""
         <div id="cellucid-viewer-{self._viewer_id}" style="width:100%; height:{self.height}px;">
             <iframe
                 id="cellucid-iframe-{self._viewer_id}"
-                src="about:blank"
+                src="{html.escape(viewer_src, quote=True)}"
                 width="100%"
                 height="100%"
                 frameborder="0"
@@ -1020,124 +1369,22 @@ class BaseViewer:
         (function() {{
             var viewerId = '{self._viewer_id}';
             var viewerToken = '{self._viewer_token}';
-            var directSrc = {json.dumps(direct_src)};
-            var port = {port};
-
-            // We use '*' because notebook frontends can proxy/transform iframe
-            // origins (e.g. Colab), and we authenticate messages with viewerToken.
-            var targetOrigin = '*';
-
-            function getNotebookBaseUrl() {{
-                try {{
-                    var baseUrl =
-                        (document.body && document.body.dataset && document.body.dataset.baseUrl) ||
-                        (document.body && document.body.getAttribute && document.body.getAttribute('data-base-url')) ||
-                        '/';
-                    if (!baseUrl) baseUrl = '/';
-                    if (!baseUrl.endsWith('/')) baseUrl = baseUrl + '/';
-                    return baseUrl;
-                }} catch (e) {{
-                    return '/';
-                }}
-            }}
-
-            function buildProxySrc() {{
-                // Requires jupyter-server-proxy (common in JupyterHub and many local installs).
-                var baseUrl = getNotebookBaseUrl();
-                if (!(window.location.protocol === 'http:' || window.location.protocol === 'https:')) {{
-                    return null;
-                }}
-                if (!baseUrl.startsWith('/')) {{
-                    return null;
-                }}
-                var q = '';
-                try {{
-                    var idx = directSrc.indexOf('?');
-                    q = idx >= 0 ? directSrc.slice(idx + 1) : '';
-                }} catch (e) {{
-                    q = '';
-                }}
-                var root = window.location.origin + baseUrl + 'proxy/' + port + '/';
-                return q ? (root + '?' + q) : root;
-            }}
-
-            async function probeHealth(url) {{
-                try {{
-                    var u = new URL(url);
-                    u.search = '';
-                    u.hash = '';
-                    if (!u.pathname.endsWith('/')) u.pathname = u.pathname + '/';
-                    u.pathname = u.pathname + '_cellucid/health';
-                    var res = await fetch(u.toString(), {{ cache: 'no-store' }});
-                    return !!(res && res.ok);
-                }} catch (e) {{
-                    return false;
-                }}
-            }}
+            var targetOrigin = {json.dumps(target_origin)};
 
             // Set up message passing infrastructure
             window.cellucidViewers = window.cellucidViewers || {{}};
             window.cellucidViewers[viewerId] = {{
                 sendMessage: function(msg) {{
                     var iframe = document.getElementById('cellucid-iframe-' + viewerId);
-                    if (iframe && iframe.contentWindow) {{
-                        iframe.contentWindow.postMessage(
-                            Object.assign({{}}, msg, {{ viewerId: viewerId, viewerToken: viewerToken }}),
-                            targetOrigin
-                        );
+                    if (!iframe || !iframe.contentWindow) {{
+                        throw new Error('Cellucid viewer iframe is unavailable: ' + viewerId);
                     }}
+                    iframe.contentWindow.postMessage(
+                        Object.assign({{}}, msg, {{ viewerId: viewerId, viewerToken: viewerToken }}),
+                        targetOrigin
+                    );
                 }}
             }};
-
-            // Choose an iframe URL that avoids HTTPS→HTTP mixed-content blocking.
-            (async function() {{
-                var iframe = document.getElementById('cellucid-iframe-' + viewerId);
-                if (!iframe) return;
-
-                // If Python already provided an HTTPS-capable URL (e.g. Colab proxy),
-                // use it directly.
-                var isHttp = (typeof directSrc === 'string') && directSrc.startsWith('http://');
-                var notebookIsHttps = (window.location && window.location.protocol === 'https:');
-                var directIsLoopback = false;
-                try {{
-                    directIsLoopback = /^http:\\/\\/(127\\.0\\.0\\.1|localhost)(:|\\/)/.test(directSrc);
-                }} catch (e) {{
-                    directIsLoopback = false;
-                }}
-                var hostIsLoopback = false;
-                try {{
-                    var hn = window.location && window.location.hostname;
-                    hostIsLoopback = (hn === '127.0.0.1' || hn === 'localhost');
-                }} catch (e) {{
-                    hostIsLoopback = false;
-                }}
-                // Prefer Jupyter Server Proxy when direct loopback is unlikely to work:
-                // - HTTPS notebook blocks HTTP loopback (mixed content)
-                // - Remote notebooks cannot reach kernel loopback directly
-                var shouldPreferProxy = directIsLoopback && (notebookIsHttps || !hostIsLoopback);
-
-                var proxySrc = buildProxySrc();
-                if (proxySrc && (shouldPreferProxy || !(window.location && window.location.protocol === 'file:'))) {{
-                    var ok = await probeHealth(proxySrc);
-                    if (ok) {{
-                        iframe.src = proxySrc;
-                        return;
-                    }}
-                    if (shouldPreferProxy) {{
-                        iframe.srcdoc = [
-                          '<div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; padding: 18px;">',
-                          '<h3 style="margin: 0 0 8px; font-size: 16px;">Cellucid: notebook proxy required</h3>',
-                          '<p style="margin: 0 0 10px; line-height: 1.35;">This notebook is served from a secure/remote origin, so the viewer cannot load an HTTP loopback server directly.</p>',
-                          '<p style="margin: 0 0 10px; line-height: 1.35;"><strong>Fix:</strong> install/enable <code>jupyter-server-proxy</code> (recommended) or set <code>CELLUCID_CLIENT_SERVER_URL</code> to a browser-reachable HTTPS URL for the Cellucid server.</p>',
-                          '<p style="margin: 0; line-height: 1.35;">In Python, run <code>viewer.debug_connection()</code> for a detailed report.</p>',
-                          '</div>'
-                        ].join('');
-                        return;
-                    }}
-                }}
-
-                iframe.src = directSrc;
-            }})();
 
             // Note: Frontend → Python communication uses HTTP POST to /_cellucid/events.
             // The postMessage listener is not used for event routing.
@@ -1161,20 +1408,19 @@ class BaseViewer:
         Example:
             viewer.send_message({'type': 'highlight', 'cells': [1,2,3], 'color': '#ff0000'})
         """
+        serialized_message = _require_frontend_message(message)
         if not self._displayed:
-            logger.warning("Viewer not yet displayed. Call display() first.")
-            return
+            raise RuntimeError("Viewer must be displayed before sending a message.")
 
-        from IPython.display import display, Javascript
+        from IPython.display import Javascript, display
 
         js = f"""
         (function() {{
             var viewer = window.cellucidViewers && window.cellucidViewers['{self._viewer_id}'];
-            if (viewer) {{
-                viewer.sendMessage({json.dumps(message)});
-            }} else {{
-                console.warn('Cellucid viewer not found: {self._viewer_id}');
+            if (!viewer) {{
+                throw new Error('Cellucid viewer command target is unavailable: {self._viewer_id}');
             }}
+            viewer.sendMessage({serialized_message});
         }})();
         """
         display(Javascript(js))
@@ -1196,7 +1442,23 @@ class BaseViewer:
         Example:
             viewer.highlight_cells([100, 200, 300], color="#00ff00")
         """
-        self.send_message({"type": "highlight", "cells": cell_indices, "color": color})
+        exact_indices = _require_cell_indices(cell_indices)
+        if not exact_indices:
+            raise ValueError("cell_indices must be a non-empty list")
+        if (
+            type(color) is not str
+            or len(color) != 7
+            or color[0] != "#"
+            or any(character not in "0123456789abcdefABCDEF" for character in color[1:])
+        ):
+            raise ValueError("color must be an exact six-digit hex color")
+        self.send_message(
+            {
+                "type": "highlight",
+                "cells": exact_indices,
+                "color": color,
+            }
+        )
 
     def clear_highlights(self):
         """Clear all cell highlights in the viewer."""
@@ -1212,7 +1474,12 @@ class BaseViewer:
         Example:
             viewer.set_color_by("cell_type")
         """
-        self.send_message({"type": "setColorBy", "field": field})
+        exact_field = _require_exact_message_text(
+            field,
+            label="field",
+            allow_whitespace=True,
+        )
+        self.send_message({"type": "setColorBy", "field": exact_field})
 
     def set_visibility(self, cell_indices: list[int] | None = None, visible: bool = True):
         """
@@ -1225,7 +1492,16 @@ class BaseViewer:
         Example:
             viewer.set_visibility([0, 1, 2], visible=False)  # Hide cells
         """
-        self.send_message({"type": "setVisibility", "cells": cell_indices, "visible": visible})
+        if type(visible) is not bool:
+            raise TypeError("visible must be exactly True or False")
+        exact_indices = None if cell_indices is None else _require_cell_indices(cell_indices)
+        self.send_message(
+            {
+                "type": "setVisibility",
+                "cells": exact_indices,
+                "visible": visible,
+            }
+        )
 
     def reset_view(self):
         """Reset the camera to the default view."""
@@ -1245,22 +1521,22 @@ class BaseViewer:
         3. Clears all hooks
         4. Logs the cleanup
 
-        Safe to call multiple times.
+        Safe to call multiple times after a successful stop.
         """
-        # Best-effort: freeze the frontend before the server disappears so the
-        # notebook output stays visually reproducible.
+        failures: list[BaseException] = []
         if self._displayed:
             try:
                 self.send_message({"type": "freeze"})
-            except Exception:
-                pass
+            except BaseException as error:
+                failures.append(error)
 
         if self._server:
             try:
                 self._server.stop()
-            except Exception as e:
-                logger.warning(f"Error stopping server: {e}")
-            self._server = None
+            except BaseException as error:
+                failures.append(error)
+            else:
+                self._server = None
 
         # Clear hooks
         self._hooks.clear()
@@ -1272,14 +1548,9 @@ class BaseViewer:
         _active_viewers.discard(self)
 
         logger.info(f"{self.__class__.__name__} stopped")
-
-    def __del__(self):
-        """Cleanup on garbage collection."""
-        try:
-            self.stop()
-        except Exception:
-            # Ignore errors during GC - object may be partially destroyed
-            pass
+        if failures:
+            details = "; ".join(f"{type(error).__name__}: {error}" for error in failures)
+            raise RuntimeError(f"Cellucid viewer shutdown failed: {details}") from failures[0]
 
     def _repr_html_(self) -> str:
         """HTML representation for Jupyter display."""
@@ -1306,6 +1577,7 @@ class BaseViewer:
 #
 # =============================================================================
 
+
 def _register_viewer_for_messages(viewer: BaseViewer):
     """
     Register a viewer to receive messages from frontend.
@@ -1319,18 +1591,43 @@ def _register_viewer_for_messages(viewer: BaseViewer):
     def _deliver(event: dict) -> None:
         resolved = viewer_ref()
         if resolved is None:
-            return
+            raise RuntimeError("The registered viewer no longer exists")
         resolved._handle_frontend_message(event)
 
-    # Register HTTP event callback - this works in ALL environments.
-    # The data server routes POSTed events here.
-    register_event_callback(viewer._viewer_id, _deliver)
+    register_event_callback(
+        viewer._viewer_id,
+        viewer._viewer_token,
+        _deliver,
+    )
+    try:
+        viewer._routing_finalizer = weakref.finalize(
+            viewer,
+            unregister_event_callback,
+            viewer._viewer_id,
+            viewer._viewer_token,
+        )
+    except BaseException:
+        unregister_event_callback(
+            viewer._viewer_id,
+            viewer._viewer_token,
+        )
+        raise
+    viewer._message_routing_registered = True
     logger.debug(f"Registered HTTP event callback for viewer {viewer._viewer_id}")
 
 
 def _unregister_viewer_for_messages(viewer: BaseViewer):
     """Unregister a viewer from message routing."""
-    unregister_event_callback(viewer._viewer_id)
+    finalizer = viewer._routing_finalizer
+    if finalizer is not None and finalizer.alive:
+        finalizer()
+    elif viewer._message_routing_registered:
+        unregister_event_callback(
+            viewer._viewer_id,
+            viewer._viewer_token,
+        )
+    viewer._routing_finalizer = None
+    viewer._message_routing_registered = False
 
 
 class CellucidViewer(BaseViewer):
@@ -1358,6 +1655,10 @@ class CellucidViewer(BaseViewer):
         port: int | None = None,
         height: int = 600,
         auto_open: bool = True,
+        *,
+        client_server_url: str | None = None,
+        web_source_url: str = CELLUCID_WEB_URL,
+        web_cache_dir: str | Path | None = None,
     ):
         """
         Initialize the viewer.
@@ -1367,22 +1668,32 @@ class CellucidViewer(BaseViewer):
             port: Port for the data server (auto-selected if None)
             height: Height of the embedded viewer in pixels
             auto_open: Automatically display when created
+            client_server_url: Exact browser-reachable data server base URL.
+            web_source_url: Origin publishing the web asset inventory.
+            web_cache_dir: Directory holding the active verified web build.
         """
-        super().__init__(port=port, height=height)
+        super().__init__(
+            port=port,
+            height=height,
+            client_server_url=client_server_url,
+            web_source_url=web_source_url,
+            web_cache_dir=web_cache_dir,
+        )
 
-        self.data_dir = Path(data_dir).resolve()
+        try:
+            self.data_dir = Path(data_dir).resolve()
 
-        if not self.data_dir.exists():
-            raise FileNotFoundError(f"Data directory not found: {self.data_dir}")
+            if not self.data_dir.exists():
+                raise FileNotFoundError(f"Data directory not found: {self.data_dir}")
 
-        # Start the server
-        self._start_server()
+            self._start_server()
+            self._activate()
 
-        # Register for cleanup
-        _active_viewers.add(self)
-
-        if auto_open and self._context["in_jupyter"]:
-            self.display()
+            if auto_open and self._context["in_jupyter"]:
+                self.display()
+        except BaseException:
+            self._rollback_failed_construction()
+            raise
 
     def _start_server(self):
         """Start the background data server."""
@@ -1392,12 +1703,12 @@ class CellucidViewer(BaseViewer):
             host="127.0.0.1",
             open_browser=False,
             quiet=True,
+            serve_web_ui=True,
+            web_source_url=self.web_source_url,
+            web_cache_dir=self.web_cache_dir,
         )
         self._server.start_background()
-        try:
-            self.port = int(getattr(self._server, "port", self.port))
-        except Exception:
-            pass
+        self.port = self._server.port
         logger.info(f"Started cellucid server at {self._server.url}")
 
     def __repr__(self) -> str:
@@ -1408,6 +1719,10 @@ class CellucidViewer(BaseViewer):
 def show(
     data_dir: str | Path,
     height: int = 600,
+    *,
+    client_server_url: str | None = None,
+    web_source_url: str = CELLUCID_WEB_URL,
+    web_cache_dir: str | Path | None = None,
 ) -> CellucidViewer:
     """
     Quick function to display a cellucid dataset in a notebook.
@@ -1415,6 +1730,9 @@ def show(
     Args:
         data_dir: Path to the dataset directory
         height: Height of the viewer in pixels
+        client_server_url: Exact browser-reachable data server base URL.
+        web_source_url: Origin publishing the web asset inventory.
+        web_cache_dir: Directory holding the active verified web build.
 
     Returns:
         CellucidViewer instance for interaction via hooks.
@@ -1431,6 +1749,9 @@ def show(
         data_dir=data_dir,
         height=height,
         auto_open=True,
+        client_server_url=client_server_url,
+        web_source_url=web_source_url,
+        web_cache_dir=web_cache_dir,
     )
 
 
@@ -1440,11 +1761,10 @@ def cleanup_all():
         try:
             viewer.stop()
         except Exception:
-            pass
+            logger.exception("Failed to stop %r during interpreter shutdown", viewer)
 
 
 # Register cleanup on interpreter exit
-import atexit
 atexit.register(cleanup_all)
 
 
@@ -1464,10 +1784,14 @@ class AnnDataViewer(BaseViewer):
     Supports:
     - In-memory AnnData objects
     - h5ad files (HDF5-based, with lazy loading via backed mode)
-    - zarr stores (directory-based, inherently lazy-loaded)
+    - zarr stores materialized by ``anndata.read_zarr``
 
     Example:
-        >>> viewer = AnnDataViewer(adata)
+        >>> viewer = AnnDataViewer(
+        ...     adata,
+        ...     dataset_name="Example",
+        ...     dataset_id="example",
+        ... )
         >>> viewer.display()
         >>>
         >>> @viewer.on_selection
@@ -1476,17 +1800,32 @@ class AnnDataViewer(BaseViewer):
         ...     sc.pl.violin(subset, ['gene1', 'gene2'])
         >>>
         >>> # From h5ad file with lazy loading
-        >>> viewer = AnnDataViewer("/path/to/data.h5ad")
+        >>> viewer = AnnDataViewer(
+        ...     "/path/to/data.h5ad",
+        ...     dataset_name="Example",
+        ...     dataset_id="example",
+        ... )
     """
 
     def __init__(
         self,
-        data: "str | Path | anndata.AnnData",
+        data: str | Path | anndata.AnnData,
         port: int | None = None,
         height: int = 600,
         auto_open: bool = True,
-        **adapter_kwargs,
-    ):
+        *,
+        latent_key: str | None = None,
+        gene_id_column: str | None = None,
+        normalize_embeddings: bool = True,
+        centroid_outlier_quantile: float = 0.95,
+        centroid_min_points: int = 10,
+        dataset_name: str,
+        dataset_id: str,
+        vector_field_default: str | None = None,
+        client_server_url: str | None = None,
+        web_source_url: str = CELLUCID_WEB_URL,
+        web_cache_dir: str | Path | None = None,
+    ) -> None:
         """
         Initialize the AnnData viewer.
 
@@ -1495,22 +1834,62 @@ class AnnDataViewer(BaseViewer):
             port: Port for the data server (auto-selected if None).
             height: Height of the embedded viewer in pixels.
             auto_open: Automatically display when created.
-            **adapter_kwargs: Additional arguments passed to AnnDataAdapter.
+            latent_key: Explicit key in ``obsm`` for the latent space.
+            gene_id_column: Exact column in ``var`` containing gene identifiers.
+                If None, identifiers come from ``var.index``.
+            normalize_embeddings: Whether to normalize embeddings into the viewer
+                coordinate range.
+            centroid_outlier_quantile: Quantile used for categorical centroids.
+            centroid_min_points: Minimum category size used for centroid computation.
+            dataset_name: Explicit human-readable dataset name.
+            dataset_id: Explicit stable dataset identifier.
+            vector_field_default: Exact field id required when multiple UMAP
+                vector fields exist.
+            client_server_url: Exact browser-reachable data server base URL.
+            web_source_url: Origin publishing the web asset inventory.
+            web_cache_dir: Directory holding the active verified web build.
         """
-        super().__init__(port=port, height=height)
+        super().__init__(
+            port=port,
+            height=height,
+            client_server_url=client_server_url,
+            web_source_url=web_source_url,
+            web_cache_dir=web_cache_dir,
+        )
 
-        self.data = data
+        try:
+            self.data = data
 
-        # Start the AnnData server
-        self._start_server(**adapter_kwargs)
+            self._start_server(
+                latent_key=latent_key,
+                gene_id_column=gene_id_column,
+                normalize_embeddings=normalize_embeddings,
+                centroid_outlier_quantile=centroid_outlier_quantile,
+                centroid_min_points=centroid_min_points,
+                dataset_name=dataset_name,
+                dataset_id=dataset_id,
+                vector_field_default=vector_field_default,
+            )
+            self._activate()
 
-        # Register for cleanup
-        _active_viewers.add(self)
+            if auto_open and self._context["in_jupyter"]:
+                self.display()
+        except BaseException:
+            self._rollback_failed_construction()
+            raise
 
-        if auto_open and self._context["in_jupyter"]:
-            self.display()
-
-    def _start_server(self, **adapter_kwargs):
+    def _start_server(
+        self,
+        *,
+        latent_key: str | None,
+        gene_id_column: str | None,
+        normalize_embeddings: bool,
+        centroid_outlier_quantile: float,
+        centroid_min_points: int,
+        dataset_name: str,
+        dataset_id: str,
+        vector_field_default: str | None,
+    ) -> None:
         """Start the AnnData server."""
         from .anndata_server import AnnDataServer
 
@@ -1520,13 +1899,20 @@ class AnnDataViewer(BaseViewer):
             host="127.0.0.1",
             open_browser=False,
             quiet=True,
-            **adapter_kwargs,
+            serve_web_ui=True,
+            web_source_url=self.web_source_url,
+            web_cache_dir=self.web_cache_dir,
+            latent_key=latent_key,
+            gene_id_column=gene_id_column,
+            normalize_embeddings=normalize_embeddings,
+            centroid_outlier_quantile=centroid_outlier_quantile,
+            centroid_min_points=centroid_min_points,
+            dataset_name=dataset_name,
+            dataset_id=dataset_id,
+            vector_field_default=vector_field_default,
         )
         self._server.start_background()
-        try:
-            self.port = int(getattr(self._server, "port", self.port))
-        except Exception:
-            pass
+        self.port = self._server.port
         logger.info(f"Started AnnData server at {self._server.url}")
 
     @property
@@ -1534,7 +1920,7 @@ class AnnDataViewer(BaseViewer):
         """Get the full viewer URL with anndata flag."""
         from urllib.parse import urlencode
 
-        base = self._get_client_server_url().rstrip("/")
+        base = self._get_client_server_url()
         query = urlencode(
             {
                 "jupyter": "true",
@@ -1562,9 +1948,20 @@ class AnnDataViewer(BaseViewer):
 
 
 def show_anndata(
-    data: "str | Path | anndata.AnnData",
+    data: str | Path | anndata.AnnData,
     height: int = 600,
-    **kwargs,
+    *,
+    latent_key: str | None = None,
+    gene_id_column: str | None = None,
+    normalize_embeddings: bool = True,
+    centroid_outlier_quantile: float = 0.95,
+    centroid_min_points: int = 10,
+    dataset_name: str,
+    dataset_id: str,
+    vector_field_default: str | None = None,
+    client_server_url: str | None = None,
+    web_source_url: str = CELLUCID_WEB_URL,
+    web_cache_dir: str | Path | None = None,
 ) -> AnnDataViewer:
     """
     Quickly display an AnnData object, h5ad file, or zarr store in a notebook.
@@ -1575,11 +1972,20 @@ def show_anndata(
     Args:
         data: AnnData object, path to h5ad file, or path to zarr directory.
         height: Height of the viewer in pixels.
-        **kwargs: Additional arguments passed to AnnDataAdapter
-            - latent_key: Key in obsm for latent space (auto-detected)
-            - gene_id_column: Column in var for gene IDs ("index" by default)
-            - normalize_embeddings: Normalize to [-1,1] (default True)
-            - dataset_name: Human-readable name
+        latent_key: Explicit key in ``obsm`` for the latent space.
+        gene_id_column: Exact column in ``var`` containing gene identifiers.
+            If None, identifiers come from ``var.index``.
+        normalize_embeddings: Whether to normalize embeddings into the viewer
+            coordinate range.
+        centroid_outlier_quantile: Quantile used for categorical centroids.
+        centroid_min_points: Minimum category size used for centroid computation.
+        dataset_name: Explicit human-readable dataset name.
+        dataset_id: Explicit stable dataset identifier.
+        vector_field_default: Exact field id required when multiple UMAP
+            vector fields exist.
+        client_server_url: Exact browser-reachable data server base URL.
+        web_source_url: Origin publishing the web asset inventory.
+        web_cache_dir: Directory holding the active verified web build.
 
     Returns:
         AnnDataViewer instance for interaction via hooks.
@@ -1587,11 +1993,15 @@ def show_anndata(
     Supported formats:
         - In-memory AnnData objects
         - .h5ad files (HDF5-based, lazy loading via backed mode)
-        - .zarr directories (directory-based, inherently lazy-loaded)
+        - .zarr directories materialized by ``anndata.read_zarr``
 
     Example:
         >>> from cellucid import show_anndata
-        >>> viewer = show_anndata(adata)
+        >>> viewer = show_anndata(
+        ...     adata,
+        ...     dataset_name="Example",
+        ...     dataset_id="example",
+        ... )
         >>>
         >>> @viewer.on_selection
         ... def handle(event):
@@ -1599,7 +2009,13 @@ def show_anndata(
         ...     sc.pl.violin(subset, 'gene1')
 
         >>> # With custom options
-        >>> viewer = show_anndata(adata, latent_key="X_pca", height=800)
+        >>> viewer = show_anndata(
+        ...     adata,
+        ...     latent_key="X_pca",
+        ...     dataset_name="Example",
+        ...     dataset_id="example",
+        ...     height=800,
+        ... )
 
     Note:
         For production use or sharing, consider using prepare
@@ -1609,5 +2025,15 @@ def show_anndata(
         data=data,
         height=height,
         auto_open=True,
-        **kwargs,
+        latent_key=latent_key,
+        gene_id_column=gene_id_column,
+        normalize_embeddings=normalize_embeddings,
+        centroid_outlier_quantile=centroid_outlier_quantile,
+        centroid_min_points=centroid_min_points,
+        dataset_name=dataset_name,
+        dataset_id=dataset_id,
+        vector_field_default=vector_field_default,
+        client_server_url=client_server_url,
+        web_source_url=web_source_url,
+        web_cache_dir=web_cache_dir,
     )

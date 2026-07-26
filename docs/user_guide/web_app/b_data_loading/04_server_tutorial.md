@@ -1,11 +1,13 @@
-# Server Mode (CLI + Python) — Recommended for Large Datasets
+# Server Mode (CLI + Python)
 
-Server Mode is the most reliable way to view **large** `.h5ad` / `.zarr` datasets in Cellucid.
+Server mode opens `.h5ad` read-only-backed. It also supports `.zarr`, which is
+loaded eagerly and therefore must fit server memory.
 
 You run a small local Python server that:
-- reads your data efficiently (often lazily)
+- keeps `.h5ad` matrix access read-only-backed
+- materializes `.zarr` input eagerly
 - serves only what the viewer needs, on demand
-- serves the viewer UI on the same origin (hosted-asset proxy)
+- establishes and serves the exact viewer generation on the same origin
 
 Then you open the **viewer URL printed by the server** (usually `http://127.0.0.1:<port>/`).
 
@@ -46,7 +48,7 @@ This is safer and also avoids browser mixed-content issues.
 1) Start the server:
 
 ```bash
-cellucid serve /path/to/data.h5ad
+cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
 2) Open the viewer:
@@ -58,31 +60,6 @@ http://127.0.0.1:8765/
 3) Keep the terminal running while you use the viewer.
 4) Stop the server with **Ctrl+C**.
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: data-loading-server-terminal-banner
-Suggested filename: data_loading/08_server-terminal-banner.png
-Where it appears: Data Loading → 04_server_tutorial → Fast Path
-Capture:
-  - UI location: terminal window
-  - State prerequisites: server started successfully
-  - Action to reach state: run `cellucid serve ...`
-Crop:
-  - Include: the printed server URL and the suggested viewer URL
-  - Exclude: your username/hostnames if sensitive
-Redact:
-  - Replace: file paths with generic `/path/to/data.h5ad`
-Alt text:
-  - Terminal output showing the Cellucid server URL.
-Caption:
-  - Explain that the viewer URL is what you open in the browser.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Cellucid server banner.
-:width: 100%
-
-When the server starts, it prints a URL you open in the browser.
-```
-
 ## Option #6 — Serve a Pre-exported Folder (Best Performance)
 
 Use this if you already ran `prepare()`.
@@ -93,23 +70,23 @@ cellucid serve /path/to/export_dir
 
 Notes:
 - This is usually the fastest experience.
-- If the directory contains `dataset_identity.json`, the CLI will detect it as an export.
+- The CLI detects only a complete current export: valid
+  `dataset_identity.json`, `obs_manifest.json`, at least one non-empty exact
+  points artifact, and every manifest-declared artifact.
 
 ## Option #7/#8 — Serve `.h5ad` or `.zarr` Directly (Auto-detected)
 
 ```bash
 # h5ad
-cellucid serve /path/to/data.h5ad
+cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 
 # zarr (directory)
-cellucid serve /path/to/data.zarr
+cellucid serve /path/to/data.zarr --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
 Why this is good:
-- For `.h5ad`, Cellucid can use **backed mode** (true lazy loading) instead of loading everything.
-- For `.zarr`, chunked storage works well with lazy access.
-
-If you see slow loads, confirm you are not forcing in-memory mode.
+- `.h5ad` uses read-only backed access instead of loading the full matrix.
+- `.zarr` is loaded eagerly, with gene values requested by the browser on demand.
 
 ### Vector fields (velocity/drift) in server mode
 
@@ -128,7 +105,7 @@ If the overlay toggle is disabled or the dropdown is empty, it’s usually:
 
 See:
 - {doc}`../i_vector_field_velocity/index`
-- `cellucid/markdown/VECTOR_FIELD_OVERLAY_CONVENTIONS.md`
+- {doc}`../i_vector_field_velocity/01_what_vector_fields_are_user_facing`
 
 ## CLI Options (What They Mean)
 
@@ -150,10 +127,6 @@ Key flags:
 - `--no-browser`:
   - Don’t auto-open a browser tab.
 
-- `--no-backed`:
-  - Forces loading the entire AnnData into memory.
-  - This is rarely what you want for large datasets.
-
 - `--latent-key`:
   - Selects which `obsm` key to use as “latent space” (used for certain derived values).
   - If you don’t know, leave it alone.
@@ -163,7 +136,8 @@ Key flags:
 You can start servers from Python (useful for scripted workflows).
 
 - `serve(export_dir)` serves a pre-exported folder.
-- `serve_anndata(data)` serves `.h5ad`, `.zarr`, or an in-memory `AnnData`.
+- `serve_anndata(data, dataset_name=..., dataset_id=...)` serves `.h5ad`,
+  `.zarr`, or an in-memory `AnnData`.
 
 ```python
 # Serve a pre-exported folder
@@ -176,8 +150,7 @@ from cellucid import serve
 # Serve a .h5ad, .zarr, or AnnData
 from cellucid import serve_anndata
 
-# serve_anndata("/path/to/data.h5ad", port=8765, host="127.0.0.1", open_browser=True)
-# serve_anndata("/path/to/data.zarr", port=8765, host="127.0.0.1", open_browser=True)
+# Direct AnnData calls also require dataset_name and dataset_id.
 ```
 
 ### Stopping the server from Python
@@ -187,7 +160,12 @@ If you use the class-based API (advanced), you can stop the server programmatica
 ```python
 from cellucid.anndata_server import AnnDataServer
 
-server = AnnDataServer("data.h5ad", open_browser=False)
+server = AnnDataServer(
+    "data.h5ad",
+    open_browser=False,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 server.start_background()
 
 # ... interact in the browser ...
@@ -206,7 +184,10 @@ This is the recommended way to use Cellucid when your data lives on a remote mac
 On the remote machine:
 
 ```bash
-cellucid serve /path/to/data.h5ad --no-browser
+cellucid serve /path/to/data.h5ad \
+  --no-browser \
+  --dataset-name "My study" \
+  --dataset-id my-study-v1
 ```
 
 Keep it bound to `127.0.0.1` (default).
@@ -235,18 +216,19 @@ Why this works well:
 ## Edge Cases
 
 - **Port already in use**:
-  - The server may automatically pick a new port.
-  - Always copy the printed URL.
+  - The server reports the bind failure for the requested port.
+  - Choose another port explicitly or use `--port 0`, then copy the printed URL.
 
 - **Windows firewall prompt**:
   - If you allow public network access accidentally, other machines may reach your server.
 
-- **Large `.h5ad` in memory mode** (`--no-backed`):
-  - Can cause huge RAM use.
+- **Large in-memory AnnData or Zarr input**:
+  - Can cause high RAM use.
 
 - **Mixed content**:
   - Opening `https://www.cellucid.com?remote=http://127.0.0.1:<port>` is blocked by browsers (HTTPS page fetching HTTP).
-  - Always open the local server viewer URL (`http://127.0.0.1:<port>/`) which serves the UI via the hosted-asset proxy.
+  - Always open the local server viewer URL
+    (`http://127.0.0.1:<port>/`), which serves the verified UI generation.
   - Prefer an SSH tunnel when the kernel/server is remote.
 
 - **Vector fields only exist in one dimension**:
@@ -267,7 +249,7 @@ Why this works well:
 - Run:
 
   ```bash
-  cellucid serve /path/to/data.h5ad --port 9000
+  cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset --port 9000
   ```
 
 - Then open:
@@ -327,7 +309,8 @@ Why this works well:
 - If using AnnData, list `obsm` keys and look for `velocity_umap_2d`-style entries.
 
 **Fix**
-- Rename/regenerate vector fields to follow the convention in `cellucid/markdown/VECTOR_FIELD_OVERLAY_CONVENTIONS.md`.
+- Rename or regenerate vector fields using the exact keys documented in
+  {doc}`../i_vector_field_velocity/01_what_vector_fields_are_user_facing`.
 - Switch the viewer to the dimension that has vectors.
 
 For overlay UI behavior and deeper debugging, see:

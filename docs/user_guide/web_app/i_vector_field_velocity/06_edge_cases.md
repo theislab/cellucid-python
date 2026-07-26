@@ -131,5 +131,8 @@ Each entry below follows: **what you see → why → how to confirm → what to 
 
 - **What you see:** some loading operations fail, or the app behaves inconsistently across machines.
 - **Why:** browser policies, extensions, or GPU driver constraints can interfere.
-- **Confirm:** try the same dataset on a different browser/machine.
-- **What to do:** use a supported browser configuration and keep GPU drivers up to date; if needed, use server mode and test in a clean profile.
+- **Confirm:** load the same dataset in a clean profile with extensions disabled
+  and inspect the first console or network error.
+- **What to do:** allow the required origin and hardware acceleration in the
+  managed-browser policy, and keep the browser, operating system, and GPU
+  driver current.

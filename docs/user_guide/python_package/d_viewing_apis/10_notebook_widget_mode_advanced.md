@@ -2,7 +2,7 @@
 
 This page explains the notebook embedding details for `show(...)` and `show_anndata(...)`, including:
 - why HTTPS notebooks can break “simple” localhost iframes,
-- how the embed chooses a working URL,
+- how to supply the one browser-reachable URL,
 - and how to debug the browser ↔ kernel connection.
 
 If you want the minimal notebook quickstart, go to {doc}`06_jupyter_show_and_show_anndata_quickstart`.
@@ -11,7 +11,7 @@ If you want the minimal notebook quickstart, go to {doc}`06_jupyter_show_and_sho
 
 **Audience**
 - JupyterHub / cloud notebook users
-- anyone seeing “proxy required” or mixed-content issues
+- anyone seeing a blank iframe, mixed-content error, or unreachable loopback URL
 
 ## The core problem: “where is localhost?”
 
@@ -29,60 +29,61 @@ It gets tricky when:
 
 ## How Cellucid chooses the iframe URL
 
-Cellucid computes a “direct” URL (what the server thinks it is):
+Without `client_server_url=`, Cellucid uses the exact URL of its bound server:
 
 ```text
 http://127.0.0.1:<port>/?jupyter=true&viewerId=...&viewerToken=...
 ```
 
-Then, inside the notebook frontend, the embed script may replace that with a safer proxy URL:
+With `client_server_url=`, Cellucid uses that exact absolute HTTP(S) base.
+The argument must have no credentials, query, fragment, trailing slash, or
+surrounding whitespace.
 
-- If the notebook environment supports **jupyter-server-proxy**, it tries:
+Cellucid does not probe for Jupyter Server Proxy, call a Colab proxy API, or
+rewrite the URL in the notebook frontend. This keeps routing explicit and makes
+connectivity failures reproducible.
 
-```text
-<notebook-origin>/<baseUrl>/proxy/<port>/?jupyter=true&viewerId=...&viewerToken=...
-```
+## Jupyter Server Proxy
 
-- If you are in Colab, it uses Colab’s HTTPS port proxy.
-- If you set `CELLUCID_CLIENT_SERVER_URL`, that override is used as the base.
-
-If none of these work in an HTTPS/remote context, the iframe shows a message explaining that a proxy is required.
-
-## Recommended solution: install/enable `jupyter-server-proxy`
-
-For JupyterHub and many remote notebooks, `jupyter-server-proxy` is the easiest and safest fix.
-
-Typical install (local environments):
-
-```bash
-pip install jupyter-server-proxy
-```
+For JupyterHub and many remote notebooks, Jupyter Server Proxy can expose the
+Cellucid port over the notebook’s HTTPS origin.
 
 ```{note}
-In managed JupyterHub deployments you might not control installs; ask your admin to enable it.
+`jupyter-server-proxy` is already a core Cellucid dependency. A Jupyter
+administrator must still enable and configure its server route; installing the
+package does not make Cellucid discover or select a proxy URL.
 ```
 
-## Advanced solution: `CELLUCID_CLIENT_SERVER_URL`
+Determine the proxy base that reaches the selected port and pass it when
+constructing the viewer:
 
-Set this environment variable in the **kernel environment** to override what URL the browser should use to reach the server.
+```python
+from cellucid import AnnDataViewer
 
-Examples:
-
-- If you have a reverse proxy that exposes the Cellucid server over HTTPS:
-
-```bash
-export CELLUCID_CLIENT_SERVER_URL=https://your.domain.example/cellucid
+viewer = AnnDataViewer(
+    adata,
+    port=8765,
+    dataset_name="Example",
+    dataset_id="example",
+    client_server_url="https://notebooks.example/user/alice/proxy/8765",
+)
 ```
 
-- If you are using an SSH tunnel and an HTTP notebook (no mixed content), you might set:
+For an SSH tunnel viewed from an HTTP notebook:
 
-```bash
-export CELLUCID_CLIENT_SERVER_URL=http://127.0.0.1:8765
+```python
+viewer = AnnDataViewer(
+    adata,
+    port=8765,
+    dataset_name="Example",
+    dataset_id="example",
+    client_server_url="http://127.0.0.1:8765",
+)
 ```
 
 ```{warning}
 If your notebook is served over HTTPS, embedding an `http://...` iframe can be blocked by the browser (mixed content).
-Prefer an HTTPS proxy URL (jupyter-server-proxy, Colab proxy, or your own HTTPS reverse proxy).
+Use an HTTPS proxy base for an HTTPS notebook.
 ```
 
 ## Debugging notebook connectivity (high-signal)
@@ -95,8 +96,8 @@ viewer.debug_connection()
 
 This report includes:
 - server health probes (`/_cellucid/health`, `/_cellucid/info`)
-- whether `jupyter-server-proxy` is installed
-- cache status for the hosted-asset proxy UI
+- the configured and browser-facing server URLs
+- the verified local viewer-generation status
 - recent frontend console warnings/errors (forwarded to Python when available)
 
 Also inspect:
@@ -113,7 +114,11 @@ Even if embedding is blocked, the server can still work in a normal browser tab:
 1) Start the viewer (still creates the server):
 
 ```python
-viewer = show_anndata("data.h5ad")
+viewer = show_anndata(
+    "data.h5ad",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 ```
 
 2) Copy and open:
@@ -124,5 +129,7 @@ print(viewer.viewer_url)
 
 ## Troubleshooting
 
-- Embed shows “proxy required” → install/enable jupyter-server-proxy or set `CELLUCID_CLIENT_SERVER_URL`.
-- Embed shows “viewer UI unavailable” → hosted-asset proxy cache/network issue: {doc}`15_troubleshooting_viewing`.
+- Mixed-content or unreachable iframe → expose the port through an appropriate
+  proxy/tunnel and pass its exact base as `client_server_url=`.
+- Web-generation startup error → diagnose the source, inventory, declared
+  object, or generation directory: {doc}`15_troubleshooting_viewing`.

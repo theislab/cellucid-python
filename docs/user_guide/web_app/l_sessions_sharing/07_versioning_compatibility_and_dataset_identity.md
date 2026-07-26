@@ -85,20 +85,12 @@ Fix:
 
 ### Case 4: different app build/version
 
-Sessions are dev-phase artifacts:
-- no backward compatibility guarantees,
-- no migrations,
-- chunks are owned by features and may change across builds.
-
-Expected outcome:
-- best-effort restore, but any of the following can happen:
-  - some chunks are skipped because the contributor doesn’t exist anymore,
-  - restore errors for certain chunks (isolated; session may partially restore),
-  - a session fails to load with a manifest/format error.
+Session bundles target the exact current app schema. A bundle whose manifest or
+chunk contract does not match is rejected or has its invalid chunk rejected.
 
 If you need long-term stability:
 - treat exported figures and exported data as the archival artifacts,
-- and treat sessions as “working state” artifacts.
+- keep the app revision with the session working-state artifact.
 
 ---
 

@@ -88,7 +88,8 @@ The core constraint:
 - browsers often block if an HTTPS page tries to load or fetch from an **HTTP loopback** server (`http://127.0.0.1:<port>`) as *active mixed content*.
 
 Cellucid’s solution:
-1. Serve the viewer UI from the same origin as the dataset server (hosted-asset proxy).
+1. Serve the exact verified viewer generation from the same origin as the
+   dataset server.
 2. When the notebook is HTTPS/remote, prefer a notebook proxy URL (Jupyter Server Proxy).
 
 In the notebook output HTML (`BaseViewer._generate_viewer_html`):
@@ -99,26 +100,31 @@ In the notebook output HTML (`BaseViewer._generate_viewer_html`):
 https://<notebook-origin>/<base>/proxy/<port>/?jupyter=true&viewerId=...&viewerToken=...
 ```
 
-and probes `/_cellucid/health` before choosing it.
+and requires that exact URL to be reachable from the browser.
 
-For Colab:
-- Python computes an HTTPS proxy URL via `google.colab.kernel.proxyPort(port)` (best effort).
+For Colab or another remote notebook:
+- the caller obtains an HTTPS proxy base and passes it explicitly.
 
-Override (advanced):
-- `CELLUCID_CLIENT_SERVER_URL` forces the browser-facing base URL for the server.
+Argument:
+- `client_server_url=` sets the browser-facing base URL for the server.
 
-## Hosted-asset proxy (web UI caching)
+## Exact web-generation establishment
 
-Notebook embeds load the Cellucid UI from the local server origin, but those HTML/JS/CSS assets are fetched from `https://www.cellucid.com` when not packaged locally.
+Notebook embeds load the Cellucid UI from the local server origin. Before each
+viewer-serving startup, the HTML/JS/CSS generation is established from the
+configured `web_source_url` (by default `https://www.cellucid.com`).
 
 Behavior:
-- The server proxies `index.html` and `/assets/*` from `CELLUCID_WEB_URL`.
-- Files are cached to disk (default: temp dir).
-- Cache invalidation uses the `<meta name="cellucid-web-build-id" content="...">` stamp in `index.html`.
+- Before binding, the server establishes the complete inventory at the exact
+  configured source URL.
+- Files are staged and byte-verified on disk (default: temp dir), then published
+  atomically.
+- The inventory build id and exact per-file hashes own generation identity.
 
 Controls:
-- Cache directory: `CELLUCID_WEB_PROXY_CACHE_DIR=/path/to/cache`
-- Prefetch in notebooks (progress bar): `viewer.ensure_web_ui_cached()`
+- Generation directory: `web_cache_dir="/path/to/cache"`
+- Establish the configured generation now: `viewer.ensure_web_ui_cached(force=True)`
+- Verify the selected existing generation only: `viewer.ensure_web_ui_cached(force=False)`
 - Clear cache: `viewer.clear_web_cache()` or `cellucid.clear_web_cache()`
 
 ## Viewer identity: `viewerId` and routing
@@ -144,10 +150,10 @@ The flow for a selection event is:
 iframe -> POST /_cellucid/events {type:"selection", viewerId:"...", cells:[...], source:"lasso"}
 server -> route_event(viewerId, event)
 viewer._handle_frontend_message(event)
-  - maps type → event name
+  - validates the exact closed record for its event type
   - strips internal fields (type, viewerId)
   - updates viewer.state + wakes waiters
-  - triggers HookRegistry callbacks (with exception guards)
+  - triggers HookRegistry callbacks
 ```
 
 ## Threading / reentrancy notes
@@ -167,7 +173,7 @@ Use `viewer.debug_connection()` to collect:
 - server health/info probes
 - ping/pong roundtrip
 - a frontend “debug snapshot” (`location.href`, origin, user agent)
-- recent forwarded frontend warnings/errors (`console` events)
+- recent accepted-event counts by exact type
 
 This is the fastest way to determine whether your failure is:
 - a notebook proxy/mixed-content problem,
@@ -180,4 +186,3 @@ This is the fastest way to determine whether your failure is:
 - Events: {doc}`07_frontend_to_python_events`
 - Security: {doc}`12_security_model` and {doc}`13_security_cors_origins_and_mixed_content`
 - Troubleshooting: {doc}`14_troubleshooting_hooks`
-

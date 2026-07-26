@@ -21,7 +21,7 @@ In the recommended workflows (`cellucid serve`, `show`, `show_anndata`):
 
 Cellucid does not “upload your dataset to cellucid.com” as part of this workflow.
 
-### The viewer UI (hosted-asset proxy)
+### The verified viewer UI generation
 
 The Python server downloads the **viewer UI assets** from:
 
@@ -29,14 +29,17 @@ The Python server downloads the **viewer UI assets** from:
 https://www.cellucid.com
 ```
 
-and caches them locally. This is done so the UI can be served from the same origin as your dataset server.
+and publishes them as one verified local generation. This lets the UI and
+dataset API use the same origin.
 
 Implications:
-- the first run may require internet access,
-- offline use is supported *after* assets are cached,
-- the cached assets are UI files (JS/CSS), not your data.
+- every viewer-serving startup requires access to the configured source,
+- the complete declared generation is verified before the server starts,
+- source failure is reported instead of substituting a previous generation,
+- the local files are UI assets, not your dataset.
 
-Configure cache location with `CELLUCID_WEB_PROXY_CACHE_DIR`.
+Configure the local generation directory with `--web-cache-dir PATH` or the
+`web_cache_dir=` Python argument.
 
 ## The biggest risk: exposing the dataset server
 
@@ -90,4 +93,4 @@ Practical guidance:
 ## Troubleshooting security/networking issues
 
 - Remote access (SSH tunnels): {doc}`12_remote_servers_ssh_tunneling_and_cloud`
-- Viewer UI cache/offline issues: {doc}`15_troubleshooting_viewing`
+- Viewer source/generation issues: {doc}`15_troubleshooting_viewing`

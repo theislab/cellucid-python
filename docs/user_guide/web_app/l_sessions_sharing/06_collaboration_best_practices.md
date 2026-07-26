@@ -153,7 +153,7 @@ Why:
 Before sending a session to someone else:
 
 1) Save the session.
-2) Open a fresh tab (or a different browser profile).
+2) Open a fresh tab in a clean browser profile with extensions disabled.
 3) Load the dataset again.
 4) Load the session.
 5) Confirm there is no dataset mismatch warning.

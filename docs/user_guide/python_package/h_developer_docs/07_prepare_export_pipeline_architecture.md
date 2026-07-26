@@ -57,7 +57,7 @@ The pipeline stages are:
 
 - `latent_space`: used to compute outlier quantiles per category (helps visualization and centroid stability)
 - `obs`: the per-cell metadata table
-- at least one embedding: `X_umap_1d`/`2d`/`3d`/`4d`
+- at least one embedding: `X_umap_1d`, `X_umap_2d`, or `X_umap_3d`
 
 Optional inputs:
 - `var` + `gene_expression` for gene overlays
@@ -81,7 +81,8 @@ If these are inconsistent, `prepare` raises early (shape mismatch).
 
 ## Stage 2 — Embedding normalization
 
-For each dimensional embedding (1D/2D/3D/4D), `prepare` normalizes coordinates to fit within `[-1, 1]`.
+For each provided 1D, 2D, or 3D embedding, `prepare` normalizes coordinates to
+fit within `[-1, 1]`.
 
 Important details:
 
@@ -117,14 +118,14 @@ Inputs:
 - `vector_fields: dict[str, array]`
 
 Accepted shapes:
-- `(n_cells,)` or `(n_cells, 1)` for 1D
+- `(n_cells, 1)` for 1D
 - `(n_cells, 2)` for 2D
 - `(n_cells, 3)` for 3D
 
 Naming conventions:
 
-- Explicit dimension keys: `<field_id>_<dim>d` (e.g. `velocity_umap_2d`, `T_fwd_umap_3d`)
-- Implicit keys without suffix are allowed **only if their shape matches a missing dimension**
+- Every declaration key must be dimension-suffixed:
+  `<field_id>_<dim>d` (e.g. `velocity_umap_2d`, `T_fwd_umap_3d`)
 
 Export rules:
 - vector files are written under `vectors/`
@@ -133,7 +134,8 @@ Export rules:
 - scaling: vectors are scaled by the **same scale factor used to normalize the corresponding points**
 
 Important invariant:
-- `field_id` must be “filename-safe” (only `[A-Za-z0-9._-]` and underscores). Unsafe IDs raise.
+- `field_id` satisfies the exact portable-identifier contract used by every
+  exported identifier. Unsafe or case-colliding IDs raise.
 
 ---
 
@@ -158,18 +160,18 @@ Obs export does three things:
 ### 5.2 Continuous obs export
 
 Files:
-- `obs/<safe_key>.values.f32(.gz)` when not quantized
-- `obs/<safe_key>.values.u8(.gz)` or `.values.u16(.gz)` when quantized
+- `obs/<key>.values.f32(.gz)` when not quantized
+- `obs/<key>.values.u8(.gz)` or `.values.u16(.gz)` when quantized
 
 If quantized:
-- NaN/Inf values are mapped to a reserved “missing marker” (255 or 65535)
+- the preflight requires real finite values representable as `float32`
 - `obs_manifest.json` stores `minValue` and `maxValue` for dequantization
 
 ### 5.3 Categorical obs export
 
 Files:
-- `obs/<safe_key>.codes.u8(.gz)` or `obs/<safe_key>.codes.u16(.gz)`
-- `obs/<safe_key>.outliers.f32(.gz)` (or `.outliers.u8/.u16` if outlier quantization enabled)
+- `obs/<key>.codes.u8(.gz)` or `obs/<key>.codes.u16(.gz)`
+- `obs/<key>.outliers.f32(.gz)` (or `.outliers.u8/.u16` if outlier quantization enabled)
 
 Codes:
 - integer codes `0..(n_categories-1)`
@@ -204,7 +206,7 @@ Inputs:
 - `var`: gene metadata table, length `n_genes`
 
 Gene identifiers:
-- chosen via `var_gene_id_column` (`"index"` by default)
+- chosen via `var_gene_id_column` (`None` selects `var.index`)
 - optionally subset via `gene_identifiers`
 
 Export:
@@ -221,24 +223,37 @@ Important performance note:
 
 ## Stage 7 — Connectivity export (optional)
 
-Connectivity export turns a KNN matrix into a GPU-friendly edge list:
+Connectivity export validates one exact graph and writes a GPU-friendly edge
+list:
 
-1) ensure CSR
-2) symmetrize: `A + A.T`
-3) binarize: set all nonzero entries to 1
-4) extract unique undirected edges as `(src, dst)` with `src < dst`
-5) sort edges lexicographically for better gzip compression
-6) write two binary arrays:
+1) require exact shape `(n_cells, n_cells)`;
+2) require a real numeric or boolean matrix whose values are finite and
+   non-negative;
+3) require exact symmetry in topology and weight and an exactly zero diagonal;
+4) extract each undirected edge once as `(src, dst)` with `src < dst`;
+5) sort edges lexicographically;
+6) write three aligned binary arrays:
    - `connectivity/edges.src.bin(.gz)`
    - `connectivity/edges.dst.bin(.gz)`
+   - `connectivity/edges.weights.f64.bin(.gz)`
+
+The weight array is exact little-endian Float64. Boolean `True` publishes as
+the explicit unit weight `1.0`. Asymmetric, directed, negative, non-finite,
+self-edge-containing, sparse-stored-zero, and duplicate-coordinate graphs are
+rejected before any graph artifact is published. The exporter never
+symmetrizes, binarizes, coalesces, or drops values. A validated zero-edge graph
+remains present and publishes three zero-length arrays plus `n_edges: 0` and
+`max_neighbors: 0`.
 
 Index dtype is chosen based on `n_cells`:
-- `uint16` if `n_cells <= 65535`
-- `uint32` if `n_cells <= 4294967295`
-- else `uint64`
+
+- `uint16` if `1 <= n_cells <= 65536`
+- `uint32` if `65537 <= n_cells <= 4294967296`
+- reject larger axes; the current contract has no `uint64` graph indices
 
 The manifest stores:
-- `n_edges`, `max_neighbors`, `index_dtype`, and file paths
+- `n_edges`, `max_neighbors`, `index_dtype`, all three file paths,
+  `weight_dtype: "float64"`, and `weight_bytes: 8`
 
 ---
 
@@ -292,29 +307,26 @@ print(pts.shape, pts.min(), pts.max())
 
 ## Edge cases and footguns (common)
 
-### Partial exports due to “skip existing files”
+### Generation publication
 
-By default `prepare` **skips writing** files that already exist unless `force=True`.
-
-This can produce a mixed export folder if you:
-- change quantization/compression settings,
-- re-run prepare without `force`,
-- and end up with manifests referring to files that were not regenerated.
-
-Recommendation:
-- during development, either delete the output folder or use `force=True`.
+`force=False` rejects a non-empty target. `force=True` writes a complete
+sibling stage, validates it, and atomically replaces the prior generation.
+Candidate failure removes the stage and preserves the prior target. Files are
+never skipped into a mixed generation.
 
 ### Too many categories for `uint8`
 
-If you force categorical dtype `uint8` and a field has >254 categories, export will error.
+If you force categorical dtype `uint8` and a field has more than 255
+categories, export errors.
 
-Use:
-- `obs_categorical_dtype="auto"` (preferred) or `"uint16"`.
+Choose `obs_categorical_dtype="uint16"`, or choose `"uint8"` only when every
+categorical field has at most 255 categories.
 
 ### NaN/Inf handling
 
-Quantized continuous data maps NaN/Inf to a missing marker (255/65535).
-If you have many NaNs, the color map may look “empty” even though export succeeded.
+Continuous observations, latent values, embeddings, and gene values must be
+real, finite, and representable as `float32`. Invalid scientific values reject
+the candidate before publication.
 
 ---
 
@@ -355,4 +367,5 @@ Cause:
 - vector field ids must be filename-safe (no spaces, slashes, etc.).
 
 Fix:
-- rename keys to safe ids (e.g. `T_fwd_umap` instead of `T fwd/umap`).
+- rename declaration keys to safe, dimension-suffixed ids (e.g.
+  `T_fwd_umap_2d` instead of `T fwd/umap_2d`).

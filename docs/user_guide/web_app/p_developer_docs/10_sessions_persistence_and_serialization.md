@@ -38,7 +38,7 @@ It is written for:
 ### Sessions are NOT…
 
 - The dataset itself (no data files are embedded).
-- A guarantee of long-term backward compatibility (dev-phase constraint).
+- An archival interchange format; use the matching app revision when restoring working state.
 - A copy of network/auth state (community annotation tokens are not included).
 
 ---
@@ -166,28 +166,6 @@ Not saved/restored:
 
 ---
 
-## Auto-load on startup from dataset exports
-
-Cellucid supports a legacy-but-useful workflow:
-- datasets can ship “latest session snapshot” pointers in their exports folder
-
-Mechanism:
-- On startup, `main.js` calls `sessionSerializer.restoreLatestFromDatasetExports()`.
-- The serializer reads `state-snapshots.json` in the current dataset base URL and loads the last `.cellucid-session` entry.
-
-Expected files:
-- `<dataset_base_url>/state-snapshots.json`
-- `<dataset_base_url>/cellucid-session-....cellucid-session`
-
-Supported `state-snapshots.json` shapes (dev-phase):
-- `{ "states": ["file.cellucid-session", ...] }` (recommended)
-- `["file.cellucid-session", ...]` (also accepted)
-
-Security model:
-- Still treated as untrusted input (bounds checks apply).
-
----
-
 ## Dataset mismatch behavior
 
 Sessions contain a dataset fingerprint.
@@ -236,11 +214,10 @@ Likely causes (ordered):
 
 How to confirm:
 - DevTools → Console: look for session serializer warnings/errors.
-- DevTools → Network: if auto-load, check whether `state-snapshots.json` and the `.cellucid-session` file were fetched.
 
 Fix:
 - Try a known-good small session file.
-- If hosting sessions, ensure the server serves the binary file correctly (no HTML fallback).
+- Confirm the selected file is the original binary `.cellucid-session` bundle, not an HTML response saved under that extension.
 
 ### Symptom: “Session loads, but highlights are missing”
 

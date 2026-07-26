@@ -60,6 +60,6 @@ If you’re adding a new feature, start by reading:
 
 - **“Code pointers”** are given as file paths (e.g. `cellucid/assets/js/app/main.js`) so you can jump directly to the source.
 - **“Symptoms”** describe what a user sees; **“Likely causes”** are ordered; **“How to confirm”** is testable; **“Fix”** is step-by-step.
-- “Dev-phase” notes are called out explicitly (things that may change quickly or lack migrations/back-compat).
+- Format and runtime contracts describe only the current exact schema.
 
 Next: {doc}`01_codebase_map_and_entry_points`.

@@ -28,9 +28,12 @@ marker_genes = ["MS4A1", "CD3D", "LYZ", "NKG7"]
 
 prepare(
     ...,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    obs_categorical_dtype="uint16",
     gene_expression=adata.X,
     var=adata.var,
-    var_gene_id_column="index",
+    var_gene_id_column=None,
     gene_identifiers=marker_genes,
     var_quantization=8,
     compression=6,
@@ -92,8 +95,8 @@ This means:
 
 Quantization rules (current exporter):
 - quantization is **per gene** (each gene gets its own min/max),
-- NaN/Inf are mapped to a reserved missing marker:
-  - `255` for 8-bit, `65535` for 16-bit,
+- gene values must be real, finite, and representable as `float32`; otherwise
+  the complete candidate is rejected before publication,
 - `minValue`/`maxValue` are stored in `var_manifest.json` and used for dequantization.
 
 Dequantization in the web app is:
@@ -110,12 +113,13 @@ Practical guidance:
 
 ### Missing/invalid values
 
-- NaN/Inf are allowed and will be treated as missing in the UI.
+- NaN, infinities, complex values, and values outside the finite `float32`
+  range are rejected before publication.
 - Negative values are allowed (quantization uses min/max and will encode them).
 
-If you see many NaNs/Inf:
+If validation reports NaN/Inf:
 - confirm your preprocessing (e.g., division by zero, log of negative values),
-- consider exporting a different representation.
+- correct the input rather than substituting a display value.
 
 ### Choosing what expression to export (counts vs normalized)
 
@@ -156,7 +160,8 @@ If you need full gene access on large datasets, prefer server mode:
 
 - **Wrong orientation** (`genes × cells`): fix by transposing to `(cells × genes)`.
 - **Mismatch between `var` and matrix columns**: leads to wrong gene names/values.
-- **Duplicate gene IDs**: can overwrite files and produce confusing UI results (see {doc}`05_var_gene_metadata`).
+- **Duplicate or filename-colliding gene IDs**: the complete candidate is
+  rejected before publication (see {doc}`05_var_gene_metadata`).
 - **All-zero genes**: export is valid but gene overlays will be flat.
 - **NaNs introduced by preprocessing**: common after invalid log transforms or normalization artifacts.
 - **Huge file counts**: tens of thousands of gene files can be slow on some filesystems (especially networked).

@@ -254,7 +254,7 @@ Do the least invasive thing that answers your question:
    - Use the same export folder/version and dataset id.
 3) If windows fail to appear entirely
    - try restoring in a fresh tab,
-   - try a different browser profile (extensions can block storage).
+   - verify in a clean profile with extensions disabled (extensions can block storage).
 
 ### Prevention
 
@@ -360,89 +360,7 @@ Likely causes:
 
 Fix:
 - follow {doc}`09_exporting_analysis_results`,
-- try a different browser profile (extensions can block downloads).
-
----
-
-## Screenshot placeholders (you will replace later)
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: analysis-missing-expression
-Suggested filename: analysis/90_missing-expression.png
-Where it appears: User Guide → Web App → Analysis → 10_troubleshooting_analysis.md
-Capture:
-  - Show an analysis mode that requires expression with a clear empty/disabled state
-  - Include any warning text (“Gene expression not available”, etc.)
-Redact:
-  - Remove: private dataset identifiers
-Alt text:
-  - Analysis mode showing an empty or disabled state due to missing gene expression.
-Caption:
-  - If gene expression is not available in the loaded dataset, expression-based analysis modes may be empty or disabled.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for missing gene expression in analysis.
-:width: 100%
-
-Expression-based analysis modes can be empty/disabled when gene expression was not exported or is not available in the current loading method.
-```
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: analysis-no-groups-defined
-Suggested filename: analysis/91_no-groups-defined.png
-Where it appears: User Guide → Web App → Analysis → 10_troubleshooting_analysis.md
-Capture:
-  - Show the analysis panel when no selection/highlight group is defined
-  - Include any “select cells”/“create group” guidance shown by the UI
-Alt text:
-  - Analysis panel showing an empty state because no groups are defined.
-Caption:
-  - Analysis requires at least one defined group (selection or highlight group); create one before running analysis.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for analysis with no groups defined.
-:width: 100%
-
-If nothing is selected and no highlight groups exist, analysis will often show an empty state until you define a group.
-```
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: analysis-all-cells-filtered-out
-Suggested filename: analysis/92_all-cells-filtered-out.png
-Where it appears: User Guide → Web App → Analysis → 10_troubleshooting_analysis.md
-Capture:
-  - Show “0 visible cells” (or equivalent) and the analysis output being empty
-  - Include the Active filters panel if possible
-Alt text:
-  - Active filters showing 0 visible cells leading to empty analysis outputs.
-Caption:
-  - If all cells are filtered out, analysis outputs can be empty; disable filters or reset visibility first.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for all cells filtered out affecting analysis.
-:width: 100%
-
-Analysis can appear empty when all cells are filtered out; check Active filters and restore visibility before re-running.
-```
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: analysis-de-slow-warning
-Suggested filename: analysis/93_de-slow-warning.png
-Where it appears: User Guide → Web App → Analysis → 10_troubleshooting_analysis.md
-Capture:
-  - If the UI shows a progress indicator, spinner, or warning for slow DE, capture it
-  - Include the group sizes if visible
-Alt text:
-  - Differential expression analysis showing a progress indicator or slow-compute warning.
-Caption:
-  - DE runtime can scale with dataset and group sizes; prefer smaller scopes or export tables for offline computation when needed.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for DE being slow.
-:width: 100%
-
-DE runtime can scale with dataset and group size; if DE is slow, reduce scope or switch to offline analysis workflows.
-```
+- verify downloads in a clean profile with extensions disabled.
 
 ---
 

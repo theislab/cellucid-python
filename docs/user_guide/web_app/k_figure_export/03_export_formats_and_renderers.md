@@ -26,12 +26,16 @@ Cellucid’s figure export supports:
   - **PNG (150/300/600)**
   - **All** (SVG + PNGs at 150/300/600)
 
+Each batch is delivered as one deterministic, uncompressed ZIP. Its entries
+retain the exact native SVG/PNG bytes and filenames produced by the renderers.
+
 **What gets exported**
 - By default: the **active view** (live view or focused snapshot).
 - Optionally: **all views** in split-view grid mode (multi-panel export).
 
 **Where files go**
-- Exports download via your browser (typically to your Downloads folder).
+- A single export downloads as `.svg` or `.png`; a batch downloads once as
+  `.zip`.
 - Filenames include dataset/field/view and a timestamp (and DPI tag when relevant). See {doc}`index` for a quick summary.
 
 ---
@@ -129,7 +133,9 @@ This is often the best default when:
 - points are raster (they will eventually pixelate if you zoom extremely far in).
 
 :::{note}
-Hybrid SVG tries to rasterize points using WebGL2 for shader-accurate appearance. If WebGL2 or required camera matrices are unavailable, it can fall back to simpler rasterization (you may see a fidelity warning).
+Hybrid SVG requires WebGL2 and the current camera matrices for shader-accurate
+points. If either is unavailable, export is blocked until the capability is
+restored.
 :::
 
 ---
@@ -148,16 +154,22 @@ PNG export produces a high-DPI raster image that is easy to paste into slides, m
 - *“Files are enormous”*: reduce plot size and/or export at 150 DPI for drafts/slides.
 
 **Provenance**
-- PNG exports embed `tEXt` metadata, including a structured JSON blob with dataset identity, filter summary, and export settings. See {doc}`05_metadata_and_provenance`.
+- PNG exports embed UTF-8 `iTXt` metadata, including a structured JSON blob with dataset identity, filter summary, and export settings. See {doc}`05_metadata_and_provenance`.
 
 ---
 
-## Cross-browser and downstream tool notes
+## Browser contract and downstream tool notes
 
 ### Browsers
 
-- If WebGL2 is blocked or unavailable, shader-accurate exports (PNG and Hybrid SVG) may degrade. Cellucid will attempt to warn you.
-- If you see unexpected differences, try exporting in a different browser and compare.
+- Chromium, Firefox, and Safari/WebKit use the same native single-file and ZIP
+  batch contracts.
+- PNG and Hybrid require WebGL2 plus the published camera matrices. If either is
+  absent, **Export blocked** names the missing requirement and no file is
+  created.
+- Diagnose unexpected output from the embedded metadata, exact export settings,
+  and any `[FigureExport]` console error. Changing browsers is not an export
+  strategy.
 
 ### Illustrator/Inkscape tips
 
@@ -171,25 +183,13 @@ Yes: it’s a fast way to confirm the export is not corrupted and that legends/a
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: figure-export-format-mode-selection
-Suggested filename: figure_export/08_format-mode-selection.png
-Where it appears: User Guide → Web App → Figure Export → 03_export_formats_and_renderers.md
-Capture:
-  - UI location: format/mode selector (SVG full/optimized/hybrid and PNG)
-  - Show any warning text for large SVG exports, if present
-Alt text:
-  - Export format and renderer selection controls.
-Caption:
-  - Choose SVG modes for editability and PNG for pixel-perfect rendering; large datasets may require optimized or hybrid modes.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for export format/mode selection.
+```{figure} ../../../_static/screenshots/figure_export/download.png
+:alt: Figure Export Download controls with output format, DPI, and split-view choice.
 :width: 100%
 
-Export formats trade off editability (SVG) vs pixel-fidelity (PNG) and practical file size.
+Download settings choose output format, resolution, and whether all views are exported.
 ```
 
 ---

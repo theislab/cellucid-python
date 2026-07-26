@@ -13,7 +13,8 @@ Before deep-diving, answer:
 
 1) Are you loading:
    - an **export folder** (recommended),
-   - a **`.h5ad` / `.zarr`** file,
+   - a browser-selected **`.h5ad`** or **Zarr ZIP** file,
+   - a Python-served **`.h5ad` / `.zarr`** path,
    - a **server-backed URL** (e.g. `http://127.0.0.1:<port>/` from `cellucid serve ...`),
    - a **remote server** (`?remote=...`, only when the viewer origin can fetch that scheme),
    - or a **GitHub exports root** (`?github=...`)?
@@ -49,24 +50,27 @@ If your `.h5ad` is large:
 
 ## Symptom → diagnosis → fix (common issues)
 
-### Symptom: “I clicked Folder / .h5ad / .zarr, but nothing happens”
+### Symptom: “I clicked Prepared / H5AD / Zarr ZIP, but nothing happens”
 
 **Likely causes (ordered)**
-1) Browser does not support the required file picker capability (common on Safari / embedded browsers).
-2) You denied the permission prompt (folder access).
-3) The app is embedded in a context that blocks file access (some notebook/iframe setups).
+1) You denied the file or directory permission prompt.
+2) The app is embedded in a context that blocks file access.
+3) A managed-browser policy disabled local file access.
+4) The selected object does not match the control: directory for **Prepared**,
+   `.h5ad` for **H5AD**, or one `.zarr.zip`/`.zip` for **Zarr ZIP**.
 
 **How to confirm**
-- Try the same action in Chrome or Edge.
-- Try a very small folder/file to rule out “large file = slow UI”.
+- Open the standalone Cellucid page in a supported current desktop browser.
+- Use a small known-current fixture with the matching control.
 
 **Fix**
-- Use Chrome/Edge.
-- If folder picking is blocked, use server mode instead: {doc}`04_server_tutorial`
-- If you must stay browser-only, prefer pre-exported folders over `.h5ad`.
+- Allow the picker permission and use the standalone page.
+- If organizational policy forbids local selection, choose server mode
+  explicitly: {doc}`04_server_tutorial`.
 
 **Prevention**
-- For workshops/collaborators, standardize on a supported browser + desktop environment.
+- For workshops, validate the three controls with a small fixture on the
+  managed browser image before distributing data.
 
 ---
 
@@ -85,7 +89,8 @@ If your `.h5ad` is large:
   http://127.0.0.1:8765/health
   ```
 
-- If using GitHub, open the raw manifest URL in a new tab (replace placeholders):
+- If using GitHub, open the raw manifest URL in a new tab after substituting
+  your exact owner, repository, branch, and path:
 
   ```text
   https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>/datasets.json
@@ -135,7 +140,7 @@ If your `.h5ad` is large:
 
   ```python
   import numpy as np
-  X = adata.obsm.get("X_umap")
+  X = adata.obsm["X_umap_2d"]
   print(np.isfinite(X).all(), X.min(), X.max())
   ```
 
@@ -211,7 +216,8 @@ For overlay behavior and deeper diagnostics, see:
 3) Corporate network blocks `raw.githubusercontent.com`.
 
 **How to confirm**
-- Open the raw URL in a browser (replace placeholders):
+- Open the raw URL in a browser after substituting your exact repository
+  coordinates:
 
   ```text
   https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>/datasets.json
@@ -256,7 +262,7 @@ If you hit one of these, switching workflows saves time:
 ## What to include when asking for help (so others can debug quickly)
 
 Copy/paste:
-- your loading path (export folder / `.h5ad` / `.zarr` / server / GitHub)
+- your loading path (Prepared / H5AD / Zarr ZIP / server / GitHub)
 - approximate dataset size: `n_cells`, `n_genes`
 - browser + OS
 - any console error text

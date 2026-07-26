@@ -24,8 +24,8 @@ That’s why:
 
 `serve` is the unified command that **auto-detects** what you gave it:
 
-- `.h5ad` → starts `AnnDataServer` (lazy loading in backed mode by default)
-- `.zarr` directory → starts `AnnDataServer`
+- `.h5ad` → starts `AnnDataServer` with read-only backed access
+- `.zarr` directory → starts `AnnDataServer` after an eager Python load
 - directory with `dataset_identity.json` → starts `CellucidServer` (static files)
 
 Examples:
@@ -34,16 +34,16 @@ Examples:
 # Export folder
 cellucid serve ./my_export
 
-# AnnData file (lazy)
-cellucid serve ./data.h5ad
+# AnnData file
+cellucid serve ./data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 
 # Zarr store
-cellucid serve ./data.zarr
+cellucid serve ./data.zarr --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
 Common flags:
 
-- `--port/-p`: choose a port (falls back to the next free port if occupied)
+- `--port/-p`: bind that exact port (`0` requests one operating-system-assigned port)
 - `--host/-H`: bind host (use `0.0.0.0` for remote access)
 - `--no-browser`: don’t auto-open a browser tab
 - `--quiet/-q`: less output
@@ -51,8 +51,11 @@ Common flags:
 
 AnnData-only flags:
 
-- `--no-backed`: load entire AnnData into memory (debugging only; can be huge)
 - `--latent-key KEY`: choose latent space for outlier quantiles (AnnData mode)
+- `--dataset-name NAME`: exact display name (required in AnnData mode)
+- `--dataset-id ID`: exact stable identifier (required in AnnData mode)
+- `--vector-field-default FIELD_ID`: exact default field ID (required when
+  direct AnnData contains more than one field)
 
 ---
 
@@ -61,31 +64,20 @@ AnnData-only flags:
 Implementation lives in:
 - `cellucid-python/src/cellucid/cli.py`
 
-Detection rules (simplified):
+Detection rules:
 
-1) If path ends with `.h5ad` → `h5ad`
-2) If path ends with `.zarr` → `zarr`
-3) If path is a directory and contains `dataset_identity.json` → `exported`
-4) Else → `unknown` (error)
+1) A regular file is `h5ad` only when it has the exact `.h5ad` suffix.
+2) A directory is `zarr` only when it is a complete Zarr v2 root (both valid
+   `.zgroup` and `.zattrs`, with no `zarr.json`).
+3) A `.zarr` directory name alone does not establish the format.
+4) A non-Zarr directory is `exported` when `_list_exported_datasets(...)`
+   discovers one or more complete prepared datasets, including an exports root
+   with dataset subdirectories.
+5) Else → `unknown` (error).
 
 Then:
 - `exported` → call `cellucid.server.serve(...)`
 - `h5ad`/`zarr` → call `cellucid.anndata_server.serve_anndata(...)`
-
----
-
-## Adding a new CLI command (recommended workflow)
-
-If you add a new subcommand (e.g., `cellucid prepare`, `cellucid cache`, `cellucid session`), do it in a way that preserves the CLI constraints.
-
-Checklist:
-
-1) Add a new `_add_<cmd>_subparser(...)` in `src/cellucid/cli.py`.
-2) Keep the parser creation lightweight (no heavy imports).
-3) In the command handler (`_run_<cmd>`), import heavy modules *inside* the function.
-4) Add `--quiet/--verbose` behavior consistent with the rest of the CLI.
-5) Add docs (this file + user guide page if user-facing).
-6) Add tests if behavior is non-trivial (see {doc}`13_testing_and_ci`).
 
 ---
 
@@ -95,17 +87,19 @@ Checklist:
 
 Confirm:
 - your path exists,
-- you gave the correct extension (`.h5ad`, `.zarr`),
-- or the directory is a valid export folder (has `dataset_identity.json`).
+- a file uses the exact `.h5ad` extension,
+- a directory is a complete Zarr v2/v3 root as described above,
+- or the directory contains one or more complete prepared datasets.
 
 ### Symptom: “The port is busy”
 
-The server will attempt to pick the next free port automatically.
+The server reports the bind failure for the exact requested port.
 
-If you need a specific port, stop the process using it or choose another:
+Stop the process using that port, choose another exact port, or request an
+operating-system-assigned port with `--port 0`:
 
 ```bash
-cellucid serve ./my_export --port 9000
+cellucid serve ./my_export --port 0
 ```
 
 ### Symptom: “The browser opens but can’t reach the server”

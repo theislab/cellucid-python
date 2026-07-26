@@ -21,7 +21,7 @@ What you send:
 - a URL (or a GitHub `owner/repo/path`) that lets the recipient load the dataset.
 
 What the recipient gets:
-- the dataset, but **not** your exact view state unless you also provide a session bundle or you set up auto-restore.
+- the dataset, but **not** your exact view state unless you also provide a session bundle.
 
 Best for:
 - “Here is the dataset, go explore.”
@@ -102,25 +102,7 @@ If you get a dataset mismatch warning, go to {doc}`07_versioning_compatibility_a
 
 ---
 
-## Workflow B: “open this dataset and it’s already set up” (auto-restore)
-
-This is best for demos and tutorials.
-
-You publish:
-- export folder + session file(s) + `state-snapshots.json`.
-
-Then any user who loads the dataset will automatically restore the latest session bundle on startup.
-
-Steps:
-1) Place one or more `.cellucid-session` files in the export folder.
-2) Add/update `state-snapshots.json` to list them (last entry is restored).
-3) Host the folder or distribute it.
-
-Full details: {doc}`04_auto_restore_latest_from_dataset_exports`.
-
----
-
-## Workflow C: offline sharing (zip everything)
+## Workflow B: offline sharing (zip everything)
 
 This is common for private datasets.
 
@@ -137,11 +119,11 @@ This is common for private datasets.
 
 1) Unzip to a local folder.
 2) Load the export folder in Cellucid (local folder picker).
-3) Load the session file (if it didn’t auto-restore).
+3) Load the session file with **Load State**.
 
 ---
 
-## Workflow D: “publication package” (reproducibility + figures)
+## Workflow C: “publication package” (reproducibility + figures)
 
 For papers, your goal is usually:
 - reproducible provenance, and

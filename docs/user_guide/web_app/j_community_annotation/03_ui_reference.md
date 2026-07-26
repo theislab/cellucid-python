@@ -9,38 +9,6 @@ If you want the guided flow first:
 
 ---
 
-## Screenshot Placeholders (How to Replace Them)
-
-The docs use a shared placeholder image:
-
-- `cellucid-python/docs/_static/screenshots/placeholder-screenshot.svg`
-
-Recommended place to store real screenshots:
-
-- `cellucid-python/docs/_static/screenshots/community_annotation/`
-
-Each placeholder in the guides is preceded by an HTML comment that tells you:
-
-- what to capture,
-- what to crop/highlight,
-- what to redact,
-- suggested filename,
-- suggested caption and alt text.
-
-### Screenshot style guide (so your docs look consistent)
-
-Recommended conventions:
-
-- **Width**: capture at ~1200–1600 px wide (UI text stays readable).
-- **Format**: PNG (UI text and icons stay crisp).
-- **Naming**: prefix with ordering, e.g. `community_annotation/12_field_dropdown_ballot_badge.png`.
-- **Redaction**: dataset ids, repo names, and usernames can be sensitive; redact when needed.
-- **Annotations**: 1–3 simple callouts are often better than many arrows. Prefer:
-  - a single highlight box around the control you want the reader to click,
-  - short numbered callouts that match text steps (1, 2, 3).
-
----
-
 ## Community Annotation Accordion (Sidebar)
 
 You’ll find **Community Annotation** in the left sidebar.
@@ -55,37 +23,11 @@ The main entry button changes based on state:
 
 If you are offline, the entry button is disabled. Local annotation state can still exist, but you cannot Pull/Publish until you’re back online.
 
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (Community Annotation accordion overview)
-Suggested filename: community_annotation/20_sidebar_accordion_overview.png
-
-Capture:
-- Left sidebar with Community Annotation accordion visible.
-- Ideally show a realistic state (connected to a repo) so the status panel fields are present.
-
-Goal:
-- Provide a single orientation screenshot for the UI reference page.
-
-Crop / framing:
-- Include the full accordion (title, entry button, status panel).
-- Include just enough surrounding UI to show where the sidebar is.
-
-Redact:
-- Dataset id if sensitive.
-- Repo/org name if private.
-- GitHub login if needed.
-
-Figure caption:
-- Example: "The Community Annotation accordion is the entry point for sign-in, repo selection, and status."
-
-Alt text:
-- Example: "Cellucid sidebar showing the Community Annotation accordion and status panel."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Community Annotation accordion in the sidebar.
+```{figure} ../../../_static/screenshots/community_annotation/disconnected-panel.png
+:alt: Community Annotation panel before an annotation repository is connected.
 :width: 100%
 
-The Community Annotation accordion is the entry point for sign-in, repo selection, and status.
+The Community Annotation entry point reports that no repository is connected and offers the explicit Connect repo action.
 ```
 
 ### Status panel fields (what to read when debugging)
@@ -156,42 +98,6 @@ Navigation:
 - **Back** / **Next** buttons navigate the wizard.
 - A status line at the bottom shows progress, warnings, and error text.
 
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (GitHub sync modal overview)
-Suggested filename: community_annotation/21_github_sync_modal_overview.png
-
-Capture:
-- GitHub sync modal showing:
-  - the stepper (1–4)
-  - repo selection (or repo list)
-  - Pull latest + Publish buttons
-
-Goal:
-- A single “map” screenshot so readers know where everything is in the sync workflow.
-
-Crop / framing:
-- Tight crop around the modal; avoid unrelated UI.
-
-Redact:
-- Repo/org names if private.
-- GitHub login if sensitive.
-
-Optional annotation:
-- Add small numbered callouts for: (1) stepper, (2) repo selection, (3) Pull latest, (4) Publish, (5) status line.
-
-Figure caption:
-- Example: "The GitHub sync modal controls sign-in, app installation, repo selection, Pull, and Publish."
-
-Alt text:
-- Example: "GitHub sync modal with stepper, repo selection, and Pull/Publish buttons."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the GitHub sync modal overview.
-:width: 100%
-
-The GitHub sync modal controls sign-in, app installation, repo selection, Pull, and Publish.
-```
-
 ### What Pull does (technical)
 
 Pull:
@@ -248,35 +154,6 @@ Notes:
 - These fields are optional and are written to your GitHub user file only on Publish.
 - Annotation repo validation disallows email fields (privacy).
 
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (Your identity modal)
-Suggested filename: community_annotation/22_your_identity_modal.png
-
-Capture:
-- The “Your identity” modal showing Display name / Affiliation / LinkedIn / ORCID fields and Save/Cancel.
-
-Goal:
-- Show expected formats (especially LinkedIn handle and ORCID).
-
-Crop / framing:
-- Tight crop around the modal.
-
-Redact:
-- Personal names if needed; use a demo identity if you prefer.
-
-Figure caption:
-- Example: "Optional profile fields are saved locally until you Publish."
-
-Alt text:
-- Example: "Your identity modal showing optional profile fields and Save/Cancel buttons."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Your identity modal.
-:width: 100%
-
-Optional profile fields are saved locally until you Publish.
-```
-
 ---
 
 ## MANAGE ANNOTATION (Author Only)
@@ -301,38 +178,6 @@ Per-column consensus settings (shown only when the column is annotatable):
 - **Reset** (discard local edits)
 
 Remember: config changes become shared only after the author clicks **Publish** in the GitHub sync modal.
-
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (MANAGE ANNOTATION section)
-Suggested filename: community_annotation/23_manage_annotation_section.png
-
-Capture:
-- MANAGE ANNOTATION section expanded, showing:
-  - Categorical obs dropdown
-  - Add/Remove/Close/Reopen
-  - Threshold + Min annotators settings (if visible)
-
-Goal:
-- Provide a visual reference for every author-only control.
-
-Crop / framing:
-- Crop tightly to the MANAGE ANNOTATION accordion.
-
-Redact:
-- Repo/dataset identifiers if visible.
-
-Figure caption:
-- Example: "Authors control annotatable columns and consensus settings under MANAGE ANNOTATION."
-
-Alt text:
-- Example: "MANAGE ANNOTATION accordion showing author controls and consensus settings."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for MANAGE ANNOTATION author controls.
-:width: 100%
-
-Authors control annotatable columns and consensus settings under MANAGE ANNOTATION.
-```
 
 ---
 
@@ -368,38 +213,6 @@ The snapshot contains:
 
 - `suggestions`: merged suggestions per bucket (with `upvotes` and `downvotes` lists)
 - `consensus`: per-bucket `status/label/confidence/voters/netVotes/suggestionId`
-
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (Consensus snapshot + cache controls)
-Suggested filename: community_annotation/24_consensus_snapshot_and_cache.png
-
-Capture:
-- CONSENSUS SNAPSHOT + LOCAL CACHE accordion expanded, showing:
-  - Download button for consensus snapshot
-  - Clear session button
-  - Clear downloads button
-
-Goal:
-- Teach end-of-round behavior (download consensus) and recovery actions (clear caches).
-
-Crop / framing:
-- Tight crop around this accordion.
-
-Redact:
-- None usually needed.
-
-Figure caption:
-- Example: "Download a consensus snapshot or clear local caches for the current scope."
-
-Alt text:
-- Example: "Consensus snapshot download and cache clear buttons in the sidebar."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for consensus snapshot download and local cache controls.
-:width: 100%
-
-Download a consensus snapshot or clear local caches for the current scope.
-```
 
 ### Local cache (two clears, different meanings)
 
@@ -463,39 +276,7 @@ Comments:
 - **Enter** submits a comment
 - **Shift+Enter** inserts a newline without submitting
 
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (Voting modal overview)
-Suggested filename: community_annotation/25_voting_modal_overview.png
 
-Capture:
-- Voting modal showing:
-  - consensus line (Pending/Disputed/Consensus)
-  - at least 2 suggestion cards
-  - ▲/▼ vote buttons
-  - comment box
-  - New suggestion form
-
-Goal:
-- A single “annotator map” screenshot where every important UI element is visible.
-
-Optional annotation (recommended):
-- Add arrows/labels for: consensus line, vote buttons, evidence/markers/ontology, comments, New suggestion.
-
-Redact:
-- Sensitive labels or dataset identifiers if needed.
-
-Figure caption:
-- Example: "The voting modal contains the consensus summary, suggestion cards with votes, comments, and New suggestion."
-
-Alt text:
-- Example: "Voting modal showing consensus line, suggestions, voting buttons, comments, and new suggestion form."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the voting modal UI overview.
-:width: 100%
-
-The voting modal contains the consensus summary, suggestion cards with votes, comments, and a New suggestion form.
-```
 
 ---
 

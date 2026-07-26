@@ -19,10 +19,6 @@ In Cellucid, “dimension” refers to which embedding dimensionality is active 
 
 Datasets can provide any subset of these. If only one dimension exists, the UI hides dimension controls.
 
-:::{note}
-You may see **4D** listed in some places as “reserved for future versions”. 4D switching is intentionally disabled and will error if forced.
-:::
-
 ---
 
 ## Where the dimension selector lives
@@ -94,51 +90,20 @@ If switching to a new dimension leaves you “lost in space” (empty-looking vi
 
 ---
 
-## Screenshots (placeholders)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: dimension-selector-dropdown
-Where it appears: Dimension switching → Where the selector lives
-Capture:
-  - A dataset with at least 2 dimensions (2D + 3D ideally)
-  - Compare Views accordion open, Dimension dropdown visible
-Crop:
-  - Include: Dimension dropdown and its options
-Alt text:
-  - Dimension dropdown showing available 1D/2D/3D options.
-Caption:
-  - The Dimension dropdown appears only when multiple embeddings are available for the dataset.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Dimension dropdown.
+```{figure} ../../../_static/screenshots/web_app/dimension-navigation-controls-2d.png
+:alt: Cellucid Compare Views controls showing 2D dimension and Planar navigation selected.
 :width: 100%
 
-The Dimension dropdown appears only when multiple embeddings are available for the dataset.
+For a 2D embedding, Cellucid selects 2D with Planar navigation; both settings remain explicit if the user chooses another valid configuration.
 ```
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: dimension-switch-before-after
-Where it appears: Dimension switching → What changes when you switch dimensions
-Capture:
-  - Use the same dataset and nearly the same camera framing
-  - Capture two screenshots:
-    - before: 3D (or 2D) view
-    - after: switch to a different dimension (2D or 1D)
-  - Show a small part of the sidebar indicating which dimension is active
-Crop:
-  - Include: most of the canvas (state change is visual), plus the dimension indicator/dropdown
-Annotations:
-  - Optional: small “Before” and “After” labels
-Alt text:
-  - Before and after switching embedding dimension in Cellucid.
-Caption:
-  - Switching dimensions changes the embedding coordinates; if the view looks empty afterward, Reset Camera is the fastest recovery.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for a before/after dimension switch.
+```{figure} ../../../_static/screenshots/web_app/dimension-2d-planar-default.png
+:alt: Cellucid displaying a two-dimensional embedding with Planar navigation.
 :width: 100%
 
-Switching dimensions changes the embedding coordinates; if the view looks empty afterward, Reset Camera is the fastest recovery.
+A two-dimensional embedding opens with Planar navigation and a flat, screen-aligned exploration surface.
 ```
 
 ---
@@ -147,7 +112,6 @@ Switching dimensions changes the embedding coordinates; if the view looks empty 
 
 - **You don’t see the dimension dropdown**: the dataset likely provides only one embedding dimension.
 - **Switching to 2D/1D does nothing**: that dimension may not exist for this dataset.
-- **4D is visible but disabled**: reserved for future; not supported yet.
 - **Switch fails with an error**: the embedding data may be missing/corrupt; check the console and the data loading docs.
 
 ---

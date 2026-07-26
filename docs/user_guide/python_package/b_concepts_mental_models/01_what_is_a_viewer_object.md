@@ -40,7 +40,12 @@ Cellucid has two main notebook viewer classes:
    ```python
    from cellucid import show_anndata
 
-   viewer = show_anndata(adata, height=650)
+   viewer = show_anndata(
+       adata,
+       height=650,
+       dataset_name="Example",
+       dataset_id="example",
+   )
    viewer.wait_for_ready(timeout=60)
    ```
 
@@ -57,7 +62,7 @@ In that mode you typically **don’t** have a “viewer object”; you just open
 
 When you create a viewer, Python starts a **local HTTP server** (by default on `127.0.0.1`):
 - it serves the dataset (export folder or AnnData-backed endpoints),
-- it serves the web app UI via a “hosted-asset proxy” cache,
+- it serves one exact inventory-verified web generation,
 - it accepts event POSTs from the web app (`/_cellucid/events`),
 - and it can accept “session bundle” uploads (`/_cellucid/session_bundle`) for the no-download workflow.
 
@@ -76,7 +81,12 @@ The viewer object also owns:
 
 ```python
 from cellucid import show_anndata
-viewer = show_anndata("data.h5ad", height=650)
+viewer = show_anndata(
+    "data.h5ad",
+    height=650,
+    dataset_name="Example",
+    dataset_id="example",
+)
 ```
 
 ### 2) Display it (if you’re in a notebook)
@@ -165,45 +175,13 @@ Use `viewer.state` when you want “pull” style logic. Use hooks when you want
 It is normal to have multiple viewers in one notebook.
 
 - Each viewer gets its own `viewerId`/`viewerToken`.
-- Each viewer starts its own server (usually a different port: `8765`, `8766`, `8767`, …).
+- Each viewer starts its own server. With the default `port=None`, the operating
+  system assigns an available port; no sequential range is scanned.
 - Events from the browser include `viewerId` so Python can route them correctly.
 
 ```{important}
 Selections/highlights are sent as **cell indices** (row positions). If your dataset changes row order, indices refer to different cells.
 For durable state transfer, use session bundles and stable dataset identity practices: {doc}`04_dataset_identity_and_reproducibility`.
-```
-
----
-
-## Screenshot: what “a viewer in a notebook” looks like
-
-If you want to add a screenshot to orient beginners, capture the *first successful embedded viewer* output.
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-viewer-object-embedded
-Suggested filename: web_app/embedded-viewer-from-python.png
-Where it appears: Python Package → Concepts & Mental Models → What is a “viewer” object?
-Capture:
-  - UI location: Jupyter notebook output cell
-  - State prerequisites: any dataset successfully displayed (AnnData or export folder)
-  - Action to reach state: run `viewer = show_anndata(...)` or `viewer = show(...)`
-Crop:
-  - Include: the embedded iframe + a small amount of surrounding notebook context (so it’s obvious this is “in a notebook”)
-  - Exclude: personal file paths, usernames, dataset private identifiers
-Redact:
-  - Remove: private dataset names displayed in the viewer title bar (if any)
-Annotations:
-  - Callouts: #1 “this is the embedded viewer”, #2 “this cell started the viewer”
-Alt text:
-  - Jupyter notebook cell output containing an embedded Cellucid viewer.
-Caption:
-  - The Cellucid web app is embedded as an iframe; the Python `viewer` object controls it and receives events from it.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for a Cellucid viewer embedded in a Jupyter notebook.
-:width: 100%
-
-Cellucid embedded in a notebook: the UI is the web app; the Python `viewer` object is the handle that controls it.
 ```
 
 ---
@@ -239,23 +217,29 @@ Start with: {doc}`08_debugging_mental_model_where_to_look`.
 ### Symptom: “The viewer area is blank”
 
 Likely causes (ordered):
-1) The viewer UI assets could not be loaded (offline/no cache).
+1) Viewer construction failed because the configured web generation could not
+   be established.
 2) Notebook is served from HTTPS, but the viewer tries to load an HTTP loopback URL (mixed content).
 3) The local server is not reachable from the browser (remote kernel, missing proxy/tunnel).
 
 How to confirm:
 - Run `report = viewer.debug_connection()` and inspect:
-  - `server_health`, `viewer_index_probe`, `frontend_roundtrip`, `frontend_console`.
+  - `server_health`, `viewer_index_probe`, `frontend_roundtrip`, and
+    `frontend_debug_snapshot`.
 - In browser devtools console, look for blocked network requests.
 
 Fix:
-- If offline: run once while online to populate the web UI cache, then retry.
-- If remote: use SSH tunneling or `jupyter-server-proxy` (see {doc}`../../web_app/b_data_loading/05_jupyter_tutorial`).
+- Restore access to the configured viewer source and correct the exact
+  establishment error.
+- If remote: expose the port through a tunnel/proxy and pass its exact base as
+  `client_server_url=` (see
+  {doc}`../../web_app/b_data_loading/05_jupyter_tutorial`).
 
 ### Symptom: “`viewer.stop()` doesn’t seem to do anything”
 
 Notes:
-- `stop()` is best-effort. The notebook output may still show the last rendered frame.
+- `stop()` reports freeze or shutdown failures. After a successful stop, the
+  notebook output may still show the last rendered frame.
 - The key effect is that the underlying server stops and hooks stop firing.
 
 How to confirm:

@@ -15,7 +15,7 @@ The main workflow is:
 **Audience**
 - Wet lab / beginner: this is optional unless you’re collaborating or exporting curated labels back into analysis.
 - Computational users: this is the bridge from “interactive UI edits” → “analysis-ready AnnData”.
-- Developers: read mismatch policies and column naming rules.
+- Developers: read the identity checks and column naming rules.
 
 ## Quickstart (copy/paste)
 
@@ -29,7 +29,11 @@ adata2 = viewer.apply_session_to_anndata(adata, inplace=False)
 
 ```python
 bundle = viewer.get_session_bundle(timeout=60)
-adata2 = bundle.apply_to_anndata(adata, inplace=False)
+adata2 = bundle.apply_to_anndata(
+    adata,
+    expected_dataset_id="my-study-v1",
+    inplace=False,
+)
 ```
 
 ```{important}
@@ -54,11 +58,14 @@ Example output:
 adata.obs["cellucid_highlight__highlight_12"]  # True/False per cell
 ```
 
-### 2) User-defined categorical fields → `adata.obs` / `adata.var` columns
+### 2) User-defined fields → `adata.obs` columns
 
-If the bundle contains user-defined categorical fields:
-- Fields sourced from `obs` become `adata.obs` categorical columns.
-- Fields sourced from `var` become `adata.var` categorical columns.
+If the bundle contains user-defined fields:
+- categorical fields decode exact labels and cell-aligned codes;
+- continuous fields copy one exact cell-aligned source;
+- a field declared with source `var` copies that gene's values across cells.
+
+All materialized fields are cell-aligned `adata.obs` columns.
 
 ### 3) Provenance metadata → `adata.uns["cellucid"]`
 
@@ -72,29 +79,23 @@ under:
 adata.uns["cellucid"]["session"]
 ```
 
-## Dataset mismatch policies (avoid accidental corruption)
+## Exact dataset identity (avoid accidental corruption)
 
 Session bundles include a dataset fingerprint with (at least):
 - `cellCount`
 - `varCount`
-- `datasetId` (if available)
+- `datasetId`
 
-When applying:
-- if counts/IDs mismatch, you choose what happens via `dataset_mismatch`:
-  - `"error"`: raise and stop
-  - `"warn_skip"` (default): warn and skip dataset-dependent chunks
-  - `"skip"`: silently skip dataset-dependent chunks
+Application requires `expected_dataset_id`. Cell/variable counts and the dataset
+ID must match exactly; a mismatch raises before the target is mutated.
 
 In practice, if you subset/shuffle your AnnData after the session was created, you will almost always have a mismatch.
 
 ## Column naming and conflicts
 
-Applying a session may add columns that collide with existing names.
-
-Controls:
-- `column_conflict="suffix"` (default): create `name__2`, `name__3`, ...
-- `column_conflict="overwrite"`: replace existing columns
-- `column_conflict="error"`: raise on conflict
+Applying a session may add columns that collide with existing names. Any
+existing target column raises `ValueError`; Cellucid does not rename or
+overwrite it.
 
 Controls for prefixes:
 - `highlights_prefix="cellucid_highlight__"`
@@ -110,27 +111,33 @@ from cellucid import apply_cellucid_session_to_anndata
 adata2, summary = apply_cellucid_session_to_anndata(
     bundle,
     adata,
+    expected_dataset_id="my-study-v1",
     inplace=False,
-    dataset_mismatch="warn_skip",
-    expected_dataset_id=None,
     add_highlights=True,
     add_user_defined_fields=True,
     store_uns=True,
-    column_conflict="suffix",
     return_summary=True,
 )
 ```
 
 This returns an `ApplySummary` with:
-- which columns were added,
-- whether chunks were skipped due to mismatch,
-- mismatch reasons.
+- `added_obs_columns`: the exact ordered names materialized by the successful
+  application.
 
 ## Edge cases
 
-- Applying to backed AnnData may be slow if it triggers copies; plan memory accordingly.
-- If pandas is not installed, applying a session raises an ImportError (it needs pandas to write categorical/boolean columns).
-- If a highlight group contains out-of-range indices, they are bounds-checked and safely ignored.
+- The default `inplace=False` path rejects backed AnnData before calling
+  `adata.copy()`. Explicitly materialize the intended target with
+  `adata.to_memory()` first.
+- `inplace=True` preserves backed `X` and changes the live object's in-memory
+  `obs`/`uns`; it does not write those changes into the source H5AD.
+- Pandas is a core `cellucid` dependency and writes the requested categorical
+  and boolean columns.
+- If a highlight group contains out-of-range indices, application raises.
+- Every manifest chunk must belong to the closed current contributor/chunk
+  inventory documented in
+  {doc}`../g_api_reference_coverage/api/sessions`; unknown or mismatched entries
+  raise before payload decoding.
 
 ## Troubleshooting
 
@@ -140,10 +147,9 @@ This is almost always because:
 - you filtered/subset/reordered `adata` after opening the viewer, or
 - you’re applying the session to a different dataset.
 
-Fix options:
-- apply to the exact same AnnData (same row order),
-- set `dataset_mismatch="error"` to catch mistakes early,
-- or accept skipping dataset-dependent chunks if you only want provenance stored.
+Fix:
+- apply to the exact same AnnData (same row order), and
+- pass the exact dataset ID used to create the viewer.
 
 ### Symptom: expected columns weren’t added
 
@@ -152,8 +158,7 @@ Confirm:
   ```python
   bundle.list_chunk_ids()
   ```
-- you didn’t skip due to mismatch:
-  - set `return_summary=True` and inspect `summary`.
+- the dataset ID and dimensions match exactly.
 
 ## Next steps
 

@@ -87,18 +87,18 @@ Important keys (high level):
 
 For each continuous field `key`, one file is written:
 
-- `obs/<safe_key>.values.f32` (float32), or
-- `obs/<safe_key>.values.u8` / `.u16` (quantized)
+- `obs/<key>.values.f32` (float32), or
+- `obs/<key>.values.u8` / `.u16` (quantized)
 
 If quantized:
 - the manifest entry includes `min_val` and `max_val`
-- invalid values (`NA`/`Inf`) are set to the reserved marker
+- all input values are finite; non-finite values reject publication
 
 ### Categorical codes
 
 For each categorical field `key`, codes are written:
 
-- `obs/<safe_key>.codes.u8` or `.u16`
+- `obs/<key>.codes.u8` or `.u16`
 
 Codes:
 - start at 0
@@ -110,8 +110,8 @@ Codes:
 
 For each categorical field `key`, outlier quantiles are written:
 
-- `obs/<safe_key>.outliers.f32` (float32), or
-- `obs/<safe_key>.outliers.u8` / `.u16` (quantized)
+- `obs/<key>.outliers.f32` (float32), or
+- `obs/<key>.outliers.u8` / `.u16` (quantized)
 
 Semantics:
 - per-cell value describing the distance rank inside its category in latent space
@@ -164,6 +164,8 @@ Important keys:
 - `index_dtype` / `index_bytes`
 - `sourcesPath`
 - `destinationsPath`
+- `weightsPath`
+- `weight_dtype` (`"float64"`) / `weight_bytes` (`8`)
 - `compression`
 
 ## Connectivity binaries: `connectivity/edges.*.bin` (optional)
@@ -171,12 +173,17 @@ Important keys:
 Files:
 - `connectivity/edges.src.bin`
 - `connectivity/edges.dst.bin`
+- `connectivity/edges.weights.f64.bin`
 
 Semantics:
-- `src[k]` and `dst[k]` form one undirected edge
+- `src[k]`, `dst[k]`, and `weight[k]` form one weighted undirected edge
 - only unique edges are kept (`src < dst`)
 - indices are **zero-based**
-- dtype depends on `n_cells` (`uint16/uint32/uint64`)
+- weights are exact little-endian Float64 values
+- dtype is `uint16` through 65,536 cells or `uint32` through
+  4,294,967,296 cells; larger axes are rejected
+- zero-length arrays represent a present, validated zero-edge graph and are
+  distinct from absent connectivity
 
 ## Dataset identity: `dataset_identity.json` (always)
 
@@ -221,7 +228,8 @@ Before sharing an export folder:
    - `var/` contains gene files
 4) If connectivities are included:
    - `connectivity_manifest.json` exists
-   - `connectivity/edges.src.bin` and `.dst.bin` exist
+   - the manifest-declared source, destination, and Float64 weight payloads
+     exist
 
 For deeper validation and binary inspection, see:
 - {doc}`../d_viewing_loading/03_validate_exports_and_debug_loading`

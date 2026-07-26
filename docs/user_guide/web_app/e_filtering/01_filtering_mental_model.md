@@ -140,29 +140,13 @@ Current behavior: gene-range filters apply only while that gene is the active fi
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: filtering-mental-model-active-filters
-Suggested filename: filtering/00_active-filters-and-count.png
-Where it appears: User Guide → Web App → Filtering → 01_filtering_mental_model.md
-Capture:
-  - UI location: left sidebar → Active filters
-  - State prerequisites: dataset loaded; at least one categorical hide and one continuous range filter active
-  - Action to reach state: hide a category and apply a continuous min/max range, then open Active filters
-Crop:
-  - Include: “Showing X of Y points” line + at least two filter entries
-  - Include: enough canvas to show that some points are missing
-Alt text:
-  - Active filters panel showing multiple filters and the current visible point count.
-Caption:
-  - Active filters is the source of truth for what currently affects visibility in the active view.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Active filters panel.
+```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
+:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
 :width: 100%
 
-Active filters lists the current filter stack and shows “Showing X of Y points” for the active view.
+Selecting a categorical observation field colors the embedding and exposes its complete category legend.
 ```
 
 ---

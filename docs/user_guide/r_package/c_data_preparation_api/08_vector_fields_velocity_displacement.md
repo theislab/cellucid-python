@@ -18,9 +18,7 @@ Rows must be cells.
 
 ## Naming conventions (important)
 
-`cellucid-r` supports two naming styles:
-
-### Style A (recommended): explicit dimensional suffix
+`cellucid-r` requires an explicit dimensional suffix.
 
 Use keys like:
 - `velocity_umap_2d`
@@ -28,21 +26,15 @@ Use keys like:
 
 The exporter groups these by base field id (`velocity_umap`) and writes one file per dimension that matches an available embedding.
 
-### Style B: implicit dimension (inferred from the array)
-
-You can also use keys like:
-- `velocity_umap` with a `(n_cells, 2)` matrix
-
-The exporter infers the dimension from the number of columns.
-
 ## Field IDs must be filesystem-safe
 
-Unlike gene IDs and obs keys (which are sanitized for filenames), vector field IDs must already be safe.
+Like every exported identifier, vector-field IDs must already be portable.
 
 Allowed characters are effectively:
 - letters, numbers, `.`, `_`, `-`
 
-And the ID must not start/end with `.` or `_` (because those get stripped by the safety function).
+The ID must start with a letter or digit, must not end with `.`, and must not
+be a Windows device name. Nothing is stripped or rewritten.
 
 If an ID is not safe, export fails with an explicit error suggesting a safe alternative.
 
@@ -52,7 +44,8 @@ Vector fields are dimension-specific:
 - 2D vectors require a 2D embedding to be present
 - 3D vectors require a 3D embedding to be present
 
-If you provide a 3D vector field but do not export `X_umap_3d`, the 3D vector file is skipped.
+If you provide a 3D vector field but do not export `X_umap_3d`, the complete
+candidate is rejected before publication.
 
 ### Automatic scaling (critical)
 
@@ -77,8 +70,9 @@ Example:
 
 Metadata is written into `dataset_identity.json` under `vector_fields`.
 
-The exporter also chooses a `default_field`:
-- `velocity_umap` if present, otherwise the first field (sorted).
+The exporter records one exact `default_field`:
+- with one vector field, that field is the default;
+- with more than one vector field, pass `vector_field_default` explicitly.
 
 If the field id ends with `_umap`, the identity metadata adds:
 - `basis = "umap"`
@@ -123,11 +117,8 @@ Export fails if:
 
 ### Duplicate definitions
 
-If you provide both:
-- `foo_2d` (explicit) and
-- `foo` with inferred 2D,
-
-the explicit one wins for that dimension.
+If two input keys resolve to the same `<field>_umap` and dimension, export
+rejects the duplicate declaration. No declaration overrides another.
 
 ## Troubleshooting pointers
 

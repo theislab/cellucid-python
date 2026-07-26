@@ -28,33 +28,11 @@ In multiview (live + snapshots), the sidebar controls apply to the **currently a
 If you’re in Grid compare, click a panel first to make it the active view, then pick a field.
 :::
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: field-selector-three-rows-and-actions
-Suggested filename: web_app/fields_legends/10_field-selector-rows-actions.png
-Where it appears: User Guide → Web App → Fields, Coloring, and Legends → 02_field_selector_ux.md
-Capture:
-  - Dataset loaded
-  - Sidebar open to “Coloring & Filtering”
-  - Make sure all three rows are visible:
-    - Categorical obs dropdown populated
-    - Continuous obs dropdown populated
-    - Gene Expression box visible (i.e., dataset has genes)
-  - Hover a field action icon so the tooltip appears (“Duplicate field”, “Rename field”, etc.)
-Crop:
-  - Include: the three selector rows and the row of action icons on the right of each selector
-  - Exclude: unrelated sidebar sections if they add clutter
-Annotations:
-  - Call out: #1 Categorical obs dropdown, #2 Continuous obs dropdown, #3 Gene Expression search, #4 action buttons (copy/rename/delete/clear)
-Alt text:
-  - The three field selectors in the Coloring & Filtering panel with action buttons.
-Caption:
-  - Explain that you can select exactly one active “color-by” source at a time, and the action buttons modify the field list (duplicate/rename/delete).
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the field selector rows and action buttons.
+```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
+:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
 :width: 100%
 
-Pick the active “color-by” field from Categorical obs, Continuous obs, or Gene Expression, then use the action buttons to duplicate/rename/delete/clear.
+Selecting a categorical observation field colors the embedding and exposes its complete category legend.
 ```
 
 ---
@@ -115,30 +93,7 @@ Result limit:
 Loading a gene can take time (especially on remote datasets). While a gene is loading, Cellucid temporarily disables other selectors so the active field state can’t race.
 :::
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: gene-expression-search-dropdown-open
-Suggested filename: web_app/fields_legends/11_gene-search-dropdown.png
-Where it appears: User Guide → Web App → Fields, Coloring, and Legends → 02_field_selector_ux.md
-Capture:
-  - Dataset with many genes loaded
-  - Click Gene Expression search box to open the dropdown
-  - Type a query that yields >10 results (so the reader sees scrolling/selection)
-  - Optional: pick a query that yields >100 results so the “...and N more” message appears
-Crop:
-  - Include: the Gene Expression input and the open dropdown list
-Annotations:
-  - Call out: query text, one result row, “...and N more” message (if present)
-Alt text:
-  - Gene expression search box with a dropdown list of matching genes.
-Caption:
-  - Explain that genes are selected via search and loaded on demand; refine the query to narrow results.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the gene expression searchable dropdown.
-:width: 100%
 
-Gene expression uses a searchable dropdown: type to narrow matches, then click (or press Enter) to load a gene and color by it.
-```
 
 ---
 
@@ -219,30 +174,6 @@ This is intentionally destructive:
 - the field becomes **non-restorable** in the current session *and* in saved session bundles.
 
 Use Confirm when you are sure you won’t want the column back and want to reduce clutter.
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: deleted-fields-restore-confirm
-Suggested filename: web_app/fields_legends/12_deleted-fields-panel.png
-Where it appears: User Guide → Web App → Fields, Coloring, and Legends → 02_field_selector_ux.md
-Capture:
-  - Delete at least one obs field and (optionally) one gene so both groups appear
-  - Expand the Deleted Fields accordion
-  - Ensure Restore and Confirm buttons are visible
-Crop:
-  - Include: “Deleted Fields” header + at least one row with its buttons
-Annotations:
-  - Call out: Restore vs Confirm and explain “soft delete vs permanent purge”
-Alt text:
-  - Deleted Fields panel showing restore and confirm deletion buttons.
-Caption:
-  - Emphasize safety: delete is reversible; confirm deletion is permanent.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Deleted Fields restore/confirm panel.
-:width: 100%
-
-Deleted Fields lets you restore soft-deleted fields, or permanently confirm deletion to remove restore capability.
-```
 
 ---
 

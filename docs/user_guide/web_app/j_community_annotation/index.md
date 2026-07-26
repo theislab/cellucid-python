@@ -24,41 +24,11 @@ Practical implication:
 - You can annotate while offline (local saves still work), but you cannot **Pull** or **Publish** until you are online again.
 :::
 
-<!-- SCREENSHOT PLACEHOLDER
-TYPE: Screenshot (UI orientation)
-Suggested filename: community_annotation/01_sidebar_community_annotation.png
-
-Capture:
-- Cellucid sidebar with the "Community Annotation" accordion visible (collapsed or expanded is fine).
-
-Goal:
-- Orient new users: show where this feature lives in the UI, without explaining every control yet.
-
-Crop / framing:
-- Include the full left sidebar.
-- Include just enough of the main plot area so readers can visually anchor “left sidebar” vs “main view”.
-
-Redact:
-- Dataset names if private.
-- GitHub org/repo names if private.
-- Any user-identifying information you do not want in docs.
-
-Optional annotation (recommended):
-- Add one arrow or highlight around the Community Annotation accordion header.
-
-Figure caption (what to write under the image):
-- Use an action-oriented caption that tells readers what to look for.
-- Example caption: "Open the Community Annotation accordion from the left sidebar."
-
-Alt text (for accessibility):
-- Mention the important UI element, not every pixel.
-- Example alt: "Cellucid left sidebar with the Community Annotation accordion highlighted."
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Community Annotation accordion.
+```{figure} ../../../_static/screenshots/community_annotation/disconnected-panel.png
+:alt: Community Annotation panel before an annotation repository is connected.
 :width: 100%
 
-The Community Annotation accordion lives in the left sidebar.
+The Community Annotation entry point reports that no repository is connected and offers the explicit Connect repo action.
 ```
 
 ---

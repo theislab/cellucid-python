@@ -60,12 +60,12 @@ Always ensure **cells × genes** for Cellucid export.
 
 ## Rule 3: no missing values in embeddings
 
-Embeddings are normalized using `min()`/`max()` and scaling.
-If embeddings contain `NA` or `Inf`, normalization will produce invalid results.
+Embeddings are validated before normalization. `NA`, `NaN`, infinities, and
+nonpositive coordinate ranges reject the complete candidate.
 
 Recommendation:
-- remove cells with missing embedding coordinates, or
-- impute before export (rarely recommended unless you know what you’re doing).
+- remove cells with missing embedding coordinates or recompute the embedding
+  from reviewed input.
 
 ## Rule 4: careful with non-numeric `obs` columns
 
@@ -86,19 +86,16 @@ Details: {doc}`04_obs_cell_metadata`
 
 ## Rule 5: avoid filename collisions
 
-To write files, `cellucid-r` turns some keys into filesystem-safe names:
-- obs field keys → `obs/<safe_key>.*`
-- gene IDs → `var/<safe_gene_id>.*`
-
-Unsupported characters become underscores. This is convenient, but can cause collisions:
-
-Example:
-- `Gene/1` → `Gene_1`
-- `Gene_1` → `Gene_1` (collision!)
+Observation keys, gene IDs, dataset IDs, and vector-field IDs are used exactly
+in manifests and paths. They must already be 1–180-byte portable ASCII
+components: start with a letter or digit, contain only letters, digits, `.`,
+`_`, or `-`, not end with `.`, not be a Windows device name, and be unique
+under case-insensitive comparison.
 
 Recommendation:
-- ensure `obs` column names and gene IDs are unique *after sanitization*.
-- `cellucid-r` aborts export with an error if it detects a collision.
+- choose stable portable identifiers before export.
+- `cellucid-r` aborts the complete candidate on any unsafe identifier or
+  collision; it does not rewrite names.
 
 ## Quick “preflight” checks (copy/paste)
 

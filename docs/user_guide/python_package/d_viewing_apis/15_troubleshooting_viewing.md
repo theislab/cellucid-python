@@ -28,7 +28,7 @@ http://127.0.0.1:<port>/_cellucid/health
 
 If this doesn’t load, the viewer can’t load either.
 
-### 3) Is the viewer UI available (hosted-asset proxy)?
+### 3) Is the exact viewer generation being served?
 
 Open:
 
@@ -65,12 +65,12 @@ viewer.debug_connection()
 - another program is using the port (often `8765`)
 
 ### How to confirm
-- the CLI prints “Port X in use, using Y”
-- `/_cellucid/health` works on a different port than you expected
+- startup raises an address-in-use `OSError`
 
 ### Fix
-- use the printed Viewer URL (don’t assume `8765`)
 - choose a port explicitly: `cellucid serve ... --port 9000`
+- in Python, pass `port=0` to request one operating-system-assigned port and
+  then use the actual `viewer.server_url`
 - in notebooks, call `viewer.stop()` on old viewers (see {doc}`11_viewer_lifecycle_cleanup_ports_and_multiple_viewers`)
 
 ### Prevention
@@ -79,60 +79,34 @@ viewer.debug_connection()
 
 ---
 
-## Symptom: “Cellucid viewer UI could not be loaded”
+## Symptom: viewer startup cannot establish the web generation
 
-This is the hosted-asset proxy error page.
+This failure occurs before the viewer server is published.
 
 ### Likely causes (ordered)
-- you are offline and have no cached UI assets yet
-- your environment cannot reach `https://www.cellucid.com` (DNS/firewall/proxy)
-- the cache directory is not writable or is being cleared (ephemeral temp dirs)
+- your environment cannot reach the configured `web_source_url`
+- the inventory or a declared object has an invalid MIME type, length, hash,
+  file set, or build identity
+- the selected `web_cache_dir` is not writable
 
 ### How to confirm
-- open the server root (`http://127.0.0.1:<port>/`) and read the reason text
-- in notebooks: `viewer.debug_connection()` → look at `web_ui.cache` and `web_ui.prefetch`
+- read the exception raised by `cellucid serve`, `show(...)`, or
+  `show_anndata(...)`
+- exercise the same establishment contract directly with
+  `ensure_web_ui_cached(force=True)`
 
 ### Fix
-- run once while online (starting a server triggers a best-effort UI prefetch)
-- set a persistent cache dir:
+- allow access to the configured source and correct the exact response failure
+- pass a writable generation location:
 
 ```bash
-export CELLUCID_WEB_PROXY_CACHE_DIR=$HOME/.cache/cellucid-web
-```
-
-- clear and re-download if you suspect a corrupted cache:
-
-```python
-from cellucid import clear_web_cache
-clear_web_cache()
+cellucid serve /path/to/data --web-cache-dir /path/to/cache
 ```
 
 ### Prevention
-- keep the cache in a persistent, writable directory
-- if you plan to work offline later, run `cellucid serve ...` once while online ahead of time
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: viewer-ui-unavailable-page
-Suggested filename: web_app/viewing_01_ui-unavailable.png
-Where it appears: Python Package Guide → Viewing APIs → Troubleshooting → UI unavailable
-Capture:
-  - UI location: browser tab at `http://127.0.0.1:<port>/`
-  - State prerequisites: UI fetch fails and no cached copy exists
-  - Action to reach state: set cache dir to empty path, disconnect internet, start server, open viewer URL
-Crop:
-  - Include: the error title + the “What to do” bullet list
-  - Exclude: browser bookmarks/personal info
-Alt text:
-  - Cellucid error page stating the viewer UI could not be loaded.
-Caption:
-  - When the server cannot fetch the viewer UI and no cached copy exists, it serves an explanatory error page with next steps (network + cache directory).
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the “viewer UI unavailable” error page.
-:width: 100%
-
-Hosted-asset proxy error page shown when the viewer UI cannot be fetched and no cached copy exists.
-```
+- verify source access and destination permissions before a workshop or job
+- do not plan on a previous local generation being substituted when the source
+  is unavailable
 
 ---
 
@@ -167,7 +141,7 @@ Hosted-asset proxy error page shown when the viewer UI cannot be fetched and no 
 
 ```python
 print(list(adata.obsm.keys()))
-for k in ["X_umap_1d", "X_umap_2d", "X_umap_3d", "X_umap"]:
+for k in ["X_umap_1d", "X_umap_2d", "X_umap_3d"]:
     if k in adata.obsm:
         print(k, getattr(adata.obsm[k], "shape", None))
 print("n_cells:", adata.n_obs)
@@ -183,7 +157,8 @@ print("n_cells:", adata.n_obs)
 ### Likely causes (ordered)
 - your gene IDs are not in `var.index` (default)
 - wrong `gene_id_column`
-- duplicate gene IDs (ambiguous)
+- the chosen gene IDs are duplicated or have portable filename collisions;
+  AnnData construction rejects them
 
 ### How to confirm
 
@@ -198,20 +173,21 @@ print(adata.var.columns)
 
 ---
 
-## Symptom (notebook): iframe shows “proxy required” / mixed-content type errors
+## Symptom (notebook): iframe is blank, unreachable, or mixed-content blocked
 
 ### Likely causes (ordered)
 - notebook served over HTTPS
 - kernel/server is remote (JupyterHub/cloud)
-- `jupyter-server-proxy` is missing/disabled
+- the browser-facing proxy/tunnel base was not supplied as `client_server_url=`
 
 ### How to confirm
-- the iframe message explicitly suggests `jupyter-server-proxy`
-- `viewer.debug_connection()` reports `jupyter_server_proxy.installed: False`
+- compare `viewer.viewer_url` with the URL that the browser can actually reach
+- inspect the browser console for mixed-content or connection errors
 
 ### Fix
-- install/enable `jupyter-server-proxy` (recommended)
-- or set `CELLUCID_CLIENT_SERVER_URL` to an HTTPS-reachable URL (advanced)
+- expose the selected port through an HTTPS proxy or tunnel
+- pass that exact browser-reachable base as `client_server_url=` when creating
+  the viewer
 
 Deep dive: {doc}`10_notebook_widget_mode_advanced`.
 
@@ -238,11 +214,11 @@ Deep dive: {doc}`10_notebook_widget_mode_advanced`.
 
 ### Likely causes (ordered)
 - using browser `.h5ad` loading instead of Python-backed mode
-- forcing in-memory mode (`--no-backed`) on a large dataset
+- loading a large in-memory AnnData or Zarr store
 - huge categorical fields or heavy overlays
 
 ### Fix
-- use `cellucid serve data.h5ad` (backed) or `data.zarr`
+- use `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`
 - export once (`prepare`) and use export mode
 - reduce or remove pathological fields (very high cardinality)
 

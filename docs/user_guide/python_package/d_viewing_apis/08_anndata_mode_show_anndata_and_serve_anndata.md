@@ -5,7 +5,7 @@ This page explains how Cellucid can visualize **AnnData directly**, without runn
 Use AnnData mode when:
 - you’re iterating inside an analysis notebook,
 - you want a quick “does this dataset look sane?” view,
-- or you have a large `.h5ad`/`.zarr` and want lazy loading without exporting.
+- or you have a large `.h5ad` and want read-only-backed access without exporting.
 
 If you want maximum performance + easiest sharing, prefer export mode:
 {doc}`07_exported_directory_mode_show_and_serve`.
@@ -27,15 +27,21 @@ If you want maximum performance + easiest sharing, prefer export mode:
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata("data.h5ad", height=600)  # backed mode by default
-# viewer = show_anndata("data.zarr", height=600)
-# viewer = show_anndata(adata, height=600)
+viewer = show_anndata(
+    "data.h5ad",
+    height=600,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
+# A .zarr path or in-memory AnnData uses the same required identity arguments.
 ```
 
 ### Terminal
 
 ```bash
-cellucid serve /path/to/data.h5ad
+cellucid serve /path/to/data.h5ad \
+  --dataset-name "My study" \
+  --dataset-id my-study-v1
 ```
 
 ### Python (script)
@@ -43,7 +49,11 @@ cellucid serve /path/to/data.h5ad
 ```python
 from cellucid import serve_anndata
 
-serve_anndata("data.h5ad")  # blocks
+serve_anndata(
+    "data.h5ad",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)  # blocks
 ```
 
 ## Minimum AnnData requirements (the “must haves”)
@@ -56,8 +66,6 @@ Cellucid currently expects UMAP coordinates under one of these keys:
   - `X_umap_1d` (shape `(n_cells, 1)`)
   - `X_umap_2d` (shape `(n_cells, 2)`)
   - `X_umap_3d` (shape `(n_cells, 3)`)
-- or a generic fallback:
-  - `X_umap` (shape `(n_cells, 1|2|3)`) **only if no explicit key for that dimension exists**
 
 If no valid UMAP embedding is found, you’ll get an error like:
 “No valid UMAP embeddings found in `adata.obsm` …”.
@@ -75,51 +83,33 @@ Cellucid derives obs fields automatically:
 
 ## UMAP key resolution rules (detailed, for debugging)
 
-Cellucid looks for embeddings in this order:
-
-1) `X_umap_1d`, `X_umap_2d`, `X_umap_3d` (explicit)
-2) `X_umap` (fallback) if:
-   - it has shape `(n_cells, 1|2|3)`, and
-   - there is no explicit key for that same dimension (explicit wins)
+Cellucid reads only the explicitly dimensioned keys
+`X_umap_1d`, `X_umap_2d`, and `X_umap_3d`.
 
 ### Common edge cases
 
-- `X_umap` is present but has the wrong shape → ignored.
-- `X_umap_3d` exists but has shape `(n_cells, 2)` → ignored.
-- both `X_umap_2d` and `X_umap` (2D) exist → `X_umap_2d` wins; `X_umap` is ignored.
+- `X_umap_3d` exists but has shape `(n_cells, 2)` → construction fails.
 
 ### Fix pattern (recommended)
 
-Always store explicit keys so there’s no ambiguity:
+Store the result under the exact key that declares its dimension:
 
 ```python
-# After computing UMAP:
-X_umap = adata.obsm["X_umap"]
-if X_umap.shape[1] == 1:
-    adata.obsm["X_umap_1d"] = X_umap
-elif X_umap.shape[1] == 2:
-    adata.obsm["X_umap_2d"] = X_umap
-elif X_umap.shape[1] == 3:
-    adata.obsm["X_umap_3d"] = X_umap
+adata.obsm["X_umap_2d"] = umap_coordinates_2d
 ```
 
-## Lazy loading and memory behavior (critical for large datasets)
+## Loading and memory behavior (critical for large datasets)
 
-### `.h5ad` (default: backed mode)
+### `.h5ad` (always read-only-backed)
 
 When you pass a `.h5ad` path:
-- Cellucid opens it in **backed** mode by default (lazy, memory-efficient).
+- Cellucid opens it with `anndata.read_h5ad(..., backed="r")`.
 - This is usually the best option for large datasets if you don’t want to export.
 
-Disable backed mode only if you know you want full in-memory behavior:
+### `.zarr` (eager)
 
-```bash
-cellucid serve data.h5ad --no-backed
-```
-
-### `.zarr` (naturally chunked)
-
-Zarr is directory-based and chunked; access is naturally “lazy-ish”.
+Cellucid calls `anndata.read_zarr`, which materializes the AnnData arrays in
+memory. Use a `.h5ad` path when read-only-backed access is required.
 
 ### In-memory `AnnData`
 
@@ -133,21 +123,26 @@ Rule of thumb: if your dataset is big enough that you worry about RAM, view from
 
 Cellucid needs a mapping from “what you type in the gene search box” → a column index in the matrix.
 
-By default it uses:
-- `var.index` (`gene_id_column="index"`)
+By default, `gene_id_column=None` uses `var.index`. Any non-blank string names
+that exact `var` column, so `gene_id_column="index"` selects a column literally
+named `"index"`.
 
 If your gene IDs are in a column (e.g. `"gene_symbols"`), pass:
 
 ```python
-viewer = show_anndata("data.h5ad", gene_id_column="gene_symbols")
+viewer = show_anndata(
+    "data.h5ad",
+    gene_id_column="gene_symbols",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 ```
 
 ```{warning}
-Duplicate gene IDs are ambiguous.
-
-In AnnData mode, Cellucid builds an internal dict `{gene_id: index}`. If gene IDs repeat, later entries overwrite earlier ones, and the viewer will effectively show one of the duplicates.
-
-Best practice: ensure your chosen gene ID column is unique before viewing/exporting.
+AnnData construction rejects duplicate gene IDs and gene IDs whose portable
+filename components collide, including case-insensitive collisions. Choose a
+unique, portable identifier in `var.index` or the selected
+`gene_id_column`.
 ```
 
 ## Vector fields (velocity/drift overlays)
@@ -156,40 +151,39 @@ Cellucid can render per-cell displacement vectors as an animated overlay.
 
 ### Naming convention (UMAP basis)
 
-Preferred explicit keys in `adata.obsm`:
+Required dimension-suffixed keys in `adata.obsm`:
 
 - `velocity_umap_2d` (shape `(n_cells, 2)`)
 - `velocity_umap_3d` (shape `(n_cells, 3)`)
 - `T_fwd_umap_2d`, `T_bwd_umap_2d` (CellRank-style drift)
 
-Implicit keys are also supported:
-
-- `velocity_umap` with shape `(n_cells, 2)` or `(n_cells, 3)`
+An unsuffixed key such as `velocity_umap` is not discovered as a vector field.
 
 Rules:
 - vectors must match `n_cells` and the current dimension (2D vs 3D)
 - vectors are scaled into the same normalized coordinate space as the embedding points
+- when the AnnData object declares more than one field ID, pass the exact
+  `vector_field_default` to `show_anndata(...)`, `serve_anndata(...)`, or
+  `AnnDataViewer(...)`; construction raises `ValueError` if it is omitted or
+  does not name an available field
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: vector-field-overlay-controls
-Suggested filename: vector_field_velocity/python_01_overlay-controls.png
-Where it appears: Python Package Guide → Viewing APIs → AnnData mode → Vector fields
-Capture:
-  - UI location: Cellucid viewer UI (overlay controls panel)
-  - State prerequisites: dataset includes at least one vector field; viewer set to matching dimension
-  - Action to reach state: load AnnData with `velocity_umap_2d` present; enable overlay
-Crop:
-  - Include: the overlay toggle + vector field dropdown + dimension indicator (2D/3D)
-Alt text:
-  - Cellucid overlay panel showing vector field controls.
-Caption:
-  - Vector fields appear only when the dataset advertises UMAP-aligned displacement vectors for the current dimension.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for vector field overlay controls.
+For example, an object containing both `velocity_umap_2d` and
+`T_fwd_umap_2d` needs:
+
+```python
+viewer = show_anndata(
+    adata,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    vector_field_default="velocity",
+)
+```
+
+```{figure} ../../../_static/screenshots/vector_field_velocity/overlay-controls.png
+:alt: A synthetic 2D dataset with the Vector Field Overlay enabled and animated particle-flow controls visible.
 :width: 100%
 
-Vector field (velocity/drift) overlay controls in the Cellucid viewer.
+A current-format 2D vector field rendered as particle flow with its field, density, speed, trail, size, opacity, palette, and LOD controls visible.
 ```
 
 ## Connectivity (KNN graph)
@@ -197,7 +191,13 @@ Vector field (velocity/drift) overlay controls in the Cellucid viewer.
 If `adata.obsp["connectivities"]` exists, Cellucid can expose connectivity edges.
 
 Notes:
-- the matrix is symmetrized and binarized for visualization (weights are not preserved),
+- the matrix must already be square, finite, non-negative, exactly symmetric
+  in topology and weight, and zero on the diagonal;
+- sparse inputs must not store explicit zeros or duplicate coordinates;
+- Cellucid preserves exact Float64 weights and rejects asymmetric, directed,
+  negative, non-finite, or self-edge-containing graphs rather than
+  transforming them;
+- a valid zero-edge matrix is still an explicitly present graph,
 - large graphs can be expensive to render in the browser.
 
 ## Troubleshooting (AnnData mode)

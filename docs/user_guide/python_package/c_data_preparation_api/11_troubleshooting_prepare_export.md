@@ -52,6 +52,9 @@ prepare(
     latent_space=latent,   # (n_cells, n_latent_dims)
     obs=obs_df,            # n_cells rows
     X_umap_2d=X_umap_2d,   # (n_cells, 2)  (or X_umap_3d)
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    obs_categorical_dtype="uint16",
     out_dir="./export",
     force=True,
 )
@@ -98,6 +101,9 @@ prepare(
     latent_space=adata2.obsm["X_pca"],
     obs=adata2.obs,
     X_umap_2d=adata2.obsm["X_umap_2d"],
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    obs_categorical_dtype="uint16",
     gene_expression=adata2.X,
     var=adata2.var,
     connectivities=adata2.obsp.get("connectivities"),
@@ -113,27 +119,25 @@ prepare(
 
 ---
 
-## Symptom: `prepare()` succeeds but “nothing changed” (stale outputs)
+## Symptom: a non-empty target is rejected
 
 ### Likely causes
 
-- You reused an `out_dir` and `force=False`, so existing files were skipped.
-- You changed inputs/parameters but the manifest files already exist and were not rewritten.
+- You reused a non-empty `out_dir` with `force=False`.
 
 ### How to confirm
 
-Look for console messages like:
+The call raises:
 
 ```text
-⚠ Skipping obs manifest: ... already exists (use force=True to overwrite)
-⚠ Skipping points_3d.bin.gz: ... already exists (use force=True to overwrite)
+FileExistsError: ... Use force=True to replace it.
 ```
 
 ### Fix (safe)
 
 Pick one:
 
-1) Use `force=True` while iterating, or
+1) Use `force=True` for an intentional complete atomic replacement, or
 2) Export to a fresh `out_dir` each run.
 
 ### Prevention
@@ -214,19 +218,22 @@ See: {doc}`10_performance_tuning_guide_prepare_export`
 ### Likely causes
 
 1) You passed `obs_keys` and did not include the field.
-2) `obs_manifest.json` was skipped due to `force=False` (stale manifest).
-3) Two field keys collided after safe filename sanitization and overwrote files.
+2) The candidate export failed validation and was never published.
+3) A field identifier was unsafe or collided under case-insensitive filesystem
+   comparison, so publication was rejected.
 
 ### How to confirm
 
 - Open `<out_dir>/obs_manifest.json` and search for the key.
 - Check whether a corresponding file exists under `<out_dir>/obs/`.
-- Check the exporter logs for “Skipping obs manifest”.
+- Read the exact exporter exception.
 
 ### Fix
 
-- Re-export to a fresh folder or set `force=True`.
-- Make field names unique after sanitization.
+- Correct the identifier to an exact portable component and resolve
+  case-insensitive collisions.
+- Re-export to a fresh folder or set `force=True` for an intentional complete
+  replacement.
 
 ### Prevention
 
@@ -289,7 +296,7 @@ See:
 ### Likely causes
 
 1) You didn’t export `vector_fields` at all.
-2) You exported vectors for 3D but didn’t export `X_umap_3d` (vectors skipped).
+2) You declared vectors for 3D but didn’t provide `X_umap_3d` (validation fails).
 3) Vector field ids contain unsafe characters (export would error).
 4) Vector arrays have wrong shape (not `(n_cells, dim)`).
 
@@ -297,11 +304,12 @@ See:
 
 - Open `<out_dir>/dataset_identity.json` and search for `"vector_fields"`.
 - Confirm `<out_dir>/vectors/` exists and contains `*.bin(.gz)` files.
-- Check exporter logs for “Skipping vector field … embedding points_<dim>d not provided”.
+- Read the validation error for the vector key and its required embedding dimension.
 
 ### Fix
 
-- Export vectors with explicit keys like `velocity_umap_2d`, `velocity_umap_3d`.
+- Export vectors with required dimension-suffixed keys such as
+  `velocity_umap_2d` and `velocity_umap_3d`.
 - Export matching embeddings.
 - Re-export with `force=True`.
 
@@ -319,7 +327,8 @@ See: {doc}`08_vector_fields_velocity_displacement`
 
 ### How to confirm
 
-- Check for `<out_dir>/connectivity_manifest.json` and `<out_dir>/connectivity/edges.src.bin(.gz)`.
+- Check for `<out_dir>/connectivity_manifest.json` and every manifest-declared
+  source, destination, and Float64 weight payload.
 
 ### Fix
 
@@ -346,28 +355,6 @@ Check that the folder root contains:
 Web app loading docs:
 - {doc}`../../web_app/b_data_loading/03_browser_file_picker_tutorial`
 - {doc}`../../web_app/b_data_loading/08_troubleshooting_data_loading`
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: invalid-export-folder-error
-Where it appears: User Guide → Python Package → Data Preparation API → Troubleshooting
-Capture:
-  - Try to load an invalid folder (missing dataset_identity.json) in the web app
-  - Capture the exact on-screen error message/toast/notification
-Crop:
-  - Include: the error message + the loader panel context
-Redact:
-  - Remove: any private paths/dataset names
-Alt text:
-  - Error message indicating the selected folder is not a valid Cellucid export.
-Caption:
-  - If the export folder is missing `dataset_identity.json`, the viewer cannot load it and shows an invalid export error.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for an invalid export folder error.
-:width: 100%
-
-If the export folder is missing `dataset_identity.json`, the viewer cannot load it and shows an invalid export error.
-```
 
 ### Fix
 

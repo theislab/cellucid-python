@@ -30,7 +30,11 @@ viewer.display()
 ```python
 from cellucid import AnnDataViewer
 
-viewer = AnnDataViewer(adata)  # or "data.h5ad" / "data.zarr"
+viewer = AnnDataViewer(
+    adata,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 viewer.display()
 ```
 
@@ -115,7 +119,8 @@ Best practices:
 - If you re-run the cell repeatedly without stopping old viewers, you may end up with multiple servers and confusing behavior.
 
 ### Callbacks and exceptions
-- Hook callbacks are best-effort; exceptions are logged rather than raised to the notebook output.
+- Hook callbacks run in registration order. A callback exception propagates
+  through event delivery and is reported by the event request.
 
 ---
 

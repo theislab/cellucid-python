@@ -37,9 +37,7 @@ Best practices:
 ### NaN/Inf and invalid values
 
 If positions/colors contain NaN/Inf:
-- some points can be skipped during rendering,
-- axis bounds can be computed incorrectly (or fall back to a default range),
-- downstream tools may behave unpredictably for SVG.
+- exact export validation terminates before rendering.
 
 If you see odd axes or missing regions:
 - verify your exported dataset does not contain NaN/Inf in embeddings,
@@ -101,13 +99,15 @@ Strategies:
 ### 3D shader-accurate points and SVG limitations
 
 Pure SVG circles cannot represent certain “shader-accurate” point appearances (e.g., 3D sphere shading).
-Cellucid may:
-- automatically switch SVG export to **Hybrid** (raster points + vector annotations), and/or
-- warn that fidelity may degrade if WebGL2 is unavailable.
+Cellucid never changes the selected strategy:
+- **Full vector** and **Optimized vector** encode the explicitly requested SVG
+  circles.
+- **Hybrid** and **PNG** use the shader-rendered point pass and require WebGL2
+  plus complete camera matrices.
 
 If you need the exported points to match the on-screen appearance:
 - export **PNG** or **Hybrid SVG**,
-- export from a browser/environment with WebGL2 available.
+- ensure the current environment exposes WebGL2 before exporting.
 
 ### Depth ordering in dense 3D views
 
@@ -138,8 +138,7 @@ If edges are essential for your figure, capture them via another workflow and do
 
 PNG and Hybrid SVG exports try to use WebGL2 for shader-accurate point rendering.
 If WebGL2 is unavailable or restricted (common in locked-down environments):
-- exports can fall back to simpler rendering (flatter dots),
-- you may see fidelity warnings.
+- export is blocked with **Exact point export unavailable**.
 
 ### Fonts and text layout differences
 
@@ -153,15 +152,17 @@ Mitigations:
 
 ### Browser download restrictions
 
-If clicking Export does nothing:
+If clicking Export produces no file:
 - your browser may be blocking downloads (popup/download settings),
 - a corporate browser policy may restrict file creation,
 - extensions can interfere.
 
-Try:
-- an incognito window,
-- a different browser,
-- exporting a small PNG first as a “download sanity check”.
+Use deterministic diagnostics:
+- check the site download permission and the browser download list,
+- inspect `[FigureExport]` console errors,
+- submit one small PNG request to separate rendering capacity from file size,
+- for a batch, expect exactly one ZIP download rather than multiple automatic
+  downloads.
 
 ### Privacy/provenance surprises
 
@@ -170,29 +171,6 @@ Exports can include:
 - embedded metadata that may include source URLs or local dataset paths.
 
 If you plan to share figures publicly, review {doc}`05_metadata_and_provenance` for inspection/stripping workflows.
-
----
-
-## Screenshot placeholder (you will replace later)
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: figure-export-zero-visible-points
-Suggested filename: figure_export/12_zero-visible-points.png
-Where it appears: User Guide → Web App → Figure Export → 06_edge_cases.md
-Capture:
-  - Apply filters so no points are visible, then attempt export (or show export preview)
-  - Capture any warning/empty-state messaging the export UI provides
-Alt text:
-  - Export state when no points are visible due to filtering.
-Caption:
-  - Exports should make “0 visible points” obvious; confirm whether the export is empty by design or indicates a filtering mistake.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for exporting with 0 visible points.
-:width: 100%
-
-Edge cases like “all cells filtered out” should be explicitly visible in export preview/output.
-```
 
 ---
 

@@ -2,7 +2,9 @@
 
 **Audience:** everyone (beginners get “what should I have?”, experts get exact file/key expectations)  
 **Time:** 10–15 minutes  
-**What you’ll learn:** what Cellucid expects when you load an export folder, a GitHub exports repo, a `.h5ad`, or a `.zarr` store  
+**What you’ll learn:** what Cellucid expects when you load an export folder, a
+GitHub exports repo, an H5AD file, a browser Zarr ZIP, or a Python-side Zarr
+directory
 **Prerequisites:** none (helpful: you know which loading option you plan to use)
 
 ---
@@ -14,7 +16,8 @@ Cellucid can load your data through different *paths*, but they all boil down to
 1) **Pre-exported dataset folder** (recommended)  
 2) **GitHub “exports root”** (a folder that contains `datasets.json` + multiple exported datasets)  
 3) **AnnData `.h5ad`**  
-4) **AnnData `.zarr` directory**
+4) **AnnData Zarr v2 store** — one portable ZIP in the browser UI, or the
+   directory itself in Python server/Jupyter workflows
 
 Everything else (browser file picker, server mode, Jupyter) is *how you point the viewer at one of the above*.
 
@@ -87,16 +90,19 @@ See {doc}`02_local_demo_tutorial` for the exact publishing workflow.
 
 ---
 
-## AnnData `.h5ad` and `.zarr` (what Cellucid reads)
+## AnnData H5AD and Zarr (what Cellucid reads)
 
-When you load `.h5ad`/`.zarr` (directly in the browser, via server mode, or in Jupyter), Cellucid reads the dataset as **AnnData**.
+The browser reads one H5AD file or one ZIP containing a complete Zarr v2 store.
+Server mode and Jupyter accept H5AD paths, Zarr directories, or an in-memory
+AnnData object. Python opens H5AD read-only-backed and materializes Zarr
+eagerly with `anndata.read_zarr`.
 
 ### Minimum requirements (all AnnData modes)
 
 You must have at least one embedding in `obsm`:
 - `obsm["X_umap_3d"]` with shape `(n_cells, 3)` (recommended)
 - `obsm["X_umap_2d"]` with shape `(n_cells, 2)`
-- `obsm["X_umap"]` with shape `(n_cells, 2)` or `(n_cells, 3)`
+- `obsm["X_umap_1d"]` with shape `(n_cells, 1)`
 
 ### Optional (but commonly expected)
 
@@ -167,8 +173,8 @@ Typical identity schema (high-level):
 - **Exports**: open `<export_dir>/dataset_identity.json` and search for `vector_fields`; also confirm `vectors/` exists.
 - **AnnData**: print `adata.obsm.keys()` and look for keys like `velocity_umap_2d`.
 
-Internal reference (naming and schema details):
-- `cellucid/markdown/VECTOR_FIELD_OVERLAY_CONVENTIONS.md`
+Naming and schema details:
+- {doc}`../i_vector_field_velocity/01_what_vector_fields_are_user_facing`
 
 ---
 
@@ -204,8 +210,10 @@ Fix:
 
 ## Edge cases and limits (read if you’re debugging weirdness)
 
-- **NaN/Inf in embeddings**: can produce missing points, huge bounding boxes, or WebGL crashes.
-- **Duplicate IDs** (cells or genes): can cause confusing “wrong gene” or selection behavior.
+- **NaN/Inf in embeddings**: invalid current input; readers reject it before
+  dataset adoption.
+- **Duplicate or filename-colliding gene IDs**: invalid current-format input;
+  regenerate the dataset with unique portable IDs.
 - **Huge categorical fields**: legends/palettes don’t scale to 50k–100k categories; consider filtering/aggregating.
 - **Browser `.h5ad`**: for large files, this often fails due to memory limits (prefer server mode or exports).
 

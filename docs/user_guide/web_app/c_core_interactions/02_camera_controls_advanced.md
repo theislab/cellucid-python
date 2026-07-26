@@ -15,12 +15,36 @@
 All navigation/camera controls are in:
 
 - **Compare Views** accordion → **Navigation** section
+- **Camera Path** accordion → saved positions, timing, and interpolation
 
 The controls shown depend on the current navigation **Mode**:
 
 - Orbit controls (keyboard speed, Google Earth-style drag, orbit anchor)
 - Planar controls (keyboard speed, zoom-to-cursor, invert axes)
 - Free-fly controls (look sensitivity, move speed, pointer lock, invert look)
+
+---
+
+## Camera Path playback is opt-in
+
+Camera Path animates between camera positions that you save explicitly:
+
+1) Frame the view and choose **Save Position**.
+2) Move to a second view and save it.
+3) After two valid positions exist, the playback bar becomes available at the
+   top of the viewport.
+4) Select **Play** in that bar to start movement.
+
+Camera Path never starts automatically. Restoring a session can restore its
+saved path, timing, and interpolation settings, but the path remains stopped
+until you select **Play**. With zero or one saved position, the top playback bar
+is not available. Loading another dataset clears the current path so positions
+from one dataset cannot move the camera over another.
+
+:::{note}
+The playback bar auto-hides when idle. Move the pointer over the viewport or
+press `Tab` to reveal it when a valid path exists.
+:::
 
 ---
 
@@ -101,6 +125,10 @@ Cellucid uses multiple persistence layers:
 - **Session bundles (`.cellucid-session`)**: Save/Load State captures the app state, including camera and many UI control values.
 - **Browser preferences (`localStorage`)**: small UI preferences like background/theme can persist across reloads.
 
+Camera Path keyframes are dataset-dependent session state. They restore only
+for the matching dataset, remain stopped after restore, and are cleared when
+the active dataset changes.
+
 Pointer lock state is *not* a persistent preference:
 
 - it is a runtime browser mode,
@@ -134,26 +162,13 @@ This section is for readers who want repeatable “feel” across machines and s
 
 ---
 
-## Screenshots (placeholders)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: camera-controls-navigation-panel
-Where it appears: Camera controls → Where camera/navigation controls live
-Capture:
-  - Show Compare Views → Navigation expanded
-  - Capture once per mode (Orbit/Planar/Free-fly) OR use one screenshot and call out the mode dropdown
-Crop:
-  - Include: Navigation controls + a small slice of canvas
-Alt text:
-  - Navigation controls panel showing the mode dropdown and mode-specific options.
-Caption:
-  - Navigation controls live under Compare Views and change based on the selected mode.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Navigation controls panel.
+```{figure} ../../../_static/screenshots/web_app/camera-path-configured-panel.png
+:alt: Camera Path panel with two saved keyframes and playback settings.
 :width: 100%
 
-Navigation controls live under Compare Views and change based on the selected mode.
+Two valid keyframes expose camera-path timing and interpolation settings; playback still waits for an explicit user action.
 ```
 
 ---

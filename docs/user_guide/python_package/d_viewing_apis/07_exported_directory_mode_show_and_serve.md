@@ -134,7 +134,9 @@ http://127.0.0.1:<port>/_cellucid/datasets
 ```
 
 ```{note}
-The server detects export directories by checking for key files (manifests + points). If your folder is missing those, it may not show up in the dataset list even if the directory exists.
+The server classifies one complete prepared dataset or a root whose
+subdirectories are all complete prepared datasets. An incomplete candidate or
+missing declared artifact raises during construction.
 ```
 
 ## Sharing exports (without giving someone your Python environment)

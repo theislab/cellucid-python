@@ -2,9 +2,6 @@
 
 This page is a **symptom → diagnosis → fix** guide for filtering issues.
 
-It follows the troubleshooting template in:
-- `cellucid/markdown/DOCUMENTATION_MASTER_GUIDE.md`
-
 ---
 
 ## Quick triage checklist (do this first)

@@ -7,7 +7,7 @@
 ## The supported workflow (high level)
 
 1) Extract arrays/data.frames from your R object(s) (Seurat, SingleCellExperiment, or raw matrices).
-2) Call `cellucid::cellucid_prepare(...)` (or the alias `cellucid::prepare(...)`).
+2) Call `cellucid::cellucid_prepare(...)`.
 3) Open the output folder in the Cellucid web app.
 
 ```{note}
@@ -103,10 +103,11 @@ If your source object has cell IDs (Seurat/SCE), use them to explicitly align in
 
 ## Common limitations (know these early)
 
-- **4D embeddings are not supported** (`X_umap_4d` must be `NULL`).
 - **Gene expression is “one file per gene”** in the export format; exporting 20k+ genes is possible but can be slow and creates many files.
-- **Invalid characters in some keys become underscores** (obs column names and gene IDs are sanitized for filenames). This can cause filename collisions if two keys sanitize to the same string.
-- **Vector field IDs are stricter**: they must already be filesystem-safe; otherwise export fails (see {doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement`).
+- **Every exported identifier is exact**: obs keys, gene IDs, dataset IDs, and
+  vector-field IDs must already be portable filename components and unique
+  under case-insensitive comparison. They are never rewritten (see
+  {doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement`).
 
 ## Recommended workflow decision tree
 

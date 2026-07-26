@@ -25,17 +25,17 @@ In practice, identity is a combination of:
 
 If you want share links, session bundles, or community annotation to behave predictably, you need to treat identity as a first-class concept.
 
-## How `cellucid-r` chooses `dataset_id`
+## How `cellucid-r` accepts `dataset_id`
 
-If you do not provide `dataset_id=...`, `cellucid_prepare()` derives it from:
-- `dataset_name` (if provided), else
-- the folder name (`basename(out_dir)`),
-
-and then sanitizes it to a filesystem-safe identifier.
+`dataset_id` and `dataset_name` are required explicit arguments.
+`cellucid_prepare()` does not derive or rewrite either value. `dataset_id`
+must satisfy the same exact portable identifier contract as exported field and
+gene IDs.
 
 ### Recommendation
 
-- **Always set `dataset_id` explicitly** for datasets you plan to share or publish.
+- Set `dataset_id` to a stable identifier that represents the exact dataset
+  generation.
 - Use something stable and versioned, like:
   - `pbmc3k_v1`
   - `mouse_brain_atlas_2024-08`
@@ -84,10 +84,12 @@ For the web app’s perspective on sessions and compatibility, see:
 ### Symptom: “I exported again but the viewer still shows old fields”
 
 **Likely cause**
-- You reused the same `out_dir` and export skipped writing because `force=FALSE` (default).
+- You reused an existing `out_dir` with `force=FALSE`, so the complete
+  candidate was rejected.
 
 **Fix**
-- Re-run with `force=TRUE`, or delete the export folder and re-export.
+- Re-run with `force=TRUE` for an intentional atomic replacement, or choose a
+  fresh output folder.
 
 ### Symptom: “My collaborator’s session doesn’t apply to my export”
 

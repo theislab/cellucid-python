@@ -2,7 +2,7 @@
 
 This page is for readers who want to understand:
 - what the server is actually doing,
-- how the hosted-asset proxy + cache works,
+- how the verified local web generation works,
 - what endpoints exist (for debugging),
 - and how to operate servers safely (local vs remote).
 
@@ -36,16 +36,17 @@ http://127.0.0.1:<port>/
 http://127.0.0.1:<port>/?anndata=true
 ```
 
-## Hosted-asset proxy (UI) + cache
+## Verified local UI generation
 
-By default, both servers run in **hosted-asset proxy mode**:
+By default, both servers publish one verified local UI generation:
 
-- when the browser requests `/` or `/index.html`,
-  - the server fetches `https://www.cellucid.com/index.html` and `/assets/*` (if needed),
-  - caches them under a local cache directory,
-  - and serves them as if they were local files.
+- before binding the public server, Cellucid establishes every file declared by
+  the configured source's `cellucid-web-assets.json`;
+- this includes `index.html`, root browser metadata, and `/assets/*`;
+- the complete staged generation is byte-verified and then published atomically.
 
 This keeps the viewer UI and dataset API on the same origin, which avoids mixed content and cross-origin problems.
+Source or inventory failure stops startup; an older cache is not substituted.
 
 ### Cache directory
 
@@ -54,18 +55,23 @@ Default: a temporary directory (platform-dependent).
 Override with:
 
 ```bash
-export CELLUCID_WEB_PROXY_CACHE_DIR=/path/to/persistent/cache
+cellucid serve /path/to/data --web-cache-dir /path/to/cache
 ```
 
-### Cache invalidation
+Python callers pass the same choice explicitly:
 
-The server looks for a build stamp in `index.html`:
-
-```html
-<meta name="cellucid-web-build-id" content="...">
+```python
+from cellucid import serve
+serve("/path/to/data", web_cache_dir="/path/to/cache")
 ```
 
-If the build ID changes, the cache is purged automatically (best-effort) to avoid stale assets.
+### Generation publication
+
+The inventory declares the build ID, every path, exact MIME type, byte length,
+and SHA-256 hash. Cellucid downloads the complete declared generation to a
+sibling staging directory and verifies it before atomic publication. If
+download, verification, or publication fails, startup propagates the error and
+does not serve another generation.
 
 ### Clearing the cache (manual)
 
@@ -144,7 +150,7 @@ exports_root/
 CLI:
 
 ```bash
-cellucid serve /path/to/data.h5ad -v
+cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset -v
 ```
 
 This enables debug logging for:
@@ -162,5 +168,6 @@ Full discussion: {doc}`13_security_privacy_cors_and_networking`.
 
 ## Troubleshooting
 
-- “Viewer UI unavailable” page → cache/network problem: {doc}`15_troubleshooting_viewing`
+- Web-generation startup error → source/inventory/cache-directory diagnosis:
+  {doc}`15_troubleshooting_viewing`
 - Remote access patterns (SSH) → {doc}`12_remote_servers_ssh_tunneling_and_cloud`

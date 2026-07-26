@@ -95,8 +95,9 @@ Large datasets are where figure export can become misleading if you’re not car
 
 ### Pick the right strategy
 
-- If you see a **Large Dataset Export** dialog, it means you have many visible points and full vector SVG may be impractical.
-- Recommended choices:
+- SVG has no default strategy and no size-triggered chooser. Select one explicit
+  strategy before export.
+- Choose according to the artifact you need:
   - **Optimized vector** for medium datasets when you still want a fully vector plot.
   - **Hybrid** for very large datasets or when exporting 3D views.
   - **PNG** when you need maximum compatibility or the SVG is too heavy.
@@ -118,12 +119,14 @@ If a rare population matters:
 
 ### Interpret export warnings correctly
 
-Cellucid may show **Export Fidelity Warnings** such as:
-- “Point reduction enabled” (optimized vector is approximate)
-- “SVG strategy adjusted for WYSIWYG” (3D/shader point appearance requires Hybrid)
-- “Shader-accurate export may degrade” (WebGL2/matrices missing; fallback may look flatter)
+Cellucid may block export with an exact requirement:
+- **Exact point export unavailable**: PNG or Hybrid lacks WebGL2 or required
+  camera matrices.
+- **Connectivity overlay not exported**: connectivity is visible, but the
+  current figure exporter owns the point layer only.
 
-These warnings are not necessarily “errors”; they are telling you which promise changed (pixel-perfect vs density-preserving vs rasterized points).
+These blockers never change the selected format, SVG strategy, backend, or
+fidelity. Resolve the named condition and submit the same request again.
 
 ---
 
@@ -192,44 +195,16 @@ Best practices:
 
 ---
 
-## Screenshot placeholders (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: figure-export-quality-knobs
-Suggested filename: figure_export/09_quality-knobs.png
-Where it appears: User Guide → Web App → Figure Export → 04_quality_knobs_and_best_practices.md
-Capture:
-  - UI location: quality-related controls (mode, size, legend/text options, any downsampling toggles)
-Alt text:
-  - Figure Export quality settings controls.
-Caption:
-  - Adjust size and mode first; then tune legend/text options so the exported figure is readable at its final intended scale.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for figure export quality controls.
+```{figure} ../../../_static/screenshots/figure_export/style.png
+:alt: Figure Export Style controls for background, typography, and text sizes.
 :width: 100%
 
-Most “publication quality” issues come from size and readability choices, not from minute rendering tweaks.
+Style controls expose background, typography, and text sizing.
 ```
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: figure-export-large-export-warning
-Suggested filename: figure_export/10_large-export-warning.png
-Where it appears: User Guide → Web App → Figure Export → 04_quality_knobs_and_best_practices.md
-Capture:
-  - Trigger any warning dialog shown for very large SVG exports (or a banner warning)
-  - Include the recommended action (switch mode, reduce size, etc.) if shown
-Alt text:
-  - Warning dialog about a large export.
-Caption:
-  - Large SVG exports can be impractical to open/edit; switch to optimized or hybrid modes when prompted.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for large export warning.
-:width: 100%
 
-For huge datasets, expect warnings and use optimized/hybrid modes to keep outputs usable in downstream tools.
-```
 
 ---
 

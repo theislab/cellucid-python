@@ -4,7 +4,7 @@
 **Time:** 20–45 minutes (depends on dataset size)  
 **What you’ll do:** extract data from a Seurat object → export → open in the Cellucid web app
 
-This recipe exports a Seurat object using `cellucid::cellucid_prepare()` (alias: `prepare()`).
+This recipe exports a Seurat object using `cellucid::cellucid_prepare()`.
 
 ```{note}
 `cellucid-r` does not depend on Seurat. This page shows how to *extract* the needed inputs from Seurat.
@@ -171,7 +171,12 @@ if ("RNA_snn" %in% names(seu@graphs)) {
 ```
 
 ```{note}
-Connectivity export symmetrizes and binarizes edges. Weights are not preserved.
+`cellucid_prepare()` accepts weighted graphs that are finite, non-negative,
+exactly symmetric in topology and weight, and exactly zero on the diagonal.
+Sparse inputs must not store explicit zeros or duplicate coordinates. Inspect
+the Seurat graph deliberately before this call; Cellucid preserves accepted
+weights and rejects invalid structure instead of symmetrizing, coalescing, or
+binarizing it.
 ```
 
 ## Step 8 — Run `cellucid_prepare()`

@@ -18,8 +18,12 @@ If you’re debugging, extending, or integrating Cellucid into custom servers, {
 ```python
 from cellucid import AnnDataAdapter
 
-adapter = AnnDataAdapter(adata)  # in-memory
-# or: adapter = AnnDataAdapter.from_file("data.h5ad")
+adapter = AnnDataAdapter(
+    adata,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
+# AnnDataAdapter.from_file uses the same required identity arguments.
 
 identity = adapter.get_dataset_identity()
 obs_manifest = adapter.get_obs_manifest()
@@ -42,10 +46,11 @@ The web viewer expects files like:
 
 In AnnData mode, the adapter serves these as **virtual endpoints** computed from AnnData on demand.
 
-### Lazy loading behavior (important for large datasets)
+### Loading behavior (important for large datasets)
 
-- `.h5ad` can be served in *backed* mode so gene expression columns are fetched on demand.
-- `.zarr` is inherently chunked/lazy.
+- `.h5ad` paths are always opened read-only-backed so gene expression columns
+  are fetched on demand.
+- `.zarr` paths are loaded eagerly with `anndata.read_zarr`.
 - In-memory AnnData uses whatever you already loaded into RAM.
 
 ---
@@ -63,7 +68,8 @@ In AnnData mode, the adapter serves these as **virtual endpoints** computed from
 ## Edge cases (do not skip)
 
 - If your embedding keys are missing or have unexpected shapes, the adapter cannot serve `points_*d.bin`.
-- Duplicate gene IDs can make gene lookup ambiguous; prefer stable, unique identifiers.
+- Duplicate gene IDs and portable filename collisions are rejected during
+  adapter construction.
 - If `adata.X` is CSR, the adapter may materialize a CSC copy for efficient column access (memory trade-off).
 
 ---
@@ -72,12 +78,13 @@ In AnnData mode, the adapter serves these as **virtual endpoints** computed from
 
 ### Symptom: “Gene expression lookup is very slow”
 Fix:
-- Prefer serving a backed `.h5ad` or `.zarr` over in-memory dense matrices.
+- Prefer a `.h5ad` path for read-only-backed access.
 - For repeated access, export with {func}`~cellucid.prepare` instead.
 
 ### Symptom: “No embeddings detected”
 Fix:
-- Ensure you have an embedding in `adata.obsm` with a supported key (e.g. `X_umap`, `X_umap_2d`, `X_umap_3d`).
+- Ensure you have an explicitly dimensioned embedding in `adata.obsm`
+  (`X_umap_1d`, `X_umap_2d`, or `X_umap_3d`).
 
 ---
 

@@ -26,7 +26,7 @@ It owns:
 ### Data server
 A small local HTTP server started by `viewer`. It serves:
 - dataset files (exported mode) or dynamic endpoints (AnnData mode)
-- the viewer UI (via hosted-asset proxy)
+- the exact verified viewer generation
 - special endpoints like:
   - `/_cellucid/health`
   - `/_cellucid/info`
@@ -68,7 +68,7 @@ Browser security concepts that explain many failures:
 
 See {doc}`13_security_cors_origins_and_mixed_content`.
 
-### Hosted-asset proxy (web UI cache)
+### Verified local web generation
 In notebook mode, the Python server can download the viewer UI assets from `https://www.cellucid.com` and serve them from the same origin as the dataset server (cached on disk).
 
 This avoids:
@@ -76,7 +76,7 @@ This avoids:
 - and many cross-origin issues.
 
 Controls:
-- Cache location: `CELLUCID_WEB_PROXY_CACHE_DIR`
+- Generation location: `web_cache_dir=...`
 - Clear cache: `cellucid.clear_web_cache()` or `viewer.clear_web_cache()`
 
 ## Mental model (one diagram)
@@ -119,7 +119,9 @@ Not necessarily:
 In the hooks API, indices are **row positions** (0-based). If you reorder/subset the dataset in Python, indices change.
 
 ### “I can treat hover events like clicks”
-Hover is debounced and high frequency; treat it as “best effort” and keep callbacks light.
+Hover is a debounced, high-frequency state stream rather than a discrete click
+record. Keep callbacks light and do not assume that every intermediate pointer
+position produces an event.
 
 ## Next steps
 
@@ -128,4 +130,3 @@ Hover is debounced and high frequency; treat it as “best effort” and keep ca
   - {doc}`06_python_to_frontend_commands`
   - {doc}`07_frontend_to_python_events`
 - Troubleshooting: {doc}`14_troubleshooting_hooks`
-

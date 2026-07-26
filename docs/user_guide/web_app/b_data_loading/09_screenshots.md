@@ -1,93 +1,65 @@
-# Screenshots
+# Verified data-loading captures
 
-This page is a **screenshot capture checklist** for the Data Loading section.
+These captures were produced through the running web application with a
+deterministic synthetic AnnData fixture. The acceptance path replaced the
+prepared dataset with its Zarr ZIP representation, replaced that with the H5AD
+representation, and then restored the prepared dataset through the visible
+controls. Each replacement asserted the 120-cell, 6-gene dataset shape, 2D
+Planar navigation, hidden camera transport, settled notifications, and the
+absence of browser-console, page, and HTTP errors.
 
-It exists so you (or a collaborator) can capture screenshots once, systematically, without hunting through every tutorial page.
+## Loading and session controls
 
----
+```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
+:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
+:width: 100%
 
-## How placeholders work
+The Session panel presents each loading path separately and keeps Save State and
+Load State beside the dataset controls.
+```
 
-All pages in this section currently use:
+## Direct H5AD load
 
-- `cellucid-python/docs/_static/screenshots/placeholder-screenshot.svg`
+```{figure} ../../../_static/screenshots/data_loading/h5ad-current-loaded.png
+:alt: A current-schema H5AD file loaded in Cellucid with dataset metadata visible.
+:width: 100%
 
-Each placeholder is preceded by an HTML comment with:
+A current-schema H5AD file loaded through the browser picker, with its dataset
+metadata and available dimensions reported in the Session panel.
+```
 
-- what state to capture,
-- what to crop/redact,
-- suggested caption/alt text,
-- suggested filename conventions.
+```{figure} ../../../_static/screenshots/data_loading/h5ad-current-visualization.png
+:alt: Cellucid visualizing a current-schema H5AD dataset in two dimensions.
+:width: 100%
 
-General guidance lives in:
+The same H5AD dataset rendered as a 2D interactive view with Planar navigation.
+```
 
-- `cellucid/markdown/DOCUMENTATION_SCREENSHOTS_AND_FIGURES_GUIDE.md`
+## Direct Zarr ZIP load
 
-Recommended storage location for this section:
+```{figure} ../../../_static/screenshots/data_loading/zarr-zip-loaded.png
+:alt: A current-schema AnnData Zarr ZIP archive loaded in Cellucid through the browser picker.
+:width: 100%
 
-- `cellucid-python/docs/_static/screenshots/data_loading/`
+The current-schema Zarr ZIP representation loaded through the browser picker.
+The Session panel identifies the source as a Zarr ZIP archive, and the
+visualization uses the archive's coordinates and categorical metadata.
+```
 
----
+## Browser-engine checks
 
-## Recommended screenshot set (data loading)
+```{figure} ../../../_static/screenshots/data_loading/h5ad-firefox.png
+:alt: A current-schema H5AD dataset loaded in Firefox.
+:width: 100%
 
-### Loader panel (orientation) (1 screenshot)
+The same direct H5AD replacement path exercised in Firefox on macOS.
+```
 
-Capture the “entry point” where users choose local files vs remote server vs GitHub.
+```{figure} ../../../_static/screenshots/data_loading/h5ad-webkit.png
+:alt: A current-schema H5AD dataset loaded in WebKit.
+:width: 100%
 
-Page:
-- `b_data_loading/index` (ID: `data-loading-dataset-connections-panel`)
-
-### Overview page (2 screenshots)
-
-1) Data loading controls highlighted (empty state)
-2) Successful load state (dataset loaded + visible legend/field selector)
-
-Page:
-- `b_data_loading/01_loading_options_overview` (IDs: `data-loading-overview-loader-panel`, `data-loading-overview-success-state`)
-
-### Browser file picker (2 screenshots)
-
-1) The three file picker buttons (folder / h5ad / zarr)
-2) Successful exported-folder load state
-
-Page:
-- `b_data_loading/03_browser_file_picker_tutorial` (IDs: `data-loading-file-picker-entry-point`, `data-loading-export-folder-success`)
-
-### GitHub exports workflow (2 screenshots)
-
-1) Validating an export locally (folder picker success)
-2) GitHub connection input + “connect” UX
-
-Page:
-- `b_data_loading/02_local_demo_tutorial` (IDs: `data-loading-github-validate-local-file-picker`, `data-loading-github-connect`)
-
-### Server mode (1 screenshot)
-
-Capture the terminal banner showing:
-- server URL
-- suggested viewer URL
-
-Page:
-- `b_data_loading/04_server_tutorial` (ID: `data-loading-server-terminal-banner`)
-
-### Jupyter embedding (1 screenshot)
-
-Capture the first successful embedded viewer output cell (with any “AnnData mode is slower” warning visible, if applicable).
-
-Page:
-- `b_data_loading/05_jupyter_tutorial` (ID: `data-loading-jupyter-embedded-viewer`)
-
----
-
-## Highly recommended “failure mode” screenshots (debugging gold)
-
-These save huge amounts of time in onboarding and support:
-
-- GitHub connect error showing `datasets.json not found` (or a clear 404)
-- CORS / mixed-content error message when connecting to a remote server
-- File picker permission prompt (and what it looks like when denied)
-- “WebGL context lost” overlay (see: `a_orientation/02_system_requirements`)
-
-If you are documenting vector fields (velocity/drift), capture those screenshots in the overlay section:
-- {doc}`../i_vector_field_velocity/08_screenshots`
+The same direct H5AD replacement path exercised in Playwright WebKit on macOS.
+WebKit is Safari's browser engine; the repository's platform matrix separately
+runs the supported browser projects on their available CI operating systems.
+```

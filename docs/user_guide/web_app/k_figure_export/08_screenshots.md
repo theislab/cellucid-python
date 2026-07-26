@@ -1,77 +1,55 @@
-# Screenshots
+# Verified figure-export captures
 
-This page is a **screenshot capture checklist** for the Figure Export section.
+## Panel structure
 
-It exists so you (or a collaborator) can capture screenshots once, systematically, without hunting through every export page.
+```{figure} ../../../_static/screenshots/figure_export/panel-overview.png
+:alt: Figure Export panel showing Framing, Labels and Annotations, Style, Download, and Export controls.
+:width: 60%
 
----
+The Figure Export panel groups framing, labels, style, and download settings
+before the explicit Export action.
+```
 
-## How placeholders work
+## Preview and framing
 
-All pages in this section currently use:
-- `cellucid-python/docs/_static/screenshots/placeholder-screenshot.svg`
+```{figure} ../../../_static/screenshots/figure_export/preview.png
+:alt: Cellucid Figure Export preview for the deterministic 120-cell fixture with framing controls visible.
+:width: 100%
 
-Each placeholder is preceded by an HTML comment with:
-- what state to capture,
-- what to crop/redact,
-- suggested caption/alt text,
-- and suggested filename conventions.
+Preview exposes the current framing and visual state before any file is written.
+```
 
-General guidance lives in:
-- `cellucid/markdown/DOCUMENTATION_SCREENSHOTS_AND_FIGURES_GUIDE.md`
+```{figure} ../../../_static/screenshots/figure_export/framing.png
+:alt: Figure Export Framing controls with a live preview thumbnail.
+:width: 60%
 
-Recommended storage location for this section:
-- `cellucid-python/docs/_static/screenshots/figure_export/`
+Framing defines dimensions, a size preset, preview visibility, and the optional
+drag-to-crop frame independently of camera navigation.
+```
 
----
+## Labels, style, and output
 
-## Recommended screenshot set (figure export)
+```{figure} ../../../_static/screenshots/figure_export/labels-annotations.png
+:alt: Figure Export Labels and Annotations controls for title, axes, legend, and annotation visibility.
+:width: 60%
 
-### Entry point / orientation (1 screenshot)
+Labels and Annotations makes title, axis, legend, and annotation choices
+explicit.
+```
 
-Page:
-- `k_figure_export/index` (ID: `figure-export-panel-overview`)
+```{figure} ../../../_static/screenshots/figure_export/style.png
+:alt: Figure Export Style controls for background, typography, and text sizes.
+:width: 60%
 
-### UI walkthrough (3 screenshots)
+Style controls expose background, typography, and text sizing.
+```
 
-Pages:
-- `k_figure_export/02_export_ui_walkthrough` (IDs: `figure-export-preview-vs-export-controls`, `figure-export-framing-overlay`, `figure-export-exported-artifact-example`)
+```{figure} ../../../_static/screenshots/figure_export/download.png
+:alt: Figure Export Download controls with SVG plus PNG, 300 DPI, Full vector strategy, and split-view choice.
+:width: 60%
 
-### Format/mode selection (1 screenshot)
-
-Page:
-- `k_figure_export/03_export_formats_and_renderers` (ID: `figure-export-format-mode-selection`)
-
-### Quality knobs + warnings (2 screenshots)
-
-Pages:
-- `k_figure_export/04_quality_knobs_and_best_practices` (IDs: `figure-export-quality-knobs`, `figure-export-large-export-warning`)
-
-### Metadata/provenance (1 screenshot)
-
-Page:
-- `k_figure_export/05_metadata_and_provenance` (ID: `figure-export-metadata-example`)
-
-### Edge cases (1 screenshot)
-
-Page:
-- `k_figure_export/06_edge_cases` (ID: `figure-export-zero-visible-points`)
-
-### Troubleshooting (1 screenshot)
-
-Page:
-- `k_figure_export/07_troubleshooting_figure_export` (ID: `figure-export-common-failure-dialog`)
-
----
-
-## Optional “high value” extras (recommended later)
-
-These screenshots are disproportionately helpful for onboarding and support:
-
-- **Large dataset strategy dialog** (“Large Dataset Export”) showing the Full/Optimized/Hybrid/Raster choices.
-- **Export fidelity warnings dialog** showing at least one real warning (e.g., forced Hybrid for 3D, WebGL2 missing, connectivity not exported).
-- **Huge legend overflow** example (and the “fix”: legend bottom, disable legend, or reduce categories).
-- **Illustrator/Inkscape pain point** example:
-  - “SVG crashes Illustrator” (full vector),
-  - “Hybrid SVG opens fine” (the fix),
-  - optionally, show the same SVG opened in a browser as a sanity check.
+Download settings choose output format, resolution, an explicit SVG point
+strategy, and whether all views are exported. A single output downloads in its
+native format; a multi-file request downloads once as a ZIP containing the
+native files.
+```

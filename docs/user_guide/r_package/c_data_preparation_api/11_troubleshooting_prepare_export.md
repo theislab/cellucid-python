@@ -1,6 +1,6 @@
 # Troubleshooting: Prepare/Export
 
-This page is the deep troubleshooting guide for `cellucid_prepare()` / `prepare()`.
+This page is the deep troubleshooting guide for `cellucid_prepare()`.
 
 If you want a shorter index by topic, see {doc}`../i_troubleshooting_index/index`.
 
@@ -181,7 +181,8 @@ colnames(var)
 ```
 
 **Fix**
-- Use a real column name, or set `var_gene_id_column = "index"` and populate `rownames(var)`.
+- Use a real column name, or set `var_gene_id_column = NULL` and populate
+  `rownames(var)`.
 
 ---
 
@@ -230,10 +231,10 @@ install.packages("Matrix")
 ## Symptom: “Field 'X' has N categories, but uint8 can only hold 254”
 
 **Likely cause**
-- You forced `obs_categorical_dtype = "uint8"` and have >254 categories.
+- You chose `obs_categorical_dtype = "uint8"` and have more than 255 categories.
 
 **Fix**
-- Use `obs_categorical_dtype = "auto"` (default) or `"uint16"`.
+- Use `obs_categorical_dtype = "uint16"`.
 
 ---
 
@@ -255,13 +256,16 @@ Better: choose explicit safe names up front (see {doc}`08_vector_fields_velocity
 ## Symptom: “I re-exported but nothing changed”
 
 **Likely cause**
-- `force = FALSE` (default) and manifests already existed, so export skipped writing.
+- `force = FALSE` (default) and the output generation already existed, so the
+  complete candidate was rejected.
 
 **How to confirm**
-- Check file timestamps in the export folder.
+- Read the exact `out_dir already exists` error; the prior generation remains
+  unchanged.
 
 **Fix**
-- Re-run with `force = TRUE`, or export to a fresh `out_dir`.
+- Re-run with `force = TRUE` for an intentional atomic replacement, or export
+  to a fresh `out_dir`.
 
 ---
 
@@ -288,26 +292,30 @@ Better: choose explicit safe names up front (see {doc}`08_vector_fields_velocity
 
 ---
 
-## Symptom: “My gene names are weird numbers”
+## Symptom: gene identifier selection fails
 
 **Likely cause**
-- `rownames(var)` were `NULL`, so gene IDs defaulted to `"0".."n_genes-1"`.
+- `var_gene_id_column = NULL` was selected but `var` has no row names, or the
+  selected explicit column is absent or invalid.
 
 **Fix**
 - Set `rownames(var)` explicitly, or set `var_gene_id_column` to the right column.
 
 ---
 
-## Symptom: “Some genes/fields disappear or overwrite each other”
+## Symptom: gene or field identifiers are rejected
 
 **Likely cause**
-- Filename sanitization collisions (two keys map to the same `<safe_key>`).
+- an identifier is not a portable component, or identifiers collide under
+  case-insensitive filesystem comparison.
 
 **How to confirm**
-- Compare original IDs vs sanitized IDs and look for duplicates.
+- Validate the exact IDs and compare `tolower(ids)` for duplicates.
 
 **Fix**
-- Rename genes/fields to be unique after sanitization, or export a smaller subset.
+- Rename genes/fields to exact portable unique IDs, or export a smaller subset.
+  The exporter rejects the complete candidate before writing any colliding
+  payload.
 
 ---
 

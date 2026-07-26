@@ -51,29 +51,11 @@ The legend list is sorted alphabetically (human-friendly), but:
 
 So “the first visible row” is not a special color; it’s just the first in alphabetical sort order.
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: categorical-color-by-hiding-a-category
-Suggested filename: web_app/fields_legends/20_categorical-hide-category.png
-Where it appears: User Guide → Web App → Fields, Coloring, and Legends → 03_color_by_behavior.md
-Capture:
-  - Select a categorical obs field with multiple categories
-  - Take the screenshot after unchecking one category so those cells disappear
-  - Ensure the Active filters box shows a line like “<field>: hiding …”
-Crop:
-  - Include: legend with one checkbox unchecked + visible point cloud
-  - Include: Active filters summary if possible
-Annotations:
-  - Call out: the unchecked category row and the fact that the points disappear (not just recolor)
-Alt text:
-  - Categorical legend with one category unchecked and the corresponding points hidden.
-Caption:
-  - Explain that unchecking a category is a real filter that removes those cells from view.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for hiding a categorical category.
+```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
+:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
 :width: 100%
 
-Unchecking a category in a categorical legend hides those cells (it is a real visibility filter, not just a recolor).
+Selecting a categorical observation field colors the embedding and exposes its complete category legend.
 ```
 
 ---
@@ -113,7 +95,9 @@ Important consequences:
 - Values `<= 0` cannot be placed on a log axis, so they render as the neutral “None” gray.
 - Your **Min/Max filter sliders still operate in the original units** (not log units).
 
-If you enable log scale on a field with no positive values, the colorbar will fall back to a safe dummy range and most/all points will appear gray (because they are non-positive). That’s a data issue, not a rendering bug.
+If you enable log scale on a field with no positive values, the colorbar uses
+the sentinel range `0–1` and all non-positive points appear gray. That is a
+data-domain issue, not a rendering bug.
 
 ---
 
@@ -146,31 +130,6 @@ When you might turn Live filtering off:
 - remote desktop / low-power machines where UI responsiveness matters.
 
 The **RESET** button restores the full numeric range for that field.
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: continuous-filter-live-vs-filter-button
-Suggested filename: web_app/fields_legends/21_continuous-filter-live-toggle.png
-Where it appears: User Guide → Web App → Fields, Coloring, and Legends → 03_color_by_behavior.md
-Capture:
-  - Select a continuous field
-  - Turn Live filtering OFF so the FILTER button becomes enabled
-  - Set Min/Max sliders to a narrow range (but don’t click FILTER yet)
-  - Optional: include Active filters summary to show whether the filter is already applied
-Crop:
-  - Include: Filtering section with Live filtering toggle + FILTER/RESET buttons + sliders
-Annotations:
-  - Call out: Live filtering toggle state and the enabled FILTER button
-Alt text:
-  - Continuous filtering controls showing Live filtering turned off and the FILTER button enabled.
-Caption:
-  - Explain that turning Live filtering off lets you stage slider changes and apply them in one step.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for Live filtering vs FILTER behavior.
-:width: 100%
-
-Turn off Live filtering to adjust sliders without immediate recomputation, then click FILTER to apply the range once.
-```
 
 ---
 
@@ -221,30 +180,6 @@ Semantics:
 Important details:
 - Outlier filtering only applies when the current active field supports it (that’s when the control is visible).
 - Derived/user-defined categorical fields created by merges/deletions typically do **not** carry latent outlier stats, so the outlier control may disappear after you “edit” a field.
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: outlier-filter-slider-visible
-Suggested filename: web_app/fields_legends/22_outlier-filter-slider.png
-Where it appears: User Guide → Web App → Fields, Coloring, and Legends → 03_color_by_behavior.md
-Capture:
-  - Select a categorical field that shows the Outlier filter slider
-  - Set it to a non-100 value (e.g., 95%) so the effect is visible
-  - Include the on-screen percent readout next to the slider
-Crop:
-  - Include: Outlier filter slider + legend + enough of canvas to see outliers disappear
-Annotations:
-  - Call out: the percent setting and what it means (“remove top tail of outlier-like cells”)
-Alt text:
-  - Outlier filter slider set below 100% in the Display options box.
-Caption:
-  - Explain that the slider removes outliers when the dataset provides latent outlier quantiles for the active field.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the outlier filter slider.
-:width: 100%
-
-When available, Outlier filter (latent space) removes the most outlier-like cells; 100% keeps all cells.
-```
 
 ---
 

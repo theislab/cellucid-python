@@ -55,10 +55,11 @@ Common sources of variation include:
 - **Font availability**: exported SVGs reference font families; if a font is missing on another machine, a substitute font can shift text widths/line breaks.
 - **GPU/WebGL differences**: PNG and Hybrid SVG point rendering can depend on WebGL2 availability and GPU/driver behavior.
 - **Export strategy choices**:
+  - *Full vector* writes every visible point as vector geometry.
   - *Optimized vector* intentionally reduces points to preserve density and keep files usable.
   - *Hybrid SVG* rasterizes points (by design) while keeping annotations vector.
-  - *Raster strategy* outputs PNG even if you requested SVG.
-  These are still valid exports, but they change what “exact match” means.
+  Cellucid executes the strategy you select; it does not substitute another
+  format or strategy. The explicit choice changes what “exact match” means.
 
 ---
 
@@ -123,7 +124,7 @@ Use this workflow when you want to be able to recreate a figure weeks later (or 
 3) **Record export settings**
    - Plot size (W×H)
    - Format (SVG/PNG) and DPI (for PNG)
-   - Large dataset strategy (full/optimized/hybrid/raster)
+   - Explicit SVG point strategy (Full vector, Optimized vector, or Hybrid)
    - Legend/axes/title/background choices
    - Frame export crop settings (if used)
 
@@ -138,6 +139,7 @@ Use this workflow when you want to be able to recreate a figure weeks later (or 
 
 5) **Package for collaboration**
    - Share: dataset export (or dataset URL) + session bundle + exported figure(s).
+   - A multi-file export is already packaged as one deterministic ZIP archive.
    - If you post-process in Illustrator, keep both:
      - the original exported artifact (SVG/PNG), and
      - the edited final figure (AI/SVG/PDF), so provenance isn’t lost.
@@ -145,31 +147,6 @@ Use this workflow when you want to be able to recreate a figure weeks later (or 
 Related pages:
 - {doc}`../l_sessions_sharing/index`
 - {doc}`05_metadata_and_provenance`
-
----
-
-## Screenshot placeholder (you will replace later)
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: figure-export-wysiwyg-vs-output
-Suggested filename: figure_export/02_wysiwyg-vs-exported-output.png
-Where it appears: User Guide → Web App → Figure Export → 01_figure_export_goals_wysiwyg_and_reproducibility.md
-Capture:
-  - Show the viewer state and the exported artifact opened outside the app (side-by-side or two windows)
-  - Prefer a state with a legend + title + at least one overlay (highlight, vector field, etc.) if supported
-Redact:
-  - Remove: private dataset ids/names and local file paths
-Alt text:
-  - Side-by-side view of the Cellucid viewer and the exported figure.
-Caption:
-  - Compare the viewer state to the exported artifact to validate what “WYSIWYG” and “reproducible export” mean in practice.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for WYSIWYG vs exported output comparison.
-:width: 100%
-
-Compare the in-app view to the exported artifact to validate which parts of state are reproduced.
-```
 
 ---
 

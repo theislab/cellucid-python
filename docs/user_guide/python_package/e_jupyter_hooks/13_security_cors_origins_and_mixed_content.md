@@ -6,7 +6,8 @@ This page explains the browser security constraints that most often break notebo
 - **CORS**: which origins are allowed to call `/_cellucid/events`
 - **Mixed content**: HTTPS notebooks blocking HTTP loopback servers
 
-If your viewer shows a blank iframe, “Failed to fetch”, or “notebook proxy required”, this is the page to read.
+If your viewer shows a blank iframe, “Failed to fetch”, or a mixed-content
+error, this is the page to read.
 
 ## Why this matters for hooks
 
@@ -30,7 +31,8 @@ As implemented in `cellucid-python/src/cellucid/_server_base.py` (`CORSMixin._ge
 Everything else is rejected (no `Access-Control-Allow-Origin`).
 
 ```{note}
-In the recommended notebook mode, the viewer UI is served from the same origin as the dataset server (hosted-asset proxy),
+In notebook mode, the exact verified viewer generation is served from the same
+origin as the dataset server,
 so most requests are same-origin and do not rely on CORS at all.
 ```
 
@@ -53,48 +55,43 @@ Symptoms:
 - browser devtools shows “Mixed Content” or “Blocked” errors,
 - hooks don’t fire (`/_cellucid/events` never reaches the server).
 
-### Cellucid’s solution: serve UI from the server origin + use notebook proxies when needed
+### Cellucid’s solution: serve the UI from the server origin
 
 Cellucid notebook embeds:
-1. Serve the viewer UI from the same origin as the dataset server (hosted-asset proxy).
-2. When a direct HTTP loopback URL is unlikely to work, embed via **Jupyter Server Proxy**:
+1. establish and serve the verified viewer generation from the same origin as
+   the dataset server, and
+2. use the exact `client_server_url=` supplied by the caller, or the bound
+   server URL when that argument is omitted.
 
-```text
-https://<notebook-origin>/<base>/proxy/<port>/?jupyter=true&viewerId=...&viewerToken=...
-```
+### If direct loopback is blocked
 
-The embed script probes `/_cellucid/health` before selecting the proxy URL.
-
-### If you see “notebook proxy required”
-
-That message means:
+This means:
 - the notebook is HTTPS or remote,
-- direct loopback is blocked/unreachable,
-- and the proxy URL probe failed.
+- and the browser cannot load the kernel machine’s HTTP loopback URL.
 
 Fix options:
-- Install/enable `jupyter-server-proxy` on the notebook server (recommended).
-- Use SSH port forwarding if the kernel is remote and your browser is local.
-- Advanced: set `CELLUCID_CLIENT_SERVER_URL` to a browser-reachable HTTPS URL for the server.
+- expose the Cellucid port through Jupyter Server Proxy or another HTTPS
+  reverse proxy, then pass that exact HTTP(S) base as `client_server_url=`, or
+- use SSH port forwarding and pass the local forwarded base.
 
-## Environment variables that affect connectivity
+Cellucid does not probe, infer, or select a proxy URL.
 
-### `CELLUCID_CLIENT_SERVER_URL`
+## Explicit connectivity arguments
 
-Overrides the URL the browser should use to reach the server.
+### `client_server_url`
+
+Sets the exact URL the browser uses to reach the server. It is for remote
+kernels, explicit reverse proxies, and notebook frontends that cannot reach
+the bound server URL.
+
+### `web_cache_dir`
+
+Sets the directory where the verified viewer generation is published.
 
 Use cases:
-- remote kernels + custom reverse proxies,
-- environments where loopback/proxy auto-detection fails.
-
-### `CELLUCID_WEB_PROXY_CACHE_DIR`
-
-Controls where hosted viewer UI assets are cached.
-
-Use cases:
-- offline/air-gapped environments (cache once, reuse),
-- persistent cache on shared machines,
-- debugging stale cache behavior.
+- selecting a controlled writable cache location,
+- verifying an existing generation with `force=False`,
+- clearing and re-establishing the current source generation.
 
 ## How to debug in practice (recommended checklist)
 
@@ -112,4 +109,3 @@ Use cases:
 
 - Full troubleshooting guide: {doc}`14_troubleshooting_hooks`
 - Security model overview: {doc}`12_security_model`
-

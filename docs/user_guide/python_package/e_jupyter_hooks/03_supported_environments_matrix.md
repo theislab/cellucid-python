@@ -29,13 +29,13 @@ Legend:
 | Environment | Embed viewer | Python → viewer commands | Viewer → Python events | Session bundle “no-download” | Notes |
 |---|---:|---:|---:|---:|---|
 | Classic Jupyter (local) | ✅ | ✅ | ✅ | ✅ | Direct loopback (`http://127.0.0.1:<port>`) usually works. |
-| JupyterLab (local) | ✅ | ✅ | ✅ | ✅ | Same as classic; base URL/proxy path handling is supported. |
+| JupyterLab (local) | ✅ | ✅ | ✅ | ✅ | Same as classic when the browser can reach loopback. |
 | VSCode notebooks (local kernel) | ✅ | ✅ | ✅ | ✅ | Works as long as the VSCode webview can reach the server URL. |
-| Google Colab | ✅ | ✅ | ✅ | ✅ | Uses Colab’s HTTPS port proxy (kernel is remote). Cache is ephemeral. |
-| JupyterHub / hosted Jupyter (HTTPS) | ⚠️ | ✅ | ✅ | ✅ | Usually needs **Jupyter Server Proxy** to avoid HTTPS→HTTP mixed-content blocking. |
-| Remote kernel over SSH (browser on laptop) | ⚠️ | ✅ | ✅ | ✅ | Use **SSH port forwarding** or set `CELLUCID_CLIENT_SERVER_URL`. |
-| “Notebook” served from file:// (rare) | ⚠️ | ✅ | ✅ | ✅ | Proxy selection logic avoids file:// issues; you may need manual URLs. |
-| Not in Jupyter (plain Python script) | ❌ | ⚠️ | ⚠️ | ⚠️ | You can still run a server (`cellucid serve ...`), but there’s no notebook iframe or hooks UI. |
+| Google Colab | ⚠️ | ✅ | ✅ | ✅ | Obtain Colab’s browser-reachable HTTPS proxy base and pass it as `client_server_url=`. |
+| JupyterHub / hosted Jupyter (HTTPS) | ⚠️ | ✅ | ✅ | ✅ | Expose the Cellucid port through an HTTPS proxy and pass its exact base as `client_server_url=`. |
+| Remote kernel over SSH (browser on laptop) | ⚠️ | ✅ | ✅ | ✅ | Forward the port, then pass the forwarded browser base as `client_server_url=`. |
+| “Notebook” served from `file://` | ⚠️ | ✅ | ✅ | ✅ | Pass an exact HTTP(S) `client_server_url`; `file://` is not an accepted server URL. |
+| Not in Jupyter (plain Python script) | ❌ | ❌ | ❌ | ❌ | Use `cellucid serve ...`; notebook display and hook channels require a notebook frontend. |
 
 ```{important}
 The biggest real-world failure mode is **connectivity**, not hooks logic:
@@ -45,15 +45,17 @@ The biggest real-world failure mode is **connectivity**, not hooks logic:
 When this happens, the UI may show errors like “Failed to fetch”, selection events won’t arrive, and highlighting commands won’t do anything.
 ```
 
-## Network requirement: viewer UI asset download (hosted-asset proxy)
+## Network requirement: exact viewer generation
 
-In notebooks, Cellucid serves the viewer UI via a **hosted-asset proxy**:
+In notebooks, Cellucid serves one verified local viewer generation:
 
-- On first run (or after the website build changes), the Python side downloads the viewer UI assets from:
-  - `https://www.cellucid.com/index.html`
-  - `https://www.cellucid.com/assets/*`
-- Assets are cached on disk (configure with `CELLUCID_WEB_PROXY_CACHE_DIR`).
-- If you are offline but the cache exists, embedding still works.
+- At each viewer/server startup, Python establishes the complete generation
+  declared by `https://www.cellucid.com/cellucid-web-assets.json`.
+- The generation includes `index.html`, root browser metadata, and all declared
+  assets; every byte is verified before publication.
+- The selected generation lives on disk (configure with `web_cache_dir=`).
+- Startup requires access to the configured source and never substitutes a
+  previous generation after source failure.
 
 See:
 - {doc}`13_security_cors_origins_and_mixed_content` (why this exists + mixed content)
@@ -61,37 +63,44 @@ See:
 
 ## Environment-specific notes (with actionable fixes)
 
-### JupyterHub / HTTPS notebooks: “notebook proxy required”
+### JupyterHub / HTTPS notebooks: browser cannot reach loopback
 
 If your notebook is served over HTTPS and your Cellucid server is plain HTTP on loopback, browsers may block it as mixed content.
 
-Cellucid tries to auto-fix this by embedding through:
+Expose the Cellucid port through an HTTPS proxy, then construct its exact base
+URL, for example:
 
 ```text
 https://<notebook-origin>/<base>/proxy/<port>/?jupyter=true&viewerId=...&viewerToken=...
 ```
 
-That requires `jupyter-server-proxy` to be installed/enabled on the notebook server.
+With Jupyter Server Proxy, the notebook administrator must install and enable
+that extension's server route and the caller must pass the resulting browser
+base as `client_server_url=...`. The Cellucid package already depends on
+`jupyter-server-proxy`; package installation alone does not expose a route or
+select its URL.
 
-If you see a “notebook proxy required” message inside the iframe:
-- install `jupyter-server-proxy` on the Jupyter server, or
-- set `CELLUCID_CLIENT_SERVER_URL` to a browser-reachable HTTPS URL for the Cellucid server (advanced), or
-- use SSH port forwarding (if your notebook runs on a remote host).
+If the direct iframe is blocked:
+
+- expose the port through an HTTPS reverse proxy and pass its exact base as
+  `client_server_url=...`, or
+- use SSH port forwarding and pass the local forwarded base.
 
 ### Google Colab
 
-Colab runs the kernel on a remote VM. Cellucid uses:
+Colab runs the kernel on a remote VM. Obtain its proxy URL in the notebook:
 
 ```python
 from google.colab.output import eval_js
 eval_js("google.colab.kernel.proxyPort(<port>)")
 ```
 
-to obtain an HTTPS URL the browser can reach.
+Then pass the returned base to `show_anndata(..., client_server_url=base)`.
+Cellucid does not invoke Colab’s proxy API implicitly.
 
 Practical implications:
-- The viewer URL will *not* be `127.0.0.1` in Colab.
-- The UI cache is not persistent between Colab sessions, so first-run downloads are common.
+- The viewer URL must be the explicit HTTPS proxy URL, not remote loopback.
+- Each viewer startup still establishes the configured exact web generation.
 
 ### Remote / HPC kernels (browser on laptop)
 
@@ -101,7 +110,15 @@ Most robust: SSH local port forwarding (example uses port 8765):
 
 1. In the notebook (remote):
    ```python
-   viewer = show_anndata("data.h5ad", port=8765)
+   from cellucid import AnnDataViewer
+
+   viewer = AnnDataViewer(
+       "data.h5ad",
+       port=8765,
+       dataset_name="Example",
+       dataset_id="example",
+       client_server_url="http://127.0.0.1:8765",
+   )
    print(viewer.viewer_url)
    ```
 2. On your laptop:
@@ -129,4 +146,3 @@ Now `http://127.0.0.1:8765/...` in your browser forwards to the remote kernel.
 
 - Minimal working loop: {doc}`02_quickstart_minimal_roundtrip`
 - Architecture details: {doc}`05_architecture_message_routing_http_vs_postmessage`
-

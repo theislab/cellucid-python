@@ -30,11 +30,15 @@ In notebook mode, the server is started with `host="127.0.0.1"` by default, so i
 
 ### The viewer UI assets
 
-In notebook mode, the server may download the viewer UI from `https://www.cellucid.com` and cache it on disk (hosted-asset proxy).
+In notebook mode, each viewer startup downloads the declared web generation
+from its configured source, verifies it completely, and publishes it locally
+before the server binds.
 
 Security implications:
 - Your dataset is **not uploaded** to cellucid.com by this mechanism.
-- Your environment does need outbound HTTPS access to cellucid.com (at least once, unless cached).
+- Every viewer-serving startup needs outbound access to its configured
+  `web_source_url`; an existing generation directory is not an offline
+  substitute.
 
 ## Authentication and integrity
 
@@ -48,10 +52,12 @@ This avoids relying on strict `postMessage` origin allowlisting, which is brittl
 ### Iframe → Python events (`/_cellucid/events`)
 
 - Events are HTTP POSTs to the local server.
-- The server routes by `viewerId`.
-- There is no per-event cryptographic auth token today; safety relies on:
-  - localhost binding by default, and
-  - CORS origin checks (see {doc}`13_security_cors_origins_and_mixed_content`).
+- Every event body must contain the exact `viewerId`, `viewerToken`, and event
+  `type`.
+- The server validates the per-viewer token before delivering the event once to
+  the registered callback.
+- Missing or incorrect credentials are rejected; see
+  {doc}`13_security_cors_origins_and_mixed_content` for the separate origin policy.
 
 ## High-risk configurations (avoid these unless you know what you’re doing)
 
@@ -78,7 +84,8 @@ On shared infrastructure, ensure:
 - Hooks events can contain:
   - selected cell indices,
   - hover/click indices,
-  - potentially other metadata if custom events are added.
+  - the exact ready and diagnostic fields documented in
+    {doc}`07_frontend_to_python_events`.
 - Session bundles can contain user-defined labels and highlight membership.
 
 Treat session bundles as sensitive data:
@@ -97,4 +104,3 @@ Treat session bundles as sensitive data:
 
 - CORS/origins/mixed-content: {doc}`13_security_cors_origins_and_mixed_content`
 - Troubleshooting: {doc}`14_troubleshooting_hooks`
-

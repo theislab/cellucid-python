@@ -17,7 +17,11 @@ Cellucid supports multiple “paths” from data → interactive viewer. The mai
 
 ```python
 from cellucid import show_anndata
-viewer = show_anndata("data.h5ad")  # or a zarr path, or an in-memory AnnData
+viewer = show_anndata(
+    "data.h5ad",
+    dataset_name="Example",
+    dataset_id="example",
+)
 ```
 
 Good for:
@@ -33,7 +37,13 @@ Tradeoffs:
 ```python
 from cellucid import prepare, show
 
-prepare(..., out_dir="./my_export")
+prepare(
+    ...,
+    out_dir="./my_export",
+    dataset_name="Example",
+    dataset_id="example",
+    obs_categorical_dtype="uint16",
+)
 viewer = show("./my_export")
 ```
 
@@ -80,7 +90,8 @@ Notebook iframe / browser tab  ◀────────────  Cellucid
 
 **What happens:**
 1) Python starts a `CellucidServer` that serves the export folder over HTTP.
-2) The browser loads the Cellucid web app UI from the same server (hosted-asset proxy cache).
+2) Before binding, Python establishes the exact source web generation; the
+   browser then loads it from the same server.
 3) The web app fetches `points_2d.bin(.gz)` / `obs_manifest.json` / expression binaries, etc.
 4) Interactions (selection/hover/click) can be sent back to Python via `/_cellucid/events`.
 
@@ -163,7 +174,7 @@ What happens:
 1) Python sends a `requestSessionBundle` command to the iframe (postMessage).
 2) The web app serializes the current session state into bytes (`.cellucid-session`).
 3) The web app uploads those bytes to:
-   `/_cellucid/session_bundle?viewerId=...&requestId=...`
+   `/_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
 4) The server streams the upload to a temporary file and notifies Python.
 5) Python returns a `CellucidSessionBundle(Path(...))`.
 
@@ -187,77 +198,19 @@ See: {doc}`04_dataset_identity_and_reproducibility`.
 
 ---
 
-## Screenshot placeholders (optional but helpful)
-
-### Screenshot 1: server banner (terminal)
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-data-flow-server-banner
-Suggested filename: data_loading/python-server-banner.png
-Where it appears: Python Package → Concepts & Mental Models → Data flows → CLI / standalone server
-Capture:
-  - UI location: terminal window
-  - State prerequisites: a server started via `cellucid serve ...` or `python -c 'from cellucid import serve; serve(...)'`
-  - Action to reach state: run `cellucid serve ./my_export --port 8765 --no-browser`
-Crop:
-  - Include: the printed Local URL + Viewer URL lines (these anchor the mental model)
-  - Exclude: usernames, machine names, private paths
-Redact:
-  - Remove: dataset names/paths if sensitive
-Annotations:
-  - Callouts: #1 Local URL (server), #2 Viewer URL (web app entry point)
-Alt text:
-  - Terminal output showing Cellucid server running with local and viewer URLs.
-Caption:
-  - The Python server hosts both the dataset and the viewer UI entry point; you open the viewer URL in a browser.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for a Cellucid server banner in a terminal.
-:width: 100%
-
-The server banner prints both the dataset server URL and the viewer URL you open in a browser.
-```
-
-### Screenshot 2: web app loading from a local server
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-data-flow-viewer-loaded-from-local-server
-Suggested filename: data_loading/viewer-loaded-from-localhost.png
-Where it appears: Python Package → Concepts & Mental Models → Data flows → Notebook/CLI modes
-Capture:
-  - UI location: browser (or notebook iframe)
-  - State prerequisites: viewer loaded successfully from `http://127.0.0.1:<port>/`
-  - Action to reach state: open `viewer.viewer_url` or the CLI-printed viewer URL
-Crop:
-  - Include: the viewer canvas + any dataset name/point count indicator if present
-  - Exclude: browser bookmarks, personal profile icons, private dataset IDs
-Redact:
-  - Remove: any sensitive dataset identifiers
-Annotations:
-  - Callouts: #1 viewer URL bar (localhost), #2 dataset loaded indicator
-Alt text:
-  - Cellucid viewer open in a browser and connected to a local Python server.
-Caption:
-  - The Cellucid web app UI runs in the browser while the dataset is served by the local Python server.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for Cellucid loaded from a local Python server.
-:width: 100%
-
-The viewer UI runs in the browser while the dataset is streamed from the local Python server.
-```
-
----
-
 ## Edge cases (common confusion points)
 
 ### “Is my data being uploaded to cellucid.com?”
 
-In notebook/server modes, the dataset is served from your Python process. The viewer UI assets may be downloaded once and cached (see {doc}`06_privacy_security_and_offline_vs_online`), but your dataset is not uploaded by default.
+In notebook/server modes, the dataset is served from your Python process. Each
+viewer-serving startup downloads and verifies the configured web generation
+(see {doc}`06_privacy_security_and_offline_vs_online`), but your dataset is not
+uploaded by default.
 
 ### “Why do I see `127.0.0.1:8765` instead of `https://cellucid.com`?”
 
-To avoid mixed-content and cross-origin issues, the Python server serves the viewer UI from the same origin as the dataset (via a hosted-asset proxy + cache).
+To avoid cross-origin issues, the Python server serves the exact verified
+viewer generation from the same origin as the dataset.
 
 ### “Why do events contain indices instead of cell IDs?”
 
@@ -268,18 +221,20 @@ Treat index order as part of dataset identity (see {doc}`04_dataset_identity_and
 
 ## Troubleshooting
 
-### Symptom: “The notebook viewer says proxy required / mixed-content blocked”
+### Symptom: “The notebook iframe is blank / mixed-content blocked”
 
 Likely causes:
 - Your notebook page is served from HTTPS (JupyterHub, Colab, remote), but the viewer tries to load `http://127.0.0.1:<port>`.
 
 How to confirm:
-- The embedded iframe shows a message about installing `jupyter-server-proxy`, or the browser console shows “mixed content” errors.
+- The browser console shows a mixed-content or connection error, and
+  `viewer.viewer_url` is not reachable from the browser.
 
 Fix options:
-1) Install/enable `jupyter-server-proxy` in that environment (recommended).
-2) Use SSH port forwarding if your kernel is remote.
-3) Set `CELLUCID_CLIENT_SERVER_URL` to an HTTPS-reachable server URL if you have one.
+1) Configure an HTTPS route for one fixed Cellucid port, or use SSH port
+   forwarding if the kernel is remote.
+2) Pass that browser-reachable server base as `client_server_url=` when
+   constructing the viewer.
 
 ### Symptom: “Hooks never fire”
 
@@ -302,4 +257,5 @@ Fix:
 
 - Understand persistence: {doc}`03_state_persistence_and_scope`
 - Understand identity/reproducibility: {doc}`04_dataset_identity_and_reproducibility`
-- Understand privacy/offline: {doc}`06_privacy_security_and_offline_vs_online`
+- Understand privacy/network requirements:
+  {doc}`06_privacy_security_and_offline_vs_online`

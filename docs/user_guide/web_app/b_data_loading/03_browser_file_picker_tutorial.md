@@ -3,9 +3,9 @@
 This tutorial covers the **browser-only** ways to load data into Cellucid.
 
 You will use the Cellucid web UI to pick one of:
-- a **pre-exported folder** (recommended)
+- a **prepared export folder**
 - a **`.h5ad` file** (works, but has hard limits)
-- a **`.zarr` directory** (often better than `.h5ad` in the browser)
+- a portable **`.zarr.zip` or `.zip` archive** containing one Zarr v2 store
 
 If your dataset is large or you want maximum reliability/performance, use **Server Mode** ({doc}`04_server_tutorial`).
 
@@ -16,15 +16,16 @@ If your dataset is large or you want maximum reliability/performance, use **Serv
 - Computational users: pay attention to the `.h5ad` vs `.zarr` limitations and when to pre-export.
 
 **Time**
-- Export folder picker: ~2–5 minutes
-- `.h5ad` / `.zarr` picker: ~5–10 minutes
+- Prepared folder picker: ~2–5 minutes
+- `.h5ad` / Zarr ZIP picker: ~5–10 minutes
 
 **Prerequisites**
-- A modern desktop browser (Chrome/Edge/Firefox recommended)
+- A current stable desktop release of Chrome, Edge, Firefox, or Safari with
+  WebGL2 and `DecompressionStream('gzip')`
 - A dataset in one of these forms:
   - exported folder from `prepare()`
   - `.h5ad`
-  - `.zarr` directory
+  - `.zarr.zip` or `.zip` containing one complete AnnData Zarr v2 store
 
 **Privacy model**
 - File picker modes load data from your computer into your browser.
@@ -35,9 +36,9 @@ If your dataset is large or you want maximum reliability/performance, use **Serv
 1) Open Cellucid: https://www.cellucid.com
 2) In the left sidebar, find the data loading area (often labeled **Dataset Connections** or **Browse local data…**).
 3) Choose the button matching what you have:
-   - **Folder** (pre-exported folder) — recommended
-   - **.h5ad** — small datasets only
-   - **.zarr** — often better than `.h5ad`
+   - **Prepared** — a folder created by `prepare()`
+   - **H5AD** — one current-schema `.h5ad`, no larger than 512 MiB
+   - **Zarr ZIP** — one `.zarr.zip` or `.zip` archive
 4) Wait for the dataset to load.
 5) Confirm success:
    - you see points rendered in the canvas
@@ -45,34 +46,14 @@ If your dataset is large or you want maximum reliability/performance, use **Serv
 
 If you don’t see points after loading, jump to the troubleshooting section at the end.
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: data-loading-file-picker-entry-point
-Suggested filename: data_loading/06_file-picker-buttons.png
-Where it appears: Data Loading → 03_browser_file_picker_tutorial → Fast Path
-Capture:
-  - UI location: left sidebar → the three file picker buttons (folder / h5ad / zarr)
-  - State prerequisites: Cellucid open; no dataset loaded
-  - Action to reach state: open Cellucid in a new tab
-Crop:
-  - Include: the file picker buttons + any short explanatory text
-  - Exclude: browser chrome and personal info
-Redact:
-  - Remove: any private dataset names
-Annotations:
-  - Callouts: #1 folder picker, #2 h5ad picker, #3 zarr picker
-Alt text:
-  - Data loading panel with buttons for folder, h5ad, and zarr.
-Caption:
-  - Tell readers which button to click depending on their file type.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the browser file picker buttons.
+```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
+:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
 :width: 100%
 
-Use the folder/h5ad/zarr buttons to load data directly from your computer.
+The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```
 
-## Option #3 — Load a Pre-exported Folder (Recommended)
+## Option #3 — Load a Prepared Export Folder
 
 ### When to use this
 - You (or a collaborator) already ran `cellucid.prepare(...)` in Python.
@@ -85,7 +66,7 @@ Exported folders are designed for the viewer:
 - the browser avoids loading a massive monolithic file
 
 ### What you click
-Click the **Folder** / **Browse folder…** button and select the export directory.
+Click **Prepared** and select the export directory.
 
 ### What success looks like
 - Points appear quickly.
@@ -97,28 +78,11 @@ Click the **Folder** / **Browse folder…** button and select the export directo
 - If the overlay toggle is disabled or the dropdown is empty, it usually means the dataset has no vectors for the current dimension (2D vs 3D) or they weren’t exported.
 - See {doc}`../i_vector_field_velocity/index`.
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: data-loading-export-folder-success
-Suggested filename: data_loading/07_export-folder-success.png
-Where it appears: Data Loading → 03_browser_file_picker_tutorial → Option #3
-Capture:
-  - UI location: left sidebar + canvas
-  - State prerequisites: exported folder loaded successfully
-  - Action to reach state: select an exported folder with the folder picker
-Crop:
-  - Include: dataset name, point count (if shown), one visible embedding, and the field selector
-Redact:
-  - Remove: private dataset ID/name if needed
-Alt text:
-  - Loaded embedding with a populated field selector.
-Caption:
-  - Describe the minimum indicators that confirm a successful load.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for a successful exported-folder load.
+```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
+:alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
 :width: 100%
 
-After selecting an exported folder, you should see points and a populated field selector.
+A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
 ```
 
 ## Option #4 — Load a `.h5ad` File Directly (Quick Preview)
@@ -141,7 +105,7 @@ Practical consequence:
 Use server mode (recommended):
 
 ```bash
-cellucid serve /path/to/data.h5ad
+cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
 Then open:
@@ -154,9 +118,12 @@ http://127.0.0.1:8765/
 
 Your `.h5ad` must include at least one embedding:
 
-- `obsm['X_umap_3d']` with shape `(n_cells, 3)` (recommended)
+- `obsm['X_umap_1d']` with shape `(n_cells, 1)`
 - `obsm['X_umap_2d']` with shape `(n_cells, 2)`
-- `obsm['X_umap']` with shape `(n_cells, 2 or 3)`
+- `obsm['X_umap_3d']` with shape `(n_cells, 3)`
+
+The key is part of the data contract: Cellucid does not infer the dimension
+from an unsuffixed key or from the array shape.
 
 Optional (but highly recommended):
 - `obs` columns for coloring and filtering
@@ -167,30 +134,42 @@ Optional (if you want the vector field / velocity overlay):
 - Per-cell vectors in `obsm` using the naming convention `<field>_umap_<dim>d` (e.g. `velocity_umap_2d`, `velocity_umap_3d`).
 - The overlay dropdown shows fields available for the current dimension only.
 
-## Option #5 — Load a `.zarr` Directory Directly
+## Option #5 — Load a Zarr ZIP Archive Directly
 
 ### When to use this
-- You have a `.zarr` export of AnnData and want browser-only viewing.
-- You want better “chunked” behavior than `.h5ad`.
+- You have a complete AnnData Zarr v2 store packaged as `.zarr.zip` or `.zip`.
+- You want a portable single-file selection in any supported browser.
 
 ### Practical expectations
-- The browser may still need to read a fair amount of metadata up front.
-- Gene expression can often be fetched more lazily (chunk-by-chunk).
+- Cellucid validates the ZIP directory and Zarr metadata before adopting the
+  dataset.
+- Gene expression is read by Zarr chunk on demand.
+- Archive entries, decoded chunks, and the active embedding still consume
+  browser memory and are bounded by the documented reader limits.
 
-If your `.zarr` is extremely large, server mode is still the most reliable.
+For an extremely large store, prefer a prepared Cellucid export. Python server
+mode loads `.zarr` eagerly, so use it only when the store fits server memory.
 
-Vector fields are supported in `.zarr` as well (same convention as `.h5ad`): store them in `obsm` as `velocity_umap_2d`, `T_fwd_umap_3d`, etc.
+The archive may contain the Zarr store at its root or inside exactly one root
+directory. It must preserve dotfiles such as `.zgroup`, `.zattrs`, and
+`.zarray`. Vector fields use the same exact `obsm` convention as H5AD:
+`velocity_umap_2d`, `T_fwd_umap_3d`, and other
+`<field>_umap_<dim>d` keys.
 
 ## Common Failure Modes (and Why They Happen)
 
 ### “It worked for a demo dataset but not my data”
 - Your file is missing required embeddings.
 - Your `.h5ad` is too large for browser memory.
-- Your `.zarr` directory is incomplete (missing `.zgroup`, `.zattrs`, etc.).
+- Your Zarr ZIP is incomplete, contains multiple roots, or omits required
+  `.zgroup`, `.zattrs`, or `.zarray` entries.
 
 ### “The file picker won’t let me select a folder”
-- Some browsers restrict directory selection.
-- Workaround: use server mode.
+- The **Prepared** control accepts directories only; H5AD and Zarr ZIP accept
+  one file.
+- In an embedded or managed browser, directory access may be disabled by the
+  embedding policy. Open the standalone Cellucid page or choose the explicit
+  Python server workflow.
 
 ### “It loads but fields are empty”
 - `obs` is empty or not written correctly.
@@ -205,12 +184,16 @@ Vector fields are supported in `.zarr` as well (same convention as `.h5ad`): sto
 - Vector fields exist but are not named using the expected `*_umap_2d` / `*_umap_3d` convention.
 - You’re in 3D but only 2D vectors exist (or vice versa).
 
-## Edge Cases (Browser-Specific)
+## Browser and file-selection boundaries
 
-- **Safari limitations**: directory picking and File System Access APIs vary by version.
+- **Prepared** uses the directory-input capability available in supported
+  current desktop browsers.
+- **H5AD** and **Zarr ZIP** use ordinary single-file inputs and have the same
+  validation contract in Chrome, Edge, Firefox, and Safari.
 - **Permission prompts**: if you deny folder access, Cellucid cannot read files.
 - **Large `.h5ad`**: the browser loads the whole file; memory spikes are normal.
-- **Nested `.zarr`**: some tools create nested stores; ensure you select the correct root.
+- **Zarr ZIP root**: the archive must contain either root metadata at archive
+  root or exactly one wrapper directory around the Zarr store.
 
 ## Troubleshooting (Massive)
 
@@ -221,17 +204,18 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 ### Symptom: “I clicked Folder, but nothing happens”
 
 **Likely causes (ordered)**
-1) Your browser blocked the directory picker.
+1) You denied directory access or a managed-browser policy blocked it.
 2) The UI is open in an embedded context that disallows directory access.
-3) You clicked the wrong button (e.g. `.h5ad` picker for an export folder).
+3) You clicked H5AD or Zarr ZIP instead of **Prepared**.
 
 **How to confirm**
-- Try a different browser (Chrome is the most reliable for folder access).
+- Open Cellucid as a standalone page and click **Prepared**.
 - Try selecting a different folder (a very small test export).
 
 **Fix**
-- Switch to Chrome/Edge.
-- If you cannot use folder picking, run server mode instead ({doc}`04_server_tutorial`).
+- Allow directory access and use the standalone page.
+- If directory input is disabled by organizational policy, choose server mode
+  explicitly ({doc}`04_server_tutorial`).
 
 ---
 
@@ -245,7 +229,8 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 - Watch the browser tab’s memory usage.
 
 **Fix**
-- Use server mode: `cellucid serve data.h5ad`.
+- Use server mode:
+  `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`.
 - Or export once with `prepare()` and load the export folder.
 
 ---
@@ -253,7 +238,8 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 ### Symptom: “It says no embedding / no UMAP”
 
 **Likely causes**
-- Missing `obsm['X_umap']` / `X_umap_2d` / `X_umap_3d`.
+- None of the exact supported keys—`obsm['X_umap_1d']`,
+  `obsm['X_umap_2d']`, or `obsm['X_umap_3d']`—is present.
 
 **How to confirm**
 - In Python:
@@ -263,19 +249,24 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
   ```
 
 **Fix**
+- Store each embedding under the key matching its exact column count. For
+  example, a two-column UMAP belongs at `obsm['X_umap_2d']`.
 - Compute UMAP and store it under one of the supported keys.
 
 ---
 
-### Symptom: “Zarr directory selected, but it errors immediately”
+### Symptom: “Zarr ZIP selected, but it errors immediately”
 
 **Likely causes**
-- The directory is not a valid AnnData zarr store.
-- Missing `.zgroup` / `.zattrs`.
+- The archive does not contain exactly one valid AnnData Zarr v2 store.
+- Required `.zgroup`, `.zattrs`, or `.zarray` entries are missing.
+- The ZIP is encrypted, multi-disk, uses an unsupported compression method, or
+  exceeds a reader limit.
 
 **Fix**
 - Re-export with `adata.write_zarr("data.zarr")`.
-- Ensure you selected the top-level `.zarr` directory.
+- Package the complete store while preserving its dotfiles, then select the
+  resulting `.zarr.zip` or `.zip` file with **Zarr ZIP**.
 
 ---
 

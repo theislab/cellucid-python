@@ -68,6 +68,8 @@ Restored early so you see the correct view quickly:
 - **Camera state**
   - camera position/orbit target/navigation mode
   - locked cameras (shared camera) vs unlocked cameras (per view)
+  - Camera Path keyframes and timing for the matching dataset
+  - restored Camera Paths remain stopped until the user selects **Play**
 - **Dimension levels**
   - which dimension (1D/2D/3D) is active per view
 - **Views / snapshots**
@@ -243,5 +245,4 @@ If any part is wrong, jump to {doc}`10_troubleshooting_sessions`.
 ## Next steps
 
 - {doc}`03_save_restore_ux` (how to use Save State / Load State safely)
-- {doc}`04_auto_restore_latest_from_dataset_exports` (how sessions can auto-load from an export folder)
-- {doc}`12_reference` (chunk inventory, `state-snapshots.json` schema, and implementation notes)
+- {doc}`12_reference` (chunk inventory and implementation notes)

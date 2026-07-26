@@ -48,14 +48,16 @@ The manifests record the correct suffixes. The viewer should follow manifests.
 
 **Likely causes**
 - gene identifiers in `var` aren’t what you expect (`rownames(var)` missing)
-- filename sanitization collisions (older exports), or manual overwrites/renames (current `cellucid-r` rejects collisions)
+- unsafe or case-insensitively colliding identifiers, or manual edits after a
+  current export
 
 **How to confirm**
 - inspect `var_manifest.json` and compare the gene IDs listed to what you expect.
 
 **Fix**
 - set `rownames(var)` or `var_gene_id_column` explicitly
-- ensure gene IDs are unique after sanitization
+- ensure gene IDs are exact portable components and unique under
+  case-insensitive comparison
 
 ## Symptom: “GitHub connect says `datasets.json not found`”
 

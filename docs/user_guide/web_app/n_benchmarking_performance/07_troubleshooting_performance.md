@@ -40,7 +40,9 @@ What to do earlier to avoid this next time.
 - Make the window smaller. If it becomes smoother immediately, you’re pixel/GPU-bound.
 - Clear snapshots (go to single view). If it becomes smoother immediately, you’re view/GPU-bound.
 - Disable overlays/smoke. If it becomes smoother immediately, you’re GPU-bound.
-- Check `chrome://gpu` (Chrome/Edge) or `about:support` (Firefox) to confirm WebGL2 is hardware-accelerated.
+- In the browser console, confirm
+  `document.createElement("canvas").getContext("webgl2") !== null`; then use
+  the browser's graphics diagnostics to confirm hardware acceleration.
 
 ### Fix
 1) Reduce **views**: clear snapshots; keep 1–3 views.
@@ -48,7 +50,8 @@ What to do earlier to avoid this next time.
 3) Use **Points** mode (avoid smoke except intentionally).
 4) If using vector overlays: reduce density and disable bloom first.  
    See {doc}`../i_vector_field_velocity/05_performance_and_quality`.
-5) If you still see low FPS on moderate datasets: try another browser (Chrome/Edge) and update GPU drivers.
+5) If you still see low FPS on moderate datasets, update the browser,
+   operating system, and GPU driver when applicable.
 
 ### Prevention
 - Keep a “laptop-safe preset” (points mode, few views, no heavy overlays).
@@ -159,8 +162,8 @@ Related docs:
    - disable overlays or reduce density/bloom,
    - smaller window.
 3) If it still happens on moderate datasets:
-   - try a different browser (Chrome/Edge),
-   - update GPU drivers/OS.
+   - confirm hardware acceleration and WebGL2 are enabled,
+   - update the browser, operating system, and GPU driver when applicable.
 
 ### Prevention
 - Keep a conservative default preset for laptops and workshops.
@@ -219,12 +222,14 @@ Related docs:
 4) Browser extension/policy interference.
 
 ### How to confirm
-- Compare WebGL2 diagnostics (`chrome://gpu` or `about:support`).
-- Run the synthetic benchmark (if available) with the same preset and compare FPS.  
-  See {doc}`05_benchmark_tools_if_exposed`.
+- Compare the browser-neutral WebGL2 console check and the browser's graphics
+  diagnostics on both machines.
+- Run the synthetic benchmark with the same preset and compare FPS.
+  See {doc}`05_benchmark_tools`.
 
 ### Fix
-- Use a recommended browser (Chrome/Edge) with hardware acceleration.
+- Enable hardware acceleration in the current stable Chrome, Edge, Firefox, or
+  Safari release.
 - Update drivers/OS on the slow machine.
 - Use a lighter export/workflow for weaker machines.
 
@@ -242,50 +247,3 @@ Go to {doc}`09_reporting_performance_bugs` and include:
 - dataset size and loading method,
 - hardware/browser,
 - and at least one number (TTFR, FPS, or filter apply time).
-
----
-
-## Screenshot placeholders (you will replace later)
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: performance-context-lost-overlay
-Suggested filename: benchmarking_performance/70_context-lost.png
-Where it appears: User Guide → Web App → Benchmarking and Performance → 07_troubleshooting_performance.md
-Capture:
-  - Trigger a real “WebGL context lost” overlay (if it happens naturally)
-  - Include the reload button/message
-Crop:
-  - Crop to the overlay; exclude personal browser chrome
-Redact:
-  - Remove: private dataset identifiers
-Alt text:
-  - Overlay indicating the WebGL context was lost and the page must be reloaded.
-Caption:
-  - WebGL context loss typically indicates GPU memory pressure; reduce views and quality settings after reloading.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for WebGL context lost in performance troubleshooting.
-:width: 100%
-
-WebGL context loss typically indicates GPU memory pressure; reduce views and quality settings after reloading.
-```
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: performance-filter-live-off
-Suggested filename: benchmarking_performance/71_live-filtering-off.png
-Where it appears: User Guide → Web App → Benchmarking and Performance → 07_troubleshooting_performance.md
-Capture:
-  - A continuous field selected
-  - Live filtering turned OFF so FILTER is enabled
-  - Optional: show the dataset is large enough that Live filtering would stutter
-Alt text:
-  - Continuous filtering controls with Live filtering turned off and the FILTER button enabled.
-Caption:
-  - Turning Live filtering off avoids repeated recomputation; use FILTER to apply the range once on large datasets.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for Live filtering off as a performance fix.
-:width: 100%
-
-Turning Live filtering off avoids repeated recomputation; use FILTER to apply the range once on large datasets.
-```

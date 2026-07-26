@@ -25,7 +25,6 @@ Use these consistently and document them the same way:
 | `KeyError` | missing key in mapping (`adata.obsm`, manifest, chunk id) | missing key + where it was searched |
 | `FileNotFoundError` | missing file/dir path | the resolved path |
 | `TimeoutError` | waiting for UI/event too long | which event + how long waited |
-| `NotImplementedError` | reserved feature (e.g., 4D embeddings) | what is not implemented + what to use instead |
 | `RuntimeError` | unexpected runtime failure (e.g., session capture returned error) | short reason + next action |
 
 For CLI:
@@ -47,7 +46,8 @@ Example (shape mismatch):
 - “`X_umap_2d` must have exactly 2 columns, got 3. Shape is (10000, 3).”
 
 Example (missing key):
-- “Missing embedding in `obsm`: `X_umap_3d` (or `X_umap`).”
+- “Declare one or more exact embedding keys in `obsm`: `X_umap_1d`,
+  `X_umap_2d`, or `X_umap_3d`.”
 
 ---
 
@@ -58,7 +58,7 @@ Example (missing key):
 Document these explicitly:
 - missing embeddings (`X_umap_1d/2d/3d`)
 - mismatched `n_cells` across inputs (`obs`, embeddings, `gene_expression`, `latent_space`)
-- unsupported dimensions (`X_umap_4d`)
+- embedding keys whose suffix and column count disagree
 - NaN/Inf handling in continuous quantization
 - “export folder huge / slow export” performance guidance
 
@@ -69,7 +69,7 @@ Where documented:
 
 Document:
 - “viewer does not appear” (notebook context / iframe restrictions)
-- “browser cannot reach localhost” (proxy required)
+- “browser cannot reach localhost” (explicit proxy or tunnel required)
 - “events not arriving” (viewer not ready / wrong viewer id / blocked POST)
 - session capture timeouts
 
@@ -81,7 +81,7 @@ Where documented:
 Document:
 - port collisions
 - remote server access confusion (localhost vs remote)
-- viewer UI proxy/cache failures
+- configured viewer-source generation failures
 
 Where documented:
 - {doc}`api/server`, {doc}`api/cli`
@@ -92,7 +92,7 @@ Document:
 - invalid magic header (wrong file)
 - invalid/oversized manifest
 - decompression limits (zip-bomb protection)
-- dataset fingerprint mismatch policies
+- exact dataset fingerprint mismatch rejection
 
 Where documented:
 - {doc}`api/sessions`
@@ -124,7 +124,8 @@ How to avoid it next time (data conventions, naming, recommended workflow).
 
 When the failure is a common user mistake, the message should also mention:
 - the most common fix path (e.g., “export with `prepare(...)` for better performance”)
-- any relevant constraints (e.g., “Cellucid supports 1D/2D/3D embeddings; 4D is reserved”)
+- any relevant constraints (for example, “Cellucid supports 1D, 2D, and 3D
+  embeddings”)
 
 When the failure is a security boundary (sessions, server exposure):
 - clearly state the risk and safe alternative (e.g., SSH tunnel instead of binding `0.0.0.0`)

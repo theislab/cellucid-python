@@ -21,7 +21,7 @@ The safest default is almost always: **keep Cellucid bound to `127.0.0.1` on the
 On the remote machine (SSH session):
 
 ```bash
-cellucid serve /path/to/data.h5ad --no-browser
+cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset --no-browser
 ```
 
 Keep it bound to `127.0.0.1` (default).
@@ -56,7 +56,7 @@ If the server prints a different port (or you set one):
 
 ```bash
 # Remote
-cellucid serve /path/to/data.h5ad --port 9000 --no-browser
+cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset --port 9000 --no-browser
 ```
 
 ```bash
@@ -89,7 +89,8 @@ Notebook embedding can fail for two common reasons:
 
 Best fixes:
 
-- enable `jupyter-server-proxy` so the iframe URL becomes HTTPS and browser-reachable (recommended)
+- configure a browser-reachable HTTPS route for one fixed Cellucid port and
+  pass its exact base as `client_server_url=`
 - or open the viewer in a separate tab using an SSH tunnel (works everywhere)
 
 Deep dive: {doc}`10_notebook_widget_mode_advanced`.
@@ -114,4 +115,5 @@ Binding to `0.0.0.0` exposes the dataset server to the network that can reach it
 ## Troubleshooting
 
 - If the page won’t load at `http://127.0.0.1:<port>/`, start with `/_cellucid/health` and `/_cellucid/info` (see {doc}`15_troubleshooting_viewing`).
-- If you’re in a notebook and see “proxy required”, see {doc}`10_notebook_widget_mode_advanced`.
+- If a notebook iframe is blank, mixed-content blocked, or unable to reach
+  loopback, see {doc}`10_notebook_widget_mode_advanced`.

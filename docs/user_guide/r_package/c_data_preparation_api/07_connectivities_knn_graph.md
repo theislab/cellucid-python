@@ -18,37 +18,53 @@ In the Cellucid ecosystem, this is typically a KNN/SNN graph derived from:
 - input can be:
   - a base R `matrix`, or
   - a `Matrix::Matrix` sparse matrix (recommended)
-- the `Matrix` package must be installed to export connectivities
+- values must be real numeric or logical, finite, and non-negative
+- topology and weights must be exactly symmetric
+- every diagonal value must be exactly `0`
+- the `Matrix` package must be installed when the input is sparse
+- sparse matrices must not contain stored zero entries or duplicate
+  coordinates
 
 ```{note}
 If you do not need connectivity features, skip this entirely. Exports load fine without it.
 ```
 
-## What `cellucid-r` does with the matrix
+## Exact exported representation
 
-The exporter turns your connectivity matrix into an **undirected, unweighted edge list**:
+Cellucid validates the graph without changing it. It does not symmetrize,
+binarize, discard weights, coalesce coordinates, remove self-edges, or
+otherwise reinterpret scientific input. Asymmetric, directed, negative,
+non-finite, nonzero-diagonal, sparse-stored-zero, and duplicate-coordinate
+graphs fail before graph artifacts are written. Logical `TRUE` is the explicit
+unit edge and is written as the exact Float64 weight `1.0`.
 
-1) Converts to a sparse matrix (if needed).
-2) Symmetrizes: `conn_sym = conn + t(conn)`.
-3) Binarizes: any non-zero becomes `1`.
-4) Extracts edges and keeps only unique undirected pairs (`src < dst`).
-5) Writes two parallel arrays:
+For a valid graph, the exporter:
+
+1) extracts each undirected edge once from the upper triangle (`src < dst`);
+2) sorts the pairs lexicographically;
+3) writes three aligned arrays:
    - `edges.src.bin`
    - `edges.dst.bin`
+   - `edges.weights.f64.bin`
 
 Indices are **zero-based** in the binary files.
+Weights are exact little-endian Float64 values.
+A valid graph with no edges remains present and reports `n_edges: 0` and
+`max_neighbors: 0`; all three payloads are zero length.
 
 ## Output files
 
 - `connectivity_manifest.json`
 - `connectivity/edges.src.bin` (or `.gz`)
 - `connectivity/edges.dst.bin` (or `.gz`)
+- `connectivity/edges.weights.f64.bin` (or `.gz`)
 
 The manifest records:
 - `n_cells`
 - `n_edges`
-- `max_neighbors` (max degree after symmetrization)
-- `index_dtype` / `index_bytes` (`uint16`, `uint32`, or `uint64` depending on `n_cells`)
+- `max_neighbors` (maximum degree in the validated graph)
+- `index_dtype` / `index_bytes` (`uint16` or `uint32`)
+- `weightsPath`, `weight_dtype: "float64"`, and `weight_bytes: 8`
 
 ## Index dtype and dataset size limits
 
@@ -56,9 +72,13 @@ Cell indices are stored using the smallest unsigned integer that fits:
 
 | `n_cells` | dtype |
 |---:|---|
-| ≤ 65,535 | `uint16` |
-| ≤ 4,294,967,295 | `uint32` |
-| larger | `uint64` |
+| 1–65,536 | `uint16` |
+| 65,537–4,294,967,296 | `uint32` |
+| larger | rejected; no current `uint64` graph format |
+
+R matrices have lower practical dimension and memory limits than the format's
+mathematical `uint32` ceiling. Prefer sparse matrices and use server-backed
+loading when a graph exceeds the browser working-set limit.
 
 ## Practical recipes (where to get a graph)
 
@@ -89,11 +109,18 @@ If you can obtain an adjacency matrix `conn` with shape `(n_cells, n_cells)`, yo
 
 ### Directed or asymmetric graphs
 
-Export always symmetrizes. If you pass a directed graph, the output becomes undirected.
+Rejected. Construct and review the intended symmetric weighted graph explicitly
+before calling `cellucid_prepare()`.
 
 ### Weighted graphs
 
-Weights are discarded (non-zero becomes 1). If you need weights for analysis, keep them elsewhere.
+Accepted when weights are finite, non-negative, exactly symmetric, and exactly
+representable as Float64. They are preserved in the aligned weight payload.
+
+### Self-edges, negative values, or non-finite values
+
+Rejected. The diagonal must be exactly zero and every value must be finite and
+non-negative.
 
 ### Dense matrices
 

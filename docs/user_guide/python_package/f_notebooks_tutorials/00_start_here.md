@@ -20,7 +20,8 @@ It is intentionally written for **mixed audiences** and uses “layered” writi
 
 `cellucid-annotation` is a separate repo for community annotation workflows.
 
-`cellucid-r` is planned but not fully ready; these tutorials focus on Python.
+`cellucid-r` provides the R export workflow. These tutorials focus on Python
+servers, notebook embedding, hooks, and Python-side preparation.
 
 ## At a glance
 
@@ -56,7 +57,8 @@ When you call `show(...)` or `show_anndata(...)` in a notebook, Cellucid does tw
 If “nothing shows up”, it’s almost always one of these:
 - the server didn’t start (exception, port conflict)
 - the browser can’t reach the server (remote kernel without proxy/tunnel)
-- the viewer UI assets aren’t available (first run offline, cache problems, blocked network)
+- the exact viewer generation could not be established from its configured
+  source
 
 ## Install (minimal)
 
@@ -70,16 +72,19 @@ If you plan to follow the workflows using `AnnData`, install the common ecosyste
 `pip install anndata scanpy`
 ```
 
-## Network requirement (important, especially for first run)
+## Network requirement
 
-Cellucid’s viewer UI assets are served via a **hosted-asset proxy**. On first run (or after the web app updates), the package may fetch the UI from:
+At every viewer/server startup, the package fetches the exact web generation
+declared by:
 - `https://www.cellucid.com`
 
-Those assets are cached locally and then served from your local server so the iframe and dataset API share the same origin (avoids mixed-content problems).
+It downloads every inventory object to a staging directory, verifies the full
+file set, MIME types, byte lengths, hashes, and build identity, then publishes
+that generation atomically. The local server serves it from the same origin as
+the dataset API. Source or verification failure stops startup; a previous
+generation is not substituted.
 
-If you are offline and you have no cached UI, the iframe will show an error page with next steps.
-
-For details (cache directory, clearing cache, corporate environments), see:
+For details (generation directory, source configuration, and firewalls), see:
 - {doc}`../../web_app/b_data_loading/05_jupyter_tutorial`
 
 ## How to run these tutorials
@@ -106,39 +111,14 @@ The docs site does not execute notebooks during the build (`nb_execution_mode = 
 
 If your kernel runs on a remote machine but your browser is on your laptop, you need a browser-reachable URL for the Python server:
 - Jupyter Server Proxy (recommended in JupyterHub/remote Jupyter)
-- Colab proxy (automatic in Colab)
+- Colab’s proxy URL (obtain it explicitly)
 - SSH port forwarding (classic HPC)
 
-This is covered in:
+In every remote case, pass the resulting browser-reachable HTTP(S) base as
+`client_server_url=`. This is covered in:
 - {doc}`22_large_dataset_server_mode_and_lazy_gene_expression`
 
-## What “success” looks like (screenshot you can add later)
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-notebooks-start-here-viewer-visible
-Suggested filename: data_loading/00_notebook-embed-viewer-visible.png
-Where it appears: User Guide → Python Package → Notebooks/Tutorials → 00_start_here.md
-Capture:
-  - UI location: a notebook output cell with an embedded Cellucid iframe
-  - State prerequisites: a viewer is displayed and finished loading; sidebar is visible
-  - Action to reach state: run a minimal `show_anndata(...)` cell in a notebook
-Crop:
-  - Include: enough of the notebook UI to show this is an output cell
-  - Include: the viewer canvas + left sidebar + dataset name / point count area (if shown)
-  - Exclude: personal file paths, usernames, tokens, unrelated notebook cells
-Redact:
-  - Remove: any private dataset name/path (use a demo dataset name if needed)
-Alt text:
-  - Jupyter notebook output cell showing an embedded Cellucid viewer with the left sidebar visible.
-Caption:
-  - A successful notebook embed shows an interactive Cellucid viewer iframe; this confirms both the Python server and the viewer UI assets loaded correctly.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for a successful Cellucid notebook embed.
-:width: 100%
-
-A successful notebook embed shows an interactive Cellucid viewer iframe (canvas + sidebar).
-```
+## What success looks like
 
 ## Troubleshooting (quick triage)
 
@@ -162,15 +142,17 @@ report
 
 This report is designed to answer:
 - “Did the server respond?”
-- “Does the web UI cache exist?”
+- “Is the local web generation exact and complete?”
 - “Are frontend→Python events arriving?”
 
 ### 3) Most common fixes (in order)
 
-1) **Port conflict** → pick a fixed port you know is free.
-2) **Web UI cache** → clear/rebuild the cache and retry.
-3) **Remote kernel** → use a proxy (or SSH tunnel).
-4) **Corporate network** → allowlist `cellucid.com` or prefetch the UI cache.
+1) **Port conflict** → choose another explicit port, or use `port=0` in Python.
+2) **Web generation** → correct the reported source, inventory, object, or
+   destination failure.
+3) **Remote kernel** → expose the port, then pass its exact base as
+   `client_server_url=`.
+4) **Corporate network** → allow access to the configured viewer source.
 
 ## Next steps
 

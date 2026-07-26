@@ -1,248 +1,192 @@
 # Frontend → Python events
 
-This page documents what the embedded Cellucid viewer can send back to Python, and how to consume those events safely.
+The embedded viewer sends one of seven closed event records to Python. The
+browser posts JSON to `POST /_cellucid/events`; the server authenticates
+`viewerId` and `viewerToken`, removes the token, and dispatches the record to
+the matching viewer.
 
-Under the hood:
-- the iframe sends JSON to `POST /_cellucid/events`
-- the Python server routes the event by `viewerId`
-- the viewer triggers callbacks registered via `@viewer.on_*`
+## Hook entry points
 
-## At a glance
-
-**Audience**
-- Wet lab / beginner: use `@viewer.on_selection` and print the size.
-- Computational users: read payload schemas + edge cases.
-- Developers: read delivery semantics + `/_cellucid/events` details in {doc}`05_architecture_message_routing_http_vs_postmessage`.
-
-## Supported hooks (Python API)
-
-All hooks are decorators attached to the `viewer` object:
+Use the event-specific decorators for interaction events:
 
 ```python
 @viewer.on_selection
-def handle(event):
-    ...
-```
+def handle_selection(event):
+    print(event["cells"], event["source"])
 
-Supported decorators:
-- `@viewer.on_ready`
-- `@viewer.on_selection`
-- `@viewer.on_hover`
-- `@viewer.on_click`
-- `@viewer.on_message` (fires for *all* event types; best for debugging and custom events)
+@viewer.on_hover
+def handle_hover(event):
+    print(event["cell"], event["position"])
 
-## Event catalog (what the viewer can emit)
+@viewer.on_click
+def handle_click(event):
+    print(event["cell"], event["button"])
 
-### `ready`
-
-Fires when the viewer has finished wiring notebook integration and the UI is ready.
-
-Payload (typical):
-
-```python
-{
-  "n_cells": 12345,
-  "dimensions": 3
-}
-```
-
-Register:
-
-```python
 @viewer.on_ready
-def on_ready(event):
-    print("Ready:", event)
+def handle_ready(event):
+    print(event["n_cells"], event["dimensions"])
 ```
+
+`@viewer.on_message` receives every accepted event in a common envelope:
+
+```python
+@viewer.on_message
+def handle_current_event(event):
+    print(event["event"], event)
+```
+
+The envelope contains `event` plus the exact payload fields below. Routing
+fields are never exposed to hook code.
+
+## Closed event catalog
+
+Unknown event types and every record with missing or undeclared fields are
+rejected before any hook runs.
+Integers are native, non-negative JSON integers; booleans are native JSON
+booleans.
 
 ### `selection`
 
-Fires when the user completes a selection step (lasso, KNN, proximity, annotation selection, etc.).
-
-Payload (typical):
-
-```python
-{
-  "cells": [0, 10, 42, ...],   # 0-based row indices
-  "source": "lasso"           # e.g. "lasso", "knn", "proximity", "annotation", "click", ...
-}
-```
-
-Register:
-
-```python
-@viewer.on_selection
-def on_selection(event):
-    cells = event.get("cells", [])
-    print("Selected:", len(cells), "source:", event.get("source"))
-```
-
-### `hover`
-
-Fires when the user hovers a cell (debounced/throttled).
-
-Payload (typical):
-
-```python
-{
-  "cell": 123,                     # int or None when not hovering a cell
-  "position": {"x": 0.1, "y": 0.2, "z": -0.3}  # may be null in some contexts
-}
-```
-
-Register:
-
-```python
-@viewer.on_hover
-def on_hover(event):
-    cell = event.get("cell")
-    if cell is None:
-        return
-    print("Hover:", cell)
-```
-
-### `click`
-
-Fires when the user clicks on a cell.
-
-Payload (typical):
-
-```python
-{
-  "cell": 123,
-  "button": 0,     # 0=left, 1=middle, 2=right
-  "shift": False,
-  "ctrl": False    # ctrl/cmd
-}
-```
-
-Register:
-
-```python
-@viewer.on_click
-def on_click(event):
-    print("Clicked cell:", event.get("cell"))
-```
-
-### `console` (debugging)
-
-Best-effort forwarding of frontend warnings/errors to Python (used by `viewer.debug_connection()`).
-
-Payload (typical):
-
-```python
-{
-  "level": "warn" | "error",
-  "message": "...",
-  "ts": "2026-01-01T12:34:56.789Z",
-  # optional: filename/lineno/colno for window.onerror
-}
-```
-
-Consume via `@viewer.on_message` if you want:
-
-```python
-@viewer.on_message
-def debug_all(event):
-    if event.get("event") == "console":
-        print(event)
-```
-
-### `session_bundle` (no-download session capture)
-
-Emitted when the viewer uploads a session bundle for `viewer.get_session_bundle()`.
-
-Payload (typical):
-
-```python
-{
-  "requestId": "...",
-  "status": "ok" | "error",
-  "bytes": 123456,     # on success
-  "path": "/tmp/....cellucid-session",  # on success (server temp path)
-  "error": "..."       # on error
-}
-```
-
-See:
-- {doc}`10_session_bundles_get_session_bundle`
-
-### `pong` and `debug_snapshot` (diagnostics)
-
-Emitted in response to `viewer.debug_connection()` probes.
-
-These are primarily for debugging, but you can also hook them if you want:
-
-```python
-@viewer.on_message
-def on_any(event):
-    if event.get("event") in {"pong", "debug_snapshot"}:
-        print(event)
-```
-
-### Custom event types
-
-The frontend can send arbitrary events. Any event with at least:
+Posted record:
 
 ```json
 {
-  "type": "<something>",
-  "viewerId": "<id>"
+  "type": "selection",
+  "viewerId": "<viewer-id>",
+  "viewerToken": "<viewer-token>",
+  "cells": [0, 10, 42],
+  "source": "lasso"
 }
 ```
 
-will be routed to:
-- `@viewer.on_message` (always), and
-- `viewer.wait_for_event("<something>")` (if you use the synchronous API).
-
-## How `@viewer.on_message` differs from other hooks
-
-For any event type `X`, the message hook receives:
+Hook payload:
 
 ```python
-{"event": "X", **payload_without_type_and_viewerId}
+{"cells": [0, 10, 42], "source": "lasso"}
 ```
 
-Whereas `@viewer.on_selection` receives only the selection payload.
+`cells` contains unique row indices. `source` is one exact non-empty token.
 
-This makes `@viewer.on_message` ideal for:
-- debugging (“show me everything”)
-- handling custom events without changing the Python package
+### `hover`
 
-## Delivery semantics (important in real notebooks)
+Posted record:
 
-### Transport
-- Events are **HTTP POST** requests from the iframe to `/_cellucid/events`.
-- The frontend sends events as “fire-and-forget” (errors are not surfaced to the UI by default).
+```json
+{
+  "type": "hover",
+  "viewerId": "<viewer-id>",
+  "viewerToken": "<viewer-token>",
+  "cell": 42,
+  "position": {"x": 0.1, "y": 0.2, "z": -0.3}
+}
+```
 
-### Size limits
-The Python server currently enforces a **1MB request limit** for `/_cellucid/events`.
+`cell` and `position` are both `null` when no cell is hovered. A non-null
+position contains exactly finite `x`, `y`, and `z` numbers.
 
-Implications:
-- Very large selections (hundreds of thousands of indices) can exceed the limit and will be rejected.
-- In that situation, prefer higher-level workflows (e.g. exporting highlight groups via session bundles) or reduce event payload size.
+### `click`
 
-### Hover frequency
-Hover is throttled/debounced to avoid flooding Python.
-Treat hover callbacks as **best-effort**, and keep them fast.
+Posted record:
 
-### Threading
-Hook callbacks can run on the server’s request-handling thread.
+```json
+{
+  "type": "click",
+  "viewerId": "<viewer-id>",
+  "viewerToken": "<viewer-token>",
+  "cell": 42,
+  "button": 0,
+  "shift": false,
+  "ctrl": true
+}
+```
 
-Rules of thumb:
-- keep callbacks quick,
-- catch exceptions,
-- do heavy work outside the callback (see {doc}`08_writing_robust_callbacks`).
+`button` is exactly `0`, `1`, or `2`.
+
+### `ready`
+
+Posted record:
+
+```json
+{
+  "type": "ready",
+  "viewerId": "<viewer-id>",
+  "viewerToken": "<viewer-token>",
+  "n_cells": 12345,
+  "dimensions": 2
+}
+```
+
+`dimensions` is exactly `1`, `2`, or `3`.
+
+### `pong`
+
+`pong` is the response to the internal `ping` diagnostic:
+
+```python
+{"requestId": "exact-request-id", "t": 1722000000000}
+```
+
+### `debug_snapshot`
+
+`debug_snapshot` reports the iframe environment for
+`viewer.debug_connection()`:
+
+```python
+{
+    "requestId": "exact-request-id",
+    "ts": "2026-07-26T12:00:00.000Z",
+    "locationHref": "https://viewer.example/?jupyter=true",
+    "origin": "https://viewer.example",
+    "serverUrl": "https://notebook.example/cellucid",
+    "connected": True,
+    "parentOrigin": "https://notebook.example",
+    "userAgent": "Browser identification",
+}
+```
+
+`userAgent` may be `None`; every other field is required.
+
+### `session_bundle`
+
+This record is generated by the Python upload endpoint after it has validated,
+stored, authenticated, and consumed one pending bundle request:
+
+```python
+{
+    "requestId": "exact-request-id",
+    "status": "ok",
+    "bytes": 123456,
+    "path": "/temporary/path/session.cellucid-session",
+}
+```
+
+There is no error-shaped event. An invalid upload is rejected by the HTTP
+endpoint and does not dispatch a hook.
+
+## Delivery and failure semantics
+
+- The endpoint accepts at most 1 MiB of UTF-8 JSON.
+- The viewer ID must be registered and the token must match.
+- The event name, full field set, and every payload value are validated before
+  hook dispatch.
+- `@viewer.on_message` handlers run before the event-specific handlers.
+- If any hook raises, the event is not published to `viewer.state`, event
+  waiters are not notified, and the HTTP request returns a callback failure.
+- A successful hook sequence is recorded once and wakes
+  `viewer.wait_for_event(...)`.
+
+Hook callbacks run on the server request thread. Keep them short and move
+expensive analysis out of the callback path.
 
 ## Troubleshooting
 
-- “No events arrive” → {doc}`14_troubleshooting_hooks`
-- Run:
-  ```python
-  viewer.debug_connection()
-  ```
+If no event arrives:
 
-## Next steps
+1. Run `viewer.debug_connection()`.
+2. Confirm `server_health`, `frontend_roundtrip`, and
+   `frontend_debug_snapshot`.
+3. Check the browser network panel for `POST /_cellucid/events`.
+4. Confirm the notebook still owns the displayed viewer; stop stale viewers
+   with `viewer.stop()`.
 
-- Writing robust callbacks: {doc}`08_writing_robust_callbacks`
-- Viewer state + waiting: {doc}`09_viewer_state_and_wait_for_event`
-- Full schemas and endpoints: {doc}`16_reference`
+See {doc}`14_troubleshooting_hooks` for the full diagnostic sequence.

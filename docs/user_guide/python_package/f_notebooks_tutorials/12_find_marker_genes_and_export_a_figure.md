@@ -133,14 +133,20 @@ Common situations:
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata(adata, height=650, gene_id_column="gene_symbols")
+viewer = show_anndata(
+    adata,
+    height=650,
+    gene_id_column="gene_symbols",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 viewer
 ```
 
 ```{important}
-Gene IDs must be stable and (ideally) unique. If you have duplicates:
-- decide which ID to keep (or disambiguate)
-- do not assume the viewer will “guess the right one”
+Gene IDs must be stable, unique, and valid portable filename components.
+Direct AnnData viewing and export reject duplicates and filename collisions.
+Choose one identifier or disambiguate it before constructing the viewer.
 ```
 
 ---
@@ -159,30 +165,7 @@ This tutorial does not assume a specific UI layout for the field selector (it ev
 - {doc}`../../web_app/d_fields_coloring_legends/index`
 ```
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-notebooks-marker-gene-coloring
-Suggested filename: web_app/01_gene-search-color-by-expression.png
-Where it appears: User Guide → Python Package → Notebooks/Tutorials → 12_find_marker_genes_and_export_a_figure.md
-Capture:
-  - UI location: field selector (gene search) + legend visible
-  - State prerequisites: dataset loaded; a marker gene is selected as the active field
-  - Action to reach state: search for a known marker gene and select it
-Crop:
-  - Include: search box + selected gene + legend showing expression range
-  - Include: enough canvas to show the expression pattern over the embedding
-Redact:
-  - Remove: private dataset name/sample IDs
-Alt text:
-  - Gene search field used to select a marker gene, with cells colored by expression.
-Caption:
-  - Color by a marker gene to validate that it is enriched where you expect (and to catch gene-ID mismatches early).
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for coloring by gene expression in the viewer.
-:width: 100%
 
-Gene search and selection to color the embedding by marker-gene expression.
-```
 
 ---
 
@@ -201,31 +184,6 @@ Exporting figures is a web-app feature. In the viewer:
 
 For a complete figure-export walkthrough (including edge cases), see:
 - {doc}`../../web_app/k_figure_export/index`
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-notebooks-figure-export-panel
-Suggested filename: figure_export/00_export-panel-with-settings.png
-Where it appears: User Guide → Python Package → Notebooks/Tutorials → 12_find_marker_genes_and_export_a_figure.md
-Capture:
-  - UI location: Figure Export panel
-  - State prerequisites: a gene is selected as active field; legend visible; export panel open
-  - Action to reach state: open export panel and select a common export mode (SVG or PNG)
-Crop:
-  - Include: export panel settings + a small portion of the canvas to orient the reader
-  - Include: any warning dialog if present (e.g. “SVG may be large”)
-Redact:
-  - Remove: file paths/usernames
-Alt text:
-  - Figure Export panel open with format and size options visible.
-Caption:
-  - Use Figure Export to create a shareable PNG or an editable SVG; confirm legends and color scales before exporting.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Figure Export panel.
-:width: 100%
-
-Figure Export panel open with format settings (PNG/SVG) and the current view preview.
-```
 
 ---
 

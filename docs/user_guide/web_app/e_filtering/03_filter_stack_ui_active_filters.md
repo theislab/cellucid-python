@@ -105,29 +105,13 @@ If you’re in grid mode, click the view/snapshot you care about first, then che
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: filtering-active-filters-stack
-Suggested filename: filtering/02_active-filters-stack.png
-Where it appears: User Guide → Web App → Filtering → 03_filter_stack_ui_active_filters.md
-Capture:
-  - UI location: left sidebar → Active filters
-  - State prerequisites: at least 2 filters applied, with one disabled
-  - Action to reach state: apply an outlier filter + a categorical hide filter, then disable one
-Crop:
-  - Include: entire Active filters list + visible count summary
-  - Include: enough canvas to show the filtered point cloud
-Alt text:
-  - Active filters panel showing multiple stacked filters, with one disabled.
-Caption:
-  - Demonstrate stacked filters and how disable differs from remove.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Active filters stack.
+```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
+:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
 :width: 100%
 
-The Active filters panel shows every filter currently affecting visibility; disable a filter to test its effect before removing it.
+Selecting a categorical observation field colors the embedding and exposes its complete category legend.
 ```
 
 ---

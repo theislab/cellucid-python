@@ -77,28 +77,11 @@ In the legend you can typically:
 
 Categorical fields can also expose **centroids** (category centers) if present or computed.
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: fields-types-categorical-legend-example
-Suggested filename: web_app/fields_legends/02_categorical-legend-example.png
-Where it appears: User Guide → Web App → Fields, Coloring, and Legends → 01_field_types_and_sources.md
-Capture:
-  - Select a categorical obs field with at least ~8 categories (e.g., clusters)
-  - Ensure the legend shows: checkboxes, swatches, category names, and counts
-  - Optional: enable “Show centroids” and “Show labels” so readers see what centroids mean
-Crop:
-  - Include: Display options box + a small portion of the point cloud
-Annotations:
-  - Call out: category checkbox, color swatch, category label, per-category cell count, (optional) centroid toggles
-Alt text:
-  - Categorical legend with per-category checkboxes and color swatches.
-Caption:
-  - State that categorical legends are for discrete labels and support category-level editing and visibility filtering.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for a categorical legend example.
+```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
+:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
 :width: 100%
 
-Categorical fields produce a checkbox-based legend where you can hide/show categories and edit category colors and labels.
+Selecting a categorical observation field colors the embedding and exposes its complete category legend.
 ```
 
 ### Continuous fields
@@ -113,30 +96,6 @@ In the legend you can typically:
 - optionally enable **log scale** for coloring,
 - adjust the **visible range** with sliders (filtering),
 - optionally rescale the colorbar to match your slider range.
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: fields-types-continuous-legend-example
-Suggested filename: web_app/fields_legends/03_continuous-legend-example.png
-Where it appears: User Guide → Web App → Fields, Coloring, and Legends → 01_field_types_and_sources.md
-Capture:
-  - Select a continuous obs field with a wide dynamic range (or select a gene)
-  - Ensure the legend shows: color scale header, gradient bar, log toggle, rescale toggle, min/max sliders
-  - Optional: open the colormap menu (so readers see it exists)
-Crop:
-  - Include: Display options box + a small portion of the colored point cloud
-Annotations:
-  - Call out: gradient bar (colormap picker), colorbar min/max labels, log toggle, rescale toggle, range sliders
-Alt text:
-  - Continuous legend showing a colorbar, palette picker, and min/max range sliders.
-Caption:
-  - Explain that continuous legends control both coloring (palette/scale) and filtering (visible numeric range).
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for a continuous legend example.
-:width: 100%
-
-Continuous fields produce a colorbar-based legend where you control the palette, scale, and visible numeric range.
-```
 
 ---
 

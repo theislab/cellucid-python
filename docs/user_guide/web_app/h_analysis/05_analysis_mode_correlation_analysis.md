@@ -80,13 +80,15 @@ Minimum size:
 Cellucid computes (per page):
 - `r` (correlation coefficient)
 - `r²`
-- `p-value` (t-distribution approximation using `n-2` degrees of freedom)
+- `p-value` (two-sided Student t distribution using `n-2` degrees of freedom)
 - `n` (number of paired values used)
 - `slope` and `intercept` for the trend line (linear regression)
 
 :::{important}
 The p-value is per page and is not multiple-testing corrected.
 If you run many correlations (many variable pairs, many pages), do not treat “p < 0.05” as a global discovery threshold.
+
+For analysis-wide scope and assumptions, see {doc}`01_analysis_mental_model`.
 :::
 
 ---
@@ -184,28 +186,13 @@ Fix:
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: analysis-correlation-success
-Suggested filename: analysis/12_correlation-success.png
-Where it appears: User Guide → Web App → Analysis → 05_analysis_mode_correlation_analysis.md
-Capture:
-  - UI location: Analysis → Correlation, expanded/modal view preferred
-  - State prerequisites: pick X and Y variables with non-trivial variance; pick at least one page
-  - Action to reach state: set X/Y → pick pages → (optional) set Color by → open expanded plot view
-Crop:
-  - Include: X/Y selectors + correlation plot + displayed r/p-value (if visible) + legend
-Alt text:
-  - Correlation mode showing a scatter plot of two variables with trend line and correlation statistics.
-Caption:
-  - Correlation compares X vs Y within each selected page using paired values only; plot points may be downsampled, but statistics use all paired data.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for Correlation mode success state.
+```{figure} ../../../_static/screenshots/analysis/correlation-results.png
+:alt: Correlation analysis configured for two continuous observation fields with a scatter plot.
 :width: 100%
 
-Correlation compares X vs Y within each selected page using paired values only; plot points may be downsampled, but statistics use all paired data.
+Correlation analysis plots two continuous observation fields for the selected cells and reports the computed relationship.
 ```
 
 ---

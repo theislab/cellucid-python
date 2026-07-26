@@ -229,30 +229,13 @@ If you hit these repeatedly, treat it as a data preparation issue:
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: performance-knobs-overview
-Suggested filename: benchmarking_performance/02_performance-knobs-overview.png
-Where it appears: User Guide → Web App → Benchmarking and Performance → 02_performance_considerations_what_gets_slow_and_why.md
-Capture:
-  - UI location: show the most relevant “performance knobs” in a single screenshot (or two)
-  - Include: Visualization → renderer settings (LOD), render mode, and an example of Live filtering toggle + FILTER button
-  - Include: at least one visible snapshot indicator (so view count is tangible)
-Crop:
-  - Include: enough left sidebar to see the knobs + enough canvas to see multiple views
-Redact:
-  - Remove: private dataset identifiers
-Alt text:
-  - Left sidebar showing performance-related knobs such as render mode, LOD, and Live filtering controls.
-Caption:
-  - Most performance issues can be fixed by reducing views, reducing pixels, lowering GPU-heavy modes, or avoiding repeated filter recomputation.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for performance-related knobs overview.
+```{figure} ../../../_static/screenshots/benchmarking_performance/benchmark-panel.png
+:alt: Performance Benchmark panel showing synthetic-data controls and live renderer metrics.
 :width: 100%
 
-Most performance issues can be fixed by reducing views, reducing pixels, lowering GPU-heavy modes, or avoiding repeated filter recomputation.
+The Performance Benchmark panel reports points, FPS, frame time, GPU memory estimate, LOD level, visible points, and timing distribution.
 ```
 
 ---

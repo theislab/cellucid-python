@@ -29,7 +29,12 @@ If you are running Cellucid in a notebook for the first time, read {doc}`00_star
 from cellucid import show_anndata
 
 # adata = ...  # your AnnData
-viewer = show_anndata(adata, height=650)
+viewer = show_anndata(
+    adata,
+    height=650,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 viewer
 ```
 

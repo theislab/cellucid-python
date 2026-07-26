@@ -7,17 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-01-01
+## [0.0.9] - 2026-01-01
 
 This release graduates Cellucid Python out of alpha (still pre-1.0).
 
 ### Added
 
 - AnnData-first viewing and serving with `.h5ad` and `.zarr` support (lazy/backed loading where possible).
-- Unified `cellucid serve` CLI with auto-detection for `.h5ad`, `.zarr`, and pre-exported dataset directories.
+- Unified CLI serving with auto-detection for AnnData files, Zarr stores, and
+  pre-exported dataset directories.
 - Jupyter notebook integration (`CellucidViewer`, `AnnDataViewer`, `show()`, `show_anndata()`) with event hooks and session export.
 - Session bundle support (`.cellucid-session`) including `CellucidSessionBundle` and `apply_cellucid_session_to_anndata()` for round-tripping highlights and user-defined fields back into AnnData.
-- Multi-dimensional embedding exports (1D/2D/3D/4D) and vector-field overlays (RNA velocity / drift) via `prepare()` and `vector_fields` helpers.
+- Multi-dimensional embedding exports (1D/2D/3D) and vector-field overlays (RNA velocity / drift) via `prepare()` and `vector_fields` helpers.
 - Hosted web UI proxy mode with on-disk caching helpers (`get_web_cache_dir()`, `clear_web_cache()`).
 
 ### Changed
@@ -51,6 +52,6 @@ This release graduates Cellucid Python out of alpha (still pre-1.0).
   - Jupyter integration (`show()`, `show_anndata()`)
 - Export functionality for web deployment
 
-[Unreleased]: https://github.com/theislab/cellucid-python/compare/v0.9.0...HEAD
-[0.9.0]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.0
+[Unreleased]: https://github.com/theislab/cellucid-python/compare/v0.0.9...HEAD
+[0.0.9]: https://github.com/theislab/cellucid-python/releases/tag/v0.0.9
 [0.0.1a2]: https://github.com/theislab/cellucid-python/releases/tag/v0.0.1a2

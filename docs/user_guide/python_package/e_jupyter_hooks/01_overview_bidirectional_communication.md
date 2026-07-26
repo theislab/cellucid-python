@@ -42,7 +42,7 @@ Once you have a `viewer` (from `show_anndata(...)` or `show(...)`), you can:
   - `@viewer.on_selection`: user selects cells
   - `@viewer.on_hover`: user hovers cells (debounced)
   - `@viewer.on_click`: user clicks a cell
-  - `@viewer.on_message`: raw debugging stream (all event types)
+  - `@viewer.on_message`: one envelope stream for all seven current event types
 
 - **Pull durable state (session bundles)**
   - `bundle = viewer.get_session_bundle()` (no browser download required)
@@ -58,7 +58,11 @@ When you run:
 
 ```python
 from cellucid import show_anndata
-viewer = show_anndata(adata)
+viewer = show_anndata(
+    adata,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 ```
 
 Cellucid:
@@ -91,7 +95,8 @@ The Python server routes that JSON event to the right `viewer` instance using `v
 If you want to trace the implementation:
 
 - Python: `cellucid-python/src/cellucid/jupyter.py` (viewer classes + hook registry)
-- Python: `cellucid-python/src/cellucid/_server_base.py` (`/_cellucid/events`, session bundle upload, hosted-asset proxy)
+- Python: `cellucid-python/src/cellucid/_server_base.py` (`/_cellucid/events`,
+  session bundle upload, verified web-generation delivery)
 - Web app: `cellucid/assets/js/data/jupyter-source.js` (JupyterBridgeDataSource; message handling + event POST)
 - Web app: `cellucid/assets/js/app/main.js` (wires session bundle capture + ready event)
 
@@ -99,17 +104,21 @@ If you want to trace the implementation:
 
 If your notebook is served on **HTTPS** (common on JupyterHub), browsers may block iframes that try to load an **HTTP loopback** server directly.
 
-Cellucid handles this by preferring a notebook proxy URL when available (see {doc}`13_security_cors_origins_and_mixed_content` and {doc}`03_supported_environments_matrix`):
-- **Jupyter Server Proxy** (`.../proxy/<port>/...`) for JupyterHub / many hosted setups
-- **Colab port proxy** for Google Colab
-- Manual override: `CELLUCID_CLIENT_SERVER_URL` (advanced)
+Cellucid uses exactly the `client_server_url=` argument when one is supplied;
+otherwise it uses the bound server URL. It does not infer or probe a proxy.
+For Jupyter Server Proxy, Colab, or another reverse proxy, obtain the exact
+browser-reachable HTTP(S) base URL and pass it to `show(...)`,
+`show_anndata(...)`, or the viewer constructor. See
+{doc}`13_security_cors_origins_and_mixed_content` and
+{doc}`03_supported_environments_matrix`.
 
 ## Edge cases (high-level)
 
 - Multiple viewers: each viewer has a unique `viewerId`; events route by ID.
 - Large selections: sending huge index lists back and forth can be slow.
 - Backed AnnData (`.h5ad` backed mode): be careful with thread-safety in callbacks.
-- Offline environments: first-time UI asset download may fail without a cached copy (see troubleshooting).
+- Source-restricted environments: viewer/server startup fails directly when it
+  cannot establish the configured exact UI generation.
 
 ## Troubleshooting (jump table)
 
@@ -124,5 +133,4 @@ Cellucid handles this by preferring a notebook proxy URL when available (see {do
 - Commands (Python → viewer): {doc}`06_python_to_frontend_commands`
 - Events (viewer → Python): {doc}`07_frontend_to_python_events`
 - Robust callback patterns: {doc}`08_writing_robust_callbacks`
-- Full reference (schemas + env vars): {doc}`16_reference`
-
+- Full reference (schemas + connectivity arguments): {doc}`16_reference`

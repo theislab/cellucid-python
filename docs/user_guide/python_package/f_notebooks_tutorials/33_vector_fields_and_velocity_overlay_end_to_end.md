@@ -57,12 +57,12 @@ The vector field must be aligned to:
 ## Step 1 — Confirm your embedding
 
 Common embedding keys:
-- `adata.obsm["X_umap"]` (often 2D)
+- `adata.obsm["X_umap_2d"]` (explicit 2D)
 - `adata.obsm["X_umap_3d"]` (explicit 3D)
 
 ```python
 print(list(adata.obsm.keys()))
-X = adata.obsm["X_umap"]
+X = adata.obsm["X_umap_2d"]
 X.shape
 ```
 
@@ -72,16 +72,21 @@ X.shape
 
 Cellucid detects vector fields using a naming convention:
 
-**Explicit (recommended, clash-safe):**
+**Required:**
 - `<field>_umap_2d`  (shape `(n_cells, 2)`)
 - `<field>_umap_3d`  (shape `(n_cells, 3)`)
 
-**Implicit (allowed):**
-- `<field>_umap`  (shape `(n_cells, 2)` or `(n_cells, 3)`)
+Unsuffixed keys such as `<field>_umap` are not vector-field declarations.
 
 Examples:
 - `velocity_umap_2d`
 - `T_fwd_umap_2d` (forward drift)
+
+If the AnnData object contains more than one field ID, the direct-viewing APIs
+require `vector_field_default` to name the initial field exactly. For example,
+an object containing both example keys above needs
+`vector_field_default="velocity"`. Omitting it, or naming an unavailable
+field, raises `ValueError`.
 
 ---
 
@@ -128,7 +133,6 @@ key = add_transition_drift_to_obsm(
     basis="umap",
     field_prefix="T_fwd",
     dim=2,                     # set to 3 for 3D, or leave None to infer
-    explicit_dim_suffix=True,  # recommended
     normalize_rows=True,
     overwrite=False,
 )
@@ -145,7 +149,17 @@ print("Wrote vector field:", key)
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata(adata, height=650)
+# This tutorial's Option A stores "velocity"; Option B stores "T_fwd".
+# Name the exact field you stored.
+default_vector_field = "velocity"
+
+viewer = show_anndata(
+    adata,
+    height=650,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    vector_field_default=default_vector_field,
+)
 viewer
 ```
 
@@ -169,13 +183,16 @@ vector_fields = {
 }
 
 prepare(
+    latent_space=adata.obsm["X_pca"],
     obs=adata.obs,
     var=adata.var,
     gene_expression=adata.X,
-    X_umap_2d=adata.obsm["X_umap"],
+    X_umap_2d=adata.obsm["X_umap_2d"],
     vector_fields=vector_fields,
     out_dir="exports/my_dataset_with_vectors",
+    dataset_name="My dataset with vectors",
     dataset_id="my_dataset_with_vectors",
+    obs_categorical_dtype="uint16",
     compression=6,
     var_quantization=8,
 )
@@ -191,30 +208,13 @@ viewer
 
 ---
 
-## Screenshot placeholders (optional but helpful)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-notebooks-vector-field-overlay-enabled
-Suggested filename: vector_field_velocity/00_overlay-enabled.png
-Where it appears: User Guide → Python Package → Notebooks/Tutorials → 33_vector_fields_and_velocity_overlay_end_to_end.md
-Capture:
-  - UI location: vector field/velocity overlay panel + embedding canvas
-  - State prerequisites: dataset loaded; vector overlay enabled; arrows/flow visible
-  - Action to reach state: select a vector field and enable the overlay
-Crop:
-  - Include: overlay settings panel (field selector + scale) and enough canvas to see vectors
-Redact:
-  - Remove: private dataset name/sample IDs
-Alt text:
-  - Vector field overlay enabled in the Cellucid viewer with arrows visible over the embedding.
-Caption:
-  - The velocity/vector overlay visualizes per-cell displacement vectors in embedding space; if the overlay is blank, the field is usually missing or mismatched in dimension/order.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for a vector field overlay enabled.
+```{figure} ../../../_static/screenshots/vector_field_velocity/overlay-controls.png
+:alt: A synthetic 2D dataset with the Vector Field Overlay enabled and animated particle-flow controls visible.
 :width: 100%
 
-Vector field overlay enabled (arrows/flow visible over the embedding).
+A current-format 2D vector field rendered as particle flow with its field, density, speed, trail, size, opacity, palette, and LOD controls visible.
 ```
 
 ---
@@ -227,7 +227,7 @@ If your embedding is 2D but vectors are 3D (or vice versa), the overlay will fai
 
 Confirm:
 ```python
-X = adata.obsm["X_umap"]
+X = adata.obsm["X_umap_2d"]
 V = adata.obsm["T_fwd_umap_2d"]
 print("X:", X.shape, "V:", V.shape)
 ```
@@ -239,7 +239,7 @@ If vectors were computed on a different cell ordering than the embedding:
 
 Best practice:
 - always compute vectors on the same `adata` object (same row order)
-- avoid reindexing between computing `X_umap` and computing `V`
+- avoid reindexing between computing `X_umap_2d` and computing `V`
 
 ### 3) Scale mismatch (overlay looks “too strong” or “invisible”)
 

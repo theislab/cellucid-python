@@ -16,7 +16,7 @@ This section is the **canonical reference** for the public `cellucid` Python API
 | `AnnData` (in memory / `.h5ad` / `.zarr`) | The fastest “just show me” notebook view | {func}`~cellucid.show_anndata` |
 | Exported dataset directory | Notebook embedding | {func}`~cellucid.show` |
 | Exported dataset directory | Browser tab (local HTTP server) | {func}`~cellucid.serve` or `cellucid serve …` |
-| `.h5ad` / `.zarr` | Browser tab without exporting first | {func}`~cellucid.serve_anndata` or `cellucid serve …` |
+| `.h5ad` / `.zarr` | Browser tab without exporting first | {func}`~cellucid.serve_anndata` or the CLI with explicit `--dataset-name` and `--dataset-id` |
 | A session captured in the web app | Apply highlights/fields back onto `AnnData` | {class}`~cellucid.CellucidSessionBundle` + {func}`~cellucid.apply_cellucid_session_to_anndata` |
 | A transition matrix + embedding | Vector field overlay in Cellucid | {func}`~cellucid.compute_transition_drift` / {func}`~cellucid.add_transition_drift_to_obsm` |
 
@@ -80,7 +80,7 @@ Compute/store vector overlays (e.g., CellRank drift) for visualization.
 :link: cli
 :link-type: doc
 
-`cellucid serve` auto-detects `.h5ad`, `.zarr`, or exported directories.
+The CLI serve subcommand auto-detects direct AnnData input or exported directories.
 :::
 
 ::::

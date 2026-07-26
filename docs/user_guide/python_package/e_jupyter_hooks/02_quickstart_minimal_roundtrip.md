@@ -35,7 +35,12 @@ Run this in a notebook cell:
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata(adata, height=600)
+viewer = show_anndata(
+    adata,
+    height=600,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 viewer
 ```
 
@@ -46,33 +51,6 @@ from cellucid import show
 
 viewer = show("./exports/my_dataset", height=600)
 viewer
-```
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: jupyter-hooks-quickstart-viewer-visible
-Suggested filename: jupyter_hooks/01_quickstart-viewer-visible.png
-Where it appears: Python Package → Jupyter Hooks → Quickstart → Step 1
-Capture:
-  - UI location: notebook output cell (iframe embed)
-  - State prerequisites: the viewer loads successfully (no error page)
-  - Action to reach state: run the Step 1 cell and wait for the UI to render
-Crop:
-  - Include: the embedded viewer + a small amount of notebook context (so beginners recognize it’s “inside the notebook”)
-  - Exclude: personal paths, usernames, dataset identifiers if private
-Redact:
-  - Remove: any sensitive dataset name shown in the top-left title area (if present)
-Annotations:
-  - Callouts: #1 the viewer iframe, #2 the notebook cell that created `viewer`
-Alt text:
-  - Notebook cell output showing the Cellucid viewer embedded as an iframe.
-Caption:
-  - The Cellucid web app UI embedded inside a notebook; once it loads, Python can send commands and receive events.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Cellucid viewer embedded in a notebook output cell.
-:width: 100%
-
-Cellucid appears as an interactive iframe inside the notebook output.
 ```
 
 ## Step 2 — Wait until the viewer reports “ready”
@@ -111,7 +89,8 @@ print(f"Selected {len(cells)} cells (first 10):", cells[:10])
 ```{important}
 Cell indices are **0-based row indices** in the dataset that Cellucid is currently serving.
 
-- For `show_anndata(adata)`, indices refer to the current `adata` row order.
+- For a viewer constructed directly from `adata`, indices refer to that
+  object's current row order.
 - If you reorder/subset `adata` after creating the viewer, indices will no longer match what you expect.
 ```
 
@@ -126,34 +105,11 @@ if cells:
 
 You should see the selection become highlighted (exact visual style depends on the web app UI).
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: jupyter-hooks-quickstart-highlight-roundtrip
-Suggested filename: jupyter_hooks/02_quickstart-selection-highlight-roundtrip.png
-Where it appears: Python Package → Jupyter Hooks → Quickstart → Step 5
-Capture:
-  - UI location: embedded viewer
-  - State prerequisites: a visible selection exists, and `viewer.highlight_cells(...)` was run successfully
-  - Action to reach state:
-      1) select a distinct group of cells in the viewer (lasso)
-      2) run Step 4 to confirm Python received indices
-      3) run Step 5 to highlight them
-Crop:
-  - Include: enough of the viewer UI to show the highlighted points clearly, plus the legend/indicator if it changes
-  - Exclude: unrelated notebook cells, personal information
-Redact:
-  - Remove: private dataset names
-Annotations:
-  - Callouts: #1 the selected region, #2 highlighted points after roundtrip
-Alt text:
-  - Embedded viewer showing a group of cells highlighted after Python sends a highlight command.
-Caption:
-  - Round-trip sanity check: a selection event arrived in Python and the same indices were highlighted back in the viewer.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for a selection highlighted back in the viewer from Python.
+```{figure} ../../../_static/screenshots/highlighting_selection/highlighting-selected-page.png
+:alt: Highlighting panel showing a named page with highlighted cells.
 :width: 100%
 
-After Python receives selected indices, it can send a highlight command back to the viewer.
+Highlighted cells are stored on a named page that can be used by analysis and session workflows.
 ```
 
 ## Optional: “reactive” style with callbacks
@@ -181,7 +137,9 @@ See {doc}`08_writing_robust_callbacks`.
 
 - **Nothing prints in Step 4**: you haven’t made a selection that triggers a `selection` event yet.
 - **Selection indices don’t match your `adata`**: your AnnData row order changed after the viewer started.
-- **Viewer is blank or shows an error page**: you likely have a notebook proxy / mixed-content / offline UI cache issue (see troubleshooting).
+- **Viewer construction raises or the iframe is blank**: distinguish an exact
+  web-generation startup error from a browser URL/mixed-content problem (see
+  troubleshooting).
 
 ## Troubleshooting
 
@@ -201,4 +159,3 @@ Then use the symptom-based guide:
 - Events catalog (viewer → Python): {doc}`07_frontend_to_python_events`
 - Viewer state + waiting: {doc}`09_viewer_state_and_wait_for_event`
 - Session bundles (no-download): {doc}`10_session_bundles_get_session_bundle`
-

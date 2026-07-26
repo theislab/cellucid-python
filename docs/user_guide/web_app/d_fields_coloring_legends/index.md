@@ -29,33 +29,13 @@ Cellucid treats “coloring” and “filtering” as coupled:
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: fields-coloring-legends-panel-overview
-Suggested filename: web_app/fields_legends/01_coloring-filtering-panel-overview.png
-Where it appears: User Guide → Web App → Fields, Coloring, and Legends → index.md
-Capture:
-  - UI location: left sidebar → “Coloring & Filtering”
-  - State prerequisites: dataset loaded; pick a categorical obs field (so the categorical legend is visible)
-  - Include: the three field selectors (Categorical obs / Continuous obs / Gene Expression) and the Display options box with the legend
-  - Optional: also show the “Active filters” block underneath to hint that legend interactions create real filters
-Crop:
-  - Include: left sidebar from “Coloring & Filtering” down through “Active filters”
-  - Include: enough canvas to show the colored point cloud
-  - Exclude: any private dataset identifiers, file paths, browser profile UI
-Annotations:
-  - Call out: #1 Categorical obs selector, #2 Continuous obs selector, #3 Gene Expression search, #4 Display options (legend), #5 Active filters summary
-Alt text:
-  - The Coloring & Filtering panel with field selectors and a legend controlling how points are colored and filtered.
-Caption:
-  - Explain that the field selector chooses what “color-by” means, and the legend is where you interpret and adjust it.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Coloring & Filtering panel.
+```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
+:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
 :width: 100%
 
-The Coloring & Filtering panel is where you pick the active field (obs or gene expression) and use the legend to interpret and adjust coloring and filters.
+Selecting a categorical observation field colors the embedding and exposes its complete category legend.
 ```
 
 ---
@@ -67,7 +47,7 @@ The Coloring & Filtering panel is where you pick the active field (obs or gene e
 3) `d_fields_coloring_legends/03_color_by_behavior` (how colors and filters are computed)
 4) `d_fields_coloring_legends/04_legend_behavior` (what you can do inside the legend)
 5) `d_fields_coloring_legends/05_troubleshooting_fields_legends` (when colors/legends feel “wrong”)
-6) `d_fields_coloring_legends/06_screenshots` (checklist for screenshots you’ll add later)
+6) `d_fields_coloring_legends/06_screenshots` (verified interface captures)
 
 ---
 
@@ -111,11 +91,11 @@ All legend interactions: colormaps, log scale, range sliders, category colors, r
 Symptom → diagnosis → fix for missing fields, slow genes, “everything is gray”, and more.
 :::
 
-:::{grid-item-card} {octicon}`checklist;1.5em;sd-mr-1` Screenshots
+:::{grid-item-card} {octicon}`image;1.5em;sd-mr-1` Verified captures
 :link: 06_screenshots
 :link-type: doc
 
-Screenshot checklist with exact capture instructions and placeholder figures to replace.
+Current coloring and categorical-legend states captured from the running app.
 :::
 
 ::::

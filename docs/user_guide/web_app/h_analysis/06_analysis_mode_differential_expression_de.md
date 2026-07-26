@@ -77,13 +77,13 @@ Cellucid supports two statistical methods:
 - It compares the distribution of expression values between the two groups.
 
 Implementation notes:
-- For datasets with **≤ 5,000 cells total**, Cellucid computes U using an exact rank pass (sorting).
-- For datasets with **> 5,000 cells**, it uses a **histogram-based approximation** of U for performance.
-  - values are binned on a capped log1p scale,
-  - the number of bins is controlled by **Wilcoxon bins** in Performance Settings (default 128).
+- Cellucid computes the U statistic from a full, tie-aware rank pass over the two selected groups.
+- The U statistic is not histogram-binned or sampled.
+- The p-value is exact when both comparison groups contain fewer than 50 finite values and there are no ties.
+- Otherwise, the p-value uses the exact U statistic with a tie- and continuity-corrected asymptotic reference distribution.
 
 Practical implication:
-- on large datasets, Wilcoxon p-values are **approximate** (but designed to be stable and fast).
+- large groups retain the exact U statistic, but use asymptotic inference and can require substantially more compute time than Welch’s t-test.
 
 ### 2) t-test = Welch’s t-test
 
@@ -91,6 +91,8 @@ Practical implication:
 - Uses Welch’s formulation (does not assume equal variances).
 
 This can be faster than Wilcoxon on some datasets, but is less robust to heavy non-normality/outliers.
+
+For analysis-wide scope and assumptions, see {doc}`01_analysis_mental_model`.
 
 ---
 
@@ -178,7 +180,6 @@ Use **Performance Settings** (collapsible) to tune:
 - **Memory budget**: limits how many gene vectors can be in flight without crashing the browser.
 - **Network parallelism**: concurrent gene loads (relevant for server/remote loading).
 - **Compute parallelism**: number of concurrent genes computed (bounded by worker pool size and memory).
-- **Wilcoxon bins**: accuracy/speed tradeoff for approximate Wilcoxon on large datasets.
 
 Recommended workflow for very large datasets:
 - start with smaller pages (more targeted groups),
@@ -212,7 +213,7 @@ Fix:
 
 Likely causes:
 - huge dataset (n_cells) and/or many genes,
-- Wilcoxon exact/approx costs,
+- exact Wilcoxon ranking costs,
 - insufficient memory budget leading to throttling.
 
 How to confirm:
@@ -236,32 +237,6 @@ Fix:
 - lower log2FC threshold,
 - switch between adjusted and raw p-values to understand correction effects,
 - increase group sizes / fix page overlap.
-
----
-
-## Screenshot placeholder (you will replace later)
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: analysis-de-success
-Suggested filename: analysis/13_de-success.png
-Where it appears: User Guide → Web App → Analysis → 06_analysis_mode_differential_expression_de.md
-Capture:
-  - UI location: DE mode showing a volcano plot and a ranked gene table
-  - State prerequisites: two reasonably sized groups with clear marker differences
-  - Action to reach state: define two groups → Analysis → DE → run
-Crop:
-  - Include: group selectors + volcano plot + top of the gene table
-Alt text:
-  - Differential Expression mode showing a volcano plot and ranked genes table.
-Caption:
-  - DE compares two groups under the current scope; interpret results carefully when group sizes are small or confounded.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for Differential Expression success state.
-:width: 100%
-
-Differential Expression shows a volcano plot and ranked genes for Group A vs Group B.
-```
 
 ---
 

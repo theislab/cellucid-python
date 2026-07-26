@@ -33,9 +33,9 @@ pip install cellucid
 ### Step 1 — Start the server (auto-detects format)
 
 ```bash
-cellucid serve /path/to/data.h5ad
+cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 # or:
-# cellucid serve /path/to/data.zarr
+# cellucid serve /path/to/data.zarr --dataset-name "My dataset" --dataset-id my-dataset
 # cellucid serve /path/to/export_dir
 ```
 
@@ -47,37 +47,14 @@ Local URL:  http://127.0.0.1:8765
 Viewer URL: http://127.0.0.1:8765/
 ```
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-cli-server-banner
-Suggested filename: data_loading/python_cli_01_server-banner.png
-Where it appears: Python Package Guide → Viewing APIs → CLI quickstart → Step 1
-Capture:
-  - UI location: terminal window
-  - State prerequisites: server started successfully
-  - Action to reach state: run `cellucid serve ...`
-Crop:
-  - Include: the printed Viewer URL and the “Press Ctrl+C to stop” line
-  - Exclude: usernames, hostnames, private paths, shell history
-Redact:
-  - Replace file paths with generic `/path/to/data.h5ad`
-Alt text:
-  - Terminal output showing the Cellucid server banner and viewer URL.
-Caption:
-  - The viewer URL printed by the CLI is what you open in your browser; keep the terminal running while you use Cellucid.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Cellucid CLI server banner.
-:width: 100%
-
-CLI banner showing the local server URL and the browser viewer URL.
-```
-
 ### Step 2 — Open the viewer in your browser
 
 Copy the **Viewer URL** into your browser address bar.
 
 ```{note}
-You do not need to visit `cellucid.com` manually for this workflow. The server serves the viewer UI itself (via the hosted-asset proxy).
+You do not need to open `cellucid.com` manually. Before binding, the Python
+server establishes its exact published web generation and then serves it from
+the dataset-server origin.
 ```
 
 ### Step 3 — Keep the terminal running
@@ -92,10 +69,13 @@ Press **Ctrl+C** in the terminal.
 
 `cellucid serve <data_path>` decides what you meant using these rules:
 
-- If `<data_path>` ends in `.h5ad` and exists → treat as **h5ad**
-- If `<data_path>` ends in `.zarr` and exists → treat as **zarr**
-- If `<data_path>` is a directory that looks like an export (or contains exported subfolders) → treat as **exported**
-- If `<data_path>` is a directory that contains `.zattrs` or `.zgroup` → treat as **zarr**
+- A regular file must use the exact `.h5ad` suffix.
+- A Zarr v2 directory must contain both `.zgroup` and `.zattrs` as valid root
+  metadata and must not also contain `zarr.json`.
+- A directory name ending in `.zarr` is not sufficient by itself, and a valid
+  Zarr store does not need that suffix.
+- Any other directory that is one complete prepared dataset or contains
+  complete prepared dataset subdirectories is treated as **exported**.
 - Otherwise → error
 
 If detection fails, the error message will tell you what it expected.
@@ -119,10 +99,11 @@ Run `cellucid serve --help` anytime.
 
 ### AnnData-specific knobs (only for `.h5ad`/`.zarr`)
 
-- `--no-backed`: force loading the entire AnnData into memory
-  - this is **not recommended** for large datasets
-  - it can defeat lazy loading and blow up RAM usage
 - `--latent-key KEY`: choose the latent space in `adata.obsm` used for some derived quantities (e.g. outlier quantiles / centroids)
+- `--dataset-name NAME`: exact display name, required for direct AnnData input
+- `--dataset-id ID`: exact stable identifier, required for direct AnnData input
+- `--vector-field-default FIELD_ID`: exact default field ID; required when
+  direct AnnData declares more than one vector field
 
 ## Remote server (HPC / cloud): recommended SSH tunnel recipe
 
@@ -131,7 +112,7 @@ This is the safest way to use Cellucid when your data is on a remote machine.
 ### On the remote machine
 
 ```bash
-cellucid serve /path/to/data.h5ad --no-browser
+cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset --no-browser
 ```
 
 Keep the default host (`127.0.0.1`). Leave this running.
@@ -161,9 +142,13 @@ If something looks wrong, open these in a browser (replace `<port>`):
 
 ## Edge cases (common)
 
-- **Port already in use**: the server may pick a different port; always copy the printed Viewer URL.
-- **Offline / blocked internet**: the viewer UI is cached from `https://www.cellucid.com`; see {doc}`15_troubleshooting_viewing` if you see a “viewer UI unavailable” page.
-- **Export folder is incomplete**: the server can start but the viewer may fail when it requests missing files; validate your export: {doc}`07_exported_directory_mode_show_and_serve`.
+- **Port already in use**: the requested port fails. Choose another explicit
+  port, or use `--port 0` to request one operating-system-assigned port.
+- **Viewer source blocked**: startup fails instead of substituting a local
+  generation; see {doc}`15_troubleshooting_viewing`.
+- **Export folder is incomplete**: startup rejects missing required metadata,
+  point files, and declared artifacts before binding the server; validate your
+  export: {doc}`07_exported_directory_mode_show_and_serve`.
 
 ## Troubleshooting
 

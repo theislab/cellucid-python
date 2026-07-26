@@ -13,11 +13,12 @@ The goal here is to make validation repeatable.
 
 ---
 
-## Current reality (dev-phase)
+## Validation contract
 
 - The web app is shipped as static files (no required bundler build).
-- Automated test coverage is limited; **manual smoke testing is mandatory** for UI/state changes.
-- Some validation scripts exist (CSS token/type checks).
+- `npm test` runs the complete Node contract suite.
+- `npm run test:browser` runs the Playwright browser suite.
+- UI and state changes also require the manual smoke checks below.
 
 This page focuses on “what you can do today” to validate changes.
 
@@ -95,7 +96,7 @@ Run these steps on at least one small dataset (fast) and optionally one larger d
 
 ---
 
-## Lightweight automated checks (available today)
+## Automated checks
 
 ### CSS design system validation (recommended when touching CSS)
 

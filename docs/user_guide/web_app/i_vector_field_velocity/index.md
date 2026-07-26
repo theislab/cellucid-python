@@ -70,11 +70,12 @@ What scales with particles/trails, recommended settings by hardware, and “why 
 Symptom → diagnosis → fix for the most common overlay failures.
 :::
 
-:::{grid-item-card} {octicon}`checklist;1.5em;sd-mr-1` Screenshot Checklist
+:::{grid-item-card} {octicon}`image;1.5em;sd-mr-1` Verified captures
 :link: 08_screenshots
 :link-type: doc
 
-Production checklist + capture specs for screenshots used in this section.
+Current overlay controls and advanced visual settings rendered with a synthetic
+2D vector field.
 :::
 
 ::::

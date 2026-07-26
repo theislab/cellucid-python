@@ -89,23 +89,19 @@ Checklist:
 Session bundles are untrusted input and must remain robust.
 
 Checklist:
-- treat new chunks/codecs as optional and versioned
+- define one exact schema for every new chunk or codec
 - keep hard caps on decompression and allocations
 - update tests in `tests/test_sessions.py` (add synthetic bundles)
 
 ---
 
-## Compatibility strategy (recommended)
+## Contract-change strategy
 
 When adding new fields/files:
-- prefer additive changes (new optional keys, new optional files)
-- do not rename/remove existing keys without a migration plan
-- document compatibility expectations in the export spec
-
-If you need to break compatibility:
-- coordinate a web app change,
-- bump a format version field,
-- and provide a clear error message when an older viewer encounters a newer export (and vice versa).
+- update every writer, server adapter, loader, validator, test, and format document
+  in the same change;
+- reject unknown keys and unsupported schemas with a clear error;
+- do not retain alternate schema readers or redirect paths.
 
 ---
 

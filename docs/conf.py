@@ -146,6 +146,7 @@ html_theme_options = {
 }
 
 html_context = {
+    "default_mode": "auto",
     "github_user": "theislab",
     "github_repo": "cellucid-python",
     "github_version": "main",

@@ -16,14 +16,15 @@ If you prefer a notebook-style, highly verbose walkthrough (with many edge cases
 
 ---
 
-## Level 1 — Fast path: `show_anndata(adata)`
+## Level 1 — Fast path: direct AnnData viewing
 
 This is the fastest way to prove “Cellucid works” and to start exploring a dataset.
 
 ### Prerequisites
 
 - A notebook environment (Jupyter / JupyterLab / VSCode notebooks / Colab)
-- An AnnData object **with at least one embedding** (typically `adata.obsm["X_umap"]`)
+- An AnnData object with at least one explicitly dimensioned embedding:
+  `X_umap_1d`, `X_umap_2d`, or `X_umap_3d`
 
 ```{tip}
 If you don’t want notebooks at all, skip to Level 2 and use the CLI: `cellucid serve ...`.
@@ -57,9 +58,9 @@ obs = pd.DataFrame(
 var = pd.DataFrame(index=["G1", "G2"])
 
 adata = ad.AnnData(X=X, obs=obs, var=var)
-adata.obsm["X_umap"] = np.array([[0, 0],
-                                 [1, 0],
-                                 [0, 1]], dtype=np.float32)
+adata.obsm["X_umap_2d"] = np.array([[0, 0],
+                                    [1, 0],
+                                    [0, 1]], dtype=np.float32)
 ```
 
 ### Step 2: Confirm you have an embedding
@@ -68,14 +69,20 @@ adata.obsm["X_umap"] = np.array([[0, 0],
 list(adata.obsm.keys())
 ```
 
-If you don’t see `X_umap` (or another embedding), Cellucid won’t know where to place your cells in 2D/3D space. Compute an embedding first (typically via Scanpy or your existing pipeline), then retry.
+If none of `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` exists, compute
+an embedding and store it under the key that exactly declares its dimension.
 
 ### Step 3: Show the viewer
 
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata(adata, height=600)
+viewer = show_anndata(
+    adata,
+    height=600,
+    dataset_name="Small example",
+    dataset_id="small-example",
+)
 ```
 
 ### Step 4 (optional): Confirm hooks are working
@@ -106,36 +113,15 @@ viewer.highlight_cells([0, 2], color="#00cc66")
 - You see points (cells) in the embedding.
 - Coloring by `cluster` changes point colors.
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-quickstart-level1-success
-Where it appears: Quick start → Level 1 → What success looks like
-Capture:
-  - UI location: notebook output cell with embedded Cellucid viewer
-  - State prerequisites: dataset loaded; a categorical field selected for color-by (e.g., cluster)
-  - Action to reach state: run the Level 1 code; choose “cluster” in the color-by UI
-Crop:
-  - Include: enough of the notebook cell to show it’s embedded + the main viewer canvas + the color-by control
-  - Exclude: personal file paths, notebook file names if sensitive
-Redact:
-  - Remove: sample IDs/patient IDs if present
-Alt text:
-  - Embedded Cellucid viewer in a notebook showing cells colored by a categorical field.
-Caption:
-  - Level 1 success state: the viewer is embedded and responding to UI controls (color-by).
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Embedded Cellucid viewer in a notebook showing cells colored by a categorical field.
-:width: 100%
-
-Level 1 success state: the viewer is embedded and responding to UI controls (color-by).
-```
-
 ### Common pitfalls (Level 1)
 
-- **Not in a notebook**: `show_anndata(...)` will print a URL instead of embedding.
-- **No embedding**: you must provide `X_umap` (or equivalent) in `adata.obsm`.
+- **Not in a notebook**: `show_anndata(...)` returns a viewer without
+  displaying or printing it; open `viewer.viewer_url` explicitly.
+- **No embedding**: provide `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` in
+  `adata.obsm`.
 - **HTTPS notebooks / remote kernels**: see {doc}`03_compatibility_matrix_must_be_explicit`.
-- **First-run offline**: the viewer UI assets may not be cached yet; see {doc}`02_installation`.
+- **Viewer source unavailable**: viewer-serving startup stops; see
+  {doc}`02_installation`.
 
 ---
 
@@ -180,14 +166,9 @@ This is a “starter” extraction pattern. Your pipeline may differ.
 ```python
 import numpy as np
 
-X_umap_2d = np.asarray(adata.obsm["X_umap"], dtype=np.float32)
+X_umap_2d = np.asarray(adata.obsm["X_umap_2d"], dtype=np.float32)
 
-# Pick a latent space:
-if "X_pca" in adata.obsm:
-    latent = np.asarray(adata.obsm["X_pca"], dtype=np.float32)
-else:
-    # Fallback: using UMAP as latent is allowed, but not ideal.
-    latent = X_umap_2d
+latent = np.asarray(adata.obsm["X_pca"], dtype=np.float32)
 ```
 
 ### Step 3: Export (recommended defaults for most users)
@@ -208,12 +189,13 @@ prepare(
     # Output
     out_dir=EXPORT_DIR,
     dataset_name="PBMC demo",
+    dataset_id="pbmc-demo",
 
     # Performance / size (recommended starting point)
     compression=6,
     var_quantization=8,
     obs_continuous_quantization=8,
-    obs_categorical_dtype="auto",
+    obs_categorical_dtype="uint16",
 
     # Overwrite behavior
     force=True,
@@ -288,7 +270,11 @@ You can also do this in AnnData direct mode:
 
 ```python
 from cellucid import show_anndata
-viewer = show_anndata(adata)
+viewer = show_anndata(
+    adata,
+    dataset_name="PBMC demo",
+    dataset_id="pbmc-demo",
+)
 ```
 
 ### Step 2: Register hooks (frontend → Python)
@@ -317,11 +303,11 @@ def _highlight(ev):
 ### Step 4: Make callbacks robust (recommended patterns)
 
 - Always guard against empty selections.
-- Wrap analysis code in `try/except` so one exception doesn’t “silently kill” your workflow.
+- Let analysis failures surface, or catch only errors you can report with
+  explicit context; do not swallow callback exceptions.
 - If your analysis is slow, consider:
   - running it asynchronously,
-  - debouncing rapid selection events,
-  - or adding an explicit “run analysis” button (future pattern).
+  - debouncing rapid selection events.
 
 ### Step 5: Debug connectivity when things feel “haunted”
 
@@ -336,7 +322,8 @@ Look for:
 - `server_health` / `server_info` (server reachable?)
 - `client_server_url` (is the iframe using the right URL?)
 - `web_ui.cache` (do you have cached UI assets?)
-- `frontend_console` (any iframe-side errors forwarded back?)
+- `frontend_roundtrip` and `frontend_debug_snapshot` (is the live iframe
+  authenticated and connected to the expected URL?)
 
 ### Step 6: Clean up (avoid port leaks)
 
@@ -364,8 +351,11 @@ cleanup_all()
 - **Missing embeddings**: no embedding → no viewer; compute one first.
 - **NaN/Inf values**: embeddings, latent space, expression, or obs fields containing NaN/Inf can cause surprising rendering or export errors.
 - **Category explosions**: categorical fields with very high cardinality can become unusable in the UI; consider grouping or filtering.
-- **Remote kernels**: you may need port forwarding + `CELLUCID_CLIENT_SERVER_URL` (see {doc}`03_compatibility_matrix_must_be_explicit`).
-- **Offline first run**: prefetch/caching matters (see {doc}`02_installation`).
+- **Remote kernels**: forward the port and pass its browser-reachable base as
+  `client_server_url=` (see
+  {doc}`03_compatibility_matrix_must_be_explicit`).
+- **Viewer-source access**: startup requires the complete exact generation from
+  the configured source (see {doc}`02_installation`).
 
 ## Troubleshooting (quick start)
 
@@ -376,18 +366,22 @@ Organize by symptom. Each entry points to the most likely root causes.
 **Likely causes**
 - You are not in a notebook environment.
 - The notebook is served from HTTPS and blocks HTTP loopback iframes.
-- The viewer UI assets were not available (offline / firewall).
+- The viewer source generation could not be established; in that case the
+  constructor raises before an iframe is displayed.
 
 **How to confirm**
-- If you see a printed URL instead of an embedded viewer, you’re not in a notebook.
+- Inspect `viewer.viewer_url`; outside a notebook, call `viewer.display()` to
+  print that URL or open it explicitly.
 - Run:
   ```python
   viewer.debug_connection()
   ```
 
 **Fix**
-- Use the browser workflow (`cellucid serve ...`) OR install `jupyter-server-proxy` for managed notebooks.
-- Prefetch UI assets once while online.
+- For HTTPS/remote notebooks, expose the port through a proxy/tunnel and pass
+  its exact base as `client_server_url=`.
+- For a source-generation error, restore access to the configured source and
+  correct the exact inventory/object/cache-directory failure reported.
 
 ---
 
@@ -397,7 +391,7 @@ Organize by symptom. Each entry points to the most likely root causes.
 - You did not pass `latent_space=...`.
 
 **Fix**
-- Use PCA/scVI/etc as latent space. If you truly don’t have one yet, you can pass `X_umap_2d` as a fallback latent space (not ideal but works for export).
+- Use PCA, scVI, or another `n_cells`-aligned representation as `latent_space`. If the embedding is the only representation you have, pass `X_umap_2d` explicitly and record that choice in your workflow.
 
 ---
 

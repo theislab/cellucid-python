@@ -66,14 +66,18 @@ For each selected page, Cellucid computes a score for each cell in that page.
 Let `G` be the set of genes you entered.
 
 For each cell `i`:
-- collect expression values `x_{i,g}` for all genes `g ∈ G` that exist and have finite values
+- collect the finite expression values `x_{i,g}` for all requested genes `g ∈ G`
 - compute:
-  - **Mean expression**: `score_i = mean_g(x_{i,g})` over available genes
-  - **Sum expression**: `score_i = sum_g(x_{i,g})` over available genes
+  - **Mean expression**: arithmetic mean of the finite values
+  - **Sum expression**: sum of the finite values
+  - **Median expression**: middle sorted value, or the mean of the two middle
+    values when the count is even
 
 Notes:
-- Genes missing from the dataset are skipped.
-- If a cell has zero valid gene values (e.g., all genes missing), its score becomes NaN and is excluded from summary statistics/plots.
+- Every requested gene must resolve for every selected page and cell arrays must
+  align exactly; a missing or misaligned payload terminates the analysis.
+- If a cell has zero finite gene values, its score becomes NaN and is excluded
+  from summary statistics and plots.
 
 :::{note}
 Signature scores are computed on the expression values present in your dataset.
@@ -81,13 +85,6 @@ Signature scores are computed on the expression values present in your dataset.
 If your dataset stores log-normalized expression, the score is on that scale.
 If your dataset stores counts, the score is on the count scale.
 :::
-
-### About the “Median expression” option
-
-The UI exposes a “Median expression” option, but the current backend aggregation is mean/sum-based.
-Until this is updated, treat “Median” as experimental and prefer **Mean expression** for reproducibility.
-
----
 
 ## Normalization options (what they do)
 
@@ -119,6 +116,8 @@ Statistical tests:
 - When you have ≥2 pages selected, the modal can show the same style of distribution-comparison tests used for continuous variables in Detailed mode.
 Treat these as exploratory.
 
+The Mann–Whitney result card reports whether its p-value is exact or asymptotic. For analysis-wide scope and assumptions, see {doc}`01_analysis_mental_model`.
+
 ---
 
 ## Export (CSV)
@@ -138,8 +137,7 @@ If you need per-cell mapping:
 
 ## Edge cases and pitfalls
 
-- **Most genes not found**: score becomes meaningless (based on a tiny subset).
-- **First gene missing**: some pages may show “No data available” behavior; put a known-present gene early in the list.
+- **Unknown gene**: scoring terminates; correct the gene list before rerunning.
 - **Duplicate genes in the list**: duplicates effectively up-weight that gene (it is added multiple times).
 - **Huge signatures (hundreds of genes)**: can be slow and may stress browser memory.
 - **Housekeeping-dominated signatures**: scores track library size/QC rather than biology.
@@ -165,28 +163,13 @@ Fix:
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: analysis-gene-signature-success
-Suggested filename: analysis/14_gene-signature-success.png
-Where it appears: User Guide → Web App → Analysis → 07_analysis_mode_gene_signature.md
-Capture:
-  - UI location: Gene Signature mode with a non-empty signature score output
-  - State prerequisites: a signature with mostly-present genes; output visible in plot/legend
-  - Action to reach state: open Gene Signature → enter signature → run
-Crop:
-  - Include: signature input area + score output
-Alt text:
-  - Gene Signature mode showing a scored signature output.
-Caption:
-  - Gene signature scoring produces a per-cell continuous score that you can compare across groups, but interpretation depends on normalization and gene matching.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for Gene Signature success state.
+```{figure} ../../../_static/screenshots/analysis/gene-signature.png
+:alt: Gene Signature analysis showing a multi-gene score distribution.
 :width: 100%
 
-Gene Signature mode scores a gene list and shows a per-cell signature value you can compare across groups.
+Gene Signature analysis computes and plots the selected multi-gene score for the chosen cell group.
 ```
 
 ---

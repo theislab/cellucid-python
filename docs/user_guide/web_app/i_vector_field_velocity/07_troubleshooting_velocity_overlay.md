@@ -125,7 +125,8 @@ If you’re stuck, do this first:
 
 ### Prevention
 
-- Use explicit keys: `<field>_umap_<dim>d` (e.g., `velocity_umap_2d`).
+- Use required dimension-suffixed keys: `<field>_umap_<dim>d` (e.g.,
+  `velocity_umap_2d`).
 - Validate shapes before export: `(n_cells, dim)` with matching row order.
 
 ---
@@ -335,6 +336,7 @@ cellucid.add_transition_drift_to_obsm(
     basis="umap",
     field_prefix="T_fwd",
     dim=2,
+    normalize_rows=False,
 )
 ```
 
@@ -359,6 +361,9 @@ prepare(
         # "T_fwd_umap_2d": drift_umap_2d,
     },
     out_dir="exports/my_dataset",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    obs_categorical_dtype="uint16",
     compression=6,
 )
 ```

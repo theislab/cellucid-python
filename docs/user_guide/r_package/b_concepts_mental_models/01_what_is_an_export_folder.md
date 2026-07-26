@@ -37,6 +37,7 @@ If you include gene expression and connectivities, you will also see:
   connectivity/
     edges.src.bin
     edges.dst.bin
+    edges.weights.f64.bin
 ```
 
 If you include vector fields (velocity/displacement):

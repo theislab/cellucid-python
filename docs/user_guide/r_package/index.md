@@ -43,7 +43,7 @@ How R exports map to the browser viewer, plus dataset identity and reproducibili
 :link: c_data_preparation_api/index
 :link-type: doc
 
-Deep documentation of `cellucid_prepare()` / `prepare()` including shapes, dtypes, edge cases, and file outputs.
+Deep documentation of `cellucid_prepare()` including shapes, dtypes, edge cases, and file outputs.
 :::
 
 :::{grid-item-card} {octicon}`browser;1.5em;sd-mr-1` Viewing & Loading

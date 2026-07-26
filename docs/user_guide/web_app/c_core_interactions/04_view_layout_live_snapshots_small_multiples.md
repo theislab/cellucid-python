@@ -120,28 +120,11 @@ Common elements:
 - **Navigation badge** *(cameras unlocked only)*: `Orb`, `Pan`, or `Fly` (click to cycle).
 - **× remove**: removes the view (or hides live view in some cases).
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: multiview-badges-indicators
-Where it appears: View layout → View badges
-Capture:
-  - Create at least 2 snapshots
-  - Switch to Grid compare
-  - Unlock cameras so nav badges (Orb/Pan/Fly) appear
-  - Ensure at least one view shows a dimension badge (e.g., 3D)
-Crop:
-  - Include: the view badges list and enough canvas to show multiple panels
-Annotations:
-  - Call out: number pill, ⌖, dimension badge, nav badge, remove ×
-Alt text:
-  - View badge list showing per-view dimension and navigation indicators.
-Caption:
-  - View badges summarize each panel and expose per-view dimension/navigation controls when cameras are unlocked.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the view badges and indicators.
+```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
+:alt: Cellucid showing two side-by-side views of the same dataset.
 :width: 100%
 
-View badges summarize each panel and expose per-view dimension/navigation controls when cameras are unlocked.
+Two kept views support side-by-side comparison while retaining one dataset identity.
 ```
 
 ---

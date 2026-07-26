@@ -5,7 +5,7 @@
 **What you’ll learn:**
 - How to capture the current viewer state into Python **without** a manual browser download
 - What parts of a session can be applied back to AnnData today
-- The safety model (dataset mismatch policies + index-based identity)
+- The safety model (exact dataset identity + index-based cell identity)
 - How to debug “bundle capture is stuck” and “apply did nothing”
 
 **Prerequisites:**
@@ -56,7 +56,12 @@ This turns interactive choices (highlights/labels) into explicit columns you can
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata("data.h5ad", height=650)
+viewer = show_anndata(
+    "data.h5ad",
+    height=650,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 viewer.wait_for_ready(timeout=60)
 ```
 
@@ -88,7 +93,11 @@ bundle.save("./sessions/my_state.cellucid-session")
 ### Step 5: apply to AnnData (non-destructive by default)
 
 ```python
-adata2 = bundle.apply_to_anndata(adata, inplace=False)
+adata2 = bundle.apply_to_anndata(
+    adata,
+    expected_dataset_id="my-study-v1",
+    inplace=False,
+)
 ```
 
 Or use the one-liner (captures + applies + cleans up the temp bundle file):
@@ -106,16 +115,21 @@ adata2 = viewer.apply_session_to_anndata(adata, inplace=False)
 ### 1) Highlights → `adata.obs` boolean columns
 
 - One boolean `.obs` column per highlight group.
-- Default column naming: `cellucid_highlight__<groupId>` (sanitized to safe characters).
+- Default column naming is the exact concatenation
+  `cellucid_highlight__<groupId>`; no rewriting is applied.
 
 This is the “most useful” mapping because it makes interactive groups explicit and scriptable:
 - `adata2.obs["cellucid_highlight__my_group"]` becomes a mask you can use in analysis.
 
-### 2) User-defined categorical fields → `adata.obs` or `adata.var`
+### 2) User-defined fields → cell-aligned `adata.obs` columns
 
-- Categorical columns decoded from session chunks like `user-defined/codes/<fieldId>`.
+- Categorical columns are decoded from session chunks such as
+  `user-defined/codes/<fieldId>`.
+- Continuous fields copy one exact cell-aligned source field.
 - Category labels come from `core/field-overlays`.
-- The target is controlled by the field’s `source` (`obs` vs `var`).
+- Every materialized result is an `adata.obs` column. A field whose declared
+  source is `var` copies the selected gene's values across cells; it does not
+  create a gene-aligned `adata.var` column.
 
 ### 3) Metadata stored under `adata.uns`
 
@@ -142,17 +156,14 @@ Even if the session came from “your own browser”, treat it like external inp
 - file framing validation (MAGIC header),
 - size caps to avoid runaway memory usage.
 
-### Dataset mismatch policy (shape + optional ID)
+### Dataset match checks (shape + exact ID)
 
 Before applying dataset-dependent chunks, Python checks a lightweight fingerprint stored in the bundle:
 - `cellCount` vs `adata.n_obs`
 - `varCount` vs `adata.n_vars`
-- optionally `datasetId` vs `expected_dataset_id`
+- `datasetId` vs the required `expected_dataset_id`
 
-Policy (`dataset_mismatch`):
-- `"error"`: raise on mismatch (strictest; best for pipelines)
-- `"warn_skip"`: warn and skip dataset-dependent chunks (default; safest interactive behavior)
-- `"skip"`: silently skip dataset-dependent chunks
+Any mismatch raises `ValueError` before Cellucid mutates the target object.
 
 ### Critical constraint: cell identity is index-based (today)
 
@@ -160,8 +171,8 @@ Highlights and user-defined codes are aligned to **cell indices** (row positions
 
 Only apply a session to an `AnnData` whose row order matches the dataset that produced the session.
 
-Recommended extra guard:
-- pass `expected_dataset_id=...` when you have a stable dataset ID string (see {doc}`04_dataset_identity_and_reproducibility`).
+Pass the exact ID used to open the viewer as `expected_dataset_id` (see
+{doc}`04_dataset_identity_and_reproducibility`).
 
 ---
 
@@ -173,36 +184,66 @@ Recommended extra guard:
 from cellucid import CellucidSessionBundle
 
 bundle = CellucidSessionBundle("./sessions/my_state.cellucid-session")
-adata2 = bundle.apply_to_anndata(adata, inplace=False)
+adata2 = bundle.apply_to_anndata(
+    adata,
+    expected_dataset_id="my-study-v1",
+    inplace=False,
+)
 ```
 
-### Control column naming + conflict behavior
+### Control column naming
 
-If you apply multiple sessions, you may create naming conflicts.
+If you apply multiple sessions, choose prefixes that keep the generated column
+names distinct.
 
 Key knobs:
 - `highlights_prefix=...`
 - `user_defined_prefix=...`
-- `column_conflict="error" | "overwrite" | "suffix"` (default: `"suffix"`)
+
+Cellucid rejects an existing target column with `ValueError`; it does not
+overwrite or rename that column.
 
 Example:
 
 ```python
 adata2 = bundle.apply_to_anndata(
     adata,
+    expected_dataset_id="my-study-v1",
     inplace=False,
     highlights_prefix="hl__",
     user_defined_prefix="udf__",
-    column_conflict="suffix",
 )
 ```
 
 ### Get a structured apply summary
 
 ```python
-adata2, summary = bundle.apply_to_anndata(adata, inplace=False, return_summary=True)
+adata2, summary = bundle.apply_to_anndata(
+    adata,
+    expected_dataset_id="my-study-v1",
+    inplace=False,
+    return_summary=True,
+)
 summary
 ```
+
+### Backed AnnData targets
+
+The default `inplace=False` contract requires an independent AnnData result, so
+it rejects backed input before calling `AnnData.copy()`. Materialize explicitly
+when that is your intended memory cost:
+
+```python
+in_memory = backed_adata.to_memory()
+adata2 = bundle.apply_to_anndata(
+    in_memory,
+    expected_dataset_id="my-study-v1",
+    inplace=False,
+)
+```
+
+`inplace=True` keeps `X` backed and applies the validated `obs`/`uns` changes
+to the live object. It does not write those changes into the source H5AD file.
 
 ---
 
@@ -220,9 +261,10 @@ How to confirm:
   - `state.ready`
   - `frontend_roundtrip`
   - `viewer_index_probe`
-  - `frontend_console`
+  - `frontend_debug_snapshot`
 - In the browser devtools network tab:
-  - look for a POST to `/_cellucid/session_bundle?...`
+  - look for a POST to
+    `/_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
 
 Fix:
 - Call `viewer.display()` to ensure the iframe exists.
@@ -240,27 +282,26 @@ Fix:
 - refresh the viewer (or recreate it),
 - request a new bundle again.
 
-### Symptom: `apply_to_anndata(...)` applies nothing / skips due to mismatch
+### Symptom: `apply_to_anndata(...)` raises a dataset mismatch
 
 Likely causes:
 - `adata.n_obs` / `adata.n_vars` differ from the session’s fingerprint,
-- `expected_dataset_id` mismatched (or inferred ID differs),
+- `expected_dataset_id` does not exactly match the session dataset ID,
 - the AnnData was subset/reordered since the session was created.
 
 How to confirm:
-- Use `return_summary=True` and inspect `summary.mismatch_reasons`.
 - Inspect `bundle.dataset_fingerprint`.
 
 Fix:
 - apply to the matching AnnData version (same row order),
-- or treat the mismatch as intentional and accept that dataset-dependent chunks are skipped.
+- and pass the exact dataset ID used when the viewer was created.
 
 ### Symptom: “My highlight groups didn’t become columns”
 
 Likely causes:
 - highlights are missing from the session (never created, or not saved by that feature yet),
-- dataset mismatch caused highlights to be skipped,
-- the session chunk IDs differ across versions.
+- dataset identity or shape validation failed,
+- the manifest contains an unknown or mismatched chunk/contributor pair.
 
 How to confirm:
 - `bundle.list_chunk_ids()` and look for:
@@ -276,20 +317,11 @@ Fix:
 Likely causes:
 - the field is not categorical (only categorical is applied today),
 - the categories list is missing,
-- codes contain out-of-range values (the apply code clamps invalid codes to NA).
+- codes contain out-of-range values.
 
 Fix:
 - confirm the field is categorical in the UI,
-- apply with `return_summary=True` and inspect which columns were added.
-
-### Symptom: ImportError about pandas
-
-`apply_cellucid_session_to_anndata` requires `pandas` because it writes `.obs`/`.var` columns.
-
-Fix:
-- `pip install pandas`
-
----
+- correct invalid codes in the source session before applying it.
 
 ## Next steps
 

@@ -77,29 +77,7 @@ In **Compare Views → Navigation → Orbit**:
 - **Google Earth-style drag** (default on): flips the horizontal drag sign (matches “grab-and-rotate” muscle memory for many users).
 - **Show orbit anchor**: shows a compass/anchor overlay in orbit mode.
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: nav-orbit-annotated
-Where it appears: Navigation modes → Orbit mode
-Capture:
-  - Use a 3D embedding dataset (or any dataset in 3D)
-  - Navigation mode: Orbit
-  - Show orbit anchor enabled
-  - Show the Navigation section in the sidebar + the canvas
-Crop:
-  - Include: Navigation controls + orbit anchor + a visible point cloud
-Annotations:
-  - Call out: Mode dropdown, “Google Earth-style drag”, “Show orbit anchor”, orbit anchor overlay
-Alt text:
-  - Orbit navigation mode controls and the orbit anchor overlay.
-Caption:
-  - Orbit mode rotates around an anchor; the orbit anchor overlay helps orient you in 3D.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for orbit navigation mode.
-:width: 100%
 
-Orbit mode rotates around an anchor; the orbit anchor overlay helps orient you in 3D.
-```
 
 ---
 
@@ -137,29 +115,6 @@ In **Compare Views → Navigation → Planar**:
 - **Zoom to cursor (pinch-style)** (default on): zoom around cursor.
 - **Invert axes**: flips pan direction (useful for unusual trackpad/remote desktop setups).
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: nav-planar-annotated
-Where it appears: Navigation modes → Planar mode
-Capture:
-  - Use a 2D embedding (switch to 2D if available)
-  - Navigation mode: Planar
-  - Show the Planar options (Zoom to cursor, Invert axes)
-Crop:
-  - Include: Planar controls + enough of canvas to show a 2D embedding
-Annotations:
-  - Call out: Mode dropdown, Zoom-to-cursor toggle, Invert axes toggle
-Alt text:
-  - Planar navigation mode controls for panning and zooming a 2D embedding.
-Caption:
-  - Planar mode turns the embedding into a “map”: drag pans and scroll zooms (optionally around the cursor).
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for planar navigation mode.
-:width: 100%
-
-Planar mode turns the embedding into a “map”: drag pans and scroll zooms (optionally around the cursor).
-```
-
 ---
 
 ## Free-fly mode (first-person navigation)
@@ -196,29 +151,7 @@ In **Compare Views → Navigation → Free-fly**:
 - **Projectile shooting** (optional demo feature): enables click/hold-to-charge projectiles
 - **Capture pointer**: enables pointer lock (press `Esc` to release)
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: nav-freefly-annotated
-Where it appears: Navigation modes → Free-fly mode
-Capture:
-  - Use a 3D embedding
-  - Navigation mode: Free-fly
-  - Capture pointer checkbox visible (either enabled or disabled)
-  - Show: look sensitivity + move speed sliders
-Crop:
-  - Include: Free-fly controls + enough canvas to orient
-Annotations:
-  - Call out: Mode dropdown, Look sensitivity, Move speed, Capture pointer
-Alt text:
-  - Free-fly navigation controls including look sensitivity, move speed, and capture pointer.
-Caption:
-  - Free-fly mode is first-person navigation; enable Capture pointer for FPS-style mouse look.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for free-fly navigation mode.
-:width: 100%
 
-Free-fly mode is first-person navigation; enable Capture pointer for FPS-style mouse look.
-```
 
 ---
 

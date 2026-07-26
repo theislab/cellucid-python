@@ -26,42 +26,31 @@ Use this as a decision tree. You can always switch later.
 | You have… | Best first choice | Why | Next page |
 |---|---|---|---|
 | A pre-exported folder from `prepare()` | Browser folder picker | Fastest, most reliable, no server | `03_browser_file_picker_tutorial` |
-| A `.h5ad` file | Server mode (recommended) or Jupyter | Lazy loading for large files, fewer browser memory issues | `04_server_tutorial` or `05_jupyter_tutorial` |
-| A `.zarr` directory | Server mode or Jupyter | Chunked storage works well with lazy loading | `04_server_tutorial` or `05_jupyter_tutorial` |
+| A portable `.zarr.zip` or `.zip` | Browser Zarr ZIP picker | One validated file selection in every supported browser | `03_browser_file_picker_tutorial` |
+| A `.h5ad` file | Server mode (recommended) or Jupyter | Python opens the file read-only-backed, reducing matrix memory pressure | `04_server_tutorial` or `05_jupyter_tutorial` |
+| A `.zarr` directory | Server mode or Jupyter | Direct Python loading is supported and eager | `04_server_tutorial` or `05_jupyter_tutorial` |
 | An in-memory `AnnData` in a notebook | Jupyter | Fastest way to iterate while analyzing | `05_jupyter_tutorial` |
 | A dataset you want to share publicly | GitHub-hosted exports | Shareable URL, no server needed | `02_local_demo_tutorial` |
 
 ---
 
-## Screenshot Placeholder (You Will Replace Later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: data-loading-dataset-connections-panel
-Suggested filename: data_loading/01_dataset-connections-panel.png
-Where it appears: User Guide → Web App → Data Loading → index.md
-Capture:
-  - UI location: left sidebar → “Dataset Connections” (or equivalent connection panel)
-  - State prerequisites: Cellucid open in a desktop browser; no dataset loaded (empty state)
-  - Action to reach state: open https://www.cellucid.com in a fresh tab (or your locally hosted Cellucid)
-Crop:
-  - Include: the full left sidebar + enough of the canvas to orient the reader
-  - Exclude: bookmarks bar, extensions, personal avatars, notifications from other apps
-Redact:
-  - Remove: local file paths, private repo names, any tokens/URLs with secrets
-Annotations:
-  - Callouts: #1 “Browse local data…” (folder/h5ad/zarr), #2 “Remote server”, #3 “GitHub repo”
-Alt text:
-  - Left sidebar showing the data loading connection controls.
-Caption:
-  - Describe what the reader should do next (not just “Screenshot of…”).
-  - Example caption: “Use Dataset Connections to load data from your computer, a server, or a public GitHub repo.”
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Dataset Connections panel.
+```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
+:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
 :width: 100%
 
-Use Dataset Connections to load data from your computer, a server, or a public GitHub repo.
+The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```
+
+:::{note}
+The Session panel keeps every loading action and connection state visible.
+Its compact `i` buttons only open explanatory help: click one, or focus it with
+{kbd}`Tab` and press {kbd}`Enter` or {kbd}`Space`. Press {kbd}`Escape`, click
+elsewhere, or move focus outside to close it. See
+{doc}`../a_orientation/04_ui_glossary_terminology` and
+{doc}`../o_accessibility_privacy_security/01_accessibility`.
+:::
 
 ---
 
@@ -97,7 +86,8 @@ Export once, then share via public GitHub-hosted exports (no server), or run a l
 :link: 03_browser_file_picker_tutorial
 :link-type: doc
 
-Load datasets directly from your file system using the browser's native file picker API.
+Load a prepared directory, one H5AD file, or one portable Zarr ZIP through the
+three visible local-data controls.
 :::
 
 :::{grid-item-card} {octicon}`server;1.5em;sd-mr-1` Server Mode
@@ -144,11 +134,12 @@ What files/keys are required for exports, GitHub manifests, `.h5ad`, and `.zarr`
 Symptom → diagnosis → fix for file picker, server mode, GitHub exports, and common data issues.
 :::
 
-:::{grid-item-card} {octicon}`image;1.5em;sd-mr-1` Screenshot Checklist
+:::{grid-item-card} {octicon}`image;1.5em;sd-mr-1` Verified captures
 :link: 09_screenshots
 :link-type: doc
 
-One place to capture all screenshots referenced in this section.
+Current loading controls, a successful direct H5AD load, and browser-engine
+acceptance captures.
 :::
 
 :::{grid-item-card} {octicon}`pulse;1.5em;sd-mr-1` Vector Fields Overlay

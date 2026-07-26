@@ -33,7 +33,7 @@ When to use `viewer.state`:
 
 Signature (simplified):
 
-```python
+```text
 viewer.wait_for_event(event: str, timeout: float | None = 30.0, *, predicate=None) -> dict
 ```
 
@@ -108,4 +108,3 @@ If waiting never returns:
 
 - Event payloads: {doc}`07_frontend_to_python_events`
 - Session bundles: {doc}`10_session_bundles_get_session_bundle`
-

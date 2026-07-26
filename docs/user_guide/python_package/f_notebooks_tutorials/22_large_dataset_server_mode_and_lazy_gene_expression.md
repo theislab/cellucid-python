@@ -23,8 +23,8 @@ It explains:
 **Prerequisites**
 - `pip install cellucid`
 - A dataset:
-  - `.h5ad` (recommended for backed/lazy loading), or
-  - `.zarr` (recommended for chunked storage), or
+  - `.h5ad` (recommended for read-only-backed access), or
+  - `.zarr` (loaded eagerly), or
   - a pre-exported folder from {doc}`21_prepare_exports_with_quantization_and_compression`
 
 ---
@@ -72,7 +72,7 @@ Workflow:
 See:
 - {doc}`21_prepare_exports_with_quantization_and_compression`
 
-### Option B (recommended for large `.h5ad` without exporting yet): `show_anndata("data.h5ad")` (backed)
+### Option B (recommended for large `.h5ad` without exporting yet): direct read-only-backed AnnData viewing
 
 Use this if:
 - you want convenience and are iterating quickly
@@ -81,7 +81,12 @@ Use this if:
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata("data.h5ad", height=650)  # backed/lazy by default
+viewer = show_anndata(
+    "data.h5ad",
+    height=650,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 viewer
 ```
 
@@ -92,29 +97,37 @@ Use this if:
 - you want a simple “serve and open browser” workflow
 
 ```bash
-# Auto-detects: exported folder vs .h5ad vs .zarr
-cellucid serve /path/to/data
+# Exported directory:
+cellucid serve /path/to/export
+
+# Direct AnnData:
+cellucid serve /path/to/data.h5ad \
+  --dataset-name "My study" \
+  --dataset-id my-study-v1
 ```
 
 ---
 
 ## Large `.h5ad` specifics (backed mode)
 
-When you pass a `.h5ad` path, Cellucid opens it in backed mode by default:
+When you pass a `.h5ad` path, Cellucid always opens it read-only-backed:
 - it does **not** load the entire matrix into RAM
 - it reads data as needed (I/O-bound but memory-friendly)
 
-### Force in-memory load (not recommended for huge datasets)
+To use an in-memory dataset, load an `AnnData` object yourself and pass that
+object to `show_anndata` with the required identity. A `.zarr` path is loaded
+eagerly by `anndata.read_zarr`.
 
-CLI:
-```bash
-cellucid serve data.h5ad --no-backed
-```
-
-Python:
 ```python
+import anndata
 from cellucid import show_anndata
-viewer = show_anndata("data.h5ad", backed=False)
+
+adata = anndata.read_h5ad("data.h5ad")
+viewer = show_anndata(
+    adata,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 ```
 
 ---
@@ -127,26 +140,24 @@ If your notebook runs at an HTTPS origin (common on JupyterHub), the browser may
 - HTTPS → HTTP is often blocked (mixed content)
 - remote kernels mean the browser’s “localhost” is not the kernel machine
 
-### The solution (recommended): Jupyter Server Proxy
+### Configure one browser-reachable URL
 
-Cellucid prefers a proxy URL when direct loopback is unlikely to work.
+Expose the Cellucid port through your notebook deployment or reverse proxy,
+then pass that exact base URL:
 
-If you see an in-iframe message like “notebook proxy required”, install/enable:
-- `jupyter-server-proxy`
-
-Then retry. (It is a dependency of `cellucid`, but your Jupyter deployment still needs to enable it.)
-
-### Alternative: set `CELLUCID_CLIENT_SERVER_URL`
-
-If your environment provides a known browser-reachable URL for the kernel machine, you can set:
-
-```bash
-export CELLUCID_CLIENT_SERVER_URL="https://<your-proxy-or-forwarded-url>"
+```python
+viewer = show_anndata(
+    "data.h5ad",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    client_server_url="https://notebooks.example.org/user/alice/proxy/8765",
+)
 ```
 
-Then create the viewer normally.
+`client_server_url` must be an absolute HTTP(S) base URL without a trailing
+slash, query, fragment, or credentials.
 
-### Alternative (classic HPC): SSH port forwarding
+### SSH port forwarding for a browser tab
 
 On the remote machine:
 ```bash
@@ -199,7 +210,7 @@ Lazy gene expression means:
 If gene requests are consistently slow:
 - your storage is slow (network filesystem)
 - your `.h5ad` is not chunked/optimized for the access pattern
-- consider `.zarr` for chunked access
+- use a read-only-backed `.h5ad` on fast local storage
 
 ---
 
@@ -215,16 +226,16 @@ Likely causes:
 Fix:
 - move data to fast local SSD (if possible)
 - consider exporting (quantize+compress) for repeated viewing
-- consider zarr for chunked storage
+- move the `.h5ad` to fast local storage
 
-### Symptom: “Viewer iframe shows ‘proxy required’”
+### Symptom: remote viewer iframe is blank or unreachable
 
 Likely causes:
 - notebook served over HTTPS and the kernel server is only reachable over HTTP loopback
 
 Fix:
-- enable `jupyter-server-proxy`, or
-- set `CELLUCID_CLIENT_SERVER_URL` to a browser-reachable URL
+- expose the server through the notebook deployment, and
+- pass that exact base URL as `client_server_url`.
 
 ### Symptom: “WebGL context lost / blank canvas”
 
@@ -235,7 +246,8 @@ Likely causes:
 Fix:
 - reduce dataset size (downsample/filter)
 - close other GPU-heavy tabs
-- try a different browser or machine
+- confirm hardware acceleration and WebGL2 are enabled, then update the
+  browser, operating system, and GPU driver when applicable
 
 ---
 

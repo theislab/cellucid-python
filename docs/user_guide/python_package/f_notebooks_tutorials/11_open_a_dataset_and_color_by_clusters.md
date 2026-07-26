@@ -35,7 +35,12 @@ If you already have `adata`:
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata(adata, height=650)
+viewer = show_anndata(
+    adata,
+    height=650,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 viewer
 ```
 
@@ -44,7 +49,12 @@ If you have a file:
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata("my_dataset.h5ad", height=650)  # or "my_dataset.zarr"
+viewer = show_anndata(
+    "my_dataset.h5ad",
+    height=650,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 viewer
 ```
 
@@ -117,12 +127,13 @@ You need:
 
 ### If you already have a UMAP embedding
 
-Look for a key like:
-- `X_umap` (Scanpy convention; usually 2D)
-- `X_umap_3d` (if you explicitly stored 3D)
-- sometimes project-specific names like `umap`, `X_umap_harmony`, etc.
+Look for one of the exact keys:
+- `X_umap_1d`
+- `X_umap_2d`
+- `X_umap_3d`
 
-If you see `X_umap` in `adata.obsm`, you can proceed.
+If one of those keys exists with its declared number of columns, you can
+proceed.
 
 ### If you do NOT have UMAP (compute it with Scanpy)
 
@@ -143,6 +154,7 @@ adata = adata[:, adata.var["highly_variable"]].copy()
 sc.pp.pca(adata)
 sc.pp.neighbors(adata)
 sc.tl.umap(adata)
+adata.obsm["X_umap_2d"] = adata.obsm.pop("X_umap")
 ```
 
 Now you should have:
@@ -151,7 +163,7 @@ Now you should have:
 list(adata.obsm.keys())
 ```
 
-and `X_umap` should appear.
+and `X_umap_2d` should appear.
 
 ---
 
@@ -204,6 +216,7 @@ viewer = show_anndata(
     adata,
     height=650,
     dataset_name="My dataset (tutorial)",
+    dataset_id="my-study-v1",
 )
 viewer
 ```
@@ -211,7 +224,7 @@ viewer
 ```{tip}
 If you want Cellucid to use a specific gene identifier column (e.g. gene symbols stored in `adata.var["gene_symbols"]`), pass:
 
-`show_anndata(adata, gene_id_column="gene_symbols")`
+`show_anndata(adata, gene_id_column="gene_symbols", dataset_name="My dataset", dataset_id="my-dataset")`
 ```
 
 ---
@@ -246,31 +259,13 @@ If the field name is wrong or missing, nothing catastrophic happens; the command
 
 ---
 
-## Screenshot placeholders (optional but helpful)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-notebooks-color-by-clusters-field-selector
-Suggested filename: web_app/00_field-selector-color-by-clusters.png
-Where it appears: User Guide → Python Package → Notebooks/Tutorials → 11_open_a_dataset_and_color_by_clusters.md
-Capture:
-  - UI location: field selector open (obs fields visible)
-  - State prerequisites: dataset loaded; at least one categorical obs field present (e.g. leiden)
-  - Action to reach state: open field selector and hover the cluster field to show tooltip (if any)
-Crop:
-  - Include: field selector UI + search box + the selected field highlighted
-  - Include: enough of the canvas to show categorical coloring applied
-Redact:
-  - Remove: any private dataset name/sample IDs visible in the UI
-Alt text:
-  - Field selector open with a cluster field selected, and points colored categorically.
-Caption:
-  - Use the field selector to color points by a cluster/label column (categorical obs field).
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for coloring by a cluster field.
+```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
+:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
 :width: 100%
 
-Field selector open with a cluster field selected; points are colored categorically and a legend is visible.
+Selecting a categorical observation field colors the embedding and exposes its complete category legend.
 ```
 
 ---
@@ -321,7 +316,7 @@ See web-app docs:
 
 Likely causes (most common first):
 1) the Python server failed to start (port conflict, exception)
-2) web UI cache is missing/corrupt (first run offline, blocked network)
+2) the configured web generation could not be fetched, verified, or published
 3) remote kernel without proxy/tunnel
 
 How to confirm:

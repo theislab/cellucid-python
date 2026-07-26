@@ -155,16 +155,17 @@ Important nuance for selection:
 - Hover/click events are high-frequency; hover is debounced.
 
 If you are debugging Python synchronization, start from:
-- `cellucid/markdown/HOOKS_DEVELOPMENT.md`
+- {doc}`../../python_package/e_jupyter_hooks/14_troubleshooting_hooks`
 
 ### Common failure modes (Python/Jupyter)
 - Wrong `viewerId` (messages routed to the wrong embedded viewer)
 - Dataset mismatch (indices don’t refer to the same cells)
 - Server unreachable from the viewer (HTTPS/remote notebooks without Jupyter Server Proxy, or remote/HPC without tunneling)
-- Embedded UI assets blocked (hosted-asset proxy blocked and no cached copy available)
+- Viewer startup failed to establish its exact configured web generation
 
 First-line diagnostic:
-- `viewer.debug_connection()` (server probes + ping/pong + frontend debug snapshot + forwarded console errors)
+- `viewer.debug_connection()` (server probes + ping/pong + frontend debug
+  snapshot + accepted-event counts)
 
 ---
 
@@ -174,4 +175,3 @@ First-line diagnostic:
 - `03_highlight_ui`
 - `05_edge_cases_highlighting`
 - `06_troubleshooting_highlighting`
-- `../g_cross_highlighting/index`

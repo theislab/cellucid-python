@@ -10,11 +10,11 @@
 
 Most Cellucid failures fall into one of these buckets:
 
-1) **The browser can’t load the viewer UI** (offline/cache/mixed-content/proxy)
+1) **The exact viewer generation cannot be established or served**
 2) **The browser can’t reach the Python server** (port/network/tunnel/proxy)
 3) **The dataset can’t be interpreted** (missing embeddings/manifests)
 4) **Hooks/events aren’t being delivered** (routing/viewerId mismatch)
-5) **Session capture/apply fails** (not ready, requestId gating, mismatch policy)
+5) **Session capture/apply fails** (not ready, requestId gating, exact dataset fingerprint mismatch)
 
 The fastest way to debug is to test these buckets in order.
 
@@ -31,7 +31,7 @@ report
 
 This returns a structured dict that checks:
 - server probes (`/_cellucid/health`, `/_cellucid/info`, `/_cellucid/datasets`)
-- whether the viewer UI (`/index.html`) is being served (proxy + cache)
+- whether the verified viewer UI (`/index.html`) is being served
 - a Python → frontend roundtrip (ping/pong)
 - a frontend debug snapshot (iframe URL/origin/user agent)
 - recent frontend console warnings/errors forwarded to Python
@@ -41,13 +41,16 @@ This returns a structured dict that checks:
 - `server_health` / `server_health_error`
   - If this fails: the server isn’t reachable (port/network problem).
 - `viewer_index_probe` / `viewer_index_probe_error`
-  - If this fails: the UI assets aren’t being served (offline/cache/network).
+  - If this fails: the active verified generation is not being served.
 - `frontend_roundtrip`
   - If `ok=False`: Python→frontend messaging is broken or the iframe isn’t alive.
-- `frontend_console`
-  - If populated: often contains the real error (missing assets, fetch failures, blocked requests).
-- `jupyter_server_proxy.installed`
-  - If false in a remote/HTTPS notebook: mixed-content issues are likely.
+- `frontend_debug_snapshot`
+  - Confirms the live iframe URL, origin, server URL, connection state, parent
+    origin, and browser identification.
+- `recent_events`
+  - Confirms which accepted event types reached Python.
+- `client_server_url`
+  - This must be the exact HTTP(S) base that the browser can reach.
 
 ```{tip}
 When asking for help, paste the `report` (redacting private paths/dataset names) instead of describing symptoms loosely.
@@ -82,12 +85,16 @@ If this fails:
 
 ## Step 2: confirm the viewer UI is being served
 
-Cellucid notebook/server mode serves the UI from the Python server (hosted-asset proxy + cache).
+Cellucid notebook/server mode serves one exact verified web generation from the
+Python server.
 
 Check:
 - `viewer.server_url + "/index.html"`
 
-If the UI cannot be served and no cached copy exists, you’ll see an error page explaining how to populate the cache (see {doc}`06_privacy_security_and_offline_vs_online`).
+Viewer construction establishes that generation before binding the server and
+raises on failure. If the published generation is removed while a server is
+running, asset requests return an explicit service error. See
+{doc}`06_privacy_security_and_offline_vs_online`.
 
 ---
 
@@ -101,9 +108,9 @@ Fix patterns:
 
 ### Option A (recommended): `jupyter-server-proxy`
 
-If installed, the notebook can proxy the viewer through the notebook server origin.
-
-The embed code will try this automatically when it detects HTTPS/remote origins.
+If installed and enabled, the notebook can proxy the viewer through the
+notebook server origin. Obtain the proxy’s browser base and pass it explicitly
+as `client_server_url=`; Cellucid does not detect or select it.
 
 ### Option B: SSH port forwarding (robust, works everywhere)
 
@@ -112,7 +119,15 @@ If your kernel runs on a remote machine:
 1) Start the viewer on a fixed port:
 
    ```python
-   viewer = show_anndata("data.h5ad", port=8765)
+   from cellucid import AnnDataViewer
+
+   viewer = AnnDataViewer(
+       "data.h5ad",
+       port=8765,
+       dataset_name="Example",
+       dataset_id="example",
+       client_server_url="http://127.0.0.1:8765",
+   )
    print(viewer.viewer_url)
    ```
 
@@ -195,8 +210,10 @@ Likely causes:
 - browser can’t POST to `/_cellucid/session_bundle` due to proxy/mixed-content issues.
 
 How to confirm:
-- `viewer.debug_connection()` (look at `state.ready`, `frontend_roundtrip`, and `frontend_console`)
-- browser network tab for `POST /_cellucid/session_bundle?...`
+- `viewer.debug_connection()` (look at `state.ready`, `frontend_roundtrip`,
+  `frontend_debug_snapshot`, and `recent_events`)
+- browser network tab for
+  `POST /_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
 
 Fix:
 - call `viewer.wait_for_ready(timeout=60)` first,
@@ -229,45 +246,13 @@ See: {doc}`04_dataset_identity_and_reproducibility`
 
 ---
 
-## Screenshot placeholder: browser devtools network POSTs to `/_cellucid/events`
-
-This screenshot is extremely helpful for non-developers when debugging hooks.
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: debugging-network-events-post
-Suggested filename: data_loading/devtools-network-events-post.png
-Where it appears: Python Package → Concepts → Debugging → Hooks/events
-Capture:
-  - UI location: browser devtools (Network tab)
-  - State prerequisites: a viewer running; interact to trigger selection/hover
-  - Action to reach state: open devtools, filter for `_cellucid/events`, do a lasso selection
-Crop:
-  - Include: the POST request row(s) + the request URL
-  - Exclude: unrelated tabs/bookmarks, personal profile icons
-Redact:
-  - Remove: dataset identifiers if shown
-Annotations:
-  - Callouts: #1 POST /_cellucid/events request, #2 status code (200 vs failing)
-Alt text:
-  - Browser developer tools showing POST requests to the Cellucid events endpoint.
-Caption:
-  - Hooks are delivered as HTTP POSTs from the viewer to the local Python server; if these requests are missing or failing, Python callbacks cannot fire.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for browser devtools showing POST requests to /_cellucid/events.
-:width: 100%
-
-Hooks are delivered as HTTP POSTs from the viewer to the local Python server; if these requests are missing or failing, Python callbacks cannot fire.
-```
-
----
-
 ## Troubleshooting index (symptom → fix)
 
 ### Symptom: “Blank viewer area”
 
 Likely causes:
-- UI assets not cached and network blocked,
+- the configured source generation could not be fetched, verified, or
+  published during viewer construction,
 - mixed-content blocked (HTTPS notebook),
 - server not reachable.
 
@@ -284,15 +269,21 @@ Fix:
 - check browser Network tab,
 - recreate the viewer.
 
-### Symptom: “`apply_session_to_anndata` did nothing”
+### Symptom: “`apply_cellucid_session_to_anndata(...)` raised an error”
 
 Likely causes:
-- mismatch policy skipped dataset-dependent chunks,
-- session doesn’t contain highlights/fields.
+- the required `expected_dataset_id`, cell count, or gene count does not match
+  the bundle fingerprint,
+- an output column already exists,
+- the session does not contain a requested highlight or user-defined-field
+  chunk.
 
 Fix:
-- use `return_summary=True`,
-- inspect `bundle.list_chunk_ids()`.
+- read the raised exception; fingerprint mismatches and column collisions are
+  rejected before mutation,
+- pass the exact dataset ID for the AnnData object,
+- inspect `bundle.list_chunk_ids()` before selecting which current chunks to
+  apply.
 
 ---
 

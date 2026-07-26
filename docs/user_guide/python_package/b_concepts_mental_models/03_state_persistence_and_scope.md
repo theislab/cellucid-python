@@ -119,7 +119,13 @@ This is a practical, high-signal pattern that works for both beginners and exper
 
 ```python
 from cellucid import prepare
-prepare(..., out_dir="./exports/pbmc_v1")
+prepare(
+    ...,
+    out_dir="./exports/pbmc_v1",
+    dataset_name="PBMC v1",
+    dataset_id="pbmc-v1",
+    obs_categorical_dtype="uint16",
+)
 ```
 
 ### Step 2: explore (many times)
@@ -146,7 +152,11 @@ In the web app: use **Save State** (downloads a `.cellucid-session` file).
 For example, turn highlights into `adata.obs` columns so downstream analysis can be scripted and versioned:
 
 ```python
-adata2 = bundle.apply_to_anndata(adata, inplace=False)
+adata2 = bundle.apply_to_anndata(
+    adata,
+    expected_dataset_id="pbmc-v1",
+    inplace=False,
+)
 ```
 
 See: {doc}`05_sessions_to_anndata_bridge`.
@@ -155,33 +165,11 @@ See: {doc}`05_sessions_to_anndata_bridge`.
 
 ## Screenshot: where “Save State” lives in the web app
 
-If you want to make this chapter friendlier for wet lab users, capture a screenshot of the session controls.
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: state-persistence-save-state-button
-Suggested filename: sessions_sharing/save-state-button-location.png
-Where it appears: Python Package → Concepts → State, persistence, and scope → Session bundle section
-Capture:
-  - UI location: Cellucid web app, “Session state” panel
-  - State prerequisites: any dataset loaded
-  - Action to reach state: open the “User data” area and locate “Session state”; show the “Save State” button
-Crop:
-  - Include: the panel header + the Save/Load controls (so the reader can find it)
-  - Exclude: private dataset identifiers
-Redact:
-  - Remove: dataset names if sensitive
-Annotations:
-  - Callouts: #1 Save State button, #2 Load State button
-Alt text:
-  - Session state panel with Save State and Load State controls.
-Caption:
-  - Session bundles are the durable way to preserve interactive UI state; you can save/load them in the web app or capture them into Python in notebooks.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Session state panel.
+```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
+:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
 :width: 100%
 
-Session bundles are the durable way to preserve interactive UI state across reloads and across machines.
+The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```
 
 ---
@@ -226,11 +214,11 @@ Fix:
 
 Likely causes:
 - you loaded the session before the dataset finished loading,
-- the session was for a different dataset and was skipped,
-- the session restore was still in progress (large sessions can restore progressively).
+- the session was rejected because its dataset identity did not match,
+- the session load reported another validation error.
 
 How to confirm:
-- watch for session-related warnings/notifications in the UI,
+- read the session-load error shown by the UI,
 - verify dataset ID and counts match (see {doc}`04_dataset_identity_and_reproducibility`).
 
 ---

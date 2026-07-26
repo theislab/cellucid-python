@@ -42,21 +42,11 @@ my_export/
 
 ## Key naming and safety rules (applies everywhere)
 
-Many paths in manifests use `{key}` placeholders.
-
-The web app expands `{key}` by applying the same sanitization rule as the Python exporter:
-
-```text
-safe = re.sub(r"[^A-Za-z0-9._-]+", "_", key)
-safe = safe.strip("._")
-safe = safe or "field"
-```
-
-This means:
-- manifest keys can be human-readable (`"pct mito"`),
-- but files on disk use a safe form (`pct_mito`).
-
-Collisions are possible; avoid them (see {doc}`02_input_requirements_global`).
+Many paths in manifests use `{key}` template tokens. Observation keys and gene
+IDs must already satisfy the one portable identifier contract; neither the
+exporter nor loader rewrites them. The exact identifier appears in the
+manifest and path. Unsafe identifiers and case-insensitive collisions reject
+the complete candidate (see {doc}`02_input_requirements_global`).
 
 ---
 
@@ -108,7 +98,7 @@ It provides:
     "compression": 6,
     "var_quantization": 8,
     "obs_continuous_quantization": 8,
-    "obs_categorical_dtype": "auto"
+    "obs_categorical_dtype": "uint16"
   },
   "source": {
     "name": "Optional source name",
@@ -195,7 +185,7 @@ Example (quantized continuous + quantized outliers):
 ```
 
 Notes:
-- `{key}` is sanitized by the loader before substitution.
+- `{key}` is the exact previously validated portable identifier.
 - `{ext}` for codes is chosen based on the field’s codes dtype (`uint8 → u8`, `uint16 → u16`).
 
 #### `_continuousFields`
@@ -219,13 +209,13 @@ Where:
 ### Binary payload files under `obs/`
 
 Per continuous field:
-- `obs/<safe_key>.values.f32` or `.values.u8` or `.values.u16` (optionally `.gz`)
+- `obs/<key>.values.f32` or `.values.u8` or `.values.u16` (optionally `.gz`)
 
 Per categorical field:
-- `obs/<safe_key>.codes.u8` or `.codes.u16` (optionally `.gz`)
-- `obs/<safe_key>.outliers.f32` or `.outliers.u8` or `.outliers.u16` (optionally `.gz`)
+- `obs/<key>.codes.u8` or `.codes.u16` (optionally `.gz`)
+- `obs/<key>.outliers.f32` or `.outliers.u8` or `.outliers.u16` (optionally `.gz`)
 
-Quantized missing markers:
+Quantized outlier/categorical missing markers:
 - 8-bit: `255`
 - 16-bit: `65535`
 
@@ -240,7 +230,7 @@ Quantized missing markers:
 Top-level keys:
 - `"_format": "compact_v1"`
 - `"n_points": <n_cells>`
-- `"var_gene_id_column": "index" | "<column>"`
+- `"var_gene_id_column": null | "<exact-column>"`
 - `"compression": <gzip level or null>`
 - `"quantization": 8 | 16 | null`
 - `"_varSchema": { ... }`
@@ -294,10 +284,12 @@ Each file stores a vector of length `n_cells`.
 
 ## Connectivity manifest: `connectivity_manifest.json` (and `connectivity/` binaries)
 
-When connectivities are exported, the exporter writes an unweighted undirected edge list:
+When connectivities are exported, the exporter writes a weighted undirected
+edge list:
 
 - `connectivity/edges.src.bin(.gz)`
 - `connectivity/edges.dst.bin(.gz)`
+- `connectivity/edges.weights.f64.bin(.gz)`
 
 `connectivity_manifest.json` contains:
 
@@ -311,13 +303,19 @@ When connectivities are exported, the exporter writes an unweighted undirected e
   "index_dtype": "uint16",
   "sourcesPath": "connectivity/edges.src.bin.gz",
   "destinationsPath": "connectivity/edges.dst.bin.gz",
+  "weightsPath": "connectivity/edges.weights.f64.bin.gz",
+  "weight_dtype": "float64",
+  "weight_bytes": 8,
   "compression": 6
 }
 ```
 
 Notes:
-- edge arrays are parallel: `src[i]` connects to `dst[i]`
+- the three arrays are aligned: `src[i]` connects to `dst[i]` with
+  little-endian Float64 weight `weights[i]`
 - indices are 0-based and refer to the exported cell row order
+- weights are finite, non-negative, and exactly symmetric in the validated
+  source graph
 
 ---
 
@@ -342,9 +340,9 @@ Practical guidance:
 - `compression=6` is a good balance for final exports.
 - Disable compression during iteration to reduce CPU time, then enable for publish/share.
 
-Compatibility note:
-- modern browsers support native `DecompressionStream` for gzip;
-- for older environments, ensure the web app build includes a gzip fallback (or export uncompressed).
+Browser requirement:
+- gzip-compressed exports require native `DecompressionStream('gzip')`;
+- current Chrome, Edge, Firefox, and Safari releases provide this API.
 
 ---
 
@@ -393,8 +391,10 @@ Web app docs:
 
 ## Edge cases and common footguns
 
-- **Partial exports**: interrupted runs can leave missing files; always verify `dataset_identity.json` + at least one `points_*d.bin`.
-- **Stale manifests**: reusing an `out_dir` with `force=False` can skip writing manifests while `dataset_identity.json` updates.
+- **Rejected candidates**: generation publication is atomic; a failed or
+  interrupted candidate is not adopted.
+- **Existing targets**: `force=False` rejects a non-empty target, while
+  `force=True` publishes one complete replacement generation.
 - **Mixed compression**: manually mixing compressed and uncompressed files breaks expectations; keep exports consistent.
 - **Case sensitivity**: dataset IDs and filenames can behave differently on macOS vs Linux vs Windows; prefer lowercase IDs.
 - **Huge category lists**: categorical fields with massive category counts bloat `obs_manifest.json`.
@@ -418,7 +418,8 @@ Fix:
 
 Likely causes:
 - `obs_manifest.json` or `var_manifest.json` missing,
-- or stale manifests because export was skipped.
+- or a manually modified/incomplete directory that was not produced by the
+  current atomic exporter.
 
 Fix:
 - re-export with `force=True`,

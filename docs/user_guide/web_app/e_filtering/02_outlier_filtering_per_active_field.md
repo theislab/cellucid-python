@@ -92,31 +92,13 @@ If your dataset is loaded from a source that does not provide outlier quantiles 
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: filtering-outlier-slider
-Suggested filename: filtering/01_outlier-filter-slider.png
-Where it appears: User Guide → Web App → Filtering → 02_outlier_filtering_per_active_field.md
-Capture:
-  - UI location: left sidebar → Coloring & Filtering (or equivalent) → outlier slider
-  - State prerequisites: dataset loaded; categorical field selected that exposes the outlier slider; slider moved below 100%
-  - Action to reach state: select a clustering-like categorical field and adjust the outlier slider to ~95%
-Crop:
-  - Include: the slider + its label + the Active filters area showing the outlier filter entry
-  - Include: enough canvas to see that outliers are gone
-Redact:
-  - Remove: private dataset names and local paths if visible
-Alt text:
-  - Outlier filtering slider set below 100% with the outlier filter listed in Active filters.
-Caption:
-  - Show where the slider is and how to confirm it is active.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the outlier filter slider.
+```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
+:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
 :width: 100%
 
-Use the outlier filter slider to hide extreme values for the active field, and confirm it is enabled in the Active filters list.
+Selecting a categorical observation field colors the embedding and exposes its complete category legend.
 ```
 
 ---

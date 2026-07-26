@@ -66,30 +66,7 @@ If you’re trying to reason about edge cases, start from the UI glossary (`a_or
 
 This diagram is the quickest way to understand “what is a thing” in Cellucid and what changes when you click.
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: orientation-mental-model
-Where it appears: What is Cellucid? → The Cellucid mental model
-Capture:
-  - Asset type: diagram (SVG preferred) OR a clean annotated screenshot
-  - Content: dataset → embedding(s) → fields → views/snapshots → filters/highlights → analysis → exports/sessions
-  - Goal: communicate scope + flow (not every UI detail)
-Crop:
-  - Include only the diagram (no browser chrome)
-Redact:
-  - Not applicable (use generic labels like `pbmc_demo`)
-Annotations:
-  - Keep it minimal; use a single directional flow with 6–8 nodes
-Alt text:
-  - Diagram of the Cellucid workflow from dataset to exports.
-Caption:
-  - The Cellucid mental model: dataset → embeddings → fields → views → highlights/filters → analysis → exports/sessions.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder diagram for the Cellucid mental model.
-:width: 100%
 
-The Cellucid mental model: dataset → embeddings → fields → views → highlights/filters → analysis → exports/sessions.
-```
 
 Key terms (you’ll see these throughout the docs):
 

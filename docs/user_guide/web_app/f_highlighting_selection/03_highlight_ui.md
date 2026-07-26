@@ -194,7 +194,7 @@ For exporting, the most robust current path is:
 
 ---
 
-## Advanced (may be dev-phase): create a categorical field from pages
+## Create a categorical field from pages
 
 Some builds include a “Category builder” UI under Highlighting that lets you:
 - drag highlight pages into a builder,

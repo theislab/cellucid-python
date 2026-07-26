@@ -38,8 +38,9 @@ In practice, information can leak from a visualization workflow through four rou
 3) **Exported artifacts** (files you share)
 4) **Screenshots/screen recordings** (often includes hidden identifiers like file paths)
 
-This page focuses on (1)–(3). For screenshots, follow the redaction checklist in:
-- {doc}`../r_screenshot_checklist/index`
+This page focuses on (1)–(3). Before sharing a screenshot, remove patient or
+sample identifiers, private repository names, usernames, tokens, URLs that
+identify private infrastructure, and local filesystem paths.
 
 ---
 

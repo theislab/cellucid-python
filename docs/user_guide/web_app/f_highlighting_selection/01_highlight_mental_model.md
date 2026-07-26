@@ -268,12 +268,16 @@ Recommended patterns:
   ```python
   viewer.wait_for_ready()
   bundle = viewer.get_session_bundle(timeout=60)
-  adata2 = bundle.apply_to_anndata(adata, inplace=False)
+  adata2 = bundle.apply_to_anndata(
+      adata,
+      expected_dataset_id="my-study-v1",
+      inplace=False,
+  )
   ```
 
 Important constraint: selections/highlights in sessions are currently **index-based** (cell identity is the row position), so only apply sessions to an `AnnData` with the same row order.
 
-Developer reference: `cellucid/markdown/HOOKS_DEVELOPMENT.md`
+Developer reference: {doc}`../../python_package/e_jupyter_hooks/16_reference`
 
 ---
 
@@ -286,5 +290,4 @@ Developer reference: `cellucid/markdown/HOOKS_DEVELOPMENT.md`
 - `03_highlight_ui`
 - `04_selection_synchronization`
 - `../e_filtering/index`
-- `../g_cross_highlighting/index`
 - `../l_sessions_sharing/index`

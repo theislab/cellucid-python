@@ -20,8 +20,8 @@ You have three equivalent entry points:
 ```bash
 # Exported folder, .h5ad, or .zarr are all supported:
 cellucid serve /path/to/data
-cellucid serve /path/to/data.h5ad
-cellucid serve /path/to/data.zarr
+cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
+cellucid serve /path/to/data.zarr --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
 Then open the printed URL (or let it auto-open).
@@ -45,7 +45,8 @@ serve("./my_export")  # blocks until Ctrl+C
 - Serve with {func}`~cellucid.serve` or `cellucid serve ./my_export`
 
 **AnnData mode** (convenient, often slower):
-- Serve with {func}`~cellucid.serve_anndata` or `cellucid serve data.h5ad`
+- Serve with {func}`~cellucid.serve_anndata` or
+  `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`
 - Useful during exploratory analysis when you don’t want to write an export yet
 
 ### 2) Local machine vs remote server (HPC / cloud VM)
@@ -74,38 +75,6 @@ serve("./my_export")  # blocks until Ctrl+C
 
 ---
 
-## Screenshot placeholders (optional but recommended)
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: server-terminal-banner
-Where it appears: Server (browser tab + local HTTP server) → Fast path
-Capture:
-  - UI location: terminal output after starting the server
-  - State prerequisites: server started successfully
-  - Action to reach state: run `cellucid serve ./my_export` and wait for the banner
-Crop:
-  - Include: the final “SERVER RUNNING” banner + the Local URL/Viewer URL lines
-  - Exclude: full terminal prompt with username/hostname, any private paths
-Redact:
-  - Remove: usernames, hostnames, private dataset paths
-Annotations:
-  - Callouts:
-    - (1) Local URL (API/data origin)
-    - (2) Viewer URL (what to open in browser)
-Alt text:
-  - Terminal output showing the Cellucid server banner with local and viewer URLs.
-Caption:
-  - The server prints a local URL (data origin) and a viewer URL; open the viewer URL in your browser to load the dataset.
--->
-```{figure} ../../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Terminal output showing the Cellucid server banner with local and viewer URLs.
-:width: 100%
-
-The server prints a local URL (data origin) and a viewer URL; open the viewer URL in your browser to load the dataset.
-```
-
----
-
 ## Deep path (how server mode works)
 
 ### What the server provides
@@ -117,15 +86,16 @@ The server prints a local URL (data origin) and a viewer URL; open the viewer UR
   - `/_cellucid/info`
   - `/_cellucid/datasets`
 
-### Viewer UI hosting and offline behavior
+### Viewer UI hosting and source requirements
 
-By default, Cellucid serves the **viewer UI** from the same server origin via a hosted-asset proxy. This avoids:
+By default, Cellucid establishes and serves the exact verified **viewer UI**
+generation from the same server origin. This avoids:
 - mixed-content issues (HTTPS notebook + HTTP localhost)
 - cross-origin iframe restrictions
 
-If the runtime cannot reach the hosted viewer assets, you may see a “viewer UI unavailable” error page.
-Use the environment variable:
-- `CELLUCID_WEB_PROXY_CACHE_DIR` to control where the UI cache is stored.
+If the runtime cannot fetch and verify the exact source generation, startup
+raises before binding the server. Use `--web-cache-dir PATH` or the
+`web_cache_dir=` argument to select its publication directory.
 
 ---
 
@@ -172,8 +142,10 @@ Use the environment variable:
 - Confirm by visiting `/_cellucid/datasets`.
 
 ### “Exported folder missing some files”
-- The viewer expects a minimum set of files (`obs_manifest.json` and at least one `points_*d.bin(.gz)`).
-- If those are missing, the server may still start, but the viewer will fail to load the dataset correctly.
+- `CellucidServer` validates the complete declared prepared-artifact inventory
+  during construction.
+- Missing required metadata, point files, or any artifact declared by a
+  current manifest raises before a socket is bound.
 
 ---
 
@@ -214,16 +186,18 @@ Likely causes:
 
 Fix:
 - Prefer opening the viewer URL served by the same origin (default).
-- Disable conflicting extensions for the session, or use a different browser profile.
+- Disable the conflicting extension for the site, or verify the request in a
+  clean profile with extensions disabled.
 
 ---
 
-### Symptom: “Viewer UI unavailable” / blank page
+### Symptom: web-generation startup failure
 Likely causes:
-- The hosted viewer assets could not be fetched and are not cached.
+- The configured source inventory or one of its declared objects could not be
+  fetched or verified.
 
 Fix:
-- Ensure HTTPS access to the hosted UI once (to populate cache), or set a persistent `CELLUCID_WEB_PROXY_CACHE_DIR`.
+- Ensure source access at startup and pass a writable `web_cache_dir`.
 
 ---
 
@@ -240,11 +214,12 @@ Likely causes:
 
 Fix:
 - Export with {func}`~cellucid.prepare` (quantization + compression) and serve the exported directory.
-- Use `.h5ad` backed mode (default) or `.zarr` for lazy loading if staying in AnnData mode.
+- Use read-only-backed `.h5ad` input when staying in AnnData mode; Zarr input
+  is loaded eagerly.
 
 ---
 
-### Symptom: “`cellucid serve data.h5ad` says ‘Importing dependencies…’ and feels stuck”
+### Symptom: direct AnnData startup says “Importing dependencies…” and feels stuck
 What’s happening:
 - The first import may be slow in fresh environments because large scientific dependencies are loaded.
 

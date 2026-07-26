@@ -32,12 +32,17 @@ This page documents the notebook-facing APIs:
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata(adata)  # or "data.h5ad" / "data.zarr"
+viewer = show_anndata(
+    adata,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 ```
 
 What you should see:
 - A Cellucid viewer embedded in the notebook output, showing your embedding.
-- (Optionally) a one-time “viewer UI cache” download progress message on first run.
+- Progress while the complete configured web generation is fetched, verified,
+  and published for this startup (unless output is quiet).
 
 ### B) “I already exported a dataset folder”
 
@@ -74,7 +79,11 @@ Use {func}`~cellucid.show` when:
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata(adata)
+viewer = show_anndata(
+    adata,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 
 @viewer.on_selection
 def on_selection(event):
@@ -119,40 +128,6 @@ See {doc}`sessions` for what a session bundle contains and how to apply it back 
 
 ---
 
-## Screenshot placeholders (optional but recommended)
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: jupyter-embedded-viewer-success
-Where it appears: Jupyter (notebook embedding + hooks) → Fast path
-Capture:
-  - UI location: a notebook cell output showing the embedded Cellucid iframe
-  - State prerequisites: dataset loaded successfully (points visible)
-  - Action to reach state: run `viewer = show_anndata(adata)` and wait until the plot renders
-Crop:
-  - Include: the notebook output area + enough of the viewer UI to orient the reader (left sidebar + plot)
-  - Exclude: browser tabs, personal file paths, kernel names that reveal identity
-Redact:
-  - Remove: dataset/sample IDs if private, usernames/emails, local filesystem paths
-Annotations:
-  - Callouts:
-    - (1) viewer panel / sidebar
-    - (2) embedding plot area
-    - (3) a visible field selector or legend (if present)
-  - Style: 2–3 callouts max, consistent color
-Alt text:
-  - Cellucid viewer embedded in a notebook cell, showing an embedding plot and a sidebar.
-Caption:
-  - The Cellucid viewer running inline in a notebook after calling `show_anndata(adata)`; the sidebar controls and the embedding plot confirm the viewer is interactive.
--->
-```{figure} ../../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Cellucid viewer embedded in a notebook cell, showing an embedding plot and a sidebar.
-:width: 100%
-
-The Cellucid viewer running inline in a notebook after calling `show_anndata(adata)`; the sidebar controls and the embedding plot confirm the viewer is interactive.
-```
-
----
-
 ## Deep path (how notebook embedding works)
 
 ### What starts when you call `show(...)` / `show_anndata(...)`
@@ -160,7 +135,7 @@ The Cellucid viewer running inline in a notebook after calling `show_anndata(ada
 1. A **local HTTP server** starts (on `127.0.0.1:<port>`).
    - Exported data: {class}`~cellucid.CellucidServer`
    - AnnData mode: {class}`~cellucid.AnnDataServer`
-2. The viewer UI is loaded from the same origin via a **hosted-asset proxy** (to avoid mixed-content and cross-origin issues).
+2. The exact verified viewer generation is served from that same origin.
 3. The viewer UI posts interaction events back to the local server at `/_cellucid/events`.
 4. The Python viewer routes those events to your hook callbacks (e.g., `@viewer.on_selection`).
 
@@ -168,8 +143,8 @@ The Cellucid viewer running inline in a notebook after calling `show_anndata(ada
 
 Some notebook setups run the kernel remotely. In those cases, your browser may not be able to reach `http://127.0.0.1:<port>` directly.
 
-If that happens, set:
-- `CELLUCID_CLIENT_SERVER_URL` to a browser-reachable URL for the running Cellucid server (HTTPS if required).
+If that happens, pass the exact browser-reachable HTTP(S) base URL as
+`client_server_url=...` when constructing the viewer.
 
 ---
 
@@ -199,13 +174,16 @@ If that happens, set:
 
 ### Data size and performance
 - Very large `adata.X` can be slow in AnnData mode; consider exporting with {func}`~cellucid.prepare`.
-- If your `.h5ad` is huge, prefer serving in **backed/lazy** mode (default) rather than loading fully into RAM.
+- A `.h5ad` path is always opened read-only-backed; a `.zarr` path is loaded
+  eagerly.
 
 ### “My embedding is not 2D/3D”
 - Cellucid supports 1D/2D/3D embeddings; if the embedding is missing or has an unexpected shape, you’ll see missing plot / errors.
 
 ### Duplicate gene identifiers
-- If gene IDs are duplicated, gene lookup behavior can be ambiguous; ensure you have a stable gene ID strategy (see {doc}`export` and {doc}`adapters`).
+- Direct AnnData viewing rejects duplicate gene IDs and portable filename
+  collisions during adapter construction; provide a unique identifier through
+  `var.index` or `gene_id_column` (see {doc}`export` and {doc}`adapters`).
 
 ---
 
@@ -222,18 +200,18 @@ How to confirm:
 
 Fix:
 - Use a notebook environment (Jupyter, JupyterLab, VSCode notebooks, Colab).
-- If iframes are blocked, open the printed URL manually.
+- If iframes are blocked, open `viewer.viewer_url` manually.
 
 ---
 
-### Symptom: “Notebook proxy required” / the iframe shows a proxy warning
+### Symptom: remote notebook iframe is blank or unreachable
 
 Likely causes:
 - The browser cannot reach the kernel’s localhost server (remote kernel or strict origin policy).
 
-Fix options:
-- Recommended: install/enable `jupyter-server-proxy` (environment dependent).
-- Or set `CELLUCID_CLIENT_SERVER_URL` to a browser-reachable URL for the server.
+Fix:
+- expose the server through your notebook deployment, and
+- pass that exact base URL as `client_server_url`.
 
 ---
 
@@ -261,29 +239,35 @@ Fix:
 ### Symptom: “The iframe is blank / white / stuck loading”
 
 Likely causes:
-- The viewer UI failed to load (offline, blocked network, or cache missing).
+- Viewer construction raised because the configured generation could not be
+  established.
 - The server isn’t reachable from the browser (remote kernel / HTTPS notebook constraints).
 
 How to confirm:
 - Open `viewer.viewer_url` in a new browser tab (sometimes notebook output hides useful errors).
 
 Fix:
-- If you are offline, run once while online (to populate the viewer UI cache), then retry.
-- If the browser cannot reach localhost, set `CELLUCID_CLIENT_SERVER_URL` (or use a notebook proxy).
+- Ensure the configured source is reachable at startup and the selected
+  generation directory is writable. A previously published generation is not
+  substituted after source failure.
+- If the browser cannot reach localhost, expose the server and pass its exact
+  browser-reachable base URL as `client_server_url`.
 
 ---
 
-### Symptom: “Cellucid: Viewer UI unavailable” page
+### Symptom: web-generation startup failure
 
 Likely causes:
-- The hosted viewer assets could not be fetched and the local cache is empty/stale.
+- The configured source generation could not be fetched, verified, or
+  atomically published.
 
 How to confirm:
 - Run `viewer.debug_connection()` and inspect the `web_ui` section.
 
 Fix:
-- Ensure the runtime can reach the hosted viewer assets once (HTTPS).
-- Set `CELLUCID_WEB_PROXY_CACHE_DIR` to a persistent, writable directory.
+- Ensure the runtime can reach the configured source at viewer startup.
+- Pass a writable `web_cache_dir` and correct the exact reported source or
+  inventory failure.
 
 ---
 

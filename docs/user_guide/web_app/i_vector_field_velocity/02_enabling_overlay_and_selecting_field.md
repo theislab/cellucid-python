@@ -131,10 +131,7 @@ This prevents accidentally carrying a velocity overlay from dataset A into datas
 
 ---
 
-## Screenshots to capture (spec only)
+## Verified interface states
 
-See `08_screenshots` for the full checklist, but the minimum set for *this page* is:
-
-- Overlay controls visible in **Visualization → Render mode: Points**
-- A screenshot showing the **disabled** toggle with the “switch dimension” hint
-- A “before/after” pair: overlay off vs on (same camera)
+See {doc}`08_screenshots` for the enabled overlay, its core controls, and the
+expanded advanced settings rendered with a synthetic 2D vector field.

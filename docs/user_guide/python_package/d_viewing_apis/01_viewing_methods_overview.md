@@ -11,7 +11,9 @@ Cellucid always needs two things:
 1) the **viewer UI** (HTML/JS) that runs in your browser, and
 2) a **dataset server** that can answer “give me points / fields / genes / vectors” requests.
 
-`cellucid-python` starts a **local HTTP server** that serves *both* of those from the same origin (via the hosted-asset proxy), so you can open:
+`cellucid-python` establishes the exact viewer generation and starts a **local
+HTTP server** that serves both UI and data from the same origin, so you can
+open:
 
 ```text
 http://127.0.0.1:8765/
@@ -49,9 +51,9 @@ and the UI can load your data without cross-origin issues.
 | Data input | How you get it | Recommended APIs | Why you’d choose it |
 |---|---|---|---|
 | Exported directory | `cellucid.prepare(...)` | `show(dir)` / `serve(dir)` / `cellucid serve dir` | fastest + most reproducible + easiest to share |
-| `.h5ad` path | AnnData HDF5 file | `show_anndata("…h5ad")` / `serve_anndata("…h5ad")` / `cellucid serve …h5ad` | convenient + scalable via backed mode |
-| `.zarr` path | AnnData Zarr store | `show_anndata("…zarr")` / `serve_anndata("…zarr")` / `cellucid serve …zarr` | convenient + naturally chunked/lazy |
-| In-memory `AnnData` | you already loaded it | `show_anndata(adata)` / `serve_anndata(adata)` | great for small/medium; risky for huge matrices |
+| `.h5ad` path | AnnData HDF5 file | `show_anndata("…h5ad", dataset_name="My dataset", dataset_id="my-dataset")` / `serve_anndata("…h5ad", dataset_name="My dataset", dataset_id="my-dataset")` / `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset` | convenient + scalable via read-only backed access |
+| `.zarr` path | AnnData Zarr store | `show_anndata("…zarr", dataset_name="My dataset", dataset_id="my-dataset")` / `serve_anndata("…zarr", dataset_name="My dataset", dataset_id="my-dataset")` / `cellucid serve data.zarr --dataset-name "My dataset" --dataset-id my-dataset` | convenient when eager loading fits memory |
+| In-memory `AnnData` | you already loaded it | `show_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")` / `serve_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")` | great for small/medium; risky for huge matrices |
 
 ## Where the “14 loading options” fit
 
@@ -62,10 +64,15 @@ The docs use a canonical list of 14 ways to load data (web app only + server + n
 
 ## Common “gotchas” (read once)
 
-- **Large dataset?** Prefer `exported` + `serve/show` or `.h5ad/.zarr` + `serve_anndata/show_anndata` (backed mode).
+- **Large dataset?** Prefer an export, or a read-only-backed `.h5ad` through
+  `serve_anndata`/`show_anndata`; Zarr input is loaded eagerly.
 - **Remote machine?** Don’t bind to `0.0.0.0` unless you mean to. Use an SSH tunnel first: {doc}`12_remote_servers_ssh_tunneling_and_cloud`.
-- **HTTPS notebook?** Direct `http://127.0.0.1:<port>` iframes can be blocked. Use `jupyter-server-proxy` or set `CELLUCID_CLIENT_SERVER_URL`: {doc}`10_notebook_widget_mode_advanced`.
-- **Offline?** The viewer UI may need to be cached once while online. See {doc}`09_server_mode_advanced` and {doc}`15_troubleshooting_viewing`.
+- **HTTPS notebook?** Direct `http://127.0.0.1:<port>` iframes can be blocked.
+  Expose the port through HTTPS and pass its exact base as
+  `client_server_url=`: {doc}`10_notebook_widget_mode_advanced`.
+- **Viewer source blocked?** Viewer-serving startup stops instead of using a
+  previous generation. See {doc}`09_server_mode_advanced` and
+  {doc}`15_troubleshooting_viewing`.
 
 ## Next steps
 

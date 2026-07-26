@@ -13,7 +13,8 @@ Cellucid is a **web app** (the viewer UI) plus **helper packages** that bring yo
 - **Cellucid web app**: what you see and interact with in the browser.
 - **`cellucid` (cellucid-python)**: this package — export/serve data and embed the web app in notebooks.
 - **`cellucid-annotation`**: helper repo for community annotation workflows.
-- **`cellucid-r`**: planned; not ready yet.
+- **`cellucid-r`**: prepares R objects and matrices as Cellucid export folders;
+  see {doc}`../../r_package/index`.
 
 ## Choose your workflow (start here)
 

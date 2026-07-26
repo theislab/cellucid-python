@@ -177,28 +177,13 @@ Fix:
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: analysis-quick-insights-success
-Suggested filename: analysis/10_quick-success.png
-Where it appears: User Guide → Web App → Analysis → 03_analysis_mode_quick_insights.md
-Capture:
-  - UI location: Analysis → Quick mode open
-  - State prerequisites: at least one highlight page with a meaningful number of cells
-  - Action to reach state: select a page → open Analysis → Quick → choose 1 composition + 1 statistics field
-Crop:
-  - Include: the Quick header (page name + cell count) + Composition + Statistics sections
-Alt text:
-  - Quick analysis showing composition and statistics summaries for a highlight page.
-Caption:
-  - Quick mode gives a fast sanity-check view of page composition and QC/statistics without configuring a full plot.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for Quick mode showing composition and statistics.
+```{figure} ../../../_static/screenshots/analysis/quick-insights.png
+:alt: Quick analysis results showing group composition and summary statistics.
 :width: 100%
 
-Quick mode gives a fast sanity-check view of page composition and QC/statistics without configuring a full plot.
+Quick Insights summarizes the selected highlight page with composition and numeric statistics.
 ```
 
 ---

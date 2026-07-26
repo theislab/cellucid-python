@@ -12,14 +12,16 @@ This page documents the **global rules** that apply to *every* input you pass to
 
 Before you export a real dataset, confirm:
 
-1) You have **at least one embedding** (`X_umap_2d` or `X_umap_3d`).
+1) You have **at least one embedding** (`X_umap_1d`, `X_umap_2d`, or
+   `X_umap_3d`).
 2) `latent_space` is provided (required by `prepare()`).
 3) `obs` has exactly `n_cells` rows and matches the embedding row order.
 4) If exporting genes:
    - `gene_expression.shape == (n_cells, n_genes)`
    - `var` has `n_genes` rows and is aligned to gene_expression columns
 5) Embeddings contain **no NaN/Inf** (must be finite).
-6) Column names you care about are **safe and unique after sanitization** (see Rule 5).
+6) Exported identifiers are already **portable exact filename components** and
+   are unique under case-insensitive filesystem comparison (see Rule 5).
 7) You are not accidentally reusing an old `out_dir` with `force=False`.
 
 If you want a copy/paste preflight script, jump to:
@@ -101,16 +103,16 @@ If you pass `genes × cells`, export will fail (shape mismatch) or silently expo
 
 ## Rule 3: embeddings must be finite (no NaN/Inf)
 
-`prepare()` normalizes each embedding by computing min/max ranges. If your embedding contains NaN/Inf:
-- normalization produces NaNs,
-- those NaNs get written to `points_*d.bin(.gz)`,
-- and the web app may render nothing or crash.
+`prepare()` validates embeddings before publication. `NaN`, infinities,
+complex values, constant coordinate domains, and values outside finite
+`float32` range reject the complete candidate.
 
 ### What to do instead
 
 - Remove cells with invalid coordinates (most common).
 - Recompute the embedding.
-- Avoid “placeholder” values like `1e20` for missing coords (they break normalization).
+- Avoid sentinel values like `1e20` for missing coordinates; they break
+  normalization.
 
 ---
 
@@ -135,35 +137,31 @@ Details: {doc}`04_obs_cell_metadata`
 
 ---
 
-## Rule 5: naming rules and filename collisions (do not ignore)
+## Rule 5: exact portable identifiers (do not ignore)
 
-On disk, field keys are converted to filesystem-safe names using the same logic as the web app:
+Observation keys, gene IDs, dataset IDs, and vector-field IDs are used as
+contract identifiers and filename components. `prepare()` does not rewrite
+them. Each must:
 
-```text
-safe = re.sub(r"[^A-Za-z0-9._-]+", "_", name)
-safe = safe.strip("._")
-safe = safe or "field"
-```
-
-This is convenient (you can have spaces), but it can cause collisions:
-
-| Original key | Safe filename key |
-|---|---|
-| `sample id` | `sample_id` |
-| `sample/id` | `sample_id` |
-| `sample_id` | `sample_id` |
-
-If two different keys map to the same safe key, **files can overwrite each other**.
+- contain 1–180 ASCII bytes,
+- begin with an ASCII letter or digit,
+- contain only ASCII letters, digits, `.`, `_`, or `-`,
+- not end in `.`,
+- not be `.` or `..`,
+- not be a Windows device name, and
+- be unique under case-insensitive filesystem comparison.
 
 Recommendations:
-- Use simple keys for exported fields (letters/numbers/underscore/dash).
-- Ensure uniqueness *after* sanitization.
-- Avoid leading/trailing dots/underscores (they are stripped).
+- choose stable portable identifiers before export,
+- keep the original scientific/display label separately when it needs spaces
+  or other punctuation, and
+- resolve case-only collisions explicitly.
 
 This applies to:
 - `obs` column names,
 - gene identifiers (from `var_gene_id_column`),
-- vector field ids (vector fields are stricter: unsafe ids raise an error).
+- dataset IDs, and
+- vector-field IDs.
 
 ---
 
@@ -172,11 +170,14 @@ This applies to:
 `out_dir` defaults to `./exports/` under your current working directory, but you should **always set it explicitly**.
 
 Important behavior:
-- Many files are **skipped** if they already exist and `force=False`.
-- `dataset_identity.json` is written at the end of every run (so it can become inconsistent with older manifests if you reused an `out_dir`).
+- A non-empty target raises `FileExistsError` when `force=False`.
+- `force=True` writes one complete sibling stage, validates it, and atomically
+  replaces the previous generation.
+- A rejected or interrupted candidate leaves the previous generation unchanged.
 
 Practical rules:
-- During iteration: use `force=True` or a fresh `out_dir` per run.
+- During iteration: use `force=True` for an intentional complete replacement or
+  a fresh `out_dir` per run.
 - For publishable exports: use a clean new `out_dir` and keep it immutable.
 
 ---
@@ -205,12 +206,10 @@ If you export everything by default, it’s easy to create:
 - wrong connectivity shape (must be square),
 - vector field shape mismatch and unsupported ids.
 
-It does **not** currently validate:
-- collisions after safe-key sanitization for obs/gene ids,
-- pathological category counts (e.g., > 65534 categories),
-- NaNs/Inf in embeddings (it will proceed and write broken outputs).
-
-Treat the preflight checklist as mandatory.
+It also validates exact identifier portability and collisions, category
+capacity, finite scientific arrays, vector domains, and atomic output
+publication. The preflight remains useful because it catches data-preparation
+mistakes earlier and lets you attach study-specific context to the error.
 
 ---
 
@@ -222,24 +221,32 @@ Treat the preflight checklist as mandatory.
 ```python
 import numpy as np
 
-X_umap = adata.obsm.get("X_umap_3d", adata.obsm.get("X_umap_2d", adata.obsm.get("X_umap")))
-if X_umap is None:
-    raise ValueError("Missing embedding: provide adata.obsm['X_umap_2d'], ['X_umap_3d'], or ['X_umap'].")
+embedding_key = next(
+    (key for key in ("X_umap_3d", "X_umap_2d", "X_umap_1d") if key in adata.obsm),
+    None,
+)
+if embedding_key is None:
+    raise ValueError("Provide X_umap_1d, X_umap_2d, or X_umap_3d in adata.obsm.")
 
-if X_umap.ndim != 2 or X_umap.shape[1] not in (2, 3):
-    raise ValueError(f"Unexpected embedding shape: {X_umap.shape} (expected (n_cells, 2) or (n_cells, 3))")
+X_umap = np.asarray(adata.obsm[embedding_key])
+expected_dimension = int(embedding_key[-2])
+if X_umap.ndim != 2 or X_umap.shape[1] != expected_dimension:
+    raise ValueError(
+        f"{embedding_key} must have shape (n_cells, {expected_dimension}); "
+        f"got {X_umap.shape}."
+    )
 
 n_cells = X_umap.shape[0]
 if adata.n_obs != n_cells:
     raise ValueError("AnnData n_obs does not match embedding row count (alignment bug).")
 
 if not np.isfinite(X_umap).all():
-    bad = np.where(~np.isfinite(X_umap).any(axis=1))[0][:10]
+    bad = np.where(~np.isfinite(X_umap).all(axis=1))[0][:10]
     raise ValueError(f"Embedding contains NaN/Inf; fix before export. Example bad rows: {bad.tolist()}")
 
 latent = adata.obsm.get("X_pca", X_umap)
 if latent is None or latent.shape[0] != n_cells:
-    raise ValueError("latent_space required and must match n_cells. Use adata.obsm['X_pca'] or a fallback latent.")
+    raise ValueError("latent_space required and must match n_cells. Use adata.obsm['X_pca'] or another aligned latent representation.")
 
 obs = adata.obs
 if obs.shape[0] != n_cells:

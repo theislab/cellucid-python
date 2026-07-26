@@ -135,7 +135,9 @@ cellucid serve ./my_export
 ### Option B: AnnData server (convenient during iteration)
 
 ```bash
-cellucid serve ./data.h5ad
+cellucid serve ./data.h5ad \
+  --dataset-name "Development dataset" \
+  --dataset-id development-dataset
 ```
 
 Both modes should open the viewer in a browser automatically (unless `--no-browser`).
@@ -150,7 +152,11 @@ Minimal test:
 
 ```python
 from cellucid import show_anndata
-viewer = show_anndata("path/to/data.h5ad")
+viewer = show_anndata(
+    "path/to/data.h5ad",
+    dataset_name="Development dataset",
+    dataset_id="development-dataset",
+)
 viewer  # show the iframe output
 ```
 
@@ -163,17 +169,17 @@ If the iframe is blank or hooks don’t work:
 
 ## Offline / airgapped development notes
 
-The Python servers run in **hosted-asset proxy** mode by default:
-- they fetch the web UI from `https://www.cellucid.com`,
-- cache it locally,
-- and serve it from the same origin as the dataset server (avoids mixed-content).
+The Python servers establish the configured exact web generation before
+binding:
 
-If you are offline:
-- run once while online to populate the cache,
-- then reuse that cache.
+- they fetch and parse `cellucid-web-assets.json`,
+- download every declared object to a staging directory,
+- byte-verify and atomically publish the complete generation, and
+- serve it from the same origin as the dataset API.
 
-You can control where the cache lives:
-- `CELLUCID_WEB_PROXY_CACHE_DIR` (see {doc}`06_configuration_env_vars_and_logging`)
+Each startup requires source access. Select the destination explicitly with
+`--web-cache-dir` or `web_cache_dir=` (see
+{doc}`06_configuration_env_vars_and_logging`).
 
 ---
 
@@ -205,11 +211,11 @@ Then rebuild:
 make -C docs clean html
 ```
 
-### Symptom: “Browser opens but shows ‘viewer UI unavailable’”
+### Symptom: server startup reports a web-generation failure
 
-This usually means the hosted UI could not be fetched and no cached copy exists.
+This means the source generation could not be fetched, verified, or published.
 
 Fix:
-- ensure network access to `https://www.cellucid.com`, or
-- pre-populate the cache once while online, or
-- set `CELLUCID_WEB_PROXY_CACHE_DIR` to a writable, persistent path.
+- ensure access to the configured source,
+- correct the exact inventory/object error reported by startup, and
+- pass a writable `web_cache_dir`.

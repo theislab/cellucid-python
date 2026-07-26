@@ -6,7 +6,7 @@
 - How to reason about the export format at the file level
 - How to validate binaries (points, edges, values) and spot corruption/misalignment
 - How vector fields are named and scaled
-- How connectivity export works (dtype selection, symmetrization)
+- How exact connectivity validation and index dtype selection work
 
 This tutorial assumes you’ve already successfully exported at least one dataset.
 
@@ -41,8 +41,11 @@ rownames(var) <- var$symbol
 
 conn <- Matrix(0, nrow = n_cells, ncol = n_cells, sparse = TRUE)
 conn[1, 2] <- 1
+conn[2, 1] <- 1
 conn[1, 3] <- 1
+conn[3, 1] <- 1
 conn[4, 3] <- 1
+conn[3, 4] <- 1
 
 vector_fields <- list(
   velocity_umap_2d = matrix(c(0.2, 0,
@@ -148,17 +151,20 @@ Gene export details: {doc}`../c_data_preparation_api/06_gene_expression_matrix`
 
 ## Part 5 — Validate connectivity edge pairs
 
-Connectivity export writes parallel arrays:
+Connectivity export writes three aligned arrays:
 - `edges.src.bin`
 - `edges.dst.bin`
+- `edges.weights.f64.bin`
 
-The dtype depends on `n_cells` (uint16/uint32/uint64).
+The dtype is `uint16` through 65,536 cells and `uint32` through
+4,294,967,296 cells. Larger axes are outside the current graph contract.
 
 For small `n_cells` it will be uint16:
 
 ```r
 src_path <- file.path(out_dir, "connectivity", "edges.src.bin")
 dst_path <- file.path(out_dir, "connectivity", "edges.dst.bin")
+weights_path <- file.path(out_dir, "connectivity", "edges.weights.f64.bin")
 
 read_u16 <- function(path) {
   con <- file(path, open = "rb")
@@ -168,12 +174,24 @@ read_u16 <- function(path) {
 
 src <- read_u16(src_path)
 dst <- read_u16(dst_path)
-cbind(src[1:3], dst[1:3])
+
+read_f64 <- function(path) {
+  con <- file(path, open = "rb")
+  on.exit(close(con), add = TRUE)
+  readBin(con, what = "numeric", size = 8, endian = "little", n = 1000)
+}
+
+weights <- read_f64(weights_path)
+cbind(src[1:3], dst[1:3], weights[1:3])
 ```
 
 Remember:
 - indices are 0-based
 - only unique undirected edges are kept (`src < dst`)
+- weights are exact little-endian Float64 values aligned by array index
+- the input must already be finite, non-negative, exactly symmetric in
+  topology and weight, and zero on the diagonal; invalid input is rejected
+  rather than transformed
 
 ---
 
@@ -210,17 +228,18 @@ Root cause:
 Prevention:
 - choose a canonical `cells` vector and reorder everything explicitly
 
-### 2) Filename collisions after sanitization
+### 2) Unsafe or colliding identifiers
 
 Symptoms:
 - missing genes
 - overwritten fields
 
 Root cause:
-- two IDs map to the same sanitized filename
+- an ID is not a portable filename component, or two IDs collide under
+  case-insensitive comparison
 
 Prevention:
-- enforce uniqueness after sanitization (especially for gene IDs)
+- validate exact portability and case-insensitive uniqueness before export
 
 ---
 

@@ -22,11 +22,12 @@ This page documents:
 
 **Audience**
 - Wet lab / beginner: use the “Apply to AnnData” workflow and the troubleshooting section.
-- Computational: pay attention to dataset mismatch policies and cell ordering assumptions.
+- Computational: pay attention to exact dataset identity and cell ordering assumptions.
 - Developer: read the “Format + safety” section before handling bundles from untrusted sources.
 
 **Prerequisites**
-- If applying to AnnData: `pandas` and an `AnnData` object.
+- If applying to AnnData: an `AnnData` object. Pandas is part of the Cellucid
+  core installation.
 - A session bundle, obtained either from the web app UI or from a notebook viewer.
 
 ---
@@ -39,7 +40,10 @@ from cellucid import CellucidSessionBundle
 bundle = CellucidSessionBundle("my-session.cellucid-session")
 
 # Apply to AnnData (creates new columns in adata.obs / adata.var)
-adata2 = bundle.apply_to_anndata(adata)
+adata2 = bundle.apply_to_anndata(
+    adata,
+    expected_dataset_id="my-study-v1",
+)
 ```
 
 Now inspect:
@@ -57,29 +61,11 @@ You have two typical options:
 
 Use this when you explore in the standalone browser viewer (notebook or not).
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: session-export-ui
-Where it appears: Sessions (.cellucid-session bundles) → How to obtain a session bundle
-Capture:
-  - UI location: the Cellucid web app panel/menu where a session export/download is triggered
-  - State prerequisites: any non-trivial session state (e.g., at least one highlight group)
-  - Action to reach state:
-    - create a highlight group (select cells → add to highlight)
-    - open the “Export / Session / Save” area
-    - click the button that downloads a `.cellucid-session`
-Crop:
-  - Include: the button/menu item that clearly indicates “download session” + any file extension hint
-  - Exclude: private dataset names, account avatars, repo URLs if private
-Alt text:
-  - Cellucid web app showing the control used to export or download a .cellucid-session bundle.
-Caption:
-  - Use the session export control to download a `.cellucid-session` bundle containing highlights and other session state.
--->
-```{figure} ../../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Cellucid web app showing the control used to export or download a .cellucid-session bundle.
+```{figure} ../../../../_static/screenshots/data_loading/data-loading-session-panel.png
+:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
 :width: 100%
 
-Use the session export control to download a `.cellucid-session` bundle containing highlights and other session state.
+The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```
 
 #### B) From a notebook viewer without downloading (advanced)
@@ -107,13 +93,13 @@ meta = bundle.decode_chunk("highlights/meta")
 
 Applying a bundle can add:
 - **Highlight membership columns** in `adata.obs` (typically boolean)
-- **User-defined categorical fields** in `adata.obs` or `adata.var` (depending on source)
+- **User-defined categorical and continuous cell-aligned fields** in
+  `adata.obs`
 - Optional bookkeeping in `adata.uns["cellucid"]` (manifest, fingerprint, and chunk snapshots)
 
-You can choose behavior via policies (see API reference below):
-- dataset mismatch handling (`dataset_mismatch=...`)
-- column conflict handling (`column_conflict=...`)
-- include/exclude deleted user-defined fields
+Application requires the exact `expected_dataset_id`. Identity, shape, bounds,
+and target-column conflicts are rejected before mutation. You may include or
+exclude deleted user-defined fields explicitly.
 
 ---
 
@@ -141,6 +127,33 @@ The `.cellucid-session` framing is:
 4. repeated chunks: `[chunkByteLength (u32 LE), chunkBytes...]`
 
 Each chunk has metadata in the manifest (`kind`, `codec`, expected sizes, ids).
+
+### Closed contributor/chunk inventory
+
+Application validates every manifest entry before decoding any payload. The
+current inventory is:
+
+| Contributor | Exact chunk identity |
+|---|---|
+| `core-state` | `core/state` |
+| `field-overlays` | `core/field-overlays` |
+| `dockable-layout` | `ui/dockable-layout` |
+| `highlights-meta` | `highlights/meta` |
+| `highlights-cells` | `highlights/cells/<groupId>` |
+| `user-defined-codes` | `user-defined/codes/<fieldId>` |
+| `analysis-windows` | `analysis/windows` |
+| `analysis-artifacts` | `analysis/artifacts/bulk-gene/<encoded-cache>/<encoded-gene>/<encoded-page>` |
+| `cinematic-camera` | `cinematic/camera` |
+
+An unknown chunk, unknown contributor, or mismatched contributor/chunk pair
+raises before payload decoding and before target mutation. AnnData application
+materializes only highlight and user-defined field chunks; the other current
+chunks remain in the session bundle, while their manifest entries are retained
+in `adata.uns` when `store_uns=True`.
+
+Each analysis-artifact identity segment uses the canonical JavaScript
+`encodeURIComponent` encoding. Noncanonical escapes, unescaped reserved
+characters, empty segments, or invalid UTF-8 are rejected.
 
 ---
 
@@ -172,7 +185,7 @@ Common mismatch causes:
 - you regenerated the AnnData with different preprocessing,
 - you are applying a session to a subset.
 
-If mismatch is detected, default behavior is to **warn and skip dataset-dependent chunks**.
+Any mismatch raises before the target is mutated.
 
 ### Cell ordering assumptions
 
@@ -182,7 +195,25 @@ If your AnnData row order differs, labels will be assigned to the wrong cells.
 ### Conflicting column names
 
 Applying a bundle can create columns like `cellucid_highlight__<group_id>`.
-If those already exist, choose a conflict policy (`error`, `overwrite`, `suffix`).
+If a target column already exists, application raises `ValueError`.
+
+### Backed AnnData
+
+`inplace=False` rejects a backed target before `AnnData.copy()` is called. If
+you need an independent result, choose and create it explicitly:
+
+```python
+in_memory = backed_adata.to_memory()
+result = bundle.apply_to_anndata(
+    in_memory,
+    expected_dataset_id="my-study-v1",
+    inplace=False,
+)
+```
+
+`inplace=True` is accepted without materializing `X`. It changes the live
+backed object's in-memory `obs`/`uns` state and does not write those changes
+back to the source H5AD file.
 
 ---
 
@@ -194,7 +225,7 @@ Likely causes:
 
 Fix:
 - Apply to the original AnnData used to create the session.
-- If you know what you’re doing, choose `dataset_mismatch="skip"` or `"warn_skip"` to salvage non-dependent chunks.
+- Pass the exact dataset ID used to create the viewer.
 
 ### Symptom: “Not a .cellucid-session file (invalid MAGIC header)”
 Fix:
@@ -210,7 +241,7 @@ Fix:
 ### Symptom: “No highlight columns were added”
 Likely causes:
 - The session contains no highlight data (no highlights were created).
-- Dataset mismatch caused dataset-dependent chunks to be skipped.
+- Dataset identity or dimensions do not match.
 - You disabled highlight application (`add_highlights=False`).
 
 How to confirm:
@@ -218,7 +249,7 @@ How to confirm:
 
 Fix:
 - Create at least one highlight group in the UI and re-export the session.
-- If mismatch is expected, set `dataset_mismatch="skip"` only if you understand the risk.
+- Apply only to the exact matching dataset.
 
 ---
 
@@ -234,8 +265,20 @@ Fix:
 
 ### Symptom: “Unsupported session chunk codec: …”
 Fix:
-- Update to a newer `cellucid` version that supports the codec used by the bundle.
-- If you control the writer, re-export using supported codecs (`none` or `gzip`).
+- Treat the bundle as outside the current contract.
+- If you control the writer, create a new bundle using the current `none` or
+  `gzip` codec contract.
+
+---
+
+### Symptom: “Unknown current session chunk …” or “requires contributor …”
+What it means:
+- The manifest contains a chunk outside the closed inventory above, or its
+  contributor does not own that exact chunk identity.
+
+Fix:
+- Do not edit or partially apply the bundle.
+- Capture a new bundle with the matching current web and Python package.
 
 ---
 
@@ -244,14 +287,8 @@ Likely causes:
 - You applied the same session twice, or you already have similarly named columns.
 
 Fix:
-- Use `column_conflict="suffix"` (default) to avoid overwriting.
-- Or choose `column_conflict="overwrite"` if you intentionally want replacement.
-
----
-
-### Symptom: “apply_cellucid_session_to_anndata requires pandas”
-Fix:
-- Install pandas in your environment: `pip install pandas`.
+- Choose non-conflicting `highlights_prefix` and `user_defined_prefix` values,
+  or explicitly remove the existing column before applying.
 
 ---
 

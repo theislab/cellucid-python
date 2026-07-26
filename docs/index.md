@@ -52,7 +52,7 @@ Viewer basics, filtering, highlighting, analysis, figure export, sessions, perfo
 Installation, data prep, `prepare()`/export, viewing modes, notebook integration, hooks/events, and troubleshooting.
 :::
 
-:::{grid-item-card} {octicon}`beaker;1.5em;sd-mr-1` R Export (Preview)
+:::{grid-item-card} {octicon}`beaker;1.5em;sd-mr-1` R Export
 :link: user_guide/r_package/index
 :link-type: doc
 

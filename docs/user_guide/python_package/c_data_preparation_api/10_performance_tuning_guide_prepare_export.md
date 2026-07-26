@@ -168,7 +168,9 @@ If connectivities are not essential, skip them in static exports.
 
 - Exporting to a slow filesystem (network mount) makes the “many files” problem much worse.
 - Enabling high gzip compression while exporting many genes can be painfully CPU-bound.
-- Reusing `out_dir` without `force=True` can produce stale manifests and confusing mismatches.
+- Reusing a non-empty `out_dir` with `force=False` raises
+  `FileExistsError`; use `force=True` only for an intentional complete
+  replacement.
 
 ---
 

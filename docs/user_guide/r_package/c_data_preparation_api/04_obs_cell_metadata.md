@@ -83,15 +83,14 @@ Missing values are encoded as a reserved integer:
 
 ### What quantization does
 
-Quantization maps floating values to integer bins to save space:
+Quantization maps finite floating values to integer bins:
 
-- 8-bit: `0..254` for valid values, `255` reserved for missing/invalid
-- 16-bit: `0..65534` for valid values, `65535` reserved for missing/invalid
+- 8-bit: `0..254`
+- 16-bit: `0..65534`
 
-Invalid values are:
-- `NA`
-- `Inf`
-- `-Inf`
+Continuous fields reject `NA`, `NaN`, and infinities. The final integer value
+is reserved only for categorical missing codes and generated nullable
+categorical outlier quantiles.
 
 ### Quantizing continuous fields
 
@@ -144,40 +143,29 @@ Cells in categories smaller than `centroid_min_points` get `NaN` outlier quantil
 
 Categorical codes can be written as `uint8` or `uint16`.
 
-Default:
-- `obs_categorical_dtype = "auto"`
-
-Auto behavior:
-- ≤ 254 categories → `uint8`
-- > 254 categories → `uint16`
-
-If you force `uint8` and a field has too many categories, export fails with an explicit error.
+Choose `obs_categorical_dtype = "uint8"` or `"uint16"` explicitly for every
+export. `uint8` stores at most 255 categories; choose `uint16` for larger
+categorical fields.
 
 ## Naming and filename safety
 
-Obs column names are sanitized to become filenames:
-- unsupported characters become underscores
-- leading/trailing dots/underscores are removed
-
-This is convenient, but can cause collisions if two column names sanitize to the same string.
+Obs column names are used exactly in manifests and filenames. They must satisfy
+the portable identifier contract and be unique under case-insensitive
+comparison.
 
 Recommendation:
 - keep obs column names simple and stable (letters/numbers/underscores)
 
 ## Edge cases (common in real datasets)
 
-### Continuous field is all missing / all infinite
+### Continuous field contains a non-finite value
 
-If a continuous field has no valid values:
-- export still succeeds,
-- `min_val`/`max_val` fall back to `0`/`1`,
-- all values become the reserved missing marker.
+Any `NA`, `NaN`, or infinity rejects the complete candidate.
 
 ### Continuous field is constant
 
 If all valid values are the same:
-- export still succeeds,
-- but the recorded range is widened (`max_val = min_val + 1`) to avoid divide-by-zero.
+- export terminates because compact quantization requires `minValue < maxValue`.
 
 ### Massive categorical fields
 
@@ -190,6 +178,7 @@ Recommendations:
 ## Troubleshooting pointers
 
 - “My numeric column became categorical” → check the R type (`str(obs$col)`).
-- “Export fails: uint8 can only hold 254” → use `obs_categorical_dtype="auto"` or `"uint16"`.
+- “Export fails because uint8 capacity is exceeded” → use
+  `obs_categorical_dtype="uint16"`.
 - “Outlier files are all missing/NaN” → category counts below `centroid_min_points` or latent space issues.
 - Full symptom-based troubleshooting: {doc}`11_troubleshooting_prepare_export`

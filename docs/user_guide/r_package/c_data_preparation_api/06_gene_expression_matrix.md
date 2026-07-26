@@ -72,12 +72,9 @@ Set:
 cellucid_prepare(..., var_quantization = 8)
 ```
 
-Missing/invalid values (`NA`, `Inf`, `-Inf`) are mapped to a reserved marker:
-
-| Quantization | Valid range | Missing marker |
-|---|---|---|
-| 8-bit | `0..254` | `255` |
-| 16-bit | `0..65534` | `65535` |
+Every gene value must be finite. Quantized finite values map to `0..254`
+(8-bit) or `0..65534` (16-bit); `NA`, `NaN`, and infinities reject the
+complete candidate rather than being mapped to a marker.
 
 ## The “sparse matrix” misconception
 
@@ -139,12 +136,13 @@ If you see “gene coloring is washed out”, consider:
 
 ### Invalid values (`NA`, `Inf`)
 
-If you export float32 (`var_quantization = NULL`), invalid values are written as-is (NaN/Inf).
-The viewer may handle them, but it’s safer to clean them ahead of time.
+Both float32 and quantized gene export reject `NA`, `NaN`, and infinities
+before publication. Correct the scientific input explicitly.
 
 ## Troubleshooting pointers
 
 - “var has X rows but gene_expression has Y genes” → orientation mismatch.
 - “Export is huge / takes forever” → you exported too many genes; use `gene_identifiers` + quantization.
-- “Gene IDs look weird” → your `rownames(var)` are missing; set them explicitly.
+- “Gene IDs are rejected” → provide exact portable unique IDs in
+  `rownames(var)` or the selected `var_gene_id_column`.
 - Full troubleshooting: {doc}`11_troubleshooting_prepare_export`

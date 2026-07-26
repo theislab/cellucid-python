@@ -1,9 +1,8 @@
 # Data Preparation API
 
-This section is the **exhaustive documentation** for the R export API:
+This section is the **exhaustive documentation** for the sole R export API:
 
-- `cellucid::cellucid_prepare(...)` (primary)
-- `cellucid::prepare(...)` (alias)
+- `cellucid::cellucid_prepare(...)`
 
 It focuses on:
 - exact input requirements (shapes, types, ordering),

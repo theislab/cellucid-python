@@ -82,10 +82,15 @@ Example: a 1200×900 plot at 300 DPI will produce an image roughly `1200×(300/9
 
 ## Downloads, filenames, and privacy
 
-- Exports download via your browser (usually to your default Downloads folder).
+- A single SVG or PNG export downloads in its native format.
+- Every multi-file choice downloads one ZIP archive containing all requested
+  SVG/PNG files byte-for-byte. This is the same contract in Chromium, Firefox,
+  and Safari/WebKit and does not require permission for multiple automatic
+  downloads.
 - Filenames are conservative and include dataset/field/view info, e.g.:
   - `<dataset>_<color-field>_<view>_<timestamp>.svg`
   - `<dataset>_<color-field>_<view>_dpi300_<timestamp>.png` (when exporting multiple DPIs)
+  - `<dataset>_<color-field>_<view>_batch_<timestamp>.zip` (batch download)
 
 :::{important}
 Exports can embed provenance metadata that may include **dataset names/ids and source paths/URLs**. If you are sharing figures publicly, skim {doc}`05_metadata_and_provenance` for how to inspect or strip metadata.
@@ -93,28 +98,13 @@ Exports can embed provenance metadata that may include **dataset names/ids and s
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: figure-export-panel-overview
-Suggested filename: figure_export/01_export-panel-overview.png
-Where it appears: User Guide → Web App → Figure Export → index.md
-Capture:
-  - UI location: Figure Export panel open with key sections visible (format/mode, size, preview/export)
-  - State prerequisites: dataset loaded; a color-by field set; legend visible
-Crop:
-  - Include: export panel + enough of the canvas to orient the reader
-  - Exclude: private dataset identifiers, file paths, personal avatars
-Alt text:
-  - Figure Export panel open in the sidebar.
-Caption:
-  - The Figure Export panel controls output format, size, and rendering mode; preview before exporting large figures.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Figure Export panel overview.
+```{figure} ../../../_static/screenshots/figure_export/panel-overview.png
+:alt: Figure Export panel showing Framing, Labels and Annotations, Style, Download, and Export controls.
 :width: 100%
 
-The Figure Export panel is the entry point for publication-grade SVG/PNG exports.
+The Figure Export panel groups framing, labels, style, and download settings before the explicit Export action.
 ```
 
 ---
@@ -128,7 +118,7 @@ The Figure Export panel is the entry point for publication-grade SVG/PNG exports
 5) {doc}`05_metadata_and_provenance`
 6) {doc}`06_edge_cases`
 7) {doc}`07_troubleshooting_figure_export`
-8) {doc}`08_screenshots` (capture checklist)
+8) {doc}`08_screenshots` (verified interface captures)
 9) {doc}`09_reference_implementation_notes`
 
 ```{toctree}

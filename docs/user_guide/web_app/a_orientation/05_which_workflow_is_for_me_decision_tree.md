@@ -12,28 +12,7 @@
 - If you are a **computational user with AnnData** → use `cellucid-python` (`show_anndata(...)` or `prepare(...); show(...)`).
 - If you need **multi-user labeling/voting** → use **Community Annotation** (GitHub-backed).
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: workflow-decision-tree-diagram
-Where it appears: Which workflow is for me? → Decision tree
-Capture:
-  - Asset type: diagram (SVG preferred)
-  - Content: a minimal decision tree that matches this page (Prepared vs AnnData vs Hosting vs Community annotation)
-  - Goal: let a non-technical reader choose a path in <30 seconds
-Crop:
-  - Include only the diagram
-Redact:
-  - Use generic dataset labels (e.g., `pbmc_demo`)
-Alt text:
-  - Decision tree for choosing a Cellucid workflow.
-Caption:
-  - Decision tree for selecting the simplest Cellucid workflow based on what data you have and how you need to share it.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder diagram for the workflow decision tree.
-:width: 100%
 
-Decision tree for selecting the simplest Cellucid workflow based on what data you have and how you need to share it.
-```
 
 ---
 
@@ -66,7 +45,7 @@ Do you already have a prepared export folder?
   └─ No →
        Do you have the dataset in Python (AnnData / arrays)?
          ├─ Yes → use cellucid-python:
-         │        - fastest: show_anndata(adata)
+         │        - fastest: show_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")
          │        - reproducible/sharable: prepare(..., out_dir=...); show(out_dir)
          └─ No → you need to obtain a usable export or a server endpoint first
 ```
@@ -87,7 +66,7 @@ Then decide on sharing:
 | You want to… | Recommended workflow | Why | Common gotcha |
 |---|---|---|---|
 | Try Cellucid quickly | Demo dataset | Zero setup | Not your data |
-| Explore your own data locally | Web app: Local data → H5AD/Zarr/Prepared | No server needed | Browser memory limits on huge datasets |
+| Explore your own data locally | Web app: Local data → Prepared, H5AD, or Zarr ZIP | No server needed | Browser memory limits on large direct files and archives |
 | Share a dataset with collaborators | Host the prepared export folder (HTTP) | Everyone opens the same dataset URL | CORS / hosting config |
 | Work in notebooks | `cellucid-python` (embedded viewer + hooks) | Tight Python ↔ UI loop | Notebook iframe restrictions (fullscreen/pointer lock) |
 | Compare multiple hypotheses | Multiview snapshots (“Keep view”) | Side-by-side views | Smoke mode is disabled when snapshots exist |

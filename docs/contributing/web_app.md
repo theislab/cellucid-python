@@ -19,7 +19,8 @@ Cellucid is split by responsibility:
 
 If you’re unsure where a bug belongs, open an issue in the repo you’re currently using and include:
 - where the UI ran (hosted app vs local app vs Jupyter iframe),
-- how data was loaded (exports vs `.h5ad`/`.zarr` vs remote server),
+- how data was loaded (Prepared, H5AD, Zarr ZIP, remote server, GitHub, or
+  Jupyter),
 - and the smallest reproduction you can share.
 
 ---
@@ -174,4 +175,3 @@ More detailed checklist:
   - how to verify (exact steps, dataset if possible)
 - If you changed a user-visible workflow, update docs in `cellucid-python/docs/`.
 - Do not attach private datasets or tokens to PRs/issues.
-

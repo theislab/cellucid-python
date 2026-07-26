@@ -41,7 +41,7 @@ For a Cellucid figure, that usually means recording:
 - plot size (W×H)
 - format (SVG vs PNG)
 - DPI (for PNG)
-- large dataset strategy (full/optimized/hybrid/raster)
+- explicit SVG point strategy (Full vector, Optimized vector, or Hybrid)
 - include axes/legend/title/background
 - frame export crop rectangle (if used)
 
@@ -55,9 +55,9 @@ If you saved a session bundle right before exporting, you already captured most 
 
 Cellucid exports embed metadata by default (there is no “metadata off” toggle in the current UI).
 
-### PNG metadata (tEXt chunks)
+### PNG metadata (UTF-8 iTXt chunks)
 
-PNG exports include standard `tEXt` fields such as:
+PNG exports include standard uncompressed `iTXt` fields such as:
 - `Software`: `Cellucid (cellucid.com)`
 - `Website`: `https://cellucid.com`
 - `Creation Time`: ISO timestamp
@@ -86,8 +86,13 @@ SVG exports include a `<metadata>` block with:
 Exports are named conservatively:
 - `<dataset>_<color-field>_<view>_<timestamp>.svg`
 - `<dataset>_<color-field>_<view>_dpi300_<timestamp>.png` (when exporting multiple DPIs)
+- `<dataset>_<color-field>_<view>_batch_<timestamp>.zip` (multi-file export)
 
 This makes it easier to tell “what is this file?” even without opening it.
+
+A batch ZIP adds no alternate scientific representation: each entry is the
+same native artifact, with its own embedded metadata, that the corresponding
+single-file renderer produces.
 
 :::{important}
 The embedded metadata is useful, but it does not replace version control. For long-term reproducibility, also record:
@@ -152,27 +157,13 @@ Related pages:
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: figure-export-metadata-example
-Suggested filename: figure_export/11_metadata-example.png
-Where it appears: User Guide → Web App → Figure Export → 05_metadata_and_provenance.md
-Capture:
-  - Export a PNG (or SVG) and show a view of its embedded metadata (or a sidecar/provenance panel if the UI provides it)
-  - Acceptable: a terminal `exiftool`-style view, macOS Preview “Inspector”, or a screenshot of the app’s provenance display
-Redact:
-  - Remove: private dataset ids/names, local file paths
-Alt text:
-  - An exported figure’s embedded metadata or provenance information.
-Caption:
-  - Provenance metadata makes it possible to recreate the same exported figure later; record dataset/version and export settings when preparing manuscripts.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for figure export metadata/provenance.
+```{figure} ../../../_static/screenshots/figure_export/labels-annotations.png
+:alt: Figure Export Labels and Annotations controls for title, axes, legend, and annotation visibility.
 :width: 100%
 
-Record (or embed) enough provenance to recreate the same export later, especially for manuscripts and collaboration.
+Labels and Annotations makes title, axis, legend, and annotation choices explicit.
 ```
 
 ---

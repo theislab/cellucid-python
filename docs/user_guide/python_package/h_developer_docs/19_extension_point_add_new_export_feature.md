@@ -105,7 +105,8 @@ Minimum doc updates:
 - add troubleshooting entries for common failure modes
 
 If the feature is UI-visible:
-- add screenshot placeholders per the screenshots guide.
+- add a reproduced and visually reviewed screenshot when it materially clarifies
+  the workflow.
 
 ---
 
@@ -127,18 +128,15 @@ If you touch session bundles or codecs:
 
 ---
 
-## Step 8 — Compatibility review
+## Step 8 — Exact ecosystem-contract review
 
 Before merging:
 
-- Does the change break older exports?
-- Does it break older viewers?
-- Is there a clear error message when a mismatch occurs?
-- Is the change additive and optional where possible?
-
-If you must break compatibility:
-- bump a version marker (`dataset_identity.json.version` or a manifest `_format` field),
-- and coordinate rollout with the web app.
+- Do Python, R, web readers, servers, checked-in datasets, schemas, and docs
+  implement the same current contract?
+- Does every mismatch fail before partial publication with one actionable error?
+- Were obsolete routes removed instead of retained as aliases or shims?
+- Did the coordinated producer/reader tests and current fixtures move together?
 
 ---
 

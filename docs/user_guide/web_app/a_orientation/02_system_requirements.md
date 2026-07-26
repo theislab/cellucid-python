@@ -9,7 +9,7 @@
 
 ---
 
-## Hard requirement: WebGL2 (no fallback)
+## Hard requirement: WebGL2
 
 Cellucid’s viewer is **WebGL2‑only**. If your browser/device cannot create a WebGL2 context, the app cannot run.
 
@@ -19,26 +19,28 @@ Common on-screen message (exact):
 
 If you hit this, your fastest fix is usually:
 
-1) try a different browser (Chrome/Edge are often the most reliable for WebGL2),
+1) update to the current stable release of your browser,
 2) update your browser,
 3) update GPU drivers / OS,
 4) disable strict “graphics blocking” policies (common in managed/corporate environments).
 
 ---
 
-## Supported environments (practical guidance)
+## Supported desktop environments
 
-Cellucid should work anywhere WebGL2 works, but in real life some combinations are smoother than others.
+Cellucid supports the current stable releases of:
 
-### Browsers (recommendation)
+| Browser | macOS | Windows | Linux |
+|---|---:|---:|---:|
+| Chrome | Yes | Yes | Yes |
+| Edge | Yes | Yes | Yes |
+| Firefox | Yes | Yes | Yes |
+| Safari | Yes | — | — |
 
-- **Recommended**: Chrome, Edge (best WebGL2 stability + modern file APIs).
-- **Usually OK**: Firefox (WebGL2 supported; performance can vary by GPU/driver).
-- **Sometimes OK**: Safari (WebGL2 support depends on macOS/iOS version; memory pressure is more common).
-
-:::{note}
-If you plan to load a *local exported folder* via a directory picker, Chrome/Edge are typically the least frustrating because the File System Access API support is more mature.
-:::
+All supported browsers must provide WebGL2 and the native
+`DecompressionStream('gzip')` API. Browser-native file pickers differ visually,
+but the local H5AD, Zarr, and prepared-export workflows use the same validation
+contract on every supported platform.
 
 ### Hardware (what matters)
 
@@ -66,8 +68,10 @@ Rule of thumb:
 Do these in order:
 
 1) **Confirm WebGL2 works**
-   - In Chrome/Edge: open `chrome://gpu` and look for “WebGL2: Hardware accelerated”.
-   - In Firefox: open `about:support` and look for WebGL2.
+   - In any supported browser console, evaluate
+     `document.createElement("canvas").getContext("webgl2") !== null`.
+   - The result must be `true`; use the browser's graphics diagnostics to
+     confirm hardware acceleration.
 
 2) **Try the app in a clean state**
    - Disable “aggressive” ad blockers for the site.
@@ -126,12 +130,12 @@ This section is intentionally long. Use the symptom that matches what you see.
 
 **How to confirm**
 
-- Check `chrome://gpu` (Chrome/Edge) or `about:support` (Firefox).
-- Look for “WebGL2” in the diagnostics and whether it is hardware-accelerated.
+- Evaluate the browser-neutral WebGL2 console check above.
+- Use the browser's graphics diagnostics to confirm hardware acceleration.
 
 **Fix**
 
-1) Try Chrome or Edge.
+1) Update to the current stable release of Chrome, Edge, Firefox, or Safari.
 2) Enable hardware acceleration in browser settings.
 3) Update browser + GPU drivers.
 4) If in a VM/remote desktop, switch to a machine with a real GPU or enable GPU passthrough.
@@ -161,7 +165,8 @@ This section is intentionally long. Use the symptom that matches what you see.
 
 1) Refresh the page once (sometimes the GPU recovers).
 2) Use **Reset Camera** and clear filters.
-3) If it persists, switch browsers or update drivers.
+3) If it persists, confirm hardware acceleration and WebGL2 are enabled, then
+   update the browser, operating system, and GPU driver when applicable.
 
 **Prevention**
 
@@ -172,28 +177,6 @@ This section is intentionally long. Use the symptom that matches what you see.
 ### Symptom: “WebGL context lost. Reload required…”
 
 Cellucid shows an overlay and requires a reload when the GPU context is lost.
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: system-requirements-webgl-context-lost
-Where it appears: System requirements → WebGL context lost
-Capture:
-  - Trigger a context lost overlay (or capture a real one if it occurs naturally)
-  - Include the “Reload” button and the message text
-Crop:
-  - Crop to the overlay (no personal browser chrome)
-Redact:
-  - Dataset ids or names if sensitive
-Alt text:
-  - Overlay stating that the WebGL context was lost and a reload is required.
-Caption:
-  - When GPU memory pressure causes a WebGL context loss, Cellucid requires a full reload.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the WebGL context lost overlay.
-:width: 100%
-
-When GPU memory pressure causes a WebGL context loss, Cellucid requires a full reload.
-```
 
 **Likely causes (ordered):**
 
@@ -217,7 +200,8 @@ When GPU memory pressure causes a WebGL context loss, Cellucid requires a full r
    - keep fewer views,
    - reduce point size / shader quality (if relevant),
    - close other GPU-heavy tabs.
-3) If the problem repeats, use a stronger GPU/machine or a different browser.
+3) If the problem repeats, reduce the dataset/rendering load or use a machine
+   with sufficient GPU memory.
 
 **Prevention**
 

@@ -34,7 +34,7 @@ Binding:
 Recommendation:
 - prefer SSH tunneling instead of exposing ports directly.
 
-### 2) Hosted-asset proxy (web UI caching)
+### 2) Exact viewer-generation delivery
 
 The server may download the viewer UI from:
 - `https://www.cellucid.com`
@@ -46,7 +46,7 @@ Privacy note:
 - but the cache directory location may appear in logs/debug reports; treat it as potentially sensitive.
 
 Config:
-- `CELLUCID_WEB_PROXY_CACHE_DIR`
+- `--web-cache-dir` or `web_cache_dir=`
 
 ### 3) Hooks event endpoint
 
@@ -61,7 +61,7 @@ Implication:
 
 ### 4) Session bundle upload endpoint
 
-- `POST /_cellucid/session_bundle?viewerId=...&requestId=...`
+- `POST /_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
 - used for notebook “no download” session capture
 
 Guards:
@@ -95,13 +95,14 @@ It does not:
 
 Before sharing logs/screenshots:
 
-- remove private dataset names (use `pbmc_demo` style placeholders)
+- replace private dataset names with an explicitly synthetic identifier such as
+  `pbmc_demo`
 - remove private hostnames and user paths
 - remove tokens or secrets
 - avoid posting raw `.cellucid-session` bundles from sensitive datasets
 
 When adding screenshots to docs, follow:
-- `cellucid/markdown/DOCUMENTATION_SCREENSHOTS_AND_FIGURES_GUIDE.md`
+- {doc}`15_docs_development_and_style_guide`
 
 ---
 
@@ -111,7 +112,8 @@ When adding screenshots to docs, follow:
 
 Python-side parsing and application takes a defensive stance:
 - bounds checks on indices/codes
-- mismatch policies (warn/skip/error)
+- a required exact dataset ID and exact cell/variable-count fingerprint check
+  that raises before mutation on any mismatch
 - chunk size guards for gzip decompression
 
 Related code:

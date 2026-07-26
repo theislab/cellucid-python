@@ -1,83 +1,70 @@
-# Screenshots
+# Verified core-interaction captures
 
-This page is a **screenshot capture checklist** for the Core Interactions section.
+## 2D dimension and navigation
 
-It exists so you (or a collaborator) can capture screenshots once, systematically, without hunting through every page.
+```{figure} ../../../_static/screenshots/web_app/dimension-navigation-controls-2d.png
+:alt: Cellucid Compare Views controls showing 2D dimension and Planar navigation selected.
+:width: 100%
 
----
+A 2D dataset selects Planar navigation by default. Dimension and navigation
+remain explicit controls if the user wants another valid configuration.
+```
 
-## How placeholders work
+```{figure} ../../../_static/screenshots/web_app/dimension-2d-planar-default.png
+:alt: Cellucid displaying a two-dimensional embedding with Planar navigation.
+:width: 100%
 
-All pages in this section currently use:
+The corresponding 2D view preserves a flat, screen-aligned exploration surface.
+```
 
-- `cellucid-python/docs/_static/screenshots/placeholder-screenshot.svg`
+## Comparing views
 
-Each placeholder is preceded by an HTML comment with:
+```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
+:alt: Cellucid showing two side-by-side views of the same dataset.
+:width: 100%
 
-- what state to capture,
-- what to crop/redact,
-- suggested caption/alt text,
-- suggested filename conventions.
+Two kept views support side-by-side comparison while retaining one dataset
+identity.
+```
 
-General guidance lives in:
+## Connectivity edges
 
-- `cellucid/markdown/DOCUMENTATION_SCREENSHOTS_AND_FIGURES_GUIDE.md`
+```{figure} ../../../_static/screenshots/web_app/connectivity-edges-controls.png
+:alt: Cellucid KNN Connectivity controls beside a 3D dataset with visible cyan graph edges.
+:width: 100%
 
----
+When a connectivity graph is present, the Render controls expose edge color,
+opacity, line width, and the maximum rendered edge count.
+```
 
-## Recommended screenshot set (core interactions)
+```{figure} ../../../_static/screenshots/web_app/connectivity-multiview.png
+:alt: Two Cellucid views showing the same point cloud and connectivity edges.
+:width: 100%
 
-### Navigation modes (3 screenshots)
+Connectivity rendering remains synchronized across kept views of the dataset.
+```
 
-1) Orbit mode (with orbit anchor visible)
-2) Planar mode (with zoom-to-cursor toggle visible)
-3) Free-fly mode (with Capture pointer visible)
+## Camera paths
 
-You can capture these from:
+```{figure} ../../../_static/screenshots/web_app/camera-path-unconfigured.png
+:alt: Camera Path panel with no saved keyframes and no playback bar.
+:width: 100%
 
-- `c_core_interactions/01_navigation_modes_orbit_planar_free_fly`
+With fewer than two saved positions, the top playback bar is absent and camera
+motion remains inactive.
+```
 
-### Multiview badges + indicators (1–2 screenshots)
+```{figure} ../../../_static/screenshots/web_app/camera-path-configured-panel.png
+:alt: Camera Path panel with two saved keyframes and playback settings.
+:width: 100%
 
-Capture:
+Two valid keyframes expose timing and interpolation settings in the sidebar.
+```
 
-- at least 2 snapshots,
-- grid compare layout,
-- cameras unlocked (so Orb/Pan/Fly badges show),
-- a visible dimension badge (e.g. 3D).
+```{figure} ../../../_static/screenshots/web_app/camera-path-transport-visible.png
+:alt: Cellucid with two camera keyframes and the playback transport visible above the canvas.
+:width: 100%
 
-Page:
-
-- `c_core_interactions/04_view_layout_live_snapshots_small_multiples`
-
-### Dimension switching (2 screenshots)
-
-1) Dimension dropdown open showing available dims
-2) Before/after switching dimensions (same view)
-
-Page:
-
-- `c_core_interactions/05_dimension_switching_1d_2d_3d`
-
-### Render modes (2 screenshots)
-
-1) Points mode (with render mode dropdown visible)
-2) Smoke mode (with smoke controls visible)
-
-Page:
-
-- `c_core_interactions/03_render_modes_points_vs_volumetric_smoke`
-
----
-
-## Highly recommended “failure mode” screenshots (debugging gold)
-
-These save huge amounts of time in support and onboarding:
-
-- WebGL context lost overlay (requires reload)
-- Smoke mode blank/slow (with grid + ray quality visible)
-- Pointer lock active (cursor hidden) and how to exit (`Esc`)
-
-System requirements page includes a placeholder for the context-lost overlay:
-
-- `a_orientation/02_system_requirements`
+The top transport appears only after two valid keyframes exist. Playback still
+waits for an explicit user action.
+```

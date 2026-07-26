@@ -41,7 +41,11 @@ Or visualize an AnnData from Python/Jupyter:
 ```python
 from cellucid import show_anndata
 
-show_anndata(adata)  # or: show_anndata("dataset.h5ad")
+show_anndata(
+    adata,
+    dataset_name="My dataset",
+    dataset_id="my-dataset",
+)
 ```
 
 ## Links

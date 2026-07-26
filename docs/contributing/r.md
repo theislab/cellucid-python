@@ -18,7 +18,8 @@ Cellucid is split by responsibility:
 | `cellucid-annotation` | GitHub repo template for community annotation | are changing the repo schema/validation/workflows |
 
 If you’re not sure where a bug belongs, open an issue in the repo you’re currently using and include:
-- how you loaded data (exports vs h5ad/zarr vs remote server vs Jupyter),
+- how you loaded data (Prepared, H5AD, Zarr ZIP, remote server, GitHub, or
+  Jupyter),
 - the UI environment (hosted app vs local app vs Jupyter iframe),
 - and the smallest reproduction you can share.
 
@@ -242,4 +243,3 @@ Common causes:
 Fix:
 - use `file.path()` in R code
 - avoid assuming writable directories; use `tempdir()` in tests/vignettes
-

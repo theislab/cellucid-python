@@ -25,7 +25,7 @@ Implementation:
 
 Use when:
 - you want convenience during iteration,
-- you want lazy loading from `.h5ad` backed mode or `.zarr`,
+- you want read-only backed access to `.h5ad`, or an eager load from `.zarr`,
 - you don’t want to write an export folder yet.
 
 Implementation:
@@ -34,7 +34,7 @@ Implementation:
 
 Both servers share:
 - CORS rules
-- hosted-asset proxy (web UI caching)
+- exact web-generation establishment and delivery
 - hooks event endpoint (`/_cellucid/events`)
 - session bundle upload endpoint (`/_cellucid/session_bundle`)
 
@@ -49,7 +49,7 @@ These endpoints exist in both server modes:
 
 ### `GET /`
 
-Serves the Cellucid web UI (typically via hosted-asset proxy).
+Serves the exact verified Cellucid web generation.
 
 ### `GET /_cellucid/health`
 
@@ -77,7 +77,7 @@ Frontend → Python hooks/events channel:
 Implementation:
 - `CORSMixin.handle_event_post` in `src/cellucid/_server_base.py`
 
-### `POST /_cellucid/session_bundle?viewerId=...&requestId=...`
+### `POST /_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
 
 Frontend → Python session capture channel:
 
@@ -122,23 +122,24 @@ Examples:
 - `/dataset_identity.json`
 - `/obs_manifest.json`
 - `/var_manifest.json`
-- `/points_3d.bin` or `/points_3d.bin.gz`
-- `/obs/<field>.values.f32` (and `.gz`)
-- `/var/<gene>.values.f32` (and `.gz`)
+- `/points_3d.bin`
+- `/obs/<field>.values.f32`
+- `/var/<gene>.values.f32`
 
 Key behaviors:
 
-- **lazy loading** for backed `.h5ad` and `.zarr` when possible
-- **gzip behavior**:
-  - `.gz` suffix returns raw gzip bytes (export-folder semantics)
-  - requests without `.gz` may return `Content-Encoding: gzip` if the browser supports it
-- **dataset id prefix stripping**: the frontend may request paths like `<dataset_id>/points_3d.bin`; the server strips the prefix.
+- **loading behavior**: H5AD is read-only backed; Zarr is loaded eagerly
+- **gzip behavior**: an exact unsuffixed binary route may return
+  `Content-Encoding: gzip` when the request advertises gzip support; `.gz` route
+  variants return `404`
+- **one rooted route contract**: data paths such as `/points_3d.bin` are served
+  exactly at the root; dataset-prefixed variants return `404`.
 
 ---
 
-## Hosted-asset proxy (why the UI loads “from the server”)
+## Verified web generation (why the UI loads from the server)
 
-Both servers are typically configured to run in hosted-asset proxy mode:
+Both servers establish the configured exact source generation:
 
 - when the browser requests `/index.html` or `/assets/...`,
 - the Python server downloads those files from `https://www.cellucid.com`,
@@ -147,36 +148,14 @@ Both servers are typically configured to run in hosted-asset proxy mode:
 
 Why this exists:
 - avoids HTTPS→HTTP mixed content in notebooks,
-- avoids cross-origin issues in embedded iframes,
-- enables offline reuse if the cache is pre-populated.
+- avoids cross-origin issues in embedded iframes.
 
-Cache configuration:
-- `CELLUCID_WEB_PROXY_CACHE_DIR` (see {doc}`06_configuration_env_vars_and_logging`)
+Generation-directory configuration:
+- `--web-cache-dir` or `web_cache_dir=` (see
+  {doc}`06_configuration_env_vars_and_logging`)
 
-If the proxy fails and no cached UI exists, the server returns a helpful HTML error page at `/index.html`.
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: hosted-asset-proxy-error-page
-Suggested filename: developer/hosted-asset-proxy-error.png
-Where it appears: Python Package → Developer Docs → Server mode architecture
-Capture:
-  - UI location: browser tab opened at http://127.0.0.1:<port>/
-  - State prerequisites: disconnect network AND clear cache dir (or use a fresh machine)
-  - Action to reach state: start server, open viewer URL
-Crop:
-  - Include: the error message text and the “what to do” bullet list
-  - Exclude: browser bookmarks/avatars, private paths
-Alt text:
-  - Browser page showing “Cellucid viewer UI could not be loaded” with steps to fix caching/network access.
-Caption:
-  - When the hosted UI cannot be fetched and no cached copy exists, the server shows an explicit error page explaining how to populate the cache.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the hosted-asset proxy error page.
-:width: 100%
-
-Hosted-asset proxy failure mode: the server explains how to populate the viewer UI cache for offline use.
-```
+If source download, verification, or atomic publication fails, server startup
+raises and does not bind. It never serves a different cached generation.
 
 ---
 
@@ -198,19 +177,25 @@ It is not a firewall and does not stop:
 - same-origin attackers,
 - or a user with network access.
 
-### Hooks event endpoint is viewerId-routed but not authenticated
+### Hooks event endpoint uses exact per-viewer authentication
 
-`POST /_cellucid/events` requires a `viewerId`, but does not currently enforce `viewerToken`.
-Treat it as trusted-local plumbing.
+`POST /_cellucid/events` requires a JSON object with non-empty `viewerId`,
+`viewerToken`, and `type`. The server authenticates the token before delivering
+the event exactly once. Unknown viewers return `404`; missing or incorrect
+credentials return `403`.
 
-### Session bundle upload has a “pending request” guard
+### Session bundle upload is token-bound and one-shot
 
 `/_cellucid/session_bundle` requires:
-- a `viewerId` and `requestId`,
-- and a prior registration by Python (`register_session_bundle_request`).
+- the exact `viewerId`, `viewerToken`, and `requestId` query fields,
+- a matching pending request registered by Python
+  (`register_session_bundle_request`), and
+- `Content-Type: application/octet-stream`.
 
 It also:
-- validates the magic header,
+- authenticates the viewer token,
+- consumes the pending request exactly once after full validation,
+- validates the complete bundle structure,
 - enforces a size limit,
 - writes to disk in a streaming way to avoid memory blowups.
 
@@ -242,7 +227,7 @@ curl -I http://127.0.0.1:8765/points_3d.bin
 
 Confirm:
 - the viewer is posting to `/_cellucid/events` (check browser network tab),
-- the event includes the correct `viewerId`,
+- the event includes the correct `viewerId`, `viewerToken`, and `type`,
 - Python registered the callback (viewer is still alive).
 
 Start with: {doc}`11_hooks_events_protocol_and_schema` and {doc}`12_debugging_playbook`.

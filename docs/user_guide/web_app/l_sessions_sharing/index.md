@@ -31,7 +31,6 @@ If you’re here because “I loaded a session but it looks different”, start 
 |---|---|---|---|
 | Reopen your work later | **Save State** → keep the `.cellucid-session` file | Captures UI state; reproducible “what I was looking at” | {doc}`03_save_restore_ux` |
 | Send someone an exact view | Send **dataset export folder** + `.cellucid-session` | Sessions don’t include data; folder + session is the portable pair | {doc}`05_share_workflows_links_bundles_exports` |
-| Make a dataset open “already configured” | Put a session in exports + list it in `state-snapshots.json` | Enables **auto-restore latest** on startup | {doc}`04_auto_restore_latest_from_dataset_exports` |
 | Collaborate on labels with many people | Use **Community Annotation** (GitHub-backed) | Sessions are single-user artifacts; annotation is multi-user | {doc}`../j_community_annotation/index` |
 
 ---
@@ -46,31 +45,13 @@ If you’re here because “I loaded a session but it looks different”, start 
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: sessions-session-controls-ui
-Suggested filename: sessions_sharing/01_session-controls-save-load.png
-Where it appears: User Guide → Web App → Sessions & Sharing → index.md
-Capture:
-  - UI location: User data accordion → “Session state” block
-  - State prerequisites: any dataset loaded (demo is fine)
-  - Action to reach state: open sidebar, expand User data, scroll to Session state
-Crop:
-  - Include: Save State + Load State buttons and the help text under “Session state”
-  - Include: enough canvas to orient that you’re in Cellucid (a small slice is fine)
-Redact:
-  - Remove: any private dataset names/IDs if needed
-Alt text:
-  - Session state controls with Save State and Load State buttons in the left sidebar.
-Caption:
-  - Save State downloads a `.cellucid-session` bundle; Load State restores it after the dataset is loaded.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the Session state controls.
+```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
+:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
 :width: 100%
 
-Save State downloads a `.cellucid-session` bundle; Load State restores it after the dataset is loaded.
+The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```
 
 ```{toctree}

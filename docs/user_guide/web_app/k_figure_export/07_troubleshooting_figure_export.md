@@ -32,38 +32,34 @@ This checklist resolves a large fraction of figure export reports:
    - If the smaller export works, scale up cautiously.
 
 5) **Check for Export Fidelity Warnings**
-   - Read the warning text: it often tells you exactly what changed (optimized reduction, forced hybrid, WebGL2 missing).
+   - **Export blocked** identifies the exact missing requirement. It never
+     changes the requested format or strategy.
 
 6) **Check the browser console**
    - Look for `[FigureExport]` errors/warnings.
    - If you’re filing a bug, copy the message and include it (see {doc}`09_reference_implementation_notes`).
 
-7) **Try a second browser**
-   - Especially if your environment blocks WebGL2 or downloads.
+7) **Check the expected delivery**
+   - One requested file downloads natively.
+   - Any multi-file choice downloads one ZIP containing every requested file.
 
 ---
 
-## If you see “Export Fidelity Warnings”
+## If you see “Export blocked”
 
-Cellucid shows fidelity warnings when an export cannot perfectly match what you see on screen.
-These warnings are there so you can make an informed choice.
+Cellucid blocks an export when it cannot exactly match the active view.
 
-Common warnings and what they mean:
+Common blockers and what they mean:
 
-- **“SVG strategy adjusted for WYSIWYG”**  
-  Your view uses shader-accurate 3D point rendering that cannot be represented as pure SVG circles, so Cellucid switches SVG export to **Hybrid** (raster points + vector annotations).
-
-- **“Shader-accurate export may degrade”**  
-  WebGL2 or required camera matrices are missing/unavailable, so point rasterization may fall back to simpler rendering (flat circles).  
-  Try a different browser or a less restricted environment.
-
-- **“Point reduction enabled”**  
-  You chose **Optimized vector** (density-preserving reduction). The export is not pixel-for-pixel identical to the full view.
+- **“Exact point export unavailable”**
+  WebGL2 or the required camera matrices are unavailable. Restore that capability
+  before exporting.
 
 - **“Connectivity overlay not exported”**  
-  Connectivity/edges are enabled in the viewer, but export currently includes the point layer only.
+  Connectivity edges are visible, but figure export covers the point layer only.
+  Disable the overlay before exporting.
 
-If the warning changes scientific meaning (e.g., rare points disappear under reduction), cancel and adjust strategy/size before exporting.
+There is no “export anyway” action: resolve every listed blocker first.
 
 ---
 
@@ -92,7 +88,7 @@ If the warning changes scientific meaning (e.g., rare points disappear under red
 
 ### Prevention
 
-- Use a modern desktop browser with WebGL2 support (Chrome/Edge are typically safest).
+- Confirm WebGL2 is available before requesting PNG or Hybrid.
 - For very large datasets, avoid full vector SVG; use Hybrid or PNG.
 
 ---
@@ -103,7 +99,7 @@ If the warning changes scientific meaning (e.g., rare points disappear under red
 
 - Export size/DPI is too large for available memory.
 - Browser/GPU limitations (especially for very large PNG or 3D views).
-- Missing required view buffers/render state (older builds or unusual viewer integrations).
+- Missing required view buffers or render state.
 
 ### How to confirm
 
@@ -117,7 +113,7 @@ If the warning changes scientific meaning (e.g., rare points disappear under red
 2) Switch strategy:
    - Large dataset → Hybrid SVG or PNG.
    - Medium dataset → Optimized vector.
-3) If the error message mentions missing viewer methods (e.g., `getViewPositions`), you may be on an incompatible build; file a bug with the error text.
+3) If the error message mentions a missing viewer method (for example, `getViewPositions`), file a bug with the exact error text and the steps that produced it.
 
 ---
 
@@ -147,7 +143,7 @@ If the warning changes scientific meaning (e.g., rare points disappear under red
 
 ### Prevention
 
-- Keep **Large data: Ask** enabled so you are prompted before generating an impractical SVG.
+- Choose the SVG strategy explicitly; Full vector has no automatic size guard.
 - Use {doc}`04_quality_knobs_and_best_practices` as your sizing/strategy playbook.
 
 ---
@@ -157,7 +153,6 @@ If the warning changes scientific meaning (e.g., rare points disappear under red
 ### Likely causes (ordered)
 
 - Export background differs (e.g., White BG vs Match viewer).
-- The view uses shader-accurate points but WebGL2 is unavailable, so export falls back to flatter rendering (often accompanied by a fidelity warning).
 - You changed the active view/field/filters right before export and are looking at a different state than you think.
 - Very small plot size + later scaling up makes the export look blurry compared to the interactive view.
 
@@ -165,33 +160,35 @@ If the warning changes scientific meaning (e.g., rare points disappear under red
 
 - Export a small PNG first (to verify state capture works).
 - Export again with **Match viewer** background and compare.
-- Check whether an “Export Fidelity Warning” appeared (and what it said).
-- Try exporting from a second browser (especially if WebGL2 is blocked).
+- Confirm that no **Export blocked** dialog remains unresolved.
 
 ### Fix
 
 1) Make the exported plot larger (don’t export tiny and scale up).
 2) Use **PNG (300 DPI)** or **Hybrid SVG** for 3D/shader-heavy views.
-3) Ensure WebGL2 is available (try a different browser or disable restrictive settings/extensions).
+3) Restore WebGL2 in the current environment by resolving the named policy,
+   driver, or extension restriction.
 4) If text/legend quality is the issue, export SVG (Hybrid) and edit text in a vector editor.
 
 ---
 
-## Symptom: “My 3D points exported as flat dots (no shading)”
+## Symptom: “PNG or Hybrid export is blocked”
 
 ### Likely causes (ordered)
 
-- WebGL2 is unavailable or blocked, so shader-accurate rasterization fell back to a simpler renderer.
+- WebGL2 is unavailable.
+- The active view has not published complete camera matrices.
 
 ### How to confirm
 
-- Look for a fidelity warning mentioning WebGL2.
-- Check the browser console for `[FigureExport] WebGL rasterization failed` warnings.
+- Read the **Exact point export unavailable** details.
+- Confirm the active view is fully loaded and the canvas has a WebGL2 context.
 
 ### Fix
 
-1) Try exporting from a WebGL2-capable browser (Chrome/Edge are often safest).
-2) Export **Hybrid SVG** or **PNG** (these are the formats that use shader-accurate rasterization when available).
+1) Restore WebGL2 or the missing camera matrices in the current environment.
+2) Submit the same PNG or Hybrid request again. Cellucid does not route the
+   request to a different renderer.
 
 ---
 
@@ -290,29 +287,6 @@ See {doc}`05_metadata_and_provenance` for:
 - how to inspect metadata,
 - how to strip metadata from PNG/SVG if needed,
 - and how to share “data + session + figures” without leaking local paths.
-## Screenshot placeholder (you will replace later)
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: figure-export-common-failure-dialog
-Suggested filename: figure_export/13_common-failure-dialog.png
-Where it appears: User Guide → Web App → Figure Export → 07_troubleshooting_figure_export.md
-Capture:
-  - Capture the most common export failure UI state you encounter (warning dialog, error banner, disabled export button state)
-  - Include the exact on-screen text and the recovery affordance (what the user should click next)
-Redact:
-  - Remove: private dataset identifiers if present
-Alt text:
-  - Figure export failure or warning message with recovery action.
-Caption:
-  - Screenshot the exact export failure state users report; the on-screen message and next action are often the fastest path to resolution.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for a common figure export failure state.
-:width: 100%
-
-Capture at least one “failure mode” screenshot; it dramatically reduces support/debugging time.
-```
-
 ---
 
 ## Next steps

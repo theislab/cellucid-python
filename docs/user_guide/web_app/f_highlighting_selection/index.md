@@ -7,7 +7,7 @@ This section is the “source of truth” for:
 - how highlight groups and highlight pages work (pages are named + colored; groups are persistent selections),
 - how each selection tool behaves (especially 2D vs 3D pitfalls),
 - what syncs across views/snapshots and with Python/Jupyter,
-- edge cases + troubleshooting + screenshot checklist.
+- edge cases, troubleshooting, and a verified highlighting capture.
 
 ## Fast path
 

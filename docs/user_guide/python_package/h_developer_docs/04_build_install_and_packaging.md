@@ -33,8 +33,8 @@ Key sections:
 - `importlib.metadata.version("cellucid")`
 
 This means:
-- in a normal install, `__version__` matches the package version,
-- in some editable/dev situations, metadata might be missing and `__version__` falls back to `"0.0.0"` (dev guard).
+- `__version__` matches installed package metadata;
+- missing package metadata raises immediately instead of inventing a version.
 
 If you are debugging a version mismatch, confirm:
 

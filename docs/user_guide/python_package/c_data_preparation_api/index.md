@@ -12,7 +12,7 @@ This export format is designed to be:
 - easy to host/share (static files + manifests),
 - fast to load in the browser,
 - reproducible (explicit manifests + stable dataset identity),
-- and compatible with future helpers (e.g., a future `cellucid-R` exporter).
+- shared with the current `cellucid-r` exporter and the web reader.
 
 This section focuses on:
 - exact input requirements (shapes, dtypes, ordering),
@@ -43,7 +43,8 @@ If you just want to visualize something quickly (no export deep dive yet), start
 ## “What do I need to export?” (at a glance)
 
 Minimum viable export (fastest to produce):
-- `latent_space` + `obs` + at least one embedding (`X_umap_2d` or `X_umap_3d`) → interactive viewer with metadata fields.
+- `latent_space` + `obs` + at least one embedding (`X_umap_1d`,
+  `X_umap_2d`, or `X_umap_3d`) → interactive viewer with metadata fields.
 
 Common “most useful” export:
 - add `gene_expression` + `var` → gene search + gene overlays.
@@ -54,7 +55,7 @@ Optional advanced features:
 
 ## API reference (when you need exact signatures)
 
-- {doc}`../api/export` (includes {func}`~cellucid.prepare` + docstring/autodoc)
+- {doc}`../g_api_reference_coverage/api/export` (includes {func}`~cellucid.prepare` + docstring/autodoc)
 
 ```{toctree}
 :maxdepth: 1

@@ -1,194 +1,354 @@
-"""
-Vector field utilities for Cellucid.
-
-Cellucid visualizes "vector fields" (animated arrow/flow overlays) as **per-cell
-displacement vectors in embedding space**. This module provides helpers to
-derive such vectors from common CellRank outputs (transition matrices) and to
-store them in AnnData `obsm` using Cellucid’s naming convention.
-"""
+"""Exact-current vector-field validation and transition-drift utilities."""
 
 from __future__ import annotations
 
-from typing import Optional, Union
+import math
+import re
+from collections.abc import Collection, Mapping
+from dataclasses import dataclass
+from numbers import Integral, Real
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 from scipy import sparse
 
+if TYPE_CHECKING:
+    import anndata
+
+
+_VECTOR_KEY_PATTERN = re.compile(r"^(?P<field>.+_umap)_(?P<dimension>[123])d$")
+
+
+def is_vector_field_declaration_key(value: object) -> bool:
+    """Return whether an AnnData ``obsm`` key exactly declares a vector field."""
+    return isinstance(value, str) and _VECTOR_KEY_PATTERN.fullmatch(value) is not None
+
+
+@dataclass(frozen=True)
+class ValidatedVectorFields:
+    """Validated vector arrays and their exact source keys."""
+
+    fields: dict[str, dict[int, np.ndarray]]
+    source_keys: dict[str, dict[int, str]]
+    default_field: str | None
+
+
+def _require_nonempty_string(value: object, *, label: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{label} must be a native non-empty string.")
+    if not value:
+        raise ValueError(f"{label} must be a native non-empty string.")
+    return value
+
+
+def _dense_array(values: object) -> np.ndarray:
+    if sparse.issparse(values):
+        return np.asarray(cast(sparse.spmatrix, values).toarray())
+    return np.asarray(values)
+
+
+def _finite_float32_matrix(
+    values: object,
+    *,
+    label: str,
+    n_rows: int | None,
+    declared_dimension: int | None,
+) -> tuple[np.ndarray, int]:
+    if values is None:
+        raise ValueError(f"{label} must not be None.")
+    array = _dense_array(values)
+    if array.dtype.kind not in {"i", "u", "f"}:
+        raise TypeError(f"{label} must contain real numeric values.")
+    if array.ndim != 2:
+        raise ValueError(f"{label} must be a 2D array, got shape {array.shape}.")
+    if array.shape[0] <= 0:
+        raise ValueError(f"{label} must contain at least one row.")
+    if n_rows is not None and array.shape[0] != n_rows:
+        raise ValueError(f"{label} must have exactly {n_rows} rows, got {array.shape[0]}.")
+    if declared_dimension is None:
+        dimension = int(array.shape[1])
+        if dimension not in (1, 2, 3):
+            raise ValueError(f"{label} must have exactly 1, 2, or 3 columns, got {array.shape[1]}.")
+    else:
+        dimension = declared_dimension
+        if array.shape[1] != dimension:
+            raise ValueError(
+                f"{label} must have exactly {dimension} columns, got {array.shape[1]}."
+            )
+    if not np.isfinite(array).all():
+        raise ValueError(f"{label} must contain only finite values.")
+    with np.errstate(over="ignore", invalid="ignore"):
+        float32_array = array.astype(np.float32, copy=False)
+    if not np.isfinite(float32_array).all():
+        raise ValueError(f"{label} contains values outside the finite float32 range.")
+    return float32_array, dimension
+
+
+def validate_vector_fields(
+    values: Mapping[Any, Any] | None,
+    *,
+    n_cells: int,
+    available_dimensions: Collection[int],
+    vector_field_default: object = None,
+) -> ValidatedVectorFields:
+    """Validate the complete mapping used by highest-dimension field metadata."""
+    if values is not None and not isinstance(values, Mapping):
+        raise TypeError("vector_fields must be a mapping of vector field keys to arrays.")
+
+    if vector_field_default is not None:
+        declared_default = _require_nonempty_string(
+            vector_field_default,
+            label="vector_field_default",
+        )
+    else:
+        declared_default = None
+
+    if not values:
+        if declared_default is not None:
+            raise ValueError("vector_field_default was provided but no vector fields exist.")
+        return ValidatedVectorFields({}, {}, None)
+
+    allowed_dimensions = set(available_dimensions)
+    fields: dict[str, dict[int, np.ndarray]] = {}
+    source_keys: dict[str, dict[int, str]] = {}
+
+    for raw_key, raw_values in values.items():
+        key = _require_nonempty_string(
+            raw_key,
+            label="vector field key",
+        )
+        match = _VECTOR_KEY_PATTERN.fullmatch(key)
+        if match is None:
+            raise ValueError(
+                f"vector field key {key!r} must exactly match '<field>_umap_<1|2|3>d'."
+            )
+
+        field_id = match.group("field")
+        dimension_text = match.group("dimension")
+        declared_dimension = int(dimension_text)
+        array, dimension = _finite_float32_matrix(
+            raw_values,
+            label=f"Vector field {key!r}",
+            n_rows=n_cells,
+            declared_dimension=declared_dimension,
+        )
+
+        if dimension not in allowed_dimensions:
+            raise ValueError(f"Vector field {key!r} requires a matching {dimension}D embedding.")
+        if dimension in fields.setdefault(field_id, {}):
+            other_key = source_keys[field_id][dimension]
+            raise ValueError(
+                f"Vector field keys {other_key!r} and {key!r} both declare "
+                f"the same {dimension}D field {field_id!r}."
+            )
+        fields[field_id][dimension] = array
+        source_keys.setdefault(field_id, {})[dimension] = key
+
+    ordered_fields = {
+        field_id: {dimension: fields[field_id][dimension] for dimension in sorted(fields[field_id])}
+        for field_id in sorted(fields)
+    }
+    ordered_source_keys = {
+        field_id: {
+            dimension: source_keys[field_id][dimension]
+            for dimension in sorted(source_keys[field_id])
+        }
+        for field_id in sorted(source_keys)
+    }
+
+    if declared_default is None:
+        if len(ordered_fields) > 1:
+            raise ValueError(
+                "vector_field_default is required when more than one vector field is declared."
+            )
+        default_field = next(iter(ordered_fields))
+    else:
+        if declared_default not in ordered_fields:
+            raise ValueError(
+                f"vector_field_default {declared_default!r} does not match an "
+                f"available field: {list(ordered_fields)}."
+            )
+        default_field = declared_default
+
+    return ValidatedVectorFields(
+        fields=ordered_fields,
+        source_keys=ordered_source_keys,
+        default_field=default_field,
+    )
+
+
+def scale_vector_field(
+    vectors: np.ndarray,
+    *,
+    scale_factor: object,
+    label: str,
+) -> np.ndarray:
+    """Scale vectors using one required finite positive scale."""
+    if isinstance(scale_factor, bool) or not isinstance(scale_factor, Real):
+        raise ValueError(f"{label} requires a finite positive scale factor.")
+    numeric_scale = float(scale_factor)
+    if not math.isfinite(numeric_scale) or numeric_scale <= 0:
+        raise ValueError(f"{label} requires a finite positive scale factor.")
+    scaled = vectors.astype(np.float64) * numeric_scale
+    if not np.isfinite(scaled).all():
+        raise ValueError(f"{label} scaling produced non-finite values.")
+    with np.errstate(over="ignore", invalid="ignore"):
+        float32_scaled = scaled.astype(np.float32)
+    if not np.isfinite(float32_scaled).all():
+        raise ValueError(f"{label} scaling produced values outside the finite float32 range.")
+    return float32_scaled
+
+
+def _transition_matrix(
+    values: np.ndarray | sparse.spmatrix,
+    *,
+    n_cells: int,
+) -> np.ndarray | sparse.csr_matrix:
+    if sparse.issparse(values):
+        matrix = cast(sparse.spmatrix, values).tocsr()
+        if matrix.dtype.kind not in {"i", "u", "f"}:
+            raise TypeError("transition_matrix must contain real numeric values.")
+        if matrix.shape != (n_cells, n_cells):
+            raise ValueError(
+                f"transition_matrix must have shape ({n_cells}, {n_cells}), got {matrix.shape}."
+            )
+        if not np.isfinite(matrix.data).all():
+            raise ValueError("transition_matrix must contain only finite values.")
+        if np.any(matrix.data < 0):
+            raise ValueError("transition_matrix values must be non-negative.")
+        return matrix.astype(np.float64)
+
+    matrix = np.asarray(values)
+    if matrix.dtype.kind not in {"i", "u", "f"}:
+        raise TypeError("transition_matrix must contain real numeric values.")
+    if matrix.ndim != 2 or matrix.shape != (n_cells, n_cells):
+        raise ValueError(
+            f"transition_matrix must have shape ({n_cells}, {n_cells}), got {matrix.shape}."
+        )
+    if not np.isfinite(matrix).all():
+        raise ValueError("transition_matrix must contain only finite values.")
+    if np.any(matrix < 0):
+        raise ValueError("transition_matrix values must be non-negative.")
+    return matrix.astype(np.float64, copy=False)
+
 
 def compute_transition_drift(
-    transition_matrix: Union[np.ndarray, sparse.spmatrix],
+    transition_matrix: np.ndarray | sparse.spmatrix,
     embedding: np.ndarray,
     *,
-    normalize_rows: bool = True,
+    normalize_rows: bool,
 ) -> np.ndarray:
-    """
-    Compute a per-cell drift vector field from a transition matrix.
+    """Compute exact per-cell transition drift in embedding space."""
+    if type(normalize_rows) is not bool:
+        raise TypeError("normalize_rows must be exactly True or False.")
+    embedding_array, _dimension = _finite_float32_matrix(
+        embedding,
+        label="embedding",
+        n_rows=None,
+        declared_dimension=None,
+    )
+    n_cells = int(embedding_array.shape[0])
+    matrix = _transition_matrix(transition_matrix, n_cells=n_cells)
+    working_embedding = embedding_array.astype(np.float64)
+    product = np.asarray(matrix @ working_embedding, dtype=np.float64)
 
-    The drift is defined as:
-        drift = E[next_embedding | current_cell] - current_embedding
+    if normalize_rows:
+        row_sums = np.asarray(matrix.sum(axis=1), dtype=np.float64).reshape(-1)
+        if not np.isfinite(row_sums).all() or np.any(row_sums == 0):
+            raise ValueError(
+                "Every transition_matrix row must have a nonzero finite row sum "
+                "when normalize_rows=True."
+            )
+        product = product / row_sums[:, None]
 
-    Where:
-        E[next_embedding] = T @ embedding
-
-    Parameters
-    ----------
-    transition_matrix:
-        A (n_cells, n_cells) matrix. Sparse matrices are recommended for large datasets.
-        Typical source: CellRank kernels' transition matrices.
-    embedding:
-        A (n_cells, dim) array of embedding coordinates (e.g. `adata.obsm['X_umap']`).
-    normalize_rows:
-        If True (default), divides each row's expectation by its row-sum. This makes
-        the drift invariant to a matrix that isn't strictly row-stochastic.
-
-    Returns
-    -------
-    np.ndarray
-        Drift vectors shaped (n_cells, dim) as float32.
-    """
-    X = np.asarray(embedding, dtype=np.float32)
-    if X.ndim != 2:
-        raise ValueError(f"embedding must be 2D, got shape {X.shape}")
-
-    if sparse.issparse(transition_matrix):
-        T = transition_matrix.tocsr()
-        TX = T.dot(X)
-        if normalize_rows:
-            row_sums = np.asarray(T.sum(axis=1)).reshape(-1)
-            safe = row_sums.copy()
-            safe[safe == 0] = 1.0
-            TX = TX / safe[:, None]
-    else:
-        T = np.asarray(transition_matrix, dtype=np.float32)
-        if T.ndim != 2:
-            raise ValueError(f"transition_matrix must be 2D, got shape {T.shape}")
-        TX = T @ X
-        if normalize_rows:
-            row_sums = T.sum(axis=1)
-            safe = np.where(row_sums == 0, 1.0, row_sums).astype(np.float32)
-            TX = TX / safe[:, None]
-
-    if TX.shape != X.shape:
-        raise ValueError(f"T @ embedding produced shape {TX.shape}, expected {X.shape}")
-
-    return (TX - X).astype(np.float32, copy=False)
+    drift = product - working_embedding
+    drift_array, _dimension = _finite_float32_matrix(
+        drift,
+        label="computed transition drift",
+        n_rows=n_cells,
+        declared_dimension=int(embedding_array.shape[1]),
+    )
+    return drift_array
 
 
-def _resolve_embedding_key(
-    adata: "anndata.AnnData",
-    *,
-    basis: str,
-    dim: int,
-) -> str:
-    """
-    Resolve an AnnData `obsm` key for an embedding basis + dimension.
+def _umap_embeddings(
+    adata: anndata.AnnData,
+) -> dict[int, tuple[str, np.ndarray]]:
+    embeddings: dict[int, tuple[str, np.ndarray]] = {}
+    n_cells = int(adata.n_obs)
+    for dimension in (1, 2, 3):
+        key = f"X_umap_{dimension}d"
+        if key not in adata.obsm:
+            continue
+        array, _resolved_dimension = _finite_float32_matrix(
+            adata.obsm[key],
+            label=f"Embedding {key!r}",
+            n_rows=n_cells,
+            declared_dimension=dimension,
+        )
+        embeddings[dimension] = (key, array)
 
-    Prefers explicit Cellucid-style keys (e.g. `X_umap_2d`) and falls back to
-    Scanpy-style `X_umap` if it matches the requested dimension.
-    """
-    key_explicit = f"X_{basis}_{dim}d"
-    if key_explicit in adata.obsm:
-        return key_explicit
-
-    key_base = f"X_{basis}"
-    if key_base in adata.obsm:
-        arr = adata.obsm[key_base]
-        shape = arr.shape
-        if len(shape) == 2 and shape[1] == dim:
-            return key_base
-        raise ValueError(f"{key_base} is {shape[1]}D, expected {dim}D")
-
-    raise KeyError(f"Missing embedding in obsm: {key_explicit} (or {key_base})")
+    if not embeddings:
+        raise ValueError(
+            "AnnData must contain one or more exact UMAP embedding keys: "
+            "'X_umap_1d', 'X_umap_2d', or 'X_umap_3d'."
+        )
+    return embeddings
 
 
 def add_transition_drift_to_obsm(
-    adata: "anndata.AnnData",
-    transition_matrix: Union[np.ndarray, sparse.spmatrix],
+    adata: anndata.AnnData,
+    transition_matrix: np.ndarray | sparse.spmatrix,
     *,
     basis: str = "umap",
     field_prefix: str = "T_fwd",
-    dim: Optional[int] = None,
-    explicit_dim_suffix: bool = True,
-    normalize_rows: bool = True,
+    dim: int | None = None,
+    normalize_rows: bool,
     overwrite: bool = False,
 ) -> str:
-    """
-    Compute drift vectors from a transition matrix and store them in `adata.obsm`.
+    """Compute transition drift and store one sanctioned UMAP vector key."""
+    basis = _require_nonempty_string(basis, label="basis")
+    if basis != "umap":
+        raise ValueError("basis must be exactly 'umap'.")
+    field_prefix = _require_nonempty_string(
+        field_prefix,
+        label="field_prefix",
+    )
+    if type(overwrite) is not bool:
+        raise TypeError("overwrite must be exactly True or False.")
 
-    The output key follows Cellucid’s vector field naming convention:
-      - Explicit: `<field_prefix>_<basis>_<dim>d`  (default)
-      - Implicit: `<field_prefix>_<basis>`
-
-    Examples
-    --------
-    - Forward drift in UMAP (2D): `T_fwd_umap_2d`
-    - Backward drift in UMAP (2D): `T_bwd_umap_2d`
-
-    Parameters
-    ----------
-    adata:
-        AnnData object to modify.
-    transition_matrix:
-        (n_cells, n_cells) matrix, dense or sparse.
-    basis:
-        Embedding basis name (default: "umap").
-    field_prefix:
-        Prefix for the vector field (default: "T_fwd").
-        Use e.g. "T_bwd" for backward matrices.
-    dim:
-        Embedding dimensionality to use. If None, it is inferred from the best
-        available embedding in `obsm`:
-        `X_{basis}_3d` → `X_{basis}_2d` → `X_{basis}_1d` → `X_{basis}` (if 1D/2D/3D).
-    explicit_dim_suffix:
-        If True, appends `_{dim}d` to the output key (recommended for clash-safe imports).
-    normalize_rows:
-        Whether to row-normalize during drift computation (see `compute_transition_drift`).
-    overwrite:
-        If False (default), raises if the target key already exists.
-
-    Returns
-    -------
-    str
-        The `obsm` key written.
-    """
+    embeddings = _umap_embeddings(adata)
     if dim is None:
-        # Prefer explicit Cellucid-style keys (X_<basis>_<dim>d) and fall back to
-        # Scanpy-style X_<basis> only if it matches 1D/2D/3D.
-        for candidate_dim in (3, 2, 1):
-            explicit_key = f"X_{basis}_{candidate_dim}d"
-            if explicit_key not in adata.obsm:
-                continue
-            shape = adata.obsm[explicit_key].shape
-            if len(shape) != 2 or shape[1] != candidate_dim:
-                raise ValueError(f"{explicit_key} has shape {shape}, expected (n_cells, {candidate_dim})")
-            dim = candidate_dim
-            break
+        if len(embeddings) != 1:
+            raise ValueError("dim must be explicit when more than one UMAP embedding exists.")
+        dimension = next(iter(embeddings))
+    else:
+        if isinstance(dim, bool) or not isinstance(dim, Integral):
+            raise TypeError("dim must be an integer dimension.")
+        dimension = int(dim)
+        if dimension not in (1, 2, 3):
+            raise ValueError("dim must be exactly 1, 2, or 3.")
+        if dimension not in embeddings:
+            raise ValueError(f"No matching {dimension}D UMAP embedding exists.")
 
-        if dim is None:
-            base_key = f"X_{basis}"
-            if base_key not in adata.obsm:
-                raise KeyError(
-                    f"dim not provided and no embedding found: "
-                    f"{base_key} or X_{basis}_{{1,2,3}}d"
-                )
-            shape = adata.obsm[base_key].shape
-            if len(shape) == 1:
-                dim = 1
-            elif len(shape) == 2 and shape[1] in (1, 2, 3):
-                dim = int(shape[1])
-            else:
-                raise ValueError(f"Cannot infer dim from {base_key} with shape {shape}")
+    embedding = embeddings[dimension][1]
+    drift = compute_transition_drift(
+        transition_matrix,
+        embedding,
+        normalize_rows=normalize_rows,
+    )
 
-    assert dim is not None
-    emb_key = _resolve_embedding_key(adata, basis=basis, dim=dim)
-    X = np.asarray(adata.obsm[emb_key], dtype=np.float32)
-    drift = compute_transition_drift(transition_matrix, X, normalize_rows=normalize_rows)
+    field_id = f"{field_prefix}_umap"
+    output_key = f"{field_id}_{dimension}d"
+    if output_key in adata.obsm and not overwrite:
+        raise KeyError(
+            f"adata.obsm already contains key {output_key!r}; set overwrite=True to replace it."
+        )
 
-    base_id = f"{field_prefix}_{basis}"
-    out_key = f"{base_id}_{dim}d" if explicit_dim_suffix else base_id
-
-    if not overwrite and out_key in adata.obsm:
-        raise KeyError(f"adata.obsm already contains key '{out_key}' (set overwrite=True to replace)")
-
-    adata.obsm[out_key] = drift
-    return out_key
+    validate_vector_fields(
+        {output_key: drift},
+        n_cells=int(adata.n_obs),
+        available_dimensions=embeddings,
+    )
+    adata.obsm[output_key] = drift
+    return output_key

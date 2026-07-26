@@ -69,13 +69,6 @@ Filtering mental model, UI controls, and edge cases (including “why did my sel
 Selecting points, highlighting, synchronization rules, and how to reason about “active vs visible vs selected”.
 :::
 
-:::{grid-item-card} {octicon}`share;1.5em;sd-mr-1` Cross-highlighting
-:link: g_cross_highlighting/index
-:link-type: doc
-
-How cross-highlighting works across viewers/embeddings and how to debug mismatches.
-:::
-
 :::{grid-item-card} {octicon}`beaker;1.5em;sd-mr-1` Analysis
 :link: h_analysis/index
 :link-type: doc
@@ -153,13 +146,6 @@ Architecture notes, state/event model, debugging playbooks, and extension points
 Symptom → diagnosis → fix across installation, data loading, rendering, selection, analysis, and export.
 :::
 
-:::{grid-item-card} {octicon}`checklist;1.5em;sd-mr-1` Screenshot Checklist
-:link: r_screenshot_checklist/index
-:link-type: doc
-
-One place to capture/track screenshots referenced across the web app docs.
-:::
-
 ::::
 
 ```{toctree}
@@ -172,7 +158,6 @@ c_core_interactions/index
 d_fields_coloring_legends/index
 e_filtering/index
 f_highlighting_selection/index
-g_cross_highlighting/index
 h_analysis/index
 i_vector_field_velocity/index
 j_community_annotation/index
@@ -182,5 +167,4 @@ n_benchmarking_performance/index
 o_accessibility_privacy_security/index
 p_developer_docs/index
 q_troubleshooting_index/index
-r_screenshot_checklist/index
 ```

@@ -4,10 +4,11 @@ import struct
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from cellucid.anndata_session import apply_cellucid_session_to_anndata
 from cellucid.session_bundle import SESSION_BUNDLE_MAGIC, CellucidSessionBundle
-from cellucid.session_codecs import decode_delta_uvarint, decode_uvarint, decode_user_defined_codes
+from cellucid.session_codecs import decode_delta_uvarint, decode_user_defined_codes, decode_uvarint
 
 
 def _encode_uvarint(value: int) -> bytes:
@@ -55,7 +56,7 @@ def test_decode_uvarint_roundtrip():
 
 
 def test_decode_delta_uvarint():
-    indices = [10, 2, 7, 7]
+    indices = [10, 2, 7]
     encoded = _encode_delta_uvarint(indices)
     decoded = decode_delta_uvarint(encoded, max_count=10, max_index=100)
     assert decoded.tolist() == sorted(indices)
@@ -88,7 +89,13 @@ def test_apply_session_bundle_to_anndata(tmp_path):
                 "name": "Page 1",
                 "color": "#ff0000",
                 "highlightedGroups": [
-                    {"id": "highlight_1", "type": "lasso", "label": "Lasso (2 cells)", "cellCount": 2}
+                    {
+                        "id": "highlight_1",
+                        "type": "lasso",
+                        "label": "Lasso (2 cells)",
+                        "enabled": True,
+                        "cellCount": 2,
+                    }
                 ],
             }
         ],
@@ -111,6 +118,16 @@ def test_apply_session_bundle_to_anndata(tmp_path):
                 "codesType": "Uint8Array",
                 "isDeleted": False,
                 "isPurged": False,
+                "centroidsByDim": {},
+                "normalizedDims": [],
+                "sourceField": None,
+                "operation": None,
+                "sourcePages": [],
+                "overlapStrategy": "first",
+                "overlapLabel": None,
+                "intersectionLabels": None,
+                "uncoveredLabel": None,
+                "createdAt": 1,
             }
         ],
     }
@@ -118,15 +135,20 @@ def test_apply_session_bundle_to_anndata(tmp_path):
 
     chunks = [
         gzip.compress(json.dumps(highlights_meta).encode("utf-8")),
-        gzip.compress(highlights_cells),
         gzip.compress(json.dumps(overlays).encode("utf-8")),
         gzip.compress(udf_codes),
+        gzip.compress(highlights_cells),
     ]
 
     manifest = {
-        "createdAt": "2025-01-01T00:00:00Z",
+        "createdAt": "2025-01-01T00:00:00.000Z",
         "dataSource": None,
-        "datasetFingerprint": {"sourceType": "jupyter", "datasetId": "test", "cellCount": n_obs, "varCount": n_vars},
+        "datasetFingerprint": {
+            "sourceType": "jupyter",
+            "datasetId": "test",
+            "cellCount": n_obs,
+            "varCount": n_vars,
+        },
         "summary": None,
         "chunks": [
             {
@@ -141,17 +163,6 @@ def test_apply_session_bundle_to_anndata(tmp_path):
                 "uncompressedBytes": len(json.dumps(highlights_meta).encode("utf-8")),
             },
             {
-                "id": "highlights/cells/highlight_1",
-                "contributorId": "highlights-cells",
-                "priority": "lazy",
-                "kind": "binary",
-                "codec": "gzip",
-                "label": "Highlight cells",
-                "datasetDependent": True,
-                "storedBytes": len(chunks[1]),
-                "uncompressedBytes": len(highlights_cells),
-            },
-            {
                 "id": "core/field-overlays",
                 "contributorId": "field-overlays",
                 "priority": "eager",
@@ -159,7 +170,7 @@ def test_apply_session_bundle_to_anndata(tmp_path):
                 "codec": "gzip",
                 "label": "Field overlays",
                 "datasetDependent": True,
-                "storedBytes": len(chunks[2]),
+                "storedBytes": len(chunks[1]),
                 "uncompressedBytes": len(json.dumps(overlays).encode("utf-8")),
             },
             {
@@ -170,8 +181,19 @@ def test_apply_session_bundle_to_anndata(tmp_path):
                 "codec": "gzip",
                 "label": "User-defined codes",
                 "datasetDependent": True,
-                "storedBytes": len(chunks[3]),
+                "storedBytes": len(chunks[2]),
                 "uncompressedBytes": len(udf_codes),
+            },
+            {
+                "id": "highlights/cells/highlight_1",
+                "contributorId": "highlights-cells",
+                "priority": "lazy",
+                "kind": "binary",
+                "codec": "gzip",
+                "label": "Highlight cells",
+                "datasetDependent": True,
+                "storedBytes": len(chunks[3]),
+                "uncompressedBytes": len(highlights_cells),
             },
         ],
     }
@@ -180,10 +202,98 @@ def test_apply_session_bundle_to_anndata(tmp_path):
     _write_bundle(bundle_path, manifest, chunks)
 
     bundle = CellucidSessionBundle(bundle_path)
-    out = apply_cellucid_session_to_anndata(bundle, adata, inplace=False)
+    out = apply_cellucid_session_to_anndata(
+        bundle,
+        adata,
+        inplace=False,
+        expected_dataset_id="test",
+    )
 
     assert "cellucid_highlight__highlight_1" in out.obs.columns
     assert out.obs["cellucid_highlight__highlight_1"].tolist() == [False, True, False, True, False]
     assert "my_label" in out.obs.columns
     assert list(out.obs["my_label"].cat.categories) == ["A", "B", "C"]
     assert out.obs["my_label"].tolist() == ["A", "B", "C", "B", "A"]
+
+
+def test_apply_session_rejects_out_of_range_categorical_codes_without_mutation() -> None:
+    import anndata as ad
+    import pandas as pd
+
+    class Bundle:
+        dataset_fingerprint = {
+            "sourceType": "anndata",
+            "datasetId": "exact",
+            "cellCount": 3,
+            "varCount": 1,
+        }
+        manifest = {
+            "version": 1,
+            "chunks": [
+                {
+                    "id": "core/field-overlays",
+                    "contributorId": "field-overlays",
+                },
+                {
+                    "id": "user-defined/codes/field-1",
+                    "contributorId": "user-defined-codes",
+                },
+            ],
+        }
+
+        def list_chunk_ids(self) -> list[str]:
+            return [
+                "core/field-overlays",
+                "user-defined/codes/field-1",
+            ]
+
+        def decode_chunk(self, chunk_id: str):
+            if chunk_id == "core/field-overlays":
+                return {
+                    "renames": None,
+                    "deletedFields": None,
+                    "userDefinedFields": [
+                        {
+                            "id": "field-1",
+                            "source": "obs",
+                            "kind": "category",
+                            "key": "status",
+                            "categories": ["A", "B"],
+                            "isDeleted": False,
+                            "isPurged": False,
+                            "codesLength": 3,
+                            "codesType": "Uint8Array",
+                            "centroidsByDim": {},
+                            "normalizedDims": [],
+                            "sourceField": None,
+                            "operation": None,
+                            "sourcePages": [],
+                            "overlapStrategy": "first",
+                            "overlapLabel": None,
+                            "intersectionLabels": None,
+                            "uncoveredLabel": None,
+                            "createdAt": 1,
+                        }
+                    ],
+                }
+            if chunk_id == "user-defined/codes/field-1":
+                return bytes([0]) + _encode_uvarint(3) + bytes([0, 2, 1])
+            raise AssertionError(chunk_id)
+
+    adata = ad.AnnData(
+        X=np.ones((3, 1), dtype=np.float32),
+        obs=pd.DataFrame(index=["cell-1", "cell-2", "cell-3"]),
+        var=pd.DataFrame(index=["gene"]),
+    )
+
+    with pytest.raises(ValueError, match="field-1.*code 2.*2 categories"):
+        apply_cellucid_session_to_anndata(
+            Bundle(),
+            adata,
+            inplace=True,
+            expected_dataset_id="exact",
+            add_highlights=False,
+            store_uns=False,
+        )
+
+    assert "status" not in adata.obs

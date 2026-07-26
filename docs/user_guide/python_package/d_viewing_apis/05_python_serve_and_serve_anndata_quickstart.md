@@ -35,13 +35,19 @@ Use this when you have a `.h5ad`, `.zarr`, or an in-memory `AnnData`.
 ```python
 from cellucid import serve_anndata
 
-serve_anndata("/path/to/data.h5ad")  # backed/lazy by default
-# serve_anndata("/path/to/data.zarr")
+serve_anndata(
+    "/path/to/data.h5ad",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
+# Zarr uses the same call shape and is loaded eagerly by anndata.read_zarr.
 ```
 
 ```{note}
-`serve_anndata(...)` returns an `AnnDataServer` instance. The convenience `serve(...)` function is blocking and does not return a server object.
-If you want lifecycle control (start in background, stop programmatically), use the classes below.
+Both convenience functions block while serving. `serve(...)` returns `None`;
+`serve_anndata(...)` returns its closed `AnnDataServer` only after serving has
+ended. Use the classes below with `start_background()` when you need a running
+server object or programmatic lifecycle control.
 ```
 
 ## Controlling host/port and browser opening
@@ -64,6 +70,8 @@ serve_anndata(
     host="127.0.0.1",
     open_browser=False,
     quiet=False,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
 )
 ```
 
@@ -94,8 +102,9 @@ server = AnnDataServer(
     "data.h5ad",
     open_browser=False,
     quiet=False,
-    backed=True,        # default; lazy loading for h5ad
     latent_key="X_pca", # optional; see below
+    dataset_name="My study",
+    dataset_id="my-study-v1",
 )
 server.start_background()
 
@@ -110,18 +119,25 @@ server.stop()
 
 These are forwarded to the `AnnDataAdapter` and affect how your AnnData is interpreted:
 
-- `backed` (h5ad only): `True`/`"r"` for lazy; `False` for in-memory
+- `.h5ad` paths are always opened with `backed="r"`; `.zarr` paths are always
+  loaded eagerly with `anndata.read_zarr`
 - `latent_key`: which `obsm` key to treat as latent space (used for some derived quantities)
-- `gene_id_column`: which `var` column to use as gene IDs (default `"index"`)
+- `gene_id_column`: `None` uses `var.index`; any non-blank string names that
+  exact `var` column (default `None`)
 - `normalize_embeddings`: normalize UMAP coordinates to `[-1, 1]` (default `True`)
-- `dataset_name`, `dataset_id`: override identity shown/used by the viewer
+- `dataset_name`, `dataset_id`: required exact identity shown/used by the viewer
+- `vector_field_default`: exact default field ID; required when direct AnnData
+  declares more than one vector field
 
-If you’re not sure, the defaults are usually correct.
+All omitted optional values retain the signature defaults; identity is never
+derived, and a multi-field vector declaration has no implicit default.
 
 ## Edge cases (high-signal)
 
 - **Remote machine**: prefer an SSH tunnel over binding to `0.0.0.0` (see {doc}`12_remote_servers_ssh_tunneling_and_cloud`).
-- **Huge `AnnData` in memory**: `serve_anndata(adata)` may duplicate/copy data paths and use a lot of RAM; prefer `.h5ad` backed mode or `.zarr`.
+- **Huge `AnnData` in memory**: direct `serve_anndata(...)` may use substantial RAM;
+  prefer a `.h5ad` path for read-only-backed access. A `.zarr` path is loaded
+  eagerly.
 - **Gene IDs not found**: set `gene_id_column` if `var.index` is not what you search by.
 
 ## Troubleshooting

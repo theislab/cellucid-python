@@ -5,7 +5,7 @@ Real-world notebooks showing how to prepare various single-cell datasets for vis
 ```{important}
 These notebooks are **templates**. They are intentionally explicit about paths, export directories, and validation steps, but you should expect to adapt:
 - dataset file locations
-- embedding keys (e.g. `X_umap` vs project-specific names)
+- explicitly dimensioned embedding keys
 - gene ID conventions (symbols vs Ensembl)
 
 If you want the conceptual “how exports work” guide first, read:
@@ -106,7 +106,8 @@ jupyter lab docs/user_guide/python_package/f_notebooks_tutorials/
 ```
 
 ```{note}
-If a notebook refers to a local path that does not exist on your machine, treat it as a configuration placeholder. The notebooks keep all path configuration in one early cell so you can update it safely.
+Before running a notebook, set every path in its early configuration cell to an
+existing local input or output location.
 ```
 
 ---
@@ -118,6 +119,7 @@ If a notebook refers to a local path that does not exist on your machine, treat 
 prepare_apidip
 prepare_braun
 prepare_garcia
+prepare_hdca
 prepare_he
 prepare_kanemaru
 prepare_miller

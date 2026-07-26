@@ -260,7 +260,9 @@ Follow the click-by-click guide:
 
 **How to confirm**
 - Check you can see `dataset_identity.json` in your export folder.
-- Try a different browser (Chrome/Firefox).
+- In the browser console, evaluate
+  `document.createElement("canvas").getContext("webgl2") !== null`; Cellucid
+  requires this to return `true` in every supported browser.
 
 **Fix**
 - Re-export with `force=TRUE`.

@@ -14,7 +14,7 @@ Hook callbacks can run on the server’s request-handling thread.
 Practical meaning:
 - keep callbacks fast and defensive,
 - avoid doing heavy analysis directly inside the callback,
-- treat hook payloads as **untrusted / best-effort** (validate keys and types).
+- treat hook payloads as **untrusted** and validate keys and types.
 
 ## Fast path: safe callback template (copy/paste)
 
@@ -25,22 +25,16 @@ logger = logging.getLogger("cellucid.hooks")
 
 @viewer.on_selection
 def on_selection(event):
-    try:
-        cells = event.get("cells", [])
-        source = event.get("source", "unknown")
-        if not isinstance(cells, list) or not cells:
-            return
-        logger.info("Selection: %d cells (source=%s)", len(cells), source)
-    except Exception:
-        logger.exception("Selection callback failed")
+    cells = event["cells"]
+    if type(cells) is not list or any(type(index) is not int for index in cells):
+        raise TypeError("selection cells must be a list of native integers")
+    logger.info("Selection: %d cells", len(cells))
 ```
 
 ```{note}
-Cellucid already catches exceptions inside hook callbacks (so the server keeps running),
-but you still want your own try/except so you can:
-- add context,
-- keep your notebook logs readable,
-- and avoid half-updated state in your own code.
+Callback exceptions propagate through event delivery. The server logs the
+exception and answers that event request with HTTP 500. Catch only an error
+that the callback can handle completely; otherwise let it surface.
 ```
 
 ## Practical patterns
@@ -56,7 +50,7 @@ selection_queue: Queue[list[int]] = Queue()
 
 @viewer.on_selection
 def enqueue_selection(event):
-    cells = event.get("cells", [])
+    cells = event["cells"]
     if cells:
         selection_queue.put(cells)
 ```
@@ -91,17 +85,17 @@ def on_selection_debounced(event):
     if now - last_at < 0.25:  # 250ms
         return
     last_at = now
-    print("Selection:", len(event.get("cells", [])))
+    print("Selection:", len(event["cells"]))
 ```
 
-### Pattern C: treat hover as “best effort”
+### Pattern C: treat hover as a debounced state stream
 
 Hover is throttled and can drop events under load. Avoid heavy work in hover hooks:
 
 ```python
 @viewer.on_hover
 def on_hover(event):
-    cell = event.get("cell")
+    cell = event["cell"]
     if cell is None:
         return
     # Good: lightweight UI feedback / logging
@@ -126,7 +120,9 @@ See {doc}`09_viewer_state_and_wait_for_event`.
 
 ### Backed `.h5ad` and thread safety
 
-When you run `show_anndata("data.h5ad")`, AnnData may be opened in backed mode.
+When you run
+`show_anndata("data.h5ad", dataset_name="My dataset", dataset_id="my-dataset")`,
+AnnData is opened read-only-backed.
 Depending on your stack (h5py/hdf5), concurrent access from multiple threads can be unsafe.
 
 Recommendations:
@@ -159,7 +155,8 @@ If you are debugging deeply, use `DEBUG`.
 
 - `event["cells"]` can be empty (user cleared selection).
 - `event["cell"]` can be `None` (not hovering).
-- Payloads may include extra fields you don’t expect; ignore unknown keys.
+- Use the documented fields for the exact event type and validate their native
+  JSON-derived types before analysis.
 - Very large selections can hit the `/_cellucid/events` size limit (see {doc}`07_frontend_to_python_events`).
 
 ## Troubleshooting
@@ -167,11 +164,11 @@ If you are debugging deeply, use `DEBUG`.
 Symptoms and fixes:
 
 - “My callback never runs” → check connectivity; run `viewer.debug_connection()`; see {doc}`14_troubleshooting_hooks`.
-- “My callback runs once then stops” → you may be raising exceptions; add try/except + logging.
+- “My callback request returns HTTP 500” → read the logged callback exception
+  and fix it; the failure is not swallowed.
 - “Notebook becomes sluggish” → your callback is doing too much; move work out of it.
 
 ## Next steps
 
 - Viewer state + `wait_for_event`: {doc}`09_viewer_state_and_wait_for_event`
 - Full troubleshooting: {doc}`14_troubleshooting_hooks`
-

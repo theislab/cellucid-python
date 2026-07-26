@@ -174,28 +174,13 @@ If you want to preserve your current work, save a session *first*, then load the
 
 ---
 
-## Screenshots (placeholders)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: sessions-notification-progress
-Suggested filename: sessions_sharing/02_session-restore-progress.png
-Where it appears: Sessions → Progressive restore
-Capture:
-  - Trigger: load a moderately large session so restore has a visible progress indicator
-  - UI location: NotificationCenter download/progress UI
-Crop:
-  - Include: the progress UI and the session-related message
-  - Exclude: private dataset names/IDs if needed
-Alt text:
-  - Session restore progress notification.
-Caption:
-  - Large sessions restore progressively: eager state first, then heavy artifacts in the background.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for session restore progress.
+```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
+:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
 :width: 100%
 
-Large sessions restore progressively: eager state first, then heavy artifacts in the background.
+The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```
 
 ---

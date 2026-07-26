@@ -20,9 +20,9 @@ Minimum requirements:
 
 1) Export the matching embedding dimension (2D vectors require `X_umap_2d`, 3D vectors require `X_umap_3d`).
 2) Provide a `vector_fields` dictionary where the values have shape `(n_cells, dim)`.
-3) Use a safe field id and the recommended naming convention.
+3) Use an exact dimension-suffixed key and a safe field id.
 
-```python
+```text
 prepare(
     ...,
     X_umap_2d=adata.obsm["X_umap_2d"],
@@ -50,44 +50,25 @@ When vector fields are present, the web app can:
 UI docs (highly recommended if you’re exporting vectors for others):
 - {doc}`../../web_app/i_vector_field_velocity/index`
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: vector-overlay-ui-controls
-Where it appears: User Guide → Python Package → Data Preparation API → Vector fields
-Capture:
-  - Load a dataset export that includes vector fields
-  - Open the vector/velocity overlay UI panel
-  - Show the field dropdown and at least one obvious parameter slider
-Crop:
-  - Include: overlay panel + enough of the canvas to show overlay is active
-Redact:
-  - Remove: sensitive dataset names/IDs if needed
-Annotations:
-  - Callouts: (1) overlay toggle, (2) field selector dropdown, (3) one “speed/density” control
-Alt text:
-  - Vector overlay controls panel with a selectable vector field and tuning sliders.
-Caption:
-  - When vector fields are exported, the viewer can render an animated overlay and let users select and tune the field.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the vector overlay controls.
+```{figure} ../../../_static/screenshots/vector_field_velocity/overlay-controls.png
+:alt: A synthetic 2D dataset with the Vector Field Overlay enabled and animated particle-flow controls visible.
 :width: 100%
 
-When vector fields are exported, the viewer can render an animated overlay and let users select and tune the field.
+A current-format 2D vector field rendered as particle flow with its field, density, speed, trail, size, opacity, palette, and LOD controls visible.
 ```
 
 ### Supported shapes and dtypes
 
 Each vector field is a per-cell array:
-- shape: `(n_cells, dim)` (or `(n_cells,)` for 1D, which is reshaped to `(n_cells, 1)`)
+- shape: exactly `(n_cells, dim)`
 - dtype: converted to `float32` for export
 
 Vectors must be aligned to the same cell order as embeddings and `obs`.
 
-### Naming conventions (recommended)
+### Naming convention (required)
 
-The exporter supports two styles:
+Every declaration key must be dimension-suffixed:
 
-**Preferred (explicit dimensional keys):**
 - keys end with `_<dim>d` (e.g., `_2d`, `_3d`)
 - the base id becomes the “field id” in `dataset_identity.json`
 
@@ -95,12 +76,7 @@ Examples:
 - `velocity_umap_2d`, `velocity_umap_3d` → field id `velocity_umap`
 - `T_fwd_umap_2d` → field id `T_fwd_umap`
 
-**Fallback (implicit key, dimension inferred from shape):**
-- key has no `_<dim>d` suffix
-- exporter infers dimension from the array shape and uses the key as the field id
-
-Recommendation:
-- Use the explicit form; it’s clearer and avoids accidental mismatches.
+An unsuffixed key such as `velocity_umap` is not a vector-field declaration.
 
 #### Safety rule: vector field ids must already be filesystem-safe
 
@@ -113,16 +89,15 @@ So prefer ids like:
 - `T_fwd_umap`
 - `drift_umap`
 
-### Dimension matching and skipping behavior
+### Dimension matching
 
-Vectors are only exported for dimensions you also exported points for.
+Each vector declaration requires an embedding with the same dimension.
 
 Example:
 - you provide `velocity_umap_3d`, but did not export `X_umap_3d`
-- result: the exporter prints a warning and skips the 3D vector file
+- result: validation fails before export
 
-To avoid confusion:
-- if you want overlay in 3D, export both `X_umap_3d` and the corresponding 3D vectors.
+For a 3D overlay, export both `X_umap_3d` and the corresponding 3D vectors.
 
 ### Scale and normalization (why overlays sometimes look “too small”)
 
@@ -165,7 +140,7 @@ Full spec: {doc}`09_output_format_specification_exports_directory`
 - **Row-order mismatch**: vectors aligned to a different cell order than points/obs.
 - **Mixed availability**: you export 2D vectors but load the dataset in 3D mode (overlay may appear missing).
 - **All-zero vectors**: overlay renders but looks static/empty.
-- **NaN/Inf in vectors**: exporter will write them; UI behavior is undefined (avoid).
+- **NaN/Inf in vectors**: validation fails before export.
 
 ---
 
@@ -183,7 +158,7 @@ How to confirm:
 Fix:
 - export with `vector_fields=...` and re-export with `force=True`.
 
-### Symptom: exporter prints “Skipping vector field … embedding points_<dim>d not provided”
+### Symptom: exporter reports that a vector field requires a matching embedding
 
 Meaning:
 - you provided vectors for a dimension you didn’t export points for.

@@ -37,31 +37,13 @@ Filtering is about **visibility**:
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: filtering-panel-overview
-Suggested filename: filtering/00_filtering-panel-overview.png
-Where it appears: User Guide → Web App → Filtering → index.md
-Capture:
-  - UI location: left sidebar with “Coloring & Filtering”, “Display options”, and “Active filters” visible
-  - State prerequisites: dataset loaded; at least one filter active (so Active filters is not empty)
-  - Action to reach state: hide a category OR apply a continuous range filter, then open Active filters
-Crop:
-  - Include: field selectors + legend area + outlier slider (if visible) + Active filters
-  - Include: enough canvas to see the filtered point cloud
-Redact:
-  - Remove: private dataset identifiers, local file paths, private org/repo names
-Alt text:
-  - Filtering controls in the left sidebar with Active filters showing at least one active filter.
-Caption:
-  - Point readers to Active filters as the source of truth for visibility.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for the filtering panel overview.
+```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
+:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
 :width: 100%
 
-Filtering controls live in the left sidebar; Active filters is the source of truth for what currently affects visibility in the active view.
+Selecting a categorical observation field colors the embedding and exposes its complete category legend.
 ```
 
 ---
@@ -74,7 +56,7 @@ Filtering controls live in the left sidebar; Active filters is the source of tru
 4) `04_common_filter_types_document_every_filter_the_ui_exposes` (reference: every filter you can create)
 5) `05_performance_considerations` + `06_edge_cases_filtering` (avoid surprises)
 6) `07_troubleshooting_filtering` (symptom → diagnosis → fix)
-7) `08_screenshots` (capture checklist)
+7) `08_screenshots` (verified interface capture)
 
 ---
 
@@ -132,11 +114,11 @@ What gets slow, why it gets slow, and safe workflows for large datasets.
 Symptom-based debugging for empty plots, filters that “do nothing”, and slow filtering.
 :::
 
-:::{grid-item-card} {octicon}`checklist;1.5em;sd-mr-1` Screenshots
+:::{grid-item-card} {octicon}`image;1.5em;sd-mr-1` Verified capture
 :link: 08_screenshots
 :link-type: doc
 
-Screenshot capture checklist for the filtering section.
+The current Coloring and Filtering panel in its explicit unfiltered state.
 :::
 
 ::::

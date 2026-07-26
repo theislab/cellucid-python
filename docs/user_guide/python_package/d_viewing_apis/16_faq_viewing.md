@@ -26,33 +26,41 @@ Security details: {doc}`13_security_privacy_cors_and_networking`.
 
 ## Can I use Cellucid offline?
 
-Yes, after the viewer UI assets have been cached at least once.
+Not for a startup that serves the viewer UI. `cellucid serve`, `show(...)`, and
+`show_anndata(...)` establish the configured exact web generation at each
+startup and report source failure instead of substituting a cached generation.
 
-If you are offline and have no cached UI, you’ll see a “viewer UI unavailable” page with next steps.
+`cellucid serve ... --no-web-ui` is the explicit data-endpoint-only mode and
+does not fetch viewer assets.
 
 Cache details: {doc}`09_server_mode_advanced`.
 
-## Why did my server pick a different port than 8765?
+## What happens if port 8765 is already in use?
 
-If `8765` is already in use, Cellucid auto-selects the next free port and prints it.
+`serve(...)`, `serve_anndata(...)`, and `cellucid serve` bind the requested port
+exactly and report an error if it is unavailable. Pass `port=0` or `--port 0`
+to request one operating-system-assigned port.
 
 Always use the printed Viewer URL.
 
-## Why does the notebook embed say “proxy required”?
+## Why is a remote notebook iframe blank or unreachable?
 
 Usually because:
 - the notebook is served over HTTPS, and/or
 - the kernel/server is remote (JupyterHub/cloud), so `127.0.0.1` is not reachable from your browser.
 
-Fix: enable `jupyter-server-proxy` (recommended) or set `CELLUCID_CLIENT_SERVER_URL`.
+Fix: expose the Cellucid port through an HTTPS proxy (for example Jupyter
+Server Proxy) and pass that exact browser base as `client_server_url=`.
 
 Details: {doc}`10_notebook_widget_mode_advanced`.
 
 ## Should I use `.h5ad` or `.zarr` for large datasets?
 
 Both can work well in Python server mode:
-- `.h5ad` with backed mode is convenient and widely used.
-- `.zarr` is naturally chunked and often performs well for lazy access patterns.
+- `.h5ad` is opened read-only-backed and is the lower-memory direct mode.
+- `.zarr` is materialized eagerly by `anndata.read_zarr`; use it only when the
+  complete AnnData fits in Python memory. Browser gene requests are still
+  served on demand after that eager load.
 
 If you’re repeatedly viewing or sharing, exports are usually best.
 
@@ -60,9 +68,12 @@ Performance guide: {doc}`14_performance_scaling_and_lazy_loading`.
 
 ## Is there an R package?
 
-`cellucid-R` is planned but not ready yet. Today, the supported “viewing” entry points are:
-- CLI (`cellucid serve`)
-- Python (`serve`, `serve_anndata`, `show`, `show_anndata`)
+Yes. `cellucid-r` prepares Seurat, SingleCellExperiment, matrices, and data
+frames as Cellucid export folders. Open those folders in the web app or host
+them as static files. Server processes, notebook embedding, and programmatic
+viewer control are provided by the Python package.
+
+See {doc}`../../r_package/index`.
 
 ## Where do I learn the web app UI (filters, analysis, figure export)?
 

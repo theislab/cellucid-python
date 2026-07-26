@@ -26,7 +26,7 @@ If you reorder one without the other, the viewer will show the wrong gene values
    - **present for every gene**, and
    - **unique** (no duplicates).
 3) Export with:
-   - `var_gene_id_column="index"` if `var.index` is the identifier you want, or
+   - `var_gene_id_column=None` if `var.index` is the identifier you want, or
    - `var_gene_id_column="<column_name>"` if the identifier lives in a column.
 
 ---
@@ -46,8 +46,9 @@ but alignment bugs often happen after manual filtering/reindexing.
 
 `prepare()` chooses gene IDs as follows:
 
-- If `var_gene_id_column == "index"` (default), gene IDs come from `var.index`.
-- Otherwise, gene IDs come from `var[var_gene_id_column]` (cast to string).
+- If `var_gene_id_column is None` (default), gene IDs come from `var.index`.
+- Every string is an exact column selector, including the literal `"index"`.
+- Identifiers must already be native non-empty strings.
 
 Recommendation:
 - For reproducible exports intended for sharing, prefer stable identifiers.
@@ -55,7 +56,7 @@ Recommendation:
 
 #### Example: use gene symbols from a column
 
-```python
+```text
 prepare(
     ...,
     var=adata.var,
@@ -67,11 +68,9 @@ prepare(
 
 ### Uniqueness (do not skip this)
 
-`prepare()` does not currently enforce uniqueness of gene IDs.
-Duplicates can cause:
-- overwritten files on disk (after safe filename sanitization),
-- confusing behavior where multiple manifest entries map to the same gene payload,
-- “wrong gene” values in the UI.
+`prepare()` requires unique gene IDs that are already exact portable filename
+components. Duplicates, unsafe IDs, and case-insensitive filesystem collisions
+fail before the export is published.
 
 Preflight check:
 
@@ -90,20 +89,21 @@ Exporting all genes can be huge (see {doc}`06_gene_expression_matrix`).
 
 Use `gene_identifiers` to export a curated list:
 
-```python
+```text
 marker_genes = ["MS4A1", "CD3D", "LYZ", "NKG7"]
 
 prepare(
     ...,
     gene_expression=adata.X,
     var=adata.var,
-    var_gene_id_column="index",
+    var_gene_id_column=None,
     gene_identifiers=marker_genes,
     ...
 )
 ```
 
-If you request genes that are not found, the exporter prints a warning and skips them.
+If any requested gene is absent, the exporter raises `KeyError` and publishes
+nothing.
 
 Reproducibility tip:
 - store the exact gene list used for export in your pipeline (and ideally version-control it).
@@ -119,17 +119,13 @@ However:
 
 ---
 
-## Naming rules (safe filenames)
+## Naming rules (exact portable IDs)
 
-Gene IDs are converted to safe filenames using the same sanitization rules as obs keys:
-
-```text
-safe = re.sub(r"[^A-Za-z0-9._-]+", "_", gene_id)
-safe = safe.strip("._")
-safe = safe or "field"
-```
-
-This means gene IDs containing slashes/spaces/etc. will be rewritten on disk.
+Gene IDs are not rewritten. They must be 1–180-byte ASCII components that
+begin with a letter or digit, contain only letters, digits, `.`, `_`, or `-`,
+do not end with `.`, are not dot segments or Windows device names, and are
+unique under case-insensitive comparison. IDs containing spaces, slashes, or
+other unsafe characters are rejected before publication.
 Collisions are possible (rare for Ensembl IDs, more common for messy symbols).
 
 ---

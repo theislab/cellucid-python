@@ -247,30 +247,13 @@ If large datasets are unusable, triage in this order:
 
 ---
 
-## Screenshot placeholders (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: large-dataset-best-practices-grid-vs-single
-Suggested filename: benchmarking_performance/03_grid-vs-single-view.png
-Where it appears: User Guide → Web App → Benchmarking and Performance → 03_large_dataset_best_practices.md
-Capture:
-  - Same dataset and camera framing
-  - One screenshot in single view (fast), one screenshot in grid view with multiple snapshots (slower)
-  - Include a small callout indicating “# views” as the multiplier
-Crop:
-  - Include enough UI to show the multi-view layout controls / view badges
-Redact:
-  - Remove: private dataset identifiers
-Alt text:
-  - Comparison between a single view and a grid of multiple snapshot views in Cellucid.
-Caption:
-  - More views multiply GPU work; tune settings in one view first, then create a small number of snapshots for comparison.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for single view vs grid view performance.
+```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
+:alt: Cellucid showing two side-by-side views of the same dataset.
 :width: 100%
 
-More views multiply GPU work; tune settings in one view first, then create a small number of snapshots for comparison.
+Two kept views support side-by-side comparison while retaining one dataset identity.
 ```
 
 ---

@@ -42,7 +42,8 @@ Cellucid then builds groups as:
 - across the full dataset (not highlight pages).
 
 Important behaviors:
-- cells with missing/invalid category codes are excluded from grouping,
+- cells with the declared missing-code sentinel are excluded from grouping,
+- an out-of-range or otherwise undeclared category code stops the run with an explicit data-contract error,
 - groups are sorted by size (largest first) for stable UI.
 
 ### 2) Mode
@@ -66,7 +67,7 @@ This can make repeated runs much faster.
 ### 5) Performance Settings (collapsible)
 
 Marker discovery can be heavy. The same performance controls used by DE apply here:
-- batch size, memory budget, network parallelism, compute parallelism, Wilcoxon bins.
+- batch size, memory budget, network parallelism, and compute parallelism.
 
 ---
 
@@ -84,6 +85,8 @@ For each gene and group, Cellucid computes (conceptually):
 - `pValue` (Wilcoxon U or Welch t-test)
 - `adjustedPValue` via Benjamini–Hochberg (computed per group across genes)
 - `percentInGroup`, `percentOutGroup` = percent of cells with expression `> 0`
+
+Wilcoxon always uses exact, tie-aware ranks. For low-cardinality values (including quantized prepared data), Cellucid aggregates exact counts per distinct value; high-cardinality values use an exact index sort. Its p-value is exact only when both comparison groups contain fewer than 50 finite values and there are no ties; otherwise inference uses the exact U statistic with a tie- and continuity-corrected asymptotic reference distribution. See {doc}`01_analysis_mental_model` for analysis-wide scope and assumptions.
 
 Markers are filtered by thresholds (typically controlled in the expanded view):
 - p-value/FDR threshold (default ~0.05)
@@ -186,28 +189,13 @@ Fix:
 
 ---
 
-## Screenshot placeholder (you will replace later)
+## Interface reference
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: analysis-genes-panel-success
-Suggested filename: analysis/15_genes-panel-success.png
-Where it appears: User Guide → Web App → Analysis → 08_analysis_mode_genes_panel.md
-Capture:
-  - UI location: Genes Panel open showing several genes and an active selection
-  - State prerequisites: add 5–10 genes to the panel; click one so its expression is visible
-  - Action to reach state: add genes → open panel → pick a gene
-Crop:
-  - Include: the Genes Panel list + gene expression legend (if it changes)
-Alt text:
-  - Genes Panel listing multiple genes with one active gene selected.
-Caption:
-  - Genes Panel speeds up iteration by keeping a curated gene list available for one-click switching.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for Genes Panel success state.
+```{figure} ../../../_static/screenshots/analysis/marker-genes.png
+:alt: Marker Genes analysis showing ranked marker output for a selected group.
 :width: 100%
 
-Marker Genes discovers one-vs-rest markers per group and visualizes them as ranked lists or a clustered heatmap.
+Marker Genes ranks candidate genes for the selected group and exposes an expanded result view.
 ```
 
 ---

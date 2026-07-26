@@ -146,7 +146,12 @@ This is optional, but very powerful when you want “this region vs that region�
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata(adata, height=650)
+viewer = show_anndata(
+    adata,
+    height=650,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 viewer
 ```
 
@@ -218,35 +223,6 @@ When you get “top marker genes” or “differential expression”:
 
 ```{note}
 This tutorial is not a full statistical DE guide. The goal is to help you avoid the most common interpretation failures in exploratory workflows.
-```
-
----
-
-## Screenshot placeholders (optional but helpful)
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-notebooks-two-selections-captured
-Suggested filename: highlighting_selection/00_two-selections-and-python-callback-output.png
-Where it appears: User Guide → Python Package → Notebooks/Tutorials → 13_compare_two_groups_and_interpret_results.md
-Capture:
-  - UI location: notebook output with viewer + Python output below
-  - State prerequisites: two selections have been made; Python printed “Stored Group A/B”
-  - Action to reach state: make two selections in the viewer and watch callback prints in notebook
-Crop:
-  - Include: viewer canvas showing selected cells (highlighted/outlined)
-  - Include: the notebook output area showing the printed “Stored Group A/B” lines
-Redact:
-  - Remove: private dataset names, file paths, usernames
-Alt text:
-  - Viewer selection made in notebook and Python output confirming captured groups.
-Caption:
-  - Selection hooks send the selected cell indices back to Python so you can run analysis on exactly what you selected in the UI.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for capturing two selections via hooks.
-:width: 100%
-
-Two selections captured from the viewer, with Python output confirming the stored group sizes.
 ```
 
 ---

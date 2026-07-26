@@ -59,32 +59,22 @@ Cellucid uses **lazy gene loading** where possible:
 
 - Exported directory: ✅ lazy by design
 - `.h5ad` served by Python: ✅ lazy (backed mode by default)
-- `.zarr` served by Python: ✅ lazy-ish (chunked access)
+- `.zarr` served by Python: the Zarr store is loaded eagerly, while browser gene
+  requests remain on demand
 - Browser file picker for `.h5ad`: ❌ usually not truly lazy (browser holds the file)
 
 See the full matrix: {doc}`02_the_14_loading_options_breakdown`.
 
-## `.h5ad` backed mode vs in-memory mode
+## Exact `.h5ad` loading mode
 
 When you run:
 
 ```bash
-cellucid serve data.h5ad
+cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
-Cellucid uses backed mode (lazy) by default.
-
-If you run:
-
-```bash
-cellucid serve data.h5ad --no-backed
-```
-
-Cellucid loads the whole AnnData into memory.
-
-Use `--no-backed` only when:
-- the dataset is small enough that RAM is not a concern, and
-- you want faster random access patterns at the cost of memory.
+Cellucid always opens direct H5AD input in read-only backed mode. Direct Zarr
+input is always loaded eagerly.
 
 ## Practical recommendations by dataset size (rule of thumb)
 
@@ -93,12 +83,12 @@ Exact cutoffs depend on your machine, browser, and GPU. These are starting point
 ```
 
 - **Small (≤50k–100k cells):**
-  - `show_anndata(adata)` is fine and very convenient.
+  - Direct AnnData viewing is fine and very convenient.
 - **Medium (100k–500k cells):**
-  - prefer `show_anndata("data.h5ad")` (backed) or `"data.zarr"`.
+  - prefer `show_anndata("data.h5ad", dataset_name="My dataset", dataset_id="my-dataset")`.
   - exports become attractive if you view often.
 - **Large (500k–millions):**
-  - prefer exports (`prepare` → `serve/show`) or `.h5ad` backed / `.zarr` served by Python.
+  - prefer exports (`prepare` → `serve/show`) or a read-only-backed `.h5ad`.
   - avoid in-memory AnnData.
 
 ## Browser/GPU considerations (web app side)
@@ -118,7 +108,7 @@ For web-app-specific performance tuning (render modes, LOD, etc.), see:
 If performance is unexpectedly bad:
 
 - confirm you’re not using browser `.h5ad` loading (#4) for a huge dataset
-- confirm you didn’t force in-memory mode (`--no-backed`)
+- confirm direct H5AD input is being served through Python
 - consider exporting once (`prepare`) and using export mode
 
 More symptom-based help: {doc}`15_troubleshooting_viewing`.

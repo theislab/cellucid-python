@@ -53,7 +53,8 @@ This is the recommended path for:
 ### 1) Disk I/O
 
 - Export mode: reading `.bin(.gz)` files from disk.
-- AnnData mode: reading from `.h5ad` (HDF5) or `.zarr` chunks.
+- AnnData mode: on-demand reads from read-only-backed `.h5ad`, or reads from
+  the in-memory AnnData produced by eager `anndata.read_zarr`.
 
 Symptoms:
 - slow first load,
@@ -127,6 +128,9 @@ Common “good defaults” for large-ish datasets:
 ```python
 prepare(
     ...,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    obs_categorical_dtype="uint16",
     compression=6,
     var_quantization=8,
     obs_continuous_quantization=8,
@@ -142,7 +146,7 @@ Tradeoffs:
 AnnData mode optimizes for interactive convenience, but there are real costs:
 - the adapter may build extra structures for fast gene access (e.g., CSC caches),
 - gene expression results are cached in an LRU (helps repeated gene queries),
-- backed mode (`.h5ad`, `.zarr`) can reduce RAM usage compared to fully in-memory data.
+- `.h5ad` paths are opened read-only-backed; `.zarr` paths are loaded eagerly.
 
 If you hit memory ceilings, export-first is usually the right move.
 
@@ -160,7 +164,9 @@ Remote notebooks add complexity:
 Mitigations:
 - use a fixed port and SSH tunnel,
 - export to a local SSD on the compute node if possible,
-- prefetch the web UI cache once (see {doc}`06_privacy_security_and_offline_vs_online`).
+- ensure the configured viewer source and selected generation directory have
+  adequate throughput (see
+  {doc}`06_privacy_security_and_offline_vs_online`).
 
 ### “My export folder is huge”
 
@@ -193,7 +199,8 @@ Fix:
 ### Symptom: “The first load takes forever”
 
 Likely causes:
-- web UI assets are being fetched for the first time (online + cache miss),
+- the complete configured web generation is being fetched and verified for
+  this startup,
 - very large points file (millions of cells),
 - slow disk.
 
@@ -202,7 +209,7 @@ How to confirm:
 - Watch network requests in the browser devtools network tab.
 
 Fix:
-- prefetch the web UI cache once,
+- diagnose source download or generation-directory throughput,
 - export-first with compression/quantization,
 - move data to faster storage.
 

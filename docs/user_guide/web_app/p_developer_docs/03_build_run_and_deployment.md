@@ -46,13 +46,14 @@ Any static host works (GitHub Pages, Netlify, S3+CloudFront, Cloudflare Pages, n
    - If you deploy under a subpath, verify that relative URLs still resolve.
 
 3) **CSP expectations**
-   - `cellucid/index.html` contains a dev-phase CSP in a `<meta http-equiv="Content-Security-Policy">`.
+   - `cellucid/index.html` defines CSP in a `<meta http-equiv="Content-Security-Policy">`.
    - If you move CSP into an HTTP header (recommended for production), keep it consistent with required endpoints (datasets, GitHub worker, analytics).
    - If you edit the inline JSON-LD `<script type="application/ld+json">`, the CSP hash in `script-src` must be updated or the browser will block it.
 
-4) **Service worker / SPA fallbacks**
+4) **Catch-all route rewrites**
    - Cellucid is a single page, but it is not using a framework router that needs wildcard rewrites.
-   - Avoid “SPA fallback” rewrites that accidentally serve `index.html` for data files (it makes fetches look like JSON parse errors).
+   - Do not serve `index.html` for missing data files; that turns a missing-file
+     response into a misleading JSON parse error.
 
 ---
 
@@ -68,9 +69,9 @@ If you load a dataset hosted at `https://example.org/my_export/` from `https://w
 
 For a development or internal server, you may choose to allow `*` (public datasets only).
 
-Exception (GitHub Pages):
-- GitHub Pages does not allow custom CORS headers.
-- Cellucid can still load GitHub Pages exports via the `cellucid-datasets/bridge.html` iframe bridge (no CORS headers required).
+This requirement has no alternate browser-side transport: if the dataset host
+does not authorize the app origin, host the export on an endpoint whose CORS
+policy you control.
 
 ### 2) Don’t “helpfully” auto-decompress `.gz` exports
 

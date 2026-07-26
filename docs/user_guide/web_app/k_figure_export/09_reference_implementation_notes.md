@@ -4,7 +4,7 @@
 **Time:** 5–15 minutes  
 **What you’ll learn:**
 - Where the figure export implementation lives
-- Which design docs/plans describe intended behavior
+- Which current architecture and authoring references define the behavior
 - What to check first when debugging export mismatches
 
 **Prerequisites:**
@@ -12,11 +12,11 @@
 
 ---
 
-## Source docs (internal)
+## Source and documentation references
 
 - Figure export module README: `cellucid/assets/js/app/ui/modules/figure-export/README.md`
-- Figure export plan: `cellucid/markdown/SCIENTIFIC_FIGURE_EXPORT_PLAN.md`
-- Screenshots & figures playbook (doc authoring): `cellucid/markdown/DOCUMENTATION_SCREENSHOTS_AND_FIGURES_GUIDE.md`
+- Figure export architecture: {doc}`../p_developer_docs/12_figure_export_architecture`
+- Screenshot authoring: {doc}`../../python_package/h_developer_docs/15_docs_development_and_style_guide`
 
 ---
 
@@ -29,7 +29,8 @@ Figure export is split into three layers so it stays fast and maintainable:
    - `cellucid/assets/js/app/ui/modules/figure-export/figure-export-ui.js`
 
 2) **Engine (state snapshot + orchestration)**  
-   Captures view buffers/render state, builds a payload with metadata, chooses filenames, and triggers downloads.
+   Captures view buffers/render state, builds a payload with metadata, chooses
+   filenames, stages every renderer result, and triggers one download.
    - `cellucid/assets/js/app/ui/modules/figure-export/figure-export-engine.js`
 
 3) **Renderers (SVG/PNG)**  
@@ -42,8 +43,8 @@ Key utilities/components:
 - Density reduction: `cellucid/assets/js/app/ui/modules/figure-export/utils/density-reducer.js`
 - Point projection: `cellucid/assets/js/app/ui/modules/figure-export/utils/point-projector.js`
 - WebGL point rasterizer (PNG + Hybrid SVG): `cellucid/assets/js/app/ui/modules/figure-export/utils/webgl-point-rasterizer.js`
-- PNG tEXt metadata: `cellucid/assets/js/app/ui/modules/figure-export/utils/png-metadata.js`
-- Large dataset choice dialog: `cellucid/assets/js/app/ui/modules/figure-export/components/large-dataset-dialog.js`
+- PNG UTF-8 iTXt metadata: `cellucid/assets/js/app/ui/modules/figure-export/utils/png-metadata.js`
+- Deterministic stored ZIP batches: `cellucid/assets/js/app/ui/modules/figure-export/utils/zip-archive.js`
 - Fidelity warnings dialog: `cellucid/assets/js/app/ui/modules/figure-export/components/fidelity-warning-dialog.js`
 
 ---
@@ -59,8 +60,13 @@ The engine constructs a payload containing:
 - per-view render state + camera state snapshots.
 
 This payload is embedded into exports:
-- **PNG**: as `tEXt` chunks including a JSON `Comment` blob (see `buildPngTextMetadata()` in `cellucid/assets/js/app/ui/modules/figure-export/renderers/png-renderer.js`).
+- **PNG**: as UTF-8 `iTXt` chunks including a JSON `Comment` blob (see `buildPngTextMetadata()` in `cellucid/assets/js/app/ui/modules/figure-export/renderers/png-renderer.js`).
 - **SVG**: as RDF/Dublin Core metadata plus a `cellucid:json` field (see `buildSvgMetadata()` in `cellucid/assets/js/app/ui/modules/figure-export/renderers/svg-renderer.js`).
+
+For one job, the engine downloads the native SVG/PNG Blob. For two or more
+jobs, it validates every native Blob, writes a stable-order stored ZIP with
+fixed ZIP timestamps, and downloads that one `application/zip` Blob. A render
+or archive failure occurs before the sole download call.
 
 :::{important}
 The metadata can include a local dataset path (`datasetUserPath`) when using local file/server workflows. Treat this as a privacy concern when sharing figures publicly.
@@ -90,15 +96,18 @@ Include enough context to reproduce without guessing:
 - **Export settings**:
   - plot size (W×H),
   - format (SVG/PNG) and DPI,
-  - strategy (full/optimized/hybrid/raster),
+  - strategy (Full vector, Optimized vector, or Hybrid for SVG),
   - include axes/legend/title/background/crop,
   - export all views on/off (and whether you were in grid compare)
-- **The exported artifact(s)** attached (SVG/PNG)
+- **The exported artifact** attached (native SVG/PNG or the batch ZIP)
+- **For ZIP batches**: the exact ordered entry names
 - **Console logs**:
   - any `[FigureExport]` warnings/errors,
   - screenshot of fidelity warning dialog text if it appeared
-- **Cross-browser check**:
-  - does it reproduce in a second browser (yes/no)?
+- **Deterministic delivery check**:
+  - requested job count,
+  - observed native filename or ZIP filename,
+  - ZIP entry names for a batch.
 
 ---
 

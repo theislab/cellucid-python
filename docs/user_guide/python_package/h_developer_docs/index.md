@@ -33,7 +33,7 @@ Cellucid is an ecosystem:
 - **cellucid-python (this repo)**: export format + servers + notebook embedding + hooks + Python/CLI APIs.
 - **cellucid-annotation**: community annotation repo template + schema (web app feature, not primarily Python).
 - **cellucid-datasets**: demo datasets (exports) used for examples/hosting.
-- **cellucid-r (future)**: R exporter (not ready yet).
+- **cellucid-r**: R exporter for the shared web export contract.
 
 This developer section focuses on **the Python repo** but links to the **web app developer docs** when the behavior is frontend-driven:
 {doc}`../../web_app/p_developer_docs/index`.

@@ -31,10 +31,10 @@ If none of these change the behavior, it is likely worth reporting.
 ### A) “Rendering is slow” (FPS / navigation)
 
 Include:
-- the synthetic benchmark result (if available), and/or
+- the synthetic benchmark result, and/or
 - your measured FPS and view/window settings.
 
-See {doc}`05_benchmark_tools_if_exposed` and {doc}`04_benchmarking_methodology_and_metrics`.
+See {doc}`05_benchmark_tools` and {doc}`04_benchmarking_methodology_and_metrics`.
 
 ### B) “Filtering/analysis is slow” (CPU hitches)
 
@@ -187,5 +187,5 @@ If you’re unsure, err on the side of redacting.
 ## Next steps
 
 - {doc}`04_benchmarking_methodology_and_metrics` (how to produce comparable numbers)
-- {doc}`05_benchmark_tools_if_exposed` (synthetic benchmark + “Copy Situation Report”)
+- {doc}`05_benchmark_tools` (synthetic benchmark + “Copy Situation Report”)
 - {doc}`07_troubleshooting_performance` (if you want to try more fixes first)

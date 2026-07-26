@@ -57,7 +57,12 @@ Python sends `postMessage(...)` commands into the iframe, for example:
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata(adata, height=650)
+viewer = show_anndata(
+    adata,
+    height=650,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
 viewer
 ```
 
@@ -72,7 +77,7 @@ viewer.wait_for_ready(timeout=30)
 ```python
 @viewer.on_selection
 def _handle_selection(event):
-    cells = event.get("cells", [])
+    cells = event["cells"]
     print(f"Selected {len(cells)} cells")
 ```
 
@@ -83,8 +88,11 @@ Now select cells in the viewer (lasso, etc.) and confirm Python prints.
 ```python
 @viewer.on_selection
 def _highlight_selection(event):
-    cells = event.get("cells", [])
-    viewer.highlight_cells(cells, color="#ff2d55")
+    cells = event["cells"]
+    if cells:
+        viewer.highlight_cells(cells, color="#ff2d55")
+    else:
+        viewer.clear_highlights()
 ```
 
 ---
@@ -110,7 +118,7 @@ Why this is useful:
 
 ```python
 event = viewer.wait_for_event("selection", timeout=120)
-cells = event.get("cells", [])
+cells = event["cells"]
 
 subset = adata[cells].copy()
 subset
@@ -123,20 +131,20 @@ If you reorder or subset `adata` after creating `viewer`, your indices can becom
 Best practice: treat `adata` as immutable after opening the viewer, or recreate the viewer after major changes.
 ```
 
-### Pattern C — Robust callbacks (don’t crash your notebook)
+### Pattern C — Validate callback input and surface failures
 
-Even though Cellucid tries to log callback errors without hard-crashing, you should still guard analysis code:
+Unhandled callback exceptions are logged and make the event request return
+HTTP 500. Validate the exact input, and do not suppress analysis failures:
 
 ```python
 @viewer.on_selection
-def _safe_handler(event):
-    try:
-        cells = event.get("cells", [])
-        if not cells:
-            return
-        # ... do analysis ...
-    except Exception as e:
-        print("Selection handler failed:", e)
+def _validated_handler(event):
+    cells = event["cells"]
+    if type(cells) is not list or any(type(index) is not int for index in cells):
+        raise TypeError("selection cells must be a list of native integers")
+    if cells:
+        # ... do analysis; any failure propagates to event delivery ...
+        print(f"Analyzing {len(cells)} cells")
 ```
 
 ### Pattern D — Use `viewer.state` for “latest selection” workflows
@@ -174,35 +182,6 @@ viewer.send_message({"type": "highlight", "cells": [1, 2, 3], "color": "#ff0000"
 
 ```{note}
 The viewer must be displayed before messages can be delivered. The `show(...)` / `show_anndata(...)` helpers display automatically in notebook contexts.
-```
-
----
-
-## Screenshot placeholder (optional: “selection → highlight” success state)
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-notebooks-selection-highlight-roundtrip
-Suggested filename: highlighting_selection/01_selection-highlight-roundtrip.png
-Where it appears: User Guide → Python Package → Notebooks/Tutorials → 23_programmatic_highlighting_and_selection_callbacks.md
-Capture:
-  - UI location: viewer embedded in notebook + Python output
-  - State prerequisites: user selects cells; Python receives event; highlight applied back
-  - Action to reach state: make a selection; run highlight callback; confirm highlight color changes
-Crop:
-  - Include: viewer canvas with highlighted cells
-  - Include: notebook output showing “Selected N cells”
-Redact:
-  - Remove: private dataset names/paths
-Alt text:
-  - Notebook-embedded viewer with a selection highlighted and Python output confirming selection size.
-Caption:
-  - Hooks let the viewer send selected cell indices to Python; Python can respond by highlighting those cells back in the UI.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for a selection-highlight roundtrip.
-:width: 100%
-
-Selection event received in Python, and the same cells highlighted back in the viewer.
 ```
 
 ---
@@ -248,7 +227,9 @@ viewer.debug_connection()
 ```
 
 Fix:
-- if on remote Jupyter, enable `jupyter-server-proxy` or use SSH tunneling (see {doc}`22_large_dataset_server_mode_and_lazy_gene_expression`)
+- on remote Jupyter, configure a browser-reachable proxy route or use SSH
+  tunneling, then pass its exact base as `client_server_url=` (see
+  {doc}`22_large_dataset_server_mode_and_lazy_gene_expression`)
 - verify `/_cellucid/health` is reachable from the browser
 
 ### Symptom: “Python receives events but highlight doesn’t show”

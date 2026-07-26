@@ -28,20 +28,22 @@ This matrix is referenced throughout the docs. Most people only use 2–3 of the
 | 2 | Cellucid web app | Public GitHub export (`?github=...`) | Exported | ✅ | sharing publicly without running a server |
 | 3 | Cellucid web app | Browser **folder picker** | Exported | ✅ | quick local viewing of prepared exports |
 | 4 | Cellucid web app | Browser **.h5ad picker** | `.h5ad` | ❌* | quick preview of small `.h5ad` |
-| 5 | Cellucid web app | Browser **.zarr folder picker** | `.zarr` | ✅† | quick preview of `.zarr` without Python |
+| 5 | Cellucid web app | Browser **Zarr ZIP picker** | `.zarr.zip` / `.zip` containing one Zarr v2 store | ✅† | portable Zarr viewing without Python |
 | 6 | Terminal (CLI) | `cellucid serve <export_dir>` | Exported | ✅ | reliable, fast local viewing |
-| 7 | Terminal (CLI) | `cellucid serve <data.h5ad>` | `.h5ad` | ✅ | large `.h5ad` with backed mode |
-| 8 | Terminal (CLI) | `cellucid serve <data.zarr>` | `.zarr` | ✅ | large `.zarr` with chunked access |
+| 7 | Terminal (CLI) | `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset` | `.h5ad` | ✅ | large `.h5ad` with read-only backed access |
+| 8 | Terminal (CLI) | `cellucid serve data.zarr --dataset-name "My dataset" --dataset-id my-dataset` | `.zarr` | ✅ | Zarr stores that fit an eager Python load |
 | 9 | Python | `cellucid.serve(<export_dir>)` | Exported | ✅ | scripted server startup |
-| 10 | Python | `cellucid.serve_anndata(<data.h5ad>)` | `.h5ad` | ✅ | scripted server startup with backed mode |
-| 11 | Python | `cellucid.serve_anndata(<data.zarr>)` | `.zarr` | ✅ | scripted server startup with chunked access |
+| 10 | Python | `cellucid.serve_anndata(<data.h5ad>, dataset_name="My dataset", dataset_id="my-dataset")` | `.h5ad` | ✅ | scripted server startup with read-only-backed access |
+| 11 | Python | `cellucid.serve_anndata(<data.zarr>, dataset_name="My dataset", dataset_id="my-dataset")` | `.zarr` | ✅ | scripted server startup with eager loading |
 | 12 | Jupyter | `cellucid.show(<export_dir>)` | Exported | ✅ | notebook exploration of exports |
-| 13 | Jupyter | `cellucid.show_anndata(<data.h5ad>)` | `.h5ad` | ✅ | notebook exploration of `.h5ad` |
-| 14 | Jupyter | `cellucid.show_anndata(<data.zarr or AnnData>)` | `.zarr` / in-memory | ✅ | notebook exploration of `.zarr` or in-memory |
+| 13 | Jupyter | `cellucid.show_anndata(<data.h5ad>, dataset_name="My dataset", dataset_id="my-dataset")` | `.h5ad` | ✅ | notebook exploration of `.h5ad` |
+| 14 | Jupyter | `cellucid.show_anndata(<data.zarr or AnnData>, dataset_name="My dataset", dataset_id="my-dataset")` | `.zarr` / in-memory | ✅ | notebook exploration of eagerly materialized `.zarr` or in-memory data |
 
 \* Browser `.h5ad` loading is typically **not truly lazy** (the browser ends up holding the file in memory).
 
-† Browser `.zarr` loading can be “effectively lazy” for gene expression, but still reads metadata up front and can be limited by browser file APIs.
+† Browser Zarr ZIP loading validates and indexes archive metadata before
+adoption, then reads gene-expression chunks on demand within the browser's
+archive and decoded-chunk memory limits.
 
 ## What you should actually use (recommended defaults)
 
@@ -56,8 +58,11 @@ If you don’t have a strong reason otherwise:
 `cellucid serve <path>` auto-detects format:
 
 - a directory that looks like an export (or contains exported subfolders) → treated as **exported** → served by `serve(...)`
-- a `.h5ad` file → treated as **AnnData** → served by `serve_anndata(..., backed=True)`
-- a `.zarr` directory (or directory with `.zattrs`/`.zgroup`) → treated as **AnnData** → served by `serve_anndata(...)`
+- a file with the exact `.h5ad` suffix → treated as **AnnData** and opened
+  read-only-backed by `serve_anndata(...)`
+- a complete Zarr v2 directory (both valid `.zgroup` and `.zattrs`, without
+  `zarr.json`) → treated as **AnnData** and materialized eagerly by
+  `serve_anndata(...)`; the directory name does not need a `.zarr` suffix
 
 Details: {doc}`04_cli_cellucid_serve_quickstart`.
 

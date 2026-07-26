@@ -13,10 +13,6 @@ In `cellucid-r`, the embedding arguments are:
 
 At least one must be provided.
 
-```{warning}
-`X_umap_4d` is reserved for future work and must be `NULL`. Passing it raises an error.
-```
-
 ## What “embedding” means (practical)
 
 An embedding is any numeric coordinate matrix with:
@@ -33,7 +29,8 @@ You can export tSNE, PCA, diffusion maps, etc., as long as the shape is correct.
 - number of columns must match the dimension (`2D` → exactly 2 columns),
 - all provided embeddings must have the same number of rows (`n_cells`).
 
-It does **not** currently sanitize `NA`/`Inf` in embeddings. Avoid missing/invalid coordinates.
+It rejects `NA`, `NaN`, infinities, nonnumeric matrices, and embeddings without
+a positive finite coordinate range before publication.
 
 ## Embedding normalization (important!)
 

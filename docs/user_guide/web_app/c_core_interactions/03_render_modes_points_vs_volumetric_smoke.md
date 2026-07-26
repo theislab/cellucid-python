@@ -72,7 +72,7 @@ Smoke mode renders the dataset as a **ray-marched volumetric cloud**. It is inte
 :::{important}
 Smoke mode is disabled when snapshots exist.
 
-If you click “Volumetric smoke cloud” while you have kept views, the UI will force you back to points mode. Clear snapshots first if you really want smoke.
+If you select “Volumetric smoke cloud” while you have kept views, the selector remains on **Points** and a visible notification tells you to clear snapshots first. No smoke volume is built and the existing views are unchanged.
 :::
 
 ---
@@ -128,32 +128,6 @@ Smoke rebuild behavior:
 
 - Smoke volume is built on first switch to smoke mode.
 - It is rebuilt after certain changes using a short debounce (~300 ms), so rapid slider changes don’t rebuild on every frame.
-
----
-
-## Screenshots (placeholders)
-
-<!-- SCREENSHOT PLACEHOLDER
-ID: render-mode-points-vs-smoke
-Where it appears: Render modes → Points vs Smoke
-Capture:
-  - Same dataset, same camera framing
-  - One screenshot in Points mode, one in Smoke mode (before/after pair)
-Crop:
-  - Include: enough sidebar to show the selected Render mode
-Annotations:
-  - Optional: label which is points vs smoke
-Alt text:
-  - Side-by-side comparison of points rendering and volumetric smoke rendering.
-Caption:
-  - Points mode shows individual cells; smoke mode shows a volumetric density cloud for cinematic/global-shape views.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Placeholder screenshot for points vs smoke comparison.
-:width: 100%
-
-Points mode shows individual cells; smoke mode shows a volumetric density cloud for cinematic/global-shape views.
-```
 
 ---
 

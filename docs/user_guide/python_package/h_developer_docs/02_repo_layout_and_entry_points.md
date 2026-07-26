@@ -66,7 +66,7 @@ Implementation:
 - `cellucid-python/src/cellucid/cli.py`
 
 Right now the CLI is intentionally minimal and centers around:
-- `cellucid serve <path>` (auto-detect `.h5ad`, `.zarr`, or export directory)
+- the `serve` subcommand (auto-detects direct AnnData input or an export directory)
 
 See: {doc}`05_cli_architecture_and_commands`
 
@@ -114,14 +114,14 @@ See: {doc}`10_jupyter_embedding_architecture`
 | You want to change… | Start in | Notes |
 |---|---|---|
 | Export filenames/manifests | `src/cellucid/prepare_data.py` | Coordinate with web app; see {doc}`08_export_format_spec_and_invariants` |
-| Quantization behavior | `src/cellucid/prepare_data.py` | Reserved NaN/Inf markers must match viewer expectations |
+| Quantization behavior | `src/cellucid/prepare_data.py` | Finite gene/continuous domains and generated nullable outlier markers must match viewer expectations |
 | AnnData lazy loading and caching | `src/cellucid/anndata_adapter.py` | Watch memory blowups (CSR→CSC), LRU cache |
 | HTTP routes for AnnData | `src/cellucid/anndata_server.py` | Keep behavior consistent with export mode |
 | CORS / origin rules | `src/cellucid/_server_base.py` | Security-sensitive |
-| Hosted UI caching/offline | `src/cellucid/web_cache.py` | Be careful with cache invalidation |
+| Verified web-generation establishment | `src/cellucid/web_cache.py` | Preserve inventory, byte-verification, staging, and atomic-publication invariants |
 | Notebook embedding issues | `src/cellucid/jupyter.py` | Remote notebook environments are tricky |
 | Session bundle parsing | `src/cellucid/session_bundle.py` | Treat bundles as untrusted input |
-| Applying sessions to AnnData | `src/cellucid/anndata_session.py` | Mismatch policy + column conflict policy matter |
+| Applying sessions to AnnData | `src/cellucid/anndata_session.py` | Exact fingerprint validation and output-column collision rejection |
 | Vector field helpers | `src/cellucid/vector_fields.py` | Keep naming conventions stable (`*_umap_2d`, etc.) |
 
 ---
@@ -134,7 +134,7 @@ Examples (run from the `cellucid-python/` folder):
 
 ```bash
 rg "dataset_identity\\.json" src/cellucid
-rg "CELLUCID_WEB_PROXY_CACHE_DIR" -S src/cellucid
+rg "web_cache_dir" src/cellucid
 rg "requestSessionBundle" src/cellucid/jupyter.py
 rg "obs_manifest" src/cellucid/prepare_data.py
 ```

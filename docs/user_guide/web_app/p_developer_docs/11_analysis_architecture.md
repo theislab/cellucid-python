@@ -79,7 +79,7 @@ Key entry points:
 
 Subdirectories (high-level):
 - `analysis/core/`: plugin contracts, validation, registries
-- `analysis/compute/`: compute operations and backends (GPU/Worker/CPU fallback)
+- `analysis/compute/`: compute operations and explicit GPU, Worker, and CPU backends
 - `analysis/data/`: data layer + query builder + transforms
 - `analysis/stats/`: statistical tests, corrections, result formatting
 - `analysis/plots/`: plot infrastructure and types
@@ -97,7 +97,7 @@ Responsibilities:
 - manages shared configuration (`currentConfig`)
 - coordinates page selection and mode switching
 - triggers plot creation and manages plot lifetimes
-- integrates with session restore (analysis windows reopening) when available
+- restores analysis windows from their exact session descriptors
 
 Code:
 - `cellucid/assets/js/app/analysis/comparison-module.js`
@@ -113,7 +113,7 @@ The analysis module needs a safe, consistent way to:
 This is handled by:
 - `cellucid/assets/js/app/analysis/data/data-layer.js`
 
-### 3) Compute backends (GPU / Worker / CPU fallback)
+### 3) Compute backends (GPU / Worker / CPU)
 
 Compute is structured around “operations” with capability metadata:
 - which operations can run on GPU
@@ -125,10 +125,10 @@ Key files:
 - `cellucid/assets/js/app/analysis/compute/compute-manager.js`
 - `cellucid/assets/js/app/analysis/compute/gpu-compute.js`
 - `cellucid/assets/js/app/analysis/compute/worker-pool.js`
-- `cellucid/assets/js/app/analysis/compute/fallback-operations.js`
 
 Design goal:
-- avoid blocking the UI while still supporting large datasets.
+- select one declared, available backend before an operation starts; execution
+  errors are reported directly and never switch to another backend.
 
 ### 4) Plot infrastructure (Plotly + custom helpers)
 
@@ -162,7 +162,7 @@ The session serializer can be given references to analysis managers once the mod
 
 This enables:
 - reopening floating analysis windows after session restore
-- optionally restoring analysis artifacts if persisted (dev-phase / chunk-dependent)
+- restoring analysis artifacts represented by registered session chunks
 
 See:
 - {doc}`10_sessions_persistence_and_serialization`

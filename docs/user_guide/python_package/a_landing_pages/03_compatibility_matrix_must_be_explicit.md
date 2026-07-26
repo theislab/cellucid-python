@@ -18,45 +18,45 @@ Legend:
 | Environment | Viewer embeds (iframe) | Python → frontend commands | Frontend → Python hooks/events | Notes |
 |---|---:|---:|---:|---|
 | Classic Jupyter Notebook (local) | OK | OK | OK | Usually simplest; notebook is often `http://localhost`. |
-| JupyterLab (local) | OK | OK | OK | If your JupyterLab is served from **HTTPS**, you may need `jupyter-server-proxy`. |
+| JupyterLab (local) | OK | OK | OK | If JupyterLab is served from **HTTPS**, expose the Cellucid port through an HTTPS route and pass that route explicitly. |
 | VSCode notebooks (local) | OK | OK | OK | If VSCode runs in Remote/SSH containers, treat it like “remote kernel”. |
-| Google Colab | Setup | OK | OK | Uses Colab port proxy; first run downloads viewer UI assets. |
-| JupyterHub / remote notebooks (HTTPS) | Setup | OK | OK | Mixed-content is common; `jupyter-server-proxy` is strongly recommended. |
+| Google Colab | Setup | OK | OK | Obtain Colab's HTTPS proxy base and pass it as `client_server_url=`; Cellucid does not call the proxy API. |
+| JupyterHub / remote notebooks (HTTPS) | Setup | OK | OK | Configure an HTTPS route for the selected port and pass its exact base as `client_server_url=`. |
 
-### Offline vs online requirements (what “offline” really means)
+### Network requirements
 
-Cellucid has two different “web things”:
-- the **viewer UI** (HTML/JS/CSS) — by default fetched from `https://www.cellucid.com` and cached locally when you use the Python server embed/proxy.
+Cellucid has two different network surfaces:
+- the **viewer UI** (HTML/JS/CSS and other declared static assets) — fetched
+  from the configured web source and established as one verified generation
+  when the Python server starts.
 - your **data** — served from your local/remote Python server (or loaded via browser file picker).
 
-| Feature | Works offline (after caching UI)? | Requires reaching `cellucid.com` right now? | Notes |
-|---|---:|---:|---|
-| `cellucid serve exports/...` (browser) | Yes | No | UI is served from your server *if it has a cached copy* of the web assets. |
-| `show(...)` / `show_anndata(...)` (notebook) | Yes | No | Same as above. First-ever run may require internet to fetch UI assets. |
-| Open the hosted web app in your browser (`cellucid.com`) | No | Yes | This is a normal website; you need internet to load it. |
-| Prefetch web UI cache (`ensure_web_ui_cached`) | No | Yes | Prefetch is how you make later offline use smoother. |
-| Hooks/events (selection/hover/click) | Yes | No | Events go to `/_cellucid/events` on your Python server. |
-
-```{tip}
-If you need an offline demo/teaching setup, run the UI prefetch once while online (see {doc}`02_installation`), set a persistent cache directory, then you can use `cellucid serve ...` without internet.
-```
+| Feature | Source access required? | Notes |
+|---|---:|---|
+| `cellucid serve exports/...` with its viewer | Yes, at startup | The server downloads, stages, byte-verifies, and atomically publishes the complete source generation before binding its HTTP server. |
+| `show(...)` / `show_anndata(...)` | Yes, at startup | The notebook viewer uses the same establishment contract. |
+| `cellucid serve ... --no-web-ui` | No | Explicit data-endpoint-only mode; no viewer is served. |
+| Hosted web app (`cellucid.com`) | Yes | The browser loads the website directly. |
+| `ensure_web_ui_cached(force=True)` | Yes | Establishes the complete source generation now. |
+| `ensure_web_ui_cached(force=False)` | No | Verifies an existing generation only; it does not alter normal viewer startup. |
+| Hooks/events after a viewer has started | No additional source request | Messages use `/_cellucid/events` on the Python server. |
 
 ## Practical notes per environment
 
 ### Classic Jupyter Notebook / JupyterLab (local)
 
 What usually works:
-- `show_anndata(adata)` embeds an iframe in the output cell.
+- `show_anndata(adata, dataset_name="Example", dataset_id="example")` embeds an iframe in the output cell.
 - Hooks and commands work bidirectionally.
 
 Common caveat:
 - If your notebook page is served from **HTTPS** (rare locally but common on managed systems), the browser can block an `http://127.0.0.1:<port>` iframe (“mixed content”).
 
 Fixes:
-- Install `jupyter-server-proxy` (recommended) and restart the notebook server:
-  ```bash
-  pip install jupyter-server-proxy
-  ```
+- Configure an HTTPS route for the Cellucid port and pass its exact
+  browser-reachable base as `client_server_url=`. The Python package already
+  depends on `jupyter-server-proxy`; installation alone does not select or
+  configure a route.
 - Or skip embedding and use the browser workflow (`cellucid serve ...`) and open the URL directly.
 
 ### VSCode notebooks
@@ -70,16 +70,23 @@ Remote VSCode (SSH / containers) is different:
 
 Recommended pattern (SSH/remote):
 1) Forward the Cellucid server port to your machine (VSCode “Ports” tab or SSH `-L`).
-2) Tell Cellucid what URL the **browser** should use:
+2) Pass the exact URL the **browser** should use when you create the viewer:
    ```python
-   import os
-   os.environ["CELLUCID_CLIENT_SERVER_URL"] = "http://127.0.0.1:8765"  # your *local* forwarded port
+   from cellucid import AnnDataViewer
+
+   viewer = AnnDataViewer(
+       adata,
+       port=8765,
+       dataset_name="Example",
+       dataset_id="example",
+       client_server_url="http://127.0.0.1:8765",
+   )
    ```
-3) Then create the viewer.
 
 ### Google Colab
 
-Colab runs the kernel on a remote VM. Cellucid uses Colab’s HTTPS port proxy so the browser can reach the server.
+Colab runs the kernel on a remote VM. The caller must obtain Colab's HTTPS
+proxy base for one fixed port and pass it explicitly:
 
 Typical pattern:
 1) Install in the Colab runtime:
@@ -87,13 +94,29 @@ Typical pattern:
    !pip -q install cellucid
    ```
 2) Load data in the runtime filesystem (uploaded, mounted Drive, etc.)
-3) Call `show_anndata(...)`
+3) Create the viewer on that same fixed port:
+   ```python
+   from cellucid import AnnDataViewer
+   from google.colab.output import eval_js
+
+   port = 8765
+   browser_base = eval_js(f"google.colab.kernel.proxyPort({port})")
+   viewer = AnnDataViewer(
+       adata,
+       port=port,
+       dataset_name="Example",
+       dataset_id="example",
+       client_server_url=browser_base,
+   )
+   ```
+
+Cellucid does not call `google.colab.kernel.proxyPort(...)` itself.
 
 If it fails:
 - Run `viewer.debug_connection()` and look at:
   - `client_server_url`
   - `server_health`
-  - any `frontend_console` messages
+  - `frontend_roundtrip` and `frontend_debug_snapshot`
 
 ## Security / browser constraints (what’s going on under the hood)
 
@@ -103,53 +126,33 @@ The two issues that matter most:
 
 If your notebook UI is served from `https://...`, the browser may refuse to load `http://127.0.0.1:<port>` inside an iframe.
 
-Cellucid’s embed logic tries to avoid this by:
-- using a notebook-provided proxy URL when `jupyter-server-proxy` is available, or
-- using environment-specific HTTPS proxies (e.g., Colab).
+Cellucid does not probe, infer, or select a proxy. It uses the exact
+`client_server_url=` supplied by the caller, or the bound loopback server URL
+when the argument is omitted. A blank iframe, mixed-content error, or failed
+network request means the caller must expose the selected port and pass its
+browser-reachable HTTP(S) base.
 
-If you see an iframe message about needing a notebook proxy, that’s what it means.
+### 2) Exact UI generation availability
 
-<!-- SCREENSHOT PLACEHOLDER
-ID: python-compat-mixed-content-proxy-required
-Where it appears: Compatibility matrix → Security → mixed content
-Capture:
-  - UI location: embedded Cellucid iframe inside a notebook output cell
-  - State prerequisites: notebook served from HTTPS/remote origin; `jupyter-server-proxy` not installed or not working
-  - Action to reach state: run `show_anndata(...)` and observe the iframe error panel
-Crop:
-  - Include: the iframe error content and the surrounding notebook cell output
-  - Exclude: private notebook names, hostnames, user names
-Redact:
-  - Remove: any internal URLs/domains if sensitive
-Alt text:
-  - Embedded Cellucid viewer showing a “notebook proxy required” message.
-Caption:
-  - When the notebook page is served from HTTPS, the browser may block an HTTP loopback iframe; installing `jupyter-server-proxy` fixes this in most managed notebook environments.
--->
-```{figure} ../../../_static/screenshots/placeholder-screenshot.svg
-:alt: Embedded Cellucid viewer showing a “notebook proxy required” message.
-:width: 100%
+Cellucid’s Python server:
 
-When the notebook page is served from HTTPS, the browser may block an HTTP loopback iframe; installing `jupyter-server-proxy` fixes this in most managed notebook environments.
-```
+1. fetches `cellucid-web-assets.json` from the configured source,
+2. downloads every object in that exact inventory into a staging directory,
+3. verifies the complete file set, byte lengths, SHA-256 hashes, MIME types,
+   and build identity, and
+4. atomically publishes the verified generation before starting the server.
 
-### 2) UI asset availability (first-run download + caching)
-
-Cellucid’s Python server runs in **hosted-asset proxy** mode:
-- it downloads the viewer UI from `https://www.cellucid.com`,
-- caches it on disk,
-- and serves it from the same origin as your dataset server.
-
-If you’re offline on your first run (or behind a firewall), you may see a “viewer UI unavailable” error page.
-
-Fixes:
-- prefetch UI assets once while online (recommended),
-- set `CELLUCID_WEB_PROXY_CACHE_DIR` to a persistent, writable location.
+If the source or any declared object is unavailable or invalid, startup stops
+and the prior cache remains untouched. Supply a reachable
+`--web-source-url` and a writable `--web-cache-dir`; an older cache is never
+served as a substitute.
 
 ## Edge cases (things that look like “bugs”)
 
 - **Ad blockers / strict corporate CSP**: can break the hosted web UI fetch or iframe behavior.
-- **Port collisions**: if 8765 is busy, servers may choose a nearby port; always copy the printed URL.
+- **Port collisions**: an explicitly requested busy port fails. In Python,
+  `port=0` asks the operating system to allocate one port; use the actual URL
+  reported by the viewer/server object.
 - **Multiple viewers in one notebook**: hooks are routed by `viewerId`. If you re-run cells many times, stop old viewers (`viewer.stop()`) or restart the kernel.
 - **Remote access**: binding `--host 0.0.0.0` exposes your server to the network; do this only if you understand the security implications.
 
@@ -159,7 +162,7 @@ Fixes:
 
 **Likely causes**
 - Browser blocked the iframe (mixed content).
-- The viewer UI assets were not available (offline / firewall).
+- The exact viewer generation could not be established from its configured source.
 - The browser can’t reach the data server (remote kernel without port forwarding).
 
 **How to confirm**
@@ -171,9 +174,11 @@ Fixes:
 - In the browser: open DevTools → Console.
 
 **Fix**
-- Install `jupyter-server-proxy` for HTTPS/remote notebooks.
-- Use port forwarding + `CELLUCID_CLIENT_SERVER_URL` for remote kernels.
-- Prefetch UI assets once while online.
+- Configure an HTTPS proxy route or use port forwarding, then pass that exact
+  browser-reachable base as `client_server_url=`.
+- Confirm source access with `ensure_web_ui_cached(force=True)` and correct the
+  reported source, inventory, object, or cache-directory failure. A previous
+  generation is intentionally not substituted.
 
 ---
 

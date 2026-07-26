@@ -1,12 +1,10 @@
-# `cellucid_prepare()` / `prepare()` Overview
+# `cellucid_prepare()` Overview
 
 **Audience:** everyone  
 **Time:** 10–20 minutes  
 **Goal:** understand what the exporter does and how to call it correctly
 
 `cellucid::cellucid_prepare()` is the main entry point of `cellucid-r`. It writes an **export folder** containing binaries + JSON manifests that the Cellucid web app can load.
-
-`cellucid::prepare()` is an alias for the same function.
 
 ## Minimal “mental model”
 
@@ -66,25 +64,27 @@ For each categorical field, `cellucid-r` computes a per-cell outlier quantile (d
 
 Details: {doc}`04_obs_cell_metadata`
 
-### 3) Export can “silently skip” work unless `force=TRUE`
+### 3) Export publication is atomic
 
-By default `force=FALSE`. If manifests already exist, export may skip:
-- `obs_manifest.json`
-- `var_manifest.json`
-- `connectivity_manifest.json`
-- and embedding/vector files that already exist
-
-This is useful for incremental work, but it can be confusing when you expect outputs to change.
+By default `force=FALSE`; an existing output generation is rejected in full.
+With `force=TRUE`, `cellucid-r` writes and validates one complete sibling stage,
+then atomically replaces the previous generation. A failed candidate leaves the
+previous generation unchanged.
 
 Rule of thumb:
 - use a new `out_dir` for each export iteration, or
-- set `force=TRUE` while you are iterating.
+- set `force=TRUE` only for an intentional complete replacement.
 
-### 4) Continuous quantization uses a reserved missing marker
+### 4) Continuous and gene values are finite-only
 
 If you quantize continuous values:
 - valid values map to `0..254` (8-bit) or `0..65534` (16-bit)
-- invalid values (`NA`, `Inf`, `-Inf`) map to `255` / `65535`
+- `NA`, `NaN`, and infinities reject the complete candidate
+- constant fields reject because compact quantization requires
+  `minValue < maxValue`
+
+The reserved `255`/`65535` marker is used only for missing categorical codes
+and generated `NaN` categorical outlier quantiles.
 
 Details: {doc}`04_obs_cell_metadata` and {doc}`06_gene_expression_matrix`
 
@@ -110,6 +110,7 @@ If you include connectivities:
 - `connectivity_manifest.json`
 - `connectivity/edges.src.bin[.gz]`
 - `connectivity/edges.dst.bin[.gz]`
+- `connectivity/edges.weights.f64.bin[.gz]`
 
 If you include vector fields:
 - `vectors/*.bin[.gz]`

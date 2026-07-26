@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *.pyo
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Virtual envs
 .env
@@ -41,3 +43,4 @@ data/raw/**
 data/experiments/**
 project_context.txt
 /docs/user_guide/python_package/examples/datasets
+/.cellucid-maintenance
