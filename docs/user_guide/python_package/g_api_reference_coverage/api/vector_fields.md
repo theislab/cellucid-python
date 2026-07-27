@@ -7,7 +7,7 @@
 Cellucid “vector fields” are **per-cell displacement vectors in embedding space**.
 
 They enable overlays such as:
-- RNA velocity / flow arrows (scVelo-style, if you already have vectors)
+- RNA velocity particle flow (scVelo-style, if you already have vectors)
 - CellRank drift vectors derived from a transition matrix
 
 This page documents:
@@ -23,7 +23,9 @@ This page documents:
 - You compute (or already have) vectors with the *same* shape.
 - Cellucid visualizes those vectors as an animated overlay on top of the embedding.
 
-Vectors are not “absolute positions”; they are **arrows attached to each cell**.
+Vectors are not absolute positions. Each row is a displacement at the
+corresponding cell, and the viewer integrates those displacements into animated
+particle flow.
 
 ---
 

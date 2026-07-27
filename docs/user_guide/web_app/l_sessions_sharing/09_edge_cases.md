@@ -1,134 +1,115 @@
-# Edge cases (sessions)
+# Edge cases: sessions
 
-**Audience:** power users and anyone building repeatable workflows  
-**Time:** 15–35 minutes  
+**Audience:** power users and anyone building repeatable workflows
+
+**Time:** 15–30 minutes
 **What you’ll learn:**
-- Common edge cases that make sessions restore “imperfectly”
-- What behavior is expected vs a bug
-- How to design workflows that avoid the worst cases
+- which unusual outcomes are expected under the strict current reader;
+- how cancellation, large bundles, and different screens behave; and
+- when to create a fresh current session.
 
-**Prerequisites:**
-- Basic familiarity with sessions ({doc}`01_session_mental_model`)
+## Different identity, even with similar files
 
----
+If a session was saved through GitHub and the same prepared files are later
+opened with the local **Prepared** picker, `sourceType` differs. If a remote
+publication changes its dataset id, `datasetId` differs. Either case rejects
+the complete restore.
 
-## Dataset identity and mismatch edge cases
-
-### Restoring into a different dataset (mismatch)
-
-**Expected behavior**
-- Cellucid warns about a dataset mismatch.
-- Dataset-dependent state is skipped (filters/highlights/active fields).
-- Only dataset-agnostic layout may restore.
-
-**Why this exists**
-- Safety: applying highlights/filters to the wrong dataset is worse than “restore didn’t work”.
-
-**What to do**
-- Load the correct dataset first, then load the session again.
-- Or create a new session for the dataset you actually want.
+This is intentional. Cellucid will not extract the floating layout or skip only
+cell-indexed chunks. Load the exact route and dataset identity used by the
+sender, or create a fresh session after loading through the intended route.
 
 See {doc}`07_versioning_compatibility_and_dataset_identity`.
 
-### “Same dataset content, different load method”
+## Same lightweight fingerprint, changed content
 
-Example:
-- you saved a session while loading from GitHub,
-- your collaborator opens the same export folder locally.
+The fingerprint checks source type, dataset id, cell count, and variable count;
+it is not a hash of every cell, gene, field, or coordinate. Reordering cells or
+recomputing an embedding under the same identity and sizes can therefore pass
+the identity guard while changing scientific meaning.
 
-**Expected behavior**
-- session may mismatch because the source type and dataset id differ.
+Never reuse an identity for changed content. Publish a new prepared generation
+under a new immutable id and save a new session.
 
-Fix:
-- align the load method, or
-- create a new session under the collaborator’s load method.
+## Eager and lazy scheduling
 
----
+Large highlight memberships, inactive categorical code columns, and analysis
+artifacts are scheduled lazily. This means progress can remain active longer,
+not that Cellucid has partly succeeded. The terminal **Session fully restored**
+notification appears only after every lazy chunk has applied and the
+transaction has committed.
 
-## Progressive restore edge cases (eager vs lazy)
+If a late chunk is invalid, earlier camera, fields, filters, highlights,
+windows, playback, and cache ownership roll back. If you press **Cancel** or
+start another restore, the older progress is dismissed and neither success nor
+a red product failure is published.
 
-### “My highlight groups are there, but nothing is highlighted yet”
+## Empty state replaces existing state
 
-This can happen when:
-- highlight meta restores eagerly, and
-- large highlight memberships are still restoring lazily.
+An ordinary current bundle always carries:
 
-Expected behavior:
-- memberships appear later (watch the session progress notifications).
+- `cinematic/camera`, even when there are no keyframes; and
+- `analysis/cache-inventory`, even when there are no artifacts.
 
-If it never resolves, see {doc}`10_troubleshooting_sessions`.
+Restoring those empty payloads clears a destination Camera Path or cache. It
+does not preserve stale state from whatever you explored before loading the
+session. Saved playback state is restored exactly; autoplay begins only at a
+successful commit when the saved settings require it.
 
-### “Session restore finished, but analysis results are missing”
+## Analysis results versus saved cache artifacts
 
-Expected behavior:
-- analysis windows restore (settings + geometry),
-- analysis results are not treated as authoritative artifacts and may need recomputation,
-- some caches may restore lazily to accelerate recomputation.
+Analysis window descriptors and the exact cache inventory can restore, but a
+session is not the canonical scientific-results archive. Export result tables
+for publication or downstream analysis. After restore, recompute any result
+that the session did not explicitly cache.
 
----
+## Different screens and browsers
 
-## UI layout edge cases (different screens, different browsers)
+Floating panels are clamped so they remain reachable on the current viewport.
+A layout saved on a large monitor can therefore move slightly on a laptop or
+mobile-sized window. Reposition and save a new device-specific session if exact
+panel placement matters.
 
-### Floating panels appear “clamped” or moved
+Restore does not promise canvas focus, hover state, or pointer-lock state.
+Click the canvas once before using keyboard shortcuts.
 
-Expected behavior:
-- when restoring on a different screen size, floating panel geometry is clamped/cascaded so panels remain visible.
+## Large bundles
 
-What to do:
-- manually reposition panels and resave the session if you want “perfect layout” on that machine.
+Sessions grow with:
 
-### Keyboard shortcuts / focus feels different after restore
+- many highlight groups containing millions of indices;
+- many categorical user-defined fields;
+- many saved views; and
+- cached analysis artifacts.
 
-Expected behavior:
-- restore does not guarantee canvas focus or pointer-lock state.
+The loader enforces stored and decoded limits, checks gzip output length before
+native decompression, and yields during heavy preflight/restore work so Cancel
+and newer loads remain responsive. You can keep ordinary workflows lighter by
+saving meaningful milestones, deleting obsolete highlights, and retaining only
+the analysis caches you expect collaborators to use.
 
-Fix:
-- click the canvas once, then retry shortcuts.
+## Missing field or changed schema
 
----
+A matching fingerprint does not make a missing field acceptable. If a saved
+active field, category inventory, code column, view descriptor, or analysis
+artifact no longer matches the loaded dataset, the exact contributor rejects
+the bundle and the transaction rolls back. Cellucid does not quietly keep the
+current field or apply the remaining chunks.
 
-## Large session edge cases (performance + file size)
+Load the unchanged prepared generation, or configure the changed dataset and
+use **Save State** to author a new current bundle.
 
-Sessions can become large when you have:
-- huge highlight groups (hundreds of thousands to millions of indices),
-- many groups/pages,
-- many snapshots,
-- many user-defined categorical fields (per-cell codes),
-- analysis caches/artifacts.
+## Official sample defaults are not manual sessions
 
-Symptoms:
-- Save State takes longer.
-- Load State shows progress for longer.
-- Browser may become memory-constrained.
+The catalog's `default.cellucid-session` has an intentionally smaller,
+integrity-pinned profile that is applied only by the official starting-state
+path. Downloading it and choosing **Load State** is rejected because the manual
+reader requires explicit camera-path and cache-inventory chunks.
 
-Mitigations:
-- save milestone sessions (not every minute),
-- keep highlight groups coarse and meaningful,
-- reduce snapshots before saving if you don’t need them.
-
----
-
-## Field/feature availability edge cases
-
-### A saved active field no longer exists
-
-If you load a session into an export where:
-- the active field was deleted/purged,
-- a gene is missing,
-- obs/var schema changed,
-
-then that field selection is not applied.
-
-Expected behavior:
-- the current field remains active and the console records the missing key.
-
-Fix:
-- load the export version that matches the session,
-- or update the session (set a new active field and resave).
-
----
+Choose the sample first, then use **Save State** if you need a shareable manual
+session. See {doc}`04_official_sample_states`.
 
 ## Next steps
 
-- {doc}`10_troubleshooting_sessions` (the full symptom → diagnosis → fix map)
-- {doc}`12_reference` (format and implementation notes)
+- {doc}`10_troubleshooting_sessions` (symptom → diagnosis → fix)
+- {doc}`12_reference` (exact framing and chunk profiles)

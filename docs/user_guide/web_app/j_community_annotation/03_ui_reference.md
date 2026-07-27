@@ -12,16 +12,24 @@ If you want the guided flow first:
 ## Community Annotation Accordion (Sidebar)
 
 You’ll find **Community Annotation** in the left sidebar.
+The accordion starts collapsed.
 
 ### Entry button states
 
-The main entry button changes based on state:
+Before a repository is connected, the compact panel reads
+`No annotation repo connected.` and exposes one action:
 
-- **Connect GitHub…**: you are not signed in (or your session expired).
-- **Choose repo…**: you are signed in, but no repo is connected for this dataset.
-- **GitHub sync…**: you are signed in and a repo is already connected (opens the sync modal).
+- **Connect repo**: opens the four-step connection wizard.
 
-If you are offline, the entry button is disabled. Local annotation state can still exist, but you cannot Pull/Publish until you’re back online.
+After a repository is connected, the **GitHub sync** action reflects
+authentication state:
+
+- **Connect GitHub…**: the repository connection exists locally, but the tab is
+  not signed in.
+- **GitHub sync…**: the tab is signed in and the repository is connected.
+
+When offline, GitHub actions are disabled. Existing annotation local state can
+still be edited, but it cannot be Pulled or Published.
 
 ```{figure} ../../../_static/screenshots/community_annotation/disconnected-panel.png
 :alt: Community Annotation panel before an annotation repository is connected.
@@ -71,7 +79,8 @@ If your annotation repo does not appear later, this step is the usual cause.
 
 - Filter input: **Filter repositories…**
 - Repos are shown as cards (public/private).
-- Button: **Connect repo**
+- Select a repo card, then use the wizard navigation button **Connect**.
+- If replacing an existing repository, the same button reads **Switch repo**.
 
 What “connect” means:
 
@@ -123,6 +132,9 @@ Publishing modes:
 
 - **Direct push** if GitHub reports you can push.
 - **Fork + Pull Request** if you cannot push but the repo allows forking.
+
+Cellucid chooses one route from current permissions before publishing. If that
+route fails, the failure is reported; a different route is not substituted.
 
 Common publish pitfalls:
 
@@ -204,10 +216,11 @@ Accordion title: **CONSENSUS SNAPSHOT + LOCAL CACHE**
 
 ### Consensus snapshot
 
-- Label: **Consensus snapshot (consensus.json)**
+- Label: **Consensus snapshot (cellucid-consensus.json)**
 - Button: **Download**
 
-Downloads a locally built `consensus_<datasetId>.json` snapshot (not written back to GitHub).
+Downloads a locally built `cellucid-consensus.json` snapshot (not written back
+to GitHub). Pull first when the export must include the newest shared files.
 
 The snapshot contains:
 
@@ -219,7 +232,8 @@ The snapshot contains:
 Two different clears exist (they do different things):
 
 - **Clear session**
-  - clears local votes/suggestions/comments and local author settings for the current scope
+  - clears local votes/suggestions/comments and annotatable-column selections
+    for the current dataset/repo/branch scope
   - does not touch GitHub
   - use this if your local state is confused and you want to start fresh
   - risk: you can lose unpublished work
@@ -228,6 +242,13 @@ Two different clears exist (they do different things):
   - clears locally cached raw GitHub files (`annotations/users/*`, `annotations/moderation/merges.json`)
   - use this if Pull behavior seems wrong due to a corrupted cache
   - safe: does not remove your local votes/suggestions/comments
+
+The annotation “session” above is separate from Cellucid's portable
+`.cellucid-session` files. Community Annotation is intentionally excluded from
+ordinary Save State/Load State bundles. GitHub tokens remain tab-scoped in
+`sessionStorage`; annotation intent and pulled-file caches retain their own
+dataset/repo/branch/user scope. See
+{doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
 
 ---
 

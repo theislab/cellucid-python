@@ -525,6 +525,33 @@ def test_documented_vector_declarations_require_dimension_suffixes() -> None:
     assert not failures, "\n".join(failures)
 
 
+def test_documented_multi_field_vector_defaults_use_exact_runtime_field_ids() -> None:
+    relative_paths = (
+        "docs/user_guide/python_package/d_viewing_apis/"
+        "08_anndata_mode_show_anndata_and_serve_anndata.md",
+        "docs/user_guide/python_package/f_notebooks_tutorials/"
+        "33_vector_fields_and_velocity_overlay_end_to_end.md",
+        "docs/user_guide/web_app/b_data_loading/05_jupyter_tutorial.md",
+    )
+    page_text = {
+        relative: (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+        for relative in relative_paths
+    }
+    combined = "\n".join(page_text.values())
+
+    assert 'vector_field_default="velocity_umap"' in page_text[relative_paths[0]]
+    assert 'vector_field_default="velocity_umap"' in page_text[relative_paths[1]]
+    assert 'default_vector_field = "velocity_umap"' in page_text[relative_paths[1]]
+    assert "`velocity_umap` or\n  `T_fwd_umap`" in page_text[relative_paths[1]]
+    assert 'vector_field_default="velocity_umap"' in page_text[relative_paths[2]]
+    assert 'vector_field_default="T_fwd_umap"' in page_text[relative_paths[2]]
+    assert not re.search(
+        r'\bvector_field_default\s*=\s*["\'](?:velocity|T_fwd)["\']',
+        combined,
+    )
+    assert 'default_vector_field = "velocity"' not in combined
+
+
 def test_documented_embedding_requirements_use_exact_current_keys() -> None:
     requirement_pages = [
         DOCS_ROOT
@@ -807,14 +834,15 @@ def test_standard_pancreas_sample_contract_is_documented_exactly() -> None:
         "3,753 genes",
         "`clusters_coarse` (5 categories)",
         "`clusters` (8 categories)",
+        "`cell_type` (8 categories)",
         "`S_score`",
         "`G2M_score`",
         "33,476 exact weighted connectivity edges",
         "`velocity_umap`",
         "f6cad69fd509be44c8453205309f4c3c3c37ba34",
         "27,998 ordered genes",
-        "3,772-file, 2,469,229-byte",
-        "5e0361c0f510876045d12bc57e5019096f3ca3aa6888e3b4778259e989e25d63",
+        "3,774-file, 2,477,205-byte",
+        "268a36b0c62f1e872bc4ebc271283fe09b9036c2b8db2b7bbf2d7d737556c865",
         "GSE132188",
         "10.1242/dev.173849",
     ):
@@ -826,9 +854,24 @@ def test_standard_pancreas_sample_contract_is_documented_exactly() -> None:
     assert "default 3D embedding with **Orbit**" in normalized
     assert "Selecting 1D or 2D" in page and "**Planar**" in page
     assert "No camera path is created or played automatically" in normalized
+    assert (
+        "four source-owned observation fields (`clusters_coarse`, `clusters`, "
+        "`S_score`, and `G2M_score`)"
+    ) in normalized
+    assert "it is not a fifth source-owned field" in normalized
+    assert "category order and per-cell codes exactly equal source-owned `clusters`" in normalized
     assert "neither is sliced, padded, or copied from the 2D coordinates" in normalized
     assert "analysis-only working copy" in normalized
     assert "sources/pancreas.json" in page
+
+
+def test_data_loading_matrix_uses_the_exact_prepared_picker_label() -> None:
+    page = (
+        DOCS_ROOT / "user_guide" / "web_app" / "b_data_loading" / "index.md"
+    ).read_text(encoding="utf-8")
+
+    assert "| Browser Prepared picker |" in page
+    assert "Browser folder picker" not in page
 
 
 def test_remote_and_github_url_docs_require_exact_multi_dataset_selection() -> None:

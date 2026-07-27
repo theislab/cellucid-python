@@ -96,6 +96,19 @@ def test_shipped_python_repository_surfaces_contain_only_current_contract_langua
     assert violations == []
 
 
+def test_readme_cross_references_the_current_cellucid_ecosystem() -> None:
+    readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+    for url in (
+        "https://cellucid.readthedocs.io/en/latest/user_guide/python_package/index.html",
+        "https://github.com/theislab/cellucid",
+        "https://github.com/theislab/cellucid-r",
+        "https://github.com/theislab/cellucid-datasets",
+        "https://github.com/theislab/cellucid-demo-custom-datasets",
+        "https://github.com/theislab/cellucid-annotation",
+    ):
+        assert url in readme
+
+
 def test_mypy_uses_each_ci_interpreter_and_ci_keeps_the_supported_boundaries() -> None:
     pyproject = (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     mypy_section = pyproject.split("[tool.mypy]", maxsplit=1)[1].split(

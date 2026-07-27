@@ -4,9 +4,9 @@
 **Time:** 20–40 minutes  
 **What you’ll learn:**
 - The explicit “saved vs not saved” contract for `.cellucid-session` bundles
-- Which parts restore immediately (eager) vs later (lazy)
-- Which parts are dataset-dependent (and skipped on dataset mismatch)
-- How to verify a restore and diagnose partial restores quickly
+- How eager and lazy chunks are ordered inside one atomic restore
+- Which parts are dataset-dependent and why identity mismatch rejects everything
+- How to verify a complete restore quickly
 
 **Prerequisites:**
 - A dataset loaded in the web app
@@ -21,10 +21,11 @@ Saved/restored (typical):
 - view layout (live + snapshots)
 - active fields (obs/var) per view
 - filter state per view (category visibility, continuous ranges, outliers)
-- highlight pages/groups, plus memberships (large groups may restore later)
+- highlight pages/groups and their exact memberships
 - some UI control values (generic controls by DOM id)
 - floating panel layout (geometry/open/closed)
-- analysis windows (settings + geometry), plus some caches (background)
+- analysis windows (settings + geometry) and the exact saved cache inventory
+- Camera Path settings and keyframes, including an explicitly empty path
 
 Not saved/restored (typical):
 - the dataset itself (points, obs, gene expression)
@@ -34,7 +35,8 @@ Not saved/restored (typical):
 - Benchmarking state
 - ephemeral UI like toasts, in-progress selections, hover state
 
-If you see a “dataset mismatch” warning during restore, only dataset-agnostic layout restores; see {doc}`07_versioning_compatibility_and_dataset_identity`.
+If the dataset fingerprint differs, the complete operation is rejected and
+rolled back; see {doc}`07_versioning_compatibility_and_dataset_identity`.
 
 ---
 
@@ -57,8 +59,9 @@ This is intentional because:
 This section is the best “source-of-truth” checklist for what you should expect.
 
 :::{note}
-Some features restore only if they exist in the current build.
-For example, if the Analysis module is not initialized, “analysis windows” cannot restore.
+The current bundle contract is closed. A missing required feature owner,
+unknown contributor, or noncanonical chunk rejects the restore; Cellucid does
+not silently omit that feature.
 :::
 
 ### 1) Core visualization + UI (“first pixels + UI-ready”) — eager
@@ -87,8 +90,8 @@ Restored early so you see the correct view quickly:
   - many checkboxes/selects/sliders are captured “by id”
   - accordion open/closed state for many sections
 
-Practical expectation:
-after eager restore, you should already recognize “where you were”.
+Eager describes ordering, not an intermediate success state. Treat the view as
+restored only after the terminal **Session fully restored** notification.
 
 ### 2) Filtering state (per view) — eager
 
@@ -120,16 +123,18 @@ Sessions persist “field overlays” that affect what fields exist and how they
 
 This is one reason sessions can restore an experience even if you created derived fields in the UI.
 
-### 4) Floating panels layout (non-analysis) — eager, dataset-agnostic
+### 4) Floating panels layout (non-analysis) — eager
 
 If you float/collapse panels, sessions can restore:
 - which accordion sections were floated,
 - their geometry (position/size),
 - open/closed state.
 
-This chunk is considered **dataset-agnostic** and can restore even when the dataset mismatches.
+Its manifest profile records `datasetDependent: false`, but the enclosing
+bundle still requires an exact dataset fingerprint. Cellucid never extracts
+this chunk from a mismatched session.
 
-### 5) Highlights — meta eager, memberships lazy
+### 5) Highlights — metadata eager, memberships lazy
 
 Highlights restore in two layers:
 
@@ -139,11 +144,11 @@ Highlights restore in two layers:
 
 2) **Highlight memberships (lazy, per group)**
    - actual arrays of cell indices can be large
-   - they restore in the background
+   - exactly one membership chunk is required for each advertised group
 
-Practical implication:
-- after eager restore you may see your pages/groups quickly,
-- but large group memberships (and any derived counts) may finish restoring later.
+The scheduler yields between lazy chunks so the browser remains responsive,
+but public completion waits for all membership arrays. A missing or malformed
+group rolls the transaction back.
 
 ### 6) User-defined field codes (derived categorical columns) — eager/lazy split
 
@@ -153,11 +158,20 @@ To keep sessions responsive:
 - codes needed for “initial view correctness” can restore eagerly (active coloring fields + snapshot actives),
 - other codes restore lazily.
 
+Every categorical user-defined field still requires exactly one codes chunk.
+Priority is part of the current contract: a code column is eager exactly when a
+target live or snapshot active field needs it, and lazy otherwise.
+
 ### 7) Analysis windows + caches — windows eager, caches lazy
 
 Sessions can persist:
 - **open floating analysis windows** (which analysis modes were open, their settings, and geometry) — eager
 - **some analysis caches/artifacts** to speed up later analysis — lazy
+
+The eager `analysis/cache-inventory` chunk lists the exact ordered cache
+artifacts that follow. It is present even when the list is empty, so restoring
+an empty saved cache clears an older destination cache instead of leaving stale
+entries behind.
 
 Important nuance:
 - analysis **results** are generally not treated as “authoritative” artifacts inside sessions.
@@ -205,13 +219,13 @@ Those are recomputed from higher-level state after restore.
 
 ---
 
-## Dataset mismatch behavior (critical)
+## Dataset identity behavior (critical)
 
 On restore, Cellucid compares a **dataset fingerprint** saved in the session with the currently loaded dataset.
 
-If they differ, Cellucid:
-- warns about the mismatch, and
-- restores only dataset-agnostic chunks (mostly layout).
+If they differ, Cellucid rejects the complete restore before success. Any
+registered mutation is rolled back; no layout, filters, fields, highlights, or
+cache subset is committed.
 
 This is a safety feature (it prevents applying filters/highlights to the wrong dataset).
 
@@ -227,16 +241,21 @@ See {doc}`07_versioning_compatibility_and_dataset_identity` for:
 After you load a session, verify in this order:
 
 1) **Did you load the correct dataset?**
-   - If you saw a dataset mismatch warning, stop and fix that first.
-2) **Eager state looks right**
+   - A mismatch is a terminal rejection. Load the exact source route and
+     dataset id, then use the unchanged bundle again.
+2) **Did the terminal success appear?**
+   - Require **Session fully restored**.
+   - A progress card is not success; eager and lazy scheduling are still
+     inside the same operation.
+3) **State looks right**
    - camera/framing
    - active field
    - filters (Active filters panel)
    - snapshot layout
-3) **Wait for lazy restore (if large)**
-   - look for session progress notifications
-   - confirm highlight memberships appear
-4) **Spot-check “derived” consequences**
+4) **Spot-check exact replacement**
+   - an empty saved Camera Path is empty after restore
+   - cache-backed analysis reflects the saved inventory, not a prior session
+5) **Spot-check derived consequences**
    - highlight counts
    - analysis window presence and settings
 

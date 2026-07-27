@@ -105,7 +105,7 @@ Step-by-step: {doc}`12_remote_servers_ssh_tunneling_and_cloud`.
 ### Step 4 — Do you need to share with collaborators?
 
 - Public sharing (no server): export once (`prepare`) then use the GitHub workflow (#2):
-  {doc}`../../web_app/b_data_loading/02_local_demo_tutorial`
+  {doc}`../../web_app/b_data_loading/11_custom_dataset_repository`
 - Private sharing: export once, then share the folder (or serve on an internal machine with an SSH tunnel).
 
 ## “I chose a path — what next?”
@@ -115,3 +115,5 @@ Step-by-step: {doc}`12_remote_servers_ssh_tunneling_and_cloud`.
 - Notebook workflow: {doc}`06_jupyter_show_and_show_anndata_quickstart`
 - Export format details + validation: {doc}`07_exported_directory_mode_show_and_serve`
 - AnnData requirements (UMAP keys, vector fields, gene IDs): {doc}`08_anndata_mode_show_anndata_and_serve_anndata`
+- Public catalog reference repository:
+  {doc}`../../web_app/b_data_loading/11_custom_dataset_repository`

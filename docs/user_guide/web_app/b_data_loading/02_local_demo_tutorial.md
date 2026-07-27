@@ -14,6 +14,8 @@ You’ll learn two closely-related workflows:
    - This is useful for offline demos or if you want to host Cellucid yourself.
 
 If you just want to load your own local files right now, use {doc}`03_browser_file_picker_tutorial`.
+For a complete, inspectable public repository with three tiny datasets, use
+{doc}`11_custom_dataset_repository`.
 
 ## At A Glance
 
@@ -87,50 +89,50 @@ The central idea:
 - That folder is what Cellucid will actually fetch.
 
 ```python
-# Option A: export from an in-memory AnnData object
-#
-# This is the most common workflow for computational users.
-
 from __future__ import annotations
 
 from pathlib import Path
-
-# NOTE: in your real workflow, you will already have `adata`.
-# Here we only show the structure.
 
 from cellucid import prepare
 
 export_dir = Path("./exports/pbmc_demo")
 
-# Optional: vector fields for the overlay (RNA velocity, drift, etc.).
-# These must be in embedding coordinates and match the same cell order as your points.
-# Naming convention: <field>_umap_<dim>d (e.g., velocity_umap_2d, velocity_umap_3d).
-#
-# vector_fields = {
-#     "velocity_umap_2d": adata.obsm.get("velocity_umap_2d"),
-#     "velocity_umap_3d": adata.obsm.get("velocity_umap_3d"),
-# }
-
-# Example sketch (fill in your own AnnData parts):
-# prepare(
-#     latent_space=adata.obsm["X_pca"],
-#     obs=adata.obs,
-#     var=adata.var,
-#     gene_expression=adata.X,
-#     connectivities=adata.obsp.get("connectivities"),
-#     X_umap_2d=adata.obsm["X_umap_2d"],
-#     X_umap_3d=adata.obsm.get("X_umap_3d"),
-#     vector_fields=vector_fields,          # optional: velocity/drift overlays
-#     out_dir=export_dir,
-#     dataset_id="pbmc_demo",              # stable ID (important for sharing)
-#     dataset_name="PBMC demo",            # human-readable
-#     obs_categorical_dtype="uint16",       # exact categorical-code storage
-#     dataset_description="PBMC scRNA-seq (example)",
-#     compression=6,                        # gzip level (tradeoff: size vs CPU)
-#     var_quantization=8,                   # smaller, lossy; good default
-#     obs_continuous_quantization=8,
-# )
+prepare(
+    latent_space=adata.obsm["X_pca"],
+    obs=adata.obs,
+    var=adata.var,
+    gene_expression=adata.X,
+    connectivities=adata.obsp["connectivities"],
+    X_umap_1d=adata.obsm["X_umap_1d"],
+    X_umap_2d=adata.obsm["X_umap_2d"],
+    X_umap_3d=adata.obsm["X_umap_3d"],
+    vector_fields={
+        "velocity_umap_1d": adata.obsm["velocity_umap_1d"],
+        "velocity_umap_2d": adata.obsm["velocity_umap_2d"],
+        "velocity_umap_3d": adata.obsm["velocity_umap_3d"],
+    },
+    vector_field_default="velocity_umap",
+    out_dir=export_dir,
+    dataset_id="pbmc_demo",
+    dataset_name="PBMC demo",
+    dataset_description="PBMC scRNA-seq with aligned velocity",
+    obs_categorical_dtype="uint16",
+    compression=6,
+    var_quantization=8,
+    obs_continuous_quantization=8,
+)
 ```
+
+This complete call assumes `adata` contains every named matrix. The executable
+{doc}`../../python_package/f_notebooks_tutorials/prepare_pancreas` notebook
+deliberately exports only the checked-in source file's real 2-D UMAP and
+connectivity; it does not invent 1-D/3-D coordinates or velocity. For the full
+standard Pancreas artifact with deterministic 1-D, 2-D, and 3-D embeddings and
+aligned velocity, use {doc}`10_standard_pancreas_dataset` and the reproducible
+{doc}`../../python_package/f_notebooks_tutorials/33_vector_fields_and_velocity_overlay_end_to_end`
+workflow. For a dataset without a particular optional product, omit that
+product deliberately—for example, omit both `X_umap_3d` and
+`velocity_umap_3d` rather than inventing a third coordinate or passing `None`.
 
 ### Export knobs you should understand (even as a beginner)
 
@@ -180,7 +182,7 @@ generate_datasets_manifest("./exports", default_dataset="pbmc_demo")
 
 Before publishing, verify that your export loads:
 
-- **Fastest validation:** open Cellucid and use the **Folder** file picker (Option #3).
+- **Fastest validation:** open Cellucid and use the **Prepared** file picker (Option #3).
 - **Most realistic validation:** run the CLI server (Option #6) and open the
   exact printed prepared-data Viewer URL
   (`http://127.0.0.1:<port>/?source=remote`).
@@ -212,13 +214,15 @@ The repo must include:
 
 - **Public repo only**: Cellucid’s GitHub loader fetches data via `raw.githubusercontent.com`.
 - **Branches**:
-  - If you don’t specify a branch, Cellucid will try common defaults (`main`, `master`, `gh-pages`, `develop`, `dev`).
-  - If your exports live on a different branch, pin it explicitly (recommended):
+  - Shorthand without a branch always means `main`; Cellucid does not probe
+    other branch names.
+  - If your exports live on a different branch, name it explicitly:
     - `owner/repo@my-branch/exports`
     - or `https://github.com/owner/repo/tree/my-branch/exports`
 - **File size limits**:
-  - GitHub blocks individual files > 100 MB in normal git.
-  - Git LFS is often not usable for direct “raw file” fetch workflows.
+  - GitHub blocks ordinary Git files larger than 100 MiB.
+  - Git LFS raw repository content is a pointer, not a transparent replacement
+    for the prepared bytes Cellucid requests.
 
 If your export is too large for GitHub:
 - Use **Server Mode** instead ({doc}`04_server_tutorial`).
@@ -229,20 +233,21 @@ In the Cellucid UI (GitHub connection), you will enter one of these:
 
 - `owner/repo` (if `datasets.json` is at repo root)
 - `owner/repo/exports` (if your exports root is in a folder)
-- `owner/repo/gh-pages/exports` (if using `gh-pages` branch)
 - `owner/repo@my-branch/exports` (if your exports root is on a custom branch)
 
 Cellucid will then:
-- fetch `datasets.json`
-- show the dataset list
-- fetch only the files it needs on demand
+- fetch and validate `datasets.json`
+- fetch and validate every listed `dataset_identity.json`
+- show the validated dataset list
+- fetch the selected dataset's remaining files on demand
 
 **Shareable URL**
 
-Once it works, you can share a direct link:
+Once it works, share the exact dataset. The `dataset=` field is required when
+the catalog contains multiple datasets:
 
 ```text
-https://www.cellucid.com?github=owner/repo/exports
+https://www.cellucid.com/?github=owner/repo/exports&dataset=pbmc_demo
 ```
 
 (Replace `owner/repo/exports` with your chosen path.)
@@ -300,7 +305,15 @@ Use this section like a lookup table.
 - If that URL 404s, Cellucid will also fail.
 
 **Fix**
-- Regenerate `datasets.json` using `generate_datasets_manifest("./exports")`.
+- Regenerate `datasets.json` with an explicit catalog default:
+
+  ```python
+  generate_datasets_manifest(
+      "./exports",
+      default_dataset="pbmc_demo",
+  )
+  ```
+
 - Ensure the file is at the exports root you are pointing Cellucid at.
 
 **Prevention**
@@ -377,6 +390,7 @@ For UI behavior and overlay-specific debugging, see:
 ## Next Steps
 
 - Want to load from your computer (no publishing)? → {doc}`03_browser_file_picker_tutorial`
+- Want a complete repository to copy and adapt? → {doc}`11_custom_dataset_repository`
 - Want the most reliable workflow for big datasets? → {doc}`04_server_tutorial`
 - Export format expectations: {doc}`07_folder_file_format_expectations_high_level_link_to_spec`
 - If GitHub loading fails: {doc}`08_troubleshooting_data_loading`

@@ -1,137 +1,110 @@
-# Enabling overlay and selecting field
+# Enable the overlay and select a field
 
 **Audience:** everyone  
-**Time:** 5–15 minutes  
-**What you’ll learn:**
-- Where the Vector Field Overlay controls live in the UI (exact labels)
-- Why you sometimes cannot enable the overlay (and what to do)
-- How the **Vector field:** dropdown is populated (dimension-specific)
-- What happens when you switch 1D/2D/3D while the overlay is on
+**Time:** 5–10 minutes
 
----
+The vector-field overlay is **off by default** and lazy: Cellucid does not load
+vector values or allocate the particle overlay until you enable it.
 
-## Prerequisites (before you look for the toggle)
+## Fast path
 
-1) You must have a dataset loaded.
-2) The dataset must contain at least one vector field for **some** dimension (1D/2D/3D).
-3) You must be in **Render mode: Points** (the overlay controls are currently placed in the Points controls area).
+1. Load the dataset and open **Visualization**.
+2. Set `Render mode:` to `Points`.
+3. Select the required 1D, 2D, or 3D view under **Compare Views → Dimension:**.
+4. Find **Vector Field Overlay:**.
+5. If `Vector field:` is already visible, choose a field. This is required when
+   the dataset has multiple fields and does not declare a default.
+6. Check `Show overlay`.
+7. Wait for `Loading vector field…`, then for particle preparation to complete.
 
-If any of these is false, the UI may hide the overlay controls entirely or disable the toggle.
+The settings panel opens after the overlay is enabled. A small `i` button beside
+the heading explains that the animation uses dimension-specific per-cell
+velocity or drift vectors.
 
----
+## Availability states
 
-## Fast path (just make it work)
+The UI has three deliberate states.
 
-1) Open the left sidebar → **Visualization**.
-2) Set **Render mode:** `Points`.
-3) Scroll to **Vector Field Overlay:**.
-4) If you see **Show overlay** enabled, check it.
-5) In **Vector field:** select the field you want (if there is more than one).
-6) Wait for the “Loading vector field…” state to finish, then look for animated particle flow on the canvas.
+### No **Vector Field Overlay:** block
 
-If the checkbox disables itself or the overlay doesn’t appear, jump to `07_troubleshooting_velocity_overlay`.
+The loaded dataset declares no vector fields in any dimension. Add a field
+using the exact preparation contract in
+{doc}`../../python_package/c_data_preparation_api/08_vector_fields_velocity_displacement`,
+then reload the dataset.
 
----
+### Block shown, `Show overlay` disabled
 
-## Where the controls live (UI map, exact labels)
+Read the message beneath the controls:
 
-The overlay controls are in the left sidebar under:
+- `Vector fields available for 1D, 2D, 3D. Switch embedding dimension to enable.`
+  means no field matches the selected dimension. The dimension list reflects
+  the dataset and can contain any subset of 1D, 2D, and 3D.
+- `Available for 1D, 2D, 3D. Select a vector field before enabling the overlay.`
+  means matching fields exist, but none is selected.
 
-- **Visualization**
-  - **Render mode:** (must be `Points`)
-  - **Vector Field Overlay:**
-    - `Show overlay` (checkbox)
-    - (appears only when enabled) **Vector field:** (dropdown)
-    - (appears only when enabled) sliders + advanced settings
+Only fields declared for the selected dimension appear in `Vector field:`.
+Cellucid does not silently choose the first field. A declared default is selected
+only when that same field supports the current dimension.
 
-:::{note}
-If you don’t see **Vector Field Overlay:** at all, that usually means the dataset has *no* vector fields (this is normal for many datasets).
-:::
+### Overlay enabled
 
----
+The status becomes `Available for …`. `Vector field:` and all core/advanced
+controls are visible. Changing the field shows `Loading vector field…`; on
+success the overlay uses the newly selected field.
 
-## When the toggle is disabled (and what that means)
+If loading fails, the error notification contains the underlying message, the
+checkbox is turned off, and the status reads `Failed to load vector field.`.
+Follow {doc}`07_troubleshooting_velocity_overlay` rather than repeatedly
+toggling it.
 
-There are two common “disabled” states:
+## Dimension changes
 
-### A) The entire overlay block is missing
+Vector data is dimension-specific:
 
-**Meaning:** your dataset provides **no vector fields**.  
-**Fix:** export/add vector fields in Python (or load a dataset that includes them).
+- If the selected field also exists in the new dimension, Cellucid loads that
+  array and keeps the overlay enabled.
+- If that field is unavailable but an applicable declared default exists, the
+  dimension-filtered selector can use that default.
+- If there is no valid selected/default field for the new dimension, the
+  overlay turns off and asks for an explicit selection.
+- If the dataset has no field at all for the new dimension, the overlay turns
+  off and reports which dimensions are available.
 
-### B) The overlay block is visible, but `Show overlay` is disabled
+For a large remote or AnnData-served dataset, the first switch to a dimension
+can require a separate vector request. Wait for the current request to finish
+before changing dimension or field again.
 
-**Meaning:** vector fields exist, but **not for the current embedding dimension**.
+## Filters and multiview
 
-In this case, Cellucid will show a hint like:
+Particles are seeded from the selected view's visible cells. Filtering all
+cells produces a ready overlay with no visible spawn cells; restore visibility
+before judging the field.
 
-- `Vector fields available for 2D, 3D. Switch embedding dimension to enable.`
+The overlay is a shared render feature, not a snapshot-specific annotation.
+Multiview maintains separate per-view visibility and trail buffers, but the
+field and visual-control settings are global. Additional visible panels increase
+GPU work. See
+{doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`.
 
-**Fix:** switch the active view to a supported dimension (e.g., 2D or 3D), then try again.
+The overlay controls are points-only. Selecting
+`Volumetric smoke cloud` hides them and uses the smoke renderer instead.
 
----
+## Dataset and session behavior
 
-## Field dropdown behavior (what appears in “Vector field:”)
+Loading or replacing a dataset always:
 
-### Only fields available for the current dimension are listed
+- clears the selected vector field;
+- turns `Show overlay` off;
+- hides the settings panel until the new dataset publishes its field inventory.
 
-The **Vector field:** dropdown is filtered to the active view’s current dimension:
+For the same loaded dataset, a `.cellucid-session` captures `Show overlay`,
+`Vector field:`, every core/advanced slider, `Color scheme:`, and
+`Sync with LOD`. Restore still validates the current field options; the session
+does not contain the vector arrays or dataset. See
+{doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
 
-- in a 2D view → only fields with 2D vectors appear
-- in a 3D view → only fields with 3D vectors appear
+## Verified interface
 
-This prevents “selecting a field that cannot possibly render” for the current view.
-
-### Label vs internal id
-
-Each dropdown entry has:
-
-- a user-facing **label** (e.g., `Velocity (UMAP)`)
-- an internal **id** (often something like `velocity_umap`)
-
-You will usually see only the label in the dropdown. The id matters when you prepare data in Python (see `01_what_vector_fields_are_user_facing` for the naming contract).
-
----
-
-## What happens when you switch 1D/2D/3D while the overlay is on
-
-Cellucid tries to keep the overlay enabled across dimension changes:
-
-- If a vector field exists for the *new* dimension, Cellucid loads it and keeps the overlay on.
-- If no vector field exists for the new dimension, Cellucid **auto-disables** the overlay (to avoid rendering nonsense).
-
-This is expected behavior. Vector fields are dimension-specific.
-
-:::{note}
-For large datasets, dimension switching may trigger a brief “Loading vector field…” state again because the app may need to fetch a different vector array.
-:::
-
----
-
-## State and persistence (be explicit)
-
-### Overlay enable state
-
-- The `Show overlay` checkbox is a **global render setting** for the current dataset.
-- When it is enabled, the overlay is drawn in the live view and in snapshot views (where applicable).
-
-### Dataset changes
-
-When you load a **new dataset**, the UI intentionally resets the overlay:
-
-- the checkbox is turned off
-- the settings panel collapses
-
-This prevents accidentally carrying a velocity overlay from dataset A into dataset B.
-
-### Snapshots (“Keep view”) and multiview
-
-- Overlay settings are not “per-snapshot annotations”; they are a render layer.
-- If you are comparing many views at once, enabling the overlay can increase GPU load (see `05_performance_and_quality`).
-
----
-
-## Verified interface states
-
-See {doc}`08_screenshots` for the enabled overlay, its core controls, and the
-expanded advanced settings rendered with a synthetic 2D vector field.
+{doc}`08_screenshots` shows the real Pancreas `velocity_umap` field in 2D
+**Planar**, the expanded advanced controls, and the independent 3D field in
+**Orbit**.

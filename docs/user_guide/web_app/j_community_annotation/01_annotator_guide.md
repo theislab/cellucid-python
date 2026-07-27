@@ -16,8 +16,9 @@ You can do this without knowing Git, branches, or JSON.
 
 1) Open Cellucid and load the dataset.
 2) Open **Community Annotation** in the left sidebar.
-3) Click **Connect GitHub…** and sign in.
-4) Choose the repo your author told you to use.
+3) Click **Connect repo**, then **Continue with GitHub**.
+4) At **Select an annotation repository**, choose the repo your author gave
+   you and click **Connect**.
 5) Click **Pull latest** (this downloads everyone’s shared contributions).
 6) Choose the 🗳️-marked column (your author will usually tell you which one).
 7) Click a cluster/category name to vote.
@@ -66,11 +67,16 @@ If you clear browser site data before publishing, you can lose unpublished work.
 
 1) Load the dataset in Cellucid.
 2) Open the **Community Annotation** accordion in the left sidebar.
-3) Click **Connect GitHub…**
-4) In the **GitHub sync** modal:
-   - sign in
-   - choose the repo (and branch, if your group uses a non-default branch)
-   - click **Pull latest**
+3) Click **Connect repo**.
+4) In the four-step **GitHub sync** wizard:
+   - use **Continue with GitHub**
+   - use **Add repo** and **Reload** if the required repository is not enabled
+   - select the repo and click **Connect**
+   - at **Sync (pull / publish)**, click **Pull latest**
+
+The picker resolves the repository's default branch. If the annotation round
+uses a different branch, open the author's canonical
+`?annotations=owner/repo@branch` link rather than guessing.
 
 ```{figure} ../../../_static/screenshots/community_annotation/disconnected-panel.png
 :alt: Community Annotation panel before an annotation repository is connected.
@@ -362,7 +368,7 @@ Common causes:
 
 If you don’t find your issue here, also check `03_ui_reference` (it catalogs UI controls and more error messages).
 
-### I can’t find the repo in “Choose repo…”
+### I can’t find the repo at “Select an annotation repository”
 
 Most common causes:
 

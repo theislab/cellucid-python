@@ -318,7 +318,7 @@ def test_portable_filename_component_rejects_every_cross_platform_hazard(
         _require_portable_filename_component(component)
 
 
-def test_portable_filename_components_are_exact_and_case_insensitively_unique() -> None:
+def test_prepared_components_are_portable_while_direct_routes_preserve_case() -> None:
     valid = [
         "A",
         "A.b_c-",
@@ -340,22 +340,34 @@ def test_portable_filename_components_are_exact_and_case_insensitively_unique() 
         },
         index=adata.obs_names,
     )
-    with pytest.raises(ValueError, match="case-insensitively"):
-        AnnDataAdapter(
-            adata,
-            latent_key="X_latent",
-            dataset_name="Obs collision",
-            dataset_id="obs-collision",
-        )
+    adapter = AnnDataAdapter(
+        adata,
+        latent_key="X_latent",
+        dataset_name="Case-distinct obs",
+        dataset_id="case-distinct-obs",
+    )
+    assert [field[0] for field in adapter.get_obs_manifest()["_continuousFields"]] == [
+        "Field",
+        "field",
+    ]
 
     adata = _adata_with_current_fields()
     adata.var_names = ["Gene", "gene"]
-    with pytest.raises(ValueError, match="case-insensitively"):
+    adapter = AnnDataAdapter(
+        adata,
+        latent_key="X_latent",
+        dataset_name="Case-distinct var",
+        dataset_id="case-distinct-var",
+    )
+    assert adapter.get_var_manifest()["fields"] == [["Gene"], ["gene"]]
+
+    adata.var_names = ["A/B", "A B"]
+    with pytest.raises(ValueError, match="collide.*A_B"):
         AnnDataAdapter(
             adata,
             latent_key="X_latent",
-            dataset_name="Var collision",
-            dataset_id="var-collision",
+            dataset_name="Wire collision",
+            dataset_id="wire-collision",
         )
 
 

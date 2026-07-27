@@ -65,7 +65,11 @@ def test_decode_delta_uvarint():
 def test_decode_user_defined_codes_raw_u8():
     # enc=0, length=5, payload=5 bytes
     payload = bytes([0]) + _encode_uvarint(5) + bytes([0, 1, 2, 1, 0])
-    decoded = decode_user_defined_codes(payload)
+    decoded = decode_user_defined_codes(
+        payload,
+        expected_length=5,
+        expected_codes_type="Uint8Array",
+    )
     assert decoded.dtype == np.uint8
     assert decoded.tolist() == [0, 1, 2, 1, 0]
 
@@ -100,13 +104,12 @@ def test_apply_session_bundle_to_anndata(tmp_path):
             }
         ],
         "activePageId": "page_1",
-        "activePageName": "Page 1",
     }
     highlights_cells = _encode_delta_uvarint([1, 3])
 
     overlays = {
-        "renames": None,
-        "deletedFields": None,
+        "renames": {"fields": {}, "categories": {}},
+        "deletedFields": {"deleted": [], "purged": []},
         "userDefinedFields": [
             {
                 "id": "udf_1",
@@ -133,35 +136,33 @@ def test_apply_session_bundle_to_anndata(tmp_path):
     }
     udf_codes = bytes([0]) + _encode_uvarint(n_obs) + bytes([0, 1, 2, 1, 0])
 
-    chunks = [
-        gzip.compress(json.dumps(highlights_meta).encode("utf-8")),
-        gzip.compress(json.dumps(overlays).encode("utf-8")),
-        gzip.compress(udf_codes),
-        gzip.compress(highlights_cells),
+    camera = {"keyframes": [], "loop": False, "autoplay": False}
+    core_state = {"notMaterializedByPython": True}
+    dockable_layout = {"notMaterializedByPython": True}
+    analysis_windows = {"notMaterializedByPython": True}
+    analysis_inventory = {"artifactIds": []}
+    raw_payloads = [
+        json.dumps(overlays, separators=(",", ":")).encode("utf-8"),
+        udf_codes,
+        json.dumps(camera, separators=(",", ":")).encode("utf-8"),
+        json.dumps(core_state, separators=(",", ":")).encode("utf-8"),
+        json.dumps(dockable_layout, separators=(",", ":")).encode("utf-8"),
+        json.dumps(analysis_windows, separators=(",", ":")).encode("utf-8"),
+        json.dumps(highlights_meta, separators=(",", ":")).encode("utf-8"),
+        json.dumps(analysis_inventory, separators=(",", ":")).encode("utf-8"),
+        highlights_cells,
     ]
+    chunks = [gzip.compress(payload, mtime=0) for payload in raw_payloads]
 
     manifest = {
         "createdAt": "2025-01-01T00:00:00.000Z",
-        "dataSource": None,
         "datasetFingerprint": {
             "sourceType": "jupyter",
             "datasetId": "test",
             "cellCount": n_obs,
             "varCount": n_vars,
         },
-        "summary": None,
         "chunks": [
-            {
-                "id": "highlights/meta",
-                "contributorId": "highlights-meta",
-                "priority": "eager",
-                "kind": "json",
-                "codec": "gzip",
-                "label": "Highlight metadata",
-                "datasetDependent": True,
-                "storedBytes": len(chunks[0]),
-                "uncompressedBytes": len(json.dumps(highlights_meta).encode("utf-8")),
-            },
             {
                 "id": "core/field-overlays",
                 "contributorId": "field-overlays",
@@ -170,8 +171,8 @@ def test_apply_session_bundle_to_anndata(tmp_path):
                 "codec": "gzip",
                 "label": "Field overlays",
                 "datasetDependent": True,
-                "storedBytes": len(chunks[1]),
-                "uncompressedBytes": len(json.dumps(overlays).encode("utf-8")),
+                "storedBytes": len(chunks[0]),
+                "uncompressedBytes": len(raw_payloads[0]),
             },
             {
                 "id": "user-defined/codes/udf_1",
@@ -179,10 +180,76 @@ def test_apply_session_bundle_to_anndata(tmp_path):
                 "priority": "eager",
                 "kind": "binary",
                 "codec": "gzip",
-                "label": "User-defined codes",
+                "label": "User-defined codes: my_label",
+                "datasetDependent": True,
+                "storedBytes": len(chunks[1]),
+                "uncompressedBytes": len(raw_payloads[1]),
+            },
+            {
+                "id": "cinematic/camera",
+                "contributorId": "cinematic-camera",
+                "priority": "eager",
+                "kind": "json",
+                "codec": "gzip",
+                "label": "Cinematic camera path",
                 "datasetDependent": True,
                 "storedBytes": len(chunks[2]),
-                "uncompressedBytes": len(udf_codes),
+                "uncompressedBytes": len(raw_payloads[2]),
+            },
+            {
+                "id": "core/state",
+                "contributorId": "core-state",
+                "priority": "eager",
+                "kind": "json",
+                "codec": "gzip",
+                "label": "Core state",
+                "datasetDependent": True,
+                "storedBytes": len(chunks[3]),
+                "uncompressedBytes": len(raw_payloads[3]),
+            },
+            {
+                "id": "ui/dockable-layout",
+                "contributorId": "dockable-layout",
+                "priority": "eager",
+                "kind": "json",
+                "codec": "gzip",
+                "label": "Floating panels",
+                "datasetDependent": False,
+                "storedBytes": len(chunks[4]),
+                "uncompressedBytes": len(raw_payloads[4]),
+            },
+            {
+                "id": "analysis/windows",
+                "contributorId": "analysis-windows",
+                "priority": "eager",
+                "kind": "json",
+                "codec": "gzip",
+                "label": "Analysis windows",
+                "datasetDependent": True,
+                "storedBytes": len(chunks[5]),
+                "uncompressedBytes": len(raw_payloads[5]),
+            },
+            {
+                "id": "highlights/meta",
+                "contributorId": "highlights-meta",
+                "priority": "eager",
+                "kind": "json",
+                "codec": "gzip",
+                "label": "Highlight metadata",
+                "datasetDependent": True,
+                "storedBytes": len(chunks[6]),
+                "uncompressedBytes": len(raw_payloads[6]),
+            },
+            {
+                "id": "analysis/cache-inventory",
+                "contributorId": "analysis-artifacts",
+                "priority": "eager",
+                "kind": "json",
+                "codec": "gzip",
+                "label": "Analysis cache inventory",
+                "datasetDependent": True,
+                "storedBytes": len(chunks[7]),
+                "uncompressedBytes": len(raw_payloads[7]),
             },
             {
                 "id": "highlights/cells/highlight_1",
@@ -190,10 +257,10 @@ def test_apply_session_bundle_to_anndata(tmp_path):
                 "priority": "lazy",
                 "kind": "binary",
                 "codec": "gzip",
-                "label": "Highlight cells",
+                "label": "Highlight cells: Lasso (2 cells)",
                 "datasetDependent": True,
-                "storedBytes": len(chunks[3]),
-                "uncompressedBytes": len(highlights_cells),
+                "storedBytes": len(chunks[8]),
+                "uncompressedBytes": len(raw_payloads[8]),
             },
         ],
     }
@@ -221,37 +288,17 @@ def test_apply_session_rejects_out_of_range_categorical_codes_without_mutation()
     import pandas as pd
 
     class Bundle:
-        dataset_fingerprint = {
-            "sourceType": "anndata",
-            "datasetId": "exact",
-            "cellCount": 3,
-            "varCount": 1,
-        }
-        manifest = {
-            "version": 1,
-            "chunks": [
-                {
-                    "id": "core/field-overlays",
-                    "contributorId": "field-overlays",
-                },
-                {
-                    "id": "user-defined/codes/field-1",
-                    "contributorId": "user-defined-codes",
-                },
-            ],
-        }
-
-        def list_chunk_ids(self) -> list[str]:
-            return [
-                "core/field-overlays",
-                "user-defined/codes/field-1",
-            ]
-
-        def decode_chunk(self, chunk_id: str):
-            if chunk_id == "core/field-overlays":
-                return {
-                    "renames": None,
-                    "deletedFields": None,
+        def __init__(self) -> None:
+            self.dataset_fingerprint = {
+                "sourceType": "anndata",
+                "datasetId": "exact",
+                "cellCount": 3,
+                "varCount": 1,
+            }
+            self._chunks = {
+                "core/field-overlays": {
+                    "renames": {"fields": {}, "categories": {}},
+                    "deletedFields": {"deleted": [], "purged": []},
                     "userDefinedFields": [
                         {
                             "id": "field-1",
@@ -275,10 +322,123 @@ def test_apply_session_rejects_out_of_range_categorical_codes_without_mutation()
                             "createdAt": 1,
                         }
                     ],
-                }
-            if chunk_id == "user-defined/codes/field-1":
-                return bytes([0]) + _encode_uvarint(3) + bytes([0, 2, 1])
-            raise AssertionError(chunk_id)
+                },
+                "user-defined/codes/field-1": (bytes([0]) + _encode_uvarint(3) + bytes([0, 2, 1])),
+                "cinematic/camera": {"notDecoded": True},
+                "core/state": {"notDecoded": True},
+                "ui/dockable-layout": {"notDecoded": True},
+                "analysis/windows": {"notDecoded": True},
+                "highlights/meta": {
+                    "pages": [
+                        {
+                            "id": "page_1",
+                            "name": "Page 1",
+                            "color": "#2563eb",
+                            "highlightedGroups": [],
+                        }
+                    ],
+                    "activePageId": "page_1",
+                },
+                "analysis/cache-inventory": {"artifactIds": []},
+            }
+            profiles = [
+                (
+                    "core/field-overlays",
+                    "field-overlays",
+                    "eager",
+                    "json",
+                    "Field overlays",
+                    True,
+                ),
+                (
+                    "user-defined/codes/field-1",
+                    "user-defined-codes",
+                    "eager",
+                    "binary",
+                    "User-defined codes: status",
+                    True,
+                ),
+                (
+                    "cinematic/camera",
+                    "cinematic-camera",
+                    "eager",
+                    "json",
+                    "Cinematic camera path",
+                    True,
+                ),
+                ("core/state", "core-state", "eager", "json", "Core state", True),
+                (
+                    "ui/dockable-layout",
+                    "dockable-layout",
+                    "eager",
+                    "json",
+                    "Floating panels",
+                    False,
+                ),
+                (
+                    "analysis/windows",
+                    "analysis-windows",
+                    "eager",
+                    "json",
+                    "Analysis windows",
+                    True,
+                ),
+                (
+                    "highlights/meta",
+                    "highlights-meta",
+                    "eager",
+                    "json",
+                    "Highlight metadata",
+                    True,
+                ),
+                (
+                    "analysis/cache-inventory",
+                    "analysis-artifacts",
+                    "eager",
+                    "json",
+                    "Analysis cache inventory",
+                    True,
+                ),
+            ]
+            manifest_chunks = []
+            for (
+                chunk_id,
+                contributor_id,
+                priority,
+                kind,
+                label,
+                dataset_dependent,
+            ) in profiles:
+                payload = self._chunks[chunk_id]
+                payload_bytes = (
+                    payload
+                    if isinstance(payload, bytes)
+                    else json.dumps(payload, separators=(",", ":")).encode("utf-8")
+                )
+                manifest_chunks.append(
+                    {
+                        "id": chunk_id,
+                        "contributorId": contributor_id,
+                        "priority": priority,
+                        "kind": kind,
+                        "codec": "gzip",
+                        "label": label,
+                        "datasetDependent": dataset_dependent,
+                        "storedBytes": len(payload_bytes),
+                        "uncompressedBytes": len(payload_bytes),
+                    }
+                )
+            self.manifest = {
+                "createdAt": "2026-07-27T00:00:00.000Z",
+                "datasetFingerprint": self.dataset_fingerprint,
+                "chunks": manifest_chunks,
+            }
+
+        def list_chunk_ids(self) -> list[str]:
+            return list(self._chunks)
+
+        def decode_chunk(self, chunk_id: str):
+            return self._chunks[chunk_id]
 
     adata = ad.AnnData(
         X=np.ones((3, 1), dtype=np.float32),

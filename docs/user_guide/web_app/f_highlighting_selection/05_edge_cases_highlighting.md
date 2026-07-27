@@ -191,8 +191,9 @@ If you reload without restoring a session, highlights typically reset (highlight
 Highlights do not transfer between datasets because they are stored as cell indices for a specific dataset ordering.
 
 ### Restoring a session on the “wrong” dataset
-When dataset fingerprints don’t match, session restore intentionally skips dataset-dependent chunks (including highlights).
-You may still see layout restore, but highlights will not appear.
+When dataset fingerprints do not match, the current reader rejects and rolls
+back the complete session. It never salvages layout or silently omits
+highlights. Load the exact dataset identity, then restore the unchanged session.
 
 ---
 

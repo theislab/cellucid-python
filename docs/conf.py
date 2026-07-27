@@ -141,7 +141,7 @@ html_theme_options = {
     },
     # Navigation
     "navigation_with_keys": True,
-    "show_nav_level": 2,
+    "show_nav_level": 1,
     "show_toc_level": 2,
 }
 

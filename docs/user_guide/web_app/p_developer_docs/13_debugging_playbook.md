@@ -252,16 +252,17 @@ Deep dive:
 
 Likely causes:
 - the feature is intentionally excluded
-- heavy artifacts are still loading (lazy chunks)
-- dataset mismatch caused dataset-dependent chunks to skip
+- the one awaited restore is still running lazy chunks
+- exact dataset identity or chunk validation rejected and rolled back the operation
 
 How to confirm:
-- Watch notifications during lazy restore.
-- Check console for “dataset mismatch” skips.
+- Require terminal **Session fully restored**.
+- Check the exact Console error and progress failure; there is no skip/partial mode.
 
 Fix:
 - Confirm you loaded the same dataset id/fingerprint.
-- If feature should persist, add a session contributor and document it.
+- If feature should persist, add it to the closed current profile with
+  completeness, rollback, and documentation tests.
 
 Deep dive:
 - {doc}`10_sessions_persistence_and_serialization`

@@ -207,9 +207,12 @@ def _event_request(
 def _empty_session_bundle() -> bytes:
     manifest = {
         "createdAt": "2026-07-26T00:00:00.000Z",
-        "dataSource": None,
-        "datasetFingerprint": None,
-        "summary": None,
+        "datasetFingerprint": {
+            "sourceType": None,
+            "datasetId": None,
+            "cellCount": 0,
+            "varCount": 0,
+        },
         "chunks": [],
     }
     manifest_bytes = json.dumps(
@@ -225,9 +228,12 @@ def _corrupt_gzip_session_bundle() -> bytes:
     stored = b"not-a-gzip-stream"
     manifest = {
         "createdAt": "2026-07-26T00:00:00.000Z",
-        "dataSource": None,
-        "datasetFingerprint": None,
-        "summary": None,
+        "datasetFingerprint": {
+            "sourceType": None,
+            "datasetId": None,
+            "cellCount": 0,
+            "varCount": 0,
+        },
         "chunks": [
             {
                 "id": "corrupt",

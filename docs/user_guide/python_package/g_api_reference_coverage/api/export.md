@@ -86,7 +86,8 @@ If you need *exact* values preserved:
 ### 4) Vector fields (velocity / drift overlays)
 
 Vector fields are optional, but powerful:
-- They are **per-cell displacement vectors in embedding space** (not “3D arrows in physical space”).
+- They are **per-cell displacement vectors in embedding space**, not physical
+  trajectories or absolute positions.
 - Naming convention: `<field>_umap_<dim>d`.
 
 See {doc}`vector_fields` for helper functions and naming conventions.

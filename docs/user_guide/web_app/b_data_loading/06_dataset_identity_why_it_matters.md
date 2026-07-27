@@ -165,13 +165,14 @@ print(viewer.viewer_url)
 ### Symptom: “My session won’t restore / says dataset mismatch”
 
 **Likely causes**
-- Dataset id changed (common when the `.h5ad` filename changed in AnnData mode).
+- The explicit `dataset_id` passed to direct AnnData mode changed.
 - You re-exported a different dataset but reused the same dataset id.
 
 **How to confirm**
 - Compare the current dataset id to the saved one:
   - exported datasets: check `dataset_identity.json["id"]`
-  - AnnData mode: check the file stem / passed `dataset_id`
+  - AnnData mode: check the required `dataset_id` passed to
+    `show_anndata()`, `serve_anndata()`, or `cellucid serve`
 
 **Fix**
 - If you intended to keep identity: use an explicit `dataset_id=...` (server/Jupyter) or `prepare(..., dataset_id=...)` (exports).
@@ -192,5 +193,6 @@ print(viewer.viewer_url)
 
 - Picking a loading path: {doc}`01_loading_options_overview`
 - Sharing datasets via GitHub exports: {doc}`02_local_demo_tutorial`
+- Publishing a complete custom catalog: {doc}`11_custom_dataset_repository`
 - Understanding export folder contents: {doc}`07_folder_file_format_expectations_high_level_link_to_spec`
 - When loading fails: {doc}`08_troubleshooting_data_loading`

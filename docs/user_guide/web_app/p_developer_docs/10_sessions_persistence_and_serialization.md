@@ -1,247 +1,252 @@
 # Sessions: persistence and serialization
 
-This page documents Cellucid’s **session bundle** system: what gets saved, how it is encoded, and how restore is staged to get “first pixels” quickly while heavier artifacts load in the background.
+This page documents the one current `.cellucid-session` writer/reader contract,
+transaction boundary, and extension discipline.
+
+**Audience:** contributors changing persistent state, data-source owners, and
+maintainers serving official starting states
+
+**Time:** 35–60 minutes
+**Prerequisites:** {doc}`05_app_architecture_overview` and
+{doc}`06_state_datastate_and_events`
+
+## Design invariants
+
+- A session stores declarative application state, not the prepared dataset.
+- The generic reader accepts exactly one current schema and restores the
+  complete document all-or-nothing.
+- Manifest, chunk profiles, framing, byte lengths, decoded payloads, and the
+  complete dataset fingerprint are exact contracts.
+- Eager and lazy are internal ordering classes inside one awaited public
+  operation.
+- All contributor state commits or registered state rolls back.
+- Explicit empty state is serialized; omission never means “keep the
+  destination value.”
+- Cancellation and replacement remain observable to the caller but do not
+  produce false success or red product diagnostics.
+
+## Code map
+
+- Factory and fixed contributor order:
+  `cellucid/assets/js/app/session/index.js`
+- Orchestrator, profiles, limits, cancellation, and transaction:
+  `cellucid/assets/js/app/session/session-serializer.js`
+- Transaction/context and exact fingerprint:
+  `cellucid/assets/js/app/session/session-context.js`
+- Container framing:
+  `cellucid/assets/js/app/session/bundle/format.js`
+- gzip/DEFLATE codec:
+  `cellucid/assets/js/app/session/codecs/gzip.js`
+- Feature owners:
+  `cellucid/assets/js/app/session/contributors/`
+- State capture helpers:
+  `cellucid/assets/js/app/state-serializer/`
+- UI command boundary:
+  `cellucid/assets/js/app/ui/modules/session-controls.js`
+
+## Container and manifest
+
+The container is:
+
+1. `CELLUCID_SESSION\n`;
+2. unsigned 32-bit little-endian manifest length;
+3. exactly that many UTF-8 JSON bytes; and
+4. for every manifest chunk, an unsigned 32-bit stored length plus exact stored
+   payload bytes.
+
+The manifest has exactly `createdAt`, `datasetFingerprint`, and `chunks`.
+`datasetFingerprint` has exactly `sourceType`, `datasetId`, `cellCount`, and
+`varCount`. Each chunk has exactly:
+
+- `id`
+- `contributorId`
+- `priority`
+- `kind`
+- `codec`
+- `label`
+- `datasetDependent`
+- `storedBytes`
+- `uncompressedBytes`
+
+There is deliberately no `version`, `dependsOn`, compatibility marker, or
+extension bag.
+
+## Closed current inventory
+
+Generic Save State always emits the current singleton profiles:
+
+| ID | Owner | Priority | Kind/codec |
+|---|---|---|---|
+| `core/field-overlays` | `field-overlays` | eager | JSON/gzip |
+| `core/state` | `core-state` | eager | JSON/gzip |
+| `ui/dockable-layout` | `dockable-layout` | eager | JSON/gzip |
+| `analysis/windows` | `analysis-windows` | eager | JSON/gzip |
+| `highlights/meta` | `highlights-meta` | eager | JSON/gzip |
+| `analysis/cache-inventory` | `analysis-artifacts` | eager | JSON/gzip |
+| `cinematic/camera` | `cinematic-camera` | eager | JSON/gzip |
+
+`analysis/cache-inventory` and `cinematic/camera` are mandatory even when
+empty. Their emptiness means replace the destination cache/path with empty
+state.
+
+Dynamic chunks are also closed:
+
+- `user-defined/codes/<fieldId>`: one binary/gzip chunk per categorical
+  user-defined field; eager exactly for target live/snapshot active fields,
+  lazy otherwise;
+- `highlights/cells/<groupId>`: one lazy binary/gzip membership chunk per
+  highlight group; and
+- `analysis/artifacts/bulk-gene/<cacheKey>`: lazy binary/gzip chunks exactly
+  matching the ordered cache inventory.
+
+Static profile aliases, missing unused codes, extra artifacts, priority lies,
+label changes, or reordered contributor groups are invalid.
+
+## Capture ordering
+
+Contributors are registered in `session/index.js`. Capture preserves their
+relative order within separate eager and lazy buckets. This lets critical code
+columns appear before `core/state`, while inactive columns can remain in the
+lazy bucket.
 
-It is written for:
-- contributors changing state fields/UI controls,
-- anyone debugging “why didn’t my session restore X?”,
-- anyone hosting `.cellucid-session` bundles alongside dataset exports.
+Before writing:
 
-## At a glance
+1. every contributor chunk descriptor is exact-validated;
+2. JSON or binary payload is encoded;
+3. uncompressed and stored limits are enforced;
+4. gzip is applied where declared;
+5. exact byte counts are recorded; and
+6. the resulting manifest is revalidated against the current generic profile.
 
-**Audience**
-- Wet lab / non-technical: read “What sessions are (and aren’t)” + “Troubleshooting”.
-- Computational users: read “Coverage: what is saved” + “Dataset mismatch behavior”.
-- Developers: read everything; this is a common source of subtle bugs.
+## Restore pipeline
 
-**Time**
-- 30–60 minutes
+The public file and URL entry points use one owner-controlled restore:
 
-**Prerequisites**
-- {doc}`05_app_architecture_overview`
-- {doc}`06_state_datastate_and_events` (for understanding what state is)
+1. a newer restore supersedes and awaits the older owner;
+2. framing streams under stored-byte and aggregate limits;
+3. the exact manifest/profile/order and dataset fingerprint validate;
+4. small reversible owner snapshots are registered;
+5. eager chunks decode/apply in order;
+6. lazy chunks decode/apply in the same awaited operation, with macrotask
+   yielding where needed;
+7. every transaction participant prepares;
+8. every participant commits in order;
+9. the final UI refresh commits; and
+10. the serializer publishes **Session fully restored**.
+
+Any error invokes rollback in reverse participant order and awaits asynchronous
+rollback. If rollback itself fails, that failure is preserved as the original
+error's cause rather than replacing the primary diagnosis.
+
+## Reversible large-state ownership
 
----
+Avoid cloning cell-scale arrays:
 
-## What sessions are (and aren’t)
-
-### Sessions are…
-
-- A **portable snapshot** of UI + app state for a dataset.
-- Downloadable as a single `.cellucid-session` file.
-- Restorable later to recover:
-  - camera/view layout,
-  - active fields and filters,
-  - highlights and highlight pages (and optionally heavy artifacts),
-  - some UI control state.
-
-### Sessions are NOT…
-
-- The dataset itself (no data files are embedded).
-- An archival interchange format; use the matching app revision when restoring working state.
-- A copy of network/auth state (community annotation tokens are not included).
-
----
-
-## Where the session system lives (code map)
-
-Session orchestrator:
-- `cellucid/assets/js/app/session/session-serializer.js`
-
-Bundle container framing:
-- `cellucid/assets/js/app/session/bundle/format.js`
-
-Feature contributors (what chunks are emitted/restored):
-- `cellucid/assets/js/app/session/contributors/`
-
-Helpers for capturing/restoring state:
-- `cellucid/assets/js/app/state-serializer/`
-- `cellucid/assets/js/app/state-serializer/README.md` (detailed coverage list)
-
-UI wiring:
-- `cellucid/assets/js/app/ui/modules/session-controls.js`
-
----
-
-## Bundle format (how `.cellucid-session` is encoded)
-
-Cellucid session bundles are a single binary container with:
-
-1) **MAGIC** bytes (ASCII): `CELLUCID_SESSION\n`
-2) `manifestByteLength` (u32 little-endian)
-3) manifest JSON bytes (UTF‑8)
-4) repeated chunks:
-   - `chunkByteLength` (u32 little-endian)
-   - `chunkBytes...`
-
-Code:
-- `cellucid/assets/js/app/session/bundle/format.js`
-
-### Chunk metadata (what the manifest contains)
-
-The manifest contains a `chunks` array.
-Each chunk describes:
-
-- `id`: unique identifier
-- `contributorId`: which contributor handles it
-- `priority`: `eager` or `lazy`
-- `kind`: `json` or `binary`
-- `codec`: `none` or `gzip`
-- `label`: display label for UI/progress reporting
-- `datasetDependent`: whether it should be skipped on dataset mismatch
-- `storedBytes`: size after codec (on disk)
-- `uncompressedBytes`: expected decoded size (guard)
-- `dependsOn` (optional): chunk ordering constraints
-
-Design constraints (dev phase):
-- No version fields, no migrations.
-- Session files are treated as **untrusted input** (strict bounds checks; size guards).
-
----
-
-## Restore staging (eager vs lazy)
-
-Restoring a session is intentionally staged:
-
-- **Eager chunks** restore “first pixels + UI-ready” state quickly:
-  - camera, layout, active fields, filters, core UI controls.
-- **Lazy chunks** restore heavier state in the background:
-  - highlight memberships (large per-cell index lists),
-  - user-defined field codes (potentially large),
-  - analysis caches/artifacts.
-
-Why this matters:
-- A session restore should feel fast even for large datasets.
-- Heavy artifacts can be cancelled if the user switches datasets or closes the tab.
-
-Implementation:
-- `cellucid/assets/js/app/session/session-serializer.js` processes eager chunks first, then schedules lazy processing with yielding between chunks.
-
----
-
-## Coverage (what is saved/restored)
-
-The authoritative list is in:
-- `cellucid/assets/js/app/state-serializer/README.md`
-
-High-level summary:
-
-### Core visualization + UI (“first pixels”)
-
-Saved/restored (eager):
-- camera state
-  - locked cameras: one global camera
-  - unlocked cameras: per-view cameras
-- live vs snapshot view layout
-- active view id
-- per-view dimension levels
-- active field selection (obs/var) per view
-- active filters (modified-only)
-- generic sidebar controls (by DOM id), with explicit exclusions
-- floating panels layout (non-analysis)
-
-### Registries and overlays
-
-Saved/restored (eager):
-- field rename registry
-- field delete/purge registry
-- user-defined fields metadata (but large codes may be lazy)
-
-### Highlights and analysis artifacts (heavier)
-
-Saved/restored (often lazy):
-- highlight pages/groups and memberships
-- user-defined field codes (if large)
-- analysis caches/artifacts
-
-### Exclusions (intentional)
-
-Not saved/restored:
-- the dataset itself
-- dataset selection/connection UI inputs
-- figure export UI state
-- benchmark UI state
-- community annotation state (auth, votes, drafts, moderation UI)
-- DOM/WebGL runtime objects (only declarative state is stored)
-
----
-
-## Dataset mismatch behavior
-
-Sessions contain a dataset fingerprint.
-If the current dataset does not match the session’s dataset:
-
-- dataset-dependent chunks are skipped (highlights/caches/core state)
-- dataset-agnostic layout can still restore (e.g. floating panels)
-
-This is a safety feature:
-- restoring highlights/caches against the wrong dataset can silently corrupt user interpretation.
-
----
-
-## Adding a new persisted feature (developer workflow)
-
-If you add a new feature and want it to persist:
-
-1) Decide what kind of state it is:
-   - “first pixels” (eager, small, required for UI coherence)
-   - “heavy artifact” (lazy, large, optional)
-
-2) Add or extend a contributor in:
-   - `cellucid/assets/js/app/session/contributors/`
-
-3) Ensure the serialized payload is:
-   - bounded in size (guarded)
-   - JSON-safe (or encode as binary)
-   - deterministic (avoid including transient runtime-only values)
-
-4) Update exclusions if needed:
-   - UI controls: `data-state-serializer-skip="true"` (DOM-level exclusion)
-   - Analysis windows: handled by analysis module exclusions
-
-5) Update docs and add a troubleshooting entry (symptoms users will see).
-
----
-
-## Troubleshooting (symptom → diagnosis → fix)
-
-### Symptom: “Load session does nothing (no UI change)”
-
-Likely causes (ordered):
-1) User cancelled file picker.
-2) Session file is corrupt or truncated.
-3) Restore was cancelled because a dataset reload started.
-
-How to confirm:
-- DevTools → Console: look for session serializer warnings/errors.
-
-Fix:
-- Try a known-good small session file.
-- Confirm the selected file is the original binary `.cellucid-session` bundle, not an HTML response saved under that extension.
-
-### Symptom: “Session loads, but highlights are missing”
-
-Likely causes:
-- Highlights are stored in lazy chunks and are still loading.
-- Dataset mismatch caused dataset-dependent highlight chunks to be skipped.
-
-How to confirm:
-- Watch notifications (lazy chunk progress).
-- Check console logs for “dataset mismatch” skips.
-
-Fix:
-- Ensure you loaded the same dataset id/fingerprint.
-- Wait for lazy chunks (or inspect which chunks are present in the manifest).
-
-### Symptom: “Invalid chunk length … (session file truncated?)”
-
-Likely cause:
-- The `.cellucid-session` response is incomplete/corrupt.
-
-Fix:
-- Re-download the session.
-- If serving from a host/proxy, ensure it is not truncating large binary responses.
-
----
-
-Next: {doc}`11_analysis_architecture` (analysis uses sessions for reopening windows and optionally restoring artifacts).
+- field overlays retain and reattach exact prior categorical typed-array
+  references;
+- the analysis data layer replaces Map/LRU container ownership and can restore
+  the exact prior containers;
+- in-flight cache writers must be generation-isolated so they cannot cross the
+  replacement boundary; and
+- cinematic restore snapshots keyframes, navigation/settings, and actual
+  stopped/playing/paused runtime state.
+
+The cache inventory verifies exact count and order during transaction prepare.
+Cinematic autoplay may begin only after successful commit. Rollback restores
+the previous playback state rather than merely copying the autoplay checkbox.
+
+## Bounded gzip
+
+Declared `storedBytes` and `uncompressedBytes` are necessary but not sufficient:
+native `DecompressionStream` may materialize one very large output chunk,
+especially in WebKit. The codec therefore preflights the complete
+single-member DEFLATE structure before constructing the native decompressor.
+
+The preflight:
+
+- accepts stored, fixed-Huffman, and dynamic-Huffman blocks;
+- validates trees, distances, back-references, trailer, ISIZE, and exact output
+  length;
+- rejects concatenated members and trailing data;
+- checks cancellation throughout; and
+- yields by bounded macrotask intervals so timers and user input can abort large
+  valid streams.
+
+Only an exact-length valid member reaches native decompression.
+
+## Dataset identity
+
+All four fingerprint values must match. `datasetDependent: false` remains
+useful profile metadata for the dockable-layout owner, but it does not authorize
+layout-only salvage from a mismatched bundle. The entire operation rejects and
+rolls back.
+
+The fingerprint is not a content hash. Dataset publishers must assign a new
+identity when cell/variable order or scientific content changes.
+
+## Official sample profile
+
+Catalog-advertised `default.cellucid-session` uses a separate exact profile:
+
+1. `core/field-overlays`
+2. `core/state`
+3. `ui/dockable-layout`
+4. `analysis/windows`
+5. `highlights/meta`
+
+The catalog advertises the state manifest and SHA-256 as a pair. Transport is
+strictly smaller and bounded. The loader verifies the manifest and digest and
+applies this profile only through `restorePublishedDefaultState()` after the
+scientific dataset is published and while the dataset selection generation is
+still current.
+
+Do not route this five-chunk artifact through generic Load State. A browser test
+for the advertised path must author a real five-chunk fixture; reusing generic
+Save State output is invalid by construction.
+
+## Cancellation outcomes
+
+Two exact coded aborts exist:
+
+- user-canceled restore; and
+- restore superseded by a newer owner.
+
+Direct serializer APIs reject with the coded `AbortError`, allowing lifecycle
+owners to settle correctly. Progress owners dismiss only those exact outcomes.
+The Session panel maps them to a no-op and does not log or post failure/success.
+An unrelated plain `AbortError` remains a real failure.
+
+## Adding or changing persistence
+
+Persistence changes are schema changes to the only current format:
+
+1. identify the sole feature owner and its rollback boundary;
+2. choose eager only when another target chunk needs the state before commit;
+3. define exact static or dynamic ID, metadata, payload keys, and size bounds;
+4. encode empty replacement state explicitly;
+5. add manifest-wide completeness/order checks where a dynamic family depends
+   on another chunk;
+6. retain cell-scale buffers by ownership/reference where safe; never clone
+   them merely for rollback;
+7. prove success, late failure, commit failure, async rollback, cancel,
+   supersession, empty replacement, metadata mutation, and large-array
+   behavior;
+8. update this page, the user-facing session chapter, the maintainer README,
+   and exact documentation tests in the same change.
+
+Do not introduce a reader for an older shape. Update every current producer,
+fixture, consumer, and published artifact together.
+
+## Intentional exclusions
+
+Generic sessions do not contain:
+
+- prepared points, observation tables, or full expression matrices;
+- dataset picker/URL/GitHub/Jupyter connection state;
+- Community Annotation authentication, votes, or repository workflow;
+- Figure Export controls;
+- Benchmarking controls;
+- notifications, hover, focus, pending selections, or in-flight requests; or
+- DOM, worker, network, and WebGL runtime objects.
+
+Next: {doc}`11_analysis_architecture`.

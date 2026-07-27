@@ -1,6 +1,8 @@
 # Data Loading in the Web App (All Paths)
 
-These pages cover the end-to-end ways to get data into Cellucid (pre-exported folders, browser file picker, server mode, and Jupyter).
+These pages cover every current route into Cellucid: public samples, prepared
+folders, browser-selected H5AD or Zarr ZIP files, local or remote Python
+servers, Jupyter, and public GitHub catalogs.
 
 They are written for **mixed audiences**:
 - **Wet lab / non-technical**: click-by-click, “what success looks like”, and safe defaults.
@@ -25,12 +27,12 @@ Use this as a decision tree. You can always switch later.
 
 | You have… | Best first choice | Why | Next page |
 |---|---|---|---|
-| A pre-exported folder from `prepare()` | Browser folder picker | Fastest, most reliable, no server | `03_browser_file_picker_tutorial` |
+| A pre-exported folder from `prepare()` | Browser Prepared picker | Fastest, most reliable, no server | `03_browser_file_picker_tutorial` |
 | A portable `.zarr.zip` or `.zip` | Browser Zarr ZIP picker | One validated file selection in every supported browser | `03_browser_file_picker_tutorial` |
 | A `.h5ad` file | Server mode (recommended) or Jupyter | Python opens the file read-only-backed, reducing matrix memory pressure | `04_server_tutorial` or `05_jupyter_tutorial` |
 | A `.zarr` directory | Server mode or Jupyter | Direct Python loading is supported and eager | `04_server_tutorial` or `05_jupyter_tutorial` |
 | An in-memory `AnnData` in a notebook | Jupyter | Fastest way to iterate while analyzing | `05_jupyter_tutorial` |
-| A dataset you want to share publicly | GitHub-hosted exports | Shareable URL, no server needed | `02_local_demo_tutorial` |
+| A dataset collection you want to share publicly | GitHub-hosted exports | Exact shareable URLs, no running server | `11_custom_dataset_repository` |
 
 ---
 
@@ -71,6 +73,14 @@ Understand all 14 loading options and choose the best approach for your workflow
 :link-type: doc
 
 Export once, then share via public GitHub-hosted exports (no server), or run a local demo viewer.
+:::
+
+:::{grid-item-card} {octicon}`repo;1.5em;sd-mr-1` Custom Dataset Repository
+:link: 11_custom_dataset_repository
+:link-type: doc
+
+Follow a complete three-dataset reference repository, validate its exact
+catalog contract, and publish stable dataset-specific links.
 :::
 
 :::{grid-item-card} {octicon}`pulse;1.5em;sd-mr-1` Standard Pancreas Sample
@@ -163,27 +173,21 @@ If your dataset includes vector fields (e.g. RNA velocity), enable the overlay a
 
 ## Quick Comparison
 
-| Method | Best For | Requires Server |
-|--------|----------|-----------------|
-| Local Demo | Quick visualization, sharing static files | No |
-| File Picker | Desktop viewing without setup | No |
-| Server Mode | Large datasets, lazy gene loading | Yes |
-| Jupyter | Interactive analysis workflows | No |
+| Method | Best For | Separate server command? |
+|--------|----------|--------------------------|
+| Public sample | Learning with known-good data | No |
+| Browser file picker | Local viewing without Python | No |
+| GitHub catalog | Public, dataset-specific share links | No |
+| Server mode | Large data and on-demand browser gene requests | Yes — `cellucid serve` |
+| Jupyter | Interactive analysis workflows | No — the viewer manages a localhost server |
 
 :::{note}
-“Requires Server” here means “you run a small local Python process that serves data to the web viewer”.
-This is still typically **local-only** (e.g. `127.0.0.1`) unless you explicitly bind to `0.0.0.0`.
+Server mode and Jupyter both use HTTP internally. The distinction above is
+whether you start a separate terminal command. Both bind to `127.0.0.1` by
+default; use the documented SSH-tunnel workflow for a remote machine.
 :::
 
 ---
-
-:::{tip}
-Adding more pages:
-
-- Add new pages into `cellucid-python/docs/user_guide/web_app/b_data_loading/`.
-- Use a numeric prefix like `10_...` so they naturally sort.
-- This page includes them automatically via a globbed toctree.
-:::
 
 ```{toctree}
 :maxdepth: 1

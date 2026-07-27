@@ -77,6 +77,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import re
 from collections import OrderedDict
 from datetime import UTC, datetime
 from numbers import Integral, Real
@@ -174,8 +175,56 @@ def _classify_anndata_path(path: str | Path) -> Literal["h5ad", "zarr"]:
     )
 
 
+_DIRECT_PAYLOAD_UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]+", flags=re.ASCII)
+_DIRECT_PAYLOAD_EDGE_RE = re.compile(r"^[._]+|[._]+$", flags=re.ASCII)
+
+
+def _direct_payload_component(name: object, *, label: str) -> str:
+    """Encode one display identifier as the current direct-server route key."""
+    if not isinstance(name, str):
+        raise TypeError(f"{label} must be a native string.")
+    if not name:
+        raise ValueError(f"{label} must be non-empty.")
+    component = _DIRECT_PAYLOAD_UNSAFE_RE.sub("_", name)
+    component = _DIRECT_PAYLOAD_EDGE_RE.sub("", component)
+    if not component:
+        raise ValueError(
+            f"{label} {name!r} has no ASCII letters, digits, '.', '_', or '-' "
+            "for its direct-server payload route."
+        )
+    return component
+
+
+def _assert_unique_direct_payload_components(
+    keys: list[str],
+    *,
+    label: str,
+) -> list[str]:
+    """Require unique raw identifiers and collision-free direct route keys."""
+    raw_keys: set[str] = set()
+    component_to_raw: dict[str, str] = {}
+    components: list[str] = []
+    for key in keys:
+        if key in raw_keys:
+            raise ValueError(f"{label} key {key!r} is duplicated.")
+        component = _direct_payload_component(
+            key,
+            label=f"{label} key",
+        )
+        previous = component_to_raw.get(component)
+        if previous is not None:
+            raise ValueError(
+                f"{label} keys {previous!r} and {key!r} collide at direct "
+                f"payload component {component!r}."
+            )
+        raw_keys.add(key)
+        component_to_raw[component] = key
+        components.append(component)
+    return components
+
+
 def _validate_manifest_field_keys(keys: list[str], *, label: str) -> None:
-    _assert_unique_filename_components(keys, label=label)
+    _assert_unique_direct_payload_components(keys, label=label)
 
 
 def _json_category_values(values: Any, *, field_key: str) -> list[str | bool | int | float]:
@@ -412,7 +461,10 @@ class AnnDataAdapter:
             raw_gene_ids,
             label=gene_label,
         )
-        _assert_unique_filename_components(gene_ids, label="Gene")
+        gene_payload_components = _assert_unique_direct_payload_components(
+            gene_ids,
+            label="Gene",
+        )
 
         # Public source attribution never includes the local filesystem path.
         self._source_type: str = "memory"
@@ -435,6 +487,12 @@ class AnnDataAdapter:
         self._gene_id_to_idx_cache: dict[str, int] | None = {
             gene_id: index for index, gene_id in enumerate(gene_ids)
         }
+        self._gene_payload_component_by_id: dict[str, str] = dict(
+            zip(gene_ids, gene_payload_components, strict=True)
+        )
+        self._gene_id_by_payload_component: dict[str, str] = dict(
+            zip(gene_payload_components, gene_ids, strict=True)
+        )
 
         self._connectivity_cache: ConnectivityEdgePairs | None = None
         self._connectivity_manifest: dict[str, Any] | None = None
@@ -458,9 +516,15 @@ class AnnDataAdapter:
             self.adata.obs.columns.tolist(),
             label="obs columns",
         )
-        _assert_unique_filename_components(
+        obs_payload_components = _assert_unique_direct_payload_components(
             obs_keys,
             label="Observation field",
+        )
+        self._obs_payload_component_by_key: dict[str, str] = dict(
+            zip(obs_keys, obs_payload_components, strict=True)
+        )
+        self._obs_key_by_payload_component: dict[str, str] = dict(
+            zip(obs_payload_components, obs_keys, strict=True)
         )
         for key in obs_keys:
             series = self.adata.obs[key]
@@ -929,6 +993,19 @@ class AnnDataAdapter:
         self._check_closed()
         return list(self.adata.obs.columns)
 
+    def get_obs_payload_component(self, key: str) -> str:
+        """Return the exact direct-server route component for one obs key."""
+        self._check_closed()
+        try:
+            return self._obs_payload_component_by_key[key]
+        except KeyError as error:
+            raise KeyError(f"Observation field {key!r} has no direct payload route.") from error
+
+    def get_obs_key_for_payload_component(self, component: str) -> str | None:
+        """Resolve one direct-server route component to its exact obs key."""
+        self._check_closed()
+        return self._obs_key_by_payload_component.get(component)
+
     def get_obs_field_kind(self, key: str) -> Literal["continuous", "category"]:
         """
         Determine if an obs field is continuous or categorical.
@@ -1193,11 +1270,33 @@ class AnnDataAdapter:
             values,
             label=label,
         )
-        _assert_unique_filename_components(self._gene_ids_cache, label="Gene")
+        payload_components = _assert_unique_direct_payload_components(
+            self._gene_ids_cache,
+            label="Gene",
+        )
 
         # Build index for O(1) lookup
         self._gene_id_to_idx_cache = {gid: idx for idx, gid in enumerate(self._gene_ids_cache)}
+        self._gene_payload_component_by_id = dict(
+            zip(self._gene_ids_cache, payload_components, strict=True)
+        )
+        self._gene_id_by_payload_component = dict(
+            zip(payload_components, self._gene_ids_cache, strict=True)
+        )
         return self._gene_ids_cache
+
+    def get_gene_payload_component(self, gene_id: str) -> str:
+        """Return the exact direct-server route component for one gene."""
+        self._check_closed()
+        try:
+            return self._gene_payload_component_by_id[gene_id]
+        except KeyError as error:
+            raise KeyError(f"Gene {gene_id!r} has no direct payload route.") from error
+
+    def get_gene_id_for_payload_component(self, component: str) -> str | None:
+        """Resolve one direct-server route component to its exact gene identifier."""
+        self._check_closed()
+        return self._gene_id_by_payload_component.get(component)
 
     def _get_gene_idx(self, gene_id: str) -> int:
         """Get gene index with O(1) lookup."""
@@ -1670,6 +1769,10 @@ class AnnDataAdapter:
         self._has_connectivity = False
         self._gene_ids_cache = None
         self._gene_id_to_idx_cache = None
+        self._gene_payload_component_by_id.clear()
+        self._gene_id_by_payload_component.clear()
+        self._obs_payload_component_by_key.clear()
+        self._obs_key_by_payload_component.clear()
 
         # Clear CSC cache (can be large for sparse matrices).
         self._X_csc_cache = None

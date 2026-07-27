@@ -1,249 +1,199 @@
-# Troubleshooting (sessions) — fast fixes
+# Troubleshooting sessions
 
-**Audience:** everyone (especially anyone sharing sessions across machines)  
-**Time:** 15–60 minutes (depending on the failure mode)  
+**Audience:** everyone reopening or sharing a session
+
+**Time:** 10–45 minutes
 **What you’ll learn:**
-- A symptom → diagnosis → fix map for session saving/restoring
-- How to distinguish “expected exclusions” from real restore failures
+- how to separate picker, identity, format, cancellation, and resource issues;
+- what terminal success looks like; and
+- the safest fix for each failure.
 
----
+## Fast diagnosis
 
-## Fast fix map (start here)
+| Symptom | Meaning | First action |
+|---|---|---|
+| File picker never opens | browser policy, embedded-context restriction, or handler error | use the ordinary browser tab, check Console, and retry from a direct click |
+| No dataset is loaded | sessions contain state, not the dataset | load the intended dataset first |
+| Dataset identity error | one of source type, dataset id, cell count, or variable count differs | load the exact published generation through the same route |
+| Manifest/chunk/profile error | file is not a complete current user bundle | obtain a fresh unchanged **Save State** file |
+| Gzip, byte-length, truncation, or trailing-data error | corrupt or dishonest container | transfer/download the original again; do not edit it |
+| Progress disappears after Cancel or a newer load | intentional abort | no action; the older restore neither succeeded nor failed |
+| **Session fully restored**, but view was already similar | valid complete restore with a subtle visual delta | compare high-signal state below |
+| Load is slow | large validated code, highlight, or cache chunks | leave progress open or Cancel; close memory-heavy tabs if needed |
 
-| Symptom | Most likely cause | First thing to try | Deep dive |
-|---|---|---|---|
-| “Load State did nothing” | dataset mismatch or no dataset loaded | load dataset first; watch for mismatch warning | {doc}`07_versioning_compatibility_and_dataset_identity` |
-| “File picker didn’t open” | browser/iframe restriction | try in a standalone tab; try another browser | “Load State button does nothing” below |
-| “Session loaded but looks different” | dataset changed, missing fields, or lazy restore not finished | wait for progress; check Active filters + active field | “Partial restore” below |
-| “Restore says dataset mismatch” | different dataset id or load method | load the exact dataset (same source type + id) | {doc}`07_versioning_compatibility_and_dataset_identity` |
-| “Save State is extremely slow / huge files” | huge highlights/caches | save milestone sessions; reduce groups/snapshots | {doc}`09_edge_cases` |
+## Know the success boundary
 
----
+A progress card or an eagerly recognizable camera is not success. Cellucid
+reports **Session fully restored** only after:
 
-## Before you debug anything (2-minute checklist)
+1. complete framing and manifest validation;
+2. exact dataset fingerprint validation;
+3. every eager and lazy chunk decode and contributor restore;
+4. transaction preparation and commit; and
+5. the final UI refresh.
 
-1) **Confirm a dataset is loaded**
-   - Sessions don’t contain data; restoring without a dataset can’t work as expected.
-2) **Look for a dataset mismatch warning**
-   - If you see it, stop: you must fix identity first.
-3) **Confirm eager restore finished**
-   - Look for “Session loaded successfully” or “eager stage complete”.
-4) **Wait for lazy restore if the session is large**
-   - Large highlight memberships and caches can finish later.
+The Session panel then reports **Session loaded successfully**. If any step
+fails, earlier mutations roll back and no partial subset is accepted.
 
-If you still have a problem, use the sections below.
+## Save State
 
----
+### The button produces no file
 
-## Save State problems
+1. Wait until the dataset and controls are ready.
+2. Click **Save State** again from the visible Session panel.
+3. Check the panel status and browser Console for `Failed to save state`.
+4. Check whether your browser or organization blocked downloads from the site
+   or embedded Jupyter frame.
+5. Open the same application URL in a normal tab and retry if an embedding
+   policy blocks downloads.
 
-### Symptom: “Save State” does nothing
+Chrome, Firefox, Safari/WebKit, and Chromium-based browsers all use the same
+current bundle writer. A browser-specific failure is reportable; changing the
+file extension or using a different serializer is not a fix.
 
-**Likely causes (ordered)**
-- The app is still initializing (session serializer not ready yet).
-- A browser download restriction blocked the programmatic download.
-- A JavaScript error occurred during session capture.
+### Saving takes a long time or the file is large
 
-**How to confirm**
-- Look for a notification:
-  - “Failed to save session” indicates capture failed.
-- Open DevTools → Console and look for:
-  - `Failed to save state:` errors.
+The likely owners are millions of highlight indices, many categorical code
+columns, or analysis-cache artifacts. Save meaningful milestones:
 
-**Fix**
-1) Wait until the dataset is fully loaded and the UI is responsive.
-2) Try **Save State** again.
-3) If it still fails, try another browser (Chrome/Firefox are usually most reliable for file downloads).
-4) If you are inside an embedded context (iframe/notebook), open Cellucid in a standalone tab and try again.
+- delete obsolete highlight groups;
+- remove unneeded saved views;
+- keep only analysis state collaborators need; and
+- avoid repeatedly saving near-identical checkpoints.
 
-**Prevention**
-- Save after major interactions, not during heavy loading.
+Do not remove chunks from a saved file. The current inventory is closed and a
+manually edited bundle is rejected.
 
----
+## Load State picker
 
-### Symptom: “Save State” is very slow or freezes the tab
+### Picker does not appear
 
-**Likely causes**
-- You have extremely large highlight memberships (huge groups).
-- You have many snapshots/views.
-- You have large session artifacts (user-defined codes, caches).
+The picker must be opened by a direct user gesture. Close any covering modal,
+click **Load State** once, and inspect Console if nothing happens. Managed
+browsers or embedded frames can apply file-input policies; use a standalone tab
+with the same application build when permitted.
 
-**How to confirm**
-- Does the dataset have very large `n_cells` (hundreds of thousands to millions)?
-- Do you have many highlight groups/pages?
+### File is hidden or cannot be chosen
 
-**Fix**
-1) Save a smaller “milestone” session:
-   - remove non-essential snapshots,
-   - reduce the number of huge highlight groups,
-   - close unnecessary analysis windows.
-2) Try saving again.
+The file must end exactly in `.cellucid-session`. Unzip an archive first and
+remove accidental suffixes such as `.txt`. Renaming an arbitrary file to the
+extension does not convert it.
 
-**Prevention**
-- Use the “milestone session” approach in {doc}`06_collaboration_best_practices`.
+### You canceled the picker
 
----
+Closing the operating-system picker without choosing a file is a normal no-op.
+It creates no restore and should show no red error.
 
-## Load State problems (manual file)
+## Complete identity rejection
 
-### Symptom: “Load State” button does nothing / file picker doesn’t appear
+The fingerprint has exactly:
 
-**Likely causes**
-- Browser blocked file picker due to embedded/managed restrictions.
-- The click was not considered a user gesture (rare, but can happen in some embedded contexts).
-- A JavaScript error prevented the handler from running.
+- `sourceType`;
+- `datasetId`;
+- `cellCount`; and
+- `varCount`.
 
-**How to confirm**
-- Try in a fresh tab with no other modal dialogs open.
-- Check DevTools → Console for errors around session loading.
+All four must match. A GitHub load and a local folder load are different even
+when their files look identical. Fix the route or publication identity, then
+retry the unchanged bundle. Cellucid does not restore floating layout alone or
+skip filters/highlights.
 
-**Fix**
-1) Try in a standalone browser tab (not inside Jupyter/iframe).
-2) Try another browser.
-3) If your organization uses strict browser policies, ask for File System Access / downloads permission.
+If the sender changed cell order, fields, categories, embeddings, or gene order
+while reusing the same lightweight identity and sizes, publish a new dataset id
+and create a new session. See
+{doc}`07_versioning_compatibility_and_dataset_identity`.
 
----
+## Current-format rejection
 
-### Symptom: “Load State” file picker opens but you can’t select your file
-
-**Likely causes**
-- The file does not end in `.cellucid-session`.
-- The file is still zipped (`.zip`) or has an extra extension (`.cellucid-session.txt`).
-- Your OS file picker is filtering for “supported types” and hiding the file.
-
-**How to confirm**
-- Check the filename suffix in your file browser.
-
-**Fix**
-1) Ensure the file ends exactly in `.cellucid-session`.
-2) If it’s zipped, unzip first.
-3) If your OS appended `.txt`, rename the file (remove `.txt`).
-
----
-
-### Symptom: “Session loaded successfully” but nothing changes
-
-This is almost always one of two things.
-
-**Likely causes**
-1) You loaded the session into the wrong dataset (dataset mismatch → most state skipped).
-2) The session contained minimal changes (you saved very early / near defaults).
-
-**How to confirm**
-- Did you see a dataset mismatch warning?
-- Check whether your current view already matched the expected camera/filters.
-
-**Fix**
-1) If you saw a dataset mismatch warning:
-   - load the correct dataset first, then load the session again.
-2) If no mismatch warning:
-   - try loading a different session file (to confirm the load path works),
-   - or ask the sender what visible change to expect (snapshots? highlights? filters?).
-
----
-
-### Symptom: “Session loaded, but it looks different than the sender’s”
-
-**Likely causes (ordered)**
-- Dataset mismatch (explicit warning).
-- Dataset content changed even though the id/fingerprint matches (cell order differences, export differences).
-- Missing fields/genes in the dataset export (session references something that doesn’t exist).
-- Lazy restore not finished (large highlights/caches).
-- Different screen size caused panel/layout differences (expected).
-
-**How to confirm**
-1) Check for dataset mismatch warning.
-2) Check **Active filters** and the **active field** (highest-signal state).
-3) Wait for lazy restore notifications to finish.
-4) Compare:
-   - number of snapshots,
-   - highlight page/group names,
-   - whether gene expression is available (if the session depends on it).
-
-**Fix**
-- If mismatch: fix dataset identity first ({doc}`07_versioning_compatibility_and_dataset_identity`).
-- If missing fields: load the export version used to create the session, or re-create the session.
-- If lazy restore: wait; if it never completes, see “Restore is stuck” below.
-
----
-
-### Symptom: “I see my highlight groups, but no points are highlighted”
-
-**Likely causes**
-- Highlight memberships are still restoring lazily (expected for large sessions).
-- Filters currently hide the highlighted cells (visibility vs highlighting interaction).
-- The highlight overlay is visually subtle in the current theme/point size.
-
-**How to confirm**
-- Wait for session restore progress to finish.
-- Disable filters one-by-one in Active filters.
-- Zoom in or increase point size to make highlight overlay more visible.
-
-**Fix**
-1) Wait for lazy restore to finish.
-2) Temporarily disable filters to verify highlight memberships exist.
-3) Adjust point size/background for visibility.
-
-Related: {doc}`../f_highlighting_selection/index`, {doc}`../e_filtering/index`
-
----
-
-### Symptom: “Restore is stuck / progress never completes”
-
-**Likely causes**
-- The session file is extremely large and the browser is CPU/memory constrained.
-- A specific lazy chunk restore is expensive (huge highlights, huge caches).
-- The restore was canceled (you loaded another session, navigated away, or the tab lost resources).
-
-**How to confirm**
-- Does the browser tab become sluggish or memory-heavy?
-- Do you see warnings/errors in DevTools console about chunk restore failures?
-
-**Fix**
-1) Give it time (large sessions can take a while).
-2) If it never finishes:
-   - reload the page,
-   - load the dataset first,
-   - load the session again,
-   - avoid interacting heavily until eager restore completes.
-3) If it still fails, try a smaller session (or remove huge highlight groups and resave).
-
----
-
-## Dataset mismatch warning problems
-
-### Symptom: “Session dataset mismatch (…) Restoring only dataset-agnostic layout.”
-
-**What it means**
-- The session was saved under a different dataset identity than what you currently loaded.
-- Cellucid is refusing to apply dataset-dependent state for safety.
-
-**Fix**
-1) Load the dataset the session was created from (same source type + dataset id).
-2) Then load the session again.
-
-If you’re collaborating:
-- agree on a single dataset access method (GitHub vs local folder vs hosted URL),
-- or regenerate the session under the recipient’s load method.
-
-Deep dive: {doc}`07_versioning_compatibility_and_dataset_identity`
-
----
-
-## “Is this a bug?” (how to report effectively)
-
-If you think you found a session bug, collect these before reporting:
-
-1) What dataset source type you used (local folder / GitHub / server) and the dataset id.
-2) Whether restore showed a dataset mismatch warning.
-3) Which parts failed:
-   - camera? filters? highlights? snapshots? analysis windows?
-4) DevTools console logs around “SessionSerializer” warnings/errors.
-5) The session file (if shareable) and the export folder version.
-
----
+The reader accepts one current user-authored profile. Common rejection causes
+include:
+
+- extra or missing manifest roots;
+- missing, duplicate, aliased, unknown, or reordered singleton chunks;
+- missing categorical-code, highlight-membership, or analysis-artifact chunks;
+- noncanonical contributor, priority, kind, codec, label, or
+  `datasetDependent` metadata;
+- mismatched stored or decoded lengths;
+- invalid JSON/binary tables; and
+- truncated, concatenated, trailing, or malformed gzip data.
+
+Obtain a fresh bundle from **Save State** in the current app. The reader accepts
+only the exact schema produced by that current writer.
+
+### Did you download an official `default.cellucid-session`?
+
+That file is an internal, SHA-256-pinned five-chunk sample starting state. It is
+applied automatically only through the catalog capability and is intentionally
+not a generic manual session.
+
+Choose the official sample, wait for its starting view, then use **Save State**
+to create a complete manual file. See {doc}`04_official_sample_states`.
+
+## Cancel and replacement
+
+Pressing **Cancel** on the progress card or starting another manual/automatic
+restore aborts the older operation. Its progress is dismissed, its registered
+mutations roll back, and it produces neither false success nor a red product
+failure.
+
+If you canceled accidentally, wait for any newer operation to finish and start
+the desired load again. If an ordinary uncoded `AbortError` appears as a
+failure without a user cancel or replacement, collect the diagnostics below;
+that is not treated as intentional cancellation.
+
+## “It restored, but looks different”
+
+First require terminal success. Then compare:
+
+1. app build shown in the footer;
+2. dataset route, id, cell count, and variable count;
+3. live/snapshot layout and active view;
+4. camera, dimension, and navigation mode;
+5. active obs/var field and category legend;
+6. Active filters, including latent-space outlier filtering;
+7. highlight pages, group names, counts, and visibility;
+8. Camera Path keyframes, Loop, Autoplay, and actual playback state; and
+9. analysis windows and cache-backed results.
+
+Different viewport sizes can clamp floating panels so they remain reachable.
+That is expected. Missing fields, code columns, highlight membership, or cache
+artifacts are not: the strict operation should reject and roll back rather than
+report success.
+
+## Progress is slow
+
+The loader yields during large gzip preflight and between lazy chunks so the
+browser can process Cancel and a newer request. Very large valid arrays still
+take CPU, network, and memory.
+
+- Keep the progress card open if you want the restore to finish.
+- Avoid launching another large analysis simultaneously.
+- Close unrelated memory-heavy tabs.
+- Press **Cancel** if you do not want to wait; do not force-close the page
+  unless the browser itself is unresponsive.
+
+If progress never settles and Cancel also cannot run, capture the exact app
+build and browser information below.
+
+## Reporting a reproducible bug
+
+Please include:
+
+1. footer build version;
+2. browser name/version, operating system, and device architecture;
+3. dataset source type, exact dataset id, cell count, and variable count;
+4. whether the operation was Save, file Load, URL Load, or automatic official
+   sample state;
+5. the complete visible error and relevant Console stack;
+6. whether Cancel or a newer load was involved;
+7. the session file and immutable prepared generation, if sharing is allowed;
+   and
+8. the smallest reliable reproduction sequence.
+
+Do not post sensitive sessions publicly. See
+{doc}`08_security_privacy_and_trust`.
 
 ## Next steps
 
-- {doc}`09_edge_cases` (expected weirdness and how to avoid it)
-- {doc}`12_reference` (session bundle format and chunk inventory)
+- {doc}`09_edge_cases` (strict expected behavior)
+- {doc}`12_reference` (exact bundle and chunk contract)

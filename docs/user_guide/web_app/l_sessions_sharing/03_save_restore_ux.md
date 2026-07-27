@@ -5,7 +5,7 @@
 **What you’ll learn:**
 - Where the session controls live in the UI
 - The exact steps to Save State and Load State
-- How to confirm a restore succeeded (and what “partial restore” looks like)
+- How to confirm the one complete restore outcome
 - Best practices for naming, organizing, and sharing session files
 
 **Prerequisites:**
@@ -40,9 +40,23 @@ In the left sidebar:
 1) Load the same dataset first.
 2) Click **Load State**.
 3) Choose the `.cellucid-session` file.
-4) Wait for “Session loaded successfully”.
+4) Wait for the download progress to finish with **Session fully restored** and
+   for the panel status to say **Session loaded successfully**.
 
-If nothing changes, don’t panic: see “How to confirm it worked” below.
+If the view already matched the file, the visual change may be subtle; use the
+checks below.
+
+:::{note}
+This file-picker workflow is for a state you or a collaborator saved. Official
+built-in samples are different: their catalog-advertised, integrity-verified
+static starting state applies automatically after the scientific dataset is
+published. See {doc}`04_official_sample_states`.
+
+The catalog's internal `default.cellucid-session` is not an ordinary manual
+bundle. If you download it and choose **Load State**, the strict manual loader
+rejects its intentionally smaller five-chunk profile. Choose the sample and
+then use **Save State** to create a portable manual bundle.
+:::
 
 ---
 
@@ -56,17 +70,21 @@ When you click **Save State**:
 
 There is no server upload by default.
 
-### Load State is progressive restore (eager then lazy)
+### Load State is ordered and atomic
 
 When you click **Load State** and pick a file:
 
-1) **Eager restore** runs first (fast):
-   - restores camera/layout/active field/filters quickly.
-2) **Lazy restore** continues in the background (can be slow for large sessions):
-   - restores large highlight memberships, some caches, user-defined codes, etc.
+1) Cellucid validates the whole container, current chunk inventory, exact
+   dataset fingerprint, and declared byte bounds.
+2) **Eager** chunks run before dependent **lazy** chunks.
+3) The loader waits for large highlight memberships, analysis artifacts, and
+   inactive user-defined codes too.
+4) All feature owners prepare and commit, then the final UI refreshes.
+5) Only then does the operation report success.
 
-Practical implication:
-- If you see the correct view but highlights “appear later”, that is expected for big sessions.
+The scheduler yields between heavy chunks to keep Cancel and newer loads
+responsive. Eager is not a partial-success boundary: a failure in any later
+chunk rolls back earlier state.
 
 ---
 
@@ -75,15 +93,21 @@ Practical implication:
 After loading:
 
 1) Look for a session notification:
-   - “Session loaded successfully” or “Session restored (eager stage complete)”
-2) Check you did **not** get a dataset mismatch warning.
-   - If you did, see {doc}`07_versioning_compatibility_and_dataset_identity`.
-3) Confirm the high-signal state:
+   - require **Session fully restored**, followed by the panel's **Session
+     loaded successfully** status.
+2) If the operation was rejected, read the exact error.
+   - A dataset mismatch rejects everything; see
+     {doc}`07_versioning_compatibility_and_dataset_identity`.
+3) Confirm the high-signal state after success:
    - active field (Coloring & Filtering section)
    - Active filters panel (should match what you remember)
    - snapshot layout (grid vs single)
-4) If the session is large, wait for lazy restore:
-   - some highlight memberships and caches can finish later.
+   - Camera Path and playback state
+   - highlight memberships and analysis windows
+
+If you press **Cancel** or start a newer restore, the older progress is
+dismissed. That intentional cancellation is neither success nor a product
+failure.
 
 If anything is off, jump to {doc}`10_troubleshooting_sessions`.
 
@@ -146,4 +170,5 @@ The Session panel presents each loading path separately and keeps Save State and
 
 ## Next steps
 
+- {doc}`04_official_sample_states` (understand automatic, integrity-verified static starting states for official samples)
 - {doc}`05_share_workflows_links_bundles_exports` (how to send sessions to humans safely)

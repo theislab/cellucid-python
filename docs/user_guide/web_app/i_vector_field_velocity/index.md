@@ -12,6 +12,20 @@ The overlay is primarily a **qualitative** visualization of directionality. Alwa
 
 ---
 
+## Start with a biological question
+
+For the standard Pancreas dataset, select `velocity_umap`, begin in the 2D
+**Planar** view, and ask whether the displayed endocrine-state flow is coherent
+with the annotated populations. Then inspect the independent 3D field in
+**Orbit**. Agreement across views can make a projected pattern easier to
+inspect; it does not by itself validate lineage, transition probability, or
+velocity uncertainty.
+
+The overlay is off by default. It becomes available only when the loaded
+dataset declares a vector field for the selected 1D, 2D, or 3D embedding.
+
+---
+
 ## Recommended reading order
 
 1) `01_what_vector_fields_are_user_facing` (what you’re looking at)
@@ -74,8 +88,8 @@ Symptom → diagnosis → fix for the most common overlay failures.
 :link: 08_screenshots
 :link-type: doc
 
-Current overlay controls and advanced visual settings rendered with a synthetic
-2D vector field.
+Current overlay controls and advanced visual settings rendered with the real
+Pancreas velocity field in 2D Planar and 3D Orbit views.
 :::
 
 ::::

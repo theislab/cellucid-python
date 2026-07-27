@@ -88,7 +88,7 @@ If your `.h5ad` is large:
 - If using server mode, open the health endpoint:
 
   ```text
-  http://127.0.0.1:8765/health
+  http://127.0.0.1:8765/_cellucid/health
   ```
 
 - If using GitHub, open the raw manifest URL in a new tab after substituting
@@ -215,7 +215,8 @@ For overlay behavior and deeper diagnostics, see:
 **Likely causes (ordered)**
 1) Wrong repo path (pointing at the dataset folder instead of the exports root).
 2) Missing `datasets.json` (you didn’t generate/commit it).
-3) Corporate network blocks `raw.githubusercontent.com`.
+3) The files are not on `main`, but the shorthand omitted `@branch`.
+4) Corporate network blocks `raw.githubusercontent.com`.
 
 **How to confirm**
 - Open the raw URL in a browser after substituting your exact repository
@@ -228,9 +229,13 @@ For overlay behavior and deeper diagnostics, see:
 **Fix**
 - Generate and commit `datasets.json` at the exports root.
 - Confirm you’re pointing Cellucid at the exports root, not at `.../pbmc_demo/`.
+- Shorthand without `@branch` always resolves to `main`; use
+  `owner/repo@branch/path` for another branch.
 - If blocked, use server mode or a different network.
 
-See {doc}`02_local_demo_tutorial`.
+Compare your repository with the known-good
+`theislab/cellucid-demo-custom-datasets/exports` connection in
+{doc}`11_custom_dataset_repository`, then see {doc}`02_local_demo_tutorial`.
 
 ---
 
@@ -278,5 +283,6 @@ Copy/paste:
 - Local file picker: {doc}`03_browser_file_picker_tutorial`
 - Server mode: {doc}`04_server_tutorial`
 - GitHub exports workflow: {doc}`02_local_demo_tutorial`
+- Complete custom repository reference: {doc}`11_custom_dataset_repository`
 - Dataset identity: {doc}`06_dataset_identity_why_it_matters`
 - Vector fields overlay: {doc}`../i_vector_field_velocity/index`

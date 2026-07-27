@@ -11,6 +11,14 @@ You will learn:
 
 If you are not in a notebook environment, start with {doc}`04_server_tutorial`.
 
+:::{tip}
+Prefer to begin from a real, runnable notebook? The
+{doc}`Pancreas Jupyter walkthrough
+<../../python_package/f_notebooks_tutorials/05_jupyter_embedding_hooks_sessions_gallery>`
+links the checked notebook, its exact launch command, and real captures of the
+embedded viewer and connection report.
+:::
+
 ## At A Glance
 
 **Audience**
@@ -306,7 +314,8 @@ To make a vector field appear when using `show_anndata(...)`, you need:
 2) A vector field in `adata.obsm` with a **Cellucid-compatible key**
 3) The vector array shape must be `(n_cells, dim)` where `dim` matches the embedding (2 or 3)
 4) If more than one field ID is present, pass the exact choice as
-   `vector_field_default="velocity"` (or the applicable field ID)
+   `vector_field_default="velocity_umap"` (or, for the forward-drift example,
+   `vector_field_default="T_fwd_umap"`)
 
 ### Naming convention (UMAP basis)
 
@@ -754,4 +763,6 @@ This section is intentionally redundant and explicit: it is designed for “I ne
 - General loading troubleshooting: {doc}`08_troubleshooting_data_loading`
 - Vector field overlay usage: {doc}`../i_vector_field_velocity/index`
 - Hooks deep dive: {doc}`../../python_package/e_jupyter_hooks/index`
+- Runnable Pancreas notebook and verified Jupyter captures:
+  {doc}`../../python_package/f_notebooks_tutorials/05_jupyter_embedding_hooks_sessions_gallery`
 - If you want to share datasets publicly: export + GitHub workflow ({doc}`02_local_demo_tutorial`)

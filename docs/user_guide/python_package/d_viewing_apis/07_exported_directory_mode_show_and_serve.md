@@ -148,7 +148,10 @@ Two common sharing modes:
    - web app folder picker (easy): {doc}`../../web_app/b_data_loading/03_browser_file_picker_tutorial`
 
 2) **Host publicly** (GitHub Pages / static hosting):
-   - end-to-end tutorial: {doc}`../../web_app/b_data_loading/02_local_demo_tutorial`
+   - complete reference repository and exact catalog workflow:
+     {doc}`../../web_app/b_data_loading/11_custom_dataset_repository`
+   - concise export-first tutorial:
+     {doc}`../../web_app/b_data_loading/02_local_demo_tutorial`
 
 ## Edge cases (exports)
 
@@ -165,3 +168,4 @@ Two common sharing modes:
 
 - AnnData direct mode: {doc}`08_anndata_mode_show_anndata_and_serve_anndata`
 - Performance guide: {doc}`14_performance_scaling_and_lazy_loading`
+- Public catalog guide: {doc}`../../web_app/b_data_loading/11_custom_dataset_repository`

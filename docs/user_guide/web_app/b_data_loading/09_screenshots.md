@@ -63,3 +63,13 @@ The same direct H5AD replacement path exercised in Playwright WebKit on macOS.
 WebKit is Safari's browser engine; the repository's platform matrix separately
 runs the supported browser projects on their available CI operating systems.
 ```
+
+## Real server and Jupyter evidence
+
+The synthetic picker captures above isolate browser-file behavior. Two
+data-backed workflows use the standard Pancreas dataset:
+
+- {doc}`04_server_tutorial` includes the real CLI startup, prepared-artifact
+  validation, verified web-build establishment, and exact Viewer URL.
+- {doc}`../../python_package/f_notebooks_tutorials/05_jupyter_embedding_hooks_sessions_gallery`
+  includes the running Jupyter embed and its exact connection report.

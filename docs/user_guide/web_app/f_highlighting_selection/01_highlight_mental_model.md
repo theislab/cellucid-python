@@ -69,8 +69,10 @@ This makes highlights **dataset-dependent**:
 if you reorder/re-export your dataset, “cell #123” may no longer refer to the same biological cell.
 
 :::{important}
-Session restore intentionally skips highlights if the session’s dataset fingerprint does not match the currently loaded dataset.
-This prevents “wrong highlights on the wrong dataset”.
+Session restore rejects and rolls back the complete operation if the saved
+dataset fingerprint does not match the current dataset. It never applies
+layout while skipping highlights. This prevents “wrong highlights on the wrong
+dataset.”
 :::
 
 ### Selection candidate set (temporary)

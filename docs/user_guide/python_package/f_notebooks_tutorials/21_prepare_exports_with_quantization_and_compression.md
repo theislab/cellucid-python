@@ -391,7 +391,7 @@ Fix:
 
 ## Next steps
 
-- {doc}`04_real_world_dataset_recipes_gallery` (full dataset export notebooks you can adapt)
+- {doc}`04_real_world_dataset_recipes_gallery` (runnable real Pancreas export)
 - {doc}`22_large_dataset_server_mode_and_lazy_gene_expression` (scaling patterns)
 - {doc}`32_session_persistence_and_restoring_analysis_artifacts` (advanced reproducibility via sessions)
 

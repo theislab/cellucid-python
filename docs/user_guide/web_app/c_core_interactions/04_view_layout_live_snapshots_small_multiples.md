@@ -1,170 +1,160 @@
-# View layout: Live + Snapshots (small multiples)
+# Multiview: Live view and kept snapshots
 
-**Audience:** everyone (multiview is a core Cellucid superpower)  
-**Time:** 10–20 minutes  
-**What you’ll learn:**
-- What a “view” is (live vs snapshot)
-- How “Keep view” works and what it preserves
-- Grid compare vs edit selected view
-- Camera locking/unlocking and per-view indicators (badges)
+**Audience:** everyone
+**Time:** 10 minutes
 
----
+Multiview makes controlled side-by-side comparisons of one loaded dataset.
+Cellucid supports the live view plus at most **three** kept snapshots—up to four
+visible panels.
 
-## Mental model: “views” are separate contexts
+## A useful comparison
 
-Cellucid supports multiple simultaneous **views** of the same dataset:
+For a differentiation dataset, keep one view colored by cell type, then change
+the selected view to a cell-cycle score or another measured covariate. With
+cameras locked, the same region stays under the cursor in both panels. This
+helps answer “is this apparent branch associated with biology or with a
+technical/continuous covariate?” without relying on memory.
 
-- **Live view**: your working view.
-- **Snapshot views**: created by clicking **Keep view**; used for side-by-side comparison.
+Multiview compares render state; it does not perform a statistical comparison.
+Use {doc}`../h_analysis/index` for quantitative follow-up.
 
-Each view can carry its own state (at minimum: camera + dimension; often also coloring/filter context depending on feature).
+## Exact controls
 
----
+Open **Compare Views → Multiview:**. The small `i` button states the important
+scope rule: snapshots keep independent coloring and filters; select a panel and
+use `Edit selected view` before changing only that panel.
 
-## Where multiview controls live
+| Control | Current behavior |
+|---|---|
+| `Keep view` | Freezes the selected view as a new panel and selects that new snapshot. |
+| `Locked Cam` | Cameras are linked. This is the default once multiple views exist. |
+| `Unlocked Cam` | Each view keeps an independent camera/navigation mode. |
+| `Layout: Grid compare` | Shows the visible live/snapshot panels together. |
+| `Layout: Edit selected view` | Shows only the selected panel at full canvas size for editing. |
+| `Clear` | Removes every kept snapshot and returns to the live view. |
 
-Multiview is controlled from:
+`Keep view` is available only in `Render mode: Points`. Smoke disables it and
+forces the live, single-view layout; see
+{doc}`03_render_modes_points_vs_volumetric_smoke`.
 
-- **Compare Views** accordion → **Multiview**
+## Create a reliable comparison
 
-Key UI elements:
+1. In the live view, choose the dimension, navigation mode, coloring, category
+   transparency, and filters you want to preserve.
+2. Frame the cells of interest.
+3. Click `Keep view`.
+4. Leave `Locked Cam` on for the same-framing comparison.
+5. Select the live or kept badge, choose `Edit selected view`, and change that
+   panel's field or filters.
+6. Return to `Grid compare`.
 
-- **Keep view**: create a snapshot panel.
-- **Locked Cam** toggle: link/unlink cameras across views.
-- **View badges**: clickable list of views with indicators.
-- **Layout** dropdown:
-  - Grid compare
-  - Edit selected view
-- **Clear**: remove all kept views.
+After step 3, the new snapshot is active and the layout is `Grid compare`.
+Repeating `Keep view` at the three-snapshot limit fails without replacing an
+existing panel; remove a snapshot before trying again.
 
----
+## What a kept snapshot preserves
 
-## Create a snapshot (Keep view)
+A snapshot captures the selected view's:
 
-### Fast path
+- active categorical or continuous field and its rendered colors;
+- category transparency and filter-derived visibility;
+- continuous/outlier filter state and filter summary;
+- dimension and dimension-specific positions;
+- camera state and navigation mode;
+- centroid render state associated with that view.
 
-1) Get the live view into a state you want to preserve (camera + coloring + filters).
-2) Click **Keep view**.
-3) A new view badge/panel appears.
+These are independent view contexts after capture. Later coloring or filtering
+changes in one selected view do not propagate to the other panels. Highlight
+pages are a separate feature and should not be treated as part of the
+per-snapshot contract.
 
-### What “Keep view” preserves (practical)
+## Select and edit the intended panel
 
-At minimum, a snapshot preserves:
+Click a view badge to make that view active. Field selectors, filters,
+**Dimension:**, and **Navigation:** then describe the selected view.
 
-- the current camera framing and navigation mode,
-- the current dimension (1D/2D/3D),
-- the current coloring and transparency buffers (so the view looks the same immediately),
-- metadata such as a short “filters summary” text (used for context).
+`Grid compare` is best for inspection. `Edit selected view` is best for
+changing one panel, because it removes ambiguity about which view owns the
+sidebar changes. Returning to the grid does not merge view state.
 
-:::{important}
-Snapshots are points-mode only.
+## Camera behavior
 
-- If you are in smoke mode, **Keep view** will not create snapshots.
-- If you already have snapshots, switching to smoke mode is blocked.
-:::
+Cellucid starts multiview with linked cameras:
 
----
+- `Locked Cam`: dragging, zooming, and navigation mode are shared.
+- `Unlocked Cam`: each panel owns its camera and navigation mode. Click inside
+  a panel before navigating it.
 
-## Layout: Grid compare vs Edit selected view
+Unlock cameras when comparing different framing or when deliberately combining,
+for example, a 2D **Planar** view with a 3D **Orbit** view. Keep them locked when
+the scientific comparison requires identical framing.
 
-### Grid compare
+## Read and operate view badges
 
-- Shows all views at once (small multiples).
-- Best for comparing clusters, thresholds, and alternative colorings.
-- Click inside a panel to focus it for navigation (focus rules matter).
+Each badge contains:
 
-### Edit selected view
-
-- Shows only the currently selected view, at full size.
-- Best for making precise changes (selecting fields, adjusting filters).
-
-Practical workflow:
-
-1) Use **Edit selected view** to set up each view.
-2) Switch back to **Grid compare** to compare them.
-
----
-
-## Camera locking (linked vs independent)
-
-The **Locked Cam** toggle controls whether views share a single camera.
-
-### Cameras locked (linked)
-
-- One camera controls all views.
-- Navigation mode is shared.
-- Great for “same framing, different coloring”.
-
-### Cameras unlocked (independent)
-
-- Each view stores its own camera and navigation mode.
-- View badges show extra indicators (navigation mode per view).
-- Great for “different framing per view” or mixing 2D planar + 3D orbit across panels.
-
-:::{tip}
-If grid compare feels confusing, keep cameras locked until you’re comfortable. Unlocking is powerful, but it makes “which panel am I controlling?” more subtle.
-:::
-
----
-
-## View badges (what the indicators mean)
-
-Each view badge is a compact status line.
-
-Common elements:
-
-- **Number pill**: the view index.
-- **⌖ camera indicator**: which view is currently the “active camera” when cameras are unlocked.
-- **Label**: typically derived from the active field or your snapshot label.
-- **Dimension badge**: e.g. `3D` (click to cycle dimensions if multiple are available).
-- **Navigation badge** *(cameras unlocked only)*: `Orb`, `Pan`, or `Fly` (click to cycle).
-- **× remove**: removes the view (or hides live view in some cases).
+- a number pill;
+- a `⌖` indicator for the currently focused camera when cameras are unlocked;
+- a view label;
+- a clickable `1D`, `2D`, or `3D` badge when another dataset dimension is
+  available;
+- a clickable `Orb`, `Pan`, or `Fly` badge when cameras are unlocked; it cycles
+  **Orbit → Planar → Free-fly**;
+- `×` when that view can be removed.
 
 ```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
-:alt: Cellucid showing two side-by-side views of the same dataset.
+:alt: Cellucid showing two side-by-side kept views of the same dataset.
 :width: 1440px
 
-Two kept views support side-by-side comparison while retaining one dataset identity.
+Two panels compare one dataset while retaining independent coloring and filter
+contexts.
 ```
 
----
+Removing `×` from a snapshot deletes that snapshot. When at least two snapshots
+exist, removing the live badge hides the live panel and selects a snapshot.
+With only one snapshot, removing live instead removes that snapshot and returns
+to the live view, so the viewer never reaches an invalid zero-view state.
 
-## Remove views: × vs Clear
+## Session and export behavior
 
-- **× on a snapshot view**: removes that single snapshot.
-- **Clear**: removes *all* snapshot views.
+A matching-dataset `.cellucid-session` saves and restores:
 
-Removing a view deletes its per-view context (camera/dimension and any view-scoped state) so it cannot be recovered unless you saved a session.
+- `Grid compare` versus `Edit selected view`;
+- active view and whether live is hidden;
+- camera-lock state plus live/per-snapshot cameras;
+- every snapshot's field, filters, dimension, label, and navigation state.
 
----
+Restoration recreates the snapshot graph rather than storing GPU buffers. The
+dataset itself is never embedded in the session. See
+{doc}`../l_sessions_sharing/02_what_gets_saved_and_restored` and
+{doc}`../l_sessions_sharing/07_versioning_compatibility_and_dataset_identity`.
 
-## Edge cases
+Figure Export can render the current multiview grid; verify panel order and
+legends in {doc}`../k_figure_export/02_export_ui_walkthrough`.
 
-- **Layout dropdown disabled**: layout editing is points-mode only; smoke forces a single view.
-- **Live view “disappears”**: when you remove the live view badge while multiple snapshots exist, the live view can be hidden to maximize compare space.
-- **Badges don’t show dimension or nav indicators**:
-  - dimension badge appears only if the dataset provides multiple dimensions,
-  - nav badge appears only when cameras are unlocked.
+## Failure and recovery
 
----
+### `Keep view` is disabled
 
-## Troubleshooting (multiview)
+Set **Visualization → Render mode:** to `Points`. If the button is enabled but
+snapshot creation reports `Keep view failed`, preserve the current live view,
+remove an unneeded snapshot if three already exist, and retry.
 
-For a full catalog, see `c_core_interactions/06_troubleshooting_core_interactions`.
+### A change affected the wrong panel
 
-### Symptom: “Keep view does nothing”
+1. Stop changing controls.
+2. Click the intended badge.
+3. Choose `Edit selected view`.
+4. Confirm its field, dimension, and filter summary before continuing.
 
-**Likely causes:**
+### The wrong panel moves
 
-- you are in smoke mode,
-- render mode is not points,
-- an internal error prevented snapshot creation (check console).
+With `Unlocked Cam`, click inside the intended panel first. Use `Locked Cam` if
+all panels should move together.
 
-**Fix:**
+### Performance drops
 
-1) Switch render mode to **Points**.
-2) Click **Keep view** again.
-
-### Symptom: “The wrong panel moves when I drag/scroll”
-
-Click inside the panel you want to control first (focus rules in grid compare).
+Every visible panel adds rendering work, and vector-field trails allocate
+per-view buffers. Hide live when at least two snapshots exist, remove unused
+snapshots, or return to a single panel. See
+{doc}`../n_benchmarking_performance/03_large_dataset_best_practices`.

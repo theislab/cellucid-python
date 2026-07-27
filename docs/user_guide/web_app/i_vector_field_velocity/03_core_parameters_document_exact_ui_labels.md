@@ -1,107 +1,96 @@
-# Core parameters (document exact UI labels)
+# Core particle-flow controls
 
-**Audience:** everyone (with a “fast path” for beginners)  
-**Time:** 10–20 minutes  
-**What you’ll learn:**
-- The meaning of each core slider/toggle (using the **exact UI labels**)
-- Which knobs change *appearance* vs *performance*
-- Safe “first settings” for laptops vs desktops
+**Audience:** everyone
+**Time:** 10 minutes
 
----
+These controls appear under **Visualization → Vector Field Overlay:** after
+`Show overlay` is enabled.
 
-## Core controls (exact UI labels, ranges, defaults)
+## Exact labels, ranges, and initial values
 
-These controls appear under **Visualization → Vector Field Overlay** after you enable `Show overlay`.
+| UI label | Exact range/options | Initial value | What changes |
+|---|---|---:|---|
+| `Vector field:` | Fields declared for the selected dimension | Dataset default or explicit selection | The per-cell vector array. Changing it loads a different field. |
+| `Particle density:` | 1K–500K, 1K steps | 15K | Simulated/drawn particle count. This is the primary particle-cost control. |
+| `Flow speed:` | 0.05×–5.00×, 0.01× steps | 3.0× | Visual advection multiplier; it is not biological time. |
+| `Trail length:` | 0.1s–15.0s, 0.1s steps | 8.0s | Particle lifetime before respawn; it is not elapsed biological time. |
+| `Particle size:` | 0.5–30, 0.5 steps | 1.0 | Screen-space particle size. Large particles increase pixel fill and can hide cells. |
+| `Opacity:` | 0%–100%, 1% steps | 60% | Composite opacity. `0%` is fully invisible. |
+| `Color scheme:` | `Viridis`, `Plasma`, `Turbo`, `Cividis`, `Magma`, `Coolwarm` | `Viridis` | Maps normalized vector magnitude to particle color; it does not encode direction. |
+| `Sync with LOD` | off/on | on | At coarser LODs, reduces particle count and uses the LOD-visible cells as spawn candidates. |
 
-| Setting (UI label) | Range (UI) | Default | What it changes (user-facing) | Performance impact | Common footguns |
-|---|---:|---:|---|---|---|
-| `Particle density:` | 1–500 (shown as `K`) | 15K | How many particles are simulated/drawn at once. Higher = denser “stream” look. | High (scales ~linearly with particle count) | High density can look like fog (misleading) and can tank FPS. |
-| `Flow speed:` | 0.05×–5.0× | 3.0× | How fast particles move per frame along the field. It is a **visual multiplier**, not biological time. | Medium | Too high can look chaotic (particles “teleport” across structure). Too low can look “stuck”. |
-| `Trail length:` | 0.1s–15.0s | 8.0s | How long a particle lives before it respawns. Longer lifetimes usually yield longer visible trajectories. | Medium–High | Very long trails can overwhelm the point cloud and hide structure. |
-| `Particle size:` | 0.5–30 | 1.0 | The size of each particle (screen-space point size, scaled by device pixel ratio). | Low–Medium | Too small can look like “nothing is happening”; too big can hide points. |
-| `Opacity:` | 0%–100% | 60% | Overall transparency of the overlay. | Low | `0%` makes the overlay invisible. High opacity can wash out points. |
-| `Color scheme:` | discrete list | `Viridis` | How particle color is mapped from **vector magnitude** (speed) to color. | Low | Users sometimes assume color encodes direction; by default it encodes magnitude. |
-| `Sync with LOD` | on/off | on | Reduces particle work when the renderer is zoomed out / using higher LOD (and uses LOD sampling for spawn candidates). | Usually helpful | Turning this off can be very expensive on large datasets; turning it on can reduce fine detail when zoomed far out. |
+The controls update the renderer while the overlay is active. They do not
+rewrite `adata.obsm`, prepared vector binaries, or the dataset identity.
 
-### Notes on units (important)
+## Scientific reading preset
 
-- `Particle density:` is displayed in **thousands**.  
-  Example: `15K` means **15,000 particles**. The maximum is `500K`.
+Use this when the question is “does the supplied direction agree with this
+annotated continuum?”:
 
-- `Flow speed:` is a multiplier (×). It is intentionally unitless.
-
-- `Trail length:` is shown in seconds (s), but it is a visualization lifetime, not biological time.
-
----
-
-## Recommended starting presets
-
-### Laptop-safe preset (start here if anything stutters)
-
-- `Particle density:` 5K–10K
-- `Flow speed:` 2.0×–3.0×
+- `Particle density:` 10K–20K
+- `Flow speed:` 1.5×–3.0×
 - `Trail length:` 2.0s–5.0s
 - `Particle size:` 1.0–2.0
 - `Opacity:` 40%–60%
+- `Color scheme:` `Viridis` or `Cividis`
 - `Sync with LOD`: on
 
-### Desktop balanced preset
+Then expand **Advanced Visual Settings** and reduce `Turbulence:` toward 0.
+This makes the supplied vectors easier to distinguish from procedural motion.
+Use {doc}`04_advanced_parameters_document_every_setting` for every advanced
+control.
 
-- `Particle density:` 15K–50K
-- `Flow speed:` 2.0×–4.0×
-- `Trail length:` 5.0s–10.0s
-- `Particle size:` 1.0–2.0
-- `Opacity:` 50%–70%
+## Performance-first preset
+
+Begin here on an integrated GPU, high-DPI display, or multiview layout:
+
+- `Particle density:` 5K
+- `Trail length:` 2.0s
+- `Particle size:` 1.0
+- `Opacity:` 50%
 - `Sync with LOD`: on
 
-:::{important}
-If you are making publication figures, prefer **clarity over drama**:
-shorter trails, lower density, and minimal post-processing.
-:::
+Raise density only after interaction is stable. Density changes simulation and
+draw work approximately with particle count; speed, lifetime, opacity, and
+palette are mainly interpretive/visual controls. Trail buffers and bloom also
+scale with viewport pixels, so reducing particle density alone may not cure a
+high-resolution bottleneck. See {doc}`05_performance_and_quality`.
 
----
+## Read combined controls correctly
 
-## Interaction notes (how controls combine)
+### Dense haze
 
-### Density × trail length = “visual accumulation”
+High `Particle density:`, long `Trail length:`, high `Trail persistence:`, and
+high opacity/bloom can merge separate directions into a bright sheet. Reduce
+density first, then lifetime, persistence, and opacity.
 
-If the overlay looks like a glowing haze, the most common cause is:
+### Flicker or apparently discontinuous motion
 
-- too many particles *and* too-long trails
+Reduce `Flow speed:` before increasing trails. A large visual multiplier can
+move particles too far between frames even when the source vectors are valid.
 
-Fix by reducing `Particle density:` first (largest win), then reducing `Trail length:`.
+### No visible flow
 
-### Opacity × bloom (advanced) can wash out the view
+Check in this order:
 
-If you later enable/adjust bloom in advanced settings, remember:
+1. `Opacity:` is above 0%.
+2. The selected view has visible cells.
+3. `Particle size:` is large enough for the display.
+4. The status does not read `Failed to load vector field.`
+5. Vector magnitudes are not all zero.
 
-- `Opacity:` makes everything brighter
-- bloom amplifies the brightest parts even more
+See {doc}`07_troubleshooting_velocity_overlay` for data, network, dimension,
+and WebGL recovery.
 
-Use a conservative opacity (40%–60%) when bloom is non-zero.
+## Multiview and session scope
 
----
+Core overlay settings are global across visible views; each view has its own
+dimension, visibility-derived spawn table, and trail buffers. Do not expect
+`Keep view` to freeze a separate particle preset.
 
-## Mini troubleshooting (core controls)
+For a matching dataset, `.cellucid-session` saves the current field, toggle,
+core controls, and advanced controls. The vector arrays are loaded again from
+the dataset. See {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
 
-### “I enabled the overlay but see nothing”
-
-Try, in this order:
-
-1) Confirm `Opacity:` is not 0%.
-2) Increase `Particle size:` to ~2.0.
-3) Reduce `Flow speed:` to ~2.0× (very high speed can look like flicker/noise).
-4) Confirm you are in a dimension that actually has a vector field (see `02_enabling_overlay_and_selecting_field`).
-
-### “It’s a bright haze / I can’t see points anymore”
-
-1) Reduce `Particle density:` (biggest impact).
-2) Reduce `Trail length:`.
-3) Reduce `Opacity:`.
-
-### “It’s very slow / stuttering”
-
-1) Reduce `Particle density:` to 5K.
-2) Reduce `Trail length:` to 2–3s.
-3) Keep `Sync with LOD` on.
-4) If you have many snapshot views, switch to a single view (multiview multiplies GPU work).
+The exact initial controls are shown on the real Pancreas dataset in
+{doc}`08_screenshots`.

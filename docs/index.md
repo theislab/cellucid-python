@@ -1,10 +1,14 @@
 # Cellucid
 
-**Interactive Single-Cell Data Visualization**
+**See every cell. Keep the biology in view.**
 
-Cellucid is a **GPU-accelerated**, browser-first single-cell viewer for exploring massive datasets in real time — fly through 2D/3D embeddings, color by genes or metadata, filter and compare populations, and share reproducible annotations with collaborators.
+Cellucid is a GPU-accelerated, browser-first workspace for exploring
+single-cell data interactively. Move through 1D, 2D, and 3D embeddings; color
+by genes or cell metadata; filter and compare populations; inspect
+connectivity and vector fields; and carry the result into a figure, notebook,
+saved session, or collaborative annotation round.
 
-::::{grid} 1 1 1 1
+::::{grid} 1 2 2 2
 :gutter: 2
 
 :::{grid-item}
@@ -12,69 +16,138 @@ Cellucid is a **GPU-accelerated**, browser-first single-cell viewer for explorin
 :color: primary
 :expand:
 
-{octicon}`browser;1em` Cellucid App
+{octicon}`browser;1em` Open Cellucid
+```
+:::
+
+:::{grid-item}
+```{button-ref} user_guide/web_app/a_orientation/03_quick_tour_60_seconds
+:ref-type: doc
+:color: secondary
+:expand:
+
+🚀 Take the 60-second tour
 ```
 :::
 
 ::::
 
----
+```{figure} _static/screenshots/web_app/suo-cell-type-close-up.jpg
+:alt: A close-up of the Suo dataset in Cellucid, showing dense groups of categorically colored cells at varied point sizes.
+:width: 70%
+:align: center
 
-## Features
+The Suo atlas makes Cellucid's scale tangible: hundreds of thousands of cells
+remain individually visible as you move from tissue-wide structure into a
+close-up view.
+```
 
-- **GPU-accelerated 2D/3D rendering** - Smooth navigation through millions of cells
-- **Genes + metadata overlays** - Fast coloring for sparse/dense expression and `obs` fields
-- **Filtering + selection workflows** - Highlight, subset, and compare populations interactively
-- **Connectivity + vector overlays** - KNN edges and velocity/drift-style fields
-- **Shareable exports** - Static folders you can host locally, on GitHub, or behind a server
-- **Works everywhere** - Web app, local server mode, and Jupyter notebook embedding
+## Start with the question in front of you
 
----
+You do not need to learn the whole application before doing useful work. Pick
+the route that matches today’s question.
 
-## User Guide
+::::{grid} 1 2 2 2
+:gutter: 3
 
-Step-by-step tutorials to get you started with Cellucid visualization.
+:::{grid-item-card} Where are my populations?
+:link: user_guide/web_app/e_filtering/index
+:link-type: doc
+
+Color by a categorical `obs` field, search for marker genes, filter noise, and
+highlight a population without losing the surrounding context.
+:::
+
+:::{grid-item-card} Where are cells going?
+:link: user_guide/web_app/b_data_loading/10_standard_pancreas_dataset
+:link-type: doc
+
+Open the real Pancreas sample, compare its 1D, 2D, and 3D embeddings, and
+inspect the dimension-matched RNA-velocity overlay.
+:::
+
+:::{grid-item-card} How do I share my own data?
+:link: user_guide/web_app/b_data_loading/11_custom_dataset_repository
+:link-type: doc
+
+Build a small public catalog with stable dataset identities, test it locally,
+and share an exact URL that opens the intended dataset.
+:::
+
+:::{grid-item-card} Can the viewer stay beside my analysis?
+:link: user_guide/web_app/b_data_loading/05_jupyter_tutorial
+:link-type: doc
+
+Embed Cellucid in Jupyter, inspect connection health, exchange selections and
+state with Python, and stop the local viewer cleanly.
+:::
+
+::::
+
+## Bring data in the way that fits the work
+
+| What you have | Best first path | Why |
+|---|---|---|
+| A prepared Cellucid folder | {doc}`Browser Prepared picker <user_guide/web_app/b_data_loading/03_browser_file_picker_tutorial>` | Fast local exploration with no separate server |
+| A small H5AD or portable Zarr ZIP | {doc}`Browser file picker <user_guide/web_app/b_data_loading/03_browser_file_picker_tutorial>` | One direct local selection |
+| A large H5AD, Zarr directory, or prepared catalog | {doc}`Python server <user_guide/web_app/b_data_loading/04_server_tutorial>` | Exact server-side validation and on-demand browser gene requests |
+| An in-memory `AnnData` object | {doc}`Jupyter integration <user_guide/web_app/b_data_loading/05_jupyter_tutorial>` | A tight analysis-to-visualization loop |
+| A public collection of prepared datasets | {doc}`Custom repository guide <user_guide/web_app/b_data_loading/11_custom_dataset_repository>` | No running server; exact catalog and share links |
+
+The {doc}`complete data-loading map
+<user_guide/web_app/b_data_loading/01_loading_options_overview>` explains the
+memory, network, privacy, and reproducibility tradeoffs before you commit to a
+path.
+
+## Learn at your own depth
 
 ::::{grid} 1 1 3 3
 :gutter: 2
 
-:::{grid-item-card} {octicon}`browser;1.5em;sd-mr-1` Web App
+:::{grid-item-card} {octicon}`browser;1.5em;sd-mr-1` Web app
 :link: user_guide/web_app/index
 :link-type: doc
 
-Viewer basics, filtering, highlighting, analysis, figure export, sessions, performance, and troubleshooting.
+Warm, task-focused guides for navigation, coloring, filtering, highlighting,
+analysis, overlays, multiview, sessions, figures, accessibility, and
+troubleshooting.
 :::
 
-:::{grid-item-card} {octicon}`package;1.5em;sd-mr-1` Python Package
+:::{grid-item-card} {octicon}`package;1.5em;sd-mr-1` Python
 :link: user_guide/python_package/index
 :link-type: doc
 
-Installation, data prep, `prepare()`/export, viewing modes, notebook integration, hooks/events, and troubleshooting.
+Exact preparation, server, Jupyter, hooks, session, performance, and API
+contracts—from a first notebook to a reproducible deployment.
 :::
 
-:::{grid-item-card} {octicon}`beaker;1.5em;sd-mr-1` R Export
+:::{grid-item-card} {octicon}`beaker;1.5em;sd-mr-1` R
 :link: user_guide/r_package/index
 :link-type: doc
 
-Exporting data with `cellucid-r` (Seurat/SCE recipes) into the same format used by the Cellucid web app.
+Prepare the same browser-ready format from matrices, Seurat, or
+SingleCellExperiment, then validate and share it through the same viewer.
 :::
 
 ::::
 
-## Installation
+## One ecosystem, clear handoffs
 
-Python:
+- [cellucid](https://github.com/theislab/cellucid) is the web application.
+- [cellucid-python](https://github.com/theislab/cellucid-python) prepares,
+  serves, and embeds data.
+- [cellucid-r](https://github.com/theislab/cellucid-r) prepares the same export
+  contract from R.
+- [cellucid-datasets](https://github.com/theislab/cellucid-datasets) hosts the
+  public sample catalog, including the standard Pancreas dataset.
+- [cellucid-demo-custom-datasets](https://github.com/theislab/cellucid-demo-custom-datasets)
+  is a tiny, inspectable model for your own public catalog.
+- [cellucid-annotation](https://github.com/theislab/cellucid-annotation)
+  provides the repository contract for community annotation.
 
-```bash
-pip install cellucid
-```
-
-R (export package):
-
-```r
-install.packages("remotes")
-remotes::install_github("theislab/cellucid-r")
-```
+Install the Python tools with `pip install cellucid`. For R installation and
+supported inputs, begin with the {doc}`R guide
+<user_guide/r_package/a_landing_pages/02_installation>`.
 
 ```{toctree}
 :maxdepth: 2

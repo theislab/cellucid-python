@@ -8,6 +8,8 @@ If you are new, start here. If you already know what you want, jump to the tutor
 - `03_browser_file_picker_tutorial`: load data from your computer using the browser file picker
 - `04_server_tutorial`: run a local/remote Python server for large datasets
 - `05_jupyter_tutorial`: embed Cellucid inside a notebook and interact programmatically
+- `11_custom_dataset_repository`: publish and validate a public multi-dataset
+  repository, starting from a complete reference implementation
 
 ## At A Glance
 
@@ -110,7 +112,7 @@ Pick the first row that matches you.
 | “I just want to look at my data quickly, no Python.” | Browser File Picker | Zero setup; good for quick preview |
 | “My dataset is big (hundreds of thousands to millions of cells).” | Server Mode or pre-export + Server Mode | True lazy loading; avoids browser memory limits |
 | “I’m already working in a notebook.” | Jupyter (`show_anndata`, `show`) | Tight analysis loop; programmatic control |
-| “I want to share a dataset publicly without running a server.” | GitHub-hosted exports | Shareable URL; no server |
+| “I want to share a dataset publicly without running a server.” | GitHub-hosted exports | Exact dataset-specific URL; no running server |
 | “I need the fastest possible web experience.” | Pre-exported folder | Best performance and stability |
 
 If you’re unsure, start with **Server Mode** for `.h5ad`/`.zarr`, or **File Picker** for exported folders.
@@ -127,8 +129,8 @@ This is the canonical list used throughout the documentation.
 | # | Where you run things | How you point Cellucid to the data | Data format | Lazy genes | Best for |
 |---:|---|---|---|---|---|
 | 1 | Cellucid web app (demo mode) | Choose a built-in demo dataset | Exported | ✅ | Learning the UI with known-good data |
-| 2 | Cellucid web app (public GitHub) | Connect to a public repo (or `?github=...`) | Exported | ✅ | Sharing a dataset publicly, no server |
-| 3 | Cellucid web app | Browser **Folder** picker | Exported | ✅ | Fast local viewing of prepared exports |
+| 2 | Cellucid web app (public GitHub) | Connect to a public exports root (or use `?github=...&dataset=...`) | Exported | ✅ | Sharing a dataset publicly, no running server |
+| 3 | Cellucid web app | Browser **Prepared** picker | Exported | ✅ | Fast local viewing of prepared exports |
 | 4 | Cellucid web app | Browser **.h5ad** picker | `.h5ad` | ❌* | Quick preview of small `.h5ad` |
 | 5 | Cellucid web app | Browser **Zarr ZIP** picker | `.zarr.zip` / `.zip` containing one Zarr v2 store | ✅† | Portable Zarr viewing without Python |
 | 6 | Terminal CLI | `cellucid serve <export_dir>` | Exported | ✅ | Reliable viewing of large exports |
@@ -217,24 +219,26 @@ except Exception as e:  # pragma: no cover
 def summarize_anndata(path: str | Path) -> dict:
     path = Path(path)
     adata = ad.read_h5ad(path, backed="r")  # doesn't load full X into memory
-    # Vector fields use exact dimension-suffixed obsm keys and no X_ prefix:
-    # <field>_umap_<dim>d (for example, velocity_umap_2d).
-    import re
+    try:
+        # Vector fields use exact dimension-suffixed obsm keys and no X_ prefix:
+        # <field>_umap_<dim>d (for example, velocity_umap_2d).
+        import re
 
-    vector_field_re = re.compile(r"^(?!X_).+_umap_[123]d$")
-    vector_field_obsm_keys = sorted(
-        [k for k in adata.obsm.keys() if vector_field_re.match(k)]
-    )
-    summary = {
-        "path": str(path),
-        "n_cells": int(adata.n_obs),
-        "n_genes": int(adata.n_vars),
-        "obsm_keys": list(adata.obsm.keys()),
-        "vector_field_obsm_keys": vector_field_obsm_keys,
-        "has_X": adata.X is not None,
-        "X_type": type(adata.X).__name__,
-    }
-    return summary
+        vector_field_re = re.compile(r"^(?!X_).+_umap_[123]d$")
+        vector_field_obsm_keys = sorted(
+            [k for k in adata.obsm.keys() if vector_field_re.match(k)]
+        )
+        return {
+            "path": str(path),
+            "n_cells": int(adata.n_obs),
+            "n_genes": int(adata.n_vars),
+            "obsm_keys": list(adata.obsm.keys()),
+            "vector_field_obsm_keys": vector_field_obsm_keys,
+            "has_X": adata.X is not None,
+            "X_type": type(adata.X).__name__,
+        }
+    finally:
+        adata.file.close()
 
 
 # Example usage (uncomment):
@@ -319,6 +323,8 @@ This is a compact troubleshooting index. Each follow-up notebook contains a **mu
 Choose your path:
 
 - Want to share a dataset publicly (no server)? → {doc}`02_local_demo_tutorial`
+- Want a complete public repository to inspect and adapt? →
+  {doc}`11_custom_dataset_repository`
 - Want to load from your own machine right now? → {doc}`03_browser_file_picker_tutorial`
 - Working with a big `.h5ad`/`.zarr`? → {doc}`04_server_tutorial`
 - Already in notebooks? → {doc}`05_jupyter_tutorial`

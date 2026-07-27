@@ -25,15 +25,16 @@ Everything else (browser file picker, server mode, Jupyter) is *how you point th
 
 ## Exported dataset folder (what must be inside)
 
-An exported dataset folder is created by `cellucid.prepare(...)`.
+An exported dataset folder is created by Python `cellucid.prepare(...)` or R
+`cellucid_prepare(...)`.
 
 Minimum expected files:
 
 ```text
 my_export/
 ├── dataset_identity.json          # required
-└── points_2d.bin(.gz)             # at least one of 1d/2d/3d must exist
-    points_3d.bin(.gz)             # optional (if you exported 3D)
+├── obs_manifest.json              # required
+└── points_2d.bin(.gz)             # at least one non-empty 1d/2d/3d file
 ```
 
 Typical full layout (recommended for most datasets):
@@ -85,8 +86,19 @@ Important distinctions:
 - Dataset folder name and dataset id are different concepts:
   - folder name: `pbmc_demo/` (path on disk / in repo)
   - dataset id: `dataset_identity.json["id"]` (identity inside Cellucid)
+- The catalog's only top-level keys are `version`, `default`, and `datasets`.
+  Version is exactly `1`, and `default` names an exact listed ID.
+- Each dataset entry requires unique `id` and `path` fields. `path` is a safe
+  relative directory ending in `/`.
+- An entry may also contain `name`, `description`, `n_cells`, and `n_genes`;
+  when present, each value must exactly match `dataset_identity.json`.
+- Connecting validates the catalog and every listed identity before presenting
+  the collection. Remaining payloads are fetched for the selected dataset as
+  needed.
 
-See {doc}`02_local_demo_tutorial` for the exact publishing workflow.
+See {doc}`11_custom_dataset_repository` for the complete reference repository,
+exact UI value, schema, validation sequence, and share links. The shorter
+export-first workflow is {doc}`02_local_demo_tutorial`.
 
 ---
 
@@ -100,9 +112,12 @@ eagerly with `anndata.read_zarr`.
 ### Minimum requirements (all AnnData modes)
 
 You must have at least one embedding in `obsm`:
-- `obsm["X_umap_3d"]` with shape `(n_cells, 3)` (recommended)
-- `obsm["X_umap_2d"]` with shape `(n_cells, 2)`
 - `obsm["X_umap_1d"]` with shape `(n_cells, 1)`
+- `obsm["X_umap_2d"]` with shape `(n_cells, 2)`
+- `obsm["X_umap_3d"]` with shape `(n_cells, 3)`
+
+The suffix and column count must agree exactly. Cellucid does not infer a
+dimension from an unsuffixed `X_umap` key.
 
 ### Optional (but commonly expected)
 
@@ -224,4 +239,5 @@ Fix:
 - Pick a workflow: {doc}`01_loading_options_overview`
 - Load locally without Python: {doc}`03_browser_file_picker_tutorial`
 - Load big `.h5ad`/`.zarr`: {doc}`04_server_tutorial`
+- Publish a public prepared catalog: {doc}`11_custom_dataset_repository`
 - Debug loading failures: {doc}`08_troubleshooting_data_loading`

@@ -5,7 +5,7 @@
 **What you’ll learn:**
 - Practical conventions that make session files usable months later
 - How to use sessions as “review packets” and “milestone checkpoints”
-- How to avoid collaboration failure modes (dataset mismatch, missing context, privacy leaks)
+- How to avoid collaboration failure modes (identity rejection, missing context, privacy leaks)
 - When to use sessions vs Community Annotation vs exported figures
 
 **Prerequisites:**
@@ -131,7 +131,8 @@ Example:
 This reduces the chance that:
 - the recipient loads the wrong dataset,
 - the recipient doesn’t know what you want them to examine,
-- the recipient assumes success when the session partially restored.
+- the recipient mistakes in-progress loading or a rejection for terminal
+  **Session fully restored** success.
 
 ---
 
@@ -156,7 +157,13 @@ Before sending a session to someone else:
 2) Open a fresh tab in a clean browser profile with extensions disabled.
 3) Load the dataset again.
 4) Load the session.
-5) Confirm there is no dataset mismatch warning.
+5) Confirm the operation reaches **Session fully restored** and that the
+   camera, active field, filters, snapshots, highlights, Camera Path, and
+   analysis windows match.
+
+If identity or chunk validation fails, fix the cause and create a fresh current
+bundle. Do not edit the manifest or try to reuse a partial subset; the reader
+has no compatibility or partial-restore mode.
 
 If you can’t reproduce your own session in a clean tab, your collaborator won’t be able to either.
 
@@ -180,5 +187,5 @@ Related: {doc}`../k_figure_export/index`, {doc}`../h_analysis/index`
 ## Next steps
 
 - {doc}`05_share_workflows_links_bundles_exports` (share workflow patterns)
-- {doc}`07_versioning_compatibility_and_dataset_identity` (why sessions sometimes don’t transfer across machines)
+- {doc}`07_versioning_compatibility_and_dataset_identity` (exact cross-machine identity rules)
 - {doc}`10_troubleshooting_sessions` (what to do when collaboration fails anyway)

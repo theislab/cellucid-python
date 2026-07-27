@@ -120,8 +120,8 @@ This is the fastest way to distinguish:
 In browser DevTools → Network:
 
 1) filter for `_cellucid`:
-   - `/health` should be 200
-   - `/info` should be 200
+   - `/_cellucid/health` should be 200
+   - `/_cellucid/info` should be 200
 2) filter for `obs_manifest.json` and `var_manifest.json`:
    - should be 200 and have JSON content
 3) look for 404s:

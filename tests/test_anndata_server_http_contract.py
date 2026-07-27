@@ -115,6 +115,60 @@ def test_file_identity_never_exposes_or_aliases_the_private_source_path(
         server.stop()
 
 
+def test_direct_server_preserves_biological_names_and_uses_exact_wire_components() -> None:
+    adata = ad.AnnData(
+        X=np.array(
+            [
+                [1.25, 2.5],
+                [3.75, 5.0],
+            ],
+            dtype=np.float32,
+        ),
+        obs=pd.DataFrame(
+            {"cell type": pd.Categorical(["ductal", "endocrine"])},
+            index=pd.Index(["cell-1", "cell-2"], dtype=object),
+        ),
+        var=pd.DataFrame(
+            index=pd.Index(["Gt(ROSA)26Sor", "Gene A"], dtype=object),
+        ),
+    )
+    adata.obsm["X_umap_2d"] = np.array(
+        [[0.0, 1.0], [1.0, 0.0]],
+        dtype=np.float32,
+    )
+
+    with _running_server(adata) as (_server, host, port):
+        status, _headers, body = _request(
+            host,
+            port,
+            "GET",
+            "/var_manifest.json",
+        )
+        assert status == 200
+        assert json.loads(body)["fields"] == [
+            ["Gt(ROSA)26Sor"],
+            ["Gene A"],
+        ]
+
+        status, _headers, body = _request(
+            host,
+            port,
+            "GET",
+            "/var/Gt_ROSA_26Sor.values.f32",
+        )
+        assert status == 200
+        assert np.frombuffer(body, dtype="<f4").tolist() == [1.25, 3.75]
+
+        status, _headers, body = _request(
+            host,
+            port,
+            "GET",
+            "/obs/cell_type.codes.u8",
+        )
+        assert status == 200
+        assert np.frombuffer(body, dtype=np.uint8).tolist() == [0, 1]
+
+
 @pytest.mark.parametrize(
     ("matrix", "cause"),
     [

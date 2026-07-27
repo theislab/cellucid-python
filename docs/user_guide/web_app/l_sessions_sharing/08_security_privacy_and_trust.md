@@ -36,7 +36,7 @@ Depending on what you did in the UI, a session bundle may include:
 - **Highlight memberships**
   - sets of cell indices belonging to groups (can be large)
 - **User-defined fields**
-  - derived field definitions and (sometimes) per-cell codes
+  - derived field definitions and exact per-cell categorical codes
 - **Analysis window configuration**
   - which analysis modes were open and their settings
 - **Some caches/artifacts**
@@ -66,16 +66,24 @@ This reduces risk, but does not eliminate it (sessions can still contain meaning
 
 Cellucid loads `.cellucid-session` bundles with safety checks:
 
-- validates manifest structure
-- enforces size limits (including decompression caps)
-- skips unknown chunk contributors
-- isolates chunk restore failures so one bad chunk doesn’t brick the app
-- skips dataset-dependent chunks on dataset mismatch
+- exact-validates framing, manifest roots, chunk profiles, ordering, and byte
+  lengths before success
+- bounds stored and decoded sizes and preflights the single-member
+  gzip/DEFLATE structure before native decompression
+- rejects unknown, missing, duplicate, aliased, or dishonest contributors
+- requires the complete dataset fingerprint to match
+- applies state in a transaction and rolls back earlier mutations if any later
+  decode, contributor, commit, or final-refresh step fails
 
 This is meant to protect you from:
 - corrupted files,
 - accidental “wrong dataset” restores,
 - extreme memory allocations from maliciously crafted gzip payloads.
+
+The strict reader exposes one all-or-nothing current operation. Starting a
+newer restore or pressing **Cancel** aborts the older operation and dismisses
+its progress without presenting the intentional cancellation as a product
+failure.
 
 :::{important}
 Even with safety checks, best practice is still:
@@ -118,4 +126,4 @@ If your organization requires it:
 ## Next steps
 
 - {doc}`05_share_workflows_links_bundles_exports` (recommended sharing patterns)
-- {doc}`10_troubleshooting_sessions` (when restores fail or warn)
+- {doc}`10_troubleshooting_sessions` (when a restore is rejected)

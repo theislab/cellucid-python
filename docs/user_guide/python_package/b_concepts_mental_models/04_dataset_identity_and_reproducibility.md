@@ -209,7 +209,10 @@ How to confirm:
 
 Fix:
 - load the correct dataset export folder,
-- or treat this as expected and accept a partial restore (layout-only).
+- or create a fresh session from the dataset generation you intend to use.
+
+The current web and Python readers do not accept a layout-only partial
+restore. Identity or format mismatch rejects the complete operation.
 
 ### Symptom: “Applying a session raises a dataset fingerprint mismatch”
 

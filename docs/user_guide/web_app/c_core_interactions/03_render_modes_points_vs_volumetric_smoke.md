@@ -1,162 +1,146 @@
-# Render modes (Points vs Volumetric “Smoke”)
+# Render modes: Points or Volumetric smoke
 
-**Audience:** everyone (smoke mode is optional, but easy to misuse)  
-**Time:** 10–20 minutes  
-**What you’ll learn:**
-- What each render mode is for (and what it is not)
-- Why smoke mode can be slow/blank (and how to fix it)
-- The key quality/performance knobs (with recommended defaults)
+**Audience:** everyone
+**Time:** 10 minutes
 
----
+Cellucid starts in **Points**. Choose **Volumetric smoke cloud** only when a
+density-shaped overview is more useful than individual-cell inspection.
 
-## Where render mode lives
+## Choose the representation before tuning it
 
-Render mode is controlled in the left sidebar:
+| Question | Choose **Points** | Choose **Volumetric smoke cloud** |
+|---|---|---|
+| Do individual cells, rare populations, exact selections, or counts matter? | Yes | No |
+| Do you need kept views for a side-by-side comparison? | Yes | No; smoke is single-view only |
+| Is the goal to read a dense manifold's broad occupied shape? | Possible | Often clearer |
+| Is the result intended as quantitative density evidence? | Use cells and an explicit analysis | No; smoke appearance depends on rendering controls |
 
-- **Visualization** accordion → **Render mode** dropdown
-  - **Points**
-  - **Volumetric smoke cloud**
+A useful biological example is a densely sampled developmental atlas. Smoke can
+make the occupied shape of a broad differentiation manifold easier to see before
+you return to Points to inspect progenitors and terminal populations. It does
+**not** establish that intermediate cells exist, estimate a probability density,
+or turn an embedding into a physical tissue volume.
 
----
+## Open the relevant controls
 
-## Points mode (default)
+Use **Visualization → Render mode:**:
 
-Points mode renders each cell as a point sprite with GPU-accelerated shading.
+- `Points` is the default.
+- `Volumetric smoke cloud` reveals **Volumetric smoke:** and hides the
+  points-only depth, renderer, connectivity, and vector-field controls.
 
-### When to use points mode
+The small `i` button beside **Volumetric smoke:** explains the mode without
+keeping extra prose open in the sidebar.
 
-- you need precise, cell-level interpretation (“these are discrete cells”),
-- you want to use **multiview snapshots** (Keep view),
-- you are doing most scientific work (coloring, filtering, selecting, comparing).
+## Points mode
 
-### Controls that matter (points mode)
+Points renders one sprite per displayed cell and is the working mode for
+coloring, filtering, highlighting, connectivity, vector fields, and multiview.
+Its relevant controls are:
 
-In the **Visualization** accordion you’ll see:
+- **Depth perception:** `Point size (log):`, `3D lighting:`,
+  `Atmospheric fog:`, and `Perspective size scaling:`
+- **Shader quality:** `Full (lighting + fog)`, `Light (circular, no lighting)`,
+  or `Ultra-light (square points)`
+- **Renderer settings:** `Level-of-Detail (LOD)`, `Force LOD level:`, and
+  `Frustum culling`
 
-- **Depth perception**
-  - Point size (log)
-  - 3D lighting
-  - Atmospheric fog
-  - Perspective size scaling
-- **Shader quality**
-  - Full (lighting + fog)
-  - Light (circular, no lighting)
-  - Ultra-light (square points)
-- **Renderer settings**
-  - Level-of-Detail (LOD)
-  - Force LOD level
-  - Frustum culling
+For large datasets, begin here and use
+{doc}`../n_benchmarking_performance/03_large_dataset_best_practices`.
 
-These are documented more deeply in the performance section, but the key idea is:
+## Smoke controls: exact current inventory
 
-- lower quality = less GPU work = smoother interaction.
+Every smoke slider has a 0–100 control position. The value printed beside it is
+the meaningful render value.
 
----
+### Quality & performance
 
-## Smoke mode (volumetric density rendering)
-
-Smoke mode renders the dataset as a **ray-marched volumetric cloud**. It is intentionally cinematic and can be helpful for “density intuition”, but it is not the default scientific mode.
-
-### When smoke mode is useful
-
-- presentations and demos,
-- giving intuition about density/structure at a glance,
-- a “global shape” view of a very dense embedding.
-
-### When smoke mode is *not* a good idea
-
-- when you need to interpret individual cells,
-- when you want multiview comparisons (snapshots),
-- on machines with limited GPU memory.
-
-:::{important}
-Smoke mode is disabled when snapshots exist.
-
-If you select “Volumetric smoke cloud” while you have kept views, the selector remains on **Points** and a visible notification tells you to clear snapshots first. No smoke volume is built and the existing views are unchanged.
-:::
-
----
-
-## Smoke controls (what each knob does)
-
-Smoke controls appear under **Visualization → Volumetric smoke** only when render mode is smoke.
-
-### Quality & performance (start here)
-
-- **Grid density**: resolution of the 3D density grid (major GPU cost driver).
-- **Ray quality**: number of ray-marching steps (major GPU cost driver).
-- **Render resolution**: scales the render target resolution (big speed lever; lower is faster).
-- **Noise detail**: resolution of the noise texture (affects fine structure; also impacts cost).
+| UI label | Initial position/readout | Meaning |
+|---|---|---|
+| `Grid density:` | 60 / `256³` | Resolution of the density volume. The exact available cube sizes are 32³, 48³, 64³, 96³, 128³, 192³, 256³, 384³, 512³, 768³, and 1024³. This is the largest memory lever. |
+| `Ray quality:` | 75 / `High` | Ray-marching work. The displayed bands are `Fast`, `Balanced`, `High`, and `Ultra`. |
+| `Render resolution:` | 15 / `0.51x` | Off-screen render scale from 0.25x through 2.00x. Lowering it is usually the fastest recovery from poor frame rate. |
+| `Noise detail:` | 58 / `128³` | Noise-texture resolution. The exact choices are 32³, 48³, 64³, 96³, 128³, 192³, and 256³. |
 
 ### Shape & motion
 
-- **Cloud density**: overall density/opacity of the volume.
-- **Fine detail**: amount of high-frequency detail (scaled adaptively with resolution).
-- **Turbulence**: warping strength of the noise field.
-- **Animation speed**: motion speed of the smoke.
-- **Edge softness**: softness of density boundaries.
+| UI label | Initial position | Meaning |
+|---|---:|---|
+| `Cloud density:` | 56 | Volume opacity. Its displayed value is recalculated when grid or noise resolution changes. |
+| `Fine detail:` | 60 | High-frequency structure. Its displayed value is also resolution-adaptive. |
+| `Turbulence:` | 10 (`10%`) | Procedural warping; it changes appearance, not the data. |
+| `Animation speed:` | 40 (`1.00`) | Procedural smoke motion. Set it to 0 when motion distracts from structure. |
+| `Edge softness:` | 0 (`0.2`) | Softness of the density boundary. |
 
 ### Lighting
 
-- **Light absorption**: how much light is absorbed through the volume.
-- **Light scattering**: how “glowy” the volume becomes.
-- **Direct lighting**: intensity of direct light contribution.
+| UI label | Initial position | Meaning |
+|---|---:|---|
+| `Light absorption:` | 65 | Attenuation through the cloud; the displayed value is resolution-adaptive. |
+| `Light scattering:` | 0 (`0.0`) | Added scattered glow. |
+| `Direct lighting:` | 3 (`0.04x`) | Direct-light contribution. |
 
-:::{tip}
-For “it’s too slow” issues, the biggest wins are usually:
+`Cloud density:`, `Fine detail:`, `Light absorption:`, `Light scattering:`, and
+ray work are intentionally adjusted with grid/noise resolution. Record the
+printed readouts—not only slider positions—when reproducing an appearance.
 
-1) lower Grid density
-2) lower Ray quality
-3) lower Render resolution
-:::
+## What is rebuilt, and when
 
----
+Smoke is lazy: no density volume is built during ordinary Points startup. The
+first switch to smoke builds a GPU volume from the **currently visible** cells.
+Filtering, changing the active field, or changing view-scoped visibility marks
+that volume dirty. While smoke is active, relevant changes are rebuilt after an
+approximately 300 ms debounce.
 
-## Deep path (exact behavior that matters for experts)
+This has two practical consequences:
 
-Smoke sliders are not independent:
+1. A smoke cloud after filtering describes only the visible subset.
+2. Returning to Points is the reliable way to verify which cells produced a
+   surprising shape.
 
-- Changing **Grid density** and **Noise detail** changes adaptive scaling factors.
-- Several parameters (density/detail/absorption/scatter/steps) are automatically scaled based on resolution so the cloud stays visually comparable across settings.
+## Multiview and session behavior
 
-Notable discrete settings (implementation detail):
+Smoke and kept views are mutually exclusive:
 
-- Grid density maps to a discrete set of cubic sizes (e.g., 32³ … 1024³).
-- Noise detail maps to discrete noise resolutions (e.g., 32³ … 256³).
+- **Keep view** is disabled in smoke.
+- If kept views already exist, selecting smoke is rolled back and Cellucid
+  reports `Volumetric smoke requires a single view. Clear snapshots first.`
+- Smoke forces the live, single-view layout.
 
-Smoke rebuild behavior:
+A `.cellucid-session` saves `Render mode:` and the smoke slider/select values.
+The session does not contain the dataset or a frozen GPU volume; loading it with
+the matching dataset rebuilds smoke from that dataset's restored visible cells.
+See {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
 
-- Smoke volume is built on first switch to smoke mode.
-- It is rebuilt after certain changes using a short debounce (~300 ms), so rapid slider changes don’t rebuild on every frame.
+## Failure and recovery
 
----
+### The cloud is blank
 
-## Edge cases
+1. Return to `Points`.
+2. Confirm that points are visible and **Showing … points** is not zero.
+3. Relax categorical, continuous, and outlier filters.
+4. Select `Volumetric smoke cloud` again.
+5. Increase `Cloud density:` only after visible cells are confirmed.
 
-- **Smoke looks blank**: density may be too low, or the dataset has few visible points (filters/outliers). Increase cloud density and/or clear filters.
-- **Smoke is extremely slow**: grid density and ray quality are likely too high for your GPU.
-- **Switching render mode “does nothing”**: if snapshots exist, smoke is blocked; clear snapshots first.
+### Interaction is slow or the WebGL context is lost
 
----
+Recover in this order:
 
-## Troubleshooting (render modes)
+1. Lower `Render resolution:`.
+2. Lower `Ray quality:`.
+3. Lower `Grid density:`.
+4. Lower `Noise detail:`.
+5. Return to `Points`; after a context loss, reload the page before retrying.
 
-For a full catalog, see `c_core_interactions/06_troubleshooting_core_interactions`.
+Changing lighting first rarely addresses the dominant cost. For platform and
+GPU checks, see {doc}`../a_orientation/02_system_requirements`; for general
+interaction failures, see
+{doc}`06_troubleshooting_core_interactions`.
 
-### Symptom: Smoke mode is blank
+## Related workflows
 
-**Likely causes:**
-
-- Cloud density is too low.
-- All/most points are filtered out (nothing to render).
-- GPU precision/driver issue (rare; try points mode to confirm).
-
-**Fix:**
-
-1) Switch to points mode and confirm points exist.
-2) Clear filters/outlier thresholds.
-3) Switch back to smoke and increase **Cloud density**.
-
-### Symptom: Smoke mode crashes / context lost
-
-Go to `a_orientation/02_system_requirements` → “WebGL context lost”.
+- {doc}`04_view_layout_live_snapshots_small_multiples` — points-only multiview
+- {doc}`../i_vector_field_velocity/index` — points-only directional overlay
+- {doc}`../e_filtering/01_filtering_mental_model` — the visible subset used to
+  build smoke
+- {doc}`../k_figure_export/index` — explicit, reproducible figure output

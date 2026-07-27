@@ -44,6 +44,14 @@ exports/
 
 `datasets.json` is a manifest that lets the web app discover datasets in the exports root.
 
+For a complete repository to inspect and adapt, see
+{doc}`../../web_app/b_data_loading/11_custom_dataset_repository`. Its exact
+Cellucid connection value is:
+
+```text
+theislab/cellucid-demo-custom-datasets/exports
+```
+
 Format (version 1):
 
 ```json
@@ -61,33 +69,56 @@ Format (version 1):
 ```r
 library(jsonlite)
 
-`%||%` <- function(a, b) if (!is.null(a)) a else b
-
 exports_root <- file.path(getwd(), "exports")
+default_id <- "pbmc_demo"
+
+if (!dir.exists(exports_root)) {
+  stop("exports/ does not exist")
+}
 dataset_dirs <- list.dirs(exports_root, full.names = TRUE, recursive = FALSE)
-
-datasets <- list()
-for (dir in dataset_dirs) {
-  ident_path <- file.path(dir, "dataset_identity.json")
-  if (!file.exists(ident_path)) next
-
-  ident <- jsonlite::read_json(ident_path, simplifyVector = TRUE)
-
-  datasets[[length(datasets) + 1L]] <- list(
-    id = ident$id %||% basename(dir),
-    path = paste0(basename(dir), "/"),
-    name = ident$name %||% basename(dir),
-    n_cells = ident$stats$n_cells %||% NULL,
-    n_genes = ident$stats$n_genes %||% NULL
-  )
+if (length(dataset_dirs) == 0L) {
+  stop("exports/ contains no dataset directories")
 }
 
-stopifnot(length(datasets) > 0)
+datasets <- lapply(dataset_dirs, function(dir) {
+  directory_name <- basename(dir)
+  if (!grepl("^[A-Za-z0-9_.-]+$", directory_name)) {
+    stop("Dataset directory is not a portable URL path: ", directory_name)
+  }
+  ident_path <- file.path(dir, "dataset_identity.json")
+  if (!file.exists(ident_path)) {
+    stop("Missing dataset_identity.json in ", directory_name)
+  }
+  ident <- jsonlite::read_json(ident_path, simplifyVector = TRUE)
+  if (
+    !is.character(ident$id) ||
+    length(ident$id) != 1L ||
+    !nzchar(ident$id) ||
+    trimws(ident$id) != ident$id
+  ) {
+    stop("dataset_identity.json has no exact non-empty id in ", directory_name)
+  }
+  list(
+    id = ident$id,
+    path = paste0(directory_name, "/")
+  )
+})
 
-default_id <- datasets[[1]]$id
+dataset_ids <- vapply(datasets, `[[`, character(1), "id")
+dataset_paths <- vapply(datasets, `[[`, character(1), "path")
+if (anyDuplicated(dataset_ids)) stop("Dataset ids must be unique")
+if (anyDuplicated(dataset_paths)) stop("Dataset paths must be unique")
+if (!default_id %in% dataset_ids) {
+  stop("default_id must exactly match one catalog dataset id")
+}
 
 manifest <- list(version = 1, default = default_id, datasets = datasets)
-jsonlite::write_json(manifest, file.path(exports_root, "datasets.json"), auto_unbox = TRUE, pretty = TRUE)
+jsonlite::write_json(
+  manifest,
+  file.path(exports_root, "datasets.json"),
+  auto_unbox = TRUE,
+  pretty = TRUE
+)
 ```
 
 #### Option B: Generate `datasets.json` using `cellucid-python` (if you have Python)
@@ -98,7 +129,7 @@ generate_datasets_manifest("./exports", default_dataset="pbmc_demo")
 ```
 
 The Python helper is documented in:
-- {doc}`../../web_app/b_data_loading/02_local_demo_tutorial`
+- {doc}`../../web_app/b_data_loading/11_custom_dataset_repository`
 
 ### Step 3: Push `exports/` to GitHub
 
@@ -109,7 +140,7 @@ Create a public GitHub repo and commit:
 Then, in the Cellucid web app, use the GitHub loading option and point it at your repo/path.
 
 The authoritative step-by-step is here:
-- {doc}`../../web_app/b_data_loading/02_local_demo_tutorial`
+- {doc}`../../web_app/b_data_loading/11_custom_dataset_repository`
 
 ## Option 2 — Private sharing via server mode
 

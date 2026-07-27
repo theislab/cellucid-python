@@ -5,7 +5,7 @@
 **What you’ll learn:**
 - What a Cellucid “session” is (and what it is not)
 - The three persistence layers: dataset vs session bundle vs browser preferences
-- Why sessions sometimes restore “almost everything” but not 100%
+- Why restore is all-or-nothing under the current format
 - How to choose between sharing a link, sharing a session, and sharing the dataset export folder
 
 **Prerequisites:**
@@ -96,30 +96,36 @@ Cellucid has **state at different scopes**:
 
 Sessions exist to capture and restore those scopes in a predictable way.
 
-### Progressive restore (why things “appear later”)
+### Ordered restore with one terminal outcome
 
-Sessions restore in two phases:
+Sessions use two scheduling classes:
 
-- **Eager restore** (fast):
-  - restores enough to get “first pixels + UI ready”.
-  - you should quickly see the right view layout, camera, active field, and filters.
+- **Eager chunks** contain the state needed by later chunks, such as field
+  definitions, active views, and highlight metadata.
+- **Lazy chunks** contain heavier arrays, such as highlight membership and
+  analysis artifacts.
 
-- **Lazy restore** (background):
-  - restores heavy artifacts (especially large highlight memberships and some analysis caches).
-  - you may see notifications/progress while it finishes.
+This ordering keeps the browser responsive, but it is **not partial success**.
+The public load operation waits for both classes, prepares and commits every
+feature owner, refreshes the final UI, and only then reports **Session fully
+restored**. If any later chunk fails, Cellucid rolls back the earlier changes.
 
-If you load a large session and immediately start interacting, you can — but some parts (like highlight memberships) may still be streaming in.
+Wait for the terminal success notification before treating the restored view as
+ready. Pressing **Cancel**, closing its progress card, or starting a newer
+restore aborts the older operation without publishing false success.
 
-### Dataset identity (the #1 reason a restore is partial)
+### Dataset identity (the first restore check)
 
-Each session is tagged with a **dataset fingerprint** (source type + dataset id, plus lightweight size guards).
+Each session carries an exact four-part **dataset fingerprint**: source type,
+dataset id, cell count, and variable count.
 
 If the session’s dataset fingerprint does not match the currently loaded dataset:
-- Cellucid warns about a dataset mismatch, and
-- restores only **dataset-agnostic layout** (e.g., some floating panel geometry),
-- skipping dataset-dependent state (filters/highlights/codes/etc).
+- Cellucid rejects the complete restore;
+- no layout-only subset is accepted; and
+- the existing app state remains intact or is recovered by rollback.
 
-See {doc}`07_versioning_compatibility_and_dataset_identity` for details and workarounds.
+See {doc}`07_versioning_compatibility_and_dataset_identity` for the exact
+matching rules and safe collaboration recipes.
 
 ---
 
@@ -134,10 +140,11 @@ Chunks are owned by “contributors” (features). This keeps sessions modular:
 - core state, highlights, analysis windows, user-defined fields, etc.
 
 Sessions are treated as **untrusted input**:
-- the loader validates manifest shape,
-- enforces size limits (including gzip “zip bomb” guards),
-- skips unknown contributors,
-- isolates failures so one bad chunk doesn’t brick the whole restore.
+- the loader exact-validates the manifest and every current chunk profile;
+- enforces stored, decoded, and gzip structure limits before native
+  decompression;
+- rejects unknown, missing, duplicate, aliased, or reordered chunks; and
+- commits the complete transaction or rolls it back.
 
 If you want the code-level reference, see {doc}`12_reference`.
 
@@ -168,7 +175,8 @@ Loading a session is intentionally “strong”:
 
 - It **overwrites** most of your current view state (camera, active fields, filters, etc.).
 - It may **cancel** an in-progress session restore if you load another session.
-- It may trigger a background lazy restore of heavy artifacts.
+- It explicitly replaces empty state too: an empty Camera Path or analysis
+  cache clears the corresponding destination state.
 
 If you want to preserve your current work, save a session *first*, then load the other session.
 

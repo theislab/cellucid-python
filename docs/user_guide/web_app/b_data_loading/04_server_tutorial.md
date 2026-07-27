@@ -52,7 +52,8 @@ This is safer and also avoids browser mixed-content issues.
 cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
-2) Open the viewer:
+2) Copy the exact **Viewer URL** printed by the command. With the default port,
+   direct AnnData prints:
 
 ```text
 http://127.0.0.1:8765/?anndata=true
@@ -60,6 +61,18 @@ http://127.0.0.1:8765/?anndata=true
 
 3) Keep the terminal running while you use the viewer.
 4) Stop the server with **Ctrl+C**.
+
+```{figure} ../../../_static/screenshots/server/pancreas-cli-serve.png
+:alt: A neutral terminal running Cellucid 0.9.1 against a prepared Pancreas catalog, showing validation of 3,696 cells, 3,753 genes, connectivity, a verified 429-file web cache, server readiness, and the exact source=remote Viewer URL.
+:width: 1440px
+
+Real prepared-data server startup for a neutral copy of the standard Pancreas
+catalog. The command validates 3,696 cells, 3,753 genes, and connectivity,
+establishes the exact 429-file web build, and prints both server URLs. Copy the
+printed Viewer URL rather than reconstructing it. For this documentation
+capture, `--web-source-url http://127.0.0.1:4173` pins the web app from the same
+checked-out repository; released use follows the standard command above.
+```
 
 ## Option #6 — Serve a Pre-exported Folder (Best Performance)
 
@@ -71,6 +84,8 @@ cellucid serve /path/to/export_dir
 
 Notes:
 - This is usually the fastest experience.
+- The path may be one complete prepared dataset or an exports root containing
+  `datasets.json` and multiple complete dataset directories.
 - The CLI detects only a complete current export: valid
   `dataset_identity.json`, `obs_manifest.json`, at least one non-empty exact
   points artifact, and every manifest-declared artifact.
@@ -119,7 +134,8 @@ cellucid serve --help
 Key flags:
 
 - `--port, -p`:
-  - Change port if `8765` is in use.
+  - Change port if `8765` is in use. `--port 0` asks the operating system for
+    an available port; copy the URL Cellucid prints.
 
 - `--host, -H`:
   - Default is `127.0.0.1` (local only).
@@ -129,30 +145,63 @@ Key flags:
   - Don’t auto-open a browser tab.
 
 - `--latent-key`:
-  - Selects which `obsm` key to use as “latent space” (used for certain derived values).
-  - If you don’t know, leave it alone.
+  - Explicit AnnData `obsm` key used as latent space for categorical centroid
+    outlier calculations.
+
+- `--dataset-name` and `--dataset-id`:
+  - Required for direct H5AD and Zarr input; invalid for prepared input.
+
+- `--vector-field-default`:
+  - Required only when direct AnnData exposes multiple vector-field IDs and
+    you need to choose the exact default.
+
+- `--quiet, -q` and `--verbose, -v`:
+  - Mutually exclusive output levels.
+
+- `--no-web-ui`:
+  - Serve scientific endpoints without establishing or serving the web
+    application. Pair it with `--no-browser`; this is an API-consumer mode, not
+    a browser-viewing workflow.
+
+- `--web-source-url` and `--web-cache-dir`:
+  - Advanced controls for establishing the exact verified web build. Leave
+    them at their defaults unless you operate an audited Cellucid web origin
+    and cache.
 
 ## Option #9/#10/#11 — Python API Server Mode
 
-You can start servers from Python (useful for scripted workflows).
+You can start the same blocking servers from Python (useful for scripts).
 
 - `serve(export_dir)` serves a pre-exported folder.
 - `serve_anndata(data, dataset_name=..., dataset_id=...)` serves `.h5ad`,
   `.zarr`, or an in-memory `AnnData`.
 
 ```python
-# Serve a pre-exported folder
 from cellucid import serve
 
-# serve("/path/to/export_dir", port=8765, host="127.0.0.1", open_browser=True)
+serve(
+    "/path/to/export_dir",
+    port=8765,
+    host="127.0.0.1",
+    open_browser=True,
+)
 ```
 
 ```python
-# Serve a .h5ad, .zarr, or AnnData
 from cellucid import serve_anndata
 
-# Direct AnnData calls also require dataset_name and dataset_id.
+serve_anndata(
+    "/path/to/data.h5ad",
+    port=8765,
+    host="127.0.0.1",
+    open_browser=True,
+    dataset_name="My dataset",
+    dataset_id="my-dataset",
+)
 ```
+
+Both convenience calls block until you interrupt them. Use the class APIs when
+another part of your program must keep control of the process.
 
 ### Stopping the server from Python
 
@@ -209,6 +258,9 @@ Leave that SSH session open.
 http://127.0.0.1:8765/?anndata=true
 ```
 
+Use the exact path printed by the remote command: `/?anndata=true` for direct
+H5AD/Zarr or `/?source=remote` for a prepared dataset or catalog.
+
 Why this works well:
 - Your browser talks only to `localhost`.
 - You avoid exposing the server to the public internet.
@@ -254,7 +306,7 @@ Why this works well:
   cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset --port 9000
   ```
 
-- Then open:
+- Then copy the exact printed Viewer URL. For this command it should be:
 
   ```text
   http://127.0.0.1:9000/?anndata=true
@@ -277,6 +329,8 @@ Why this works well:
   ```
 
   (If the server is running locally, you should get a small JSON response.)
+- For an exports root, inspect the validated catalog separately at
+  `http://127.0.0.1:8765/_cellucid/datasets`.
 
 **Fix**
 - Use an SSH tunnel for remote machines.
@@ -337,3 +391,5 @@ For overlay UI behavior and deeper debugging, see:
 - Full troubleshooting matrix: {doc}`08_troubleshooting_data_loading`
 - Want notebook embedding + programmatic control? → {doc}`05_jupyter_tutorial`
 - Want browser-only loading without any server? → {doc}`03_browser_file_picker_tutorial`
+- Want to publish a static public catalog instead? →
+  {doc}`11_custom_dataset_repository`

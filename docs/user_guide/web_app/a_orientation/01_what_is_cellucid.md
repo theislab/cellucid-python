@@ -52,7 +52,8 @@ Cellucid (web) is a stateful UI + WebGL viewer:
 
 - **Data model:** dataset → embeddings → fields → per‑view contexts → artifacts (figures/sessions).
 - **Performance model:** big arrays (positions/colors/visibility) are GPU‑resident; UI changes try to avoid hot‑path allocations.
-- **Persistence:** “Save State” writes a single-file `.cellucid-session` bundle containing versioned chunks.
+- **Persistence:** “Save State” writes one exact-current
+  `.cellucid-session` bundle with a closed, validated chunk inventory.
 - **Integration:** `cellucid-python` can export the required folder layout and can embed/drive the viewer from notebooks (hooks/events).
 
 If you’re trying to reason about edge cases, start from the UI glossary (`a_orientation/04_ui_glossary_terminology`) and the “Core interactions” section (`c_core_interactions/index`).

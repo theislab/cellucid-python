@@ -10,7 +10,7 @@ These tutorials assume you can load an `AnnData` and are comfortable in Python, 
 1) {doc}`21_prepare_exports_with_quantization_and_compression`
 2) {doc}`22_large_dataset_server_mode_and_lazy_gene_expression`
 3) {doc}`23_programmatic_highlighting_and_selection_callbacks`
-4) For real dataset templates: {doc}`04_real_world_dataset_recipes_gallery`
+4) For a runnable real dataset recipe: {doc}`04_real_world_dataset_recipes_gallery`
 
 ## What you will learn
 

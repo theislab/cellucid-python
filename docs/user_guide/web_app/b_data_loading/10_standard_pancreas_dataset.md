@@ -28,9 +28,11 @@ is created or played automatically.
 
 The public dataset exposes:
 
-- categorical observations `clusters_coarse` (5 categories) and `clusters`
-  (8 categories);
-- continuous observations `S_score` and `G2M_score`;
+- source-owned categorical observations `clusters_coarse` (5 categories) and
+  `clusters` (8 categories);
+- the derived categorical convenience alias `cell_type` (8 categories), whose
+  category order and per-cell codes exactly equal source-owned `clusters`;
+- source-owned continuous observations `S_score` and `G2M_score`;
 - 3,753 ordered, source-marked, nonconstant genes for on-demand coloring;
 - 33,476 exact weighted connectivity edges;
 - independently declared 1D, 2D, and 3D embeddings; and
@@ -46,7 +48,7 @@ diagnostics or uncertainty checks.
 :alt: Cellucid showing the Pancreatic endocrinogenesis (scVelo) sample in its 3D Orbit view, colored by clusters, with the velocity_umap overlay enabled and vector controls visible.
 :width: 1440px
 
-The standard Pancreas sample in Build 2026-07-26.4: `clusters` supplies eight
+The standard Pancreas sample in Build 2026-07-27.1: `clusters` supplies eight
 categories, **Show overlay** is enabled, `velocity_umap` is selected, and the
 dimension-owned controls report **3D** with **Orbit** navigation.
 ```
@@ -59,9 +61,12 @@ The source is the commit-pinned E15.5 H5AD from the scVelo notebooks:
 https://raw.githubusercontent.com/theislab/scvelo_notebooks/f6cad69fd509be44c8453205309f4c3c3c37ba34/data/Pancreas/endocrinogenesis_day15.h5ad
 ```
 
-Its exact 2D UMAP, 50-dimensional PCA, cell and gene order, four observation
-fields, highly-variable-gene marker, expression values, and weighted
-connectivity graph are retained as source-owned inputs. The 1D and 3D UMAPs are
+Its exact 2D UMAP, 50-dimensional PCA, cell and gene order, four source-owned
+observation fields (`clusters_coarse`, `clusters`, `S_score`, and `G2M_score`),
+highly-variable-gene marker, expression values, and weighted connectivity graph
+are retained as source-owned inputs. The public `cell_type` field is a derived
+convenience alias of `clusters`, with exactly the same category order and
+per-cell codes; it is not a fifth source-owned field. The 1D and 3D UMAPs are
 independently optimized deterministic embeddings; neither is sliced, padded,
 or copied from the 2D coordinates. Velocity is computed on a separate
 analysis-only working copy and projected independently onto each exact
@@ -85,8 +90,8 @@ in `cellucid-datasets`. It pins:
 - semantic digests for coordinates, vectors, metadata, genes, expression, and
   connectivity;
 - the exact Cellucid 0.9.1 producer-source digest; and
-- the complete 3,772-file, 2,469,229-byte generation digest
-  `5e0361c0f510876045d12bc57e5019096f3ca3aa6888e3b4778259e989e25d63`.
+- the complete 3,774-file, 2,477,205-byte generation digest
+  `268a36b0c62f1e872bc4ebc271283fe09b9036c2b8db2b7bbf2d7d737556c865`.
 
 The source data correspond to
 [GSE132188](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE132188).

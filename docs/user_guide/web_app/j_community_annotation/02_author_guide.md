@@ -21,7 +21,7 @@ As an author, you will:
 4) Install the Cellucid GitHub App so the repo appears in the UI.
 5) Connect from Cellucid, Pull, enable fields, and run the round.
 6) Optionally moderate duplicates (merges).
-7) Export a `consensus_<datasetId>.json` snapshot for downstream tooling.
+7) Export a `cellucid-consensus.json` snapshot for downstream tooling.
 
 ---
 
@@ -37,7 +37,7 @@ Follow these sections in order:
 - Section 2 (dataset id): confirm your dataset id is stable.
 - Section 3–6 (repo + app): create repo, configure `config.json`, install GitHub App.
 - Section 7–9 (Cellucid UI): connect, enable fields, tune consensus settings.
-- Section 12 (export): download `consensus_<datasetId>.json`.
+- Section 12 (export): download `cellucid-consensus.json`.
 - Section 13 (troubleshooting): when something breaks.
 :::
 
@@ -508,8 +508,10 @@ See also:
 
 1) Load your dataset in Cellucid.
 2) Open the **Community Annotation** accordion.
-3) Click **Connect GitHub…** (or **GitHub sync…** if you are already signed in).
-4) Complete sign-in, pick the repo, then **Pull latest**.
+3) Click **Connect repo**. If this dataset already has a repository connection,
+   use **Connect GitHub…** or **GitHub sync…** as shown.
+4) Complete **Continue with GitHub**, enable/reload repositories if needed,
+   select the repo, click **Connect**, then **Pull latest**.
 5) Confirm you see author-only controls (e.g. **MANAGE ANNOTATION**).
 
 ### Dataset mismatch (the most common “why can’t annotators Pull?” issue)
@@ -730,17 +732,17 @@ The derived column uses the threshold/minAnnotators you set in the derived-colum
 
 Inside **CONSENSUS SNAPSHOT + LOCAL CACHE**:
 
-- **Consensus snapshot (consensus.json)** → **Download**
+- **Consensus snapshot (cellucid-consensus.json)** → **Download**
 
 This produces a JSON snapshot built in your browser from the locally cached raw GitHub files (it is not written back to GitHub).
 
 Recommended author workflow:
 
 1) Pull latest (ensure you have everyone’s newest files)
-2) Download `consensus_<datasetId>.json`
+2) Download `cellucid-consensus.json`
 3) Use it downstream (e.g., build an official cell-type column)
 
-### What is inside `consensus_<datasetId>.json`? (Structure)
+### What is inside `cellucid-consensus.json`? (Structure)
 
 The snapshot contains:
 
@@ -764,7 +766,7 @@ import json
 
 import pandas as pd
 
-doc = json.load(open("consensus_my_atlas_v1.json"))
+doc = json.load(open("cellucid-consensus.json"))
 
 target_field = "leiden"
 
@@ -835,7 +837,7 @@ For non-technical collaborators, a screenshot of the status panel + error messag
 
 ### GitHub App install / repo not appearing
 
-- **Repo does not appear under “Choose repo”**
+- **Repo does not appear under “Select an annotation repository”**
   - Causes:
     - the Cellucid GitHub App is not installed for the repo owner
     - the app was installed for “Only selected repositories” and the repo is not selected

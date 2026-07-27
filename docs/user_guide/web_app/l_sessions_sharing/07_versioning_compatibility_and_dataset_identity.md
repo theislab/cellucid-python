@@ -1,162 +1,120 @@
-# Versioning, compatibility, and dataset identity
+# Current format and dataset identity
 
-**Audience:** computational users, power users, and anyone sharing sessions across machines  
-**Time:** 25–50 minutes  
+**Audience:** anyone reopening or sharing sessions
+
+**Time:** 20–35 minutes
 **What you’ll learn:**
-- Why “same dataset” is not a vague concept in Cellucid (it’s a concrete fingerprint check)
-- How sessions behave when the dataset or app version changes
-- How to build collaboration workflows that avoid silent mis-restores
-- What to do when a restore warns “dataset mismatch”
+- what Cellucid means by “the same dataset”;
+- why the current reader rejects rather than partially restores; and
+- how to make a session reproducible across machines.
 
-**Prerequisites:**
-- You understand the session mental model ({doc}`01_session_mental_model`)
+## The safety rule
 
----
+A Cellucid session is cell-indexed scientific state. Applying it to the wrong
+dataset could make a filter, highlight, categorical code, or cached analysis
+look plausible while referring to different cells. Cellucid therefore uses one
+strict rule:
 
-## The big idea
+> The complete current bundle and the complete current dataset fingerprint
+> must validate, or no restore succeeds.
 
-Cellucid sessions are intentionally conservative:
+There is no layout-only partial restore, unknown-chunk skip, compatibility
+reader, or migration path. If any chunk, field, byte count, or identity check
+fails, the transaction rolls back and reports the exact failure.
 
-- If Cellucid is confident you loaded the **same dataset**, it will restore dataset-dependent state.
-- If it is not confident, it will **skip dataset-dependent chunks** and restore only safe layout.
+## Exact fingerprint
 
-This is designed to prevent the most dangerous failure mode:
+The session stores four fields:
 
-> applying highlights/filters from one dataset onto a different dataset.
+- `sourceType`: the loading route, such as `local-demo`, `github-repo`,
+  `local-user`, `remote`, or `jupyter`;
+- `datasetId`: the route's exact dataset identifier;
+- `cellCount`: the number of observations; and
+- `varCount`: the number of variables.
 
----
+All four must equal the currently loaded dataset. This means the same files
+loaded through a GitHub repository and through a local folder are intentionally
+different identities. Likewise, moving a remote dataset to a different
+published identifier requires a newly saved session.
 
-## “Same dataset” is determined by a dataset fingerprint
+## Outcome matrix
 
-Each session bundle stores a small **dataset fingerprint**.
+| Situation | Result |
+|---|---|
+| Current bundle, exact fingerprint, complete valid chunks | eager and lazy schedules finish, the transaction commits, then Cellucid reports **Session fully restored** |
+| Different source type, id, cell count, or variable count | complete rejection; current state remains or is restored by rollback |
+| Missing, extra, duplicate, aliased, reordered, or noncanonical chunk | complete rejection before success |
+| Corrupt/truncated framing, dishonest byte count, or invalid gzip/JSON/binary payload | complete rejection, bounded decode, rollback |
+| Newer load starts or the user presses **Cancel** | older restore aborts and its progress is dismissed without a red product error |
+| Bundle made by a different schema/build | accepted only if it is byte-for-byte valid under the one current contract; otherwise rejected |
 
-At a high level, the fingerprint includes:
+Cellucid does not store a format-version field and does not guess how to
+translate another schema. For reproducible work, record the app build shown in
+the footer and keep the dataset publication revision with the session.
 
-- `sourceType` (how the dataset was loaded)
-  - examples: local demo, local folder, GitHub, remote server
-- `datasetId` (the dataset identifier within that source)
-- lightweight size guards like `cellCount` and `varCount` (when available)
+## Identity is a guard, not a content hash
 
-On restore, Cellucid compares:
-- fingerprint in the session file vs
-- fingerprint of the currently loaded dataset.
+The fingerprint is deliberately small. It does not hash every coordinate,
+field, category, or cell identifier. You can defeat the guard by publishing
+changed content under the same source type, dataset id, and sizes.
 
-If they differ, you get a warning like:
+Treat a dataset id as a content identity:
 
-> “Session dataset mismatch (…) Restoring only dataset-agnostic layout.”
+1. keep cell order, variable order, and prepared files immutable;
+2. publish changed filtering, ordering, embeddings, fields, or categories as a
+   new dataset id or immutable repository revision;
+3. save a new session after the changed dataset is loaded; and
+4. tell collaborators the exact loading route and dataset revision.
 
-And then Cellucid skips dataset-dependent state.
+## Reliable collaboration recipes
 
----
+### Shared GitHub publication
 
-## Compatibility matrix (what to expect)
+Give collaborators the exact `owner/repository`, branch or immutable revision,
+and dataset id. Everyone should use the **GitHub** loading route, then choose
+**Load State**.
 
-### Case 1: same app build + same dataset fingerprint
+### Shared prepared folder
 
-Expected outcome:
-- full restore (eager + lazy), subject to normal “not saved” exclusions.
+Distribute one unchanged folder and the session together. Everyone should use
+the **Prepared** browser picker. Re-zipping without changing files is fine;
+re-preparing or renaming the dataset identity is a new publication.
 
-### Case 2: same dataset fingerprint, but the dataset content actually changed
+### Shared remote or Jupyter server
 
-This is the dangerous case.
+Keep the endpoint's dataset identity stable for that exact prepared generation.
+If you publish a new generation at the same service, give it a new dataset id
+and save a new session.
 
-Because the fingerprint is intentionally lightweight, it may not detect “subtle” changes like:
-- cell order changes,
-- different filtering during export,
-- recomputed embeddings with the same shape,
-- different gene list ordering with the same length.
+## Ordinary sessions versus official starting states
 
-If you reuse the same dataset id for changed content, a session can restore “successfully” but be semantically wrong.
+Official catalog samples may apply a small SHA-256-pinned state automatically.
+That internal five-chunk file is validated through a separate advertised
+capability; it is not an ordinary **Load State** artifact.
 
-**Best practice:**
-- Treat dataset ids as content ids.
-- If you change anything that would reorder or remove/add cells, treat it as a new dataset id/version.
+To share your own state for Suo, Garcia, He, Kanemaru, or Pancreas:
 
-### Case 3: different dataset fingerprint (mismatch)
+1. choose the official sample;
+2. wait for the verified starting view;
+3. make any changes you want; and
+4. use **Save State**.
 
-Expected outcome:
-- dataset-dependent chunks are skipped,
-- only dataset-agnostic layout restores (e.g., some floating panel geometry),
-- your highlights/filters/active fields won’t apply.
+The downloaded result has the full current user-session inventory and can be
+restored manually against the same official dataset identity. See
+{doc}`04_official_sample_states`.
 
-Fix:
-- load the correct dataset (same source type + dataset id), then restore again,
-- or create a new session for the dataset you actually want to use.
+## If restore is rejected
 
-### Case 4: different app build/version
+Do not rename the file, edit its manifest, remove a chunk, or retry against a
+“similar” dataset. Instead:
 
-Session bundles target the exact current app schema. A bundle whose manifest or
-chunk contract does not match is rejected or has its invalid chunk rejected.
+1. confirm the expected dataset is fully loaded;
+2. confirm the same loading route and exact dataset id;
+3. compare the app build in the footer with the sender's recorded build;
+4. obtain the original unchanged session again if transfer corruption is
+   possible; and
+5. ask the sender to load the intended dataset and create a fresh **Save
+   State** bundle with the current app.
 
-If you need long-term stability:
-- treat exported figures and exported data as the archival artifacts,
-- keep the app revision with the session working-state artifact.
-
----
-
-## Why sessions can mismatch across “equivalent” dataset loads
-
-It’s common to think:
-
-> “It’s the same export folder, just loaded a different way.”
-
-But the fingerprint includes the **source type**.
-
-Practical examples:
-
-- If you save a session while loading from **GitHub**, then later load the export folder from your **local disk**, the session can mismatch.
-- If you save a session while loading from a **remote server URL**, then later load the same files through a different host/path, the dataset id may differ.
-
-**Collaboration rule:**
-When you share sessions, agree on one dataset access method:
-- “Everyone loads from GitHub path X”, or
-- “Everyone uses the shared export folder Y locally”, or
-- “Everyone uses the same hosted export URL”.
-
-If you can’t align access methods, create a session bundle using the same method the recipient will use.
-
----
-
-## How to design dataset identity so sessions are safe
-
-If you are the person exporting datasets (often the computational user), you control most of this story.
-
-Recommended approach:
-
-1) Assign a stable dataset id for a stable dataset content snapshot.
-2) When content meaningfully changes (cell order/selection, embedding recompute, gene list changes), create a new dataset id/version.
-3) Keep old exports and sessions if reproducibility matters.
-
-This aligns with:
-- Community Annotation (which also keys off dataset identity),
-- long-term provenance for figures.
-
----
-
-## “Fields missing” and “non-restorable state” pitfalls
-
-Even if the dataset fingerprint matches, a restore can still look incomplete if:
-
-- a field referenced by the session is missing in the export,
-- a field was renamed/deleted/purged since the session was saved,
-- gene expression is unavailable (var fields missing).
-
-Some UI actions can make state intentionally non-restorable:
-- permanently purging a field,
-- changing field schema or category encoding upstream.
-
-When this happens you may see:
-- a default active field instead of the expected one,
-- filters silently not applying (because the field doesn’t exist),
-- highlight groups present but meaningless (if they were based on missing derived fields).
-
-Fix strategy:
-- restore the exact export folder version used to create the session, or
-- accept that the session is not portable across those changes and re-create it.
-
----
-
-## Next steps
-
-- {doc}`05_share_workflows_links_bundles_exports` (collaboration-safe sharing patterns)
-- {doc}`10_troubleshooting_sessions` (dataset mismatch and partial restore fixes)
+See {doc}`10_troubleshooting_sessions` for symptom-led checks and
+{doc}`12_reference` for the exact container contract.

@@ -8,8 +8,9 @@ This implements the same framing format as the web app:
 3) manifest JSON bytes (UTF-8)
 4) repeated chunks: [chunkByteLength (u32 LE), chunkBytes...]
 
-The manifest contains chunk metadata in order; chunk payloads are either JSON
-or binary and may be gzip-compressed.
+The manifest contains exactly ``createdAt``, ``datasetFingerprint``, and ordered
+``chunks`` metadata. Chunk payloads are either JSON or binary and may be
+gzip-compressed.
 """
 
 from __future__ import annotations
@@ -31,9 +32,7 @@ MAX_STORED_CHUNK_BYTES = 512 * 1024 * 1024
 
 _MANIFEST_KEYS = {
     "createdAt",
-    "dataSource",
     "datasetFingerprint",
-    "summary",
     "chunks",
 }
 _FINGERPRINT_KEYS = {"sourceType", "datasetId", "cellCount", "varCount"}
@@ -48,13 +47,7 @@ _CHUNK_REQUIRED_KEYS = {
     "storedBytes",
     "uncompressedBytes",
 }
-_CHUNK_OPTIONAL_KEYS = {"dependsOn"}
-_CHUNK_ID_RE = re.compile(
-    r"^[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
-)
-_UTC_TIMESTAMP_RE = re.compile(
-    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"
-)
+_UTC_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
 
 
 @dataclass(frozen=True)
@@ -80,31 +73,25 @@ def _require_exact_nonnegative_int(value: Any, *, label: str, maximum: int) -> i
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"Invalid session manifest ({label} must be an integer)")
     if value < 0:
-        raise ValueError(
-            f"Invalid session manifest ({label} must be non-negative)"
-        )
+        raise ValueError(f"Invalid session manifest ({label} must be non-negative)")
     if value > maximum:
-        raise ValueError(
-            f"Invalid session manifest ({label} exceeds the {maximum}-byte limit)"
-        )
+        raise ValueError(f"Invalid session manifest ({label} exceeds the {maximum}-byte limit)")
     return int(value)
 
 
 def _validate_fingerprint(value: Any) -> None:
-    if value is None:
-        return
     if not isinstance(value, dict):
         raise ValueError("Invalid session manifest (datasetFingerprint must be an object)")
+    missing = _FINGERPRINT_KEYS - set(value)
     unknown = set(value) - _FINGERPRINT_KEYS
-    if unknown:
+    if missing or unknown:
+        details: list[str] = []
+        if missing:
+            details.append("missing " + ", ".join(sorted(missing)))
+        if unknown:
+            details.append("unknown " + ", ".join(sorted(unknown)))
         raise ValueError(
-            "Invalid session manifest (unknown datasetFingerprint fields: "
-            + ", ".join(sorted(unknown))
-            + ")"
-        )
-    if "sourceType" not in value or "datasetId" not in value:
-        raise ValueError(
-            "Invalid session manifest (datasetFingerprint requires sourceType and datasetId)"
+            "Invalid session manifest (datasetFingerprint fields: " + "; ".join(details) + ")"
         )
     for key in ("sourceType", "datasetId"):
         item = value[key]
@@ -114,12 +101,11 @@ def _validate_fingerprint(value: Any) -> None:
                 "a non-empty string or null)"
             )
     for key in ("cellCount", "varCount"):
-        if key in value:
-            _require_exact_nonnegative_int(
-                value[key],
-                label=f"datasetFingerprint.{key}",
-                maximum=(1 << 32) - 1,
-            )
+        _require_exact_nonnegative_int(
+            value[key],
+            label=f"datasetFingerprint.{key}",
+            maximum=(1 << 32) - 1,
+        )
 
 
 def _validate_manifest(manifest: Any) -> list[dict[str, Any]]:
@@ -133,20 +119,12 @@ def _validate_manifest(manifest: Any) -> list[dict[str, Any]]:
             root_details.append("missing " + ", ".join(root_missing))
         if root_unknown:
             root_details.append("unknown " + ", ".join(root_unknown))
-        raise ValueError(
-            "Invalid session manifest fields (" + "; ".join(root_details) + ")"
-        )
+        raise ValueError("Invalid session manifest fields (" + "; ".join(root_details) + ")")
     created_at = manifest["createdAt"]
     if not isinstance(created_at, str) or _UTC_TIMESTAMP_RE.fullmatch(created_at) is None:
         raise ValueError(
             "Invalid session manifest (createdAt must be an exact UTC millisecond timestamp)"
         )
-    if manifest["dataSource"] is not None and not isinstance(
-        manifest["dataSource"], dict
-    ):
-        raise ValueError("Invalid session manifest (dataSource must be an object or null)")
-    if manifest["summary"] is not None and not isinstance(manifest["summary"], dict):
-        raise ValueError("Invalid session manifest (summary must be an object or null)")
     _validate_fingerprint(manifest["datasetFingerprint"])
 
     chunks = manifest["chunks"]
@@ -158,12 +136,9 @@ def _validate_manifest(manifest: Any) -> list[dict[str, Any]]:
     lazy_seen = False
     for position, raw in enumerate(chunks):
         if not isinstance(raw, dict):
-            raise ValueError(
-                f"Invalid session manifest (chunk #{position} must be an object)"
-            )
-        allowed = _CHUNK_REQUIRED_KEYS | _CHUNK_OPTIONAL_KEYS
+            raise ValueError(f"Invalid session manifest (chunk #{position} must be an object)")
         chunk_missing = _CHUNK_REQUIRED_KEYS - set(raw)
-        chunk_unknown = set(raw) - allowed
+        chunk_unknown = set(raw) - _CHUNK_REQUIRED_KEYS
         if chunk_missing or chunk_unknown:
             chunk_details: list[str] = []
             if chunk_missing:
@@ -177,10 +152,12 @@ def _validate_manifest(manifest: Any) -> list[dict[str, Any]]:
             )
 
         chunk_id = raw["id"]
-        if not isinstance(chunk_id, str) or _CHUNK_ID_RE.fullmatch(chunk_id) is None:
-            raise ValueError(
-                f"Invalid session manifest (chunk #{position} has an invalid id)"
-            )
+        if (
+            not isinstance(chunk_id, str)
+            or not chunk_id
+            or chunk_id != chunk_id.strip()
+        ):
+            raise ValueError(f"Invalid session manifest (chunk #{position} has an invalid id)")
         if chunk_id in chunk_ids:
             raise ValueError(f"Invalid session manifest (duplicate chunk id {chunk_id!r})")
         chunk_ids.add(chunk_id)
@@ -188,23 +165,17 @@ def _validate_manifest(manifest: Any) -> list[dict[str, Any]]:
         contributor_id = raw["contributorId"]
         if (
             not isinstance(contributor_id, str)
-            or _CHUNK_ID_RE.fullmatch(contributor_id) is None
-            or "/" in contributor_id
+            or not contributor_id
+            or contributor_id != contributor_id.strip()
         ):
-            raise ValueError(
-                f"Invalid session manifest (chunk {chunk_id!r} contributorId)"
-            )
+            raise ValueError(f"Invalid session manifest (chunk {chunk_id!r} contributorId)")
         priority = raw["priority"]
         if priority not in {"eager", "lazy"}:
-            raise ValueError(
-                f"Invalid session manifest (chunk {chunk_id!r} priority)"
-            )
+            raise ValueError(f"Invalid session manifest (chunk {chunk_id!r} priority)")
         if priority == "lazy":
             lazy_seen = True
         elif lazy_seen:
-            raise ValueError(
-                "Invalid session manifest (all eager chunks must precede lazy chunks)"
-            )
+            raise ValueError("Invalid session manifest (all eager chunks must precede lazy chunks)")
         if raw["kind"] not in {"json", "binary"}:
             raise ValueError(f"Invalid session manifest (chunk {chunk_id!r} kind)")
         if raw["codec"] not in {"none", "gzip"}:
@@ -212,9 +183,7 @@ def _validate_manifest(manifest: Any) -> list[dict[str, Any]]:
         if not isinstance(raw["label"], str) or not raw["label"]:
             raise ValueError(f"Invalid session manifest (chunk {chunk_id!r} label)")
         if type(raw["datasetDependent"]) is not bool:
-            raise ValueError(
-                f"Invalid session manifest (chunk {chunk_id!r} datasetDependent)"
-            )
+            raise ValueError(f"Invalid session manifest (chunk {chunk_id!r} datasetDependent)")
         stored_bytes = _require_exact_nonnegative_int(
             raw["storedBytes"],
             label=f"chunk {chunk_id!r} storedBytes",
@@ -231,23 +200,6 @@ def _validate_manifest(manifest: Any) -> list[dict[str, Any]]:
                 "uncompressedBytes must match for codec 'none')"
             )
 
-        depends_on = raw.get("dependsOn")
-        if depends_on is not None:
-            if (
-                not isinstance(depends_on, list)
-                or any(not isinstance(item, str) or not item for item in depends_on)
-                or len(depends_on) != len(set(depends_on))
-            ):
-                raise ValueError(
-                    f"Invalid session manifest (chunk {chunk_id!r} dependsOn)"
-                )
-            unavailable = [item for item in depends_on if item not in chunk_ids]
-            if unavailable:
-                raise ValueError(
-                    f"Invalid session manifest (chunk {chunk_id!r} depends on "
-                    "a missing or later chunk)"
-                )
-
         validated.append(raw)
     return validated
 
@@ -261,9 +213,7 @@ def _decompress_gzip_exact(stored: bytes, expected_bytes: int) -> bytes:
         decoded = decompressor.decompress(remaining_input, remaining_capacity + 1)
         output.extend(decoded)
         if len(output) > expected_bytes:
-            raise ValueError(
-                "Session chunk uncompressedBytes is smaller than the gzip payload"
-            )
+            raise ValueError("Session chunk uncompressedBytes is smaller than the gzip payload")
         if decompressor.unconsumed_tail:
             remaining_input = decompressor.unconsumed_tail
             if remaining_capacity == 0:
@@ -274,9 +224,7 @@ def _decompress_gzip_exact(stored: bytes, expected_bytes: int) -> bytes:
     remaining_capacity = expected_bytes - len(output)
     output.extend(decompressor.flush(remaining_capacity + 1))
     if len(output) > expected_bytes:
-        raise ValueError(
-            "Session chunk uncompressedBytes is smaller than the gzip payload"
-        )
+        raise ValueError("Session chunk uncompressedBytes is smaller than the gzip payload")
     if not decompressor.eof:
         raise ValueError("Invalid gzip session chunk (truncated stream)")
     if decompressor.unused_data:
@@ -351,9 +299,10 @@ class CellucidSessionBundle:
         return self._manifest
 
     @property
-    def dataset_fingerprint(self) -> dict[str, Any] | None:
+    def dataset_fingerprint(self) -> dict[str, Any]:
         fp = self.manifest.get("datasetFingerprint")
-        return fp if isinstance(fp, dict) else None
+        assert isinstance(fp, dict)
+        return fp
 
     def list_chunk_ids(self) -> list[str]:
         self._ensure_indexed()
@@ -438,9 +387,7 @@ class CellucidSessionBundle:
                     )
                 offset = f.tell()
                 if offset + stored_len > file_size:
-                    raise ValueError(
-                        f"Invalid session chunk {chunk_id!r}: frame exceeds file size"
-                    )
+                    raise ValueError(f"Invalid session chunk {chunk_id!r}: frame exceeds file size")
                 f.seek(stored_len, 1)
                 chunks_by_id[chunk_id] = SessionChunkRef(
                     id=chunk_id,

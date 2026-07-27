@@ -14,6 +14,10 @@ import numpy as np
 MAX_SAFE_INTEGER = (1 << 53) - 1
 MAX_UINT32 = (1 << 32) - 1
 MAX_UINT16 = (1 << 16) - 1
+_ENC_RAW_U8 = 0
+_ENC_RAW_U16 = 1
+_ENC_RLE_U8 = 2
+_ENC_RLE_U16 = 3
 
 
 def decode_uvarint(data: bytes | bytearray | memoryview, offset: int = 0) -> tuple[int, int]:
@@ -105,7 +109,12 @@ def decode_delta_uvarint(
     return out
 
 
-def decode_user_defined_codes(data: bytes | bytearray | memoryview) -> np.ndarray:
+def decode_user_defined_codes(
+    data: bytes | bytearray | memoryview,
+    *,
+    expected_length: int,
+    expected_codes_type: str,
+) -> np.ndarray:
     """
     Decode a user-defined categorical codes chunk (pre-gzip payload).
 
@@ -113,7 +122,8 @@ def decode_user_defined_codes(data: bytes | bytearray | memoryview) -> np.ndarra
     - 1 byte: encodingType
       - 0 = raw Uint8
       - 1 = raw Uint16 (little-endian)
-      - 2 = RLE pairs encoded as uvarints (value, runLength)
+      - 2 = RLE Uint8 pairs encoded as uvarints (value, runLength)
+      - 3 = RLE Uint16 pairs encoded as uvarints (value, runLength)
     - codesLength (uvarint)
     - payload:
       - raw: `codesLength * bytesPerElement` bytes
@@ -121,13 +131,39 @@ def decode_user_defined_codes(data: bytes | bytearray | memoryview) -> np.ndarra
     """
     if not isinstance(data, bytes | bytearray | memoryview):
         raise TypeError("decode_user_defined_codes: data must be bytes-like")
+    if isinstance(expected_length, bool) or not isinstance(expected_length, int):
+        raise TypeError("decode_user_defined_codes: expected_length must be an integer")
+    if expected_length < 0 or expected_length > MAX_UINT32:
+        raise ValueError(
+            "decode_user_defined_codes: expected_length exceeds Uint32 capacity"
+        )
+    if expected_codes_type not in {"Uint8Array", "Uint16Array"}:
+        raise ValueError(
+            "decode_user_defined_codes: expected_codes_type must be "
+            "Uint8Array or Uint16Array"
+        )
     if len(data) < 2:
         raise ValueError("decode_user_defined_codes: payload too short")
 
     enc = data[0]
     length, offset = decode_uvarint(data, 1)
+    if length != expected_length:
+        raise ValueError(
+            "decode_user_defined_codes: declared length "
+            f"{length} does not match expected length {expected_length}"
+        )
+    is_u8 = enc in {_ENC_RAW_U8, _ENC_RLE_U8}
+    is_u16 = enc in {_ENC_RAW_U16, _ENC_RLE_U16}
+    if not is_u8 and not is_u16:
+        raise ValueError(f"decode_user_defined_codes: unknown encoding type {enc}")
+    actual_codes_type = "Uint8Array" if is_u8 else "Uint16Array"
+    if actual_codes_type != expected_codes_type:
+        raise ValueError(
+            "decode_user_defined_codes: encoding type "
+            f"{actual_codes_type} does not match expected {expected_codes_type}"
+        )
 
-    if enc == 0:
+    if enc == _ENC_RAW_U8:
         end = offset + length
         if end > len(data):
             raise ValueError("decode_user_defined_codes: truncated raw u8 payload")
@@ -135,7 +171,7 @@ def decode_user_defined_codes(data: bytes | bytearray | memoryview) -> np.ndarra
             raise ValueError("decode_user_defined_codes: trailing bytes")
         return np.frombuffer(bytes(data[offset:end]), dtype=np.uint8)
 
-    if enc == 1:
+    if enc == _ENC_RAW_U16:
         nbytes = length * 2
         end = offset + nbytes
         if end > len(data):
@@ -144,7 +180,7 @@ def decode_user_defined_codes(data: bytes | bytearray | memoryview) -> np.ndarra
             raise ValueError("decode_user_defined_codes: trailing bytes")
         return np.frombuffer(bytes(data[offset:end]), dtype="<u2")
 
-    if enc == 2:
+    if enc in {_ENC_RLE_U8, _ENC_RLE_U16}:
         pair_count, offset = decode_uvarint(data, offset)
         if length == 0:
             if pair_count != 0:
@@ -155,40 +191,37 @@ def decode_user_defined_codes(data: bytes | bytearray | memoryview) -> np.ndarra
             raise ValueError(
                 "decode_user_defined_codes: RLE pair count cannot fill the declared length"
             )
-        pairs: list[tuple[int, int]] = []
-        needs_u16 = False
+        maximum_value = 0xFF if is_u8 else MAX_UINT16
+        out = np.empty(length, dtype=np.uint8 if is_u8 else np.uint16)
         decoded_length = 0
+        previous_value: int | None = None
         for _ in range(pair_count):
             value, offset = decode_uvarint(data, offset)
             run, offset = decode_uvarint(data, offset)
-            if value > MAX_UINT16:
+            if value > maximum_value:
                 raise ValueError(
-                    "decode_user_defined_codes: RLE value exceeds Uint16 capacity"
+                    "decode_user_defined_codes: RLE value exceeds its declared code type"
                 )
             if run == 0:
                 raise ValueError(
                     "decode_user_defined_codes: RLE run length must be positive"
                 )
-            decoded_length += run
-            if decoded_length > length:
+            if previous_value == value:
+                raise ValueError(
+                    "decode_user_defined_codes: adjacent RLE runs must have distinct values"
+                )
+            end = decoded_length + run
+            if end > length:
                 raise ValueError(
                     "decode_user_defined_codes: RLE run total exceeds declared length"
                 )
-            if value >= 256:
-                needs_u16 = True
-            pairs.append((value, run))
+            out[decoded_length:end] = value
+            decoded_length = end
+            previous_value = value
         if offset != len(data):
             raise ValueError("decode_user_defined_codes: trailing bytes")
         if decoded_length != length:
             raise ValueError("decode_user_defined_codes: RLE did not fill expected length")
-
-        out = np.empty(length, dtype=np.uint16 if needs_u16 else np.uint8)
-        i = 0
-        for value, run in pairs:
-            end = i + run
-            out[i:end] = value
-            i = end
-
         return out
 
-    raise ValueError(f"decode_user_defined_codes: unknown encoding type {enc}")
+    raise AssertionError("decode_user_defined_codes: unreachable encoding")

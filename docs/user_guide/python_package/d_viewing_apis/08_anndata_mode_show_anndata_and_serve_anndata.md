@@ -175,15 +175,17 @@ viewer = show_anndata(
     adata,
     dataset_name="My study",
     dataset_id="my-study-v1",
-    vector_field_default="velocity",
+    vector_field_default="velocity_umap",
 )
 ```
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/overlay-controls.png
-:alt: A synthetic 2D dataset with the Vector Field Overlay enabled and animated particle-flow controls visible.
+:alt: The real Pancreatic endocrinogenesis sample in its 2D Planar view with the velocity_umap particle overlay and controls visible.
 :width: 1440px
 
-A current-format 2D vector field rendered as particle flow with its field, density, speed, trail, size, opacity, palette, and LOD controls visible.
+The real 3,696-cell Pancreas sample in Build 2026-07-27.1, rendered in 2D
+Planar mode with `velocity_umap`; the field, density, speed, trail, size,
+opacity, palette, and LOD controls are visible.
 ```
 
 ## Connectivity (KNN graph)

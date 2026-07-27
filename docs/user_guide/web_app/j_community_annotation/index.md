@@ -14,6 +14,13 @@ If you only read one idea, read this: community annotation is **offline-first** 
 - Each person writes only their own file (conflict-free collaboration).
 - The merged consensus view is compiled in the browser during **Pull** (no “compiled” artifact is required in the repo).
 
+A concrete use case is an endocrine atlas with cluster categories such as
+`clusters`. One contributor can suggest “beta cell” with marker evidence,
+another can vote or comment on the same category, and the author can keep the
+bucket disputed until the configured evidence/voter threshold is met. Consensus
+records group judgment; it does not replace marker, perturbation, or lineage
+evidence.
+
 :::{important}
 Community annotation is “offline-first” after you connect a repo:
 
@@ -21,7 +28,8 @@ Community annotation is “offline-first” after you connect a repo:
 - **Publish** uploads your changes to GitHub (direct push if allowed; otherwise fork + Pull Request).
 - GitHub OAuth tokens are stored only in `sessionStorage` (cleared when the tab closes).
 
-Practical implication:
+Practical implication after a repository has been connected and its state is
+available locally:
 
 - You can annotate while offline (local saves still work), but you cannot **Pull** or **Publish** until you are online again.
 :::
@@ -47,14 +55,15 @@ You are contributing labels, votes, and comments. You do **not** manage the repo
 
 1) Open Cellucid and load the dataset.
 2) Open **Community Annotation** in the left sidebar.
-3) Click **Connect GitHub…** and sign in.
-4) Choose the repo + branch (if needed).
-5) Click **Pull latest** (this downloads everyone’s current contributions).
+3) Click **Connect repo**.
+4) In the four-step wizard, use **Continue with GitHub**, install/authorize the
+   app if needed, select a repository, and choose **Connect**.
+5) In **Sync (pull / publish)**, click **Pull latest**.
 6) Pick a 🗳️-marked categorical column (e.g. `leiden`).
 7) Click a category (cluster) to open the voting modal.
 8) Vote, comment, and add suggestions; then **Publish** so others can see your work.
 
-Next: read `01_annotator_guide` for the full workflow, edge cases, and troubleshooting.
+Next: read {doc}`01_annotator_guide` for the full workflow, edge cases, and troubleshooting.
 :::
 
 :::{tab-item} Author (Repo Setup + Moderation)
@@ -70,7 +79,7 @@ You are running an annotation round: you create/configure the GitHub repo, decid
 7) During the round, periodically Pull, resolve duplicates (optional merges), and communicate decisions.
 8) At the end, close fields, Pull one last time, and export a consensus snapshot.
 
-Next: read `02_author_guide` for full setup/ops, scaling guidance, and troubleshooting.
+Next: read {doc}`02_author_guide` for full setup/ops, scaling guidance, and troubleshooting.
 :::
 
 ::::
@@ -178,7 +187,7 @@ If you are not technical, think of this like “drafts” vs “shared document�
 
 There are two different local storage layers (both scoped by dataset + repo + user):
 
-1) **Session state** (local intent)
+1) **Annotation local state** (local intent)
    - Stores your votes/suggestions/comments and author settings you changed locally.
    - Purpose: preserve your work immediately, even before you Publish.
 
@@ -186,7 +195,24 @@ There are two different local storage layers (both scoped by dataset + repo + us
    - Stores fetched JSON files from the repo (`annotations/users/*.json`, optional `annotations/moderation/merges.json`).
    - Purpose: make Pull fast and deterministic without re-downloading unchanged files.
 
-The annotation repo is the shared source of truth. If you switch dataset, repo, branch, or GitHub user, you switch to a different cache scope.
+The annotation repo is the shared source of truth. The exact local scope is
+dataset id + `owner/repo` + branch + numeric GitHub user id. If any component
+changes, Cellucid opens a different annotation scope.
+
+:::{important}
+Annotation local state is **not** part of an ordinary `.cellucid-session`
+bundle. The Community Annotation subtree is intentionally excluded because it
+is network/auth-driven. Session Save/Load does not carry votes, suggestions,
+comments, repository connection, or GitHub authentication.
+
+- GitHub tokens live in `sessionStorage`.
+- Votes/suggestions/comments and the repo connection use annotation-specific
+  local storage.
+- Raw pulled GitHub files use IndexedDB.
+
+Use **Publish** for collaboration, not session export. See
+{doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
+:::
 
 ---
 
@@ -196,11 +222,11 @@ Use this as a first-stop map. Each row links to the page where the full troubles
 
 | Symptom | Most likely cause | First thing to try | Deep dive |
 |---|---|---|---|
-| Repo doesn’t show up in “Choose repo…” | GitHub App not installed / repo not selected | Install app → Reload repos | `03_ui_reference` |
-| “Dataset mismatch” / can’t Pull | Dataset id missing in `annotations/config.json` | Ask an author to connect + Publish config | `02_author_guide` |
-| You voted, but others don’t see it | You didn’t Publish, or PR not merged | Publish (or check PR merge) → others Pull | `01_annotator_guide` |
-| Everything is disabled | Column is closed 🗳️🏁, or you’re signed out | Check column badge → re-sign-in → Pull | `01_annotator_guide` |
-| Pull/Publish keeps failing | Network / rate limits / storage restrictions | Retry; then check browser storage and error text | `03_ui_reference` |
+| Repo doesn’t appear at **Select an annotation repository** | GitHub App not installed / repo not selected | **Add repo**, then **Reload** | {doc}`03_ui_reference` |
+| “Dataset mismatch” / can’t Pull | Dataset id missing in `annotations/config.json` | Ask an author to connect + Publish config | {doc}`02_author_guide` |
+| You voted, but others don’t see it | You didn’t Publish, or PR not merged | Publish (or check PR merge) → others Pull | {doc}`01_annotator_guide` |
+| Everything is disabled | Column is closed 🗳️🏁, or you’re signed out | Check column badge → re-sign-in → Pull | {doc}`01_annotator_guide` |
+| Pull/Publish keeps failing | Network / rate limits / storage restrictions | Retry; then check browser storage and exact error text | {doc}`03_ui_reference` |
 
 ---
 

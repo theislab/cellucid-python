@@ -31,7 +31,8 @@ Start with the web app user guide landing page: {doc}`../index`.
 - **Codebase map**: how `cellucid/index.html` boots the app and which folders correspond to state, UI, rendering, and data loading.
 - **State model**: `DataState`, events, per-view contexts, multi-page highlights, caches, and batch updates.
 - **Rendering pipeline**: the WebGL viewer, buffers, LOD, overlays (smoke + velocity), and performance footguns.
-- **Persistence**: the `.cellucid-session` bundle format, what is saved/restored, and dataset mismatch behavior.
+- **Persistence**: the exact-current `.cellucid-session` format, atomic
+  transaction, closed profiles, and dataset-identity rejection.
 - **Debugging**: how to capture minimal repro steps + the exact logs that help fix issues quickly.
 - **Extension points**: the safe, repeatable steps for adding a UI module, an analysis mode, or an export renderer.
 

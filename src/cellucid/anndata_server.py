@@ -63,7 +63,6 @@ from ._server_base import (
 )
 from .anndata_adapter import AnnDataAdapter, _classify_anndata_path
 from .connectivity_contract import build_connectivity_manifest
-from .prepare_data import _require_portable_filename_component
 
 if TYPE_CHECKING:
     import anndata
@@ -331,13 +330,7 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         field_name = parts[0]
         data_type = parts[1]  # 'values', 'codes', or 'outliers'
 
-        # Find the actual field key (may differ from safe filename)
-        obs_keys = self.adapter.get_obs_keys()
-        actual_key = None
-        for key in obs_keys:
-            if _require_portable_filename_component(key) == field_name:
-                actual_key = key
-                break
+        actual_key = self.adapter.get_obs_key_for_payload_component(field_name)
 
         if actual_key is None:
             self.send_error_response(404, f"Obs field not found: {field_name}")
@@ -388,14 +381,7 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
 
         gene_safe = filename[:-11]  # Remove '.values.f32'
 
-        # Find actual gene ID (may differ from safe filename due to special characters)
-        gene_ids = self.adapter.get_gene_ids()
-        actual_gene = None
-
-        for gid in gene_ids:
-            if _require_portable_filename_component(gid) == gene_safe:
-                actual_gene = gid
-                break
+        actual_gene = self.adapter.get_gene_id_for_payload_component(gene_safe)
 
         if actual_gene is None:
             self.send_error_response(404, f"Gene not found: {gene_safe}")
@@ -752,7 +738,7 @@ class AnnDataServer:
         continuous_schema = obs_schemas.get("continuous")
         if continuous_schema is not None:
             for field in obs_manifest["_continuousFields"]:
-                key = _require_portable_filename_component(field[0])
+                key = self.adapter.get_obs_payload_component(field[0])
                 add_payload(
                     continuous_schema["pathPattern"].format(key=key),
                     n_cells * 4,
@@ -761,7 +747,7 @@ class AnnDataServer:
         categorical_schema = obs_schemas.get("categorical")
         if categorical_schema is not None:
             for field in obs_manifest["_categoricalFields"]:
-                key = _require_portable_filename_component(field[0])
+                key = self.adapter.get_obs_payload_component(field[0])
                 ext = {"uint8": "u8", "uint16": "u16"}[field[2]]
                 item_size = {"uint8": 1, "uint16": 2}[field[2]]
                 add_payload(
@@ -777,7 +763,7 @@ class AnnDataServer:
 
         var_schema = var_manifest["_varSchema"]
         for field in var_manifest["fields"]:
-            key = _require_portable_filename_component(field[0])
+            key = self.adapter.get_gene_payload_component(field[0])
             add_payload(var_schema["pathPattern"].format(key=key), n_cells * 4)
 
         if connectivity_manifest is not None:

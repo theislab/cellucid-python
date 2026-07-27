@@ -22,9 +22,9 @@ Cellucid’s **Vector Field Overlay** draws an animated **particle flow** on top
 
 Think of each cell as having a tiny “push” in a certain direction on the embedding. The overlay shows many small particles “floating” along those directions, so you can see:
 
-- where the population tends to “flow”
-- where trajectories appear to start/end
-- where directionality is weak or ambiguous (flow looks noisy or faint)
+- where displayed per-cell directions are locally coherent
+- where the field points along or across an annotated continuum
+- where directionality is weak or ambiguous (flow looks noisy, mixed, or faint)
 
 ### What it’s good for (real questions)
 
@@ -32,13 +32,18 @@ Think of each cell as having a tiny “push” in a certain direction on the emb
 - “Is there a consistent direction along this continuum?”
 - “Do two conditions have different directional trends?”
 
+For example, in the standard Pancreas sample you can color by `clusters`, show
+`velocity_umap` in 2D **Planar**, and then inspect its independent 3D field in
+**Orbit**. Treat agreement as a useful visual check, not as proof of endocrine
+lineage or kinetic time.
+
 ### What success looks like
 
 When it’s working, you see:
 
-- a particle flow that roughly follows your biological expectations (e.g., along a trajectory)
+- a stable particle flow that follows the supplied vectors
 - flow that changes appropriately when you switch to a different vector field (if multiple exist)
-- flow that respects filtering (if you hide cells, the overlay should mostly disappear from those regions)
+- flow that respects filtering (particles are seeded only from currently visible cells)
 
 :::{important}
 The animation is primarily **qualitative**. It is not a substitute for proper velocity uncertainty checks, stream plots, or model diagnostics.
@@ -63,14 +68,20 @@ In other words, if your embedding is `(n_cells, 2)`, then your vector field must
 Cellucid turns your per-cell vectors into a visualization by:
 
 - spawning particles from **visible cells** (it respects filters/visibility),
-- moving particles through space using the local per-cell displacement,
+- moving each particle using its associated cell's dimension-matched vector,
 - drawing motion as trails (so you can see direction and persistence),
 - coloring particles using a **colormap** (the default mapping is based on **vector magnitude**).
+
+The renderer does not reconstruct a continuous biological trajectory between
+cells, infer transition probabilities, or follow a real cell through time.
+`Flow speed:`, `Trail length:`, turbulence, and post-processing change the
+animation, not the stored vector values.
 
 ### Dimensionality is not optional (1D vs 2D vs 3D)
 
 Vector fields are **dimension-specific**:
 
+- a 1D vector field can be shown only in a **1D** embedding view
 - a 2D vector field can be shown only in a **2D** embedding view
 - a 3D vector field can be shown only in a **3D** embedding view
 
@@ -113,6 +124,11 @@ Vector fields can arrive via multiple data loading workflows:
 - **AnnData in the browser / server / Jupyter**: vector fields are detected from
   exact dimension-suffixed `adata.obsm` keys such as `velocity_umap_2d`.
 
+The preparation contracts are documented in
+{doc}`../../python_package/c_data_preparation_api/08_vector_fields_velocity_displacement`;
+loading-path checks are in
+{doc}`../b_data_loading/01_loading_options_overview`.
+
 ---
 
 ## Mini troubleshooting (common misconceptions)
@@ -137,7 +153,9 @@ Start with conservative settings (shorter trails, low turbulence) and verify row
 
 ## Next steps
 
-- Continue to `02_enabling_overlay_and_selecting_field` to learn where the controls live and how dimension switching affects availability.
+- Continue to {doc}`02_enabling_overlay_and_selecting_field` to learn where the
+  controls live and how dimension switching affects availability.
+- Compare the real Pancreas 2D and 3D captures in {doc}`08_screenshots`.
 
 ---
 

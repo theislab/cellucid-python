@@ -85,7 +85,7 @@ Examples:
 If the AnnData object contains more than one field ID, the direct-viewing APIs
 require `vector_field_default` to name the initial field exactly. For example,
 an object containing both example keys above needs
-`vector_field_default="velocity"`. Omitting it, or naming an unavailable
+`vector_field_default="velocity_umap"`. Omitting it, or naming an unavailable
 field, raises `ValueError`.
 
 ---
@@ -149,9 +149,9 @@ print("Wrote vector field:", key)
 ```python
 from cellucid import show_anndata
 
-# This tutorial's Option A stores "velocity"; Option B stores "T_fwd".
+# This tutorial's Option A stores "velocity_umap"; Option B stores "T_fwd_umap".
 # Name the exact field you stored.
-default_vector_field = "velocity"
+default_vector_field = "velocity_umap"
 
 viewer = show_anndata(
     adata,
@@ -164,9 +164,12 @@ viewer
 ```
 
 Then in the UI:
-- open the vector field / velocity overlay panel
-- select the vector field (e.g. `velocity` or `T_fwd`)
-- adjust overlay settings (scale/speed/density) until it’s interpretable
+- open **Visualization → Vector Field Overlay**
+- enable **Show overlay**
+- choose the field under **Vector field:** (for example, `velocity_umap` or
+  `T_fwd_umap`)
+- tune **Particle density:**, **Flow speed:**, and **Trail length:** until
+  the animated particle flow is clear without obscuring the cells
 
 Web-app docs for the overlay UI:
 - {doc}`../../web_app/i_vector_field_velocity/index`
@@ -211,10 +214,12 @@ viewer
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/overlay-controls.png
-:alt: A synthetic 2D dataset with the Vector Field Overlay enabled and animated particle-flow controls visible.
+:alt: The real Pancreatic endocrinogenesis sample in its 2D Planar view with the velocity_umap particle overlay and controls visible.
 :width: 1440px
 
-A current-format 2D vector field rendered as particle flow with its field, density, speed, trail, size, opacity, palette, and LOD controls visible.
+The real 3,696-cell Pancreas sample in Build 2026-07-27.1, rendered in 2D
+Planar mode with `velocity_umap`; the field, density, speed, trail, size,
+opacity, palette, and LOD controls are visible.
 ```
 
 ---
@@ -241,7 +246,7 @@ Best practice:
 - always compute vectors on the same `adata` object (same row order)
 - avoid reindexing between computing `X_umap_2d` and computing `V`
 
-### 3) Scale mismatch (overlay looks “too strong” or “invisible”)
+### 3) Vector-magnitude mismatch (particle flow looks too fast or nearly static)
 
 Vectors can be too small or too large relative to the embedding.
 
@@ -254,7 +259,8 @@ float(np.quantile(mag, 0.5)), float(np.quantile(mag, 0.95))
 
 Fix:
 - rescale vectors before storing/exporting (multiply by a scalar)
-- adjust overlay scale in the UI
+- use **Flow speed:** for presentation only; record any data-space rescaling in
+  the analysis that produced the vectors
 
 ### 4) Non-finite values (NaN/Inf)
 

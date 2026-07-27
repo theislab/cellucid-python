@@ -44,8 +44,9 @@ All notebook/tutorial docs in this section live here:
 
 This folder contains:
 - narrative tutorial pages (`.md`)
-- runnable notebooks (`prepare_*.ipynb`, `jupyter_*.ipynb`)
-- a small supporting dataset folder (`datasets/`)
+- `prepare_pancreas.ipynb`, which builds and validates a compact prepared export
+- `jupyter_pancreas.ipynb`, which exercises embedding, hooks, and sessions
+- a checked-in real Pancreas H5AD in `datasets/`
 
 ## The one mental model that explains 90% of issues
 
@@ -95,16 +96,18 @@ Start with:
 - {doc}`index`
 - {doc}`01_beginner_notebooks_wet_lab_friendly`
 
-### Option B — Run the actual notebooks (recommended)
+### Option B — Run the actual Pancreas notebooks (recommended)
 
 From the repo root (`cellucid-python/`):
 
 ```bash
-jupyter lab docs/user_guide/python_package/f_notebooks_tutorials/
+python -m pip install -e . jupyterlab
+jupyter lab docs/user_guide/python_package/f_notebooks_tutorials/jupyter_pancreas.ipynb
 ```
 
 ```{note}
-The docs site does not execute notebooks during the build (`nb_execution_mode = "off"`), so “expected output” sections describe what you should see rather than embedding executed outputs.
+The notebook resolves its checked-in input from any working directory inside
+the clone. You do not need to edit a data path.
 ```
 
 ### Option C — Remote/HPC notebooks
@@ -119,6 +122,16 @@ In every remote case, pass the resulting browser-reachable HTTP(S) base as
 - {doc}`22_large_dataset_server_mode_and_lazy_gene_expression`
 
 ## What success looks like
+
+- {doc}`prepare_pancreas` reports the checked 2-D embedding, selected
+  observation fields, and exported genes; its prepared viewer opens, then the
+  temporary export is removed cleanly.
+- {doc}`jupyter_pancreas` reports `n_cells=2531` and `dimensions=2`, renders
+  the real `clusters` field, and materializes the viewer highlight back into
+  AnnData.
+- The final connection report says server health is `ok`, confirms 2,531
+  served cells and a successful frontend round trip, and the cleanup cell
+  removes the session artifact and stops the local viewer server.
 
 ## Troubleshooting (quick triage)
 

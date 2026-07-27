@@ -33,9 +33,9 @@ If your dataset is large or you want maximum reliability/performance, use **Serv
 
 ## Fast Path (Wet Lab Friendly)
 
-1) Open Cellucid: https://www.cellucid.com
-2) In the left sidebar, find the data loading area (often labeled **Dataset Connections** or **Browse local data…**).
-3) Choose the button matching what you have:
+1) Open [Cellucid](https://www.cellucid.com/).
+2) Expand **Session** in the left sidebar and find **Local data:**.
+3) Choose the button matching exactly what you have:
    - **Prepared** — a folder created by `prepare()`
    - **H5AD** — one current-schema `.h5ad`, no larger than 512 MiB
    - **Zarr ZIP** — one `.zarr.zip` or `.zip` archive
@@ -108,7 +108,8 @@ Use server mode (recommended):
 cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
-Then open:
+Then open the exact **Viewer URL** printed in the terminal. With the default
+port it is:
 
 ```text
 http://127.0.0.1:8765/?anndata=true
@@ -201,7 +202,7 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 
 ---
 
-### Symptom: “I clicked Folder, but nothing happens”
+### Symptom: “I clicked Prepared, but nothing happens”
 
 **Likely causes (ordered)**
 1) You denied directory access or a managed-browser policy blocked it.

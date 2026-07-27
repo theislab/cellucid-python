@@ -264,12 +264,12 @@ If these do not resolve it, jump to the symptom that matches what you see.
 1) You switched highlight pages (different groups).
 2) You are looking at a snapshot view with different filters (highlights exist but are not visible there).
 3) You reloaded without restoring a session (highlights are not auto-persisted in URLs).
-4) You restored a session on the wrong dataset (dataset-dependent chunks skipped).
+4) You restored a session on the wrong dataset and the complete operation was rejected.
 
 ### How to confirm
 - Check the active page tab and group list.
 - Check whether the highlight count says “X of Y visible”.
-- If you restored a session, look for a warning about dataset mismatch.
+- If you restored a session, check whether it reached terminal **Session fully restored**.
 
 ### Fix
 - Switch to the intended highlight page.
@@ -285,17 +285,18 @@ If these do not resolve it, jump to the symptom that matches what you see.
 ## Symptom: “My highlights didn’t restore from a session”
 
 ### Likely causes (ordered)
-1) Dataset mismatch: session restore skipped dataset-dependent highlights.
-2) Session file is still loading lazy chunks (large highlight memberships can load later).
-3) The exact current session you loaded did not contain those highlights.
+1) Dataset identity or exact-format validation rejected and rolled back the complete restore.
+2) Session progress is still active; lazy highlight memberships are inside the same awaited operation.
+3) The exact current session was saved without those highlights.
 
 ### How to confirm
-- Look for a notification about “dataset mismatch”.
-- Wait a few seconds: large sessions can apply highlight memberships lazily.
-- Check whether pages/groups appear first but counts fill in later (a sign of lazy restore).
+- Require terminal **Session fully restored**, not merely an eager visual change.
+- If progress remains active, let it finish or press **Cancel**.
+- Read any identity, format, or chunk error; no partial result is committed.
 
 ### Fix
 - Load the session on the dataset it was created from.
+- Obtain a fresh current **Save State** bundle if exact-format validation fails.
 - If you must change the dataset, you must recreate highlights (indices won’t match).
 
 ### Prevention

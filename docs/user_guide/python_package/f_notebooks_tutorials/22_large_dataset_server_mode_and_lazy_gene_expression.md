@@ -255,5 +255,5 @@ Fix:
 ## Next steps
 
 - {doc}`23_programmatic_highlighting_and_selection_callbacks` (hooks + robust callback patterns)
-- {doc}`04_real_world_dataset_recipes_gallery` (dataset-specific export notebooks)
+- {doc}`04_real_world_dataset_recipes_gallery` (runnable real Pancreas export)
 - Web app performance guidance: {doc}`../../web_app/n_benchmarking_performance/index`

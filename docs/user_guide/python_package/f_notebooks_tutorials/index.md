@@ -1,6 +1,6 @@
 # Notebooks / Tutorials (Very Detailed, Step-by-Step)
 
-These are long-form, notebook-style tutorials for the **Cellucid Python package**. They are intentionally verbose:
+These are long-form, notebook-style tutorials for the **Cellucid Python package**. They are intentionally thorough:
 - every step is explained,
 - edge cases and “gotchas” are called out,
 - and each tutorial ends with a large troubleshooting section.
@@ -8,7 +8,10 @@ These are long-form, notebook-style tutorials for the **Cellucid Python package*
 ```{note}
 These pages are written in **MyST** and live in `docs/user_guide/python_package/f_notebooks_tutorials/`.
 
-Some entries link to real `.ipynb` notebooks in the same folder. The docs site does **not** execute notebooks during the build (`nb_execution_mode = "off"`), so you should run notebooks locally to reproduce results.
+The runnable `.ipynb` entries use the real Pancreas H5AD checked into this
+repository. The docs site does **not** execute notebooks during the build
+(`nb_execution_mode = "off"`), so run them locally to interact with the
+embedded viewer.
 ```
 
 ::::{grid} 1 1 2 2
@@ -42,18 +45,18 @@ Reproducible exports, scaling workflows, and practical “do this when…” gui
 Hooks, session mechanics, vector fields, and format-level debugging.
 :::
 
-:::{grid-item-card} {octicon}`beaker;1.5em;sd-mr-1` Real-World Dataset Recipes
+:::{grid-item-card} {octicon}`beaker;1.5em;sd-mr-1` Real Pancreas Recipe
 :link: 04_real_world_dataset_recipes_gallery
 :link-type: doc
 
-Dataset-specific preparation notebooks (end-to-end) you can adapt to your data.
+A complete, executable Pancreas preparation workflow you can adapt to your data.
 :::
 
-:::{grid-item-card} {octicon}`plug;1.5em;sd-mr-1` Jupyter Embedding + Hooks Sessions
+:::{grid-item-card} {octicon}`plug;1.5em;sd-mr-1` Jupyter + Hooks + Sessions
 :link: 05_jupyter_embedding_hooks_sessions_gallery
 :link-type: doc
 
-Notebooks focused on embedding, Python↔frontend events, and session bridging.
+A real Pancreas notebook for embedding, Python↔frontend events, and session bridging.
 :::
 
 ::::

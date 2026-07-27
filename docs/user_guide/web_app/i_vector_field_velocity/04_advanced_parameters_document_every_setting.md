@@ -16,6 +16,7 @@ All advanced settings are under:
 - **Visualization → Vector Field Overlay → Advanced Visual Settings** (expand the dropdown triangle)
 
 They only show up after you enable `Show overlay`.
+The **Advanced Visual Settings** disclosure starts collapsed.
 
 :::{important}
 Advanced settings are powerful, but they can also make the overlay scientifically misleading (e.g., adding turbulence or heavy post-processing can suggest structure that isn’t in the data). Use them intentionally.
@@ -68,7 +69,7 @@ These controls add film-like glow and tone mapping. They can dramatically change
 | Setting (UI label) | Range (UI) | Default | What it does | Performance impact | Guidance |
 |---|---:|---:|---|---|---|
 | `Exposure:` | 0.10–2.00 | 0.50 | Global brightness of the overlay’s HDR composite. | Medium | If everything is too dark, raise exposure slightly before raising opacity. |
-| `Bloom strength:` | 0.00–0.50 | 0.08 | How strong the glow spill is around bright particles/trails. | High | For scientific use, keep low (0–0.10) or set to 0 to effectively disable bloom. |
+| `Bloom strength:` | 0.00–0.50 | 0.08 | How strong the glow spill is around bright particles/trails. | High | For scientific use, keep low (0–0.10) or set to 0 to remove the visible bloom contribution. A zero value does not remove the post-processing passes. |
 | `Bloom threshold:` | 0.10–1.00 | 0.75 | How bright something must be before bloom applies. | Medium | Increase threshold to keep bloom only on the brightest pixels. |
 | `Anamorphic ratio:` | 1.0–3.0 | 1.2 | Makes bloom stretched horizontally (“cinematic streaks”). | High | Keep close to 1.0 for scientific figures. |
 
@@ -103,7 +104,8 @@ These are almost entirely aesthetic.
 
 ### If you want a “clean scientific overlay”
 
-1) Keep `Turbulence:` low (0–0.2).
+1) Set `Turbulence:` to 0 when you need the closest visual reading of the
+   supplied vectors; add it only when procedural motion is intentional.
 2) Keep `Bloom strength:` low (0–0.08) and `Anamorphic ratio:` close to 1.0.
 3) Avoid chromatic effects (`Chromatic fade:`, `Chromatic aberr.:`, `Film grain:`).
 4) Use shorter trails and moderate density (see `03_core_parameters_document_exact_ui_labels`).
@@ -114,3 +116,16 @@ These are almost entirely aesthetic.
 2) Increase `Trail persistence:` a bit (but monitor washout).
 3) Use modest bloom (avoid extreme).
 4) Keep a separate “scientific export” preset so your visuals stay honest when you switch contexts.
+
+## Scope and reproducibility
+
+These controls change one global render layer; they are not stored separately
+inside kept snapshots. A matching-dataset `.cellucid-session` does save their
+current values through the sidebar control inventory. Record the field,
+dimension, core controls, and advanced controls together when a rendered
+appearance is evidence.
+
+The real Pancreas field with every group expanded is shown in
+{doc}`08_screenshots`. For session boundaries, see
+{doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`; for figure
+provenance, see {doc}`../k_figure_export/05_metadata_and_provenance`.

@@ -33,8 +33,8 @@ pip install cellucid
 
 Try the web app (no setup):
 
-1. Open https://cellucid.com
-2. Load a pre-exported folder, `.h5ad`, or `.zarr`
+1. Open [cellucid.com](https://www.cellucid.com)
+2. Load a prepared folder, one `.h5ad`, or one `.zarr.zip` archive
 
 Or visualize an AnnData from Python/Jupyter:
 
@@ -48,15 +48,18 @@ show_anndata(
 )
 ```
 
-## Links
+## Documentation and ecosystem
 
-- Web app: https://cellucid.com
-- Documentation: https://cellucid.readthedocs.io
-- Community annotation voting: https://cellucid.readthedocs.io/en/latest/user_guide/web_app/j_community_annotation/index.html
-- Source: https://github.com/theislab/cellucid-python
-- Web viewer: https://github.com/theislab/cellucid
-- Annotation template: https://github.com/theislab/cellucid-annotation
-- Issues: https://github.com/theislab/cellucid-python/issues
+- [Python package guide](https://cellucid.readthedocs.io/en/latest/user_guide/python_package/index.html)
+- [Complete Cellucid documentation](https://cellucid.readthedocs.io/en/latest/)
+- [Live web application](https://www.cellucid.com) and
+  [web viewer source](https://github.com/theislab/cellucid)
+- [R package](https://github.com/theislab/cellucid-r)
+- [Official public demo datasets](https://github.com/theislab/cellucid-datasets)
+- [Three custom dataset repository examples](https://github.com/theislab/cellucid-demo-custom-datasets)
+- [Community annotation repository](https://github.com/theislab/cellucid-annotation)
+  and [annotation guide](https://cellucid.readthedocs.io/en/latest/user_guide/web_app/j_community_annotation/index.html)
+- [Python package issues](https://github.com/theislab/cellucid-python/issues)
 
 ## Community
 

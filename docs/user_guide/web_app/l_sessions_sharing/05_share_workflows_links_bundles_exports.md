@@ -6,7 +6,7 @@
 - The three shareable artifacts: links, session bundles, and export folders
 - Which artifact is appropriate for which collaboration goal
 - How to package “the reproducible pair”: dataset export + `.cellucid-session`
-- How to avoid the common “dataset mismatch” sharing pitfall
+- How to preserve the exact dataset identity a session requires
 
 **Prerequisites:**
 - You can save a session bundle (see {doc}`03_save_restore_ux`)
@@ -91,14 +91,16 @@ This is the default 1:1 collaboration workflow.
 
 1) Load the dataset first (same method if possible).
 2) Load the session file: **Load State** → pick the `.cellucid-session` file.
-3) Wait for eager restore; if the session is large, wait for lazy restore too.
+3) Wait for **Session fully restored**. Eager and lazy are internal scheduling
+   classes; neither is a separate user-visible success state.
 
 ### What success looks like
 
-- No “dataset mismatch” warning.
+- The operation reaches **Session fully restored** with no rejection.
 - Camera, active field, filters, and snapshot layout match what the sender described.
 
-If you get a dataset mismatch warning, go to {doc}`07_versioning_compatibility_and_dataset_identity`.
+If the dataset identity differs, Cellucid rejects and rolls back the complete
+operation. Go to {doc}`07_versioning_compatibility_and_dataset_identity`.
 
 ---
 
@@ -143,18 +145,23 @@ Related: {doc}`../k_figure_export/index`
 
 ---
 
-## Common sharing pitfall: “it loads but warns dataset mismatch”
+## Common sharing pitfall: dataset identity rejection
 
 This happens when the recipient loads the dataset via a different identity than the session expects.
 
 Common causes:
 - the sender loaded from GitHub, the recipient loaded from a local folder (different source type),
 - the dataset was re-exported and the dataset id changed,
-- the dataset contents changed but kept the same id (dangerous; can silently misapply highlights).
+- the dataset contents changed but kept the same id (dangerous because the
+  lightweight fingerprint cannot detect every content change).
 
 How to resolve:
 - align on the same dataset access method (same source type + dataset id), or
 - create a new session bundle from the recipient’s dataset load method.
+
+Cellucid never salvages layout or skips only the scientific chunks. The exact
+fingerprint and complete current chunk profile succeed together or the whole
+restore fails.
 
 Deep dive: {doc}`07_versioning_compatibility_and_dataset_identity`
 
