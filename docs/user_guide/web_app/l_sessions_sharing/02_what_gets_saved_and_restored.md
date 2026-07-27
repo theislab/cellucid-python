@@ -68,8 +68,10 @@ Restored early so you see the correct view quickly:
 - **Camera state**
   - camera position/orbit target/navigation mode
   - locked cameras (shared camera) vs unlocked cameras (per view)
-  - Camera Path keyframes and timing for the matching dataset
-  - restored Camera Paths remain stopped until the user selects **Play**
+  - Camera Path keyframes, timing, interpolation, navigation interaction
+    controls, Loop playback, and Autoplay for the matching dataset
+  - restored Camera Paths remain stopped unless their saved Autoplay setting
+    is enabled; enabled autoplay begins only after the complete restore commits
 - **Dimension levels**
   - which dimension (1D/2D/3D) is active per view
 - **Views / snapshots**

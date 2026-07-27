@@ -62,12 +62,13 @@ motion remains inactive.
 :width: 246px
 
 Two valid keyframes expose timing and interpolation settings in the sidebar.
+Loop playback and Autoplay follow the saved path settings.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/camera-path-transport-visible.png
 :alt: Cellucid with two camera keyframes and the playback transport visible above the canvas.
 :width: 1440px
 
-The top transport appears only after two valid keyframes exist. Playback still
-waits for an explicit user action.
+The top transport appears only after two valid keyframes exist. Playback waits
+for **Play** unless the user explicitly enables **Autoplay**.
 ```

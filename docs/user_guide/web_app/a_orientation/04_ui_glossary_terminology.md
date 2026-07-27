@@ -37,7 +37,7 @@ A loaded dataset in Cellucid: the sidebar controls the active view while the cat
   links skip it because they already declare a data source.
 - **Suo**: the sample catalog default. It may finish loading behind the welcome
   overlay before you choose another source.
-- **Default background**: white in a fresh browser profile. A user-selected
+- **Default background**: light grid in a fresh browser profile. A user-selected
   background remains an explicit preference.
 - **Build**: the web build identity printed in the sidebar footer. Include this
   exact value in bug reports so maintainers can identify the HTML, JavaScript,
@@ -45,12 +45,12 @@ A loaded dataset in Cellucid: the sidebar controls the active view while the cat
   version.
 
 ```{figure} ../../../_static/screenshots/web_app/startup-loaded-build.png
-:alt: Loaded Suo point cloud on a white background with Community Annotation and Camera Path collapsed and Build 2026-07-26.4 in the footer.
+:alt: Loaded Suo point cloud on a light grid with Community Annotation and Camera Path collapsed and Build 2026-07-27.1 in the footer.
 :width: 1440px
 
-Fresh startup after closing the welcome overlay: Suo is loaded on white,
+Fresh startup after closing the welcome overlay: Suo is loaded on the light grid,
 **Community Annotation** and **Camera Path** are collapsed, and the footer
-identifies this capture as Build 2026-07-26.4.
+identifies this capture as Build 2026-07-27.1.
 ```
 
 ---
@@ -133,8 +133,9 @@ Scope note:
 - **Dimension-specific navigation default**: 1D and 2D start in Planar; 3D
   starts in Orbit. An explicit user change takes precedence.
 - **Camera Path**: a collapsed-at-start panel for user-created keyframes. Its
-  transport appears only after two valid keyframes, and playback is stopped
-  until the user starts it.
+  transport appears only after two valid keyframes. Playback is stopped by
+  default; explicit **Autoplay** starts a ready path immediately and after a
+  successful session restore.
 
 ---
 

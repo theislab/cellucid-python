@@ -787,11 +787,12 @@ def test_current_startup_screenshots_and_documented_defaults_are_exact() -> None
     assert "Suo dataset remains the sample\ncatalog default" in quick_tour
     assert "1D or 2D starts in **Planar**" in quick_tour
     assert "3D starts in **Orbit**" in quick_tour
-    assert "default white background" in quick_tour
-    assert "Build 2026-07-26.4" in combined
+    assert "default light grid" in quick_tour
+    assert "Build 2026-07-27.1" in combined
     assert "exact value in bug reports" in glossary
     assert "Camera Path** accordion starts collapsed" in camera_page
     assert "Community Annotation** accordion starts collapsed" in annotation_index
+    assert "unless the user explicitly enables **Autoplay**" in camera_page
 
 
 def test_standard_pancreas_sample_contract_is_documented_exactly() -> None:

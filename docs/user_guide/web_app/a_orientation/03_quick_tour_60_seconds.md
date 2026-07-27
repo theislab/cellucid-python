@@ -28,12 +28,12 @@ Choose **Choose a dataset** to open the data controls, or press {kbd}`Escape`
 to inspect the loaded default dataset first.
 
 ```{figure} ../../../_static/screenshots/web_app/startup-loaded-build.png
-:alt: Loaded Suo point cloud on a white background with Community Annotation and Camera Path collapsed and Build 2026-07-26.4 in the footer.
+:alt: Loaded Suo point cloud on a light grid with Community Annotation and Camera Path collapsed and Build 2026-07-27.1 in the footer.
 :width: 1440px
 
-The fresh loaded state uses a white background. **Community Annotation** and
+The fresh loaded state uses the light grid background. **Community Annotation** and
 **Camera Path** start collapsed, and the footer reports the exact web build
-identity; this capture is Build 2026-07-26.4.
+identity; this capture is Build 2026-07-27.1.
 ```
 
 ---
@@ -64,7 +64,7 @@ A loaded dataset in Cellucid: the sidebar controls the active view while the cat
 
 **What success looks like**
 
-- The canvas shows points on the default white background.
+- The canvas shows points on the default light grid.
 - The dataset info panel shows non‑zero counts.
 
 :::{note}
@@ -83,9 +83,11 @@ ZIP) or from a **Remote server**, but those workflows are documented in
 4) In Orbit, drag to rotate, use the wheel or trackpad to zoom, and
    right-drag (or Shift-drag) to pan.
 
-The app does not start camera motion automatically. **Camera Path** starts
+The app does not start camera motion by default. **Camera Path** starts
 collapsed, its top transport is absent until at least two keyframes exist, and
-playback begins only when you select **Play**.
+playback begins when you select **Play**. If you explicitly enable
+**Autoplay**, a ready path starts immediately and starts again when that
+setting is restored from a session.
 
 ### 3) Color by a field (metadata or gene expression)
 

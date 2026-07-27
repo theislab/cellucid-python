@@ -33,13 +33,16 @@ Camera Path animates between camera positions that you save explicitly:
 2) Move to a second view and save it.
 3) After two valid positions exist, the playback bar becomes available at the
    top of the viewport.
-4) Select **Play** in that bar to start movement.
+4) Select **Play** in that bar to start movement, or enable **Autoplay** directly
+   below **Loop playback**.
 
-Camera Path never starts automatically. Restoring a session can restore its
-saved path, timing, and interpolation settings, but the path remains stopped
-until you select **Play**. With zero or one saved position, the top playback bar
-is not available. Loading another dataset clears the current path so positions
-from one dataset cannot move the camera over another.
+Autoplay is off by default. Enabling it starts a ready path immediately. Save
+State records the setting; after a complete successful Load State operation,
+an enabled ready path starts without another Play action. **Loop playback**
+controls whether it repeats or stops at the final keyframe. With zero or one
+saved position, the top playback bar is not available and Autoplay waits until
+the path becomes ready. Loading another dataset clears the current path so
+positions from one dataset cannot move the camera over another.
 
 :::{note}
 The playback bar auto-hides when idle. Move the pointer over the viewport or
@@ -122,17 +125,19 @@ Practical implication: if you want “start over visually”, use the **button**
 
 Cellucid uses multiple persistence layers:
 
-- **Session bundles (`.cellucid-session`)**: Save/Load State captures the app state, including camera and many UI control values.
+- **Session bundles (`.cellucid-session`)**: Save/Load State captures camera
+  state, Camera Path keyframes, timing, interpolation, navigation interaction
+  controls, Loop playback, Autoplay, and the other current UI control values.
 - **Browser preferences (`localStorage`)**: small UI preferences like background/theme can persist across reloads.
 
 Camera Path keyframes are dataset-dependent session state. They restore only
-for the matching dataset, remain stopped after restore, and are cleared when
-the active dataset changes.
+for the matching dataset and are cleared when the active dataset changes.
+They remain stopped unless the saved path explicitly enabled Autoplay.
 
-Pointer lock state is *not* a persistent preference:
+Pointer lock state is not saved in sessions or browser preferences:
 
-- it is a runtime browser mode,
-- it is disabled when you exit free-fly or press `Esc`.
+- the browser requires a user gesture before it enters pointer lock;
+- active pointer lock ends when you exit free-fly or press `Esc`.
 
 ---
 
@@ -168,7 +173,8 @@ This section is for readers who want repeatable “feel” across machines and s
 :alt: Camera Path panel with two saved keyframes and playback settings.
 :width: 246px
 
-Two valid keyframes expose camera-path timing and interpolation settings; playback still waits for an explicit user action.
+Two valid keyframes expose camera-path timing and interpolation settings.
+Autoplay remains off until the user explicitly enables it.
 ```
 
 ---
