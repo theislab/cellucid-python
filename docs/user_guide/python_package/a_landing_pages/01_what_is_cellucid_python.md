@@ -177,12 +177,12 @@ Most common causes:
 - your notebook is served from HTTPS and blocks HTTP loopback iframes.
 
 Start with:
-- {doc}`02_installation`
+- {doc}`../installation`
 - {doc}`03_compatibility_matrix_must_be_explicit`
 - {doc}`04_quick_start_3_levels`
 
 ## Next steps
 
-- Install and verify the CLI/notebook prerequisites: {doc}`02_installation`
+- Install and verify the CLI/notebook prerequisites: {doc}`../installation`
 - Check environment constraints early (VSCode/Colab/HTTPS notebooks): {doc}`03_compatibility_matrix_must_be_explicit`
 - Get your first view running: {doc}`04_quick_start_3_levels`

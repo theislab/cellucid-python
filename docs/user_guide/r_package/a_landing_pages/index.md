@@ -12,7 +12,7 @@ This documentation is intentionally written for mixed audiences:
 1) {doc}`01_what_is_cellucid_r`
 2) {doc}`04_quick_start_3_levels`
 3) {doc}`03_supported_inputs_and_workflows`
-4) {doc}`02_installation` (or earlier if you can’t install)
+4) {doc}`../installation` (or earlier if you can’t install)
 
 ::::{grid} 1 1 2 2
 :gutter: 3
@@ -39,10 +39,11 @@ Exactly what inputs `cellucid_prepare()` expects (shapes, dtypes, conventions), 
 :::
 
 :::{grid-item-card} {octicon}`download;1.5em;sd-mr-1` Installation
-:link: 02_installation
+:link: ../installation
 :link-type: doc
 
-How to install from GitHub, optional dependencies, and installation troubleshooting.
+How to choose CRAN or the official source, verify the active version, install
+optional dependencies, and troubleshoot the environment.
 :::
 
 ::::

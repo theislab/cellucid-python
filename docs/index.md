@@ -147,7 +147,7 @@ SingleCellExperiment, then validate and share it through the same viewer.
 
 Install the Python tools with `pip install cellucid`. For R installation and
 supported inputs, begin with the {doc}`R guide
-<user_guide/r_package/a_landing_pages/02_installation>`.
+<user_guide/r_package/installation>`.
 
 ```{toctree}
 :maxdepth: 2

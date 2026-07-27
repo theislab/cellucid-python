@@ -10,8 +10,20 @@ If you want notebook embedding, servers, and programmatic control, see the {doc}
 For the web UI experience after export (loading, filtering, analysis, sessions, community annotation), see {doc}`../web_app/index`.
 ```
 
+:::{admonition} Active package version — 0.9.1
+:class: note
+
+Version **0.9.1** is the active Cellucid for R source and documentation
+version and the CRAN submission release. The
+[CRAN package index](https://cran.r-project.org/web/packages/available_packages_by_name.html)
+is authoritative for registry availability. Check an installed environment
+with `packageVersion("cellucid")`; the {doc}`installation` page gives the
+matching CRAN and official-source installation paths.
+:::
+
 ## Where to start (pick one)
 
+- “I need to install or verify Cellucid for R” → {doc}`installation`
 - “I have a Seurat object” → {doc}`e_integrations_recipes/01_seurat_recipe`
 - “I have a SingleCellExperiment” → {doc}`e_integrations_recipes/02_singlecellexperiment_recipe`
 - “I just have matrices/data.frames” → {doc}`e_integrations_recipes/03_raw_matrices_and_data_frames_recipe`
@@ -24,6 +36,14 @@ For the web UI experience after export (loading, filtering, analysis, sessions, 
 
 ::::{grid} 1 1 2 2
 :gutter: 3
+
+:::{grid-item-card} {octicon}`download;1.5em;sd-mr-1` Installation
+:link: installation
+:link-type: doc
+
+Install version 0.9.1 from the source currently available to you, verify the
+loaded package, and diagnose dependency or environment problems.
+:::
 
 :::{grid-item-card} {octicon}`rocket;1.5em;sd-mr-1` Landing Pages
 :link: a_landing_pages/index
@@ -94,6 +114,7 @@ Symptom → diagnosis → fix across installation, exports, and web app loading.
 :maxdepth: 2
 :hidden:
 
+installation
 a_landing_pages/index
 b_concepts_mental_models/index
 c_data_preparation_api/index

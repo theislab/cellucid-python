@@ -444,7 +444,7 @@ def test_docs_do_not_reintroduce_removed_or_invented_runtime_contracts() -> None
     assert "`CELLUCID_CLIENT_SERVER_URL` are ignored" in environment_page
 
     installation_page = text_by_path[
-        Path("docs/user_guide/python_package/a_landing_pages/02_installation.md")
+        Path("docs/user_guide/python_package/installation.md")
     ]
     assert r".\.venv\Scripts\Activate.ps1" in installation_page
     assert r".\.venv\Scripts\activate.bat" in installation_page

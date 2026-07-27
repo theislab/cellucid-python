@@ -66,7 +66,6 @@ Update all release surfaces:
 - `CHANGELOG.md`
 - `CITATION.cff`
 - `docs/conf.py`
-- `docs/_static/switcher.json`
 - the installation, packaging, and release pages
 - `scripts/publishing/meta.yaml`
 

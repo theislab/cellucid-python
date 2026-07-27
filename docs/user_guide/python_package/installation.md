@@ -4,6 +4,14 @@
 **Time:** 5–20 minutes  
 **Goal:** install `cellucid`, verify the CLI, and avoid the most common environment pitfalls
 
+:::{note}
+**Active package version: 0.9.1.** Version 0.9.1 is the PyPI submission
+release. If the [PyPI package page](https://pypi.org/project/cellucid/) lists
+0.9.1, the normal install and pin commands below retrieve it. Until then, they
+resolve only to versions available from PyPI; use the source-checkout install
+under **Deep path** when validating 0.9.1 before publication.
+:::
+
 ## Requirements
 
 - **Python:** 3.11, 3.12, 3.13, or 3.14 (see `requires-python` in `pyproject.toml`)
@@ -168,7 +176,7 @@ python -c "from cellucid import clear_web_cache; print(clear_web_cache())"
 
 - **Multiple Python environments**: “installed but can’t import” usually means you installed into one env and ran Python in another.
 - **Conda + pip mixing**: it can work, but if you hit binary/ABI issues, prefer either “all conda” or “all pip” for core scientific deps.
-- **HTTPS notebook pages**: if your notebook is served over HTTPS, the browser can block `http://127.0.0.1:<port>` iframes (mixed content). See {doc}`03_compatibility_matrix_must_be_explicit`.
+- **HTTPS notebook pages**: if your notebook is served over HTTPS, the browser can block `http://127.0.0.1:<port>` iframes (mixed content). See {doc}`a_landing_pages/03_compatibility_matrix_must_be_explicit`.
 - **Blocked viewer source**: startup stops if the configured source inventory or
   any declared asset cannot be fetched and verified. Use `--no-web-ui` only
   when you intentionally want the scientific data endpoints without a viewer.
@@ -272,5 +280,5 @@ python -m pip show cellucid
 
 ## Next steps
 
-- Environment gotchas first: {doc}`03_compatibility_matrix_must_be_explicit`
-- Then get something running end-to-end: {doc}`04_quick_start_3_levels`
+- Environment gotchas first: {doc}`a_landing_pages/03_compatibility_matrix_must_be_explicit`
+- Then get something running end-to-end: {doc}`a_landing_pages/04_quick_start_3_levels`

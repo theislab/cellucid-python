@@ -101,44 +101,17 @@ html_theme_options = {
     },
     "header_links_before_dropdown": 5,
     "navbar_align": "left",
-    "navbar_end": ["theme-switcher", "navbar-icon-links", "version-switcher"],
+    "navbar_end": ["theme-switcher", "navbar-icon-links"],
     "icon_links": [
         {
             "name": "Cellucid App",
             "url": "https://cellucid.com",
             "icon": "fa-solid fa-globe",
         },
-        {
-            "name": "GitHub: cellucid",
-            "url": "https://github.com/theislab/cellucid",
-            "icon": "fa-brands fa-github",
-        },
-        {
-            "name": "GitHub: cellucid-annotation",
-            "url": "https://github.com/theislab/cellucid-annotation",
-            "icon": "fa-solid fa-pen-to-square",
-        },
-        {
-            "name": "GitHub: cellucid-python",
-            "url": "https://github.com/theislab/cellucid-python",
-            "icon": "fa-brands fa-python",
-        },
-        {
-            "name": "GitHub: cellucid-r",
-            "url": "https://github.com/theislab/cellucid-r",
-            "icon": "fa-brands fa-r-project",
-        },
     ],
-    "show_version_warning_banner": True,
     "footer_start": ["copyright"],
     "footer_end": ["sphinx-version"],
-    "secondary_sidebar_items": ["page-toc", "edit-this-page"],
-    "use_edit_page_button": True,
-    # Version switcher
-    "switcher": {
-        "json_url": "https://cellucid.readthedocs.io/en/latest/_static/switcher.json",
-        "version_match": version,
-    },
+    "secondary_sidebar_items": ["page-toc"],
     # Navigation
     "navigation_with_keys": True,
     "show_nav_level": 1,
@@ -146,11 +119,7 @@ html_theme_options = {
 }
 
 html_context = {
-    "default_mode": "auto",
-    "github_user": "theislab",
-    "github_repo": "cellucid-python",
-    "github_version": "main",
-    "doc_path": "docs",
+    "default_mode": "light",
 }
 
 html_static_path = ["_static"]

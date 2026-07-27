@@ -137,7 +137,8 @@ def test_release_version_and_embedding_dimensions_are_coherent() -> None:
     citation = (REPOSITORY_ROOT / "CITATION.cff").read_text(encoding="utf-8")
     docs_conf = (REPOSITORY_ROOT / "docs/conf.py").read_text(encoding="utf-8")
     assert f"## [{version}]" in changelog
-    assert f"/compare/v{version}...HEAD" in changelog
+    assert "## [Unreleased]" not in changelog
+    assert "[Unreleased]:" not in changelog
     assert f"/releases/tag/v{version}" in changelog
     assert f"version: {version}" in citation
     assert "date-released:" not in citation

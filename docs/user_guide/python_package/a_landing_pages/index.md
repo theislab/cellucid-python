@@ -20,7 +20,7 @@ Cellucid is a **web app** (the viewer UI) plus **helper packages** that bring yo
 
 - “I have an AnnData and want to see it *now*” → {doc}`04_quick_start_3_levels` (Level 1: `show_anndata`)
 - “I need a shareable, fast export folder (papers/collaboration)” → {doc}`04_quick_start_3_levels` (Level 2: `prepare`) + {doc}`../c_data_preparation_api/index`
-- “I want the viewer in a browser (no notebook)” → {doc}`02_installation` (verify CLI) + {doc}`04_quick_start_3_levels` (use `cellucid serve`)
+- “I want the viewer in a browser (no notebook)” → {doc}`../installation` (verify CLI) + {doc}`04_quick_start_3_levels` (use `cellucid serve`)
 - “I need Python ↔ UI hooks (selection callbacks, programmatic highlights)” → {doc}`04_quick_start_3_levels` (Level 3) + {doc}`../e_jupyter_hooks/index`
 - “Something failed” → {doc}`../i_troubleshooting_index/index`
 
@@ -39,7 +39,7 @@ What the Python package does, how it relates to the Cellucid web app, and which 
 :::
 
 :::{grid-item-card} {octicon}`download;1.5em;sd-mr-1` Installation
-:link: 02_installation
+:link: ../installation
 :link-type: doc
 
 How to install, optional dependencies, platform notes, and installation troubleshooting.

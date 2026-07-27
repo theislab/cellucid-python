@@ -121,7 +121,7 @@ viewer.highlight_cells([0, 2], color="#00cc66")
   `adata.obsm`.
 - **HTTPS notebooks / remote kernels**: see {doc}`03_compatibility_matrix_must_be_explicit`.
 - **Viewer source unavailable**: viewer-serving startup stops; see
-  {doc}`02_installation`.
+  {doc}`../installation`.
 
 ---
 
@@ -357,7 +357,7 @@ cleanup_all()
   `client_server_url=` (see
   {doc}`03_compatibility_matrix_must_be_explicit`).
 - **Viewer-source access**: startup requires the complete exact generation from
-  the configured source (see {doc}`02_installation`).
+  the configured source (see {doc}`../installation`).
 
 ## Troubleshooting (quick start)
 

@@ -25,4 +25,4 @@ Run `python -m pip show cellucid`, then inspect the environment that owns
 environment's executable path.
 
 For environment creation, editable installs, and the full verification sequence,
-see {doc}`../a_landing_pages/02_installation`.
+see {doc}`../installation`.

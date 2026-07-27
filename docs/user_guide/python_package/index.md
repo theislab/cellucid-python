@@ -4,8 +4,20 @@ This guide documents the **`cellucid` Python package**: how to prepare datasets,
 
 If you’re looking for the end-user web UI docs (loading data, filtering, analysis, annotation), start with {doc}`../web_app/index`.
 
+:::{admonition} Active package version — 0.9.1
+:class: note
+
+Version **0.9.1** is the current Cellucid Python source and documentation
+version and the PyPI submission release. The
+[PyPI package page](https://pypi.org/project/cellucid/) is authoritative for
+registry availability. Check an installed environment with
+`python -c "import cellucid; print(cellucid.__version__)"`; the
+{doc}`installation` page gives the matching install path.
+:::
+
 ## Where to start (pick one)
 
+- “I need to install or verify Cellucid” → {doc}`installation`
 - “I have an AnnData and want to view it” → {doc}`d_viewing_apis/index` (and {doc}`../web_app/b_data_loading/05_jupyter_tutorial`)
 - “I want the fastest web viewing” → {doc}`c_data_preparation_api/index` (exports via `prepare`)
 - “I want notebook embedding + programmatic control” → {doc}`d_viewing_apis/index` + {doc}`e_jupyter_hooks/index`
@@ -16,6 +28,14 @@ If you’re looking for the end-user web UI docs (loading data, filtering, analy
 
 ::::{grid} 1 1 2 2
 :gutter: 3
+
+:::{grid-item-card} {octicon}`download;1.5em;sd-mr-1` Installation
+:link: installation
+:link-type: doc
+
+Install on macOS, Linux, or Windows; verify the package and CLI; and diagnose
+environment or viewer-startup problems.
+:::
 
 :::{grid-item-card} {octicon}`rocket;1.5em;sd-mr-1` Landing Pages
 :link: a_landing_pages/index
@@ -93,6 +113,7 @@ Complete reference for all functions and classes in the Cellucid Python package.
 :maxdepth: 2
 :hidden:
 
+installation
 a_landing_pages/index
 b_concepts_mental_models/index
 c_data_preparation_api/index

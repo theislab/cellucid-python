@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import re
 import subprocess
 import tomllib
@@ -193,9 +192,8 @@ def validate_release(tag: str | None, *, verify_local_tags: bool = False) -> str
     changelog = _read("CHANGELOG.md")
     _require(f"## [{version}]" in changelog, "CHANGELOG.md has no current release heading")
     _require(
-        f"[Unreleased]: https://github.com/theislab/cellucid-python/compare/v{version}...HEAD"
-        in changelog,
-        "CHANGELOG.md has no current comparison link",
+        "## [Unreleased]" not in changelog and "[Unreleased]:" not in changelog,
+        "CHANGELOG.md must contain release entries only",
     )
     _require(
         f"[{version}]: https://github.com/theislab/cellucid-python/releases/tag/v{version}"
@@ -220,7 +218,7 @@ def validate_release(tag: str | None, *, verify_local_tags: bool = False) -> str
     exact_text = {
         "CITATION.cff": f"version: {version}",
         "docs/conf.py": f'release = version = "{version}"  # CELLUCID_VERSION',
-        "docs/user_guide/python_package/a_landing_pages/02_installation.md": (
+        "docs/user_guide/python_package/installation.md": (
             f'pip install "cellucid=={version}"  # CELLUCID_VERSION'
         ),
         "docs/user_guide/python_package/h_developer_docs/04_build_install_and_packaging.md": (
@@ -229,7 +227,7 @@ def validate_release(tag: str | None, *, verify_local_tags: bool = False) -> str
         "docs/user_guide/python_package/h_developer_docs/14_release_process.md": (
             f"`cellucid` is currently in beta (`{version}`). <!-- CELLUCID_VERSION -->"
         ),
-        "docs/user_guide/r_package/a_landing_pages/02_installation.md": (
+        "docs/user_guide/r_package/installation.md": (
             f"Version `{version}` from `packageVersion` <!-- CELLUCID_VERSION -->"
         ),
     }
@@ -248,13 +246,6 @@ def validate_release(tag: str | None, *, verify_local_tags: bool = False) -> str
         "CHANGELOG.md current version heading must not claim a publication date",
     )
 
-    switcher = json.loads(_read("docs/_static/switcher.json"))
-    stable = [entry for entry in switcher if entry.get("preferred") is True]
-    _require(len(stable) == 1, "documentation switcher must have one preferred release")
-    _require(
-        stable[0].get("version") == version,
-        "documentation switcher preferred release does not match package metadata",
-    )
     validate_recipe(version)
     return version
 

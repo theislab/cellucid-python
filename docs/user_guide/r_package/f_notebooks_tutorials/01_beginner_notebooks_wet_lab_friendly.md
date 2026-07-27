@@ -44,7 +44,7 @@ Then:
 library(cellucid)
 ```
 
-If `library(cellucid)` fails, go to {doc}`../a_landing_pages/02_installation`.
+If `library(cellucid)` fails, go to {doc}`../installation`.
 
 ---
 

@@ -2,6 +2,17 @@
 
 **Audience:** everyone  
 **Time:** 5–15 minutes (depending on your setup)
+**Goal:** install Cellucid for R, verify version 0.9.1, and choose the correct
+source for current registry availability
+
+:::{note}
+**Active package version: 0.9.1.** Version 0.9.1 is the CRAN submission
+release. The
+[CRAN package index](https://cran.r-project.org/web/packages/available_packages_by_name.html)
+is authoritative for registry availability. Use the CRAN command below when
+the index lists `cellucid` 0.9.1; otherwise install the active source from the
+official GitHub repository.
+:::
 
 ## Requirements
 
@@ -14,16 +25,29 @@
 Those packages are only needed if you want to follow the Seurat/SCE recipes in this guide.
 ```
 
-## Install from GitHub (recommended for now)
+## Install Cellucid
 
-### Option A: `remotes` (simple, common)
+### From CRAN when version 0.9.1 is listed
+
+When the CRAN package index lists `cellucid` 0.9.1, install it with:
+
+```r
+install.packages("cellucid")
+```
+
+If the index does not list version 0.9.1 yet, use the official source
+installation below.
+
+### From the official source repository
+
+#### Option A: `remotes` (simple, common)
 
 ```r
 install.packages("remotes")
 remotes::install_github("theislab/cellucid-r")
 ```
 
-### Option B: `pak` (often faster, better resolver)
+#### Option B: `pak` (often faster, better resolver)
 
 ```r
 install.packages("pak")
@@ -58,8 +82,8 @@ install.packages("Matrix")
 ### Seurat / SingleCellExperiment (only for the recipes)
 
 These are optional and only needed if you want to follow the extraction tutorials:
-- {doc}`../e_integrations_recipes/01_seurat_recipe`
-- {doc}`../e_integrations_recipes/02_singlecellexperiment_recipe`
+- {doc}`e_integrations_recipes/01_seurat_recipe`
+- {doc}`e_integrations_recipes/02_singlecellexperiment_recipe`
 
 ## Troubleshooting installation
 
@@ -113,4 +137,4 @@ packageVersion("cellucid")
 
 ## Next steps
 
-- Ready to export? Go to {doc}`04_quick_start_3_levels`.
+- Ready to export? Go to {doc}`a_landing_pages/04_quick_start_3_levels`.
