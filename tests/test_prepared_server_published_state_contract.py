@@ -289,6 +289,7 @@ def test_published_state_rejects_a_partial_sidecar_pair(
         (b"", "1 through 32768"),
         (b"x" * 32769, "1 through 32768"),
     ],
+    ids=("empty", "one-byte-over-limit"),
 )
 def test_published_state_bundle_has_one_exact_bounded_transport(
     tmp_path: Path,
