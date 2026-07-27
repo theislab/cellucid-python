@@ -30,10 +30,11 @@ If this doesn’t load, the viewer can’t load either.
 
 ### 3) Is the exact viewer generation being served?
 
-Open:
+Open the exact **Viewer URL** printed by the server:
 
 ```text
-http://127.0.0.1:<port>/
+Prepared export: http://127.0.0.1:<port>/?source=remote
+Direct AnnData:  http://127.0.0.1:<port>/?anndata=true
 ```
 
 If you see a “viewer UI could not be loaded” page, it’s a UI cache/network issue (see below).

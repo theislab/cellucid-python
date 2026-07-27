@@ -30,7 +30,7 @@ servers, notebook embedding, hooks, and Python-side preparation.
 - Typical tutorial: 20–60 minutes
 
 **Prerequisites**
-- Python 3.10+ (recommended)
+- Python 3.11–3.14
 - A Jupyter environment (JupyterLab, classic notebook, VSCode notebooks, or Colab)
 - `pip install cellucid`
 

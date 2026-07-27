@@ -31,15 +31,19 @@ report
 
 This returns a structured dict that checks:
 - server probes (`/_cellucid/health`, `/_cellucid/info`, `/_cellucid/datasets`)
+- every declared dataset identity under its exact id/path
 - whether the verified viewer UI (`/index.html`) is being served
 - a Python → frontend roundtrip (ping/pong)
 - a frontend debug snapshot (iframe URL/origin/user agent)
-- recent frontend console warnings/errors forwarded to Python
+- recent accepted-event counts grouped by exact event type
 
 ### How to read the report (high signal fields)
 
 - `server_health` / `server_health_error`
   - If this fails: the server isn’t reachable (port/network problem).
+- `dataset_identity_probes`
+  - Every declared dataset id maps to its exact path, URL, and parsed identity,
+    or to that dataset’s explicit probe error.
 - `viewer_index_probe` / `viewer_index_probe_error`
   - If this fails: the active verified generation is not being served.
 - `frontend_roundtrip`

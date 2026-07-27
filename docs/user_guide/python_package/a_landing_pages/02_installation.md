@@ -6,7 +6,7 @@
 
 ## Requirements
 
-- **Python:** `>= 3.10` (see `requires-python` in `pyproject.toml`)
+- **Python:** 3.11, 3.12, 3.13, or 3.14 (see `requires-python` in `pyproject.toml`)
 - **OS:** macOS, Linux, or Windows
 - **Browser:** a current Chrome, Edge, Firefox, or Safari release
 - **Network (at viewer startup):** the Python server establishes the exact web
@@ -93,18 +93,20 @@ pip install -U cellucid
 Pin a specific version (recommended for paper pipelines):
 
 ```bash
-pip install "cellucid==0.0.9"  # CELLUCID_VERSION
+pip install "cellucid==0.9.1"  # CELLUCID_VERSION
 ```
 
 ### Core scientific runtime
 
 The core installation includes the coupled direct-data runtime:
 
-- `anndata>=0.11.4,<0.12`
-- `zarr>=2.18.3,<3`
+- `anndata>=0.12.19,<0.13`
+- `zarr>=3.1.4,<4`
+- `numcodecs>=0.16.3,<0.17`
 
 Python `.zarr` input is one complete Zarr v2 root containing both `.zgroup` and
-`.zattrs`. No separate Zarr installation is needed.
+`.zattrs`. The core installation supplies the complete reader runtime,
+including the compiled numcodecs wheel used on Python 3.14.
 
 ### Additional tools you might need
 
@@ -176,7 +178,7 @@ python -c "from cellucid import clear_web_cache; print(clear_web_cache())"
 ### Symptom: `pip install cellucid` fails with a Python version error
 
 **Likely causes**
-- You’re on Python `< 3.10`.
+- You’re outside the supported Python 3.11–3.14 range.
 
 **How to confirm**
 ```bash
@@ -184,7 +186,7 @@ python --version
 ```
 
 **Fix**
-- Create a new environment with Python 3.10+ (see “Fast path”).
+- Create a new environment with Python 3.11–3.14 (see “Fast path”).
 
 ---
 

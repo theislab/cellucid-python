@@ -15,8 +15,8 @@ If `pip show` reports no installation, activate the intended environment and run
 
 ## Python version rejected
 
-Cellucid requires Python 3.10 or newer. Check with `python --version`, then create
-a supported environment if necessary.
+Cellucid supports Python 3.11 through 3.14. Check with `python --version`, then
+create an environment in that range if necessary.
 
 ## CLI command not found
 

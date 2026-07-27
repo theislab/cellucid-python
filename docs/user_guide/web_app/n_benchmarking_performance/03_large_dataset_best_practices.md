@@ -251,7 +251,7 @@ If large datasets are unusable, triage in this order:
 
 ```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
 :alt: Cellucid showing two side-by-side views of the same dataset.
-:width: 100%
+:width: 1440px
 
 Two kept views support side-by-side comparison while retaining one dataset identity.
 ```

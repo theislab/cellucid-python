@@ -63,7 +63,7 @@ If you’re a wet lab scientist or a non-technical collaborator, it helps to thi
 
 ```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
 :alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
-:width: 100%
+:width: 1440px
 
 A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
 ```

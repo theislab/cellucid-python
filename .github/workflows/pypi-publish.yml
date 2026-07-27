@@ -4,29 +4,183 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build-and-publish:
+  release-provenance:
+    name: Verify release provenance
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Checkout
+      - name: Check out the exact tag with complete history
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
-      - name: Set up Python
+      - name: Install Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.10"
+          python-version: "3.14"
 
-      - name: Install build backend
-        run: python -m pip install --upgrade pip build
+      - name: Require the tag and package versions to match
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python scripts/validate_release.py \
+            --tag "${RELEASE_TAG}" \
+            --verify-local-tags
 
-      - name: Build distributions
-        run: python -m build
+      - name: Require the tagged commit to belong to origin/main
+        shell: bash
+        run: |
+          git fetch --force --no-tags origin \
+            refs/heads/main:refs/remotes/origin/main
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]]
+          if ! git merge-base --is-ancestor \
+            "${GITHUB_SHA}" "refs/remotes/origin/main"; then
+            echo "::error::Release commit ${GITHUB_SHA} is not on origin/main."
+            exit 1
+          fi
 
-      - name: Publish to PyPI
+  quality-gates:
+    name: Release quality gates
+    needs: release-provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the exact tag
+        uses: actions/checkout@v7
+
+      - name: Install Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install the package and release tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,docs]"
+
+      - name: Run source quality gates
+        run: |
+          python -m ruff check src tests scripts/validate_release.py scripts/normalize_sdist.py
+          python -m mypy src/cellucid
+          python -m pytest
+
+      - name: Build documentation with warnings as errors
+        run: python -m sphinx -W --keep-going -b html docs docs/_build/html
+
+  build:
+    name: Build release distributions
+    needs: release-provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the exact tag
+        uses: actions/checkout@v7
+
+      - name: Install Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "build==1.5.0" "twine==6.2.0"
+
+      - name: Build and inspect both distributions
+        env:
+          SOURCE_DATE_EPOCH: "315532800"
+        run: |
+          python -m build
+          python scripts/normalize_sdist.py dist
+          python scripts/validate_release.py --sdist dist
+          python -m twine check --strict dist/*
+
+      - name: Upload the exact distributions
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-distributions
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  artifact-gates:
+    name: Installed artifact gates
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        artifact: [wheel, sdist]
+    steps:
+      - name: Download the exact distributions
+        uses: actions/download-artifact@v8
+        with:
+          name: python-distributions
+          path: dist
+
+      - name: Install Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install the selected distribution
+        shell: bash
+        env:
+          ARTIFACT_KIND: ${{ matrix.artifact }}
+        run: |
+          python -m pip install --upgrade pip
+          if [[ "${ARTIFACT_KIND}" == "wheel" ]]; then
+            artifact="$(find dist -maxdepth 1 -type f -name 'cellucid-*.whl' -print)"
+          else
+            artifact="$(find dist -maxdepth 1 -type f -name 'cellucid-*.tar.gz' -print)"
+          fi
+          [[ -n "${artifact}" ]]
+          [[ "$(printf '%s\n' "${artifact}" | wc -l | tr -d ' ')" == "1" ]]
+          python -m pip install "${artifact}"
+
+      - name: Verify installed metadata, dependencies, API, and CLI
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python -m pip check
+          python -c "import cellucid; assert 'v' + cellucid.__version__ == '${RELEASE_TAG}'"
+          cellucid --version
+          cellucid --help
+          cellucid serve --help
+
+  publish:
+    name: Publish exact distributions
+    needs: [quality-gates, artifact-gates]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/p/cellucid
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download the gated distributions
+        uses: actions/download-artifact@v8
+        with:
+          name: python-distributions
+          path: dist
+
+      - name: Publish through PyPI trusted publishing
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
           packages-dir: dist/

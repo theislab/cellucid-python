@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import ast
+import binascii
 import inspect
 import json
 import re
+import struct
 import textwrap
 from collections.abc import Iterator
 from pathlib import Path
@@ -49,6 +51,53 @@ COMMENTED_CALL_START = re.compile(
     rf"(?:{'|'.join(sorted(map(re.escape, PUBLIC_CALL_NAMES), key=len, reverse=True))})"
     r"\s*\("
 )
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def _validated_png_dimensions(path: Path) -> tuple[int, int]:
+    payload = path.read_bytes()
+    assert payload.startswith(PNG_SIGNATURE), path
+
+    offset = len(PNG_SIGNATURE)
+    dimensions: tuple[int, int] | None = None
+    saw_image_data = False
+    saw_end = False
+    while offset < len(payload):
+        assert offset + 12 <= len(payload), path
+        chunk_length = struct.unpack(">I", payload[offset : offset + 4])[0]
+        chunk_type = payload[offset + 4 : offset + 8]
+        chunk_data_start = offset + 8
+        chunk_data_end = chunk_data_start + chunk_length
+        chunk_crc_end = chunk_data_end + 4
+        assert chunk_crc_end <= len(payload), (path, chunk_type)
+
+        chunk_data = payload[chunk_data_start:chunk_data_end]
+        expected_crc = struct.unpack(">I", payload[chunk_data_end:chunk_crc_end])[0]
+        actual_crc = binascii.crc32(chunk_type + chunk_data) & 0xFFFFFFFF
+        assert actual_crc == expected_crc, (path, chunk_type)
+
+        if chunk_type == b"IHDR":
+            assert dimensions is None and offset == len(PNG_SIGNATURE), path
+            assert chunk_length == 13, path
+            width, height = struct.unpack(">II", chunk_data[:8])
+            assert width > 0 and height > 0, path
+            assert chunk_data[10:12] == b"\x00\x00", path
+            assert chunk_data[12] in {0, 1}, path
+            dimensions = (width, height)
+        elif chunk_type == b"IDAT":
+            assert dimensions is not None, path
+            saw_image_data = True
+        elif chunk_type == b"IEND":
+            assert chunk_length == 0 and not saw_end, path
+            saw_end = True
+            offset = chunk_crc_end
+            break
+
+        offset = chunk_crc_end
+
+    assert dimensions is not None and saw_image_data and saw_end, path
+    assert offset == len(payload), path
+    return dimensions
 
 
 def _markdown_files() -> list[Path]:
@@ -493,11 +542,7 @@ def test_documented_embedding_requirements_use_exact_current_keys() -> None:
         / "python_package"
         / "c_data_preparation_api"
         / "02_input_requirements_global.md",
-        DOCS_ROOT
-        / "user_guide"
-        / "python_package"
-        / "c_data_preparation_api"
-        / "index.md",
+        DOCS_ROOT / "user_guide" / "python_package" / "c_data_preparation_api" / "index.md",
     ]
     exact_keys = ("X_umap_1d", "X_umap_2d", "X_umap_3d")
 
@@ -585,7 +630,43 @@ def test_server_and_jupyter_docs_state_exact_current_security_and_loading() -> N
     for claim in stale_zarr_claims:
         assert claim not in all_text
 
+    prepared_server_page = text_by_path[
+        Path(
+            "docs/user_guide/python_package/d_viewing_apis/"
+            "05_python_serve_and_serve_anndata_quickstart.md"
+        )
+    ]
+    advanced_server_page = text_by_path[
+        Path("docs/user_guide/python_package/d_viewing_apis/09_server_mode_advanced.md")
+    ]
+    for page in (prepared_server_page, advanced_server_page):
+        assert "/?source=remote" in page
+        assert "first paint" in page
+
     failures: list[str] = []
+    bare_loopback_viewer = re.compile(
+        r"http://127\.0\.0\.1:(?:<port>|\d+)/"
+        r"(?=(?:\s|[`)\],.;:]|$))"
+    )
+    launch_text_by_path = dict(text_by_path)
+    launch_text_by_path.update(
+        {
+            path.relative_to(REPOSITORY_ROOT): path.read_text(encoding="utf-8")
+            for path in _notebook_files()
+        }
+    )
+    for path, text in launch_text_by_path.items():
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if bare_loopback_viewer.search(line):
+                failures.append(
+                    f"{path}:{line_number}: prepared/direct server launch "
+                    "must use its exact printed Viewer URL"
+                )
+
+    cli_source = (REPOSITORY_ROOT / "src" / "cellucid" / "cli.py").read_text(encoding="utf-8")
+    assert not bare_loopback_viewer.search(cli_source)
+    assert "open the exact Viewer URL printed by Cellucid" in cli_source
+
     session_route = re.compile(r"/_cellucid/session_bundle\?[^\s`]*")
     for path, text in text_by_path.items():
         for line_number, line in enumerate(text.splitlines(), start=1):
@@ -607,8 +688,9 @@ def test_docs_preserve_closed_jupyter_session_and_zarr_contracts() -> None:
     markdown_text = "\n".join(path.read_text(encoding="utf-8") for path in _markdown_files())
     pyproject_text = (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
-    assert "anndata>=0.11.4,<0.12" in pyproject_text
-    assert "zarr>=2.18.3,<3" in pyproject_text
+    assert "anndata>=0.12.19,<0.13" in pyproject_text
+    assert "zarr>=3.1.4,<4" in pyproject_text
+    assert "numcodecs>=0.16.3,<0.17" in pyproject_text
     assert "pip install zarr" not in markdown_text.lower()
     assert "frontend_console" not in markdown_text
 
@@ -658,3 +740,211 @@ def test_docs_preserve_closed_jupyter_session_and_zarr_contracts() -> None:
         in session_reference
     )
     assert "inplace=False` rejects a backed target" in session_reference
+
+
+def test_embedding_docs_require_a_defined_normalization_range() -> None:
+    page = (
+        DOCS_ROOT
+        / "user_guide"
+        / "python_package"
+        / "c_data_preparation_api"
+        / "03_embeddings_and_coordinates.md"
+    ).read_text(encoding="utf-8")
+    assert "all points identical is rejected" in page
+    assert "no finite normalization scale exists" in page
+    assert "nonzero finite range on at least one axis" in page
+    assert "collapsed point cloud" not in page
+    assert "export is “valid”" not in page
+
+
+def test_current_startup_screenshots_and_documented_defaults_are_exact() -> None:
+    screenshot_directory = DOCS_ROOT / "_static" / "screenshots" / "web_app"
+    for filename in ("welcome-startup.png", "startup-loaded-build.png"):
+        assert _validated_png_dimensions(screenshot_directory / filename) == (
+            1440,
+            1000,
+        )
+
+    quick_tour = (
+        DOCS_ROOT / "user_guide" / "web_app" / "a_orientation" / "03_quick_tour_60_seconds.md"
+    ).read_text(encoding="utf-8")
+    glossary = (
+        DOCS_ROOT / "user_guide" / "web_app" / "a_orientation" / "04_ui_glossary_terminology.md"
+    ).read_text(encoding="utf-8")
+    camera_page = (
+        DOCS_ROOT / "user_guide" / "web_app" / "c_core_interactions" / "07_screenshots.md"
+    ).read_text(encoding="utf-8")
+    annotation_index = (
+        DOCS_ROOT / "user_guide" / "web_app" / "j_community_annotation" / "index.md"
+    ).read_text(encoding="utf-8")
+    combined = "\n".join((quick_tour, glossary))
+
+    assert "../../../_static/screenshots/web_app/welcome-startup.png" in quick_tour
+    assert "../../../_static/screenshots/web_app/startup-loaded-build.png" in combined
+    assert "Every ordinary bundled or catalog startup opens the welcome overlay" in quick_tour
+    assert "explicit Jupyter, remote-server, or GitHub-served startup skips" in quick_tour
+    assert "Explicit Jupyter, remote-server, and GitHub-served startup" in glossary
+    assert "Suo dataset remains the sample\ncatalog default" in quick_tour
+    assert "1D or 2D starts in **Planar**" in quick_tour
+    assert "3D starts in **Orbit**" in quick_tour
+    assert "default white background" in quick_tour
+    assert "Build 2026-07-26.4" in combined
+    assert "exact value in bug reports" in glossary
+    assert "Camera Path** accordion starts collapsed" in camera_page
+    assert "Community Annotation** accordion starts collapsed" in annotation_index
+
+
+def test_standard_pancreas_sample_contract_is_documented_exactly() -> None:
+    page = (
+        DOCS_ROOT / "user_guide" / "web_app" / "b_data_loading" / "10_standard_pancreas_dataset.md"
+    ).read_text(encoding="utf-8")
+    normalized = " ".join(page.split())
+
+    for exact_value in (
+        "Pancreatic endocrinogenesis (scVelo)",
+        "3,696 cells",
+        "3,753 genes",
+        "`clusters_coarse` (5 categories)",
+        "`clusters` (8 categories)",
+        "`S_score`",
+        "`G2M_score`",
+        "33,476 exact weighted connectivity edges",
+        "`velocity_umap`",
+        "f6cad69fd509be44c8453205309f4c3c3c37ba34",
+        "27,998 ordered genes",
+        "3,772-file, 2,469,229-byte",
+        "5e0361c0f510876045d12bc57e5019096f3ca3aa6888e3b4778259e989e25d63",
+        "GSE132188",
+        "10.1242/dev.173849",
+    ):
+        assert exact_value in normalized
+
+    assert "Suo remains the catalog default" in page
+    assert "compact Session statistics round both counts to **4K**" in normalized
+    assert "**Showing all 3,696 points**" in normalized
+    assert "default 3D embedding with **Orbit**" in normalized
+    assert "Selecting 1D or 2D" in page and "**Planar**" in page
+    assert "No camera path is created or played automatically" in normalized
+    assert "neither is sliced, padded, or copied from the 2D coordinates" in normalized
+    assert "analysis-only working copy" in normalized
+    assert "sources/pancreas.json" in page
+
+
+def test_remote_and_github_url_docs_require_exact_multi_dataset_selection() -> None:
+    page = (
+        DOCS_ROOT
+        / "user_guide"
+        / "web_app"
+        / "p_developer_docs"
+        / "04_configuration_env_vars_and_feature_flags.md"
+    ).read_text(encoding="utf-8")
+
+    assert "?remote=https://data.example.org&dataset=study-a" in page
+    assert "?github=owner/repo/path&dataset=study-a" in page
+    assert "manifest containing exactly one dataset selects that sole" in page
+    assert "requires `dataset=<exact-dataset-id>`" in page
+    assert "does not choose an arbitrary\n  catalog entry" in page
+    assert "loads its first dataset" not in page
+
+
+def test_prepared_server_docs_open_the_catalog_without_guessing_a_dataset() -> None:
+    pages = [
+        (
+            DOCS_ROOT
+            / "user_guide"
+            / "python_package"
+            / "d_viewing_apis"
+            / "05_python_serve_and_serve_anndata_quickstart.md"
+        ),
+        (
+            DOCS_ROOT
+            / "user_guide"
+            / "python_package"
+            / "d_viewing_apis"
+            / "09_server_mode_advanced.md"
+        ),
+        (
+            DOCS_ROOT
+            / "user_guide"
+            / "python_package"
+            / "g_api_reference_coverage"
+            / "api"
+            / "server.md"
+        ),
+    ]
+    combined = "\n".join(page.read_text(encoding="utf-8") for page in pages)
+    normalized = " ".join(combined.split())
+
+    assert "`server.viewer_url` opens the served catalog" in normalized
+    assert "catalog contains exactly one dataset" in normalized
+    assert "multiple datasets" in normalized
+    assert "exact dataset-id selection" in normalized
+    assert "never chooses the first entry" in normalized
+    assert "stray or partial subdirectory rejects the root" in normalized
+    assert "loads its first dataset" not in combined
+
+
+def test_debug_connection_docs_use_only_the_keyed_all_dataset_report() -> None:
+    markdown = "\n".join(path.read_text(encoding="utf-8") for path in _markdown_files())
+    assert markdown.count("dataset_identity_probes") >= 11
+    assert "dataset_identity_url" not in markdown
+    assert "dataset_identity_error" not in markdown
+    assert "recent frontend console warnings" not in markdown
+    assert "recent frontend console warnings/errors" not in markdown
+    assert "every declared dataset identity under its exact id/path" in markdown
+
+
+def test_every_documented_screenshot_uses_its_intrinsic_responsive_width() -> None:
+    screenshot_root = (DOCS_ROOT / "_static" / "screenshots").resolve()
+    referenced: set[Path] = set()
+    declared_widths: dict[Path, set[str]] = {}
+    figure_count = 0
+
+    for page in sorted(DOCS_ROOT.rglob("*.md")):
+        lines = page.read_text(encoding="utf-8").splitlines()
+        for index, line in enumerate(lines):
+            if not line.startswith("```{figure} "):
+                continue
+            target = line.removeprefix("```{figure} ")
+            image = (page.parent / target).resolve()
+            if image.suffix.lower() != ".png":
+                continue
+            assert image.is_relative_to(screenshot_root), (page, target)
+            assert image.is_file(), (page, target)
+
+            closing_index = lines.index("```", index + 1)
+            options = lines[index + 1 : closing_index]
+            alt_options = [
+                option.removeprefix(":alt: ") for option in options if option.startswith(":alt: ")
+            ]
+            width_options = [
+                option.removeprefix(":width: ")
+                for option in options
+                if option.startswith(":width: ")
+            ]
+            assert len(alt_options) == 1 and alt_options[0].strip()
+            assert len(width_options) == 1
+
+            intrinsic_width, _ = _validated_png_dimensions(image)
+            expected_width = f"{intrinsic_width}px"
+            assert width_options[0] == expected_width, (
+                page.relative_to(REPOSITORY_ROOT),
+                target,
+                intrinsic_width,
+                width_options[0],
+            )
+
+            referenced.add(image)
+            declared_widths.setdefault(image, set()).add(width_options[0])
+            figure_count += 1
+
+    screenshots = {path.resolve() for path in screenshot_root.rglob("*.png")}
+    assert len(screenshots) >= 38
+    assert figure_count >= 97
+    assert referenced == screenshots
+    assert all(len(widths) == 1 for widths in declared_widths.values())
+
+    stylesheet = (DOCS_ROOT / "_static" / "custom.css").read_text(encoding="utf-8")
+    assert "figure img {" in stylesheet
+    assert "height: auto;" in stylesheet
+    assert "max-width: 100%;" in stylesheet

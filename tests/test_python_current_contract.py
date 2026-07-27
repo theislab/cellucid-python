@@ -3,10 +3,13 @@ from __future__ import annotations
 import inspect
 import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
+import cellucid
 from cellucid._server_base import (
     register_event_callback,
     route_event,
@@ -87,14 +90,13 @@ def test_shipped_python_repository_surfaces_contain_only_current_contract_langua
         ):
             if RETIRED_PATH_LANGUAGE.search(line):
                 violations.append(
-                    f"{path.relative_to(REPOSITORY_ROOT)}:{line_number}: "
-                    f"{line.strip()}"
+                    f"{path.relative_to(REPOSITORY_ROOT)}:{line_number}: {line.strip()}"
                 )
 
     assert violations == []
 
 
-def test_mypy_uses_each_ci_interpreter_and_ci_keeps_the_minimum_version() -> None:
+def test_mypy_uses_each_ci_interpreter_and_ci_keeps_the_supported_boundaries() -> None:
     pyproject = (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     mypy_section = pyproject.split("[tool.mypy]", maxsplit=1)[1].split(
         "\n[",
@@ -102,10 +104,10 @@ def test_mypy_uses_each_ci_interpreter_and_ci_keeps_the_minimum_version() -> Non
     )[0]
     assert re.search(r"(?m)^\s*python_version\s*=", mypy_section) is None
 
-    workflow = (REPOSITORY_ROOT / ".github/workflows/test.yml").read_text(
-        encoding="utf-8"
-    )
-    assert 'python: "3.10"' in workflow
+    workflow = (REPOSITORY_ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
+    assert 'python: "3.11"' in workflow
+    assert 'python: "3.14"' in workflow
+    assert 'python: "3.10"' not in workflow
     assert "python -m mypy src/cellucid" in workflow
 
 
@@ -125,9 +127,58 @@ def test_release_version_and_embedding_dimensions_are_coherent() -> None:
     assert f"/compare/v{version}...HEAD" in changelog
     assert f"/releases/tag/v{version}" in changelog
     assert f"version: {version}" in citation
+    assert "date-released:" not in citation
+    assert f"## [{version}]\n" in changelog
     assert f'release = version = "{version}"' in docs_conf
     assert "1D/2D/3D/4D" not in changelog
     assert "Multi-dimensional embedding exports (1D/2D/3D)" in changelog
+    assert cellucid.__doc__ is not None
+    assert "1D, 2D, and 3D single-cell WebGL visualization toolkit" in cellucid.__doc__
+
+    validator = REPOSITORY_ROOT / "scripts" / "validate_release.py"
+    valid = subprocess.run(
+        [sys.executable, str(validator), "--tag", f"v{version}"],
+        cwd=REPOSITORY_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert valid.returncode == 0, valid.stderr
+    wrong = subprocess.run(
+        [sys.executable, str(validator), "--tag", "v999.999.999"],
+        cwd=REPOSITORY_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert wrong.returncode != 0
+    assert f"must equal v{version}" in wrong.stderr
+
+
+def test_pypi_release_requires_gated_artifacts_and_trusted_identity() -> None:
+    workflow = (REPOSITORY_ROOT / ".github/workflows/pypi-publish.yml").read_text(encoding="utf-8")
+    assert "workflow_dispatch" not in workflow
+    assert "PYPI_API_TOKEN" not in workflow
+    assert "password:" not in workflow
+    assert "id-token: write" in workflow
+    assert "name: pypi" in workflow
+    assert "release-provenance:" in workflow
+    assert workflow.count("needs: release-provenance") == 2
+    assert workflow.count("fetch-depth: 0") == 1
+    assert "refs/heads/main:refs/remotes/origin/main" in workflow
+    assert (
+        'git merge-base --is-ancestor \\\n            "${GITHUB_SHA}" "refs/remotes/origin/main"'
+    ) in workflow
+    assert '[[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]]' in workflow
+    assert "needs: [quality-gates, artifact-gates]" in workflow
+    assert '--tag "${RELEASE_TAG}" \\' in workflow
+    assert "--verify-local-tags" in workflow
+    assert "python -m pytest" in workflow
+    assert "python scripts/normalize_sdist.py dist" in workflow
+    assert "python scripts/validate_release.py --sdist dist" in workflow
+    assert "python -m twine check --strict dist/*" in workflow
+    assert "os: [ubuntu-latest, macos-latest, windows-latest]" in workflow
+    assert "artifact: [wheel, sdist]" in workflow
 
 
 def test_event_callback_failure_propagates_to_the_http_boundary() -> None:

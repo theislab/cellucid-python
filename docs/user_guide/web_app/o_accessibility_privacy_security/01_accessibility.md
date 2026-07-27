@@ -169,7 +169,7 @@ Important focus rule:
 
 ```{figure} ../../../_static/screenshots/web_app/keyboard-shortcuts.png
 :alt: Keyboard Shortcuts panel listing camera, dimension, navigation, and highlighting shortcuts.
-:width: 100%
+:width: 1440px
 
 The Keyboard Shortcuts panel documents camera, dimension, navigation, and highlighting controls.
 ```

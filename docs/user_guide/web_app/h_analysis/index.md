@@ -51,7 +51,7 @@ If you’re here because “analysis is empty / missing results”, start with {
 
 ```{figure} ../../../_static/screenshots/analysis/analysis-panel-tabs.png
 :alt: Analysis panel listing Quick, Detailed, Correlation, Differential Expression, Gene Signature, and Marker Genes modes.
-:width: 100%
+:width: 246px
 
 The Analysis panel exposes six explicit modes, each with its own validated inputs and result area.
 ```

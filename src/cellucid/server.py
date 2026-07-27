@@ -96,9 +96,7 @@ def _read_exported_dataset_entry(
         or not point_files
         or any(path.stat().st_size == 0 for path in point_files)
     ):
-        raise ValueError(
-            f"{dataset_dir.name!r} is not a complete exported dataset."
-        )
+        raise ValueError(f"{dataset_dir.name!r} is not a complete exported dataset.")
 
     try:
         identity = json.loads(required_files[0].read_text(encoding="utf-8"))
@@ -124,10 +122,11 @@ def _read_exported_dataset_entry(
         label="dataset_name",
     )
     for label, value in (("dataset_id", dataset_id), ("dataset_name", dataset_name)):
-        if value != value.strip() or any(ord(character) < 32 or ord(character) == 127 for character in value):
+        if value != value.strip() or any(
+            ord(character) < 32 or ord(character) == 127 for character in value
+        ):
             raise ValueError(
-                f"{label} must be exact text without surrounding whitespace "
-                "or control characters."
+                f"{label} must be exact text without surrounding whitespace or control characters."
             )
 
     return {
@@ -274,9 +273,7 @@ def _declared_dataset_artifacts(dataset_dir: Path) -> set[str]:
         raise ValueError("Continuous observation fields require their exact schema.")
     if not continuous_fields and continuous_schema is not None:
         raise ValueError("Continuous observation schema exists without any fields.")
-    continuous_schema_values = (
-        continuous_schema if isinstance(continuous_schema, dict) else {}
-    )
+    continuous_schema_values = continuous_schema if isinstance(continuous_schema, dict) else {}
     for index, field in enumerate(continuous_fields):
         if not isinstance(field, list) or not field:
             raise ValueError(f"obs_manifest.json continuous field {index} is invalid.")
@@ -297,9 +294,7 @@ def _declared_dataset_artifacts(dataset_dir: Path) -> set[str]:
         raise ValueError("Categorical observation fields require their exact schema.")
     if not categorical_fields and categorical_schema is not None:
         raise ValueError("Categorical observation schema exists without any fields.")
-    categorical_schema_values = (
-        categorical_schema if isinstance(categorical_schema, dict) else {}
-    )
+    categorical_schema_values = categorical_schema if isinstance(categorical_schema, dict) else {}
     dtype_extensions = {"uint8": "u8", "uint16": "u16"}
     for index, field in enumerate(categorical_fields):
         if not isinstance(field, list) or len(field) < 3:
@@ -310,9 +305,7 @@ def _declared_dataset_artifacts(dataset_dir: Path) -> set[str]:
         )
         dtype = field[2]
         if dtype not in dtype_extensions:
-            raise ValueError(
-                f"obs_manifest.json categorical field {index} has an invalid dtype."
-            )
+            raise ValueError(f"obs_manifest.json categorical field {index} has an invalid dtype.")
         paths.add(
             _expand_artifact_pattern(
                 categorical_schema_values.get("codesPathPattern"),
@@ -360,19 +353,13 @@ def _declared_dataset_artifacts(dataset_dir: Path) -> set[str]:
                 )
             )
         if len(fields) != n_genes:
-            raise ValueError(
-                "var_manifest.json field count must match identity stats.n_genes."
-            )
+            raise ValueError("var_manifest.json field count must match identity stats.n_genes.")
     elif var_manifest_path.exists():
-        raise ValueError(
-            "var_manifest.json is present while identity stats.n_genes is zero."
-        )
+        raise ValueError("var_manifest.json is present while identity stats.n_genes is zero.")
 
     has_connectivity = stats.get("has_connectivity")
     if type(has_connectivity) is not bool:
-        raise ValueError(
-            "dataset_identity.json stats.has_connectivity must be a boolean."
-        )
+        raise ValueError("dataset_identity.json stats.has_connectivity must be a boolean.")
     connectivity_manifest_path = dataset_dir / "connectivity_manifest.json"
     if has_connectivity:
         paths.add("connectivity_manifest.json")
@@ -388,9 +375,7 @@ def _declared_dataset_artifacts(dataset_dir: Path) -> set[str]:
                 )
             )
     elif connectivity_manifest_path.exists():
-        raise ValueError(
-            "connectivity_manifest.json is present while connectivity is disabled."
-        )
+        raise ValueError("connectivity_manifest.json is present while connectivity is disabled.")
 
     vector_fields = identity.get("vector_fields")
     if vector_fields is not None:
@@ -401,9 +386,7 @@ def _declared_dataset_artifacts(dataset_dir: Path) -> set[str]:
             raise ValueError("dataset_identity.json vector_fields.fields must be an object.")
         for field_id, field in vector_fields["fields"].items():
             if not isinstance(field, dict) or not isinstance(field.get("files"), dict):
-                raise ValueError(
-                    f"dataset_identity.json vector field {field_id!r} is invalid."
-                )
+                raise ValueError(f"dataset_identity.json vector field {field_id!r} is invalid.")
             for dimension, artifact_path in field["files"].items():
                 paths.add(
                     _require_artifact_path(
@@ -432,22 +415,18 @@ def _build_prepared_artifact_inventory(
                 current = current / part
                 if current.is_symlink():
                     raise ValueError(
-                        f"Declared artifact must not traverse a symbolic link: "
-                        f"{request_path}"
+                        f"Declared artifact must not traverse a symbolic link: {request_path}"
                     )
             try:
                 resolved = candidate.resolve(strict=True)
                 resolved.relative_to(root)
             except (FileNotFoundError, ValueError) as error:
                 raise ValueError(
-                    f"Declared artifact is missing or outside the export root: "
-                    f"{request_path}"
+                    f"Declared artifact is missing or outside the export root: {request_path}"
                 ) from error
             metadata = resolved.stat()
             if not stat.S_ISREG(metadata.st_mode):
-                raise ValueError(
-                    f"Declared artifact must be a regular file: {request_path}"
-                )
+                raise ValueError(f"Declared artifact must be a regular file: {request_path}")
             if request_path in inventory:
                 raise ValueError(f"Prepared artifact path is duplicated: {request_path}")
             inventory[request_path] = _PreparedArtifact(
@@ -642,10 +621,9 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         try:
             opened = os.fstat(descriptor)
             after = artifact.path.stat()
-            if (
-                not self._artifact_metadata_matches(opened, artifact)
-                or not self._artifact_metadata_matches(after, artifact)
-            ):
+            if not self._artifact_metadata_matches(
+                opened, artifact
+            ) or not self._artifact_metadata_matches(after, artifact):
                 raise OSError("Prepared artifact changed while it was opened.")
         except BaseException:
             os.close(descriptor)
@@ -682,9 +660,7 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
 
         start, end = interval if interval is not None else (0, artifact.size - 1)
         content_length = 0 if artifact.size == 0 else end - start + 1
-        self.send_response(
-            HTTPStatus.PARTIAL_CONTENT if interval is not None else HTTPStatus.OK
-        )
+        self.send_response(HTTPStatus.PARTIAL_CONTENT if interval is not None else HTTPStatus.OK)
         self.send_header("Content-Type", artifact.content_type)
         self.send_header("Content-Length", str(content_length))
         self.send_header("Accept-Ranges", "bytes")
@@ -816,9 +792,7 @@ class CellucidServer:
 
         self._datasets = _list_exported_datasets(self.data_dir)
         if not self._datasets:
-            raise ValueError(
-                "Prepared-data path does not contain one complete current dataset."
-            )
+            raise ValueError("Prepared-data path does not contain one complete current dataset.")
         self._artifact_inventory = _build_prepared_artifact_inventory(
             self.data_dir,
             self._datasets,
@@ -870,9 +844,7 @@ class CellucidServer:
         if type(n_genes) is not int or n_genes < 0:
             raise ValueError("dataset_identity.json stats.n_genes must be non-negative.")
         if type(has_connectivity) is not bool:
-            raise ValueError(
-                "dataset_identity.json stats.has_connectivity must be a boolean."
-            )
+            raise ValueError("dataset_identity.json stats.has_connectivity must be a boolean.")
         print_detail("Cells", f"{n_cells:,}")
         print_detail("Genes", f"{n_genes:,}")
         print_detail("Connectivity", "yes" if has_connectivity else "no")
@@ -888,8 +860,13 @@ class CellucidServer:
 
     @property
     def viewer_url(self) -> str:
-        """Get the full URL to open the viewer with this server's data."""
-        return f"{self.url}/"
+        """Open this server's prepared-data catalog in the verified viewer.
+
+        The viewer selects the sole declared dataset when the catalog is
+        unique. A multi-dataset catalog requires an exact dataset selection;
+        this URL never embeds or guesses an arbitrary catalog entry.
+        """
+        return f"{self.url}/?source=remote"
 
     def start(self, blocking: bool = True):
         """Start this single-use server."""
@@ -899,8 +876,7 @@ class CellucidServer:
             raise RuntimeError("Server is already running.")
         if self._started or self._closed:
             raise RuntimeError(
-                "CellucidServer is single-use and has been closed. "
-                "Create a new server instance."
+                "CellucidServer is single-use and has been closed. Create a new server instance."
             )
         self._started = True
 
@@ -947,9 +923,7 @@ class CellucidServer:
 
             if blocking:
                 if self.open_browser and webbrowser.open(self.viewer_url) is not True:
-                    raise RuntimeError(
-                        f"Could not open the browser for {self.viewer_url}"
-                    )
+                    raise RuntimeError(f"Could not open the browser for {self.viewer_url}")
                 self._serving = True
                 try:
                     self._server.serve_forever()
@@ -965,9 +939,7 @@ class CellucidServer:
                 self._thread.start()
                 self._serve_entered.wait()
                 if self.open_browser and webbrowser.open(self.viewer_url) is not True:
-                    raise RuntimeError(
-                        f"Could not open the browser for {self.viewer_url}"
-                    )
+                    raise RuntimeError(f"Could not open the browser for {self.viewer_url}")
         except BaseException:
             self._rollback_failed_start(shutdown=self._thread is not None)
             raise
@@ -980,9 +952,7 @@ class CellucidServer:
         try:
             server = self._server
             if server is None:
-                raise RuntimeError(
-                    "CellucidServer lost its bound HTTP server before serving"
-                )
+                raise RuntimeError("CellucidServer lost its bound HTTP server before serving")
             server.serve_forever()
         except BaseException as error:
             serving_error = error
@@ -995,8 +965,7 @@ class CellucidServer:
                     serving_error = cleanup_error
                 else:
                     logger.exception(
-                        "Prepared-data server cleanup also failed after its "
-                        "serving loop failed"
+                        "Prepared-data server cleanup also failed after its serving loop failed"
                     )
         self._background_error = serving_error
         if serving_error is not None:
@@ -1020,8 +989,7 @@ class CellucidServer:
                 server.server_close()
             except BaseException as error:
                 raise RuntimeError(
-                    f"Prepared-data server cleanup failed: "
-                    f"{type(error).__name__}: {error}"
+                    f"Prepared-data server cleanup failed: {type(error).__name__}: {error}"
                 ) from error
 
     def _rollback_failed_start(self, *, shutdown: bool) -> None:
@@ -1033,22 +1001,15 @@ class CellucidServer:
                 server.shutdown()
             except BaseException:
                 logger.exception(
-                    "Failed to shut down the prepared-data server after "
-                    "startup failed"
+                    "Failed to shut down the prepared-data server after startup failed"
                 )
         if server is not None:
             try:
                 server.server_close()
             except BaseException:
-                logger.exception(
-                    "Failed to close the prepared-data socket after startup failed"
-                )
+                logger.exception("Failed to close the prepared-data socket after startup failed")
         thread = self._thread
-        if (
-            thread is not None
-            and thread is not threading.current_thread()
-            and thread.is_alive()
-        ):
+        if thread is not None and thread is not threading.current_thread() and thread.is_alive():
             thread.join()
         self._server = None
         self._thread = None
@@ -1078,11 +1039,7 @@ class CellucidServer:
                 failures.append(error)
         self._server = None
 
-        if (
-            thread is not None
-            and thread is not threading.current_thread()
-            and thread.is_alive()
-        ):
+        if thread is not None and thread is not threading.current_thread() and thread.is_alive():
             thread.join()
         self._thread = None
         self._serving = False
@@ -1091,12 +1048,8 @@ class CellucidServer:
         if not self.quiet:
             print("Server stopped")
         if failures:
-            details = "; ".join(
-                f"{type(error).__name__}: {error}" for error in failures
-            )
-            raise RuntimeError(
-                f"Prepared-data server shutdown failed: {details}"
-            ) from failures[0]
+            details = "; ".join(f"{type(error).__name__}: {error}" for error in failures)
+            raise RuntimeError(f"Prepared-data server shutdown failed: {details}") from failures[0]
 
     def is_running(self) -> bool:
         """Check if the server is running."""

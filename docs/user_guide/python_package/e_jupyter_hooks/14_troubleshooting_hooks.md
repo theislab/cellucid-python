@@ -15,6 +15,7 @@ report
 
 This report includes:
 - server probes (`/_cellucid/health`, `/_cellucid/info`, `/_cellucid/datasets`)
+- `dataset_identity_probes`, keyed by every exact declared dataset id/path
 - ping/pong roundtrip (Python → iframe → Python)
 - a frontend “debug snapshot” (iframe URL/origin/user agent)
 - recent accepted-event counts grouped by exact event type

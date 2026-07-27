@@ -96,7 +96,9 @@ If yes, do **not** start by binding to `0.0.0.0`.
 Recommended:
 - run `cellucid serve … --no-browser` on the remote machine,
 - create an **SSH tunnel** from your laptop,
-- open `http://127.0.0.1:<port>/` locally.
+- open the exact **Viewer URL** printed by the server through the local tunnel
+  (`/?source=remote` for a prepared export or `/?anndata=true` for direct
+  AnnData).
 
 Step-by-step: {doc}`12_remote_servers_ssh_tunneling_and_cloud`.
 

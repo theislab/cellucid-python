@@ -158,7 +158,7 @@ Examples:
     # For SSH tunnel access from remote server:
     # On the server: cellucid serve /path/to/data
     # On local machine: ssh -L 8765:localhost:8765 user@server
-    # Then open: http://127.0.0.1:8765/
+    # Then open the exact Viewer URL printed by Cellucid.
 """,
     )
 

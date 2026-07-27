@@ -37,3 +37,9 @@ div.highlight pre {
     border-radius: 4px;
     margin-top: 8px;
 }
+
+/* Preserve screenshot detail without enlarging narrow UI captures. */
+figure img {
+    height: auto;
+    max-width: 100%;
+}

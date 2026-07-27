@@ -101,7 +101,14 @@ The exported server can serve:
 `/_cellucid/datasets` lists what’s available (used for multi-dataset browsing).
 
 Detection rules:
-- a dataset is a directory containing `obs_manifest.json` and at least one `points_*d.bin(.gz)`
+- a dataset is a directory containing a valid version-2
+  `dataset_identity.json`, an object-valued `obs_manifest.json`, and at least
+  one non-empty supported `points_1d`, `points_2d`, or `points_3d` binary;
+- once any immediate child is a dataset candidate, every immediate
+  subdirectory must be one complete current dataset. Stray directories reject
+  the root;
+- `CellucidServer.viewer_url` opens the catalog. A sole entry may auto-open;
+  multiple entries require an exact id and are never resolved by list order.
 
 ### Static file serving
 

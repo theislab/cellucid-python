@@ -155,11 +155,13 @@ report
 
 The report includes:
 - server health/info probes,
+- `dataset_identity_probes`, keyed by every dataset declared by the server,
+  preserving each exact dataset id/path and recording failures per dataset,
 - whether the viewer is displayed,
 - web UI cache status + build id,
 - a Python→frontend ping/pong roundtrip,
 - a frontend “debug snapshot” (URL/origin/userAgent as seen by the iframe),
-- and recent frontend console warnings forwarded to Python.
+- and recent accepted-event counts grouped by exact event type.
 
 If you are filing a bug report, paste the report as JSON:
 

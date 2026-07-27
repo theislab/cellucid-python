@@ -171,6 +171,7 @@ See {doc}`08_writing_robust_callbacks`.
 
 Use `viewer.debug_connection()` to collect:
 - server health/info probes
+- `dataset_identity_probes`, keyed by every exact declared dataset id/path
 - ping/pong roundtrip
 - a frontend “debug snapshot” (`location.href`, origin, user agent)
 - recent accepted-event counts by exact type

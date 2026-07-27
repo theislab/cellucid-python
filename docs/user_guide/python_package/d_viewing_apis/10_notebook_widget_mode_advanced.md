@@ -96,9 +96,10 @@ viewer.debug_connection()
 
 This report includes:
 - server health probes (`/_cellucid/health`, `/_cellucid/info`)
+- `dataset_identity_probes`, keyed by every exact server-declared dataset id
 - the configured and browser-facing server URLs
 - the verified local viewer-generation status
-- recent frontend console warnings/errors (forwarded to Python when available)
+- recent accepted-event counts grouped by exact event type
 
 Also inspect:
 

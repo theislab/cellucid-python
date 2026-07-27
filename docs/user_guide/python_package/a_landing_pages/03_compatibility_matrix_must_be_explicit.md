@@ -116,6 +116,7 @@ If it fails:
 - Run `viewer.debug_connection()` and look at:
   - `client_server_url`
   - `server_health`
+  - `dataset_identity_probes`
   - `frontend_roundtrip` and `frontend_debug_snapshot`
 
 ## Security / browser constraints (what’s going on under the hood)

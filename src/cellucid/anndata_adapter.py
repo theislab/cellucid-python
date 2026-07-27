@@ -74,12 +74,11 @@ Usage:
 
 from __future__ import annotations
 
-import gzip
 import json
 import logging
 import math
 from collections import OrderedDict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from numbers import Integral, Real
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -88,6 +87,7 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
+from ._compression import deterministic_gzip_compress
 from .connectivity_contract import (
     ConnectivityEdgePairs,
     build_connectivity_manifest,
@@ -837,7 +837,7 @@ class AnnDataAdapter:
         data = embedding.astype(np.float32).tobytes()
 
         if compress:
-            return gzip.compress(data, compresslevel=6)
+            return deterministic_gzip_compress(data, compresslevel=6)
         return data
 
     def get_vector_field_binary(self, field_id: str, dim: int, compress: bool = False) -> bytes:
@@ -893,7 +893,7 @@ class AnnDataAdapter:
 
         data = self._vector_field_cache[cache_key].tobytes()
         if compress:
-            return gzip.compress(data, compresslevel=6)
+            return deterministic_gzip_compress(data, compresslevel=6)
         return data
 
     # =========================================================================
@@ -985,7 +985,7 @@ class AnnDataAdapter:
         data = cast(bytes, values.tobytes())
 
         if compress:
-            return gzip.compress(data, compresslevel=6)
+            return deterministic_gzip_compress(data, compresslevel=6)
         return data
 
     def get_obs_categorical_codes(
@@ -1041,7 +1041,7 @@ class AnnDataAdapter:
 
         data = codes_typed.tobytes()
         if compress:
-            data = gzip.compress(data, compresslevel=6)
+            data = deterministic_gzip_compress(data, compresslevel=6)
 
         return data, categories, int(missing_value)
 
@@ -1163,7 +1163,7 @@ class AnnDataAdapter:
         data = quantiles.tobytes()
 
         if compress:
-            return gzip.compress(data, compresslevel=6)
+            return deterministic_gzip_compress(data, compresslevel=6)
         return data
 
     # =========================================================================
@@ -1319,7 +1319,7 @@ class AnnDataAdapter:
         values = self._get_validated_gene_values(gene_id)
         data = values.tobytes()
         if compress:
-            return gzip.compress(data, compresslevel=6)
+            return deterministic_gzip_compress(data, compresslevel=6)
         return data
 
     def get_gene_min_max(self, gene_id: str) -> tuple[float, float]:
@@ -1400,9 +1400,18 @@ class AnnDataAdapter:
         weights_data = edges.weights.tobytes()
 
         if compress:
-            sources_data = gzip.compress(sources_data, compresslevel=6)
-            destinations_data = gzip.compress(destinations_data, compresslevel=6)
-            weights_data = gzip.compress(weights_data, compresslevel=6)
+            sources_data = deterministic_gzip_compress(
+                sources_data,
+                compresslevel=6,
+            )
+            destinations_data = deterministic_gzip_compress(
+                destinations_data,
+                compresslevel=6,
+            )
+            weights_data = deterministic_gzip_compress(
+                weights_data,
+                compresslevel=6,
+            )
 
         return (
             sources_data,
@@ -1450,7 +1459,7 @@ class AnnDataAdapter:
             "id": self.dataset_id,
             "name": self.dataset_name,
             "description": "Loaded directly from AnnData",
-            "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "cellucid_data_version": "anndata_adapter",
             "stats": {
                 "n_cells": self.n_cells,

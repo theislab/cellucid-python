@@ -44,8 +44,12 @@ You should see a banner like:
 ```text
 CELLUCID SERVER RUNNING
 Local URL:  http://127.0.0.1:8765
-Viewer URL: http://127.0.0.1:8765/
+Viewer URL: http://127.0.0.1:8765/?anndata=true
 ```
+
+The direct AnnData command above prints `?anndata=true`. A prepared export
+prints `?source=remote`. Copy the printed **Viewer URL** exactly; the bare
+Local URL is the server origin for diagnostics, not the launch URL.
 
 ### Step 2 — Open the viewer in your browser
 
@@ -126,7 +130,7 @@ ssh -L 8765:localhost:8765 user@remote-host
 Then open:
 
 ```text
-http://127.0.0.1:8765/
+http://127.0.0.1:8765/?anndata=true
 ```
 
 Full guide (edge cases, firewalls, JupyterHub): {doc}`12_remote_servers_ssh_tunneling_and_cloud`.

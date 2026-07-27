@@ -161,7 +161,7 @@ Related pages:
 
 ```{figure} ../../../_static/screenshots/figure_export/labels-annotations.png
 :alt: Figure Export Labels and Annotations controls for title, axes, legend, and annotation visibility.
-:width: 100%
+:width: 224px
 
 Labels and Annotations makes title, axis, legend, and annotation choices explicit.
 ```

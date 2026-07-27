@@ -86,12 +86,21 @@ server = CellucidServer("/path/to/export_dir", open_browser=False, quiet=False)
 server.start_background()
 
 print(server.url)        # e.g. http://127.0.0.1:8765
-print(server.viewer_url) # e.g. http://127.0.0.1:8765/
+print(server.viewer_url) # e.g. http://127.0.0.1:8765/?source=remote
 
 # ... do other work ...
 
 server.stop()
 ```
+
+Use `server.viewer_url` when opening the application. Its exact
+`source=remote` marker identifies this user-served prepared-data launch before
+the first paint, so the ordinary sample-catalog welcome overlay is not shown.
+The data and viewer remain on the same server origin. `server.viewer_url` opens
+the served catalog exposed by `/_cellucid/datasets`; it does not embed an
+arbitrary dataset. If that catalog contains exactly one dataset, the viewer
+selects that sole entry. If it contains multiple datasets, the viewer requires
+an exact dataset-id selection and never chooses the first entry.
 
 ### AnnData: `AnnDataServer`
 

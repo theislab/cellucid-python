@@ -21,9 +21,36 @@ This glossary is written to match the app UI language, even when a â€œtechnicalâ
 
 ```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
 :alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
-:width: 100%
+:width: 1440px
 
 A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
+```
+
+---
+
+## Startup and build identity
+
+- **Welcome overlay**: the modal shown on every ordinary bundled or catalog
+  startup. Its dismissal is not remembered for the next ordinary load.
+  **Choose a dataset** opens the data controls; {kbd}`Escape` dismisses it for
+  the current load. Explicit Jupyter, remote-server, and GitHub-served startup
+  links skip it because they already declare a data source.
+- **Suo**: the sample catalog default. It may finish loading behind the welcome
+  overlay before you choose another source.
+- **Default background**: white in a fresh browser profile. A user-selected
+  background remains an explicit preference.
+- **Build**: the web build identity printed in the sidebar footer. Include this
+  exact value in bug reports so maintainers can identify the HTML, JavaScript,
+  CSS, and asset inventory you exercised. It is not the Python or R package
+  version.
+
+```{figure} ../../../_static/screenshots/web_app/startup-loaded-build.png
+:alt: Loaded Suo point cloud on a white background with Community Annotation and Camera Path collapsed and Build 2026-07-26.4 in the footer.
+:width: 1440px
+
+Fresh startup after closing the welcome overlay: Suo is loaded on white,
+**Community Annotation** and **Camera Path** are collapsed, and the footer
+identifies this capture as Build 2026-07-26.4.
 ```
 
 ---
@@ -103,6 +130,11 @@ Scope note:
 - **Pointer lock / Capture pointer**: a browser feature that hides the cursor and reports raw mouse movement (needed for FPS-style looking).
 - **Orbit anchor**: a visual compass/anchor indicator shown in orbit mode (optional).
 - **Reset Camera**: returns the camera to a default framing (and can reset related UI controls depending on how you trigger it).
+- **Dimension-specific navigation default**: 1D and 2D start in Planar; 3D
+  starts in Orbit. An explicit user change takes precedence.
+- **Camera Path**: a collapsed-at-start panel for user-created keyframes. Its
+  transport appears only after two valid keyframes, and playback is stopped
+  until the user starts it.
 
 ---
 

@@ -49,7 +49,7 @@ If you’re here because “I loaded a session but it looks different”, start 
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
 :alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
-:width: 100%
+:width: 246px
 
 The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```

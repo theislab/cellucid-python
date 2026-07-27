@@ -12,7 +12,7 @@ absence of browser-console, page, and HTTP errors.
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
 :alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
-:width: 100%
+:width: 246px
 
 The Session panel presents each loading path separately and keeps Save State and
 Load State beside the dataset controls.
@@ -22,7 +22,7 @@ Load State beside the dataset controls.
 
 ```{figure} ../../../_static/screenshots/data_loading/h5ad-current-loaded.png
 :alt: A current-schema H5AD file loaded in Cellucid with dataset metadata visible.
-:width: 100%
+:width: 1280px
 
 A current-schema H5AD file loaded through the browser picker, with its dataset
 metadata and available dimensions reported in the Session panel.
@@ -30,7 +30,7 @@ metadata and available dimensions reported in the Session panel.
 
 ```{figure} ../../../_static/screenshots/data_loading/h5ad-current-visualization.png
 :alt: Cellucid visualizing a current-schema H5AD dataset in two dimensions.
-:width: 100%
+:width: 1280px
 
 The same H5AD dataset rendered as a 2D interactive view with Planar navigation.
 ```
@@ -39,7 +39,7 @@ The same H5AD dataset rendered as a 2D interactive view with Planar navigation.
 
 ```{figure} ../../../_static/screenshots/data_loading/zarr-zip-loaded.png
 :alt: A current-schema AnnData Zarr ZIP archive loaded in Cellucid through the browser picker.
-:width: 100%
+:width: 1280px
 
 The current-schema Zarr ZIP representation loaded through the browser picker.
 The Session panel identifies the source as a Zarr ZIP archive, and the
@@ -50,14 +50,14 @@ visualization uses the archive's coordinates and categorical metadata.
 
 ```{figure} ../../../_static/screenshots/data_loading/h5ad-firefox.png
 :alt: A current-schema H5AD dataset loaded in Firefox.
-:width: 100%
+:width: 1280px
 
 The same direct H5AD replacement path exercised in Firefox on macOS.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/h5ad-webkit.png
 :alt: A current-schema H5AD dataset loaded in WebKit.
-:width: 100%
+:width: 1280px
 
 The same direct H5AD replacement path exercised in Playwright WebKit on macOS.
 WebKit is Safari's browser engine; the repository's platform matrix separately

@@ -222,7 +222,7 @@ Fix:
 
 ```{figure} ../../../_static/screenshots/analysis/detailed-categorical.png
 :alt: Detailed analysis configured for a categorical observation field with a bar plot.
-:width: 100%
+:width: 224px
 
 Detailed analysis displays a categorical observation field as a bar plot for the selected page.
 ```

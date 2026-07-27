@@ -18,7 +18,6 @@ Instead of AnnData, accepts:
 - connectivities: sparse matrix with KNN connectivities
 """
 
-import gzip
 import json
 import math
 import os
@@ -27,16 +26,17 @@ import shutil
 import tempfile
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from numbers import Integral, Real
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, BinaryIO, Literal, cast
 
 import numpy as np
 import pandas as pd
 import tqdm
 from scipy import sparse
 
+from ._compression import open_deterministic_gzip_writer
 from .connectivity_contract import (
     CONNECTIVITY_BINARY_DIRNAME,
     CONNECTIVITY_MANIFEST_FILENAME,
@@ -55,6 +55,10 @@ MANIFEST_FORMAT_VERSION = "compact_v1"
 JsonScalar = str | bool | int | float
 _PORTABLE_COMPONENT_PATTERN = re.compile(
     r"^[A-Za-z0-9][A-Za-z0-9._-]{0,179}$",
+    flags=re.ASCII,
+)
+_CANONICAL_UTC_TIMESTAMP_PATTERN = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$",
     flags=re.ASCII,
 )
 _WINDOWS_RESERVED_COMPONENTS = {
@@ -172,6 +176,25 @@ def _require_optional_native_string(
         raise TypeError(f"{label} must be None or a native string.")
     if not allow_empty and (not value or not value.strip()):
         raise ValueError(f"{label} must be None or a non-empty string.")
+    return value
+
+
+def _resolve_created_at(value: object) -> str:
+    """Return one exact UTC-seconds timestamp for dataset identity metadata."""
+    if value is None:
+        return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if type(value) is not str:
+        raise TypeError(
+            "created_at must be None or a native string in 'YYYY-MM-DDTHH:MM:SSZ' UTC format."
+        )
+    if not _CANONICAL_UTC_TIMESTAMP_PATTERN.fullmatch(value):
+        raise ValueError("created_at must use exact 'YYYY-MM-DDTHH:MM:SSZ' UTC format.")
+    try:
+        datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError as error:
+        raise ValueError(
+            "created_at must be a valid UTC calendar timestamp in 'YYYY-MM-DDTHH:MM:SSZ' format."
+        ) from error
     return value
 
 
@@ -443,12 +466,46 @@ def _write_binary(
 
     if compression is not None:
         gz_path = Path(str(path) + ".gz")
-        with gzip.open(gz_path, "wb", compresslevel=compression) as f:
-            f.write(data.tobytes())
+        _atomic_write_gzip(
+            gz_path,
+            data,
+            compresslevel=compression,
+        )
         return gz_path
     else:
         data.tofile(path)
         return path
+
+
+def _atomic_write_gzip(
+    path: Path,
+    data: np.ndarray,
+    *,
+    compresslevel: int,
+) -> None:
+    """Write one deterministic gzip payload and publish it atomically."""
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
+            with open_deterministic_gzip_writer(
+                cast(BinaryIO, temporary_file),
+                compresslevel=compresslevel,
+            ) as compressed:
+                compressed.write(data.tobytes())
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+        os.chmod(temporary_path, 0o644)
+        os.replace(temporary_path, path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def _quantize_continuous(
@@ -743,6 +800,7 @@ def _prepare_generation(
     obs_categorical_dtype: Literal["uint8", "uint16"],
     dataset_name: str,
     dataset_id: str,
+    created_at: str,
     dataset_description: str | None = None,
     source_name: str | None = None,
     source_url: str | None = None,
@@ -1402,12 +1460,10 @@ def _prepare_generation(
 
                 # Quantize outlier quantiles (they're always 0-1)
                 if obs_continuous_quantization is not None:
-                    oq_quantized, oq_min, oq_max, oq_scale = (
-                        _quantize_nullable_outlier_quantiles(
-                            outlier_quantiles,
-                            bits=obs_continuous_quantization,
-                            field_name=f"{key}_outliers",
-                        )
+                    oq_quantized, oq_min, oq_max, oq_scale = _quantize_nullable_outlier_quantiles(
+                        outlier_quantiles,
+                        bits=obs_continuous_quantization,
+                        field_name=f"{key}_outliers",
                     )
 
                     if obs_continuous_quantization == 8:
@@ -1771,7 +1827,7 @@ def _prepare_generation(
         "id": dataset_id,
         "name": dataset_name,
         "description": dataset_description if dataset_description is not None else "",
-        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "created_at": created_at,
         "cellucid_data_version": cellucid_version,
         "stats": {
             "n_cells": int(n_cells),
@@ -1817,6 +1873,7 @@ def prepare(
     obs_categorical_dtype: Literal["uint8", "uint16"],
     dataset_name: str,
     dataset_id: str,
+    created_at: str | None = None,
     dataset_description: str | None = None,
     source_name: str | None = None,
     source_url: str | None = None,
@@ -1827,7 +1884,12 @@ def prepare(
     vector_fields: dict[str, np.ndarray | sparse.spmatrix] | None = None,
     vector_field_default: str | None = None,
 ) -> None:
-    """Build and atomically publish one complete canonical Cellucid export generation."""
+    """Build and atomically publish one complete canonical Cellucid export generation.
+
+    ``created_at`` defaults to the current UTC time. Reproducible builders can
+    pass an exact ``YYYY-MM-DDTHH:MM:SSZ`` UTC timestamp; it is validated and
+    preserved byte-for-byte in ``dataset_identity.json``.
+    """
     force = _require_native_boolean(force, label="force")
     centroid_min_points = _require_positive_native_integer(
         centroid_min_points,
@@ -1853,6 +1915,7 @@ def prepare(
         label="source_citation",
         allow_empty=False,
     )
+    created_at = _resolve_created_at(created_at)
     if source_name is None and (source_url is not None or source_citation is not None):
         raise ValueError(
             "source_name is required whenever source_url or source_citation is provided."
@@ -1900,6 +1963,7 @@ def prepare(
                 _published_out_dir=target_dir,
                 dataset_name=dataset_name,
                 dataset_id=dataset_id,
+                created_at=created_at,
                 dataset_description=dataset_description,
                 source_name=source_name,
                 source_url=source_url,

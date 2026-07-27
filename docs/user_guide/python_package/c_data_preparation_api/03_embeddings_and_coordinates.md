@@ -66,7 +66,8 @@ X_normalized = (X - center) * scale_factor
 Practical implications:
 - Distances are preserved up to a single scale factor **within each dimensionality**.
 - You should **not** compare distances between 2D and 3D exports (they are normalized independently).
-- If your embedding is degenerate (all points identical), `prepare()` avoids division-by-zero and you’ll get a collapsed point cloud.
+- An embedding with all points identical is rejected because its largest
+  per-axis range is zero, so no finite normalization scale exists.
 
 ### Default dimension and UI switching
 
@@ -81,7 +82,7 @@ Related UI docs:
 
 ```{figure} ../../../_static/screenshots/web_app/dimension-navigation-controls-2d.png
 :alt: Cellucid Compare Views controls showing 2D dimension and Planar navigation selected.
-:width: 100%
+:width: 246px
 
 For a 2D embedding, Cellucid selects 2D with Planar navigation; both settings remain explicit if the user chooses another valid configuration.
 ```
@@ -136,7 +137,8 @@ If you recompute UMAP (stochastic), you will get a different export even if ever
 - **NaN/Inf coordinates**: must be removed before export.
 - **Wrong shape**: `(n_cells,)` is not accepted; use `(n_cells, 1)`.
 - **Mismatched rows**: embeddings computed on a subset but `obs`/`X` not subset identically.
-- **Collapsed embedding**: all points identical → viewer shows a single point; export is “valid” but useless.
+- **All-identical embedding**: rejected before export; recompute or supply an
+  embedding with a nonzero finite range on at least one axis.
 
 ---
 

@@ -20,7 +20,7 @@ Common on-screen message (exact):
 If you hit this, your fastest fix is usually:
 
 1) update to the current stable release of your browser,
-2) update your browser,
+2) enable browser hardware acceleration,
 3) update GPU drivers / OS,
 4) disable strict “graphics blocking” policies (common in managed/corporate environments).
 
@@ -39,8 +39,8 @@ Cellucid supports the current stable releases of:
 
 All supported browsers must provide WebGL2 and the native
 `DecompressionStream('gzip')` API. Browser-native file pickers differ visually,
-but the local H5AD, Zarr, and prepared-export workflows use the same validation
-contract on every supported platform.
+but the local H5AD file, Zarr ZIP, and prepared-export workflows use the same
+validation contract on every supported platform.
 
 ### Hardware (what matters)
 

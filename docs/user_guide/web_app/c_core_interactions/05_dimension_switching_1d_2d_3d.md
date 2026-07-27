@@ -94,14 +94,14 @@ If switching to a new dimension leaves you “lost in space” (empty-looking vi
 
 ```{figure} ../../../_static/screenshots/web_app/dimension-navigation-controls-2d.png
 :alt: Cellucid Compare Views controls showing 2D dimension and Planar navigation selected.
-:width: 100%
+:width: 246px
 
 For a 2D embedding, Cellucid selects 2D with Planar navigation; both settings remain explicit if the user chooses another valid configuration.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/dimension-2d-planar-default.png
 :alt: Cellucid displaying a two-dimensional embedding with Planar navigation.
-:width: 100%
+:width: 1440px
 
 A two-dimensional embedding opens with Planar navigation and a flat, screen-aligned exploration surface.
 ```

@@ -181,13 +181,15 @@ generate_datasets_manifest("./exports", default_dataset="pbmc_demo")
 Before publishing, verify that your export loads:
 
 - **Fastest validation:** open Cellucid and use the **Folder** file picker (Option #3).
-- **Most realistic validation:** run the CLI server (Option #6) and open the printed viewer URL (`http://127.0.0.1:<port>/`).
+- **Most realistic validation:** run the CLI server (Option #6) and open the
+  exact printed prepared-data Viewer URL
+  (`http://127.0.0.1:<port>/?source=remote`).
 
 This avoids debugging “GitHub problems” that are actually export problems.
 
 ```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
 :alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
-:width: 100%
+:width: 1440px
 
 A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
 ```

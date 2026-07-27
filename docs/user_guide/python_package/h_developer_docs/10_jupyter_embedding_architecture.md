@@ -168,7 +168,8 @@ Likely causes (ordered):
 
 How to confirm:
 - run `viewer.debug_connection()` and read:
-  - `server_health`, `viewer_index_probe`, `frontend_roundtrip`.
+  - `server_health`, `dataset_identity_probes`, `viewer_index_probe`,
+    `frontend_roundtrip`.
 
 Fix:
 - expose the port through a proxy/tunnel and pass its base as

@@ -320,6 +320,8 @@ report
 
 Look for:
 - `server_health` / `server_info` (server reachable?)
+- `dataset_identity_probes` (did every exact declared dataset identity load and
+  match its id/path?)
 - `client_server_url` (is the iframe using the right URL?)
 - `web_ui.cache` (do you have cached UI assets?)
 - `frontend_roundtrip` and `frontend_debug_snapshot` (is the live iframe

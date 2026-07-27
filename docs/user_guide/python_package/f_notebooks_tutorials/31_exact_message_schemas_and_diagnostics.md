@@ -87,6 +87,7 @@ print(snapshot["serverUrl"])
 ```python
 report = viewer.debug_connection(timeout=5)
 print(report["server_health"])
+print(report["dataset_identity_probes"])
 print(report["frontend_roundtrip"])
 print(report["frontend_debug_snapshot"])
 print(report["recent_events"])

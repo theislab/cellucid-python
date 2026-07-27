@@ -107,7 +107,7 @@ You should see the selection become highlighted (exact visual style depends on t
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/highlighting-selected-page.png
 :alt: Highlighting panel showing a named page with highlighted cells.
-:width: 100%
+:width: 246px
 
 Highlighted cells are stored on a named page that can be used by analysis and session workflows.
 ```

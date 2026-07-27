@@ -621,7 +621,8 @@ def test_real_h5ad_backed_loading_reports_actual_state_and_serves_values(
 def test_real_zarr_loading_reports_materialized_state(tmp_path) -> None:
     pytest.importorskip("zarr")
     store = tmp_path / "fixture.zarr"
-    _adata_with_current_fields().write_zarr(store)
+    with pytest.warns(UserWarning, match="Writing zarr v2 data"):
+        _adata_with_current_fields().write_zarr(store)
 
     with AnnDataAdapter.from_file(
         store,

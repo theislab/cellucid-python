@@ -25,6 +25,7 @@ If you want the “hands-on but explained” tutorials, start with:
 1) Make sure the viewer is fully loaded (wait for the “ready” event).
 2) Call `viewer.debug_connection()` and check:
    - `server_health` is `ok`
+   - every `dataset_identity_probes` entry contains the matching `identity`
    - `web_ui.cache.index_html_exists` is true
 3) If you are on a remote Jupyter server, use a proxy (or SSH tunnel) so the browser can reach the kernel-side port.
 

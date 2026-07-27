@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import socket
+import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -10,14 +11,19 @@ import pytest
 from anndata import AnnData
 
 
-def _prepared_dataset(root: Path) -> Path:
+def _prepared_dataset(
+    root: Path,
+    *,
+    dataset_id: str = "bind-contract",
+    dataset_name: str = "Bind contract",
+) -> Path:
     root.mkdir()
     (root / "dataset_identity.json").write_text(
         json.dumps(
             {
                 "version": 2,
-                "id": "bind-contract",
-                "name": "Bind contract",
+                "id": dataset_id,
+                "name": dataset_name,
                 "description": "",
                 "stats": {
                     "n_cells": 1,
@@ -98,7 +104,44 @@ def test_exported_server_publishes_the_exact_os_assigned_port(
         assert server.port == server._server.server_address[1]
         assert server.port > 0
         assert server.url == f"http://127.0.0.1:{server.port}"
+        assert server.viewer_url == (f"http://127.0.0.1:{server.port}/?source=remote")
         assert server.server_info["port"] == server.port
+    finally:
+        server.stop()
+
+
+def test_exported_server_viewer_url_opens_the_exact_served_catalog(
+    tmp_path: Path,
+) -> None:
+    from cellucid.server import CellucidServer
+
+    root = tmp_path / "catalog"
+    root.mkdir()
+    _prepared_dataset(root / "alpha", dataset_id="alpha", dataset_name="Alpha")
+    _prepared_dataset(root / "beta", dataset_id="beta", dataset_name="Beta")
+    server = CellucidServer(
+        root,
+        host="127.0.0.1",
+        port=0,
+        open_browser=False,
+        quiet=True,
+        serve_web_ui=False,
+    )
+    server.start_background()
+    try:
+        assert server.viewer_url == f"{server.url}/?source=remote"
+        assert "dataset=" not in server.viewer_url
+        with urllib.request.urlopen(
+            f"{server.url}/_cellucid/datasets",
+            timeout=5,
+        ) as response:
+            payload = json.loads(response.read())
+        assert payload == {
+            "datasets": [
+                {"id": "alpha", "path": "/alpha/", "name": "Alpha"},
+                {"id": "beta", "path": "/beta/", "name": "Beta"},
+            ]
+        }
     finally:
         server.stop()
 

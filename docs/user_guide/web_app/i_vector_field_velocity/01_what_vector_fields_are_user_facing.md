@@ -119,7 +119,9 @@ Vector fields can arrive via multiple data loading workflows:
 
 ### “Why don’t I see arrows?”
 
-Cellucid’s overlay is not a static arrow plot by default. It’s a **particle flow visualization**. If you want arrow glyphs, you would typically generate them outside Cellucid (e.g., scVelo stream/arrow plots) or export vector fields and use a dedicated arrow rendering (future feature).
+Cellucid’s vector overlay is a **particle flow visualization**; it does not
+render static arrow glyphs. Generate a separate stream or arrow plot with a
+tool such as scVelo when that representation is required.
 
 ### “The flow looks random”
 

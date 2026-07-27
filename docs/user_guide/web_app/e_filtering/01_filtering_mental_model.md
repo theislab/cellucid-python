@@ -144,7 +144,7 @@ Current behavior: gene-range filters apply only while that gene is the active fi
 
 ```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
 :alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
-:width: 100%
+:width: 246px
 
 Selecting a categorical observation field colors the embedding and exposes its complete category legend.
 ```

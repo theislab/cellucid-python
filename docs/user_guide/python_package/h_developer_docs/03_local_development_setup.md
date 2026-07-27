@@ -12,7 +12,7 @@ It is intentionally detailed so that:
 ## Prerequisites
 
 Required:
-- Python `>=3.10`
+- Python 3.11 through 3.14
 - Git
 
 Recommended:
@@ -44,7 +44,8 @@ source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
 python -m pip install --upgrade pip
 ```
 
-If you use conda, the key requirement is “Python 3.10+ and a clean environment”; the rest is the same.
+If you use conda, choose Python 3.11 through 3.14 in a clean environment; the
+rest is the same.
 
 ---
 

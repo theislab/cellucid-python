@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it."
 type: software
 title: "cellucid (Python): Interactive Single-Cell Data Visualization"
-version: 0.0.9
+version: 0.9.1
 authors:
   - family-names: Inecik
     given-names: Kemal
@@ -10,4 +10,3 @@ authors:
 repository-code: "https://github.com/theislab/cellucid-python"
 url: "https://cellucid.readthedocs.io"
 license: "BSD-3-Clause"
-

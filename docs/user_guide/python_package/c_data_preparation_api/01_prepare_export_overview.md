@@ -58,7 +58,7 @@ Use the browser file picker workflow:
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
 :alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
-:width: 100%
+:width: 246px
 
 The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```
@@ -165,6 +165,8 @@ prepare(
     out_dir="./exports/pbmc_demo",
     dataset_name="PBMC demo",
     dataset_id="pbmc_demo",
+    # Optional: fix this only in a canonical byte-reproducible builder.
+    created_at="2026-07-26T12:34:56Z",
     obs_categorical_dtype="uint16",
     compression=6,
     var_quantization=8,

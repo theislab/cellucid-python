@@ -15,7 +15,9 @@ Before deep-diving, answer:
    - an **export folder** (recommended),
    - a browser-selected **`.h5ad`** or **Zarr ZIP** file,
    - a Python-served **`.h5ad` / `.zarr`** path,
-   - a **server-backed URL** (e.g. `http://127.0.0.1:<port>/` from `cellucid serve ...`),
+   - a **server-backed Viewer URL** (the exact printed
+     `/?source=remote` for prepared data or `/?anndata=true` for direct
+     AnnData),
    - a **remote server** (`?remote=...`, only when the viewer origin can fetch that scheme),
    - or a **GitHub exports root** (`?github=...`)?
 2) Is it **browser-only** (no Python running) or **server-backed** (Python process running)?

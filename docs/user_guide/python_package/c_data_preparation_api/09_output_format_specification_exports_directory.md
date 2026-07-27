@@ -72,7 +72,7 @@ It provides:
   "description": "",
   "created_at": "2026-01-01T00:00:00Z",
   "_cellucid_version_marker": "CELLUCID_VERSION",
-  "cellucid_data_version": "0.0.9",
+  "cellucid_data_version": "0.9.1",
   "stats": {
     "n_cells": 10000,
     "n_genes": 2000,
@@ -348,9 +348,30 @@ Browser requirement:
 
 ## Determinism and reproducibility
 
-Exports are deterministic given:
+Scientific binary payloads, including their gzip bytes, are deterministic given:
 - the exact input arrays and DataFrames,
-- and the same version of the exporter.
+- the same exporter version and compression level.
+
+Gzip payloads use a fixed timestamp and no filename header, so repeated exports
+do not change their compressed bytes because of the clock or output directory.
+By default, `dataset_identity.json["created_at"]` records the real UTC
+generation time. For a complete byte-identical export, pass one provenance-fixed
+timestamp explicitly:
+
+```python
+prepare(
+    ...,
+    dataset_name="Canonical build",
+    dataset_id="canonical-build-v1",
+    obs_categorical_dtype="uint16",
+    created_at="2026-07-26T12:34:56Z",
+)
+```
+
+The value must be a valid timestamp in exact `YYYY-MM-DDTHH:MM:SSZ` form:
+seconds only, UTC `Z`, no offset or fractional seconds. Cellucid preserves an
+accepted explicit value exactly. Invalid values reject before the output parent
+directory is created.
 
 Common non-deterministic sources are **upstream**:
 - stochastic embeddings (UMAP),
@@ -359,6 +380,8 @@ Common non-deterministic sources are **upstream**:
 
 Recommended reproducibility practice:
 - set `dataset_id` explicitly and keep it stable across re-exports of the “same dataset”.
+- fix `created_at` in the canonical builder when whole-directory byte identity
+  is part of the artifact contract.
 - record your pipeline version and the cellucid package version (`cellucid_data_version` is written automatically).
 
 ---

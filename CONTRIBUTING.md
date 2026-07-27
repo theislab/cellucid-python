@@ -68,7 +68,7 @@ Fast workflow:
 
 ### Prerequisites
 
-- Python `>=3.10`
+- Python 3.11 through 3.14
 - Git
 
 Recommended:

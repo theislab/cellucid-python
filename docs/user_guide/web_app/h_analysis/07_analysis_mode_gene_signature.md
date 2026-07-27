@@ -167,7 +167,7 @@ Fix:
 
 ```{figure} ../../../_static/screenshots/analysis/gene-signature.png
 :alt: Gene Signature analysis showing a multi-gene score distribution.
-:width: 100%
+:width: 224px
 
 Gene Signature analysis computes and plots the selected multi-gene score for the chosen cell group.
 ```

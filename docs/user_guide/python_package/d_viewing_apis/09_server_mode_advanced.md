@@ -24,8 +24,16 @@ Cellucid runs one of two servers depending on what you are viewing:
 - viewer URL looks like:
 
 ```text
-http://127.0.0.1:<port>/
+http://127.0.0.1:<port>/?source=remote
 ```
+
+The exact `source=remote` marker declares prepared-server launch intent before
+the first paint. Open `server.viewer_url` rather than constructing a bare URL;
+ordinary sample-catalog onboarding is intentionally not presented for this
+explicitly user-served source. This URL opens the server's
+`/_cellucid/datasets` catalog. A unique catalog selects its sole dataset; a
+multi-dataset catalog requires an exact dataset-id selection. Neither
+`CellucidServer.viewer_url` nor the viewer guesses the first catalog entry.
 
 ### AnnData server (`AnnDataServer`)
 

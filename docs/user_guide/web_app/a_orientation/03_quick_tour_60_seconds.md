@@ -2,11 +2,39 @@
 
 **Audience:** first-time users (wet lab + computational)  
 **Time:** 1–3 minutes  
-**What you’ll do:** load → move → color → keep a snapshot → highlight → export/save
+**What you’ll do:** enter → move → color → keep a snapshot → highlight → export/save
 
 :::{tip}
 If you prefer to learn by definition-first, read `a_orientation/04_ui_glossary_terminology` before this tour.
 :::
+
+---
+
+## What appears on ordinary startup
+
+```{figure} ../../../_static/screenshots/web_app/welcome-startup.png
+:alt: Cellucid welcome overlay shown over the loaded Suo single-cell embedding at page startup.
+:width: 1440px
+
+Every ordinary bundled or catalog startup opens the welcome overlay.
+The Suo dataset remains the sample
+catalog default and can finish loading behind it;
+dismissing the overlay is not remembered for the next ordinary load. An
+explicit Jupyter, remote-server, or GitHub-served startup skips the overlay
+because its data source has already been selected.
+```
+
+Choose **Choose a dataset** to open the data controls, or press {kbd}`Escape`
+to inspect the loaded default dataset first.
+
+```{figure} ../../../_static/screenshots/web_app/startup-loaded-build.png
+:alt: Loaded Suo point cloud on a white background with Community Annotation and Camera Path collapsed and Build 2026-07-26.4 in the footer.
+:width: 1440px
+
+The fresh loaded state uses a white background. **Community Annotation** and
+**Camera Path** start collapsed, and the footer reports the exact web build
+identity; this capture is Build 2026-07-26.4.
+```
 
 ---
 
@@ -16,7 +44,7 @@ This tour references UI areas by name (the app labels). A single annotated scree
 
 ```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
 :alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
-:width: 100%
+:width: 1440px
 
 A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
 ```
@@ -25,15 +53,18 @@ A loaded dataset in Cellucid: the sidebar controls the active view while the cat
 
 ## Fast path (click-by-click)
 
-### 1) Load a dataset (demo is fine)
+### 1) Confirm or replace the default dataset
 
-1) Open the **Session** accordion.
-2) Under **Sample datasets**, choose any dataset.
+1) After dismissing the welcome overlay, inspect the **Session** accordion.
+2) Keep the loaded Suo sample, or choose another entry under **Sample
+   datasets**. **Pancreatic endocrinogenesis (scVelo)** is the standard
+   1D/2D/3D velocity example; see
+   {doc}`../b_data_loading/10_standard_pancreas_dataset`.
 3) Wait for the dataset info panel to populate (Cells/Genes/Obs fields).
 
 **What success looks like**
 
-- The canvas shows points (usually on a grid background).
+- The canvas shows points on the default white background.
 - The dataset info panel shows non‑zero counts.
 
 :::{note}
@@ -42,16 +73,19 @@ ZIP) or from a **Remote server**, but those workflows are documented in
 `b_data_loading/index`.
 :::
 
-### 2) Move the camera (don’t skip this)
+### 2) Move the camera
 
 1) Open **Compare Views** → **Navigation**.
-2) Keep the default mode: **Orbit**.
-3) Try:
-   - click‑drag to rotate,
-   - mouse wheel / trackpad scroll to zoom,
-   - right‑drag (or Shift‑drag) to pan.
+2) Check the dimension-specific default:
+   - 1D or 2D starts in **Planar**;
+   - 3D starts in **Orbit**.
+3) In Planar, drag to pan and use the wheel or trackpad to zoom.
+4) In Orbit, drag to rotate, use the wheel or trackpad to zoom, and
+   right-drag (or Shift-drag) to pan.
 
-If you are on a trackpad and the interaction feels “wrong”, try **Planar** mode (best for 2D embeddings).
+The app does not start camera motion automatically. **Camera Path** starts
+collapsed, its top transport is absent until at least two keyframes exist, and
+playback begins only when you select **Play**.
 
 ### 3) Color by a field (metadata or gene expression)
 
@@ -90,6 +124,10 @@ Pick one:
 
 - **Save State** (Session accordion) to download a `.cellucid-session` bundle you can reopen later.
 - **Figure Export** to export a publication‑ready figure of the current view(s).
+
+For a bug report, scroll to the sidebar footer and include its exact **Build**
+value. It identifies the web files you exercised and is separate from the
+Python package version.
 
 ---
 

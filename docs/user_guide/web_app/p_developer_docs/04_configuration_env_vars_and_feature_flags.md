@@ -28,12 +28,16 @@ Handled by:
 |---|---|---|
 | `dataset` | `?dataset=suo` | Selects a local-demo dataset by id |
 | `source` | `?source=local-demo&dataset=suo` | Selects the source type for `dataset` (default: `local-demo`) |
-| `remote` | `?remote=http://127.0.0.1:8765` | Connects to a remote data server and loads its first dataset |
+| `remote` | `?remote=https://data.example.org&dataset=study-a` | Connects to a remote data server; `dataset` is required when its manifest contains multiple datasets |
 | `anndata` | `?remote=http://127.0.0.1:8765&anndata=true` | Hint: remote server is serving live AnnData (UI shows performance warning) |
-| `github` | `?github=owner/repo/path` | Connects to a GitHub-hosted exports path and loads its first dataset |
+| `github` | `?github=owner/repo/path&dataset=study-a` | Connects to a GitHub-hosted exports path; `dataset` is required when its manifest contains multiple datasets |
 
 Notes:
-- **Mixed content:** when the viewer origin is HTTPS (e.g. `https://www.cellucid.com`), browsers will block `remote=http://127.0.0.1:<port>` (HTTPS page fetching HTTP). For local servers, prefer opening the server-backed viewer URL (`http://127.0.0.1:<port>/`) served by `cellucid-python`.
+- A remote or GitHub manifest containing exactly one dataset selects that sole
+  dataset when `dataset` is omitted. A manifest containing multiple datasets
+  requires `dataset=<exact-dataset-id>`; Cellucid does not choose an arbitrary
+  catalog entry.
+- **Mixed content:** when the viewer origin is HTTPS (e.g. `https://www.cellucid.com`), browsers will block `remote=http://127.0.0.1:<port>` (HTTPS page fetching HTTP). For local prepared-data servers, open the exact server-backed Viewer URL (`http://127.0.0.1:<port>/?source=remote`) served by `cellucid-python`; direct AnnData uses `?anndata=true`.
 - For **local-user** (browser file picker), the URL is intentionally kept clean (no local paths in the URL).
 - `url-state.js` uses `history.replaceState()` so UI changes don’t spam browser history.
 

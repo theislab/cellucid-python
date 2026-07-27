@@ -4,16 +4,16 @@ This page documents how to test `cellucid-python` locally and what CI currently 
 
 ---
 
-## What tests exist today
+## What tests exist
 
 Tests live under:
 - `cellucid-python/tests/`
 
-Current coverage focuses on:
-- session bundle decoding + “apply session to AnnData”
-- vector field utilities
-
-If you change servers or export format behavior, you should add tests even if none exist yet for that area.
+The suite covers AnnData and Zarr loading, prepared exports, exact scientific
+value and identity contracts, HTTP routes and server lifecycle, Jupyter
+messaging, sessions, vector fields, cache and path confinement, documentation,
+cross-platform repository paths, and release artifacts. Changes to a public
+contract require a focused regression test at the owning boundary.
 
 ---
 
@@ -22,44 +22,46 @@ If you change servers or export format behavior, you should add tests even if no
 From the `cellucid-python/` folder:
 
 ```bash
-pytest
+python -m pytest
 ```
 
 Useful variants:
 
 ```bash
-pytest -v --tb=short
-pytest -k sessions
-pytest -k vector_fields
+python -m pytest -k sessions
+python -m pytest -k vector_fields
 ```
 
 Coverage (if installed):
 
 ```bash
-pytest --cov=cellucid
+python -m pytest --cov=cellucid
 ```
 
 ---
 
 ## Linting, formatting, and types
 
-### Ruff (format + lint)
+### Ruff
+
+Format the Python files you intentionally changed, then lint the maintained
+source, test, and release-script surfaces:
 
 ```bash
-ruff format .
-ruff check .
+python -m ruff format path/to/changed_file.py
+python -m ruff check src tests scripts
 ```
 
-Auto-fix what’s safe:
+To check an intentionally formatted file without changing it:
 
 ```bash
-ruff check . --fix
+python -m ruff format --check path/to/changed_file.py
 ```
 
 ### mypy
 
 ```bash
-mypy src/cellucid
+python -m mypy src/cellucid
 ```
 
 Note: mypy is configured pragmatically (`ignore_missing_imports = true`).
@@ -75,9 +77,12 @@ Current workflows:
 
 - `docs-check.yml`: builds Sphinx docs on PRs and pushes to `main`
 - `test.yml`: runs the complete pytest suite, Ruff, mypy, and distribution
-  checks across Python 3.10–3.14 on Ubuntu, representative Python versions on
+  checks across Python 3.11–3.14 on Ubuntu, representative Python versions on
   macOS, and representative Python versions on Windows
-- `pypi-publish.yml`: builds and publishes distributions to PyPI on tags `v*`
+- `pypi-publish.yml`: proves tag provenance, validates source and docs,
+  normalizes and verifies the source-distribution digest, installs both
+  artifacts on all three operating systems, and publishes through trusted
+  identity on tags `v*`
 - `readthedocs.yml`: triggers a ReadTheDocs build via API
 
 ---
@@ -124,11 +129,11 @@ make -C docs clean html
 
 ### Symptom: “Ruff complains but formatting looks fine”
 
-Run:
+Run both checks on the files you changed:
 
 ```bash
-ruff format .
-ruff check . --fix
+python -m ruff format path/to/changed_file.py
+python -m ruff check path/to/changed_file.py
 ```
 
-If you need to suppress a lint rule, do it surgically and justify it in the PR description.
+Any rule suppression must be narrow and justified in the review description.

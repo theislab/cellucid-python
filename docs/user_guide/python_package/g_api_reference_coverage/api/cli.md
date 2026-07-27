@@ -71,7 +71,10 @@ ssh -L 8765:127.0.0.1:8765 user@remote
 ```
 
 Then open:
-- `http://127.0.0.1:8765/`
+- `http://127.0.0.1:8765/?anndata=true`
+
+This H5AD command prints `?anndata=true`; a prepared export prints
+`?source=remote`. Always copy the exact Viewer URL from the server banner.
 
 ---
 

@@ -63,7 +63,7 @@ Use this when you explore in the standalone browser viewer (notebook or not).
 
 ```{figure} ../../../../_static/screenshots/data_loading/data-loading-session-panel.png
 :alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
-:width: 100%
+:width: 246px
 
 The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```

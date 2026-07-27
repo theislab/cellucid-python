@@ -325,7 +325,7 @@ If you want all panels to be directly comparable, lock cameras across views (see
 
 ```{figure} ../../../_static/screenshots/figure_export/preview.png
 :alt: Cellucid Figure Export preview showing the configured embedding and sidebar controls.
-:width: 100%
+:width: 1440px
 
 Preview exposes the current framing and visual state before a file is written.
 ```

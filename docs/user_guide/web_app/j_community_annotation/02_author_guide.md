@@ -60,7 +60,7 @@ Read everything, but pay special attention to:
 
 ```{figure} ../../../_static/screenshots/community_annotation/disconnected-panel.png
 :alt: Community Annotation panel before an annotation repository is connected.
-:width: 60%
+:width: 246px
 
 Before repository setup, the Community Annotation panel reports that no
 repository is connected and presents the explicit Connect repo action.

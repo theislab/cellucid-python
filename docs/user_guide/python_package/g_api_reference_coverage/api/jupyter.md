@@ -346,6 +346,7 @@ Fix:
   ```
 - The report includes:
   - server health/info probes,
+  - `dataset_identity_probes`, keyed by every exact declared dataset id/path,
   - detected notebook context (Jupyter/Colab/VSCode),
   - viewer UI cache status,
   - recent events and readiness state.

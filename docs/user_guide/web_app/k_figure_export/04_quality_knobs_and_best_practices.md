@@ -199,7 +199,7 @@ Best practices:
 
 ```{figure} ../../../_static/screenshots/figure_export/style.png
 :alt: Figure Export Style controls for background, typography, and text sizes.
-:width: 100%
+:width: 224px
 
 Style controls expose background, typography, and text sizing.
 ```

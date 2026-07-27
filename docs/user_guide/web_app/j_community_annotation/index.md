@@ -9,6 +9,8 @@ This documentation is intentionally written for **two audiences at once**:
 
 If you only read one idea, read this: community annotation is **offline-first** and **scope-based** (dataset + repo + branch + user), and GitHub is just the shared synchronization layer.
 
+- The **Community Annotation** accordion starts collapsed. Open it only when
+  you want to connect or work with an annotation repository.
 - Each person writes only their own file (conflict-free collaboration).
 - The merged consensus view is compiled in the browser during **Pull** (no “compiled” artifact is required in the repo).
 
@@ -26,7 +28,7 @@ Practical implication:
 
 ```{figure} ../../../_static/screenshots/community_annotation/disconnected-panel.png
 :alt: Community Annotation panel before an annotation repository is connected.
-:width: 100%
+:width: 246px
 
 The Community Annotation entry point reports that no repository is connected and offers the explicit Connect repo action.
 ```

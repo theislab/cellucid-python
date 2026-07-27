@@ -181,7 +181,7 @@ Fix:
 
 ```{figure} ../../../_static/screenshots/analysis/quick-insights.png
 :alt: Quick analysis results showing group composition and summary statistics.
-:width: 100%
+:width: 246px
 
 Quick Insights summarizes the selected highlight page with composition and numeric statistics.
 ```

@@ -188,6 +188,14 @@ If you point a server at a directory containing multiple dataset subfolders, the
 
 - `GET /_cellucid/datasets` → dataset list + relative paths
 - Each dataset folder should contain a `dataset_identity.json` (written by `prepare(...)`)
+- `server.viewer_url` opens this served catalog without choosing an arbitrary
+  entry. Exactly one declared dataset may auto-open; multiple datasets require
+  an exact dataset-id selection.
+
+The root is intentionally strict. Once any immediate subdirectory looks like
+an exported-dataset candidate, every immediate subdirectory must be a complete
+current export. A stray directory rejects the root rather than disappearing
+from the catalog.
 
 This matters for:
 - demos (“choose a dataset”),

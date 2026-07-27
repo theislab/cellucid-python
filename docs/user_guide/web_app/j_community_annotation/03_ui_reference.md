@@ -25,7 +25,7 @@ If you are offline, the entry button is disabled. Local annotation state can sti
 
 ```{figure} ../../../_static/screenshots/community_annotation/disconnected-panel.png
 :alt: Community Annotation panel before an annotation repository is connected.
-:width: 100%
+:width: 246px
 
 The Community Annotation entry point reports that no repository is connected and offers the explicit Connect repo action.
 ```

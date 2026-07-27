@@ -17,14 +17,17 @@ from cellucid.cli import _detect_data_format
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_core_metadata_declares_one_bounded_zarr_v2_runtime() -> None:
+def test_core_metadata_declares_one_current_bounded_direct_data_runtime() -> None:
     pyproject = (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    anndata_declaration = Requirement("anndata>=0.11.4,<0.12")
-    declaration = Requirement("zarr>=2.18.3,<3")
-    assert pyproject.count('"anndata>=0.11.4,<0.12",') == 1
-    assert pyproject.count('"zarr>=2.18.3,<3",') == 1
+    anndata_declaration = Requirement("anndata>=0.12.19,<0.13")
+    zarr_declaration = Requirement("zarr>=3.1.4,<4")
+    numcodecs_declaration = Requirement("numcodecs>=0.16.3,<0.17")
+    assert pyproject.count('"anndata>=0.12.19,<0.13",') == 1
+    assert pyproject.count('"zarr>=3.1.4,<4",') == 1
+    assert pyproject.count('"numcodecs>=0.16.3,<0.17",') == 1
     assert Version(version("anndata")) in anndata_declaration.specifier
-    assert Version(version("zarr")) in declaration.specifier
+    assert Version(version("zarr")) in zarr_declaration.specifier
+    assert Version(version("numcodecs")) in numcodecs_declaration.specifier
 
 
 @pytest.mark.parametrize("suffix", [".zarr", ""])
@@ -104,9 +107,7 @@ def test_real_zarr_v2_store_runs_the_read_and_serve_preparation_path(
                 dtype=object,
             ),
         ),
-        var=pd.DataFrame(
-            index=pd.Index(["Gene_A", "Gene_B"], dtype=object)
-        ),
+        var=pd.DataFrame(index=pd.Index(["Gene_A", "Gene_B"], dtype=object)),
         obsm={
             "X_umap_2d": np.array(
                 [[-2.0, 1.0], [0.0, 0.0], [2.0, -1.0]],
@@ -115,7 +116,8 @@ def test_real_zarr_v2_store_runs_the_read_and_serve_preparation_path(
         },
     )
     store = tmp_path / "serve-ready.zarr"
-    source.write_zarr(store)
+    with pytest.warns(UserWarning, match="Writing zarr v2 data"):
+        source.write_zarr(store)
     assert (store / ".zgroup").is_file()
     assert (store / ".zattrs").is_file()
     assert not (store / "zarr.json").exists()

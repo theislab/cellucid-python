@@ -1,7 +1,7 @@
 """
-Cellucid - 3D UMAP WebGL visualization toolkit.
+Cellucid - 1D, 2D, and 3D single-cell WebGL visualization toolkit.
 
-Utilities for exporting AnnData/array data for the 3D UMAP web viewer,
+Utilities for exporting AnnData/array data for the Cellucid web viewer,
 serving data locally or remotely, and integrating with Jupyter notebooks.
 
 Main exports:

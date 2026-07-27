@@ -146,3 +146,79 @@ def test_valid_message_serialization_is_strict_json(
 def test_debug_connection_exposes_only_current_diagnostics() -> None:
     parameters = inspect.signature(jupyter.BaseViewer.debug_connection).parameters
     assert list(parameters) == ["self", "timeout"]
+
+
+def test_debug_connection_probes_every_declared_dataset_by_exact_id_and_path(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    viewer = jupyter.BaseViewer(
+        port=8765,
+        client_server_url="http://127.0.0.1:8765",
+        web_cache_dir=tmp_path / "web-cache",
+    )
+    requested: list[str] = []
+
+    class Response:
+        def __init__(self, payload: object) -> None:
+            self._body = payload if type(payload) is bytes else json.dumps(payload).encode("utf-8")
+            self.headers = {"Content-Type": "application/json"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self) -> bytes:
+            return self._body
+
+    responses: dict[str, object] = {
+        "http://127.0.0.1:8765/_cellucid/health": {"status": "ok"},
+        "http://127.0.0.1:8765/_cellucid/info": {"version": "0.9.1"},
+        "http://127.0.0.1:8765/_cellucid/datasets": {
+            "datasets": [
+                {"id": "alpha", "path": "/alpha/", "name": "Alpha"},
+                {"id": "beta", "path": "/beta/", "name": "Beta"},
+            ]
+        },
+        "http://127.0.0.1:8765/alpha/dataset_identity.json": {
+            "id": "alpha",
+            "name": "Alpha",
+        },
+        "http://127.0.0.1:8765/beta/dataset_identity.json": {
+            "id": "wrong-id",
+            "name": "Beta",
+        },
+    }
+
+    def urlopen(request, *, timeout: float):
+        url = request.full_url if hasattr(request, "full_url") else request
+        requested.append(url)
+        if url not in responses:
+            raise OSError(f"unmapped diagnostic URL: {url}")
+        assert timeout == 2
+        return Response(responses[url])
+
+    monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    report = viewer.debug_connection()
+
+    assert report["server_datasets"] == [
+        {"id": "alpha", "path": "/alpha/", "name": "Alpha"},
+        {"id": "beta", "path": "/beta/", "name": "Beta"},
+    ]
+    assert report["dataset_identity_probes"]["alpha"] == {
+        "path": "/alpha/",
+        "url": "http://127.0.0.1:8765/alpha/dataset_identity.json",
+        "identity": {"id": "alpha", "name": "Alpha"},
+    }
+    assert report["dataset_identity_probes"]["beta"] == {
+        "path": "/beta/",
+        "url": "http://127.0.0.1:8765/beta/dataset_identity.json",
+        "error": "dataset_identity.json id does not match declared dataset 'beta'",
+    }
+    assert "dataset_identity" not in report
+    assert "dataset_identity_url" not in report
+    assert "dataset_identity_error" not in report
+    assert requested.count("http://127.0.0.1:8765/alpha/dataset_identity.json") == 1
+    assert requested.count("http://127.0.0.1:8765/beta/dataset_identity.json") == 1

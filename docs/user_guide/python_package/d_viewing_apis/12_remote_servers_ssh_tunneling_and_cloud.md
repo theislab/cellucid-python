@@ -41,11 +41,13 @@ Leave this SSH session open.
 In your local browser:
 
 ```text
-http://127.0.0.1:8765/
+http://127.0.0.1:8765/?anndata=true
 ```
 
 ```{note}
 This works because your browser connects to *your laptop* at `localhost:8765`, and SSH forwards that traffic to the remote machine’s `localhost:8765`.
+Use the exact Viewer URL printed by the remote command. The H5AD command above
+prints `?anndata=true`; a prepared export prints `?source=remote`.
 ```
 
 ## Common variations
@@ -67,7 +69,7 @@ ssh -L 9000:localhost:9000 user@remote-host
 Then open:
 
 ```text
-http://127.0.0.1:9000/
+http://127.0.0.1:9000/?anndata=true
 ```
 
 ### HPC: jump hosts and compute nodes
@@ -114,6 +116,8 @@ Binding to `0.0.0.0` exposes the dataset server to the network that can reach it
 
 ## Troubleshooting
 
-- If the page won’t load at `http://127.0.0.1:<port>/`, start with `/_cellucid/health` and `/_cellucid/info` (see {doc}`15_troubleshooting_viewing`).
+- If the printed Viewer URL will not load, test the same origin's
+  `/_cellucid/health` and `/_cellucid/info` endpoints (see
+  {doc}`15_troubleshooting_viewing`).
 - If a notebook iframe is blank, mixed-content blocked, or unable to reach
   loopback, see {doc}`10_notebook_widget_mode_advanced`.

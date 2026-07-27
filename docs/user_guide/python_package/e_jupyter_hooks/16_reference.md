@@ -99,7 +99,9 @@ Synchronous “pull” API:
 
 ### Connectivity / cache utilities
 
-- `viewer.debug_connection(timeout=5.0)` → structured connectivity report
+- `viewer.debug_connection(timeout=5.0)` → structured connectivity report,
+  including `dataset_identity_probes`, keyed by every exact server-declared
+  dataset id/path
 - `viewer.ensure_web_ui_cached(force=True, show_progress=True)` → establish the
   complete source UI generation
 - `viewer.ensure_web_ui_cached(force=False, show_progress=True)` → verify the

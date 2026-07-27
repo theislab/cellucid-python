@@ -9,7 +9,8 @@ You run a small local Python server that:
 - serves only what the viewer needs, on demand
 - establishes and serves the exact viewer generation on the same origin
 
-Then you open the **viewer URL printed by the server** (usually `http://127.0.0.1:<port>/`).
+Then you open the exact **Viewer URL printed by the server**:
+`/?source=remote` for prepared data or `/?anndata=true` for direct AnnData.
 
 This tutorial covers options **#6–#11** from the “14 loading options” list.
 
@@ -54,7 +55,7 @@ cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-da
 2) Open the viewer:
 
 ```text
-http://127.0.0.1:8765/
+http://127.0.0.1:8765/?anndata=true
 ```
 
 3) Keep the terminal running while you use the viewer.
@@ -205,7 +206,7 @@ Leave that SSH session open.
 ### Step 3 — Open Cellucid locally
 
 ```text
-http://127.0.0.1:8765/
+http://127.0.0.1:8765/?anndata=true
 ```
 
 Why this works well:
@@ -227,8 +228,9 @@ Why this works well:
 
 - **Mixed content**:
   - Opening `https://www.cellucid.com?remote=http://127.0.0.1:<port>` is blocked by browsers (HTTPS page fetching HTTP).
-  - Always open the local server viewer URL
-    (`http://127.0.0.1:<port>/`), which serves the verified UI generation.
+  - Always open the exact local Viewer URL printed by the server
+    (`/?source=remote` for prepared data or `/?anndata=true` for direct
+    AnnData), which serves the verified UI generation.
   - Prefer an SSH tunnel when the kernel/server is remote.
 
 - **Vector fields only exist in one dimension**:
@@ -255,7 +257,7 @@ Why this works well:
 - Then open:
 
   ```text
-  http://127.0.0.1:9000/
+  http://127.0.0.1:9000/?anndata=true
   ```
 
 ---

@@ -224,8 +224,8 @@ Likely causes (ordered):
 
 How to confirm:
 - Run `report = viewer.debug_connection()` and inspect:
-  - `server_health`, `viewer_index_probe`, `frontend_roundtrip`, and
-    `frontend_debug_snapshot`.
+  - `server_health`, `dataset_identity_probes`, `viewer_index_probe`,
+    `frontend_roundtrip`, and `frontend_debug_snapshot`.
 - In browser devtools console, look for blocked network requests.
 
 Fix:

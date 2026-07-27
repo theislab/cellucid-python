@@ -232,7 +232,7 @@ Fix:
 
 ```{figure} ../../../_static/screenshots/analysis/marker-genes-expanded.png
 :alt: Expanded Marker Genes result with heatmap, summary statistics, export controls, and top-marker table.
-:width: 100%
+:width: 860px
 
 The expanded Marker Genes result combines the heatmap, method summary, ranked table, and PDF, PNG, and CSV export actions.
 ```

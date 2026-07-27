@@ -64,7 +64,8 @@ serve("./my_export")  # blocks until Ctrl+C
    ssh -L 8765:127.0.0.1:8765 user@remote
    ```
 3. In your laptop browser:
-   - Open `http://127.0.0.1:8765/`
+   - Open the printed prepared-export Viewer URL:
+     `http://127.0.0.1:8765/?source=remote`
 
 **Direct LAN access** (use carefully):
 - Bind to `0.0.0.0` to make the server accessible to other machines on the network:
@@ -139,7 +140,13 @@ raises before binding the server. Use `--web-cache-dir PATH` or the
 
 ### “The dataset directory contains multiple datasets”
 - {class}`~cellucid.CellucidServer` supports serving a directory that contains multiple exported datasets as subfolders.
-- Confirm by visiting `/_cellucid/datasets`.
+- `server.viewer_url` opens that served catalog without embedding an arbitrary
+  dataset id. One unique entry is selected automatically; multiple entries
+  require an exact dataset-id selection.
+- Confirm the exact ids and paths by visiting `/_cellucid/datasets`.
+- Once any immediate child is recognized as a dataset candidate, **every**
+  immediate subdirectory must be one complete current export. A stray or
+  partial subdirectory rejects the root instead of being silently omitted.
 
 ### “Exported folder missing some files”
 - `CellucidServer` validates the complete declared prepared-artifact inventory

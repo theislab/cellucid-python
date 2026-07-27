@@ -232,10 +232,14 @@ If you hit these repeatedly, treat it as a data preparation issue:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/benchmarking_performance/benchmark-panel.png
-:alt: Performance Benchmark panel showing synthetic-data controls and live renderer metrics.
-:width: 100%
+:alt: Cellucid Performance Benchmark rendering a 10-million-point GLB model surface while showing the live synthetic-data controls and renderer metrics.
+:width: 1440px
 
-The Performance Benchmark panel reports points, FPS, frame time, GPU memory estimate, LOD level, visible points, and timing distribution.
+Build 2026-07-26.4 rendering the 10-million-point GLB model surface in
+Chromium on an Apple M1 Pro. The captured panel reports all 10.0M points
+visible, full LOD, 17 FPS, a 57.67 ms live frame sample, and generation in
+1,592 ms. See {doc}`08_screenshots` for the matching Chromium, Firefox,
+WebKit, and 20-million-point acceptance samples.
 ```
 
 ---

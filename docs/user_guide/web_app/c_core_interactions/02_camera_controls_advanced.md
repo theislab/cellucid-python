@@ -166,7 +166,7 @@ This section is for readers who want repeatable “feel” across machines and s
 
 ```{figure} ../../../_static/screenshots/web_app/camera-path-configured-panel.png
 :alt: Camera Path panel with two saved keyframes and playback settings.
-:width: 100%
+:width: 246px
 
 Two valid keyframes expose camera-path timing and interpolation settings; playback still waits for an explicit user action.
 ```

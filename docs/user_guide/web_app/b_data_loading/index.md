@@ -38,7 +38,7 @@ Use this as a decision tree. You can always switch later.
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
 :alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
-:width: 100%
+:width: 246px
 
 The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```
@@ -71,6 +71,14 @@ Understand all 14 loading options and choose the best approach for your workflow
 :link-type: doc
 
 Export once, then share via public GitHub-hosted exports (no server), or run a local demo viewer.
+:::
+
+:::{grid-item-card} {octicon}`pulse;1.5em;sd-mr-1` Standard Pancreas Sample
+:link: 10_standard_pancreas_dataset
+:link-type: doc
+
+Load the scVelo pancreas sample and verify its 1D/2D/3D embeddings,
+dimension-matched velocity, metadata, genes, connectivity, and provenance.
 :::
 
 ::::

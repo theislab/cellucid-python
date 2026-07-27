@@ -52,7 +52,7 @@ UI docs (highly recommended if you’re exporting vectors for others):
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/overlay-controls.png
 :alt: A synthetic 2D dataset with the Vector Field Overlay enabled and animated particle-flow controls visible.
-:width: 100%
+:width: 1440px
 
 A current-format 2D vector field rendered as particle flow with its field, density, speed, trail, size, opacity, palette, and LOD controls visible.
 ```

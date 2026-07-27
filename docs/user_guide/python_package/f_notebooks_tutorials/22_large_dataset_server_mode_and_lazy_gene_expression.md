@@ -170,7 +170,8 @@ ssh -L 8765:127.0.0.1:8765 user@remote-host
 ```
 
 In your browser:
-- open `http://127.0.0.1:8765/`
+- open the printed Viewer URL:
+  `http://127.0.0.1:8765/?source=remote`
 
 ```{warning}
 Be careful with `--host 0.0.0.0`. It exposes the server to your network. Use it only if you understand the security implications.

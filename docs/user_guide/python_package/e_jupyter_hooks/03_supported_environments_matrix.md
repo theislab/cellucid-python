@@ -126,7 +126,9 @@ Most robust: SSH local port forwarding (example uses port 8765):
    ssh -N -L 8765:127.0.0.1:8765 <user>@<remote-host>
    ```
 
-Now `http://127.0.0.1:8765/...` in your browser forwards to the remote kernel.
+Now the exact printed
+`http://127.0.0.1:8765/?jupyter=true&viewerId=...&viewerToken=...` URL in your
+browser forwards to the remote kernel.
 
 ## Edge cases
 

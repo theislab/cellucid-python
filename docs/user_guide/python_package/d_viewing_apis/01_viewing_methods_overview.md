@@ -12,14 +12,16 @@ Cellucid always needs two things:
 2) a **dataset server** that can answer “give me points / fields / genes / vectors” requests.
 
 `cellucid-python` establishes the exact viewer generation and starts a **local
-HTTP server** that serves both UI and data from the same origin, so you can
-open:
+HTTP server** that serves both UI and data from the same origin. Open the exact
+**Viewer URL** printed by that server:
 
 ```text
-http://127.0.0.1:8765/
+Prepared export: http://127.0.0.1:8765/?source=remote
+Direct AnnData:  http://127.0.0.1:8765/?anndata=true
 ```
 
-and the UI can load your data without cross-origin issues.
+The query marker declares the selected user-served source before the first
+paint, and the UI can load the data without cross-origin issues.
 
 ## At a glance
 

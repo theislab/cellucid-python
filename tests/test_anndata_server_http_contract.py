@@ -464,7 +464,8 @@ def test_real_weighted_zarr_serves_the_same_float64_payload(
         np.array([[0.0, 6.125], [6.125, 0.0]], dtype=np.float64)
     )
     source_path = tmp_path / "weighted.zarr"
-    adata.write_zarr(source_path)
+    with pytest.warns(UserWarning, match="Writing zarr v2 data"):
+        adata.write_zarr(source_path)
 
     server = AnnDataServer(
         source_path,

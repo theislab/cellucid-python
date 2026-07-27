@@ -102,7 +102,7 @@ Exports can embed provenance metadata that may include **dataset names/ids and s
 
 ```{figure} ../../../_static/screenshots/figure_export/panel-overview.png
 :alt: Figure Export panel showing Framing, Labels and Annotations, Style, Download, and Export controls.
-:width: 100%
+:width: 246px
 
 The Figure Export panel groups framing, labels, style, and download settings before the explicit Export action.
 ```

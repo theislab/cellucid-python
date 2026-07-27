@@ -175,9 +175,20 @@ If you have an adjacency matrix `conn` with shape `(n_cells, n_cells)` (dense or
 
 ```r
 conn <- NULL
-# conn <- <your adjacency matrix>
-# conn <- conn[cells, cells]
+if ("connectivities" %in% names(metadata(sce))) {
+  conn <- metadata(sce)$connectivities
+  if (!identical(dim(conn), c(length(cells), length(cells)))) {
+    stop("metadata(sce)$connectivities must be n_cells x n_cells")
+  }
+  if (!is.null(rownames(conn)) && !is.null(colnames(conn))) {
+    conn <- conn[cells, cells, drop = FALSE]
+  }
+}
 ```
+
+If your workflow stores its graph somewhere else, assign that exact matrix to
+`conn` and apply the same dimension and cell-order checks before export. Leaving
+`conn <- NULL` intentionally exports no connectivity graph.
 
 ## Step 8 — Run `cellucid_prepare()`
 

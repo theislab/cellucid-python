@@ -177,6 +177,67 @@ def _require_exact_json_value(
         ancestors.remove(identity)
 
 
+def _require_debug_dataset_list(payload: object) -> list[dict[str, str]]:
+    """Validate the exact dataset-list response used by diagnostics."""
+    if type(payload) is not dict or set(payload) != {"datasets"}:
+        raise TypeError("Dataset-list response must contain exactly 'datasets'")
+    raw_datasets = payload["datasets"]
+    if type(raw_datasets) is not list:
+        raise TypeError("Dataset-list response 'datasets' must be a native list")
+
+    datasets: list[dict[str, str]] = []
+    dataset_ids: set[str] = set()
+    dataset_paths: set[str] = set()
+    for index, entry in enumerate(raw_datasets):
+        if type(entry) is not dict or set(entry) != {"id", "path", "name"}:
+            raise TypeError(f"Dataset-list entry {index} must contain exactly id, name, and path")
+        dataset_id = _require_exact_message_text(
+            entry["id"],
+            label=f"Dataset-list entry {index} id",
+            allow_whitespace=True,
+        )
+        dataset_name = _require_exact_message_text(
+            entry["name"],
+            label=f"Dataset-list entry {index} name",
+            allow_whitespace=True,
+        )
+        path = entry["path"]
+        if (
+            type(path) is not str
+            or not path.startswith("/")
+            or not path.endswith("/")
+            or any(
+                not (character.isascii() and (character.isalnum() or character in "/._-"))
+                for character in path
+            )
+            or (
+                path != "/" and any(segment in {"", ".", ".."} for segment in path[1:-1].split("/"))
+            )
+        ):
+            raise TypeError(
+                f"Dataset-list entry {index} path must be one exact absolute "
+                "portable directory route"
+            )
+        if path != "/" and path.count("/") != 2:
+            raise TypeError(
+                f"Dataset-list entry {index} path must identify one served dataset directory"
+            )
+        if dataset_id in dataset_ids:
+            raise ValueError(f"Dataset-list response duplicates id {dataset_id!r}")
+        if path in dataset_paths:
+            raise ValueError(f"Dataset-list response duplicates path {path!r}")
+        dataset_ids.add(dataset_id)
+        dataset_paths.add(path)
+        datasets.append(
+            {
+                "id": dataset_id,
+                "path": path,
+                "name": dataset_name,
+            }
+        )
+    return datasets
+
+
 def _require_cell_indices(value: object, *, label: str = "cell_indices") -> list[int]:
     if type(value) is not list:
         raise TypeError(f"{label} must be a native list")
@@ -1082,6 +1143,7 @@ class BaseViewer:
 
         Includes:
         - server health/info probes
+        - exact id/path-keyed identity probes for every declared dataset
         - Python→Frontend ping/pong roundtrip (postMessage + HTTP events)
         - frontend debug snapshot (URL/origin/userAgent as seen by the iframe)
         """
@@ -1160,30 +1222,45 @@ class BaseViewer:
 
             with urllib.request.urlopen(f"{self.server_url}/_cellucid/datasets", timeout=2) as f:
                 payload = json.loads(f.read().decode("utf-8"))
-                raw = payload.get("datasets") if isinstance(payload, dict) else None
-                if isinstance(raw, list):
-                    datasets = [d for d in raw if isinstance(d, dict)]
+                datasets = _require_debug_dataset_list(payload)
                 report["server_datasets"] = datasets
         except Exception as e:
             report["server_datasets_error"] = str(e)
 
-        # Probe dataset identity using the first declared dataset entry.
-        if datasets:
-            try:
-                import urllib.request
+        # Probe every validated dataset identity by its exact declared id/path.
+        if datasets is not None:
+            import urllib.request
 
-                first = datasets[0]
-                rel = first.get("path") if isinstance(first, dict) else None
-                if isinstance(rel, str) and rel:
-                    base = f"{self.server_url.rstrip('/')}{rel}"
-                    if not base.endswith("/"):
-                        base += "/"
-                    url = f"{base}dataset_identity.json"
+            identity_probes: dict[str, dict[str, Any]] = {}
+            for dataset in datasets:
+                dataset_id = dataset["id"]
+                dataset_name = dataset["name"]
+                path = dataset["path"]
+                url = f"{self.server_url.rstrip('/')}{path}dataset_identity.json"
+                probe: dict[str, Any] = {
+                    "path": path,
+                    "url": url,
+                }
+                try:
                     with urllib.request.urlopen(url, timeout=2) as f:
-                        report["dataset_identity_url"] = url
-                        report["dataset_identity"] = json.loads(f.read().decode("utf-8"))
-            except Exception as e:
-                report["dataset_identity_error"] = str(e)
+                        identity = json.loads(f.read().decode("utf-8"))
+                    if type(identity) is not dict:
+                        raise TypeError("dataset_identity.json must contain a JSON object")
+                    if identity.get("id") != dataset_id:
+                        raise ValueError(
+                            "dataset_identity.json id does not match declared dataset "
+                            f"{dataset_id!r}"
+                        )
+                    if identity.get("name") != dataset_name:
+                        raise ValueError(
+                            "dataset_identity.json name does not match declared dataset "
+                            f"{dataset_name!r}"
+                        )
+                    probe["identity"] = identity
+                except Exception as e:
+                    probe["error"] = str(e)
+                identity_probes[dataset_id] = probe
+            report["dataset_identity_probes"] = identity_probes
 
         # Inspect the locally served, inventory-verified index.
         try:

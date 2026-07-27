@@ -193,7 +193,7 @@ Fix:
 
 ```{figure} ../../../_static/screenshots/analysis/marker-genes.png
 :alt: Marker Genes analysis showing ranked marker output for a selected group.
-:width: 100%
+:width: 224px
 
 Marker Genes ranks candidate genes for the selected group and exposes an expanded result view.
 ```

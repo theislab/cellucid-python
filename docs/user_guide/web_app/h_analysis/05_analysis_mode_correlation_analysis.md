@@ -190,7 +190,7 @@ Fix:
 
 ```{figure} ../../../_static/screenshots/analysis/correlation-results.png
 :alt: Correlation analysis configured for two continuous observation fields with a scatter plot.
-:width: 100%
+:width: 224px
 
 Correlation analysis plots two continuous observation fields for the selected cells and reports the computed relationship.
 ```

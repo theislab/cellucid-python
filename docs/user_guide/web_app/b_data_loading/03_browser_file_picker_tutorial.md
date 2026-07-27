@@ -48,7 +48,7 @@ If you don’t see points after loading, jump to the troubleshooting section at 
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
 :alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
-:width: 100%
+:width: 246px
 
 The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```
@@ -80,7 +80,7 @@ Click **Prepared** and select the export directory.
 
 ```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
 :alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
-:width: 100%
+:width: 1440px
 
 A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
 ```
@@ -111,7 +111,7 @@ cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-da
 Then open:
 
 ```text
-http://127.0.0.1:8765/
+http://127.0.0.1:8765/?anndata=true
 ```
 
 ### `.h5ad` minimum requirements
@@ -264,7 +264,9 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
   exceeds a reader limit.
 
 **Fix**
-- Re-export with `adata.write_zarr("data.zarr")`.
+- With the supported AnnData version, re-export with
+  `adata.write_zarr("data.zarr")`; the resulting store must contain the Zarr
+  v2 root markers `.zgroup` and `.zattrs`.
 - Package the complete store while preserving its dotfiles, then select the
   resulting `.zarr.zip` or `.zip` file with **Zarr ZIP**.
 

@@ -95,7 +95,9 @@ If either group has very few cells (e.g. < 30–50), most “marker” results w
 If you already have a short gene list (e.g. markers), you can compare means/medians:
 
 ```python
-genes = list(adata.var_names[:10])  # replace with genes you care about
+# This runnable baseline uses the first ten ordered genes. For a planned
+# analysis, assign an explicit preregistered marker list instead.
+genes = list(adata.var_names[:10])
 
 # Dense-safe example:
 import numpy as np

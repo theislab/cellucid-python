@@ -54,6 +54,11 @@ prepare(
 )
 ```
 
+`created_at` is optional. Its default records the current UTC export time. A
+canonical dataset builder that must reproduce the complete directory
+byte-for-byte should instead pass its fixed provenance timestamp in exact UTC
+seconds format, for example `created_at="2026-07-26T12:34:56Z"`.
+
 ---
 
 ## Practical path (what to decide before you export)
@@ -92,7 +97,7 @@ See {doc}`vector_fields` for helper functions and naming conventions.
 
 ```{figure} ../../../../_static/screenshots/web_app/app-overview-cell-type.png
 :alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
-:width: 100%
+:width: 1440px
 
 A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
 ```

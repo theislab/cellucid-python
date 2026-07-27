@@ -68,12 +68,18 @@ prepare(
     out_dir="./exports/pbmc_v1",
     dataset_name="PBMC 10k (Seurat v3 tutorial)",
     dataset_id="pbmc_10k_v1",
+    created_at="2026-07-26T12:34:56Z",
     dataset_description="PBMC demo export used for tutorial figures",
     source_name="Seurat PBMC tutorial",
     source_url="https://satijalab.org/seurat/articles/pbmc3k_tutorial.html",
     obs_categorical_dtype="uint16",
 )
 ```
+
+Omit `created_at` for an ordinary export: Cellucid writes the current UTC time.
+Use an explicit, provenance-fixed value only when a canonical builder must
+reproduce the complete export directory byte-for-byte. Its exact accepted form
+is `YYYY-MM-DDTHH:MM:SSZ`.
 
 ### AnnData direct mode (`show_anndata(...)`)
 

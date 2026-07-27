@@ -9,7 +9,8 @@ If you are cutting a release, also read: {doc}`14_release_process`.
 ## Packaging model (what’s in `pyproject.toml`)
 
 `cellucid-python` uses:
-- **setuptools** as the build backend (`setuptools.build_meta`)
+- **setuptools 83.0.0** as the exact build backend
+  (`setuptools.build_meta`)
 - a `src/` layout (`src/cellucid/`)
 - extras for developer tooling and docs
 
@@ -17,7 +18,7 @@ Key sections:
 
 - `[project]`
   - `name = "cellucid"`
-  - `version = "0.0.9"` (beta) <!-- CELLUCID_VERSION -->
+  - `version = "0.9.1"` (beta) <!-- CELLUCID_VERSION -->
   - runtime dependencies (`numpy`, `pandas`, `scipy`, `anndata`, `ipython`, `jupyter-server-proxy`)
 - `[project.optional-dependencies]`
   - `dev`: `pytest`, `ruff`, `mypy`, `pre-commit`
@@ -70,12 +71,28 @@ The CI release workflow uses `python -m build`.
 Locally:
 
 ```bash
-python -m pip install --upgrade build
-python -m build
+python -m pip install "build==1.5.0" "twine==6.2.0"
+SOURCE_DATE_EPOCH=315532800 python -m build
+python scripts/normalize_sdist.py dist
+python scripts/validate_release.py --sdist dist
+python -m twine check --strict dist/*
 ```
 
 Outputs appear under:
 - `cellucid-python/dist/`
+
+The normalized source distribution has canonical archive metadata and a
+one-mebibyte hard size limit. Its digest must match the downstream recipe
+before the workflow uploads it. The fixed `SOURCE_DATE_EPOCH` is the earliest
+ZIP timestamp (1980-01-01T00:00:00Z) and makes repeated wheel builds
+byte-identical; it is archive metadata, not a claimed release date.
+
+In Windows PowerShell, set the same process environment before building:
+
+```powershell
+$env:SOURCE_DATE_EPOCH = "315532800"
+python -m build
+```
 
 To test the wheel:
 

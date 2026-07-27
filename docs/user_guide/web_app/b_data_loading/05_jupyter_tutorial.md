@@ -189,8 +189,9 @@ Fixed ports are especially useful for remote notebooks, because you can pre-conf
 ```python
 from cellucid import show
 
-# Example (replace with your path):
-# viewer = show("./exports/pbmc_demo", height=600)
+# Open the exported directory used throughout this page.
+viewer = show("./exports/pbmc_demo", height=600)
+viewer.stop()
 ```
 
 ## Option #13/#14 — `show_anndata()` (AnnData / `.h5ad` / `.zarr`)
@@ -322,8 +323,13 @@ For full expectations (including exported-folder layout), see {doc}`07_folder_fi
 ```python
 import numpy as np
 
-n = adata.n_obs
-adata.obsm["velocity_umap_2d"] = np.zeros((n, 2), dtype=np.float32)  # replace with real vectors
+# A complete synthetic counter-clockwise field for an interface check.
+# Do not interpret this constructed field as biological velocity.
+coordinates = np.asarray(adata.obsm["X_umap_2d"], dtype=np.float32)
+offsets = coordinates - coordinates.mean(axis=0, keepdims=True)
+adata.obsm["velocity_umap_2d"] = np.column_stack(
+    (-offsets[:, 1], offsets[:, 0])
+).astype(np.float32)
 
 viewer = show_anndata(
     adata,
@@ -494,7 +500,9 @@ report = viewer.debug_connection()
 report
 ```
 
-This checks server endpoints (`/_cellucid/health`, `/_cellucid/info`), performs a ping/pong roundtrip, and includes recent frontend console warnings/errors forwarded to Python.
+This checks server endpoints (`/_cellucid/health`, `/_cellucid/info`,
+`/_cellucid/datasets`), probes every declared identity under its exact id/path,
+performs a ping/pong roundtrip, and reports recent accepted-event counts.
 It also includes a frontend “debug snapshot” (the iframe’s `location.href`, origin, and user agent), which is useful in proxied notebook environments.
 
 ## Cleanup (Do This If You Re-run Cells Often)

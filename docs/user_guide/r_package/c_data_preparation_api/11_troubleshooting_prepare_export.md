@@ -120,7 +120,7 @@ Practical choices:
 If you truly have no metadata, create a minimal one:
 
 ```r
-obs <- data.frame(dummy = rep("all", n_cells))
+obs <- data.frame(cell_group = factor(rep("all_cells", n_cells)))
 ```
 
 ---
