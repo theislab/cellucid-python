@@ -25,7 +25,7 @@ It is written for contributors who might touch:
 ## Renderer entry point
 
 The viewer is created in `cellucid/assets/js/rendering/viewer.js` via:
-- `createViewer({ canvas, labelLayer, viewTitleLayer, sidebar, onViewFocus })`
+- `createViewer({ canvas, labelLayer, viewTitleLayer, onViewFocus })`
 
 Hard constraint:
 - **WebGL2 only**. If `canvas.getContext('webgl2')` fails, the app throws early.
@@ -44,7 +44,28 @@ Hard constraint:
 
 - **Smoke / volumetric density**
   - Backend: `SmokeRenderer` (`cellucid/assets/js/rendering/smoke-cloud/`)
-  - Uses a density volume built from visible points (GPU splatting path exists via `viewer.buildSmokeVolumeGPU`).
+  - `viewer.buildSmokeVolumeGPU(...)` builds the visible-point volume through
+    one WebGL2 transaction: bounded position batches → R32F splat atlas →
+    logarithmic GPU maximum reduction → normalized R8 atlas → R8 3D texture.
+  - The product path performs no `readPixels` synchronization. It publishes the
+    new texture and bounds before completing its notification, preserves the
+    prior volume on failure, and returns only a frozen non-owning summary.
+  - The exact UI grid inventory is 32³, 48³, 64³, 96³, and 128³. The builder
+    accepts exact integer sizes from 8 through 128 and rejects values outside
+    that range before allocation. At 128³, its 2D atlas is 1536×1408—below
+    WebGL2's required 2048 minimum `MAX_TEXTURE_SIZE`.
+  - A build requires a clean GL error state, `EXT_color_buffer_float`,
+    `EXT_float_blend`, and sufficient 2D/3D texture limits. These are explicit
+    preconditions; there is no alternate density implementation.
+  - Per-build framebuffers, vertex arrays, staging buffers, atlases, and
+    reduction textures are deleted on success and failure, and every touched
+    GL binding/capability is restored. Programs plus the corner/quad buffers
+    are cached per context, disposed with `SmokeRenderer`, and invalidated on
+    context loss. The viewer requires a page reload after context loss.
+  - The user notification duration covers the synchronous renderer call,
+    including validation and publication. The `[GPU Splat] … submission`
+    console duration starts after preflight and measures command submission.
+    Neither duration is a GPU-completion measurement.
 
 - **Connectivity edges**
   - Backend: instanced lines + edge textures (in `viewer.js`)
@@ -137,6 +158,14 @@ Prefer:
 - reusing scratch buffers (float32/uint8) sized to `pointCount`
 - debouncing expensive work in UI modules
 
+Smoke density never makes a full duplicate position array. It retains the
+dataset-owned positions, alpha, and optional outlier-quantile arrays, validates
+them in place, and streams visible positions through a transient buffer fixed
+at 262,144 XYZ points (3 MiB). Large inputs are submitted in bounded batches.
+Do not replace this with a buffer sized to the complete dataset or introduce
+GPU→CPU volume readback. The grid cap and early release of completed reduction
+textures bound the other transient memory.
+
 ### 2) Full buffer re-uploads when only alpha changed
 
 Filtering often only needs alpha changes.
@@ -179,6 +208,8 @@ Causes:
 Mitigation:
 - reduce smoke settings / disable heavy overlays
 - lower dataset size for reproduction
+- reload the page after context loss; restored contexts are not reused by the
+  current viewer
 - use the performance troubleshooting docs: {doc}`../n_benchmarking_performance/index`
 
 ---

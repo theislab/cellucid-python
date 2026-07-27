@@ -203,13 +203,16 @@ If the canvas is blank or you see WebGL errors, jump to `a_orientation/02_system
 
 ### How to confirm
 
-- Lower grid density and ray quality; if performance improves immediately, you found the bottleneck.
+- Lower render resolution, then ray quality. If frame rate improves, the
+  steady-state ray-marching cost was dominant. If entering smoke or changing a
+  filter is the slow part, lower grid density instead.
 
 ### Fix (fastest wins)
 
-1) Lower **Grid density**.
+1) Lower **Render resolution**.
 2) Lower **Ray quality**.
-3) Lower **Render resolution**.
+3) Lower **Grid density**.
+4) Lower **Noise detail**.
 
 ---
 

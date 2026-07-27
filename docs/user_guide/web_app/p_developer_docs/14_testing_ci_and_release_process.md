@@ -98,6 +98,25 @@ Run these steps on at least one small dataset (fast) and optionally one larger d
 
 ## Automated checks
 
+### Protected smoke-density contracts
+
+The browser matrix runs the density transaction in Chromium, Firefox, and
+WebKit. Its retained checks prove:
+
+- byte equality (within one R8 step) against the historical GPU pipeline,
+  including adversarial Float32 inputs;
+- zero product `readPixels` calls;
+- a maximum 262,144-point staging upload and bounded draw submissions;
+- exact GL-state restoration, including samplers and separate blend equations;
+- complete resource cleanup after an injected mid-publication failure;
+- atomic renderer publication, prior-volume rollback, and no owned texture in
+  the public return value; and
+- context-loss invalidation plus the viewer's reload-required contract.
+
+Keep these checks cross-engine. Do not replace the historical GPU authority
+with a JavaScript voxel model: binary64 arithmetic does not reproduce GLSL
+Float32 cutoff behavior.
+
 ### CSS design system validation (recommended when touching CSS)
 
 Docs:

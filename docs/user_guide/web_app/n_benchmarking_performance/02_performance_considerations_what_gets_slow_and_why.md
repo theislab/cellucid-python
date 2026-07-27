@@ -71,11 +71,18 @@ Related docs:
 
 Smoke mode is intentionally heavy and can dominate GPU time.
 
-**The two biggest cost drivers** are documented in {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke`:
-- **Grid density** (3D volume resolution)
-- **Ray quality** (raymarch steps)
+Separate build cost from frame cost:
+
+- **Visible-cell count** scales density-build validation and GPU submission
+  approximately linearly.
+- **Grid density** scales density-build work and GPU memory steeply—roughly
+  with the cube of the selected grid width.
+- **Render resolution** and **Ray quality** are the main steady-state
+  per-frame costs because they control rendered pixels and ray-march work.
 
 Practical consequences:
+- The exact grid choices are 32³, 48³, 64³, 96³, and 128³; 128³ is the
+  initial and maximum setting on every supported WebGL2 implementation.
 - Smoke can look “blank” if density is low or if few points are visible (filters/outliers).
 - Smoke can cause “context lost” if grid/quality are too high for your GPU.
 

@@ -57,7 +57,7 @@ the meaningful render value.
 
 | UI label | Initial position/readout | Meaning |
 |---|---|---|
-| `Grid density:` | 60 / `256³` | Resolution of the density volume. The exact available cube sizes are 32³, 48³, 64³, 96³, 128³, 192³, 256³, 384³, 512³, 768³, and 1024³. This is the largest memory lever. |
+| `Grid density:` | 80 / `128³` | Resolution of the density volume. The exact available cube sizes are 32³, 48³, 64³, 96³, and 128³. The 128³ ceiling is valid even on WebGL2 devices that provide only the required minimum 2D texture size; this is the largest memory lever. |
 | `Ray quality:` | 75 / `High` | Ray-marching work. The displayed bands are `Fast`, `Balanced`, `High`, and `Ultra`. |
 | `Render resolution:` | 15 / `0.51x` | Off-screen render scale from 0.25x through 2.00x. Lowering it is usually the fastest recovery from poor frame rate. |
 | `Noise detail:` | 58 / `128³` | Noise-texture resolution. The exact choices are 32³, 48³, 64³, 96³, 128³, 192³, and 256³. |
@@ -89,13 +89,28 @@ printed readouts—not only slider positions—when reproducing an appearance.
 Smoke is lazy: no density volume is built during ordinary Points startup. The
 first switch to smoke builds a GPU volume from the **currently visible** cells.
 Filtering, changing the active field, or changing view-scoped visibility marks
-that volume dirty. While smoke is active, relevant changes are rebuilt after an
-approximately 300 ms debounce.
+that volume dirty. While smoke is active, a completed visibility change queues
+one rebuild after the newly published counts and controls have had a paint
+opportunity; other changes from the same publication are coalesced. Only direct
+`Grid density:` slider movement uses the approximately 300 ms debounce, so
+dragging the slider does not rebuild on every input event.
 
-This has two practical consequences:
+The build stays on the GPU: Cellucid scans the existing position and visibility
+arrays without making a full-size position copy, streams visible positions
+through one bounded 3 MiB staging batch, splats them into a density atlas,
+reduces its maximum there, normalizes to 8-bit density, and publishes the native
+3D texture as one ordered transaction. No pixel data or normalization crosses
+into JavaScript. The previous volume remains published until the replacement
+commands, validation, and notification publication succeed. If a replacement
+fails, Cellucid keeps that volume, reports the exact failure, and returns the
+visible mode controls to Points so stale smoke is never presented as current.
+
+This has three practical consequences:
 
 1. A smoke cloud after filtering describes only the visible subset.
-2. Returning to Points is the reliable way to verify which cells produced a
+2. If no cells are visible, Cellucid clears the smoke volume instead of showing
+   stale density.
+3. Returning to Points is the reliable way to verify which cells produced a
    surprising shape.
 
 ## Multiview and session behavior

@@ -116,15 +116,22 @@ Related docs:
 
 ### Why it happens
 Smoke mode is a ray-marched volumetric rendering:
-- **Grid density** increases 3D volume resolution (major GPU memory + compute).
-- **Ray quality** increases raymarch steps (major GPU compute).
+- **Grid density** increases density-build time and GPU memory;
+  the current exact choices run from 32³ through 128³ and start at 128³.
+- **Visible-cell count** increases density-build validation and submission.
+- **Render resolution** increases the pixels rendered each frame.
+- **Ray quality** increases ray-march steps per pixel.
 
 ### How to confirm
-- Reduce grid density first; if FPS recovers immediately, you found the bottleneck.
+- Lower render resolution first, then ray quality, when frame rate is poor.
+- Lower grid density when entering Smoke or rebuilding after a filter is slow,
+  or when GPU memory pressure is the problem. Grid changes are applied after
+  the approximately 300 ms slider debounce and then rebuild the volume.
 
 ### Fix
-- Lower grid density and ray quality.
-- Lower render resolution in the benchmark controls.
+- Lower render resolution and ray quality in **Volumetric smoke:**.
+- Lower grid density for build latency or memory pressure.
+- Lower noise detail if memory pressure remains.
 - Return to points mode when doing scientific work; use smoke selectively.
 
 ### Prevention

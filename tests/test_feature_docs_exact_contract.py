@@ -83,7 +83,7 @@ def test_smoke_and_multiview_docs_publish_current_exact_limits() -> None:
 
     for exact in (
         "`Grid density:`",
-        "60 / `256³`",
+        "80 / `128³`",
         "`Ray quality:`",
         "75 / `High`",
         "`Render resolution:`",

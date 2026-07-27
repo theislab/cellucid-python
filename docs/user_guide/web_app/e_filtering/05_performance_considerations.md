@@ -51,7 +51,11 @@ you can easily multiply the amount of per-cell work.
 ### Heavy render modes and modules reacting to visibility changes
 
 Filtering affects more than points:
-- smoke/volumetric modes may rebuild density from visible points
+- while Smoke is active, committed visibility changes coalesce and rebuild
+  density after the updated counts and controls have had one paint opportunity
+- while Smoke is inactive, visibility changes only mark density dirty; the next
+  Smoke entry builds it from the then-visible cells
+- zero visible cells clear the current smoke volume
 - edges/graphs may update which edges are visible
 - legends recompute category counts (visible/available)
 
