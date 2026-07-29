@@ -272,7 +272,12 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
             # Compress if client supports gzip (transparent compression for better network perf)
             compress = supports_gzip
             data = self.adapter.get_points_binary(dim, compress=compress)
-            self.send_binary(data, head_only=head_only, compressed=compress)
+            self.send_binary(
+                data,
+                head_only=head_only,
+                compressed=compress,
+                vary_accept_encoding=True,
+            )
         except ValueError:
             self.send_error_response(404, "Points data not available")
 
@@ -301,6 +306,7 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
                 data,
                 head_only=head_only,
                 compressed=supports_gzip,
+                vary_accept_encoding=True,
             )
         except ValueError as e:
             self.send_error_response(404, str(e))
@@ -340,17 +346,32 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
             if data_type == "values":
                 # Continuous field values
                 data = self.adapter.get_obs_continuous_values(actual_key, compress=compress)
-                self.send_binary(data, head_only=head_only, compressed=compress)
+                self.send_binary(
+                    data,
+                    head_only=head_only,
+                    compressed=compress,
+                    vary_accept_encoding=True,
+                )
             elif data_type == "codes":
                 # Categorical codes
                 data, categories, missing = self.adapter.get_obs_categorical_codes(
                     actual_key, compress=compress
                 )
-                self.send_binary(data, head_only=head_only, compressed=compress)
+                self.send_binary(
+                    data,
+                    head_only=head_only,
+                    compressed=compress,
+                    vary_accept_encoding=True,
+                )
             elif data_type == "outliers":
                 # Outlier quantiles for categorical field
                 data = self.adapter.get_obs_outlier_quantiles(actual_key, compress=compress)
-                self.send_binary(data, head_only=head_only, compressed=compress)
+                self.send_binary(
+                    data,
+                    head_only=head_only,
+                    compressed=compress,
+                    vary_accept_encoding=True,
+                )
             else:
                 self.send_error_response(
                     404, f"Unknown obs data type: {data_type} (expected values, codes, or outliers)"
@@ -389,7 +410,12 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
 
         try:
             data = self.adapter.get_gene_expression(actual_gene, compress=compress)
-            self.send_binary(data, head_only=head_only, compressed=compress)
+            self.send_binary(
+                data,
+                head_only=head_only,
+                compressed=compress,
+                vary_accept_encoding=True,
+            )
         except KeyError:
             self.send_error_response(404, "Gene not found")
         except Exception:
@@ -420,11 +446,26 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
             ) = self.adapter.get_connectivity_edges(compress=compress)
 
             if filename == "edges.src.bin":
-                self.send_binary(sources_data, head_only=head_only, compressed=compress)
+                self.send_binary(
+                    sources_data,
+                    head_only=head_only,
+                    compressed=compress,
+                    vary_accept_encoding=True,
+                )
             elif filename == "edges.dst.bin":
-                self.send_binary(dests_data, head_only=head_only, compressed=compress)
+                self.send_binary(
+                    dests_data,
+                    head_only=head_only,
+                    compressed=compress,
+                    vary_accept_encoding=True,
+                )
             elif filename == "edges.weights.f64.bin":
-                self.send_binary(weights_data, head_only=head_only, compressed=compress)
+                self.send_binary(
+                    weights_data,
+                    head_only=head_only,
+                    compressed=compress,
+                    vary_accept_encoding=True,
+                )
             else:
                 self.send_error_response(
                     404,

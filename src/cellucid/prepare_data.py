@@ -497,7 +497,7 @@ def _atomic_write_gzip(
                 cast(BinaryIO, temporary_file),
                 compresslevel=compresslevel,
             ) as compressed:
-                compressed.write(data.tobytes())
+                compressed.write(_as_c_contiguous_byte_view(data))
             temporary_file.flush()
             os.fsync(temporary_file.fileno())
         os.chmod(temporary_path, 0o644)
@@ -506,6 +506,15 @@ def _atomic_write_gzip(
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
+
+
+def _as_c_contiguous_byte_view(data: np.ndarray) -> memoryview:
+    """Expose C-order array bytes without copying an already-contiguous payload."""
+    contiguous = np.ascontiguousarray(data)
+    return memoryview(contiguous).cast("B")
+
+
+_QUANTIZATION_ARITHMETIC_CHUNK_SIZE = 1_048_576
 
 
 def _quantize_continuous(
@@ -564,8 +573,21 @@ def _quantize_continuous(
         dtype = np.uint16
 
     scale = max_quant / (max_val - min_val)
-    normalized = (values - min_val) * scale
-    quantized = np.clip(normalized, 0, max_quant).astype(dtype)
+    quantized = np.empty(values.shape, dtype=dtype)
+    for start in range(0, values.shape[0], _QUANTIZATION_ARITHMETIC_CHUNK_SIZE):
+        end = start + _QUANTIZATION_ARITHMETIC_CHUNK_SIZE
+        # Values already belong to the viewer's Float32 domain, but a valid
+        # subnormal range can require a normalization scale beyond Float32.
+        # Bounded Float64 chunks avoid both arithmetic overflow and an N-wide
+        # Float64 owner.
+        normalized = values[start:end].astype(np.float64, copy=True)
+        normalized -= min_val
+        normalized *= scale
+        # Match the R exporter at integer boundaries where binary arithmetic
+        # can land infinitesimally below the mathematically exact code.
+        normalized += 1e-8
+        np.clip(normalized, 0, max_quant, out=normalized)
+        quantized[start:end] = normalized
 
     return quantized, min_val, max_val, scale
 
@@ -822,8 +844,13 @@ def _prepare_generation(
     var_quantization : int or None
         Bits for gene expression quantization (8, 16, or None for full float32).
         8-bit reduces file size by 4x with minimal visual impact for colormapping.
+        Codes and bounds derive from the viewer-visible float32 values. A
+        source range that collapses to one float32 value is rejected, while an
+        individual nonzero source value may round to zero if the range remains
+        non-collapsed.
     obs_continuous_quantization : int or None
         Bits for continuous obs field quantization (8, 16, or None for full float32).
+        It follows the same viewer-visible float32 domain as var quantization.
     obs_categorical_dtype : 'uint8' or 'uint16'
         - 'uint8': Store up to 255 categories
         - 'uint16': Store up to 65,535 categories

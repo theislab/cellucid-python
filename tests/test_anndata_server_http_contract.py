@@ -383,6 +383,7 @@ def test_get_honors_gzip_quality_zero_and_positive_quality() -> None:
             headers={"Accept-Encoding": "br, gzip;q=0"},
         )
         assert status == 200
+        assert headers["Vary"] == "Accept-Encoding"
         assert "Content-Encoding" not in headers
         assert body == expected
 
@@ -394,6 +395,7 @@ def test_get_honors_gzip_quality_zero_and_positive_quality() -> None:
             headers={"Accept-Encoding": "br, gzip;q=0.5"},
         )
         assert status == 200
+        assert headers["Vary"] == "Accept-Encoding"
         assert headers["Content-Encoding"] == "gzip"
         assert gzip.decompress(body) == expected
 

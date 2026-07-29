@@ -108,8 +108,12 @@ If you set:
 - `obs_continuous_quantization=16`, values are stored as `uint16`
 
 Encoding rules (current exporter):
-- every continuous input must be real, finite, and representable as `float32`;
-  otherwise the complete candidate is rejected before publication
+- every continuous input must be real and finite and must remain finite after
+  conversion to the viewer's `float32` domain; otherwise the complete candidate
+  is rejected before publication
+- codes and bounds derive from those exact viewer-visible values; a source
+  range that collapses to one `float32` value is rejected, while an individual
+  nonzero source value may round to zero if the range remains non-collapsed
 - validated values map to `0..254` (8-bit) or `0..65534` (16-bit)
 - per-field `minValue`/`maxValue` are recorded in the manifest and used to dequantize in the browser.
 

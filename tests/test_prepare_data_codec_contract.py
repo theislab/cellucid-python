@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 from cellucid.prepare_data import (
+    _as_c_contiguous_byte_view,
     _quantize_continuous,
     _quantize_nullable_outlier_quantiles,
     prepare,
@@ -28,6 +29,20 @@ def _prepare_with_options(out_dir, **options):
         force=True,
         **options,
     )
+
+
+def test_compressed_writer_borrows_contiguous_payload_bytes_without_reordering():
+    contiguous = np.arange(12, dtype="<f4").reshape(3, 4)
+    contiguous_view = _as_c_contiguous_byte_view(contiguous)
+
+    assert contiguous_view.obj is contiguous
+    assert contiguous_view.tobytes() == contiguous.tobytes(order="C")
+
+    fortran_ordered = np.asfortranarray(contiguous)
+    fortran_view = _as_c_contiguous_byte_view(fortran_ordered)
+
+    assert fortran_view.obj is not fortran_ordered
+    assert fortran_view.tobytes() == fortran_ordered.tobytes(order="C")
 
 
 @pytest.mark.parametrize(
@@ -113,6 +128,45 @@ def test_quantizer_rejects_undefined_scientific_ranges(values, message):
         _quantize_continuous(values, bits=8, field_name="score")
 
 
+def test_quantizer_preserves_a_noncollapsed_float32_subnormal_range():
+    source_values = np.array([2.0**-150, 2.0**-149, 2.0**-148])
+    visible_values = source_values.astype(np.float32)
+
+    assert visible_values.tolist() == [0.0, 2.0**-149, 2.0**-148]
+    with np.errstate(over="raise", invalid="raise"):
+        quantized, minimum, maximum, scale = _quantize_continuous(
+            visible_values,
+            bits=8,
+            field_name="subnormal",
+        )
+
+    assert quantized.tolist() == [0, 127, 254]
+    assert minimum == 0.0
+    assert maximum == 2.0**-148
+    assert np.isfinite(scale)
+    decoded = (minimum + quantized.astype(np.float64) / 254 * (maximum - minimum)).astype(
+        np.float32
+    )
+    np.testing.assert_array_equal(decoded, visible_values)
+
+
+@pytest.mark.parametrize(
+    ("values", "bits", "expected"),
+    [
+        ([-99633.28125, 99994.2109375], 8, [0, 254]),
+        ([-99922.4375, 99958.34375], 16, [0, 65534]),
+    ],
+)
+def test_quantizer_maps_exact_float32_bounds_to_terminal_codes(values, bits, expected):
+    quantized, *_ = _quantize_continuous(
+        np.array(values, dtype=np.float32),
+        bits=bits,
+        field_name="bounds",
+    )
+
+    assert quantized.tolist() == expected
+
+
 def test_outlier_quantizer_preserves_nan_with_an_exact_reserved_marker():
     quantized, minimum, maximum, scale = _quantize_nullable_outlier_quantiles(
         np.array([2.0, np.nan, 4.0], dtype=np.float32),
@@ -147,9 +201,7 @@ def test_prepare_reserves_missing_marker_for_generated_outlier_quantiles(tmp_pat
             [[0.0, 0.0], [1.0, 0.0], [4.0, 0.0], [8.0, 0.0]],
             dtype=np.float32,
         ),
-        obs=pd.DataFrame(
-            {"cluster": pd.Categorical(["large", "large", "large", "small"])}
-        ),
+        obs=pd.DataFrame({"cluster": pd.Categorical(["large", "large", "large", "small"])}),
         X_umap_2d=embedding,
         out_dir=out_dir,
         dataset_id="outlier-missing-marker",
@@ -160,5 +212,5 @@ def test_prepare_reserves_missing_marker_for_generated_outlier_quantiles(tmp_pat
     )
 
     outlier_codes = np.fromfile(out_dir / "obs/cluster.outliers.u8", dtype=np.uint8)
-    assert outlier_codes[:3].tolist() == [127, 0, 253]
+    assert outlier_codes[:3].tolist() == [127, 0, 254]
     assert outlier_codes[3] == 255

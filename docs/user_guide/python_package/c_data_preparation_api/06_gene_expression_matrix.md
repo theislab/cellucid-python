@@ -95,8 +95,12 @@ This means:
 
 Quantization rules (current exporter):
 - quantization is **per gene** (each gene gets its own min/max),
-- gene values must be real, finite, and representable as `float32`; otherwise
-  the complete candidate is rejected before publication,
+- gene values must be real and finite and must remain finite after conversion
+  to the viewer's `float32` domain; otherwise the complete candidate is
+  rejected before publication,
+- codes and bounds derive from those exact viewer-visible values; a source
+  range that collapses to one `float32` value is rejected, while an individual
+  nonzero source value may round to zero if the range remains non-collapsed,
 - `minValue`/`maxValue` are stored in `var_manifest.json` and used for dequantization.
 
 Dequantization in the web app is:

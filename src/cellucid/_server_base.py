@@ -602,13 +602,16 @@ class CORSMixin:
         content_type: str = "application/octet-stream",
         head_only: bool = False,
         compressed: bool = False,
+        vary_accept_encoding: bool = False,
     ):
-        """Send binary data with CORS headers."""
+        """Send binary data with exact encoding and cache-variation headers."""
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", len(data))
         if compressed:
             self.send_header("Content-Encoding", "gzip")
+        if vary_accept_encoding:
+            self.send_header("Vary", "Accept-Encoding")
         # Note: CORS headers are added by end_headers() override in subclasses
         self.end_headers()
         if not head_only:
