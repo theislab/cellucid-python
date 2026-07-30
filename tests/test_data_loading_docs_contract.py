@@ -39,6 +39,11 @@ def test_custom_repository_guide_publishes_the_exact_current_catalog_contract() 
     assert "does not probe `master`, `gh-pages`, or any other branch" in guide
     assert "owner/repo@release-2026/path/to/exports" in guide
     assert "owner/repo/release-2026/path/to/exports" in guide
+    assert "`generate_datasets.py`" in guide
+    assert "one root-level" in normalized
+    assert "there are no tests, validation harness" in normalized
+    assert "workflows, `.github/` directory, or site assets" in normalized
+    assert "cross-references this guide" in normalized
 
     for dataset_id, n_cells, n_genes in (
         ("synthetic-cell-types-2d", 72, 8),

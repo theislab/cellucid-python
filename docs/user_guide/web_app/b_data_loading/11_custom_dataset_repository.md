@@ -9,10 +9,12 @@ prepared dataset directories.
 The small
 [cellucid-demo-custom-datasets](https://github.com/theislab/cellucid-demo-custom-datasets)
 repository is the reference implementation. It contains three deterministic
-synthetic datasets and a wet-lab-friendly README. Deliberately, that is all:
-there are no repository scripts, tests, workflows, or site assets to copy.
-The README walks from one ordinary Python `prepare(...)` call through the
-GitHub upload and optional GitHub Pages setup.
+synthetic datasets, a wet-lab-friendly README, and one root-level
+`generate_datasets.py` file that reproducibly renews those exports.
+Deliberately, that is all: there are no tests, validation harness, package
+scaffolding, workflows, `.github/` directory, or site assets to copy. The
+README walks from one ordinary Python `prepare(...)` call through the GitHub
+upload and optional GitHub Pages setup.
 
 :::{important}
 Publishing prepared data in a public repository publishes the coordinates,
@@ -71,6 +73,7 @@ give Cellucid must resolve to an **exports root** with this shape:
 ```text
 my-cellucid-datasets/
 ├── README.md
+├── generate_datasets.py
 └── exports/
     ├── datasets.json
     ├── study-a/
@@ -82,6 +85,10 @@ my-cellucid-datasets/
         ├── points_3d.bin.gz
         └── ...
 ```
+
+The generator is the reference repository's sole reproducibility script. Your
+own data repository may use a notebook or another preparation workflow
+instead; Cellucid itself only reads the `exports/` tree.
 
 `datasets.json` is the exact catalog. Its top-level object contains only
 `version`, `default`, and `datasets`:
@@ -352,5 +359,6 @@ generic private-repository authentication mechanism.
 Continue with {doc}`08_troubleshooting_data_loading` for browser, CORS, memory,
 embedding, and server diagnostics. The reference repository's
 [README](https://github.com/theislab/cellucid-demo-custom-datasets#readme)
-gives the shortest Python-to-GitHub path, including browser checks, privacy,
+cross-references this guide and gives the shortest Python-to-GitHub path,
+including its single-file regeneration workflow, browser checks, privacy,
 updates, multiple datasets, and GitHub Pages.
