@@ -18,18 +18,28 @@ Instead of AnnData, accepts:
 - connectivities: sparse matrix with KNN connectivities
 """
 
+import errno
 import json
 import math
 import os
 import re
+import secrets
 import shutil
+import stat
+import sys
 import tempfile
+import threading
 from collections.abc import Iterable, Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from numbers import Integral, Real
 from pathlib import Path
 from typing import Any, BinaryIO, Literal, cast
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import fcntl
 
 import numpy as np
 import pandas as pd
@@ -69,6 +79,48 @@ _WINDOWS_RESERVED_COMPONENTS = {
     *(f"COM{index}" for index in range(1, 10)),
     *(f"LPT{index}" for index in range(1, 10)),
 }
+_EXPORT_LOCK_REGISTRY_GUARD = threading.RLock()
+_EXPORT_LOCK_REGISTRY: dict[str, tuple[Path, int]] = {}
+_EXPORT_LOCK_REGISTRY_PID = os.getpid()
+_EXPORT_TRANSACTION_FORMAT = "cellucid-export-transaction"
+_EXPORT_TRANSACTION_VERSION = 1
+_EXPORT_TRANSACTION_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$", flags=re.ASCII)
+
+
+def _acquire_export_lock_registry_before_fork() -> None:
+    """Prevent a fork from inheriting an unregistered coordination descriptor."""
+    _EXPORT_LOCK_REGISTRY_GUARD.acquire()
+
+
+def _release_export_lock_registry_after_fork_in_parent() -> None:
+    """Release the registry snapshot held across a parent-side fork."""
+    _EXPORT_LOCK_REGISTRY_GUARD.release()
+
+
+def _reset_export_lock_registry_after_fork() -> None:
+    """Close inherited descriptors and drop record-lock claims after a fork."""
+    global _EXPORT_LOCK_REGISTRY_GUARD
+    global _EXPORT_LOCK_REGISTRY
+    global _EXPORT_LOCK_REGISTRY_PID
+
+    inherited_descriptors = tuple(
+        descriptor for _lock_path, descriptor in _EXPORT_LOCK_REGISTRY.values()
+    )
+    _EXPORT_LOCK_REGISTRY_GUARD = threading.RLock()
+    _EXPORT_LOCK_REGISTRY = {}
+    _EXPORT_LOCK_REGISTRY_PID = os.getpid()
+    for descriptor in inherited_descriptors:
+        with suppress(OSError):
+            os.close(descriptor)
+
+
+_register_at_fork = getattr(os, "register_at_fork", None)
+if _register_at_fork is not None:
+    _register_at_fork(
+        before=_acquire_export_lock_registry_before_fork,
+        after_in_parent=_release_export_lock_registry_after_fork_in_parent,
+        after_in_child=_reset_export_lock_registry_after_fork,
+    )
 
 
 def _require_portable_filename_component(
@@ -145,6 +197,21 @@ def _require_nonempty_string(value: object, *, label: str) -> str:
     if not value:
         raise ValueError(f"{label} must be a non-empty string.")
     return value
+
+
+def _require_dataset_name(value: object, *, label: str = "dataset_name") -> str:
+    """Require one exact unpadded, nonblank human-readable dataset name."""
+    name = _require_nonempty_string(value, label=label)
+    if name != name.strip() or re.search(r"[\x00-\x1f\x7f-\x9f]", name):
+        raise ValueError(
+            f"{label} must be one non-empty, unpadded string without control characters."
+        )
+    return name
+
+
+def _require_dataset_id(value: object, *, label: str = "dataset_id") -> str:
+    """Require the portable producer identity accepted by every data path."""
+    return _require_portable_filename_component(value, label=label)
 
 
 def _require_native_boolean(value: object, *, label: str) -> bool:
@@ -384,59 +451,656 @@ def _output_path_is_writable(
     return True
 
 
-def _publish_export_generation(staging_dir: Path, target_dir: Path) -> None:
-    """Publish one complete staged directory, restoring the prior one on failure."""
-    if not staging_dir.is_dir():
-        raise RuntimeError(f"Staged export directory is missing: {staging_dir}")
+def _export_transaction_paths(
+    target_dir: Path,
+    transaction_id: str,
+) -> tuple[Path, Path, Path, Path]:
+    """Derive every reserved path from one validated transaction identity."""
+    if not _EXPORT_TRANSACTION_ID_PATTERN.fullmatch(transaction_id):
+        raise ValueError("Export transaction identity is not canonical.")
+    parent = target_dir.parent
+    stem = f".{target_dir.name}"
+    return (
+        parent / f"{stem}.cellucid-transaction.json",
+        parent / f"{stem}.cellucid-transaction.json.tmp",
+        parent / f"{stem}.cellucid-stage-{transaction_id}",
+        parent / f"{stem}.cellucid-backup-{transaction_id}",
+    )
 
-    prior_dir: Path | None = None
-    if target_dir.exists():
-        backup_name = tempfile.mkdtemp(
-            prefix=f".{target_dir.name}.cellucid-backup-",
-            dir=target_dir.parent,
-        )
-        prior_dir = Path(backup_name)
-        prior_dir.rmdir()
-        target_dir.rename(prior_dir)
 
+def _export_transaction_control_paths(target_dir: Path) -> tuple[Path, Path]:
+    """Return the fixed journal and its fixed atomic-write temporary path."""
+    journal, journal_temp, _stage, _backup = _export_transaction_paths(
+        target_dir,
+        "0" * 32,
+    )
+    return journal, journal_temp
+
+
+def _path_lstat(path: Path) -> os.stat_result | None:
+    """Inspect one path without following a symbolic link."""
     try:
-        staging_dir.rename(target_dir)
-    except BaseException:
-        if prior_dir is not None:
-            try:
-                prior_dir.rename(target_dir)
-            except BaseException as restore_error:
-                raise RuntimeError(
-                    f"Failed to publish {target_dir} and failed to restore its prior "
-                    f"generation from {prior_dir}."
-                ) from restore_error
-        raise
+        return os.lstat(path)
+    except FileNotFoundError:
+        return None
 
-    if prior_dir is not None:
-        shutil.rmtree(prior_dir)
+
+def _is_windows_reparse_point(path_stat: os.stat_result) -> bool:
+    """Return whether a Windows path is any reparse-point alias."""
+    return sys.platform == "win32" and bool(
+        getattr(path_stat, "st_file_attributes", 0)
+        & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    )
+
+
+def _require_export_directory_or_absent(path: Path, *, label: str) -> bool:
+    """Require one reserved generation path to be absent or a real directory."""
+    path_stat = _path_lstat(path)
+    if path_stat is None:
+        return False
+    if (
+        stat.S_ISLNK(path_stat.st_mode)
+        or _is_windows_reparse_point(path_stat)
+        or not stat.S_ISDIR(path_stat.st_mode)
+    ):
+        raise RuntimeError(f"{label} must be an ordinary non-symbolic directory or absent: {path}")
+    return True
+
+
+def _require_export_regular_file(path: Path, *, label: str) -> os.stat_result:
+    """Require one reserved control path to be one unlinked regular file."""
+    path_stat = _path_lstat(path)
+    if path_stat is None:
+        raise RuntimeError(f"{label} is missing: {path}")
+    if (
+        stat.S_ISLNK(path_stat.st_mode)
+        or _is_windows_reparse_point(path_stat)
+        or not stat.S_ISREG(path_stat.st_mode)
+        or path_stat.st_nlink != 1
+    ):
+        raise RuntimeError(f"{label} must be one non-linked, non-symbolic regular file: {path}")
+    return path_stat
+
+
+def _fsync_export_directory(path: Path) -> None:
+    """Durably order sibling creation, rename, and removal where supported."""
+    if sys.platform == "win32":
+        return
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_DIRECTORY", 0)
+    descriptor = os.open(path, flags)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _rename_export_path(source: Path, destination: Path) -> None:
+    """Rename one transaction path and durably publish the directory entry."""
+    source.rename(destination)
+    _fsync_export_directory(destination.parent)
+
+
+def _remove_export_tree(path: Path) -> None:
+    """Remove one validated transaction-owned directory durably."""
+    if not _require_export_directory_or_absent(
+        path,
+        label="Export transaction directory",
+    ):
+        return
+    shutil.rmtree(path)
+    _fsync_export_directory(path.parent)
+
+
+def _remove_export_control_file(path: Path) -> None:
+    """Remove one validated transaction-owned control file durably."""
+    _require_export_regular_file(path, label="Export transaction control file")
+    path.unlink()
+    _fsync_export_directory(path.parent)
+
+
+def _serialize_export_transaction(
+    transaction_id: str,
+    *,
+    had_target: bool,
+) -> bytes:
+    """Serialize the exact Python/R interoperable transaction descriptor."""
+    if not _EXPORT_TRANSACTION_ID_PATTERN.fullmatch(transaction_id):
+        raise ValueError("Export transaction identity is not canonical.")
+    if type(had_target) is not bool:
+        raise TypeError("Export transaction had_target must be exactly boolean.")
+    had_target_json = "true" if had_target else "false"
+    return (
+        f'{{"format":"{_EXPORT_TRANSACTION_FORMAT}",'
+        f'"version":{_EXPORT_TRANSACTION_VERSION},'
+        f'"transaction_id":"{transaction_id}",'
+        f'"had_target":{had_target_json}}}\n'
+    ).encode("ascii")
+
+
+def _reject_duplicate_json_members(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    """Reject ambiguous transaction journals instead of keeping a last value."""
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate export transaction journal member: {key!r}.")
+        result[key] = value
+    return result
+
+
+def _read_export_transaction(journal_path: Path) -> tuple[str, bool]:
+    """Read and strictly validate one cross-language transaction journal."""
+    path_stat = _require_export_regular_file(
+        journal_path,
+        label="Export transaction journal",
+    )
+    if path_stat.st_size > 512:
+        raise RuntimeError(f"Export transaction journal is unexpectedly large: {journal_path}")
+    try:
+        journal_bytes = journal_path.read_bytes()
+        payload = json.loads(
+            journal_bytes,
+            object_pairs_hook=_reject_duplicate_json_members,
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        raise RuntimeError(f"Export transaction journal is malformed: {journal_path}") from error
+    if type(payload) is not dict or set(payload) != {
+        "format",
+        "version",
+        "transaction_id",
+        "had_target",
+    }:
+        raise RuntimeError(f"Export transaction journal has an invalid schema: {journal_path}")
+    transaction_id = payload["transaction_id"]
+    had_target = payload["had_target"]
+    if (
+        payload["format"] != _EXPORT_TRANSACTION_FORMAT
+        or type(payload["version"]) is not int
+        or payload["version"] != _EXPORT_TRANSACTION_VERSION
+        or type(transaction_id) is not str
+        or not _EXPORT_TRANSACTION_ID_PATTERN.fullmatch(transaction_id)
+        or type(had_target) is not bool
+        or journal_bytes
+        != _serialize_export_transaction(
+            transaction_id,
+            had_target=had_target,
+        )
+    ):
+        raise RuntimeError(f"Export transaction journal is not canonical: {journal_path}")
+    return transaction_id, had_target
+
+
+def _require_active_export_transaction(
+    journal_path: Path,
+    transaction_id: str,
+    *,
+    had_target: bool,
+) -> None:
+    """Require the journal to retain the exact active transaction owner."""
+    journal_transaction_id, journal_had_target = _read_export_transaction(
+        journal_path,
+    )
+    if journal_transaction_id != transaction_id or journal_had_target is not had_target:
+        raise RuntimeError("Export transaction journal does not describe the active transaction.")
+
+
+def _discard_export_transaction_temp(journal_temp: Path) -> None:
+    """Recover a process death during the journal's atomic file write."""
+    if _path_lstat(journal_temp) is None:
+        return
+    _remove_export_control_file(journal_temp)
+
+
+def _recover_export_transaction(target_dir: Path) -> None:
+    """Resolve every valid interrupted publication state before a new write."""
+    journal_path, journal_temp = _export_transaction_control_paths(target_dir)
+    _discard_export_transaction_temp(journal_temp)
+    if _path_lstat(journal_path) is None:
+        return
+
+    transaction_id, had_target = _read_export_transaction(journal_path)
+    _journal, _journal_temp, staging_dir, backup_dir = _export_transaction_paths(
+        target_dir,
+        transaction_id,
+    )
+    target_exists = _require_export_directory_or_absent(
+        target_dir,
+        label="Export target",
+    )
+    stage_exists = _require_export_directory_or_absent(
+        staging_dir,
+        label="Staged export generation",
+    )
+    backup_exists = _require_export_directory_or_absent(
+        backup_dir,
+        label="Prior export generation",
+    )
+    state = (target_exists, stage_exists, backup_exists)
+
+    if had_target:
+        if state == (True, False, False):
+            pass
+        elif state == (True, True, False):
+            _remove_export_tree(staging_dir)
+        elif state == (False, True, True):
+            _rename_export_path(backup_dir, target_dir)
+            _remove_export_tree(staging_dir)
+        elif state == (True, False, True):
+            _remove_export_tree(backup_dir)
+        else:
+            raise RuntimeError(
+                "Export transaction cannot be recovered without guessing whether "
+                f"to commit or roll back: target/stage/backup state is {state}."
+            )
+    else:
+        if state == (False, False, False):
+            pass
+        elif state == (False, True, False):
+            _remove_export_tree(staging_dir)
+        elif state == (True, False, False):
+            pass
+        else:
+            raise RuntimeError(
+                "Initial export transaction cannot be recovered without guessing "
+                f"whether to commit or roll back: target/stage/backup state is {state}."
+            )
+
+    _require_active_export_transaction(
+        journal_path,
+        transaction_id,
+        had_target=had_target,
+    )
+    _remove_export_control_file(journal_path)
+
+
+def _new_export_transaction_id(target_dir: Path) -> str:
+    """Choose one unpredictable identity whose derived artifact paths are free."""
+    for _attempt in range(128):
+        transaction_id = secrets.token_hex(16)
+        _journal, _journal_temp, stage, backup = _export_transaction_paths(
+            target_dir,
+            transaction_id,
+        )
+        if _path_lstat(stage) is None and _path_lstat(backup) is None:
+            return transaction_id
+    raise RuntimeError("Could not allocate a unique export transaction identity.")
+
+
+def _write_export_transaction(
+    target_dir: Path,
+    transaction_id: str,
+    *,
+    had_target: bool,
+) -> None:
+    """Atomically and durably publish one write-ahead transaction journal."""
+    journal_path, journal_temp, _stage, _backup = _export_transaction_paths(
+        target_dir,
+        transaction_id,
+    )
+    if _path_lstat(journal_path) is not None or _path_lstat(journal_temp) is not None:
+        raise RuntimeError(f"Export transaction control path is already occupied for {target_dir}.")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(journal_temp, flags, 0o600)
+    journal_bytes = _serialize_export_transaction(
+        transaction_id,
+        had_target=had_target,
+    )
+    try:
+        with os.fdopen(descriptor, "wb", closefd=True) as stream:
+            descriptor = -1
+            stream.write(journal_bytes)
+            stream.flush()
+            os.fsync(stream.fileno())
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    _rename_export_path(journal_temp, journal_path)
+
+
+def _begin_export_transaction(
+    target_dir: Path,
+) -> tuple[str, bool, Path, Path]:
+    """Journal ownership before creating any staged generation directory."""
+    transaction_id = _new_export_transaction_id(target_dir)
+    had_target = _require_export_directory_or_absent(
+        target_dir,
+        label="Export target",
+    )
+    _write_export_transaction(
+        target_dir,
+        transaction_id,
+        had_target=had_target,
+    )
+    _journal, _journal_temp, staging_dir, backup_dir = _export_transaction_paths(
+        target_dir,
+        transaction_id,
+    )
+    staging_dir.mkdir()
+    _fsync_export_directory(target_dir.parent)
+    return transaction_id, had_target, staging_dir, backup_dir
+
+
+def _publish_export_generation(
+    staging_dir: Path,
+    target_dir: Path,
+    *,
+    transaction_id: str,
+    had_target: bool,
+) -> None:
+    """Publish and settle one journal-owned complete export generation."""
+    journal_path, journal_temp, expected_stage, backup_dir = _export_transaction_paths(
+        target_dir,
+        transaction_id,
+    )
+    if staging_dir != expected_stage:
+        raise RuntimeError("Staged export path does not belong to the active transaction.")
+    if _path_lstat(journal_temp) is not None:
+        raise RuntimeError(
+            f"Export transaction temporary control path reappeared before publication: "
+            f"{journal_temp}"
+        )
+    _require_active_export_transaction(
+        journal_path,
+        transaction_id,
+        had_target=had_target,
+    )
+    if not _require_export_directory_or_absent(
+        staging_dir,
+        label="Staged export generation",
+    ):
+        raise RuntimeError(f"Staged export directory is missing: {staging_dir}")
+    if had_target:
+        if not _require_export_directory_or_absent(
+            target_dir,
+            label="Export target",
+        ):
+            raise RuntimeError(f"Prior export generation is missing: {target_dir}")
+        if _path_lstat(backup_dir) is not None:
+            raise RuntimeError(f"Export backup path is already occupied: {backup_dir}")
+        _rename_export_path(target_dir, backup_dir)
+    elif _path_lstat(target_dir) is not None:
+        raise RuntimeError(f"Initial export target appeared during publication: {target_dir}")
+
+    _rename_export_path(staging_dir, target_dir)
+    if had_target:
+        _remove_export_tree(backup_dir)
+    _require_active_export_transaction(
+        journal_path,
+        transaction_id,
+        had_target=had_target,
+    )
+    _remove_export_control_file(journal_path)
+
+
+def _canonical_export_lock_key(lock_path: Path) -> str:
+    """Return one process-local identity for path aliases to a lock inode."""
+    return os.path.normcase(os.path.realpath(os.fspath(lock_path)))
+
+
+def _open_and_reserve_process_export_lock(
+    lock_path: Path,
+) -> tuple[str, int] | None:
+    """Open a lock path only after excluding same-process inode aliases."""
+    global _EXPORT_LOCK_REGISTRY_PID
+
+    process_id = os.getpid()
+    with _EXPORT_LOCK_REGISTRY_GUARD:
+        if process_id != _EXPORT_LOCK_REGISTRY_PID:
+            _EXPORT_LOCK_REGISTRY.clear()
+            _EXPORT_LOCK_REGISTRY_PID = process_id
+
+        lock_key = _canonical_export_lock_key(lock_path)
+        if lock_path.is_symlink():
+            raise RuntimeError(f"Export lock path must not be a symbolic link: {lock_path}")
+        try:
+            path_stat = os.lstat(lock_path)
+        except FileNotFoundError:
+            path_stat = None
+        if path_stat is not None and (
+            not stat.S_ISREG(path_stat.st_mode)
+            or path_stat.st_nlink != 1
+            or (
+                sys.platform == "win32"
+                and bool(
+                    getattr(path_stat, "st_file_attributes", 0)
+                    & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+                )
+            )
+        ):
+            raise RuntimeError(
+                "Export lock path must identify one non-linked regular non-symbolic "
+                f"file: {lock_path}"
+            )
+        if lock_key in _EXPORT_LOCK_REGISTRY:
+            return None
+        for claimed_path, _descriptor in _EXPORT_LOCK_REGISTRY.values():
+            try:
+                if os.path.samefile(lock_path, claimed_path):
+                    return None
+            except FileNotFoundError:
+                pass
+
+        create_lock_file = path_stat is None
+        try:
+            try:
+                descriptor = _open_export_lock_descriptor(
+                    lock_path,
+                    create=create_lock_file,
+                    expected_stat=path_stat,
+                )
+            except FileExistsError:
+                if not create_lock_file:
+                    raise
+                raced_path_stat = os.lstat(lock_path)
+                descriptor = _open_export_lock_descriptor(
+                    lock_path,
+                    create=False,
+                    expected_stat=raced_path_stat,
+                )
+        except FileNotFoundError as error:
+            raise RuntimeError(
+                f"Export lock path changed while establishing ownership: {lock_path}"
+            ) from error
+        _EXPORT_LOCK_REGISTRY[lock_key] = (lock_path, descriptor)
+        return lock_key, descriptor
+
+
+def _release_process_export_lock(
+    lock_key: str,
+    descriptor: int | None,
+) -> None:
+    """Release one matching process-local target claim."""
+    with _EXPORT_LOCK_REGISTRY_GUARD:
+        active_claim = _EXPORT_LOCK_REGISTRY.get(lock_key)
+        if active_claim is not None and active_claim[1] == descriptor:
+            _EXPORT_LOCK_REGISTRY.pop(lock_key, None)
+
+
+def _validate_export_lock_descriptor(
+    lock_path: Path,
+    descriptor: int,
+    *,
+    expected_stat: os.stat_result | None,
+) -> None:
+    """Require one descriptor to retain the inspected coordination inode."""
+    descriptor_stat = os.fstat(descriptor)
+    try:
+        path_stat = os.lstat(lock_path)
+    except FileNotFoundError as error:
+        raise RuntimeError(
+            f"Export lock path changed while establishing ownership: {lock_path}"
+        ) from error
+    is_windows_reparse_point = sys.platform == "win32" and bool(
+        getattr(path_stat, "st_file_attributes", 0)
+        & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    )
+    descriptor_identity = (descriptor_stat.st_dev, descriptor_stat.st_ino)
+    path_identity = (path_stat.st_dev, path_stat.st_ino)
+    if expected_stat is not None and descriptor_identity != (
+        expected_stat.st_dev,
+        expected_stat.st_ino,
+    ):
+        raise RuntimeError(f"Export lock path changed while establishing ownership: {lock_path}")
+    if (
+        not stat.S_ISREG(descriptor_stat.st_mode)
+        or descriptor_stat.st_nlink != 1
+        or path_stat.st_nlink != 1
+        or stat.S_ISLNK(path_stat.st_mode)
+        or is_windows_reparse_point
+        or descriptor_identity != path_identity
+    ):
+        raise RuntimeError(
+            f"Export lock path must identify one non-linked regular non-symbolic file: {lock_path}"
+        )
+
+
+def _open_export_lock_descriptor(
+    lock_path: Path,
+    *,
+    create: bool,
+    expected_stat: os.stat_result | None,
+) -> int:
+    """Open one persistent, empty, non-symbolic regular coordination file."""
+    if lock_path.is_symlink():
+        raise RuntimeError(f"Export lock path must not be a symbolic link: {lock_path}")
+
+    flags = os.O_RDWR
+    if create:
+        flags |= os.O_CREAT | os.O_EXCL
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(lock_path, flags, 0o600)
+    try:
+        _validate_export_lock_descriptor(
+            lock_path,
+            descriptor,
+            expected_stat=expected_stat,
+        )
+    except BaseException as error:
+        try:
+            os.close(descriptor)
+        except OSError as close_error:
+            error.add_note(
+                "The invalid export lock descriptor also failed to close: "
+                f"{type(close_error).__name__}: {close_error}"
+            )
+        raise
+    return descriptor
+
+
+def _acquire_export_lock_descriptor(descriptor: int) -> None:
+    """Acquire the R-interoperable byte range without waiting."""
+    if sys.platform == "win32":
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+        return
+
+    fcntl.lockf(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB, 0, 0, os.SEEK_SET)
+
+
+def _release_export_lock_descriptor(descriptor: int) -> None:
+    """Release the exact byte range acquired by `_acquire_export_lock_descriptor`."""
+    if sys.platform == "win32":
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+        return
+
+    fcntl.lockf(descriptor, fcntl.LOCK_UN, 0, 0, os.SEEK_SET)
+
+
+def _is_export_lock_contention(error: OSError) -> bool:
+    """Distinguish a live owner from filesystem or permission failures."""
+    contention_errors = {errno.EACCES, errno.EAGAIN}
+    if sys.platform == "win32":
+        contention_errors.add(getattr(errno, "EDEADLOCK", errno.EDEADLK))
+    return error.errno in contention_errors
 
 
 @contextmanager
 def _exclusive_export_generation(target_dir: Path) -> Iterator[None]:
-    """Hold one non-waiting cross-process writer lock for an export target."""
+    """Hold one non-waiting, process-owned writer lock for an export target."""
     lock_path = target_dir.parent / f".{target_dir.name}.cellucid.lock"
-    try:
-        descriptor = os.open(
-            lock_path,
-            os.O_CREAT | os.O_EXCL | os.O_WRONLY,
-            0o600,
-        )
-    except FileExistsError as error:
-        raise RuntimeError(f"An export generation is already active for {target_dir}.") from error
+    reservation = _open_and_reserve_process_export_lock(lock_path)
+    if reservation is None:
+        raise RuntimeError(f"An export generation is already active for {target_dir}.")
 
+    lock_key, descriptor = reservation
+    owner_pid = os.getpid()
+    descriptor_locked = False
     try:
-        with os.fdopen(descriptor, "wb") as lock_file:
-            lock_file.write(f"{os.getpid()}\n".encode("ascii"))
-            lock_file.flush()
-            os.fsync(lock_file.fileno())
+        try:
+            _acquire_export_lock_descriptor(descriptor)
+        except OSError as error:
+            if _is_export_lock_contention(error):
+                raise RuntimeError(
+                    f"An export generation is already active for {target_dir}."
+                ) from error
+            raise
+        descriptor_locked = True
+        _validate_export_lock_descriptor(
+            lock_path,
+            descriptor,
+            expected_stat=None,
+        )
         yield
     finally:
-        lock_path.unlink()
+        if os.getpid() == owner_pid:
+            active_error = sys.exc_info()[1]
+            cleanup_errors: list[OSError] = []
+            cleanup_cancellation: BaseException | None = None
+            os_lock_released = not descriptor_locked
+            try:
+                if descriptor is not None and descriptor_locked:
+                    try:
+                        _release_export_lock_descriptor(descriptor)
+                        os_lock_released = True
+                    except OSError as unlock_error:
+                        cleanup_errors.append(unlock_error)
+            except BaseException as unlock_cancellation:
+                cleanup_cancellation = unlock_cancellation
+            finally:
+                if descriptor is not None:
+                    try:
+                        os.close(descriptor)
+                        os_lock_released = True
+                    except OSError as close_error:
+                        cleanup_errors.append(close_error)
+                    except BaseException as close_cancellation:
+                        if cleanup_cancellation is None:
+                            cleanup_cancellation = close_cancellation
+                        else:
+                            cleanup_cancellation.add_note(
+                                "Closing the export lock descriptor also failed: "
+                                f"{type(close_cancellation).__name__}: "
+                                f"{close_cancellation}"
+                            )
+
+            if os_lock_released:
+                _release_process_export_lock(
+                    lock_key,
+                    descriptor,
+                )
+
+            if cleanup_cancellation is not None:
+                for cleanup_error in cleanup_errors:
+                    cleanup_cancellation.add_note(
+                        "Export lock cleanup also failed: "
+                        f"{type(cleanup_error).__name__}: {cleanup_error}"
+                    )
+                raise cleanup_cancellation
+
+            if cleanup_errors:
+                cleanup_message = (
+                    f"Failed to release the export generation lock for {target_dir}: "
+                    + "; ".join(f"{type(error).__name__}: {error}" for error in cleanup_errors)
+                )
+                if active_error is not None:
+                    active_error.add_note(cleanup_message)
+                else:
+                    raise RuntimeError(cleanup_message) from cleanup_errors[0]
 
 
 def _write_binary(
@@ -511,7 +1175,7 @@ def _atomic_write_gzip(
 def _as_c_contiguous_byte_view(data: np.ndarray) -> memoryview:
     """Expose C-order array bytes without copying an already-contiguous payload."""
     contiguous = np.ascontiguousarray(data)
-    return memoryview(contiguous).cast("B")
+    return contiguous.data.cast("B")
 
 
 _QUANTIZATION_ARITHMETIC_CHUNK_SIZE = 1_048_576
@@ -929,11 +1593,14 @@ def _prepare_generation(
     Dataset Metadata Parameters
     ---------------------------
     dataset_name : str
-        Explicit human-readable name for the dataset.
+        Exact non-empty human-readable name without surrounding whitespace or
+        control characters. Unicode is preserved.
     dataset_description : str, optional
         Description of the dataset.
     dataset_id : str
-        Explicit unique identifier for the dataset.
+        Portable 1-180 byte ASCII identifier: begin with a letter or digit,
+        then use only letters, digits, ``.``, ``_``, or ``-``. It cannot end
+        in ``.`` or use a reserved Windows device name.
     source_name : str, optional
         Name of the data source (e.g., "HLCA Consortium").
     source_url : str, optional
@@ -948,11 +1615,11 @@ def _prepare_generation(
         obs_categorical_dtype=obs_categorical_dtype,
         centroid_outlier_quantile=centroid_outlier_quantile,
     )
-    dataset_name = _require_nonempty_string(
+    dataset_name = _require_dataset_name(
         dataset_name,
         label="dataset_name",
     )
-    dataset_id = _require_nonempty_string(
+    dataset_id = _require_dataset_id(
         dataset_id,
         label="dataset_id",
     )
@@ -1918,6 +2585,14 @@ def prepare(
     preserved byte-for-byte in ``dataset_identity.json``.
     """
     force = _require_native_boolean(force, label="force")
+    dataset_name = _require_dataset_name(
+        dataset_name,
+        label="dataset_name",
+    )
+    dataset_id = _require_dataset_id(
+        dataset_id,
+        label="dataset_id",
+    )
     centroid_min_points = _require_positive_native_integer(
         centroid_min_points,
         label="centroid_min_points",
@@ -1953,6 +2628,7 @@ def prepare(
         raise ValueError("out_dir must name a child export directory.")
     target_dir.parent.mkdir(parents=True, exist_ok=True)
     with _exclusive_export_generation(target_dir):
+        _recover_export_transaction(target_dir)
         if target_dir.is_symlink():
             raise ValueError(f"out_dir must not be a symbolic link: {target_dir}")
         if target_dir.exists():
@@ -1964,13 +2640,10 @@ def prepare(
                     "Pass force=True to publish a complete replacement generation."
                 )
 
-        staging_dir = Path(
-            tempfile.mkdtemp(
-                prefix=f".{target_dir.name}.cellucid-stage-",
-                dir=target_dir.parent,
-            )
-        )
         try:
+            transaction_id, had_target, staging_dir, _backup_dir = _begin_export_transaction(
+                target_dir
+            )
             _prepare_generation(
                 latent_space=latent_space,
                 obs=obs,
@@ -2001,15 +2674,19 @@ def prepare(
                 vector_fields=vector_fields,
                 vector_field_default=vector_field_default,
             )
-            _publish_export_generation(staging_dir, target_dir)
+            _publish_export_generation(
+                staging_dir,
+                target_dir,
+                transaction_id=transaction_id,
+                had_target=had_target,
+            )
         except BaseException:
-            if staging_dir.exists():
-                try:
-                    shutil.rmtree(staging_dir)
-                except BaseException as cleanup_error:
-                    raise RuntimeError(
-                        f"Failed to remove rejected staged generation {staging_dir}."
-                    ) from cleanup_error
+            try:
+                _recover_export_transaction(target_dir)
+            except BaseException as cleanup_error:
+                raise RuntimeError(
+                    f"Failed to recover rejected export transaction for {target_dir}."
+                ) from cleanup_error
             raise
 
 
@@ -2046,15 +2723,10 @@ def generate_datasets_manifest(
         raise FileNotFoundError(f"Exports directory not found: {exports_dir}")
     if not exports_dir.is_dir():
         raise NotADirectoryError(f"Exports path must be a directory: {exports_dir}")
-    default_dataset = _require_nonempty_string(
+    default_dataset = _require_dataset_id(
         default_dataset,
         label="default_dataset",
     )
-    if default_dataset != default_dataset.strip() or re.search(r"[\x00-\x1f\x7f]", default_dataset):
-        raise ValueError(
-            "default_dataset must be exact text without surrounding whitespace "
-            "or control characters."
-        )
 
     print(f"Scanning {exports_dir} for datasets...")
 
@@ -2100,20 +2772,15 @@ def generate_datasets_manifest(
         if type(identity.get("version")) is not int or identity["version"] != 2:
             raise ValueError(f"{identity_file} version must be exactly 2.")
 
-        dataset_id = _require_nonempty_string(
+        dataset_id = _require_dataset_id(
             identity.get("id"),
             label=f"{identity_file} dataset_id",
         )
-        if dataset_id != dataset_id.strip() or re.search(r"[\x00-\x1f\x7f]", dataset_id):
-            raise ValueError(
-                f"{identity_file} dataset_id must be exact text without surrounding "
-                "whitespace or control characters."
-            )
         if dataset_id in dataset_ids:
             raise ValueError(f"duplicate dataset id {dataset_id!r}.")
         dataset_ids.add(dataset_id)
 
-        dataset_name = _require_nonempty_string(
+        dataset_name = _require_dataset_name(
             identity.get("name"),
             label=f"{identity_file} dataset_name",
         )

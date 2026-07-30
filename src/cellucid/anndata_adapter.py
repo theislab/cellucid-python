@@ -98,6 +98,8 @@ from .prepare_data import (
     _assert_unique_filename_components,
     _normalize_finite_float32_embedding,
     _require_continuous_obs_values,
+    _require_dataset_id,
+    _require_dataset_name,
     _require_finite_float32_array,
     _require_native_boolean,
     _require_nonempty_string,
@@ -387,12 +389,23 @@ class AnnDataAdapter:
         centroid_min_points : int
             Minimum points per category for centroid computation.
         dataset_name : str
-            Explicit human-readable dataset name.
+            Exact non-empty human-readable name without surrounding whitespace
+            or control characters. Unicode is preserved.
         dataset_id : str
-            Explicit dataset identifier.
+            Portable 1-180 byte ASCII identifier: begin with a letter or
+            digit, then use only letters, digits, ``.``, ``_``, or ``-``.
+            It cannot end in ``.`` or use a reserved Windows device name.
         vector_field_default : str, optional
             Exact field id to select when multiple UMAP vector fields exist.
         """
+        dataset_name = _require_dataset_name(
+            dataset_name,
+            label="dataset_name",
+        )
+        dataset_id = _require_dataset_id(
+            dataset_id,
+            label="dataset_id",
+        )
         self.adata: anndata.AnnData = adata
         if adata.isbacked and adata.file._filemode != "r":
             raise ValueError(
@@ -437,14 +450,8 @@ class AnnDataAdapter:
             label="centroid_min_points",
         )
 
-        self.dataset_name: str = _require_nonempty_string(
-            dataset_name,
-            label="dataset_name",
-        )
-        self.dataset_id: str = _require_nonempty_string(
-            dataset_id,
-            label="dataset_id",
-        )
+        self.dataset_name: str = dataset_name
+        self.dataset_id: str = dataset_id
 
         if self.gene_id_column is None:
             raw_gene_ids = self.adata.var.index.tolist()
@@ -596,9 +603,12 @@ class AnnDataAdapter:
         centroid_min_points : int
             Minimum category size used for centroid computation.
         dataset_name : str
-            Explicit human-readable dataset name.
+            Exact non-empty human-readable name without surrounding whitespace
+            or control characters. Unicode is preserved.
         dataset_id : str
-            Explicit stable dataset identifier.
+            Portable 1-180 byte ASCII identifier: begin with a letter or
+            digit, then use only letters, digits, ``.``, ``_``, or ``-``.
+            It cannot end in ``.`` or use a reserved Windows device name.
         vector_field_default : str, optional
             Exact field id required when multiple UMAP vector fields exist.
         Returns
@@ -624,11 +634,11 @@ class AnnDataAdapter:
         """
         import anndata as ad
 
-        dataset_name = _require_nonempty_string(
+        dataset_name = _require_dataset_name(
             dataset_name,
             label="dataset_name",
         )
-        dataset_id = _require_nonempty_string(
+        dataset_id = _require_dataset_id(
             dataset_id,
             label="dataset_id",
         )

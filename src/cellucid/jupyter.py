@@ -75,6 +75,7 @@ from ._server_base import (
     require_server_port,
     unregister_event_callback,
 )
+from .prepare_data import _require_dataset_id, _require_dataset_name
 from .server import CellucidServer
 
 logger = logging.getLogger("cellucid.jupyter")
@@ -1918,14 +1919,25 @@ class AnnDataViewer(BaseViewer):
                 coordinate range.
             centroid_outlier_quantile: Quantile used for categorical centroids.
             centroid_min_points: Minimum category size used for centroid computation.
-            dataset_name: Explicit human-readable dataset name.
-            dataset_id: Explicit stable dataset identifier.
+            dataset_name: Exact non-empty human-readable name without
+                surrounding whitespace or control characters.
+            dataset_id: Portable 1-180 byte ASCII identifier beginning with a
+                letter or digit and otherwise using letters, digits, ``.``,
+                ``_``, or ``-``; no trailing ``.`` or Windows device name.
             vector_field_default: Exact field id required when multiple UMAP
                 vector fields exist.
             client_server_url: Exact browser-reachable data server base URL.
             web_source_url: Origin publishing the web asset inventory.
             web_cache_dir: Directory holding the active verified web build.
         """
+        dataset_name = _require_dataset_name(
+            dataset_name,
+            label="dataset_name",
+        )
+        dataset_id = _require_dataset_id(
+            dataset_id,
+            label="dataset_id",
+        )
         super().__init__(
             port=port,
             height=height,
@@ -2056,8 +2068,11 @@ def show_anndata(
             coordinate range.
         centroid_outlier_quantile: Quantile used for categorical centroids.
         centroid_min_points: Minimum category size used for centroid computation.
-        dataset_name: Explicit human-readable dataset name.
-        dataset_id: Explicit stable dataset identifier.
+        dataset_name: Exact non-empty human-readable name without surrounding
+            whitespace or control characters.
+        dataset_id: Portable 1-180 byte ASCII identifier beginning with a
+            letter or digit and otherwise using letters, digits, ``.``, ``_``,
+            or ``-``; no trailing ``.`` or Windows device name.
         vector_field_default: Exact field id required when multiple UMAP
             vector fields exist.
         client_server_url: Exact browser-reachable data server base URL.

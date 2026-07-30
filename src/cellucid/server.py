@@ -60,7 +60,8 @@ from ._server_base import (
     require_server_port,
 )
 from .prepare_data import (
-    _require_nonempty_string,
+    _require_dataset_id,
+    _require_dataset_name,
     _require_portable_filename_component,
 )
 
@@ -95,22 +96,15 @@ def _read_published_state_file(
     try:
         before = candidate.lstat()
     except OSError as error:
-        raise ValueError(
-            f"Published sample state sidecar is unreadable: {filename}"
-        ) from error
+        raise ValueError(f"Published sample state sidecar is unreadable: {filename}") from error
     if stat.S_ISLNK(before.st_mode):
-        raise ValueError(
-            f"Published sample state sidecar must not be a symbolic link: {filename}"
-        )
+        raise ValueError(f"Published sample state sidecar must not be a symbolic link: {filename}")
     if not stat.S_ISREG(before.st_mode):
-        raise ValueError(
-            f"Published sample state sidecar must be a regular file: {filename}"
-        )
+        raise ValueError(f"Published sample state sidecar must be a regular file: {filename}")
     if before.st_size < minimum_bytes or before.st_size > maximum_bytes:
         if minimum_bytes == maximum_bytes:
             raise ValueError(
-                f"Published sample state {filename} must be exactly "
-                f"{minimum_bytes} bytes."
+                f"Published sample state {filename} must be exactly {minimum_bytes} bytes."
             )
         raise ValueError(
             f"Published sample state {filename} size must be from "
@@ -157,9 +151,7 @@ def _read_published_state_file(
             chunks.append(chunk)
             remaining -= len(chunk)
         if os.read(descriptor, 1):
-            raise ValueError(
-                f"Published sample state sidecar grew during validation: {filename}"
-            )
+            raise ValueError(f"Published sample state sidecar grew during validation: {filename}")
         after = candidate.lstat()
         if not _same_regular_file(opened, after):
             raise ValueError(
@@ -188,8 +180,7 @@ def _read_optional_published_state(dataset_dir: Path) -> dict[str, str]:
     extra_bundles = sorted(
         child.name
         for child in dataset_root.iterdir()
-        if child.name.endswith(".cellucid-session")
-        and child.name != _PUBLISHED_STATE_BUNDLE
+        if child.name.endswith(".cellucid-session") and child.name != _PUBLISHED_STATE_BUNDLE
     )
     if extra_bundles:
         raise ValueError(
@@ -207,22 +198,18 @@ def _read_optional_published_state(dataset_dir: Path) -> dict[str, str]:
         manifest = json.loads(manifest_bytes.decode("utf-8"))
     except (UnicodeError, json.JSONDecodeError) as error:
         raise ValueError(
-            f"Published sample state {_PUBLISHED_STATE_MANIFEST} "
-            "must contain readable UTF-8 JSON."
+            f"Published sample state {_PUBLISHED_STATE_MANIFEST} must contain readable UTF-8 JSON."
         ) from error
     if not isinstance(manifest, dict):
         raise TypeError(
-            f"Published sample state {_PUBLISHED_STATE_MANIFEST} "
-            "must contain a JSON object."
+            f"Published sample state {_PUBLISHED_STATE_MANIFEST} must contain a JSON object."
         )
     if set(manifest) != {"states"}:
         raise ValueError(
             f"Published sample state {_PUBLISHED_STATE_MANIFEST} "
             "must contain the exact keys: states."
         )
-    if type(manifest["states"]) is not list or manifest["states"] != [
-        _PUBLISHED_STATE_BUNDLE
-    ]:
+    if type(manifest["states"]) is not list or manifest["states"] != [_PUBLISHED_STATE_BUNDLE]:
         raise ValueError(
             f"Published sample state {_PUBLISHED_STATE_MANIFEST} states "
             f"must contain exactly {_PUBLISHED_STATE_BUNDLE}."
@@ -287,21 +274,14 @@ def _read_exported_dataset_entry(
     if type(identity.get("version")) is not int or identity["version"] != 2:
         raise ValueError("dataset_identity.json version must be exactly 2.")
 
-    dataset_id = _require_nonempty_string(
+    dataset_id = _require_dataset_id(
         identity.get("id"),
         label="dataset_id",
     )
-    dataset_name = _require_nonempty_string(
+    dataset_name = _require_dataset_name(
         identity.get("name"),
         label="dataset_name",
     )
-    for label, value in (("dataset_id", dataset_id), ("dataset_name", dataset_name)):
-        if value != value.strip() or any(
-            ord(character) < 32 or ord(character) == 127 for character in value
-        ):
-            raise ValueError(
-                f"{label} must be exact text without surrounding whitespace or control characters."
-            )
 
     entry = {
         "id": dataset_id,

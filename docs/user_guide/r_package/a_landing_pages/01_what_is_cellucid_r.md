@@ -34,6 +34,9 @@ Cellucid itself is a **web app** (the viewer UI). `cellucid-python` and `celluci
 It is intentionally dependency-light:
 - Hard dependency: `jsonlite`
 - Optional (recommended) dependency: `Matrix` for sparse matrices and connectivity export
+- A small compiled primitive owns the persistent per-target export lock shared
+  with the Python package; source installs therefore need the platform R build
+  toolchain.
 
 ### Deep path (expert / maintainer)
 `cellucid_prepare()` also:

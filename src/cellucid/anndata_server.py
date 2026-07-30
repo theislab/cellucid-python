@@ -63,6 +63,7 @@ from ._server_base import (
 )
 from .anndata_adapter import AnnDataAdapter, _classify_anndata_path
 from .connectivity_contract import build_connectivity_manifest
+from .prepare_data import _require_dataset_id, _require_dataset_name
 
 if TYPE_CHECKING:
     import anndata
@@ -556,9 +557,12 @@ class AnnDataServer:
         centroid_min_points : int
             Minimum category size used for centroid computation.
         dataset_name : str
-            Explicit human-readable dataset name.
+            Exact non-empty human-readable name without surrounding whitespace
+            or control characters. Unicode is preserved.
         dataset_id : str
-            Explicit stable dataset identifier.
+            Portable 1-180 byte ASCII identifier beginning with a letter or
+            digit and otherwise using only letters, digits, ``.``, ``_``, or
+            ``-``; it cannot end in ``.`` or use a Windows device name.
         vector_field_default : str, optional
             Exact field id required when multiple UMAP vector fields exist.
         serve_web_ui : bool
@@ -568,6 +572,14 @@ class AnnDataServer:
         web_cache_dir : str or Path, optional
             Directory holding the active verified web build.
         """
+        dataset_name = _require_dataset_name(
+            dataset_name,
+            label="dataset_name",
+        )
+        dataset_id = _require_dataset_id(
+            dataset_id,
+            label="dataset_id",
+        )
         self.port = require_server_port(port)
         self.host = host
         if type(open_browser) is not bool:
@@ -1119,9 +1131,12 @@ def serve_anndata(
     centroid_min_points : int
         Minimum category size used for centroid computation.
     dataset_name : str
-        Explicit human-readable dataset name.
+        Exact non-empty human-readable name without surrounding whitespace or
+        control characters. Unicode is preserved.
     dataset_id : str
-        Explicit stable dataset identifier.
+        Portable 1-180 byte ASCII identifier beginning with a letter or digit
+        and otherwise using only letters, digits, ``.``, ``_``, or ``-``; it
+        cannot end in ``.`` or use a Windows device name.
     vector_field_default : str, optional
         Exact field id required when multiple UMAP vector fields exist.
     serve_web_ui : bool

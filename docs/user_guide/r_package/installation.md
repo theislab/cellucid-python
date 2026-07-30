@@ -19,6 +19,8 @@ official GitHub repository.
 - **R:** `cellucid` currently targets **R ≥ 4.3.0**.
 - **Hard dependency:** `jsonlite`
 - **Optional but recommended:** `Matrix` (sparse matrices + connectivities)
+- **Source builds:** Rtools on Windows, the Xcode Command Line Tools on macOS,
+  or a C toolchain plus R development headers on Linux
 
 ```{note}
 `cellucid-r` is designed to be dependency-light and does not require Seurat or SingleCellExperiment.
@@ -39,6 +41,10 @@ If the index does not list version 0.9.1 yet, use the official source
 installation below.
 
 ### From the official source repository
+
+These routes compile Cellucid's small native export-lock primitive and
+therefore require the source-build toolchain listed above. A platform CRAN
+binary, when available, does not require a local compiler.
 
 #### Option A: `remotes` (simple, common)
 

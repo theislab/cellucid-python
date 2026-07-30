@@ -69,6 +69,8 @@ Fast workflow:
 
 - R `>= 4.3.0` (matches `DESCRIPTION`)
 - Git
+- A C toolchain for package builds: Rtools on Windows, the Xcode Command Line
+  Tools on macOS, or a compiler plus R development headers on Linux
 
 Recommended:
 - RStudio (optional, but convenient for vignettes)
@@ -171,6 +173,8 @@ This package is intentionally:
 - **minimal-dependency** (only `jsonlite` is a hard dependency)
 - **format-first** (exports must match what the web app expects)
 - **Bioconductor-friendly** (checks, vignette style, and package structure matter)
+- **cross-process safe** (a small native primitive owns the persistent export
+  lock shared with the Python package)
 
 If you propose adding a new dependency:
 - prefer `Suggests` over `Imports` unless strictly required

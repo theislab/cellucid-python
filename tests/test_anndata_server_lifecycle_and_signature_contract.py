@@ -118,6 +118,23 @@ def test_public_anndata_entry_points_have_complete_closed_signatures() -> None:
     ]
 
 
+def test_show_anndata_rejects_identity_before_base_viewer_setup() -> None:
+    with (
+        mock.patch(
+            "cellucid.jupyter.BaseViewer.__init__",
+            side_effect=AssertionError("Notebook viewer setup was entered"),
+        ) as base_init,
+        pytest.raises(ValueError, match="dataset_id"),
+    ):
+        show_anndata(
+            object(),
+            dataset_name="Declared name",
+            dataset_id="data/set",
+        )
+
+    base_init.assert_not_called()
+
+
 @pytest.mark.parametrize("backed_value", [None, True, False, "r", "r+"])
 def test_removed_backed_modes_are_not_accepted(
     tmp_path: Path,

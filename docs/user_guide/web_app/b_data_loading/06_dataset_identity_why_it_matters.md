@@ -50,8 +50,12 @@ See {doc}`02_local_demo_tutorial` for the exact required layout.
 When you serve or display AnnData directly, Cellucid still generates a `dataset_identity.json` payload—dynamically—via the AnnData adapter.
 
 Exact behavior:
-- `dataset_name` and `dataset_id` are required non-empty strings for
-  `serve_anndata(...)`, `show_anndata(...)`, and `AnnDataViewer(...)`.
+- `dataset_name` is required, non-empty, unpadded, and free of control
+  characters; human-readable Unicode is preserved.
+- `dataset_id` is required and uses the same portable export identifier on
+  every Python path: 1–180 ASCII characters, beginning with a letter or digit,
+  followed only by letters, digits, `.`, `_`, or `-`, with no trailing `.`
+  or reserved Windows device name.
 - `cellucid serve <h5ad-or-zarr>` requires both `--dataset-name` and
   `--dataset-id`.
 - Cellucid does not derive either value from a filename or silently create a

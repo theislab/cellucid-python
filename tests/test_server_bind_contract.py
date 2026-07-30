@@ -4,6 +4,7 @@ import json
 import socket
 import urllib.request
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -146,6 +147,40 @@ def test_exported_server_viewer_url_opens_the_exact_served_catalog(
         server.stop()
 
 
+@pytest.mark.parametrize(
+    ("dataset_id", "dataset_name", "message"),
+    [
+        ("data/set", "Declared name", "dataset_id"),
+        ("CON", "Declared name", "dataset_id"),
+        ("trailing.", "Declared name", "dataset_id"),
+        ("ümlaut", "Declared name", "dataset_id"),
+        ("declared-id", " padded", "dataset_name"),
+        ("declared-id", "Declared\x7fname", "dataset_name"),
+        ("declared-id", "Declared\x85name", "dataset_name"),
+    ],
+)
+def test_exported_server_rejects_nonportable_manifest_identity_before_binding(
+    tmp_path: Path,
+    dataset_id: str,
+    dataset_name: str,
+    message: str,
+) -> None:
+    from cellucid.server import CellucidServer
+
+    with pytest.raises(ValueError, match=message):
+        CellucidServer(
+            _prepared_dataset(
+                tmp_path / "dataset",
+                dataset_id=dataset_id,
+                dataset_name=dataset_name,
+            ),
+            host="127.0.0.1",
+            port=0,
+            quiet=True,
+            serve_web_ui=False,
+        )
+
+
 def test_anndata_server_publishes_the_exact_os_assigned_port() -> None:
     from cellucid.anndata_server import AnnDataServer
 
@@ -167,6 +202,29 @@ def test_anndata_server_publishes_the_exact_os_assigned_port() -> None:
         assert server.server_info["port"] == server.port
     finally:
         server.stop()
+
+
+def test_anndata_server_rejects_identity_before_source_classification() -> None:
+    from cellucid.anndata_server import AnnDataServer
+
+    with (
+        mock.patch(
+            "cellucid.anndata_server._classify_anndata_path",
+            side_effect=AssertionError("AnnData source was classified"),
+        ) as classify,
+        pytest.raises(ValueError, match="dataset_id"),
+    ):
+        AnnDataServer(
+            "must-not-be-inspected.h5ad",
+            dataset_name="Declared name",
+            dataset_id="data/set",
+            host="127.0.0.1",
+            port=0,
+            quiet=True,
+            serve_web_ui=False,
+        )
+
+    classify.assert_not_called()
 
 
 def test_explicit_occupied_port_is_rejected_without_port_scanning(

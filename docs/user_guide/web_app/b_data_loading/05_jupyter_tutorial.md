@@ -245,8 +245,12 @@ followed by these exact keyword-only parameters:
 - `normalize_embeddings`: normalize coordinates to `[-1, 1]` (default: True)
 - `centroid_outlier_quantile`: quantile used for categorical centroids
 - `centroid_min_points`: minimum category size used for categorical centroids
-- `dataset_name`: required label shown in the UI
-- `dataset_id`: required stable dataset identity string (important for sessions; see {doc}`06_dataset_identity_why_it_matters`)
+- `dataset_name`: required non-empty, unpadded label without control
+  characters; human-readable Unicode is preserved
+- `dataset_id`: required portable 1–180 character ASCII identity (letter or
+  digit first; then letters, digits, `.`, `_`, or `-`; no trailing `.` or
+  reserved Windows device name), important for sessions; see
+  {doc}`06_dataset_identity_why_it_matters`
 - `vector_field_default`: exact field ID; required when the AnnData declares
   more than one vector field
 

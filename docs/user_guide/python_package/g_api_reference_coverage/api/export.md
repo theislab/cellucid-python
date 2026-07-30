@@ -59,6 +59,13 @@ canonical dataset builder that must reproduce the complete directory
 byte-for-byte should instead pass its fixed provenance timestamp in exact UTC
 seconds format, for example `created_at="2026-07-26T12:34:56Z"`.
 
+`dataset_id` is the portable identity shared by prepared, H5AD, Zarr, server,
+and Jupyter paths. It must contain 1–180 ASCII characters, begin with a letter
+or digit, use only letters, digits, `.`, `_`, or `-`, not end with `.`, and
+not use a reserved Windows device name. `dataset_name` is human-readable
+Unicode, but must be non-empty and have no surrounding whitespace or control
+characters.
+
 ---
 
 ## Practical path (what to decide before you export)

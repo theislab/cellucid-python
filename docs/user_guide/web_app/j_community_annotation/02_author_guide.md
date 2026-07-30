@@ -225,17 +225,23 @@ Cellucid expects a specific repository layout. The easiest path is to start from
 ```
 annotations/
   config.json
+  config.schema.json
   schema.json
   users/
     (one JSON file per contributor)
   moderation/
     merges.json   (optional but recommended; authors publish it from the UI)
+    merges.schema.json
 .github/
   workflows/
     validate.yml  (recommended)
 scripts/
   validate_user_files.py
 ```
+
+The browser requires both `annotations/config.schema.json` and
+`annotations/moderation/merges.schema.json` even though the active
+`annotations/moderation/merges.json` document itself is optional.
 
 ### Recommended “template-first” setup
 
@@ -267,10 +273,25 @@ If you’re doing this in the GitHub web UI:
 4) Edit `annotations/config.json`.
 5) Commit + push.
 
-Example (conceptual):
+Example on macOS/Linux:
 
 ```bash
-cp -R /path/to/cellucid-annotation/* /path/to/your-annotation-repo/
+rsync -a --exclude '.git/' /path/to/cellucid-annotation/ /path/to/your-annotation-repo/
+git add -A
+git commit -m "Initialize Cellucid annotation repo"
+git push
+```
+
+The trailing slashes are intentional. Unlike a `*` copy, this also copies the
+template's `.github/` workflow directory while excluding only the template's
+own Git history.
+
+Windows PowerShell equivalent:
+
+```powershell
+Get-ChildItem -Force 'C:\path\to\cellucid-annotation' |
+  Where-Object Name -ne '.git' |
+  Copy-Item -Destination 'C:\path\to\your-annotation-repo' -Recurse -Force
 git add -A
 git commit -m "Initialize Cellucid annotation repo"
 git push
@@ -344,7 +365,11 @@ For large groups, a dedicated branch reduces accidental changes to `main` and ma
 
 - `fieldsToAnnotate`
   - List of **categorical obs keys** (column names) that may be annotated.
-  - If you list a key that does not exist in the dataset, Cellucid will warn and ignore it.
+  - Every listed key must exist as a categorical field in the loaded dataset.
+    Any missing key fails the complete Pull without changing annotation state.
+    Cellucid performs this check before selecting the raw-cache scope or
+    downloading any user or moderation files, so the mismatch cannot mutate
+    the raw-file cache.
 
 - `annotatableSettings[fieldKey]`
   - Per-field consensus rules.
@@ -358,7 +383,8 @@ For large groups, a dedicated branch reduces accidental changes to `main` and ma
 :::{important}
 Validation rule (enforced by the template CI script):
 
-- Every key in `annotatableSettings` must also appear in `fieldsToAnnotate`.
+- The keys in `annotatableSettings` must be exactly the same keys as
+  `fieldsToAnnotate`; neither side may contain an extra or missing key.
 - Every key in `closedFields` must also appear in `fieldsToAnnotate`.
 
 If you violate this, GitHub Actions will fail and authors may be blocked from publishing updates cleanly.
@@ -375,7 +401,9 @@ Cellucid computes (per category bucket):
 Important edge cases:
 
 - If `voters < minAnnotators` → status is **Pending** (even if there is a strong early leader).
-- If the top net-vote score is tied across multiple suggestions → status is always **Disputed**.
+- Suggestions are ranked by net vote first and upvote count second. A top tie
+  exists only when suggestions have both equal net vote and equal upvote count;
+  that tie is **Disputed**.
 
 See Section 9 for worked examples and recommended defaults.
 
@@ -394,6 +422,20 @@ This validates:
 - `annotations/moderation/merges.json` (optional)
 
 If this fails, fix the file(s) it reports before inviting annotators.
+
+### Pull bounds and atomic failure
+
+Each active annotation JSON document is limited to 1,000,000 decoded UTF-8
+bytes. One Pull accepts at most 10,000 active user files and 64,000,000
+aggregate decoded UTF-8 bytes across those user files. The browser preflights
+and then verifies those bounds while fetching.
+
+Any missing configured categorical field, invalid or oversized active
+document, count/byte limit violation, or incomplete fetch fails the complete
+Pull without changing annotation state. Cellucid never publishes a partial
+merged view from an invalid repository. The configured-field check occurs
+before raw-cache scope selection or user/moderation downloads; repository
+preflight and fetch-validation failures also occur before cache mutation.
 
 ---
 
@@ -416,6 +458,10 @@ Cellucid chooses the best option per user:
 - If the user can push → direct publish
 - Else if the repo allows forking → fork + PR publish
 - Else → user cannot publish (they can still vote locally, but nothing can be shared)
+
+In other words, Cellucid uses a fork + Pull Request only when the repository
+allows forking. It selects exactly one route from repository metadata before
+mutation; a route failure is terminal and does not switch to the other route.
 
 ### Fork + PR model: one extra requirement most teams miss
 
@@ -445,11 +491,16 @@ Branch protection can break direct publishing:
 
 - If direct pushes are blocked, users with “write” permissions may still see Publish fail.
 
-Options:
+There is no UI route override. Branch protection alone does not select fork +
+Pull Request: when repository metadata reports push permission, Cellucid
+selects direct publication and reports a terminal error if GitHub rejects it.
 
-- relax protection for the annotation repo (common for JSON-only repos), or
-- require PR flow for all changes (requires policy + reviewer time), or
-- publish to a dedicated “staging” branch and merge via PR (more overhead, more control).
+For direct publication, configure the connected branch to accept the exact
+Cellucid commit. For an annotator to use fork + PR instead, that annotator must
+have no source-repository push permission and the repository must allow
+forking. Authors with maintain/admin permission remain on the direct route; use
+GitHub outside Cellucid for an all-PR governance policy that blocks their direct
+commits.
 
 ---
 
@@ -466,41 +517,60 @@ Org repos often require an org admin to approve the installation.
 
 ### Optional: self-host the GitHub OAuth + API proxy (org deployments)
 
-Cellucid’s community annotation UI uses a small server component (typically a Cloudflare Worker) to:
-
-- run the GitHub OAuth flow for a GitHub App
-- proxy GitHub API requests so the frontend never needs GitHub secrets
+Cellucid's community annotation UI uses a small server component (the
+checked-in deployment is a Cloudflare Worker) to run GitHub App OAuth, proxy
+only the repository operations used by Cellucid, and relay fixed CAP persisted
+queries.
 
 If you are using **cellucid.com**, you typically do *not* need to do anything here.
 
 If your organization requires owning the auth infrastructure (recommended for many orgs), you can self-host.
 
-#### What you need (conceptual)
+#### Exact version-1 route contract
 
-- A **GitHub App** (not a Personal Access Token) with OAuth enabled.
-- A Worker deployment (Cloudflare Worker or equivalent) that exposes:
-  - `/auth/login`, `/auth/callback`
-  - `/auth/user`, `/auth/installations`, `/auth/installation-repos`
-  - `/api/*` proxy to `https://api.github.com/*`
+The Worker exposes the following ordered routes:
 
-#### Worker configuration (conceptual)
+- `/auth/login`
+- `/auth/callback`
+- `/auth/user`
+- `/auth/installations`
+- `/auth/installation-repos`
+- `/cap/lookup-cells`
+- `/cap/search-datasets`
+- `/api/repos/*`
 
-The Worker must be configured with:
+Opening `/` must return the exact compatible service identity and ordered route
+inventory, beginning
+`{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":1,`
+and continuing with an `endpoints` array containing the routes above. Before
+OAuth or token disclosure, the browser checks that health document and stops
+on a stale or incompatible Worker.
 
-- `ALLOWED_ORIGINS`: comma-separated allowlist (CORS), e.g. `https://your.cellucid.site,https://staging.your.cellucid.site`
-- `GITHUB_APP_ID`: numeric GitHub App id
-- `GITHUB_PRIVATE_KEY`: GitHub App private key (PEM)
-- `GITHUB_CLIENT_ID`: GitHub App OAuth client id
-- `GITHUB_CLIENT_SECRET`: GitHub App OAuth client secret
+#### Exact Worker and GitHub App configuration
 
-#### Pointing Cellucid at your worker (deployment-specific)
+The Worker requires exactly `ALLOWED_ORIGINS`, `GITHUB_CLIENT_ID`, and
+`GITHUB_CLIENT_SECRET`. It does not use an App id, private key, App JWT, or
+installation access token. Configure Cloudflare Workers Paid with the Standard
+usage model; the checked-in Worker requires its one-second CPU ceiling. Apply a
+rate-limiting rule to `/cap/*` for a public deployment.
 
-- Some builds support a runtime override (e.g. `window.__CELLUCID_GITHUB_WORKER_ORIGIN__`).
-- Production deployments usually set the worker origin at build time.
+Configure the GitHub App with user-to-server token expiration disabled,
+webhooks disabled, account permissions unset, and these repository permissions:
 
-See also:
+- Metadata: read-only
+- Contents: read and write
+- Pull requests: read and write
+- Administration: read and write
 
-- `cellucid/docs/github-oauth-cloudflare-setup.md` in the Cellucid web repo
+Production uses the Worker origin compiled into the Cellucid client. A
+different runtime override is accepted only from a recognized local-development
+host. The exact Cellucid page origin must also be present in
+`ALLOWED_ORIGINS`.
+
+For commands, precise origin rules, the complete health JSON, and live
+verification, follow `cellucid/docs/github-oauth-cloudflare-setup.md` in the
+Cellucid web repository. A source edit does not update a running Worker; deploy
+the accepted Worker source and then verify the live root and browser lifecycle.
 
 ---
 
@@ -584,14 +654,17 @@ Inside **MANAGE ANNOTATION**, after you select a column that is already annotata
 
 After applying locally, **Publish** to write the settings to `annotations/config.json` so all annotators receive them on Pull.
 
-### Default settings (if you do not set anything)
+### Settings created when a field is enabled
 
-If a field has no explicit entry in `annotatableSettings`, Cellucid uses defaults:
+The keys in `annotatableSettings` must be exactly the same keys as
+`fieldsToAnnotate`. When an author enables a field in the UI, Cellucid creates
+its required entry with:
 
 - `minAnnotators = 1`
 - `threshold = 0.5`
 
-In practice, for predictable behavior across devices/users, you should set `annotatableSettings` explicitly for every annotatable field.
+You may then edit these values before Publish. A config file may not omit the
+settings entry for an enabled field.
 
 ### Worked examples (to build intuition)
 
@@ -609,7 +682,7 @@ Examples:
 | 3 users upvote “B cell”, nobody downvotes | 3 | 3 | 1.0 | Strong consensus |
 | 3 users: 2 upvote “B cell”, 1 downvotes “B cell” | 3 | 1 | 0.33 | Often disputed unless threshold is low |
 | 4 users: 3 up, 1 down | 4 | 2 | 0.5 | Exactly meets `threshold=0.5` (if not tied) |
-| 4 users split: 2 upvote A, 2 upvote B | 4 | 2 | 0.5 | **Disputed** due to tie (two top suggestions) |
+| 4 users split: 2 upvote A, 2 upvote B | 4 | 2 | 0.5 | **Disputed** because net votes and upvotes both tie |
 
 :::{important}
 `threshold` is not “percent upvotes”.
@@ -671,7 +744,11 @@ Do not merge when meaning differs:
 
 Each merge entry includes:
 
-- `bucket`: which category bucket the merge applies to (format `<fieldKey>:<categoryLabel>`)
+- `bucket`: which category bucket the merge applies to. Its format is
+  `<fieldKey>:<categoryLabel>` when the field key contains no colon. When it
+  does, Cellucid uses
+  `fk~${encodeURIComponent(fieldKey)}:<categoryLabel>`; the `fk~` prefix and
+  percent-encoding make the embedded colon unambiguous.
 - `fromSuggestionId` → `intoSuggestionId`: the mapping (merge “from” into “into”)
 - `by`: author identity (stored as `ghid_<githubUserId>`)
 - `at`: timestamp
@@ -693,12 +770,12 @@ Example (illustrative):
 
 ### Undoing a merge (if you merged the wrong thing)
 
-Depending on the UI version, you may have an author-only option to detach/undo a merge from the **View merged** dialog.
-
-If the UI does not expose an undo:
-
-- revert the commit that changed `annotations/moderation/merges.json`, or
-- edit `merges.json` manually (advanced; validate after editing).
+Open **View merged** on the target suggestion. Authors can detach a merged
+member there. Only the GitHub identity that created a merge record can edit or
+delete its note. Publish afterward to write the changed merge log. For recovery
+outside the UI, revert the commit that changed
+`annotations/moderation/merges.json`; direct JSON editing is advanced and must
+be validated before Pull.
 
 ---
 
@@ -755,7 +832,12 @@ The snapshot contains:
   - `netVotes`: best net vote count
   - `suggestionId`: winning suggestion id (null in ties)
 
-Buckets are keyed by `<fieldKey>:<categoryLabel>`.
+Buckets use `<fieldKey>:<categoryLabel>` when the field key contains no colon.
+For a field key containing `:`, Cellucid uses
+`fk~${encodeURIComponent(fieldKey)}:<categoryLabel>`. The category label
+follows the first delimiter verbatim. Treat `fk~` as the escape prefix only
+with `%3A` in the prefixed component; a colon-free field key may itself
+begin with `fk~`.
 
 ### Example downstream usage (computational)
 
@@ -763,6 +845,7 @@ This is one simple pattern: map consensus labels back onto an `AnnData` cluster 
 
 ```python
 import json
+from urllib.parse import unquote
 
 import pandas as pd
 
@@ -772,7 +855,13 @@ target_field = "leiden"
 
 mapping = {}
 for bucket, summary in doc["consensus"].items():
-    field_key, category_label = bucket.split(":", 1)
+    field_key_part, category_label = bucket.split(":", 1)
+    encoded_field_key = field_key_part[3:]
+    field_key = (
+        unquote(encoded_field_key)
+        if field_key_part.startswith("fk~") and "%3a" in encoded_field_key.lower()
+        else field_key_part
+    )
     if field_key != target_field:
         continue
     if summary.get("status") == "consensus":
@@ -859,10 +948,9 @@ For non-technical collaborators, a screenshot of the status panel + error messag
   - Common causes:
     - branch protection blocks direct writes
     - required status checks are configured but GitHub API rejects direct commit
-  - Fix options:
-    - relax branch protection for the annotation repo, or
-    - require PR flow for all changes, or
-    - publish to a dedicated branch and merge via PR
+  - Cellucid does not retry as a fork or PR. Adjust the connected branch rules
+    to permit the direct commit, or make the change through an external GitHub
+    workflow.
 
 - **Publishing fails for annotators and you disabled forking**
   - Cause: users without push cannot publish if `allow_forking` is disabled.
@@ -881,9 +969,12 @@ For non-technical collaborators, a screenshot of the status panel + error messag
 
 ### Local cache corruption / storage restrictions
 
-- **Warning about IndexedDB unavailable (“downloads will be cached in-memory…”)**
+- **Error that the local raw cache is unavailable**
   - Cause: browser storage policies (private mode, strict settings, embedded iframe restrictions).
-  - Impact: Pull will re-download after reload; large repos will feel slower.
+  - Impact: file bodies use IndexedDB and the cache's SHA index uses local
+    storage. The persistent raw-file cache requires IndexedDB and local
+    storage. Cellucid never switches to an in-memory cache. Pull fails without
+    replacing the current annotation view.
   - Fix: use a normal browser profile, allow site storage, avoid restrictive privacy modes for the annotation session.
 
 - **Error about local cache being corrupted**
@@ -892,8 +983,15 @@ For non-technical collaborators, a screenshot of the status panel + error messag
 
 ### CAP (Cell Annotation Platform) search issues
 
-- CAP search queries are sent to `https://celltype.info/graphql`.
-- If your org blocks outbound calls, CAP helper searches will fail. This does not block manual annotation.
+- The browser sends a bounded object to the configured Cellucid Worker at
+  `/cap/lookup-cells`. The Worker chooses a pinned persisted query and relays it
+  to CAP; it does not accept a caller-provided query or upstream.
+- Search text is visible to the Worker operator, CAP, and the network path. The
+  GitHub bearer token and OAuth cookies are not sent to CAP.
+- A successful response is
+  `{ "contractVersion": 1, "results": [...], "omittedInvalidCount": number }`.
+- If your org blocks either network hop, CAP helper searches fail without
+  blocking manual annotation.
 
 ### Security / privacy review questions
 

@@ -128,6 +128,76 @@ def test_prepare_requires_explicit_dataset_identity_before_output_mutation(
     assert not out_dir.exists()
 
 
+@pytest.mark.parametrize(
+    "dataset_id",
+    [
+        "",
+        "   ",
+        " padded ",
+        "data/set",
+        "data\\set",
+        "CON",
+        "trailing.",
+        "ümlaut",
+        "a" * 181,
+    ],
+)
+def test_prepare_rejects_nonportable_dataset_id_before_output_mutation(
+    tmp_path,
+    dataset_id,
+):
+    out_dir = tmp_path / "must-not-exist"
+    kwargs = _prepare_identity_kwargs(out_dir)
+    kwargs["dataset_id"] = dataset_id
+
+    with pytest.raises((TypeError, ValueError), match="dataset_id"):
+        prepare(**kwargs)
+
+    assert not out_dir.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    "dataset_name",
+    [
+        "",
+        "   ",
+        " padded",
+        "padded ",
+        "\tTabbed",
+        "Control\x7f",
+        "Control\x80",
+        "Control\x85",
+        "Control\x9f",
+    ],
+)
+def test_prepare_rejects_inexact_dataset_name_before_output_mutation(
+    tmp_path,
+    dataset_name,
+):
+    out_dir = tmp_path / "must-not-exist"
+    kwargs = _prepare_identity_kwargs(out_dir)
+    kwargs["dataset_name"] = dataset_name
+
+    with pytest.raises((TypeError, ValueError), match="dataset_name"):
+        prepare(**kwargs)
+
+    assert not out_dir.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_prepare_preserves_unicode_dataset_name_with_portable_id(tmp_path):
+    out_dir = tmp_path / "generation"
+    kwargs = _prepare_identity_kwargs(out_dir)
+    kwargs["dataset_name"] = "细胞 atlas 🧬"
+
+    prepare(**kwargs)
+
+    identity = json.loads((out_dir / "dataset_identity.json").read_text(encoding="utf-8"))
+    assert identity["id"] == "identity-contract"
+    assert identity["name"] == "细胞 atlas 🧬"
+
+
 @pytest.mark.parametrize("invalid_description", [7, True, [], {}])
 def test_prepare_rejects_non_string_description_before_output_mutation(
     tmp_path,
@@ -187,9 +257,7 @@ def test_prepare_emits_one_exact_optional_source_object(tmp_path):
     )
     prepare(**kwargs)
 
-    identity = json.loads(
-        (out_dir / "dataset_identity.json").read_text(encoding="utf-8")
-    )
+    identity = json.loads((out_dir / "dataset_identity.json").read_text(encoding="utf-8"))
     assert identity["description"] == ""
     assert identity["source"] == {
         "name": "Exact source",
@@ -321,7 +389,11 @@ def test_prepare_rejects_nonportable_or_colliding_gene_ids_before_mutation(
         ({"version": 2, "name": "Declared name"}, "dataset_id"),
         ({"version": 2, "id": "declared-id"}, "dataset_name"),
         ({"version": 2, "id": 7, "name": "Declared name"}, "dataset_id"),
+        ({"version": 2, "id": "data/set", "name": "Declared name"}, "dataset_id"),
+        ({"version": 2, "id": " padded ", "name": "Declared name"}, "dataset_id"),
         ({"version": 2, "id": "declared-id", "name": ""}, "dataset_name"),
+        ({"version": 2, "id": "declared-id", "name": "   "}, "dataset_name"),
+        ({"version": 2, "id": "declared-id", "name": " padded"}, "dataset_name"),
     ],
 )
 def test_dataset_manifest_rejects_malformed_identity_without_filename_fabrication(
@@ -338,5 +410,35 @@ def test_dataset_manifest_rejects_malformed_identity_without_filename_fabricatio
 
     with pytest.raises((TypeError, ValueError), match=invalid_field):
         generate_datasets_manifest(tmp_path, default_dataset="declared-id")
+
+    assert not (tmp_path / "datasets.json").exists()
+
+
+@pytest.mark.parametrize(
+    "default_dataset",
+    ["data/set", " padded ", "CON", "trailing.", "ümlaut"],
+)
+def test_dataset_manifest_rejects_nonportable_default_without_mutation(
+    tmp_path,
+    default_dataset,
+):
+    dataset_dir = tmp_path / "declared-id"
+    dataset_dir.mkdir()
+    (dataset_dir / "dataset_identity.json").write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "id": "declared-id",
+                "name": "Declared name",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="default_dataset"):
+        generate_datasets_manifest(
+            tmp_path,
+            default_dataset=default_dataset,
+        )
 
     assert not (tmp_path / "datasets.json").exists()

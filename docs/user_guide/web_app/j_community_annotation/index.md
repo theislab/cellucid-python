@@ -25,7 +25,10 @@ evidence.
 Community annotation is “offline-first” after you connect a repo:
 
 - Your votes, suggestions, and comments are saved locally in the browser immediately.
-- **Publish** uploads your changes to GitHub (direct push if allowed; otherwise fork + Pull Request).
+- **Publish** uploads your changes directly when GitHub reports push permission,
+  or by fork + Pull Request only when the repository allows forking. If neither
+  route is available, Publish is disabled. Cellucid selects one route before
+  mutation; a failure is terminal and does not switch to the other route.
 - GitHub OAuth tokens are stored only in `sessionStorage` (cleared when the tab closes).
 
 Practical implication after a repository has been connected and its state is
@@ -127,7 +130,9 @@ This section defines terms you will see across all pages. (Computational readers
 - **Vote**: an upvote (▲) or downvote (▼) on a suggestion.
 - **Consensus**: the current “winning” label for a category under the author’s rules.
 - **Pull**: download the current GitHub files into your local cache and rebuild the merged view in your browser.
-- **Publish**: upload your changes to GitHub (direct push if allowed; otherwise create a fork + Pull Request).
+- **Publish**: upload your changes directly when GitHub reports push
+  permission, or by fork + Pull Request only when the repository allows
+  forking. The selected route never switches to another mutation route.
 - **Branch**: a GitHub branch (e.g. `main`, `v1-round1`). Your group must agree on which branch to use.
 - **Fork + Pull Request (PR)**: a safe way to contribute without direct write access; your changes become visible after the PR is merged.
 
@@ -138,7 +143,10 @@ This section defines terms you will see across all pages. (Computational readers
 Cellucid derives roles from GitHub repository permissions after you connect an annotation repo:
 
 - **Author**: you have **maintain** or **admin** access on the annotation repo. Authors can change repo-level settings (which columns are annotatable, consensus thresholds, closing fields) and can moderate merges.
-- **Annotator**: any other role. Annotators can vote, comment, and propose suggestions, and can publish their own user file (direct push if they have write access; otherwise PR flow).
+- **Annotator**: any other role. Annotators can vote, comment, and propose
+  suggestions. They can publish their own user file directly when GitHub
+  reports push permission, or by fork + Pull Request only when the repository
+  allows forking; without either route, they cannot publish.
 
 If your role cannot be determined (e.g., GitHub API access issue), Cellucid may disconnect the repo to avoid ambiguous permission state.
 
@@ -171,8 +179,10 @@ For each bucket (one column + one category), Cellucid computes:
 Consensus status:
 
 - **Pending**: `voters < minAnnotators`
-- **Consensus**: not tied, and `confidence >= threshold`
-- **Disputed**: otherwise (including ties between top suggestions)
+- **Consensus**: one suggestion leads after ranking first by net vote and then
+  by upvote count, and `confidence >= threshold`
+- **Disputed**: otherwise. A top tie exists only when suggestions have both
+  equal net vote and equal upvote count.
 
 Authors can configure `minAnnotators` and `threshold` per annotatable column in `annotations/config.json` (and can update those settings via the UI).
 
@@ -208,7 +218,11 @@ comments, repository connection, or GitHub authentication.
 - GitHub tokens live in `sessionStorage`.
 - Votes/suggestions/comments and the repo connection use annotation-specific
   local storage.
-- Raw pulled GitHub files use IndexedDB.
+- Raw pulled GitHub file bodies use IndexedDB, while the cache's SHA index uses
+  local storage. The persistent raw-file cache requires both IndexedDB and
+  local storage. Cellucid never switches to an in-memory cache. If either
+  storage boundary is unavailable, Pull fails without replacing the current
+  annotation view.
 
 Use **Publish** for collaboration, not session export. See
 {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.

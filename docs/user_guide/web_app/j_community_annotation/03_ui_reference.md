@@ -87,7 +87,9 @@ What “connect” means:
 - the repo choice is saved locally per dataset and per GitHub account
 - Cellucid validates required paths:
   - `annotations/config.json`
+  - `annotations/config.schema.json`
   - `annotations/schema.json`
+  - `annotations/moderation/merges.schema.json`
   - `annotations/users/`
 
 ### 4) Sync (Pull / Publish)
@@ -112,10 +114,21 @@ Navigation:
 Pull:
 
 - lists `annotations/users/*.json` and downloads only files whose GitHub `sha` changed since your last Pull
-- downloads optional `annotations/moderation/merges.json` (authors only; if present)
-- caches raw files locally (IndexedDB if available; otherwise memory-only)
+- downloads optional `annotations/moderation/merges.json` when present; only
+  authors may publish changes to that document
+- writes validated raw-file bodies to the required persistent IndexedDB cache
+  and their SHA index to local storage; Cellucid never switches to an in-memory
+  cache
 - compiles the merged view in the browser
 - applies author settings from `annotations/config.json` (annotatable columns, thresholds, closed fields)
+
+Pull is fail-closed and atomic. A missing configured categorical field, an
+invalid or oversized active document, more than 10,000 active user files, or
+more than 64,000,000 aggregate decoded UTF-8 bytes across those active user
+files fails the complete Pull without changing annotation state. Cellucid
+checks configured fields before selecting the raw-cache scope or downloading
+user/moderation files, so that mismatch cannot mutate the raw-file cache. No
+partial merged annotation view is applied.
 
 ### What Publish does (technical)
 
@@ -155,16 +168,26 @@ Buttons:
 
 The “Your identity” modal includes:
 
-- **Display name:** free text (e.g. “Alice Smith”)
+- **Name:** free text used to search ORCID (e.g. “Alice Smith”)
 - **Affiliation / role:** free text (e.g. “Theis Lab, Postdoc”)
 - **LinkedIn:** handle only (no URL; lowercase `a-z0-9-`)
-- **ORCID:** accepts an ORCID iD or a name; auto-suggests when possible
+- **ORCID:** accepts a checksum-valid ORCID iD and auto-suggests matches
 - **Save** / **Cancel**
 
 Notes:
 
 - These fields are optional and are written to your GitHub user file only on Publish.
 - Annotation repo validation disallows email fields (privacy).
+- For eligible exact input with no surrounding whitespace and at most 240
+  Unicode code points, typing at least three Unicode code points in either
+  **Name** or **ORCID** starts a 250 ms-debounced direct browser request to
+  `https://pub.orcid.org`, unless the exact query is served from the 60-second
+  per-modal cache. An exact ORCID iD uses `/v3.0/{id}/person`; other text uses
+  `/v3.0/expanded-search/` with at most eight results. The request omits
+  credentials and referrer information, but the typed text still leaves
+  Cellucid and is visible to ORCID and the network path.
+- Save accepts an empty ORCID or an exact checksum-valid ORCID iD. The name
+  text is search input, not a valid saved ORCID iD.
 
 ---
 
@@ -287,9 +310,13 @@ Duplicates:
 
 Merged bundles (author moderation):
 
-- a merged suggestion shows a “Merged bundle …” row and a **View merged** button
-- bundle totals are de-duplicated (one vote per user)
-- some UIs may show delegated bundle votes based on member votes (majority; ties = none)
+- a merged suggestion shows a “Merged bundle …” row and a **View merged**
+  button; any author can detach a member there, but only the GitHub identity
+  that created the merge record can edit or delete its note
+- bundle totals are de-duplicated to one effective vote per user
+- a direct vote on the merged target wins; otherwise Cellucid delegates the
+  majority of that user's votes across the merged members, with a tie producing
+  no effective vote
 
 Comments:
 
@@ -363,9 +390,13 @@ Checklist:
 - If installed with “Only select repositories”, add the repo explicitly.
 - In the GitHub sync modal: use **Reload**.
 
-#### Pull warns about “invalid user file(s) skipped”
+#### Pull fails on an invalid or oversized active file
 
-- Cause: one or more `annotations/users/*.json` files are invalid JSON or violate schema rules.
+- Cause: one or more active annotation documents are invalid JSON, violate
+  their schema, exceed 1,000,000 decoded UTF-8 bytes, or make the Pull exceed
+  its active-user-file count or aggregate-user-file byte limit.
+- Result: the whole Pull fails; Cellucid does not expose a partial merged view
+  or replace the last valid downloaded cache.
 - Fix:
   - run the template validation script in the annotation repo (`python scripts/validate_user_files.py`)
   - fix or revert the offending files
@@ -376,8 +407,10 @@ Checklist:
 - Some environments block `localStorage` and/or IndexedDB (private browsing, strict privacy settings, embedded contexts).
 - Symptoms:
   - cannot acquire cross-tab lock
-  - warning about IndexedDB unavailable (memory-only cache)
+  - `LOCAL_RAW_CACHE_UNAVAILABLE` or another local persistence error during Pull
   - local persistence/integrity errors that disconnect the repo
+- Result: Pull fails without replacing the current annotation view; it does not
+  continue with a transient raw-file cache.
 - Fix:
   - use a standard browser profile
   - allow site storage
@@ -385,9 +418,12 @@ Checklist:
 
 #### CAP search concerns (privacy / firewall)
 
-- CAP search sends queries to `https://celltype.info/graphql`.
-- If your environment blocks this, CAP helper buttons will fail.
-- This does not block manual suggestions/voting.
+- The browser calls the configured Cellucid Worker at `/cap/lookup-cells`; the
+  Worker relays a pinned persisted query to CAP.
+- The search text is visible to the Worker operator and CAP. The GitHub bearer
+  token and OAuth cookies are not sent to CAP.
+- If your environment blocks either hop, CAP helper buttons fail without
+  blocking manual suggestions or voting.
 
 #### Self-hosted worker issues (CORS / OAuth redirect)
 

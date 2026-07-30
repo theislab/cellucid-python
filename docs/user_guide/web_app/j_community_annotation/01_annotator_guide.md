@@ -32,7 +32,8 @@ If anything fails, jump to “Troubleshooting (Massive)” at the end and start 
 1) Verify you are on the intended scope: dataset id + `owner/repo@branch`.
 2) Pull (SHA-based incremental download) and confirm the merged view is current.
 3) Vote/suggest; include ontology ids and evidence when possible.
-4) Publish (direct push if permitted; otherwise fork + PR) and confirm the PR is merged.
+4) Publish directly if permitted, or by fork + Pull Request only when the
+   repository allows forking, and confirm any PR is merged.
 5) Ask others to Pull to refresh their merged view.
 
 This guide includes schema limits, caching behavior, and edge cases (tabs, devices, forks, branch mismatches).
@@ -104,6 +105,12 @@ When you click **Pull latest**, Cellucid:
 - downloads only files that changed since your last Pull (SHA-based incremental)
 - rebuilds the merged suggestion/vote view in your browser
 
+The persistent raw-file cache stores file bodies in IndexedDB and its SHA index
+in browser local storage. Annotation state and cross-tab coordination also
+require local storage. Cellucid never switches to an in-memory cache: if either
+storage boundary is unavailable, Pull fails without replacing the current
+annotation view.
+
 If you do not Pull:
 
 - you may be voting on an outdated view (missing others’ new suggestions),
@@ -129,7 +136,8 @@ For everyday work, a good pattern is:
 - propose new suggestions (label + optional ontology id/markers/evidence)
 - comment on suggestions (and edit/delete your own comments)
 - edit/delete your own suggestions
-- Publish your own user file (direct push if permitted; otherwise PR)
+- Publish your own user file directly if permitted, or through a fork + Pull
+  Request only when the repository allows forking
 
 ### You cannot (by design)
 
@@ -191,7 +199,8 @@ So:
 
 - downvotes reduce confidence,
 - one person voting multiple times still counts as **one voter** (denominator is unique users),
-- ties between top net-vote suggestions are always Disputed.
+- suggestions are ranked first by net vote and then by upvote count; a top tie
+  exists only at equal net vote and equal upvote count, and is Disputed.
 
 If you are not sure what to do:
 
@@ -281,11 +290,18 @@ Duplicates split votes until an author merges them.
 
 ### About CAP search (privacy + failure modes)
 
-Cellucid can query the Cell Annotation Platform (CAP) at `https://celltype.info/graphql`:
+Cellucid sends a bounded request to the configured Cellucid Worker at
+`/cap/lookup-cells`. The Worker chooses a pinned CAP persisted query and relays
+only the required variables; the browser does not send an arbitrary GraphQL
+document or caller-selected upstream.
 
 - CAP searches can help you find ontology ids, synonyms, and marker genes.
-- Your search terms are sent to CAP. If that is not acceptable for your environment, do not use CAP search.
-- If you are offline (or CAP is blocked), searches will fail, but manual suggestions still work.
+- Search text is visible to the Cellucid Worker operator, CAP, and the network
+  path. The GitHub bearer token and OAuth cookies are not sent to CAP.
+- A successful response has the bounded shape
+  `{ "contractVersion": 1, "results": [...], "omittedInvalidCount": number }`.
+- If this disclosure is not acceptable, or if you are offline or CAP is
+  blocked, use manual suggestions; voting and manual annotation still work.
 
 ---
 
@@ -295,8 +311,14 @@ In the **GitHub sync** modal, click **Publish**.
 
 What happens depends on your GitHub permissions:
 
-- If you have push access: Cellucid writes directly to `annotations/users/ghid_<yourNumericId>.json`.
-- If you do not have push access: Cellucid uses a fork + Pull Request flow.
+- If GitHub reports push access, Cellucid writes directly to
+  `annotations/users/ghid_<yourNumericId>.json`.
+- Without push access, Cellucid uses a fork + Pull Request only when the
+  repository allows forking. Otherwise Publish is disabled.
+
+Cellucid selects exactly one route from the repository metadata before making
+any mutation. If that route fails, the operation stops and does not switch to
+the other route.
 
 ### Before you publish (recommended)
 

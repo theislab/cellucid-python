@@ -44,6 +44,9 @@ Version 0.9.1 is the PyPI submission release.
   float32-representable scientific values and exact cell/gene alignment.
 - Prepared generation, replacement, and server shutdown are atomic and retain
   actionable errors at their owning boundary.
+- Prepared-directory writers share one persistent exact-target lock with the R
+  exporter, reject concurrent publication, and recover after process death
+  without leaking descriptors.
 - Cross-platform file names, dataset identifiers, request ranges, and cache
   paths are validated before filesystem or network mutation.
 - Prepared exports and direct AnnData responses now use canonical gzip headers,

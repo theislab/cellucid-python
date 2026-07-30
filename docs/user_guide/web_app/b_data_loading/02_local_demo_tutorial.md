@@ -138,11 +138,15 @@ product deliberately—for example, omit both `X_umap_3d` and
 
 - `dataset_id`:
   - A **stable** identifier that will appear in URLs and manifests.
+  - Use 1–180 ASCII characters: start with a letter or digit, then use only
+    letters, digits, `.`, `_`, or `-`; do not end with `.` or use a reserved
+    Windows device name.
   - Avoid changing it after you publish.
   - See {doc}`06_dataset_identity_why_it_matters` for what breaks when it changes.
 
 - `dataset_name` / `dataset_description`:
-  - Human-friendly labels shown in the UI.
+  - Human-friendly labels shown in the UI. `dataset_name` must be non-empty
+    and unpadded, without control characters; Unicode is supported.
 
 - `compression` (gzip level):
   - Higher = smaller files, slower export.

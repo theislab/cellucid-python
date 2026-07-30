@@ -449,12 +449,19 @@ def test_anndata_adapter_requires_explicit_dataset_identity(
     ("dataset_name", "dataset_id", "invalid_key"),
     [
         ("", "declared-id", "dataset_name"),
+        (" padded", "declared-id", "dataset_name"),
+        ("Declared\x7fname", "declared-id", "dataset_name"),
+        ("Declared\x85name", "declared-id", "dataset_name"),
         ("Declared name", "", "dataset_id"),
+        ("Declared name", "data/set", "dataset_id"),
+        ("Declared name", "CON", "dataset_id"),
+        ("Declared name", "trailing.", "dataset_id"),
+        ("Declared name", "ümlaut", "dataset_id"),
         (7, "declared-id", "dataset_name"),
         ("Declared name", 7, "dataset_id"),
     ],
 )
-def test_anndata_adapter_dataset_identity_is_exact_nonempty_text(
+def test_anndata_adapter_dataset_identity_matches_portable_export_contract(
     dataset_name: object,
     dataset_id: object,
     invalid_key: str,
@@ -465,6 +472,52 @@ def test_anndata_adapter_dataset_identity_is_exact_nonempty_text(
             dataset_name=dataset_name,
             dataset_id=dataset_id,
         )
+
+
+def test_from_file_rejects_invalid_identity_before_source_io(tmp_path) -> None:
+    source = tmp_path / "must-not-be-read.h5ad"
+    source.write_bytes(b"not an H5AD file")
+
+    with (
+        mock.patch("anndata.read_h5ad") as read_h5ad,
+        pytest.raises(ValueError, match="dataset_id"),
+    ):
+        AnnDataAdapter.from_file(
+            source,
+            dataset_name="Declared name",
+            dataset_id="data/set",
+        )
+
+    read_h5ad.assert_not_called()
+
+
+def test_anndata_adapter_rejects_invalid_identity_before_adata_inspection() -> None:
+    adata = mock.Mock()
+    isbacked = mock.PropertyMock(
+        side_effect=AssertionError("AnnData source was inspected")
+    )
+    type(adata).isbacked = isbacked
+
+    with pytest.raises(ValueError, match="dataset_id"):
+        AnnDataAdapter(
+            adata,
+            dataset_name="Declared name",
+            dataset_id="data/set",
+        )
+
+    isbacked.assert_not_called()
+
+
+def test_anndata_adapter_preserves_unicode_human_readable_dataset_name() -> None:
+    adapter = AnnDataAdapter(
+        _adata_with_current_fields(),
+        dataset_name="细胞 atlas 🧬",
+        dataset_id="unicode-name",
+    )
+    try:
+        assert adapter.get_dataset_identity()["name"] == "细胞 atlas 🧬"
+    finally:
+        adapter.close()
 
 
 def test_malformed_explicit_umap_cannot_be_replaced_by_generic_umap() -> None:

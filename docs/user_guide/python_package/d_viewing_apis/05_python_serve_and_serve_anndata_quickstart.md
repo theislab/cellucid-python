@@ -134,7 +134,11 @@ These are forwarded to the `AnnDataAdapter` and affect how your AnnData is inter
 - `gene_id_column`: `None` uses `var.index`; any non-blank string names that
   exact `var` column (default `None`)
 - `normalize_embeddings`: normalize UMAP coordinates to `[-1, 1]` (default `True`)
-- `dataset_name`, `dataset_id`: required exact identity shown/used by the viewer
+- `dataset_name`: required non-empty, unpadded human-readable identity without
+  control characters; Unicode is preserved
+- `dataset_id`: required portable 1–180 character ASCII identity (letter or
+  digit first; then letters, digits, `.`, `_`, or `-`; no trailing `.` or
+  reserved Windows device name)
 - `vector_field_default`: exact default field ID; required when direct AnnData
   declares more than one vector field
 

@@ -191,6 +191,109 @@ def test_community_annotation_docs_distinguish_local_and_portable_sessions() -> 
     assert "consensus_<datasetId>.json" not in (index + ui + author)
 
 
+def test_community_annotation_docs_publish_current_network_and_repository_contract() -> None:
+    index = _read("j_community_annotation/index.md")
+    annotator = _read("j_community_annotation/01_annotator_guide.md")
+    author = _read("j_community_annotation/02_author_guide.md")
+    ui = _read("j_community_annotation/03_ui_reference.md")
+    combined = "\n".join((index, annotator, author, ui))
+    normalized = " ".join(combined.split())
+    author_normalized = " ".join(author.split())
+
+    for exact in (
+        "annotations/config.schema.json",
+        "annotations/moderation/merges.schema.json",
+        "rsync -a --exclude '.git/'",
+        "fails the complete Pull without changing annotation state",
+        "before selecting the raw-cache scope or downloading any user or moderation files",
+        "exactly the same keys as `fieldsToAnnotate`",
+        "There is no UI route override",
+        "Branch protection alone does not select fork + Pull Request",
+        "equal net vote and equal upvote count",
+        "`<fieldKey>:<categoryLabel>` when the field key contains no colon",
+        "`fk~${encodeURIComponent(fieldKey)}:<categoryLabel>`",
+        "`%3A` in the prefixed component",
+        "from urllib.parse import unquote",
+        "`/auth/login`",
+        "`/auth/callback`",
+        "`/auth/user`",
+        "`/auth/installations`",
+        "`/auth/installation-repos`",
+        "`/cap/lookup-cells`",
+        "`/cap/search-datasets`",
+        "`/api/repos/*`",
+        "`ALLOWED_ORIGINS`, `GITHUB_CLIENT_ID`, and `GITHUB_CLIENT_SECRET`",
+        '`{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":1,',
+        "1,000,000 decoded UTF-8 bytes",
+        "10,000 active user files",
+        "64,000,000 aggregate decoded UTF-8 bytes across those user files",
+        "persistent raw-file cache requires IndexedDB",
+        "Cellucid never switches to an in-memory cache",
+        "Only the GitHub identity that created a merge record can edit or delete its note",
+    ):
+        assert exact in author_normalized
+
+    for guide in (annotator, author, ui):
+        guide_normalized = " ".join(guide.split())
+        assert "configured Cellucid Worker" in guide_normalized
+        assert "`/cap/lookup-cells`" in guide_normalized
+        assert "GitHub bearer token and OAuth cookies are not sent to CAP" in guide_normalized
+    assert "`/cap/search-datasets`" not in annotator
+    assert "`/cap/search-datasets`" not in ui
+    assert "`/cap/lookup-cells` or" not in annotator
+    assert "`/cap/lookup-cells` or" not in ui
+    assert "related datasets" not in annotator
+
+    for guide in (index, annotator, author):
+        guide_normalized = " ".join(guide.split())
+        assert "fork + Pull Request only when the repository allows forking" in guide_normalized
+        assert "does not switch to the other route" in guide_normalized
+    assert "without either route, they cannot publish" in normalized
+
+    ui_normalized = " ".join(ui.split())
+    assert "**Name:**" in ui
+    assert "direct browser request to `https://pub.orcid.org`" in ui_normalized
+    assert "at least three Unicode code points" in ui_normalized
+    assert "no surrounding whitespace and at most 240 Unicode code points" in ui_normalized
+    assert "`/v3.0/{id}/person`" in ui_normalized
+    assert "`/v3.0/expanded-search/`" in ui_normalized
+    assert "at most eight results" in ui_normalized
+    assert "60-second per-modal cache" in ui_normalized
+    assert "omits credentials and referrer information" in ui_normalized
+    assert "empty ORCID or an exact checksum-valid ORCID iD" in ui_normalized
+    assert "name text is search input, not a valid saved ORCID iD" in ui_normalized
+    assert "direct vote on the merged target wins" in ui_normalized
+    assert "majority of that user's votes across the merged members" in ui_normalized
+
+    assert 'encoded_field_key = field_key_part[3:]' in author
+    assert '"%3a" in encoded_field_key.lower()' in author
+
+    for stale in (
+        "Cellucid will warn and ignore it",
+        "If a field has no explicit entry in `annotatableSettings`, Cellucid uses defaults",
+        "ties between top net-vote suggestions are always Disputed",
+        "If the top net-vote score is tied across multiple suggestions",
+        "`/api/*` proxy",
+        "`GITHUB_APP_ID`",
+        "`GITHUB_PRIVATE_KEY`",
+        "some UIs may show delegated bundle votes",
+        "Depending on the UI version",
+        "If you do not have push access: Cellucid uses a fork + Pull Request flow",
+        "CAP search sends queries to `https://celltype.info/graphql`",
+        "same-origin Worker",
+        "otherwise memory-only",
+        "otherwise PR flow",
+        "cached in-memory",
+        "downloaded cache may already contain validated remote files",
+        "Validated files are cached before the dataset-field check",
+        "publish to a dedicated “staging” branch",
+    ):
+        assert stale not in normalized
+
+    assert "raw-file cache stores file bodies in IndexedDB and its SHA index" in normalized
+    assert "Raw pulled GitHub file bodies use IndexedDB" in normalized
+
+
 def test_official_sample_state_docs_publish_integrity_verified_static_loading() -> None:
     index = _read("l_sessions_sharing/index.md")
     manual = _read("l_sessions_sharing/03_save_restore_ux.md")

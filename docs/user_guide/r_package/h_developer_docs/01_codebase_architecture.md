@@ -47,6 +47,8 @@ The user-guide docs mirror this structure:
 - Minimal dependencies (only `jsonlite` required).
 - Deterministic, file-based exports.
 - Shared format with the Python exporter.
+- One persistent, package-owned native lock per target prevents concurrent R
+  and Python exporters from splitting a published generation.
 
 ## Adding a new exported artifact (maintainer notes)
 
