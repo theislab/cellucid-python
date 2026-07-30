@@ -48,6 +48,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlparse
 
+from ._console import console_print
 from ._server_base import (
     CELLUCID_WEB_URL,
     DEFAULT_HOST,
@@ -1060,7 +1061,7 @@ class AnnDataServer:
         self._closed = True
 
         if not self.quiet:
-            print("AnnData server stopped")
+            console_print("AnnData server stopped")
         if failures:
             details = "; ".join(f"{type(error).__name__}: {error}" for error in failures)
             raise RuntimeError(f"AnnData server shutdown failed: {details}") from failures[0]

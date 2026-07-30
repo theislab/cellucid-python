@@ -46,6 +46,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse
 
+from ._console import console_print
 from ._server_base import (
     CELLUCID_WEB_URL,
     DEFAULT_HOST,
@@ -1230,7 +1231,7 @@ class CellucidServer:
         self._closed = True
 
         if not self.quiet:
-            print("Server stopped")
+            console_print("Server stopped")
         if failures:
             details = "; ".join(f"{type(error).__name__}: {error}" for error in failures)
             raise RuntimeError(f"Prepared-data server shutdown failed: {details}") from failures[0]

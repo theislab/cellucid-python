@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 # Import shared configuration from _server_base
+from ._console import console_print
 from ._server_base import CELLUCID_WEB_URL, DEFAULT_HOST, DEFAULT_PORT
 
 logger = logging.getLogger("cellucid.cli")
@@ -208,7 +209,7 @@ def _run_serve(args: argparse.Namespace) -> None:
     if not args.quiet:
         from . import __version__
 
-        print(f"cellucid v{__version__}")
+        console_print(f"cellucid v{__version__}")
 
     # Detect format
     data_path = Path(args.data_path)
@@ -260,12 +261,16 @@ def _run_serve(args: argparse.Namespace) -> None:
         if not isinstance(args.dataset_id, str) or not args.dataset_id:
             raise ValueError("--dataset-id is required when serving h5ad or zarr data")
         if not args.quiet:
-            print("\nImporting dependencies (anndata, numpy, scipy)...", end=" ", flush=True)
+            console_print(
+                "\nImporting dependencies (anndata, numpy, scipy)...",
+                end=" ",
+                flush=True,
+            )
 
         from .anndata_server import serve_anndata
 
         if not args.quiet:
-            print("done")
+            console_print("done")
 
         adapter_options = {
             "latent_key": args.latent_key,
@@ -395,14 +400,14 @@ def main(args: list[str] | None = None) -> int:
         parsed_args.func(parsed_args)
         return 0
     except FileNotFoundError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        console_print(f"Error: {e}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
-        print("\nInterrupted by user", file=sys.stderr)
+        console_print("\nInterrupted by user", file=sys.stderr)
         return 130
     except Exception as e:
         logger.exception("Unexpected error")
-        print(f"Error: {e}", file=sys.stderr)
+        console_print(f"Error: {e}", file=sys.stderr)
         return 1
 
 

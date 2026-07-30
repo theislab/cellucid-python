@@ -65,6 +65,7 @@ from urllib.parse import urlparse
 if TYPE_CHECKING:
     import anndata
 
+from ._console import console_print
 from ._server_base import (
     CELLUCID_WEB_URL,
     _extract_web_build_id,
@@ -1403,7 +1404,7 @@ class BaseViewer:
     def display(self):
         """Display the viewer in a notebook cell."""
         if not self._context["in_jupyter"]:
-            print(f"Not in Jupyter environment. Open manually: {self.viewer_url}")
+            console_print(f"Not in Jupyter environment. Open manually: {self.viewer_url}")
             return
 
         from IPython.display import HTML, display

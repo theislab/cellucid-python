@@ -214,6 +214,8 @@ def _leave_dead_export_lock(target: Path) -> None:
 
 
 def _crash_export_at_rename(target: Path, phase: str) -> None:
+    environment = os.environ.copy()
+    environment["PYTHONIOENCODING"] = "cp1252"
     completed = subprocess.run(
         [
             sys.executable,
@@ -270,9 +272,9 @@ def _crash_export_at_rename(target: Path, phase: str) -> None:
             str(target),
             phase,
         ],
-        env=os.environ.copy(),
+        env=environment,
         capture_output=True,
-        text=True,
+        encoding="cp1252",
         timeout=20,
         check=False,
     )
@@ -547,17 +549,80 @@ def test_existing_lock_replaced_during_open_is_not_adopted(
     lock_path.write_bytes(b"")
     real_open = prepare_module._open_export_lock_descriptor
     create_modes: list[bool] = []
+    attempts = 16
 
-    def replace_before_open(
+    for attempt in range(attempts):
+        replacement = tmp_path / f".generation.cellucid.lock.replacement-{attempt}"
+        replacement.write_bytes(b"")
+        replaced = False
+
+        def replace_before_open(
+            path: Path,
+            *,
+            create: bool,
+            expected_stat: os.stat_result | None,
+            replacement_path: Path = replacement,
+        ):
+            nonlocal replaced
+            create_modes.append(create)
+            if path == lock_path and not create and not replaced:
+                os.replace(replacement_path, path)
+                replaced = True
+            return real_open(
+                path,
+                create=create,
+                expected_stat=expected_stat,
+            )
+
+        with monkeypatch.context() as race_patch:
+            race_patch.setattr(
+                prepare_module,
+                "_open_export_lock_descriptor",
+                replace_before_open,
+            )
+            with (
+                pytest.raises(RuntimeError, match="changed while establishing ownership"),
+                prepare_module._exclusive_export_generation(target),
+            ):
+                raise AssertionError("recreated lock unexpectedly entered")
+        assert replaced
+        assert not replacement.exists()
+
+    assert create_modes == [False] * attempts
+    assert lock_path.is_file()
+    assert not target.exists()
+    with prepare_module._exclusive_export_generation(target):
+        pass
+    _assert_only_persistent_lock(tmp_path, target.name)
+
+
+def test_same_inode_lock_mutation_during_open_is_not_adopted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import cellucid.prepare_data as prepare_module
+
+    target = tmp_path / "generation"
+    lock_path = tmp_path / ".generation.cellucid.lock"
+    lock_path.write_bytes(b"")
+    inspected_stat = lock_path.lstat()
+    inspected_generation = prepare_module._export_lock_generation(inspected_stat)
+    real_open = prepare_module._open_export_lock_descriptor
+    mutated = False
+
+    def mutate_before_open(
         path: Path,
         *,
         create: bool,
         expected_stat: os.stat_result | None,
-    ) -> int:
-        create_modes.append(create)
-        if path == lock_path and not create:
-            path.unlink()
-            path.write_bytes(b"")
+    ):
+        nonlocal mutated
+        if path == lock_path and not create and not mutated:
+            path.write_bytes(b"same inode, different generation")
+            mutated = True
+            assert path.stat().st_dev == inspected_stat.st_dev
+            assert path.stat().st_ino == inspected_stat.st_ino
+            assert prepare_module._export_lock_generation(path.stat()) != inspected_generation
         return real_open(
             path,
             create=create,
@@ -568,17 +633,61 @@ def test_existing_lock_replaced_during_open_is_not_adopted(
         race_patch.setattr(
             prepare_module,
             "_open_export_lock_descriptor",
-            replace_before_open,
+            mutate_before_open,
         )
         with (
             pytest.raises(RuntimeError, match="changed while establishing ownership"),
             prepare_module._exclusive_export_generation(target),
         ):
-            raise AssertionError("recreated lock unexpectedly entered")
+            raise AssertionError("mutated lock unexpectedly entered")
 
-    assert create_modes == [False]
+    assert mutated
+    assert lock_path.read_bytes() == b"same inode, different generation"
+    lock_path.write_bytes(b"")
+    with prepare_module._exclusive_export_generation(target):
+        pass
+    _assert_only_persistent_lock(tmp_path, target.name)
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows denies replacing the opened lock path at this boundary",
+)
+def test_lock_replaced_after_os_acquisition_is_rejected_before_entry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import cellucid.prepare_data as prepare_module
+
+    target = tmp_path / "generation"
+    lock_path = tmp_path / ".generation.cellucid.lock"
+    replacement = tmp_path / ".generation.cellucid.lock.replacement"
+    lock_path.write_bytes(b"")
+    replacement.write_bytes(b"")
+    real_acquire = prepare_module._acquire_export_lock_descriptor
+    replaced = False
+
+    def replace_after_acquire(descriptor: int) -> None:
+        nonlocal replaced
+        real_acquire(descriptor)
+        os.replace(replacement, lock_path)
+        replaced = True
+
+    with monkeypatch.context() as race_patch:
+        race_patch.setattr(
+            prepare_module,
+            "_acquire_export_lock_descriptor",
+            replace_after_acquire,
+        )
+        with (
+            pytest.raises(RuntimeError, match="changed while establishing ownership"),
+            prepare_module._exclusive_export_generation(target),
+        ):
+            raise AssertionError("replaced lock unexpectedly entered")
+
+    assert replaced
     assert lock_path.is_file()
-    assert not target.exists()
+    assert not replacement.exists()
     with prepare_module._exclusive_export_generation(target):
         pass
     _assert_only_persistent_lock(tmp_path, target.name)

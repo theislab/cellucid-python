@@ -34,7 +34,7 @@ from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from numbers import Integral, Real
 from pathlib import Path
-from typing import Any, BinaryIO, Literal, cast
+from typing import Any, BinaryIO, Literal, NamedTuple, cast
 
 if sys.platform == "win32":
     import msvcrt
@@ -47,6 +47,7 @@ import tqdm
 from scipy import sparse
 
 from ._compression import open_deterministic_gzip_writer
+from ._console import console_print
 from .connectivity_contract import (
     CONNECTIVITY_BINARY_DIRNAME,
     CONNECTIVITY_MANIFEST_FILENAME,
@@ -85,6 +86,25 @@ _EXPORT_LOCK_REGISTRY_PID = os.getpid()
 _EXPORT_TRANSACTION_FORMAT = "cellucid-export-transaction"
 _EXPORT_TRANSACTION_VERSION = 1
 _EXPORT_TRANSACTION_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$", flags=re.ASCII)
+
+
+class _ExportLockGeneration(NamedTuple):
+    """Stable metadata used to distinguish reused lock-file identities."""
+
+    device: int
+    inode: int
+    mode: int
+    link_count: int
+    owner: int
+    group: int
+    size: int
+    modified_ns: int
+    changed_ns: int
+    birth_ns: int | None
+    filesystem_generation: int
+    flags: int
+    file_attributes: int
+    reparse_tag: int
 
 
 def _acquire_export_lock_registry_before_fork() -> None:
@@ -835,6 +855,38 @@ def _publish_export_generation(
     _remove_export_control_file(journal_path)
 
 
+def _export_lock_generation(path_stat: os.stat_result) -> _ExportLockGeneration:
+    """Capture identity plus mutation metadata for one inspected lock file.
+
+    Device and inode alone are insufficient: filesystems may immediately reuse
+    an inode after an unlink/create race. Change, birth, and filesystem
+    generation metadata distinguish that replacement where the platform
+    exposes them, while size and modification metadata also detect same-inode
+    mutation between inspection and acquisition.
+    """
+    birth_ns_value = getattr(path_stat, "st_birthtime_ns", None)
+    if birth_ns_value is None:
+        birth_seconds = getattr(path_stat, "st_birthtime", None)
+        if birth_seconds is not None:
+            birth_ns_value = round(float(birth_seconds) * 1_000_000_000)
+    return _ExportLockGeneration(
+        device=int(path_stat.st_dev),
+        inode=int(path_stat.st_ino),
+        mode=int(path_stat.st_mode),
+        link_count=int(path_stat.st_nlink),
+        owner=int(getattr(path_stat, "st_uid", 0)),
+        group=int(getattr(path_stat, "st_gid", 0)),
+        size=int(path_stat.st_size),
+        modified_ns=int(path_stat.st_mtime_ns),
+        changed_ns=int(path_stat.st_ctime_ns),
+        birth_ns=int(birth_ns_value) if birth_ns_value is not None else None,
+        filesystem_generation=int(getattr(path_stat, "st_gen", 0)),
+        flags=int(getattr(path_stat, "st_flags", 0)),
+        file_attributes=int(getattr(path_stat, "st_file_attributes", 0)),
+        reparse_tag=int(getattr(path_stat, "st_reparse_tag", 0)),
+    )
+
+
 def _canonical_export_lock_key(lock_path: Path) -> str:
     """Return one process-local identity for path aliases to a lock inode."""
     return os.path.normcase(os.path.realpath(os.fspath(lock_path)))
@@ -842,7 +894,7 @@ def _canonical_export_lock_key(lock_path: Path) -> str:
 
 def _open_and_reserve_process_export_lock(
     lock_path: Path,
-) -> tuple[str, int] | None:
+) -> tuple[str, int, _ExportLockGeneration] | None:
     """Open a lock path only after excluding same-process inode aliases."""
     global _EXPORT_LOCK_REGISTRY_PID
 
@@ -886,7 +938,7 @@ def _open_and_reserve_process_export_lock(
         create_lock_file = path_stat is None
         try:
             try:
-                descriptor = _open_export_lock_descriptor(
+                descriptor, generation = _open_export_lock_descriptor(
                     lock_path,
                     create=create_lock_file,
                     expected_stat=path_stat,
@@ -895,7 +947,7 @@ def _open_and_reserve_process_export_lock(
                 if not create_lock_file:
                     raise
                 raced_path_stat = os.lstat(lock_path)
-                descriptor = _open_export_lock_descriptor(
+                descriptor, generation = _open_export_lock_descriptor(
                     lock_path,
                     create=False,
                     expected_stat=raced_path_stat,
@@ -905,7 +957,7 @@ def _open_and_reserve_process_export_lock(
                 f"Export lock path changed while establishing ownership: {lock_path}"
             ) from error
         _EXPORT_LOCK_REGISTRY[lock_key] = (lock_path, descriptor)
-        return lock_key, descriptor
+        return lock_key, descriptor, generation
 
 
 def _release_process_export_lock(
@@ -923,9 +975,9 @@ def _validate_export_lock_descriptor(
     lock_path: Path,
     descriptor: int,
     *,
-    expected_stat: os.stat_result | None,
-) -> None:
-    """Require one descriptor to retain the inspected coordination inode."""
+    expected_generation: _ExportLockGeneration | None,
+) -> _ExportLockGeneration:
+    """Require one descriptor to retain the inspected lock-file generation."""
     descriptor_stat = os.fstat(descriptor)
     try:
         path_stat = os.lstat(lock_path)
@@ -937,11 +989,11 @@ def _validate_export_lock_descriptor(
         getattr(path_stat, "st_file_attributes", 0)
         & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
     )
-    descriptor_identity = (descriptor_stat.st_dev, descriptor_stat.st_ino)
-    path_identity = (path_stat.st_dev, path_stat.st_ino)
-    if expected_stat is not None and descriptor_identity != (
-        expected_stat.st_dev,
-        expected_stat.st_ino,
+    descriptor_generation = _export_lock_generation(descriptor_stat)
+    path_generation = _export_lock_generation(path_stat)
+    if (
+        (expected_generation is not None and descriptor_generation != expected_generation)
+        or descriptor_generation != path_generation
     ):
         raise RuntimeError(f"Export lock path changed while establishing ownership: {lock_path}")
     if (
@@ -950,11 +1002,11 @@ def _validate_export_lock_descriptor(
         or path_stat.st_nlink != 1
         or stat.S_ISLNK(path_stat.st_mode)
         or is_windows_reparse_point
-        or descriptor_identity != path_identity
     ):
         raise RuntimeError(
             f"Export lock path must identify one non-linked regular non-symbolic file: {lock_path}"
         )
+    return descriptor_generation
 
 
 def _open_export_lock_descriptor(
@@ -962,7 +1014,7 @@ def _open_export_lock_descriptor(
     *,
     create: bool,
     expected_stat: os.stat_result | None,
-) -> int:
+) -> tuple[int, _ExportLockGeneration]:
     """Open one persistent, empty, non-symbolic regular coordination file."""
     if lock_path.is_symlink():
         raise RuntimeError(f"Export lock path must not be a symbolic link: {lock_path}")
@@ -974,10 +1026,12 @@ def _open_export_lock_descriptor(
     flags |= getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(lock_path, flags, 0o600)
     try:
-        _validate_export_lock_descriptor(
+        generation = _validate_export_lock_descriptor(
             lock_path,
             descriptor,
-            expected_stat=expected_stat,
+            expected_generation=(
+                _export_lock_generation(expected_stat) if expected_stat is not None else None
+            ),
         )
     except BaseException as error:
         try:
@@ -988,7 +1042,7 @@ def _open_export_lock_descriptor(
                 f"{type(close_error).__name__}: {close_error}"
             )
         raise
-    return descriptor
+    return descriptor, generation
 
 
 def _acquire_export_lock_descriptor(descriptor: int) -> None:
@@ -1027,7 +1081,7 @@ def _exclusive_export_generation(target_dir: Path) -> Iterator[None]:
     if reservation is None:
         raise RuntimeError(f"An export generation is already active for {target_dir}.")
 
-    lock_key, descriptor = reservation
+    lock_key, descriptor, opened_generation = reservation
     owner_pid = os.getpid()
     descriptor_locked = False
     try:
@@ -1043,7 +1097,7 @@ def _exclusive_export_generation(target_dir: Path) -> Iterator[None]:
         _validate_export_lock_descriptor(
             lock_path,
             descriptor,
-            expected_stat=None,
+            expected_generation=opened_generation,
         )
         yield
     finally:
@@ -1725,24 +1779,26 @@ def _prepare_generation(
     default_dimension = max(available_dimensions)
 
     # Print export settings summary
-    print("=" * 60)
-    print("Export Settings:")
-    print(f"  Output directory: {_published_out_dir}")
-    print(f"  Compression: {'gzip level ' + str(compression) if compression else 'disabled'}")
-    print(
+    console_print("=" * 60)
+    console_print("Export Settings:")
+    console_print(f"  Output directory: {_published_out_dir}")
+    console_print(
+        f"  Compression: {'gzip level ' + str(compression) if compression else 'disabled'}"
+    )
+    console_print(
         f"  Var (gene) quantization: {str(var_quantization) + '-bit' if var_quantization else 'disabled (float32)'}"
     )
-    print(
+    console_print(
         f"  Obs continuous quantization: {str(obs_continuous_quantization) + '-bit' if obs_continuous_quantization else 'disabled (float32)'}"
     )
-    print(f"  Obs categorical dtype: {obs_categorical_dtype}")
-    print(f"  Available dimensions: {available_dimensions}")
-    print(f"  Default dimension: {default_dimension}D")
-    print("  Coordinate normalization (per-dimension, aspect-ratio preserved):")
+    console_print(f"  Obs categorical dtype: {obs_categorical_dtype}")
+    console_print(f"  Available dimensions: {available_dimensions}")
+    console_print(f"  Default dimension: {default_dimension}D")
+    console_print("  Coordinate normalization (per-dimension, aspect-ratio preserved):")
     for dim in sorted(normalization_info.keys()):
         info = normalization_info[dim]
-        print(f"    {dim}D: range {info['original_range']:.2f} → [-1, 1]")
-    print("=" * 60)
+        console_print(f"    {dim}D: range {info['original_range']:.2f} → [-1, 1]")
+    console_print("=" * 60)
 
     # Validate and convert latent space
     if latent_space is None:
@@ -1991,7 +2047,7 @@ def _prepare_generation(
         if _output_path_is_writable(check_path, check_path.name):
             actual_path = _write_binary(dim_path, arr, compression)
             suffix = " (gzip)" if compression else ""
-            print(
+            console_print(
                 f"✓ Wrote {dim}D positions ({arr.shape[0]:,} cells × {dim} dims) "
                 f"to {published_path(actual_path)}{suffix}"
             )
@@ -2010,7 +2066,7 @@ def _prepare_generation(
                 if _output_path_is_writable(check_path, check_path.name):
                     actual_path = _write_binary(path, vectors, compression)
                     suffix = " (gzip)" if compression else ""
-                    print(
+                    console_print(
                         f"✓ Wrote vector field '{field_id}' {dimension}D "
                         f"({vectors.shape[0]:,} cells × {dimension} comps) "
                         f"to {published_path(actual_path)}{suffix}"
@@ -2256,7 +2312,7 @@ def _prepare_generation(
         obs_manifest_path.write_text(json.dumps(obs_manifest_payload), encoding="utf-8")
 
         total_fields = len(obs_continuous_fields) + len(obs_categorical_fields)
-        print(
+        console_print(
             f"✓ Wrote obs manifest ({total_fields} fields: {len(obs_continuous_fields)} continuous, "
             f"{len(obs_categorical_fields)} categorical) "
             f"to {published_path(obs_manifest_path)} "
@@ -2405,12 +2461,12 @@ def _prepare_generation(
 
             compression_info = f", gzip level {compression}" if compression else ""
             quant_info = f", {var_quantization}-bit quantized" if var_quantization else ""
-            print(
+            console_print(
                 f"✓ Wrote var manifest ({len(var_manifest_fields)} genes{quant_info}{compression_info}) "
                 f"to {published_path(var_manifest_path)}"
             )
     else:
-        print("INFO: Gene expression was not requested; no var artifact was emitted.")
+        console_print("INFO: Gene expression was not requested; no var artifact was emitted.")
 
     # Process connectivity data if provided
     # GPU-optimized edge format for instanced rendering
@@ -2467,14 +2523,14 @@ def _prepare_generation(
                 json.dumps(connectivity_manifest_payload), encoding="utf-8"
             )
 
-            print(
+            console_print(
                 f"✓ Wrote connectivity ({connectivity_edges.n_edges:,} edges, "
                 f"max {connectivity_edges.max_neighbors} neighbors/cell, "
                 f"{connectivity_edges.index_dtype}) "
                 f"to {published_path(connectivity_binary_dir)}"
             )
     else:
-        print("INFO: Connectivity was not requested; no connectivity artifact was emitted.")
+        console_print("INFO: Connectivity was not requested; no connectivity artifact was emitted.")
 
     # =========================================================================
     # Generate dataset_identity.json (metadata for multi-dataset support)
@@ -2544,7 +2600,7 @@ def _prepare_generation(
         identity_payload["vector_fields"] = vector_fields_identity
 
     identity_path.write_text(json.dumps(identity_payload, indent=2), encoding="utf-8")
-    print(f"✓ Wrote dataset identity to {published_path(identity_path)}")
+    console_print(f"✓ Wrote dataset identity to {published_path(identity_path)}")
 
 
 def prepare(
@@ -2728,7 +2784,7 @@ def generate_datasets_manifest(
         label="default_dataset",
     )
 
-    print(f"Scanning {exports_dir} for datasets...")
+    console_print(f"Scanning {exports_dir} for datasets...")
 
     datasets: list[dict[str, object]] = []
     dataset_ids: set[str] = set()
@@ -2812,7 +2868,7 @@ def generate_datasets_manifest(
             dataset_entry[count_key] = count
 
         datasets.append(dataset_entry)
-        print(f"  ✓ Found dataset: {dataset_entry['name']} ({dataset_entry['id']})")
+        console_print(f"  ✓ Found dataset: {dataset_entry['name']} ({dataset_entry['id']})")
 
     if not datasets:
         raise ValueError(f"Exports directory contains no datasets: {exports_dir}")
@@ -2842,7 +2898,7 @@ def generate_datasets_manifest(
             temporary_path.unlink()
         raise
 
-    print(f"✓ Wrote datasets manifest with {len(datasets)} datasets to {manifest_path}")
-    print(f"  Default dataset: {default_dataset}")
+    console_print(f"✓ Wrote datasets manifest with {len(datasets)} datasets to {manifest_path}")
+    console_print(f"  Default dataset: {default_dataset}")
 
     return manifest_path

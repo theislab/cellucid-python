@@ -26,6 +26,8 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, cast
 
+from ._console import console_print
+
 if TYPE_CHECKING:
     from http.client import HTTPMessage
 
@@ -245,31 +247,31 @@ def cancel_session_bundle_request(
 
 def print_step(step: int, total: int, title: str):
     """Print a step header like [1/4] Title..."""
-    print(f"\n[{step}/{total}] {title}...")
+    console_print(f"\n[{step}/{total}] {title}...")
 
 
 def print_detail(label: str, value: str):
     """Print an indented detail line."""
-    print(f"      {label}: {value}")
+    console_print(f"      {label}: {value}")
 
 
 def print_success(message: str = "Done"):
     """Print a success indicator with checkmark."""
-    print(f"      ✓ {message}")
+    console_print(f"      ✓ {message}")
 
 
 def print_server_banner(url: str, viewer_url: str):
     """Print the final server ready banner."""
-    print(f"\n{'═' * 60}")
-    print("  CELLUCID SERVER RUNNING")
-    print(f"{'═' * 60}")
-    print()
-    print(f"  Local URL:    {url}")
-    print(f"  Viewer URL:   {viewer_url}")
-    print()
-    print("  Press Ctrl+C to stop")
-    print()
-    print(f"{'═' * 60}")
+    console_print(f"\n{'═' * 60}")
+    console_print("  CELLUCID SERVER RUNNING")
+    console_print(f"{'═' * 60}")
+    console_print()
+    console_print(f"  Local URL:    {url}")
+    console_print(f"  Viewer URL:   {viewer_url}")
+    console_print()
+    console_print("  Press Ctrl+C to stop")
+    console_print()
+    console_print(f"{'═' * 60}")
 
 
 class _ViewerNotRegisteredError(LookupError):

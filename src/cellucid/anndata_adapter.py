@@ -1386,7 +1386,7 @@ class AnnDataAdapter:
                 # Only do this for in-memory data (not backed files)
                 if self._X_csc_cache is None:
                     logger.info(
-                        f"Converting CSR matrix ({X.shape[0]:,}×{X.shape[1]:,}, "
+                        f"Converting CSR matrix ({X.shape[0]:,}x{X.shape[1]:,}, "
                         f"{X.nnz:,} non-zeros) to CSC for efficient column access"
                     )
                     self._X_csc_cache = X.tocsc()
