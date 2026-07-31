@@ -48,46 +48,59 @@ my_export/
   points_2d.bin(.gz)                   # optional
   points_3d.bin(.gz)                   # optional
   obs/
-    <field>.values.f32(.gz)            # continuous, not quantized
-    <field>.values.u8(.gz)             # continuous, quantized 8-bit
-    <field>.values.u16(.gz)            # continuous, quantized 16-bit
-    <field>.codes.u8(.gz)              # categorical codes
-    <field>.codes.u16(.gz)
-    <field>.outliers.f32(.gz)          # per-cell outlier quantiles (latent space)
-    <field>.outliers.u8(.gz)           # quantized outliers (if enabled)
-    <field>.outliers.u16(.gz)
+    <index>.values.f32(.gz)            # continuous, not quantized
+    <index>.values.u8(.gz)             # continuous, quantized 8-bit
+    <index>.values.u16(.gz)            # continuous, quantized 16-bit
+    <index>.codes.u8(.gz)              # categorical codes
+    <index>.codes.u16(.gz)
+    <index>.outliers.f32(.gz)          # per-cell outlier quantiles (latent space)
+    <index>.outliers.u8(.gz)           # quantized outliers (if enabled)
+    <index>.outliers.u16(.gz)
   var/
-    <gene>.values.f32(.gz)             # gene expression, not quantized
-    <gene>.values.u8(.gz)              # quantized gene expression
-    <gene>.values.u16(.gz)
+    <index>.values.f32(.gz)            # gene expression, not quantized
+    <index>.values.u8(.gz)             # quantized gene expression
+    <index>.values.u16(.gz)
   connectivity/
     edges.src.bin(.gz)                 # integer indices
     edges.dst.bin(.gz)
     edges.weights.f64.bin(.gz)         # little-endian Float64 weights
   vectors/
-    <field_id>_1d.bin(.gz)
-    <field_id>_2d.bin(.gz)
-    <field_id>_3d.bin(.gz)
+    <index>_1d.bin(.gz)
+    <index>_2d.bin(.gz)
+    <index>_3d.bin(.gz)
 ```
 
 Notes:
-- `<field>` and `<gene>` are exact portable identifiers validated before
-  publication (see below).
+- `<index>` is the field's own payload index, a plain unpadded decimal integer
+  in `0 … N-1` (see below). No payload filename contains an identifier.
 - `.gz` files are **raw gzip files** (the viewer decompresses them; servers typically do not set `Content-Encoding` for these).
 
 ---
 
-## Exact portable identifiers
+## Payload indices and identifiers
 
-`prepare` does not sanitize contract identifiers. Observation keys, gene IDs,
-dataset IDs, and vector-field IDs must already be 1–180-byte portable ASCII
-filename components: they start with a letter or digit, contain only letters,
-digits, `.`, `_`, or `-`, do not end with `.`, are not dot segments or Windows
-device names, and are unique under case-insensitive comparison.
+Payload filenames are integer indices, so an identifier is never a path.
 
-The exact validated identifier is used in both the manifest and path. Any
-unsafe identifier or collision rejects the complete candidate before
-publication.
+Within one axis directory the indices are exactly `0 … N-1`, each used once,
+assigned by position in the exported selection. `obs` shares that one space
+across `_continuousFields` and `_categoricalFields`, because both write into
+`obs/`. Both writers assert this against the manifest they have just built and
+re-derive every declared payload path to compare it against the directory they
+actually wrote; a mismatch rejects the complete candidate before publication.
+
+Because it is not a path, an identifier carries no filename rule. `prepare`
+still requires each exported observation key, gene name, and vector-field id to
+be a non-empty string, distinct within its axis, and drawable exactly as stored
+(no control characters, no `U+200B`/`U+2060`/`U+FEFF`, no leading or trailing
+whitespace) — the rule string category labels obey, since all of them are drawn
+in the same legend. Nothing is ever sanitized: an identifier that breaks the
+rule rejects the complete candidate before publication.
+
+`dataset_id` is the exception. It names a real directory in a multi-dataset
+export root and in a served URL, so it remains a 1–180-byte portable ASCII
+filename component: it starts with a letter or digit, contains only letters,
+digits, `.`, `_`, or `-`, does not end with `.`, and is not a Windows device
+name.
 
 The contract is scoped to the identifiers that become paths. `obs_keys` and
 `gene_identifiers` narrow what is exported and narrow this contract with it, so
@@ -134,13 +147,13 @@ Unless stated otherwise:
 - shape: `(n_cells, dim)`
 - value range: normalized to approximately `[-1, 1]`
 
-### `vectors/<field_id>_<dim>d.bin`
+### `vectors/<index>_<dim>d.bin`
 
 - dtype: `float32`
 - shape: `(n_cells, dim)`
 - scaled into the same normalized coordinate system as the points
 
-### `obs/<field>.values.*`
+### `obs/<index>.values.*`
 
 Continuous field values, either:
 
@@ -152,9 +165,14 @@ Quantized encoding:
   undefined categorical outlier quantile):
   - u8: `255` is missing; `0..254` are valid quantized values
   - u16: `65535` is missing; `0..65534` are valid quantized values
-- manifests store `minValue` and `maxValue` for dequantization
+- manifests store `minValue` and `maxValue` for dequantization, with
+  `minValue <= maxValue`
+- a field whose values are all the same is the format's constant case:
+  `minValue == maxValue` and every code `0`, decoded by returning `minValue`
+  directly. See
+  {ref}`How a quantized continuous payload decodes <python_package-quantized-continuous-payloads>`.
 
-### `obs/<field>.codes.*`
+### `obs/<index>.codes.*`
 
 Categorical codes:
 - dtype: `uint8` or `uint16`
@@ -162,13 +180,13 @@ Categorical codes:
   - `0..(n_categories-1)` are category indices
   - missing marker is stored in the manifest (255 or 65535)
 
-### `obs/<field>.outliers.*`
+### `obs/<index>.outliers.*`
 
 Per-cell outlier quantiles computed in latent space:
 - either `float32` or quantized `uint8/uint16`
 - same missing-marker rules for quantized variants
 
-### `var/<gene>.values.*`
+### `var/<index>.values.*`
 
 Gene expression values (one file per gene):
 - either `float32` or quantized `uint8/uint16`
@@ -294,13 +312,14 @@ from pathlib import Path
 export_dir = Path("my_export")
 obs_manifest = json.loads((export_dir / "obs_manifest.json").read_text("utf-8"))
 
-# Find one categorical field entry
+# Find one categorical field entry: [index, key, categories, dtype, ...]
 field = obs_manifest["_categoricalFields"][0]
-key = field[0]
-codes_dtype = field[2]  # "uint8" or "uint16"
+payload_index = field[0]
+key = field[1]
+codes_dtype = field[3]  # "uint8" or "uint16"
 codes_ext = "u8" if codes_dtype == "uint8" else "u16"
 
-path = export_dir / "obs" / f"{key}.codes.{codes_ext}"
+path = export_dir / "obs" / f"{payload_index}.codes.{codes_ext}"
 raw = gzip.open(str(path) + ".gz", "rb").read() if (path.with_suffix(path.suffix + ".gz")).exists() else path.read_bytes()
 codes = np.frombuffer(raw, dtype=np.uint8 if codes_ext == "u8" else np.uint16)
 ```

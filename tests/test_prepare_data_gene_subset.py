@@ -77,8 +77,10 @@ def test_identity_gene_count_matches_exported_var_subset(
     var_manifest = json.loads((tmp_path / "var_manifest.json").read_text(encoding="utf-8"))
     identity = json.loads((tmp_path / "dataset_identity.json").read_text(encoding="utf-8"))
 
-    assert var_manifest["fields"] == [["gene_c"], ["gene_a"]]
+    assert var_manifest["fields"] == [[0, "gene_c"], [1, "gene_a"]]
     assert identity["stats"]["n_genes"] == len(var_manifest["fields"]) == 2
+    # The payload index is the position in the exported subset, never the var row.
+    assert _exported_gene_payloads(tmp_path) == ["0.values.f32", "1.values.f32"]
 
 
 @pytest.mark.parametrize(
@@ -176,90 +178,64 @@ def _exported_gene_payloads(export_dir):
 
 
 @pytest.mark.parametrize(
-    ("unexported_id", "defect"),
-    [
-        ("HLA-DRB1/2", "unsafe character"),
-        ("CON", "reserved Windows device name"),
-        ("trailing.", "trailing dot"),
-    ],
-    ids=["slash", "windows-device", "trailing-dot"],
+    "gene_name",
+    ["HLA-DRB1/2", "CON", "trailing.", "細胞", "A" * 400],
+    ids=["slash", "windows-device", "trailing-dot", "unicode", "long"],
 )
-def test_unexported_gene_ids_are_not_validated_as_payload_paths(
+def test_a_real_gene_name_is_never_rejected_for_being_an_unusable_filename(
     tmp_path,
-    unexported_id,
-    defect,
+    gene_name,
 ):
-    """A gene left out by gene_identifiers= names no file, so it names no rule.
+    """Payload files are named by index, so no gene name has to survive a path.
 
-    Filename portability is a property of the payload path, and obs_keys=
-    already narrows which observation keys are held to it. Rejecting a var row
-    that is never written would fail an export whose every published path is
-    valid, purely because of a gene the caller deselected.
+    Every rejection here was a filename rule: an unsafe character, a reserved
+    Windows device name, a trailing dot, a byte budget. ``HLA-DRB1/2`` is a real
+    HGNC symbol and ``CON`` is a real gene, and neither ever reaches a path now.
     """
     _prepare_gene_export(
         tmp_path,
-        var=pd.DataFrame(index=["gene_a", unexported_id, "gene_c"]),
-        gene_identifiers=["gene_a", "gene_c"],
+        var=pd.DataFrame(index=["gene_a", gene_name, "gene_c"]),
+        gene_identifiers=["gene_a", gene_name],
     )
 
-    assert _exported_gene_payloads(tmp_path) == [
-        "gene_a.values.f32",
-        "gene_c.values.f32",
-    ], defect
+    var_manifest = json.loads((tmp_path / "var_manifest.json").read_text(encoding="utf-8"))
+    assert var_manifest["fields"] == [[0, "gene_a"], [1, gene_name]]
+    assert _exported_gene_payloads(tmp_path) == ["0.values.f32", "1.values.f32"]
 
 
-def test_case_insensitive_collision_outside_the_exported_subset_is_allowed(tmp_path):
+def test_case_distinct_gene_names_are_two_distinct_exported_fields(tmp_path):
+    """'GENE_B' and 'gene_b' are two genes, and now two payloads, not a collision."""
     _prepare_gene_export(
         tmp_path,
         var=pd.DataFrame(index=["gene_a", "GENE_B", "gene_b"]),
-        gene_identifiers=["gene_a", "gene_b"],
+        gene_identifiers=["GENE_B", "gene_b"],
     )
 
-    assert _exported_gene_payloads(tmp_path) == [
-        "gene_a.values.f32",
-        "gene_b.values.f32",
-    ]
+    var_manifest = json.loads((tmp_path / "var_manifest.json").read_text(encoding="utf-8"))
+    assert var_manifest["fields"] == [[0, "GENE_B"], [1, "gene_b"]]
+    assert _exported_gene_payloads(tmp_path) == ["0.values.f32", "1.values.f32"]
 
 
-def test_unexported_row_of_the_selected_gene_id_column_is_not_validated(tmp_path):
+def test_an_undrawable_exported_gene_name_is_still_rejected(tmp_path):
+    """The one rule a name still owes: it must read as the value it stores."""
+    with pytest.raises(ValueError, match="displayed verbatim"):
+        _prepare_gene_export(
+            tmp_path,
+            var=pd.DataFrame(index=["gene_a", "gene_b ", "gene_c"]),
+            gene_identifiers=["gene_a", "gene_b "],
+        )
+
+
+def test_an_undrawable_unexported_gene_name_reaches_no_manifest_and_no_rule(tmp_path):
+    """A var row left out by gene_identifiers= is never drawn, so it is never checked."""
     _prepare_gene_export(
         tmp_path,
-        var=pd.DataFrame(
-            {"gene_id": ["gene_a", "HLA-DRB1/2", "gene_c"]},
-            index=["row_a", "row_b", "row_c"],
-        ),
-        var_gene_id_column="gene_id",
+        var=pd.DataFrame(index=["gene_a", "gene_b ", "gene_c"]),
         gene_identifiers=["gene_a", "gene_c"],
     )
 
-    assert _exported_gene_payloads(tmp_path) == [
-        "gene_a.values.f32",
-        "gene_c.values.f32",
-    ]
-
-
-def test_exported_gene_ids_are_still_validated_as_payload_paths(tmp_path):
-    with pytest.raises(
-        ValueError,
-        match=r"Gene key 'HLA-DRB1/2' must be 1-180 ASCII bytes",
-    ):
-        _prepare_gene_export(
-            tmp_path,
-            var=pd.DataFrame(index=["gene_a", "HLA-DRB1/2", "gene_c"]),
-            gene_identifiers=["gene_a", "HLA-DRB1/2"],
-        )
-
-
-def test_case_insensitive_collision_inside_the_exported_subset_is_rejected(tmp_path):
-    with pytest.raises(
-        ValueError,
-        match="collide case-insensitively at one payload path",
-    ):
-        _prepare_gene_export(
-            tmp_path,
-            var=pd.DataFrame(index=["gene_a", "GENE_B", "gene_b"]),
-            gene_identifiers=["GENE_B", "gene_b"],
-        )
+    var_manifest = json.loads((tmp_path / "var_manifest.json").read_text(encoding="utf-8"))
+    assert var_manifest["fields"] == [[0, "gene_a"], [1, "gene_c"]]
 
 
 def test_unexported_duplicate_var_identifiers_are_still_rejected(tmp_path):
@@ -291,7 +267,7 @@ def test_none_selects_var_index_and_literal_index_selects_the_column(tmp_path):
         (index_export / "var_manifest.json").read_text(encoding="utf-8")
     )
     assert index_manifest["var_gene_id_column"] is None
-    assert index_manifest["fields"] == [["row_a"], ["row_b"], ["row_c"]]
+    assert index_manifest["fields"] == [[0, "row_a"], [1, "row_b"], [2, "row_c"]]
 
     column_export = tmp_path / "literal-index-column"
     _prepare_gene_export(column_export, var=var, var_gene_id_column="index")
@@ -299,7 +275,7 @@ def test_none_selects_var_index_and_literal_index_selects_the_column(tmp_path):
         (column_export / "var_manifest.json").read_text(encoding="utf-8")
     )
     assert column_manifest["var_gene_id_column"] == "index"
-    assert column_manifest["fields"] == [["column_a"], ["column_b"], ["column_c"]]
+    assert column_manifest["fields"] == [[0, "column_a"], [1, "column_b"], [2, "column_c"]]
 
 
 def test_existing_var_manifest_must_match_requested_subset(tmp_path):

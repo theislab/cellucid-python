@@ -19,11 +19,15 @@ Minimal export (no gene expression, no connectivity):
   obs_manifest.json
   dataset_identity.json
   obs/
-    <field>.values.f32
-    <field>.codes.u8
-    <field>.outliers.f32
+    0.values.f32
+    1.codes.u8
+    1.outliers.f32
     ...
 ```
+
+Payload files are named by an **integer index**, not by the field or gene they
+hold. The JSON manifest beside them is what says which field each index belongs
+to, so nothing in a filename depends on your column names or gene names.
 
 If you include gene expression and connectivities, you will also see:
 
@@ -31,7 +35,8 @@ If you include gene expression and connectivities, you will also see:
 <out_dir>/
   var_manifest.json
   var/
-    <gene>.values.f32
+    0.values.f32
+    1.values.f32
     ...
   connectivity_manifest.json
   connectivity/
@@ -45,8 +50,8 @@ If you include vector fields (velocity/displacement):
 ```
 <out_dir>/
   vectors/
-    <field>_2d.bin
-    <field>_3d.bin
+    0_2d.bin
+    0_3d.bin
     ...
 ```
 
@@ -65,7 +70,8 @@ This export format optimizes for:
 
 The biggest design consequence is:
 
-> Gene expression is stored as **one file per gene** (`var/<gene>.values.*`).
+> Gene expression is stored as **one file per gene** (`var/<index>.values.*`),
+> where `<index>` is the gene's position in `var_manifest.json`.
 
 That makes gene lookup simple in the browser, but it can create tens of thousands of files for typical datasets.
 

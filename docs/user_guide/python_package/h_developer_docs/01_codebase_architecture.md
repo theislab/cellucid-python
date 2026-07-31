@@ -87,7 +87,8 @@ This contract is documented in detail here:
 ### B) AnnData server workflow (convenient + lazy)
 
 1) Python: `AnnDataServer` opens AnnData (in-memory, backed `.h5ad`, or `.zarr`).
-2) Browser: requests “files” like `/var/FOXP1.values.f32`.
+2) Browser: reads `var_manifest.json`, finds `FOXP1`'s payload index, and
+   requests “files” like `/var/0.values.f32`.
 3) Python: `AnnDataAdapter` reads that gene column lazily and returns bytes (optionally gzip).
 
 ### C) Notebook embedding + hooks workflow

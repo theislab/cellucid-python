@@ -302,7 +302,12 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
     normalized = " ".join(presets.split())
 
     assert "{doc}`04_official_sample_states`" in index
-    for dataset_id in ("suo", "garcia", "he", "pancreas"):
+    # The published catalog advertises five generations, and every one of them
+    # ships both sidecars, so every one of them applies a starting state the
+    # moment its sample is chosen. A dataset missing from this page is a user
+    # watching a view appear and finding nothing that documents it, so the page
+    # has to name all five and this loop has to cover all five.
+    for dataset_id in ("suo", "garcia", "he", "kanemaru", "pancreas"):
         assert f"exports/{dataset_id}/default.cellucid-session" in presets
         assert f"exports/{dataset_id}/state-snapshots.json" in presets
 
@@ -333,7 +338,8 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
         # session format changes, so a `state_sha256` copied into prose goes
         # stale silently. The page has to send readers to the catalog instead.
         "Read the current value out of the catalog",
-        "all four generation directories",
+        "all five generation directories",
+        "| Kanemaru | `exports/kanemaru/default.cellucid-session`",
     ):
         assert exact in normalized
 
@@ -347,10 +353,17 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
         "__close-up.cellucid-session",
         "never restored automatically",
         "Custom and non-advertised sources are not probed",
-        # The four published presets were regenerated; this pinned the digest
-        # they had before, and there is no fifth (kanemaru) generation.
+        # The published presets are regenerated with the reviewed view and the
+        # session format, so each digest the page has ever quoted is dead the
+        # moment the next generation is published. These are the ones it has
+        # carried; the example must track `exports/datasets.json`, never a
+        # value copied out of an earlier revision of this page.
         "5581569118eaa992",
-        "all five generation directories",
+        "20769ea20075a212",
+        # `miller` was withdrawn and `kanemaru` published in its place, so the
+        # count moved from four to five. Naming four generations here would put
+        # the page back to hiding a sample that applies a starting state.
+        "all four generation directories",
     ):
         assert stale not in presets
 

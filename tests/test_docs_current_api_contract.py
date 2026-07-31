@@ -428,7 +428,7 @@ def test_docs_do_not_reintroduce_removed_or_invented_runtime_contracts() -> None
         )
     ]
     assert "vector_field_default" in vector_page
-    assert "rejects duplicate gene IDs" in vector_page
+    assert "rejects duplicate gene names" in vector_page
     cli_page = text_by_path[
         Path("docs/user_guide/python_package/d_viewing_apis/04_cli_cellucid_serve_quickstart.md")
     ]

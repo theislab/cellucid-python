@@ -203,8 +203,9 @@ Important details:
   candidate
 - compact quantization maps finite values to `0..254` (8-bit) or
   `0..65534` (16-bit)
-- constant-valued fields cannot satisfy the compact `minValue < maxValue`
-  contract and are rejected when quantization is enabled
+- constant-valued fields take the compact contract's constant case:
+  `minValue == maxValue` and every code `0`, which decodes back to the exact
+  constant
 - only generated categorical outlier quantiles use `255`/`65535` as a missing
   marker
 
@@ -331,8 +332,8 @@ If you have more categories, use:
 
 If the viewer’s gene search feels wrong:
 - you probably picked the wrong `var_gene_id_column`
-- or gene IDs are duplicated anywhere in `var`, or the exported ones are not
-  exact portable filename components
+- or gene names are duplicated anywhere in `var`, or an exported one carries
+  invisible characters (stray whitespace is the usual cause)
 
 Confirm:
 ```python

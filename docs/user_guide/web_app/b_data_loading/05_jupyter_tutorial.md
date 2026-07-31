@@ -728,11 +728,15 @@ This section is intentionally redundant and explicit: it is designed for “I ne
 - Follow the naming rules in {ref}`vector-fields` (and {doc}`07_folder_file_format_expectations_high_level_link_to_spec`).
 - If you have both 2D and 3D points, make sure you provide the matching vector dimension.
 
-### Symptom: “Gene search returns nothing / wrong gene IDs”
+### Symptom: “Gene search returns nothing / the wrong gene names”
 
 **Likely causes**
-- Your `var_names` are Ensembl IDs but you’re searching symbols (or vice versa).
-- Your gene IDs are in a different `var` column.
+- Your genes were named from `var_names`, which holds a vocabulary you are not searching in.
+- The names you want are in a different `var` column.
+
+Each gene carries exactly one name — whichever column you select — and Cellucid
+applies no alias mapping, so it is worth selecting the column your readers will
+type.
 
 **Fix**
 - Pass `gene_id_column="..."` to `show_anndata()`.

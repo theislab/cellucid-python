@@ -129,13 +129,21 @@ Naming conventions:
 
 Export rules:
 - vector files are written under `vectors/`
-- file name: `vectors/<field_id>_<dim>d.bin(.gz)`
+- file name: `vectors/<index>_<dim>d.bin(.gz)`
 - dtype: `float32`
 - scaling: vectors are scaled by the **same scale factor used to normalize the corresponding points**
+- rounding: the caller's own values are scaled at their own precision and the
+  product is rounded to `float32` exactly once, at the write. Rounding the
+  input first and the product second rounds twice, and a component whose two
+  roundings disagree lands one ULP away from the correctly rounded value.
+  `cellucid-r` rounds once for the same reason, so both writers publish the
+  same bytes
 
-Important invariant:
-- `field_id` satisfies the exact portable-identifier contract used by every
-  exported identifier. Unsafe or case-colliding IDs raise.
+Important invariants:
+- `field_id` satisfies the identifier contract used on every axis: non-empty,
+  distinct, and drawable exactly as stored. It is never a path.
+- each field's payload files are `vectors/<index>_<dim>d.bin(.gz)`, where
+  `<index>` is the field's position in the sorted field list.
 
 ---
 
@@ -159,19 +167,20 @@ Obs export does three things:
 
 ### 5.2 Continuous obs export
 
-Files:
-- `obs/<key>.values.f32(.gz)` when not quantized
-- `obs/<key>.values.u8(.gz)` or `.values.u16(.gz)` when quantized
+Files (`<index>` is the field's payload index in the single `obs/` index space):
+- `obs/<index>.values.f32(.gz)` when not quantized
+- `obs/<index>.values.u8(.gz)` or `.values.u16(.gz)` when quantized
 
 If quantized:
 - the preflight requires real finite values representable as `float32`
-- `obs_manifest.json` stores `minValue` and `maxValue` for dequantization
+- `obs_manifest.json` stores `minValue` and `maxValue` for dequantization, and
+  a constant field is stored as `minValue == maxValue` with every code `0`
 
 ### 5.3 Categorical obs export
 
 Files:
-- `obs/<key>.codes.u8(.gz)` or `obs/<key>.codes.u16(.gz)`
-- `obs/<key>.outliers.f32(.gz)` (or `.outliers.u8/.u16` if outlier quantization enabled)
+- `obs/<index>.codes.u8(.gz)` or `obs/<index>.codes.u16(.gz)`
+- `obs/<index>.outliers.f32(.gz)` (or `.outliers.u8/.u16` if outlier quantization enabled)
 
 Codes:
 - integer codes `0..(n_categories-1)`
@@ -211,10 +220,11 @@ Gene identifiers:
 
 Export:
 - one file per gene under `var/`
-- file: `var/<safe_gene_id>.values.f32(.gz)` or quantized `.values.u8/.u16(.gz)`
+- file: `var/<index>.values.f32(.gz)` or quantized `.values.u8/.u16(.gz)`, where
+  `<index>` is the gene's position in the **exported** subset
 - `var_manifest.json` stores either:
-  - `[gene_id]` (not quantized), or
-  - `[gene_id, minValue, maxValue]` (quantized)
+  - `[index, name]` (not quantized), or
+  - `[index, name, minValue, maxValue]` (quantized)
 
 Important performance note:
 - if `gene_expression` is CSR, `prepare` converts to CSC for efficient column access.

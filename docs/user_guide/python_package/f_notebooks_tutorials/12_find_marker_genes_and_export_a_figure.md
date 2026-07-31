@@ -144,11 +144,11 @@ viewer
 ```
 
 ```{important}
-Gene IDs must be stable and unique, and the ones that become files must be
-valid portable filename components. Direct AnnData viewing serves every gene in
-`var`, so it holds all of them to that rule; `prepare()` holds only the genes
-`gene_identifiers` actually exports. Both reject duplicate IDs anywhere in
-`var`. Choose one identifier or disambiguate it before constructing the viewer.
+Gene names must be distinct across `var`, and the ones that reach a manifest
+must read as the value they store. Names are never filenames, so `HLA-DRB1/2`
+is fine. Direct AnnData viewing serves every gene in `var`, so it holds all of
+them to the display rule; `prepare()` holds only the genes `gene_identifiers`
+actually exports. Both reject duplicate names anywhere in `var`.
 ```
 
 ---

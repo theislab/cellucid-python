@@ -48,16 +48,20 @@ Gene expression values are written as **one file per gene** under:
 
 - `<out_dir>/var/`
 
-For a gene ID like `MS4A1`, you will get one of:
+Each file is named by the gene's **payload index** — its position in the
+manifest's `fields` array — not by its ID. For the first exported gene you will
+get one of:
 
-- float32: `var/MS4A1.values.f32`
-- 8-bit quantized: `var/MS4A1.values.u8`
-- 16-bit quantized: `var/MS4A1.values.u16`
+- float32: `var/0.values.f32`
+- 8-bit quantized: `var/0.values.u8`
+- 16-bit quantized: `var/0.values.u16`
 
 The manifest:
 - `<out_dir>/var_manifest.json`
 
-maps gene IDs to file patterns and (if quantized) stores the min/max needed to dequantize.
+is what maps each index back to its gene ID, and (if quantized) stores the
+min/max needed to dequantize. Because the ID never reaches a path, a gene called
+`HLA-DRB1/2` needs no renaming.
 
 ## Quantization (`var_quantization`)
 
@@ -143,6 +147,6 @@ before publication. Correct the scientific input explicitly.
 
 - “var has X rows but gene_expression has Y genes” → orientation mismatch.
 - “Export is huge / takes forever” → you exported too many genes; use `gene_identifiers` + quantization.
-- “Gene IDs are rejected” → provide exact portable unique IDs in
-  `rownames(var)` or the selected `var_gene_id_column`.
+- “Gene IDs are rejected” → provide non-empty, distinct IDs in `rownames(var)`
+  or the selected `var_gene_id_column`.
 - Full troubleshooting: {doc}`11_troubleshooting_prepare_export`

@@ -84,26 +84,46 @@ Recommendation:
 
 Details: {doc}`04_obs_cell_metadata`
 
-## Rule 5: avoid filename collisions
+## Rule 5: identifiers name fields, not files
 
-Observation keys, gene IDs, dataset IDs, and vector-field IDs are used exactly
-in manifests and paths. They must already be 1–180-byte portable ASCII
-components: start with a letter or digit, contain only letters, digits, `.`,
-`_`, or `-`, not end with `.`, not be a Windows device name, and be unique
-under case-insensitive comparison.
+Observation keys, gene IDs, and vector-field IDs are recorded exactly in the
+manifests. They are **not** filenames: every payload file is named by an integer
+index, and the manifest is what says which identifier that index belongs to.
 
-This applies to the identifiers you **export**, because the rule is about the
-file each one is written to. `obs_keys` and `gene_identifiers` narrow the export,
-and they narrow this rule with it: a column or gene you leave out is written to
-no path and is not checked here. Gene identifiers carry one extra rule that is
-not about paths and so is *not* narrowed — every ID in `var` must be a non-empty
-string and must be distinct, because `gene_identifiers` addresses `var` rows by
-identifier. The `cellucid` Python package applies the identical scopes.
+So an identifier carries no filename rule at all — no ASCII restriction, no
+length limit, no ban on `/`, spaces, or non-ASCII characters, no
+case-insensitive collision rule, and no Windows device-name rule. What survives
+is what the identity is actually for. Every exported identifier must:
+
+1. be a **non-empty string**;
+2. be **distinct within its axis**, so a lookup by identifier resolves exactly
+   one field; and
+3. be **text the viewer can draw exactly as it is stored** — no control
+   characters (`U+0001`-`U+001F`, `U+007F`-`U+009F`), no zero-width characters
+   (`U+200B`, `U+2060`, `U+FEFF`), and no leading or trailing whitespace of any
+   kind, including `U+00A0` NO-BREAK SPACE.
+
+Rule 3 is the same rule every category label obeys, because a gene name and a
+category label are drawn in the same legend. `cellucid_prepare()` rejects the
+complete candidate rather than trimming, since trimming would rewrite an
+annotation you did not ask to change. The `cellucid` Python package enforces the
+identical rules.
+
+Rules 1 and 3 are checked on what you actually **export**: `obs_keys` and
+`gene_identifiers` narrow the export and narrow those checks with it. Gene
+uniqueness is not narrowed — every ID in `var` must be distinct, because
+`gene_identifiers` addresses `var` rows by identifier whether or not that row is
+exported.
+
+`dataset_id` is the one identifier that really is a path segment: it names the
+dataset's directory and appears in URLs. It must still be a 1–180-byte portable
+ASCII component — start with a letter or digit, otherwise only letters, digits,
+`.`, `_`, or `-`, not ending with `.`, and not a Windows device name.
 
 Recommendation:
-- choose stable portable identifiers before export.
-- `cellucid-r` aborts the complete candidate on any unsafe identifier or
-  collision among the exported ones; it does not rewrite names.
+- choose a stable, versioned `dataset_id` before export.
+- `cellucid-r` aborts the complete candidate on a duplicate or undrawable
+  identifier; it does not rewrite names.
 
 ## Quick “preflight” checks (copy/paste)
 

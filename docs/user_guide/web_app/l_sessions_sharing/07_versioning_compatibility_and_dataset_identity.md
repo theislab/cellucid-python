@@ -132,7 +132,7 @@ Official catalog samples may apply a small SHA-256-pinned state automatically.
 That internal five-chunk file is validated through a separate advertised
 capability; it is not an ordinary **Load State** artifact.
 
-To share your own state for Suo, Garcia, He, or Pancreas:
+To share your own state for Suo, Garcia, He, Kanemaru, or Pancreas:
 
 1. choose the official sample;
 2. wait for the verified starting view;

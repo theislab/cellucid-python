@@ -65,7 +65,8 @@ Each vector field is a per-cell array:
 - shape: exactly `(n_cells, dim)`, where `dim` is the dimension its key declares
 - a `_1d` key also accepts a plain `(n_cells,)` vector as the single column it
   declares; `_2d` and `_3d` keys require the full 2D array
-- dtype: converted to `float32` for export
+- dtype: any real numeric dtype; the export scales your values at their own
+  precision and rounds the product to `float32` once, at the write
 
 Vectors must be aligned to the same cell order as embeddings and `obs`.
 
@@ -86,16 +87,22 @@ inferred from an array's width: a field can carry both a 2D and a 3D version,
 and a suffix that disagrees with the array's shape is a mistake worth catching
 rather than a shape to trust.
 
-#### Safety rule: vector field ids must already be filesystem-safe
+#### Identity rule: a vector field id is a name, not a path
 
-Unlike obs keys and gene IDs, vector field ids are strict:
-- only `A–Z`, `a–z`, `0–9`, `.`, `_`, `-` are allowed
-- spaces or slashes will raise an error
+A vector payload is named by its integer position on the vectors axis, never by
+its field id, so no filename rule reaches the id. What remains is what the
+identity is for. Exactly as for an obs key and a gene id, a vector field id
+must be:
 
-So prefer ids like:
-- `velocity_umap`
-- `T_fwd_umap`
-- `drift_umap`
+- a non-empty string,
+- distinct from every other vector field id, and
+- text the viewer can draw exactly as it is stored: no control characters, no
+  zero-width characters, and no leading or trailing whitespace.
+
+`cellucid-r` applies the identical rule, and the web app accepts exactly these
+keys, so an id one accepts is an id all three accept. Spaces, slashes, and
+punctuation are ordinary characters here: `Velocity (UMAP)` and
+`chr1:1000000-1000500` are valid ids.
 
 ### Dimension matching
 
@@ -129,11 +136,13 @@ If vectors look too small/large in the UI, it’s usually because:
 Vector files are written under:
 
 ```text
-out_dir/vectors/<field_id>_<dim>d.bin(.gz)
+out_dir/vectors/<index>_<dim>d.bin(.gz)
 ```
 
-- dtype: `float32`
+- dtype: `float32`, rounded once from the scaled value
 - shape: `(n_cells, dim)`
+- `<index>` is the field's position in the sorted field list, `0 … N-1`; the
+  field id itself never appears in a path
 
 The presence and locations of vector files are recorded in:
 - `dataset_identity.json["vector_fields"]`

@@ -171,7 +171,7 @@ Interpret plots and effect sizes alongside p-values. For confirmatory inference,
 - **Pages overlap**: the same cell can exist in multiple pages. Comparisons are then not independent.
 - **Pages are tiny**: many statistics are unstable below ~50–100 cells; DE below the app’s minimum size may be skipped.
 - **Gene expression missing**: if the dataset was loaded without gene expression, gene-based modes will be unavailable/empty.
-- **Gene IDs mismatch**: “TP53” vs “Tp53” vs Ensembl IDs; gene signature lists must match the dataset’s gene keys.
+- **Gene names mismatch**: “TP53” vs “Tp53”; a gene signature list must match the one name each gene is published under, exactly.
 - **Interpreting p-values as biology**: DE and correlation tests are exploratory; batch/technical confounding can dominate.
 
 ---

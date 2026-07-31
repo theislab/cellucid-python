@@ -9,6 +9,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Version 0.9.1 is the PyPI submission release.
 
+### Fixed — export format: a constant continuous field has an encoding
+
+A gene expressed at one identical level in every exported cell — very often
+zero, once an atlas is subset to one lineage — and a continuous `obs` column a
+subset flattened are both ordinary scientific data. `prepare()` used to refuse
+the whole export when it met one, which cost real features: subsetting Suo to
+`LVL0 == "Haematopoeitic_lineage"` leaves four genes detected in none of the
+published cells, one of them the nameable `NFIB-AS1`.
+
+compact_v1 now has a named case for them:
+
+- `minValue == maxValue` and every code `0`. The entry keeps its exact shape and
+  length — `[index, key, minValue, maxValue]` — so nothing about the manifest
+  contract moves.
+- The writer takes an explicit branch and never derives a scale, so nothing
+  divides by `maxValue - minValue`.
+- The reader takes the matching branch and returns `minValue` directly, so the
+  constant comes back bit-exact rather than as an approximation of itself.
+- Native-double variation finer than float32 resolution collapses to one float32
+  value, which is one constant, and is published the same way instead of being
+  rejected.
+
+`cellucid_prepare()` in the R package implements the identical case. The only
+continuous payload still without an encoding is a categorical field's generated
+outlier quantiles when *every* quantile is missing, because no category holds
+`centroid_min_points` cells — there is no value to publish at all, and that
+failure still names every affected field in one run before any file is written.
+
+### Changed — export format: payload files are named by index
+
+Every scientific payload an export writes is now named by its integer index, or
+by a fixed neutral name. No filename anywhere in the tree carries an observation
+key, a gene name, or a vector field id:
+
+```text
+var/0.values.u8.gz     obs/0.codes.u8.gz     obs/0.outliers.u8.gz
+obs/1.values.u8.gz     vectors/0_2d.bin.gz
+```
+
+- `_varSchema.pathPattern` and every `_obsSchemas` path pattern now substitute
+  `{index}` instead of `{key}`, and each field entry declares its own index as
+  element `[0]`:
+  - `var` — `[index, name]`, or `[index, name, minValue, maxValue]` quantized;
+  - obs continuous — `[index, key]`, or `[index, key, minValue, maxValue]`;
+  - obs categorical — `[index, key, categories, dtype, sentinel, centroids]`,
+    plus `outlierMinValue`/`outlierMaxValue` when quantized.
+  A `var` entry and an obs-continuous entry now share a shape deliberately, so a
+  reader must take a field's kind from the array it came from, never from the
+  entry's length.
+- Within one axis directory the indices are exactly `0 … N-1`, each used once,
+  and `obs` shares that one space across `_continuousFields` and
+  `_categoricalFields` because both write into `obs/`. `prepare()` asserts this
+  against the manifest it has just built, and re-derives every declared payload
+  path to compare it with the directory it actually wrote — two fields holding
+  one index would write one payload over another and the app would then draw one
+  field's values under another field's name, with nothing raised.
+- The Jupyter/direct AnnData server serves the same index routes
+  (`/var/0.values.f32`, `/obs/0.codes.u8`, `/vectors/0_2d.bin`) and emits
+  byte-identical manifest shapes to the batch exporter. Only the exact unpadded
+  decimal form resolves; `/var/00.values.f32` is a 404.
+- Because an identifier is no longer a path, the filename-portability,
+  case-collision, and Windows-reserved-name rules are **removed** from
+  observation keys, gene names, and vector field ids. `HLA-DRB1/2`, `CON`,
+  `% mito`, `细胞`, and the two distinct fields `Field` and `field` now export
+  unchanged. What remains is what an identity is for: non-empty, distinct within
+  its axis, and drawable exactly as stored — the same display-text rule every
+  string category label already obeyed. `dataset_id` is unaffected: it names a
+  real directory and a served URL, so it keeps the full portable-component rule.
+- The direct AnnData adapter no longer carries its own copy of that identifier
+  validator. It had sanitized unsafe characters into `_` where the batch
+  exporter rejected them, so the two producers disagreed about which inputs were
+  admissible; both now call the one shared rule.
+
+An index is a position, not a stable name: adding a gene or reordering
+`obs_keys` renumbers the payload files. Resolve a payload through the manifest
+every time rather than caching or hard-coding a path across exports. Exports are
+regenerated from source, so re-export with `force=True`; there is no dual-read
+path.
+
 ### Added
 
 - Exact release-contract validation for package, citation, documentation, and
@@ -82,18 +161,15 @@ Version 0.9.1 is the PyPI submission release.
 ### Fixed
 
 - `prepare()` no longer rejects an export because of a gene it was never asked
-  to export. The portable-filename-component rule and the case-insensitive
-  collision rule are about the file a gene is written to, so they now apply to
-  the genes `gene_identifiers` selects rather than to every row of `var`. A
-  `var` carrying an identifier such as `HLA-DRB1/2`, a Windows device name, or
-  a case-only twin of another identifier now exports cleanly whenever
-  `gene_identifiers` leaves that gene out, which is what `obs_keys` has always
-  done for observation keys and what `cellucid_prepare()` in the R package has
-  always done for genes. The rule that is *not* about paths is unchanged and
-  still spans the whole `var`: every gene identifier must be a non-empty string
-  and must be distinct, because `gene_identifiers` addresses `var` rows by
-  identifier and a repeated one resolves to no single row. Identifiers that are
-  exported are validated exactly as before.
+  to export. The two gene-identifier rules that survive the move to
+  index-named payloads have two different scopes, and each is now checked at
+  its own. Being drawable is a property of a name the viewer shows, so it
+  covers the genes `gene_identifiers` selects; a `var` row left out reaches no
+  manifest and is not checked, exactly as an `obs` column left out of
+  `obs_keys` is not. Distinctness spans the whole `var`, because
+  `gene_identifiers` addresses `var` rows by identifier and a repeated one
+  names no single row. `cellucid_prepare()` in the R package documents the
+  identical pair of scopes.
 - Python 3.14 installation on macOS no longer resolves to the old
   `numcodecs<0.16` build path that failed on Apple silicon.
 - Dataset preparation and direct AnnData serving now enforce finite,
@@ -103,8 +179,8 @@ Version 0.9.1 is the PyPI submission release.
 - Prepared-directory writers share one persistent exact-target lock with the R
   exporter, reject concurrent publication, and recover after process death
   without leaking descriptors.
-- Cross-platform file names, dataset identifiers, request ranges, and cache
-  paths are validated before filesystem or network mutation.
+- Dataset identifiers, request ranges, and cache paths are validated before
+  filesystem or network mutation.
 - Prepared exports and direct AnnData responses now use canonical gzip headers,
   eliminating clock and output-path bytes from compressed payloads.
 

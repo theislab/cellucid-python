@@ -109,6 +109,30 @@ def test_transition_drift_exposes_no_unsuffixed_output_switch() -> None:
     assert "explicit_dim_suffix" not in inspect.signature(add_transition_drift_to_obsm).parameters
 
 
+_VECTOR_FIELD_KEY_ORDER = [
+    "label",
+    "available_dimensions",
+    "default_dimension",
+    "files",
+    "basis",
+]
+
+
+def test_a_vector_field_entry_uses_the_specified_key_order(tmp_path: Path) -> None:
+    # Key order is the order the output format specification prints and the
+    # order cellucid-r writes, so one input produces one file whichever writer
+    # produced it. A dict comparison passes whatever the order is, so the order
+    # is asserted directly.
+    prepare(**_prepare_kwargs(tmp_path, {"velocity_umap_2d": _vectors_2d()}))
+    identity = json.loads((tmp_path / "dataset_identity.json").read_text(encoding="utf-8"))
+    entry = identity["vector_fields"]["fields"]["velocity_umap"]
+    assert list(entry) == _VECTOR_FIELD_KEY_ORDER
+
+    adapter = _adapter({"velocity_umap_2d": _vectors_2d()})
+    served = adapter.get_dataset_identity()["vector_fields"]["fields"]["velocity_umap"]
+    assert list(served) == _VECTOR_FIELD_KEY_ORDER
+
+
 def test_prepare_single_vector_field_is_unambiguous_and_metadata_is_exact(
     tmp_path: Path,
 ) -> None:
@@ -121,15 +145,15 @@ def test_prepare_single_vector_field_is_unambiguous_and_metadata_is_exact(
         "fields": {
             "velocity_umap": {
                 "label": "velocity_umap",
-                "basis": "umap",
                 "available_dimensions": [2],
                 "default_dimension": 2,
-                "files": {"2d": "vectors/velocity_umap_2d.bin"},
+                "files": {"2d": "vectors/0_2d.bin"},
+                "basis": "umap",
             }
         },
     }
     exported = np.fromfile(
-        tmp_path / "vectors" / "velocity_umap_2d.bin",
+        tmp_path / "vectors" / "0_2d.bin",
         dtype=np.float32,
     ).reshape(3, 2)
     np.testing.assert_allclose(exported, vectors * 2.0)
@@ -203,7 +227,7 @@ def test_sparse_vector_values_follow_the_same_exact_contract(
         )
     )
     prepared = np.fromfile(
-        tmp_path / "export" / "vectors" / "velocity_umap_2d.bin",
+        tmp_path / "export" / "vectors" / "0_2d.bin",
         dtype=np.float32,
     ).reshape(3, 2)
     np.testing.assert_allclose(prepared, vectors * 2.0)
@@ -236,10 +260,11 @@ def test_prepare_multiple_vector_fields_require_an_exact_explicit_default(
     assert identity["vector_fields"]["default_field"] == "drift_umap"
 
 
-def test_vector_field_ids_must_be_case_insensitively_unique(
+def test_case_distinct_vector_field_ids_are_two_indexed_fields(
     tmp_path: Path,
 ) -> None:
-    out_dir = tmp_path / "must-not-exist"
+    """Vector payloads are named by index, so case no longer collides at a path."""
+    out_dir = tmp_path / "export"
     fields = {
         "Velocity_umap_2d": _vectors_2d(),
         "velocity_umap_2d": _vectors_2d(0.1),
@@ -247,12 +272,24 @@ def test_vector_field_ids_must_be_case_insensitively_unique(
     kwargs = _prepare_kwargs(out_dir, fields)
     kwargs["vector_field_default"] = "Velocity_umap"
 
-    with pytest.raises(ValueError, match="case-insensitively"):
-        prepare(**kwargs)
-    assert not out_dir.exists()
+    prepare(**kwargs)
 
-    with pytest.raises(ValueError, match="case-insensitively"):
-        _adapter(fields, vector_field_default="Velocity_umap")
+    identity = json.loads((out_dir / "dataset_identity.json").read_text(encoding="utf-8"))
+    assert {
+        field_id: field["files"]
+        for field_id, field in identity["vector_fields"]["fields"].items()
+    } == {
+        "Velocity_umap": {"2d": "vectors/0_2d.bin"},
+        "velocity_umap": {"2d": "vectors/1_2d.bin"},
+    }
+    assert sorted(path.name for path in (out_dir / "vectors").iterdir()) == [
+        "0_2d.bin",
+        "1_2d.bin",
+    ]
+
+    adapter = _adapter(fields, vector_field_default="Velocity_umap")
+    assert adapter.get_vector_field_id_for_payload_index("1") == "velocity_umap"
+    assert adapter.get_vector_field_id_for_payload_index("2") is None
 
 
 def test_vector_default_without_vector_fields_is_rejected_before_mutation(
@@ -394,10 +431,10 @@ def test_anndata_single_vector_field_metadata_and_binary_are_exact() -> None:
         "fields": {
             "velocity_umap": {
                 "label": "velocity_umap",
-                "basis": "umap",
                 "available_dimensions": [2],
                 "default_dimension": 2,
-                "files": {"2d": "vectors/velocity_umap_2d.bin"},
+                "files": {"2d": "vectors/0_2d.bin"},
+                "basis": "umap",
             }
         },
     }

@@ -48,7 +48,17 @@ names(obs_manifest)
 
 Confirm:
 - `_continuousFields` and/or `_categoricalFields` exist (depending on your obs)
-- `_obsSchemas` contains file patterns for `obs/`
+- `_obsSchemas` contains file patterns for `obs/`, templated over `{index}`
+- every entry begins with its payload index, and those indices run `0 … N-1`
+  across both arrays together, each used once:
+
+```r
+indices <- c(
+  vapply(obs_manifest$`_continuousFields`, function(f) f[[1]], numeric(1)),
+  vapply(obs_manifest$`_categoricalFields`, function(f) f[[1]], numeric(1))
+)
+stopifnot(identical(sort(indices), seq_along(indices) - 1))
+```
 
 ## 4) Validate embedding binary length (quick check)
 

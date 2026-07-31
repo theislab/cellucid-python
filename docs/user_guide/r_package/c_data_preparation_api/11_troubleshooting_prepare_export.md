@@ -245,16 +245,16 @@ install.packages("Matrix")
   `Vector field key '...' must exactly match '<field>_umap_<1|2|3>d'.` An
   unsuffixed `velocity_umap` is rejected: the key declares the dimension and it
   is never inferred from the array.
-- Or the field id (the part before the dimensional suffix) contains spaces or
-  slashes, starts with `_`/`.`/`-`, exceeds 180 bytes, or is a Windows device
-  name, and the export stops with
-  `Vector field ids '...' is not a portable identifier. ...`
+- Or two list names reduce to the same field id, and the export stops with
+  `Vector field ids must be unique. Duplicates: ...`
+
+The field id itself carries no character rule: it names a field in
+`dataset_identity.json`, and the payload is written to
+`vectors/<index>_<dim>d.bin`.
 
 **Fix**
-- Add or correct the dimensional suffix, then rename the field id to a
-  filesystem-safe identifier:
+- Add or correct the dimensional suffix:
   ```r
-  names(vector_fields) <- gsub("[^A-Za-z0-9._-]+", "_", names(vector_fields))
   names(vector_fields) <- paste0(names(vector_fields), "_2d")
   ```
 
@@ -351,16 +351,20 @@ The same rule covers `dataset_name`, `dataset_description`, `source_name`,
 ## Symptom: gene or field identifiers are rejected
 
 **Likely cause**
-- an identifier is not a portable component, or identifiers collide under
-  case-insensitive filesystem comparison.
+- an identifier is empty, two identifiers on the same axis are equal, or an
+  exported identifier carries a character with no glyph. There is no filename
+  rule to violate: payload files are named by an integer index, so
+  `HLA-DRB1/2`, `CON`, and a name with interior spaces all export.
 
 **How to confirm**
-- Validate the exact IDs and compare `tolower(ids)` for duplicates.
+- Compare the exact IDs for duplicates with `anyDuplicated(ids)`. Note that gene
+  uniqueness spans every row of `var`, not only the exported subset.
+- Check for invisible characters with `identical(ids, trimws(ids))`.
 
 **Fix**
-- Rename genes/fields to exact portable unique IDs, or export a smaller subset.
-  The exporter rejects the complete candidate before writing any colliding
-  payload.
+- Rename the duplicate, or clean the invisible character. The exporter rejects
+  the complete candidate before writing any payload rather than trimming, which
+  would rewrite an annotation you did not ask to change.
 
 ---
 

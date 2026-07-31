@@ -112,8 +112,9 @@ Encoding rules (current exporter):
   conversion to the viewer's `float32` domain; otherwise the complete candidate
   is rejected before publication
 - codes and bounds derive from those exact viewer-visible values; a source
-  range that collapses to one `float32` value is rejected, while an individual
-  nonzero source value may round to zero if the range remains non-collapsed
+  range that collapses to one `float32` value is published as a constant field,
+  while an individual nonzero source value may round to zero if the range
+  remains non-collapsed
 - validated values map to `0..254` (8-bit) or `0..65534` (16-bit)
 - per-field `minValue`/`maxValue` are recorded in the manifest and used to dequantize in the browser.
 
@@ -125,6 +126,12 @@ value = minValue + q * (maxValue - minValue) / maxQuant
 
 Where `maxQuant = 254` or `65534`.
 
+A field whose values are all the same is published as a constant field:
+`minValue == maxValue` and every code `0`. The formula above is exact for it —
+nothing divides by `maxValue - minValue` — so the browser recovers the constant
+itself. See
+{ref}`How a quantized continuous payload decodes <python_package-quantized-continuous-payloads>`.
+
 Practical guidance:
 - Use quantization for large exports to reduce size.
 - Prefer 16-bit if you care about subtle gradients (scores/pseudotime).
@@ -135,7 +142,7 @@ Practical guidance:
 
 Categorical fields are stored as:
 - a list of category labels (strings) in the manifest,
-- and a per-cell integer code array written to `obs/<field>.codes.u8` or `.u16`.
+- and a per-cell integer code array written to `obs/<index>.codes.u8` or `.u16`.
 
 Missing values:
 - pandas missing categories (`NaN`) become a reserved missing code:
@@ -206,7 +213,7 @@ High-level idea:
 - For each category, compute the centroid in `latent_space`.
 - Compute each cell’s distance to its category centroid.
 - Rank those distances within the category and convert to a `0..1` quantile-like value.
-- Export those per-cell values as `<field>.outliers.*`.
+- Export those per-cell values as `obs/<index>.outliers.*`.
 
 These quantiles are used by the web app’s **outlier filter** (when a categorical field is the active field).
 
@@ -233,19 +240,24 @@ If you set `centroid_outlier_quantile=None`, centroids are exported as empty lis
 
 ---
 
-## Naming rules (safe filenames)
+## Naming rules
 
-An obs key becomes a filename under `obs/`, so `prepare()` requires it to
-already be a portable filename component and does not rewrite it. Each key must
-be 1–180 ASCII bytes, start with an ASCII letter or digit, otherwise use only
-ASCII letters, digits, `.`, `_`, or `-`, not end with `.`, and not be a reserved
-Windows device name. No two keys may collide under case-insensitive comparison.
-`prepare()` rejects the complete candidate export before publication when any of
-those fails, and the message names the offending key.
+An obs key never becomes a filename — payloads under `obs/` are named by integer
+index — so keys carry no filename rule. `% mito`, `cell type`, `CON`, and the
+two distinct columns `Field` and `field` all export unchanged.
+
+`prepare()` never rewrites a key, and requires each exported key to be a
+non-empty string, distinct within `obs`, and text the viewer can draw exactly as
+stored: no control characters, none of the zero-width characters `U+200B`,
+`U+2060`, `U+FEFF`, and no leading or trailing whitespace. It rejects the
+complete candidate export before publication when that fails, and the message
+names the offending key.
 
 Recommendation:
-- keep your exported keys already-safe and unique (`cluster`, `cell_type`, `sample_id`, `pct_mito`)
-- avoid spaces/slashes/punctuation in keys you intend to export long-term
+- use the key your analysis already uses; there is no longer a reason to rename
+  a column for the exporter's benefit
+- do check for stray whitespace, which is invisible on screen and is the one
+  defect this rule exists to catch
 
 ---
 
@@ -263,14 +275,21 @@ The web app expands this into a verbose “fields array” at load time.
 
 ### Binary payloads under `obs/`
 
+`<index>` is the field's payload index, declared as element `[0]` of its
+manifest entry. `obs/` uses **one** index space across both field arrays, in the
+order the columns were exported, so a categorical field and a continuous field
+never share an index.
+
 Per continuous field:
-- `obs/<key>.values.f32` (or `.values.u8` / `.values.u16`)
+- `obs/<index>.values.f32` (or `.values.u8` / `.values.u16`)
 
 Per categorical field:
-- `obs/<key>.codes.u8` (or `.codes.u16`)
-- `obs/<key>.outliers.f32` (or `.outliers.u8` / `.outliers.u16`)
+- `obs/<index>.codes.u8` (or `.codes.u16`)
+- `obs/<index>.outliers.f32` (or `.outliers.u8` / `.outliers.u16`)
 
-All files may have a `.gz` suffix if `compression` is enabled.
+All files may have a `.gz` suffix if `compression` is enabled. No payload
+filename contains the obs key, so a column called `% mito` or `cell type`
+exports without complaint.
 
 Full spec: {doc}`09_output_format_specification_exports_directory`
 
@@ -302,11 +321,12 @@ Datetimes become categorical unless you convert them. If you want time as contin
 Object columns that mix numbers and strings can produce confusing categories.
 Make them consistent before export.
 
-### Unsafe or colliding column names
+### Duplicate or undrawable column names
 
-Keys must already be exact portable filename components and must be unique
-under case-insensitive comparison. `prepare()` rejects the complete candidate
-before publication when either invariant fails.
+Keys must be distinct within `obs` and must read as the value they store.
+`prepare()` rejects the complete candidate before publication when either
+invariant fails. A trailing space is the usual cause:
+`obs.columns = obs.columns.str.strip()` before exporting.
 
 ---
 

@@ -300,7 +300,8 @@ Do the least invasive thing that answers your question:
 1) **Gene list formatting**
    - In the current UI, genes are parsed by commas (`,`). Newline-only lists can be interpreted as one “gene”.
 2) **Genes not found in your dataset**
-   - Gene IDs may be symbols vs Ensembl, or different casing.
+   - The names you pasted may be a different vocabulary from the one the export
+     publishes, or differ only in casing. Each gene has one name and no alias.
 3) **Gene expression missing**
    - Signature scoring requires expression.
 4) **Normalization misunderstanding**
@@ -315,15 +316,15 @@ Do the least invasive thing that answers your question:
 ### Fix
 
 1) Fix gene list formatting (comma-separated)
-2) Use the correct gene namespace
-   - If your dataset uses Ensembl IDs, provide Ensembl IDs.
+2) Use the names the dataset actually publishes
+   - Read a few of them out of the field selector and match that vocabulary.
 3) Turn off normalization temporarily to sanity-check raw behavior
 4) Reduce to a minimal signature to debug
    - then expand the list once you see non-empty results
 
 ### Prevention
 
-- Keep a “known-good” gene list snippet for each dataset (symbols vs Ensembl) and reuse it.
+- Keep a “known-good” gene list snippet for each dataset, written in that dataset’s own names, and reuse it.
 
 ---
 

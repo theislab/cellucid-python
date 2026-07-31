@@ -78,8 +78,29 @@ Important keys (high level):
 - `compression` (null or integer)
 - `_obsSchemas`:
   - schema for continuous and categorical files (path patterns, dtypes, quantization flags)
+  - the path patterns are templates over `{index}` (and `{ext}` for codes), for
+    example `obs/{index}.values.u8.gz` and `obs/{index}.codes.{ext}.gz`
 - `_continuousFields`: list of continuous field entries
 - `_categoricalFields`: list of categorical field entries (categories, dtype, missing marker, centroids, outlier ranges if quantized)
+
+Every field entry begins with its own **payload index**, an integer:
+
+- continuous: `[index, key]`, or `[index, key, min_val, max_val]` when quantized
+- categorical: `[index, key, categories, codes_dtype, codes_missing_value,
+  centroids_by_dim]`, or the same six followed by
+  `outlier_min_value, outlier_max_value` when outliers are quantized
+
+Both arrays write into `obs/`, so their indices are **one shared space**: across
+`_continuousFields` and `_categoricalFields` together the indices are exactly
+`0 … N-1`, each used once. `cellucid_prepare()` proves that before publishing,
+because two fields sharing an index would overwrite one payload with another and
+the viewer would then draw one field's values under another field's name.
+
+```{note}
+A continuous entry and a gene entry are both four members long when quantized.
+Never infer a field's kind from an entry's length — the array it came from is
+what says which it is.
+```
 
 Every **string** category label published here must be text a reader can
 see: non-empty, free of control characters (`U+0001`-`U+001F`,
@@ -93,12 +114,16 @@ the identical rule. See
 
 ## Obs binaries: `obs/`
 
+Payload filenames are the field's **payload index**, never its key. The manifest
+entry beside the file is what says which field an index belongs to, so no
+exported path depends on a dataset's vocabulary.
+
 ### Continuous
 
-For each continuous field `key`, one file is written:
+For each continuous field with payload index `i`, one file is written:
 
-- `obs/<key>.values.f32` (float32), or
-- `obs/<key>.values.u8` / `.u16` (quantized)
+- `obs/<i>.values.f32` (float32), or
+- `obs/<i>.values.u8` / `.u16` (quantized)
 
 If quantized:
 - the manifest entry includes `min_val` and `max_val`
@@ -106,9 +131,9 @@ If quantized:
 
 ### Categorical codes
 
-For each categorical field `key`, codes are written:
+For each categorical field with payload index `i`, codes are written:
 
-- `obs/<key>.codes.u8` or `.u16`
+- `obs/<i>.codes.u8` or `.u16`
 
 Codes:
 - start at 0
@@ -118,10 +143,10 @@ Codes:
 
 ### Categorical outlier quantiles
 
-For each categorical field `key`, outlier quantiles are written:
+For each categorical field with payload index `i`, outlier quantiles are written:
 
-- `obs/<key>.outliers.f32` (float32), or
-- `obs/<key>.outliers.u8` / `.u16` (quantized)
+- `obs/<i>.outliers.f32` (float32), or
+- `obs/<i>.outliers.u8` / `.u16` (quantized)
 
 Semantics:
 - per-cell value describing the distance rank inside its category in latent space
@@ -140,19 +165,26 @@ Important keys (high level):
 - `var_gene_id_column`
 - `compression`
 - `quantization` (null, 8, or 16)
-- `_varSchema` (path pattern, dtype, quantization flags)
+- `_varSchema` (path pattern, dtype, quantization flags); the pattern is a
+  template over `{index}`, for example `var/{index}.values.f32.gz`
 - `fields`: list of gene entries
 
 Each `fields` entry is:
-- `[gene_id]` for float32 exports, or
-- `[gene_id, min_val, max_val]` for quantized exports
+- `[index, gene_id]` for float32 exports, or
+- `[index, gene_id, min_val, max_val]` for quantized exports
+
+The first element is the gene's payload index. Within `var/` the indices are exactly
+`0 … N-1`, each used once, and `cellucid_prepare()` proves that before
+publishing. There is **one** identity per gene: the entry carries the exact
+identifier read from `rownames(var)` or `var_gene_id_column`, and nothing else.
+No accession is retained beside it, and no parallel identifier array exists.
 
 ## Var binaries: `var/`
 
-For each exported gene ID, one file is written:
+For each exported gene with payload index `i`, one file is written:
 
-- `var/<safe_gene_id>.values.f32`, or
-- `var/<safe_gene_id>.values.u8` / `.u16`
+- `var/<i>.values.f32`, or
+- `var/<i>.values.u8` / `.u16`
 
 Values:
 - length `n_cells` (dense vector)
@@ -223,9 +255,31 @@ label. `description` may be `""`; the others may not be empty.
 
 Vector binaries are float32 matrices stored row-major:
 
-- `vectors/<field>_2d.bin` etc
+- `vectors/<i>_2d.bin`, `vectors/<i>_3d.bin`, etc
 
-The web app discovers them via `dataset_identity.json` (`vector_fields` section).
+`<i>` is the field's payload index, assigned by sorting the field ids by code
+point so that `cellucid-r` and the `cellucid` Python package assign the same
+index to the same field. Within `vectors/` the indices are exactly `0 … N-1`,
+each used once.
+
+The web app discovers them via `dataset_identity.json` (`vector_fields` section),
+which is what maps each field id to its files.
+
+## The writer proves the layout before publishing
+
+Before a candidate generation is published, `cellucid_prepare()` checks each
+payload directory against the manifest that describes it, on four axes —
+`Observation`, `Gene`, `Connectivity`, and `Vector field`. Every path a manifest
+declares must exist, and every file present must be declared. A mismatch stops
+the export with, for example:
+
+```text
+Gene manifest does not describe the payloads that were written. Declared but
+absent: var/7.values.u8.gz. Written but undeclared: var/8.values.u8.gz.
+```
+
+That is what makes the index space trustworthy: a stale file from an earlier
+generation cannot survive beside a current manifest.
 
 ## Validation checklist (quick)
 

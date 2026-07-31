@@ -160,9 +160,15 @@ Exports store vectors as binary files under `vectors/` and describe them in `dat
 Typical filenames:
 
 ```text
-vectors/<fieldId>_<dim>d.bin
-vectors/<fieldId>_<dim>d.bin.gz      # if export compression is enabled
+vectors/<index>_<dim>d.bin
+vectors/<index>_<dim>d.bin.gz        # if export compression is enabled
 ```
+
+`<index>` is the vector field's position, not its name. Payload files across
+the whole export are named by an integer index and never by a field name; the
+manifest beside them is what says which field an index belongs to. Always read
+the paths out of `dataset_identity.json["vector_fields"]` rather than assembling
+them from a field label.
 
 Typical identity schema (high-level):
 
@@ -174,8 +180,8 @@ Typical identity schema (high-level):
       "velocity_umap": {
         "available_dimensions": [2, 3],
         "files": {
-          "2d": "vectors/velocity_umap_2d.bin.gz",
-          "3d": "vectors/velocity_umap_3d.bin.gz"
+          "2d": "vectors/0_2d.bin.gz",
+          "3d": "vectors/0_3d.bin.gz"
         }
       }
     }
@@ -215,10 +221,10 @@ Fix:
 ### “Gene search returns nothing”
 
 Meaning:
-- There is no gene expression (`X`) and/or gene ids are not where Cellucid expects.
+- There is no gene expression (`X`), or the genes were named from a `var` column whose vocabulary nobody is searching in.
 
 Fix:
-- Provide `adata.X` and a usable gene id column.
+- Provide `adata.X` and name the genes from the `var` column your readers will type.
 - In Jupyter/server mode, pass `gene_id_column=...` if needed.
 
 ---
@@ -227,8 +233,11 @@ Fix:
 
 - **NaN/Inf in embeddings**: invalid current input; readers reject it before
   dataset adoption.
-- **Duplicate or filename-colliding gene IDs**: invalid current-format input;
-  regenerate the dataset with unique portable IDs.
+- **Duplicate gene names**: invalid current-format input; regenerate the
+  dataset with one distinct name per gene. Names are never filenames, so any
+  printable text is acceptable — but two genes sharing a name are
+  indistinguishable in the field selector, the legend, and every exported
+  figure.
 - **Huge categorical fields**: legends/palettes don’t scale to 50k–100k categories; consider filtering/aggregating.
 - **Browser `.h5ad`**: for large files, this often fails due to memory limits (prefer server mode or exports).
 

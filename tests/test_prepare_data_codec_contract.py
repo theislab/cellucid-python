@@ -110,10 +110,6 @@ def test_quantizer_requires_exact_current_bit_width(bits):
             "no finite values",
         ),
         (
-            np.array([3.0, 3.0], dtype=np.float32),
-            "constant",
-        ),
-        (
             np.array([2.0, np.nan, 4.0], dtype=np.float32),
             "only finite values",
         ),
@@ -126,6 +122,50 @@ def test_quantizer_requires_exact_current_bit_width(bits):
 def test_quantizer_rejects_undefined_scientific_ranges(values, message):
     with pytest.raises(ValueError, match=message):
         _quantize_continuous(values, bits=8, field_name="score")
+
+
+@pytest.mark.parametrize("bits", [8, 16])
+@pytest.mark.parametrize("constant", [0.0, -0.0, 3.0, -12.5, 2.0**-149, 3.4028235e38])
+def test_quantizer_encodes_a_constant_field_as_equal_bounds_and_zero_codes(bits, constant):
+    values = np.full(7, constant, dtype=np.float32)
+
+    quantized, minimum, maximum, scale = _quantize_continuous(
+        values,
+        bits=bits,
+        field_name="constant",
+    )
+
+    assert quantized.dtype == (np.uint8 if bits == 8 else np.uint16)
+    assert quantized.tolist() == [0] * 7
+    assert minimum == float(np.float32(constant))
+    assert maximum == minimum
+    # No scale exists for a constant field, and the writer never derives one.
+    assert scale == 0.0
+
+
+@pytest.mark.parametrize("bits", [8, 16])
+@pytest.mark.parametrize("constant", [0.0, 3.0, -12.5, 2.0**-149, 3.4028235e38])
+def test_the_reader_arithmetic_recovers_a_constant_field_exactly(bits, constant):
+    """The published bounds and codes must decode back to the exact constant.
+
+    Not within a quantization step: the same value, bit for bit, under both the
+    reader's constant branch and the general dequantization formula.
+    """
+    max_quant = 254 if bits == 8 else 65534
+    quantized, minimum, maximum, _ = _quantize_continuous(
+        np.full(5, constant, dtype=np.float32),
+        bits=bits,
+        field_name="constant",
+    )
+
+    # The reader's explicit constant branch.
+    assert np.float32(minimum) == np.float32(constant)
+    # The general formula, which must not divide by (maximum - minimum).
+    decoded = (
+        minimum + quantized.astype(np.float64) * ((maximum - minimum) / max_quant)
+    ).astype(np.float32)
+    np.testing.assert_array_equal(decoded, np.full(5, constant, dtype=np.float32))
+    assert np.isfinite(decoded).all()
 
 
 def test_quantizer_preserves_a_noncollapsed_float32_subnormal_range():
@@ -211,6 +251,6 @@ def test_prepare_reserves_missing_marker_for_generated_outlier_quantiles(tmp_pat
         obs_categorical_dtype="uint16",
     )
 
-    outlier_codes = np.fromfile(out_dir / "obs/cluster.outliers.u8", dtype=np.uint8)
+    outlier_codes = np.fromfile(out_dir / "obs/0.outliers.u8", dtype=np.uint8)
     assert outlier_codes[:3].tolist() == [127, 0, 254]
     assert outlier_codes[3] == 255

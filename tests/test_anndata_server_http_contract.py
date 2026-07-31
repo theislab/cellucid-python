@@ -115,7 +115,7 @@ def test_file_identity_never_exposes_or_aliases_the_private_source_path(
         server.stop()
 
 
-def test_direct_server_preserves_biological_names_and_uses_exact_wire_components() -> None:
+def test_direct_server_preserves_biological_names_and_routes_by_payload_index() -> None:
     adata = ad.AnnData(
         X=np.array(
             [
@@ -146,24 +146,31 @@ def test_direct_server_preserves_biological_names_and_uses_exact_wire_components
         )
         assert status == 200
         assert json.loads(body)["fields"] == [
-            ["Gt(ROSA)26Sor"],
-            ["Gene A"],
+            [0, "Gt(ROSA)26Sor"],
+            [1, "Gene A"],
         ]
 
         status, _headers, body = _request(
             host,
             port,
             "GET",
-            "/var/Gt_ROSA_26Sor.values.f32",
+            "/var/0.values.f32",
         )
         assert status == 200
         assert np.frombuffer(body, dtype="<f4").tolist() == [1.25, 3.75]
+
+        # The name was never mangled into a route, so no route spells it back.
+        assert _request(host, port, "GET", "/var/Gt_ROSA_26Sor.values.f32")[0] == 404
+        assert _request(host, port, "GET", "/obs/cell_type.codes.u8")[0] == 404
+        # A non-canonical index is not the index the manifest declares.
+        assert _request(host, port, "GET", "/var/00.values.f32")[0] == 404
+        assert _request(host, port, "GET", "/var/2.values.f32")[0] == 404
 
         status, _headers, body = _request(
             host,
             port,
             "GET",
-            "/obs/cell_type.codes.u8",
+            "/obs/0.codes.u8",
         )
         assert status == 200
         assert np.frombuffer(body, dtype=np.uint8).tolist() == [0, 1]
@@ -587,12 +594,12 @@ def test_server_publishes_the_exact_vector_manifest_and_payload() -> None:
             "fields": {
                 "velocity_umap": {
                     "label": "velocity_umap",
-                    "basis": "umap",
                     "available_dimensions": [2],
                     "default_dimension": 2,
                     "files": {
-                        "2d": "vectors/velocity_umap_2d.bin",
+                        "2d": "vectors/0_2d.bin",
                     },
+                    "basis": "umap",
                 }
             },
         }
@@ -605,12 +612,15 @@ def test_server_publishes_the_exact_vector_manifest_and_payload() -> None:
             host,
             port,
             "GET",
-            "/vectors/velocity_umap_2d.bin",
+            "/vectors/0_2d.bin",
             headers={"Accept-Encoding": "gzip"},
         )
         assert status == 200
         assert headers["Content-Encoding"] == "gzip"
         assert gzip.decompress(body) == expected
+
+        assert _request(host, port, "GET", "/vectors/velocity_umap_2d.bin")[0] == 404
+        assert _request(host, port, "GET", "/vectors/1_2d.bin")[0] == 404
 
 
 @pytest.mark.parametrize(

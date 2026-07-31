@@ -12,12 +12,12 @@ from cellucid.anndata_adapter import (
     _categorical_storage,
 )
 from cellucid.prepare_data import (
-    _assert_unique_filename_components,
-    _require_portable_filename_component,
-    _select_category_dtype,
+    _json_category_values as _prepare_json_category_values,
 )
 from cellucid.prepare_data import (
-    _json_category_values as _prepare_json_category_values,
+    _require_field_identities,
+    _require_portable_filename_component,
+    _select_category_dtype,
 )
 
 
@@ -76,22 +76,22 @@ def test_anndata_adapter_emits_exact_current_compact_manifests() -> None:
         "_categoricalFields",
     ]
     assert obs["_format"] == "compact_v1"
-    assert obs["_continuousFields"] == [["score"]]
+    assert obs["_continuousFields"] == [[0, "score"]]
     assert len(obs["_categoricalFields"]) == 1
     categorical = obs["_categoricalFields"][0]
-    assert categorical[:4] == ["cluster", ["A", "B"], "uint8", 255]
-    assert isinstance(categorical[4], dict)
-    assert len(categorical) == 5
+    assert categorical[:5] == [1, "cluster", ["A", "B"], "uint8", 255]
+    assert isinstance(categorical[5], dict)
+    assert len(categorical) == 6
     assert obs["_obsSchemas"] == {
         "continuous": {
-            "pathPattern": "obs/{key}.values.f32",
+            "pathPattern": "obs/{index}.values.f32",
             "ext": "f32",
             "dtype": "float32",
             "quantized": False,
         },
         "categorical": {
-            "codesPathPattern": "obs/{key}.codes.{ext}",
-            "outlierPathPattern": "obs/{key}.outliers.f32",
+            "codesPathPattern": "obs/{index}.codes.{ext}",
+            "outlierPathPattern": "obs/{index}.outliers.f32",
             "outlierExt": "f32",
             "outlierDtype": "float32",
             "outlierQuantized": False,
@@ -113,12 +113,12 @@ def test_anndata_adapter_emits_exact_current_compact_manifests() -> None:
     assert var["quantization"] is None
     assert var["_varSchema"] == {
         "kind": "continuous",
-        "pathPattern": "var/{key}.values.f32",
+        "pathPattern": "var/{index}.values.f32",
         "ext": "f32",
         "dtype": "float32",
         "quantized": False,
     }
-    assert var["fields"] == [["Gene_A"], ["Gene-B"]]
+    assert var["fields"] == [[0, "Gene_A"], [1, "Gene-B"]]
 
     identity = adapter.get_dataset_identity()
     assert "_anndata_adapter" not in identity
@@ -143,8 +143,10 @@ def test_identity_obs_fields_follow_the_exact_compact_manifest_order() -> None:
     )
 
     manifest = adapter.get_obs_manifest()
-    assert [field[0] for field in manifest["_continuousFields"]] == ["score"]
-    assert [field[0] for field in manifest["_categoricalFields"]] == ["cluster"]
+    # obs/ is one index space: 'cluster' is served first, so it owns index 0
+    # even though it is listed second in the manifest's categorical array.
+    assert manifest["_continuousFields"] == [[1, "score"]]
+    assert [field[:2] for field in manifest["_categoricalFields"]] == [[0, "cluster"]]
     identity = adapter.get_dataset_identity()
     assert identity["obs_fields"] == [
         {"key": "score", "kind": "continuous"},
@@ -185,7 +187,7 @@ def test_anndata_adapter_marks_outliers_absent_without_an_explicit_latent_key() 
     )
     categorical_schema = adapter.get_obs_manifest()["_obsSchemas"]["categorical"]
     assert categorical_schema == {
-        "codesPathPattern": "obs/{key}.codes.{ext}",
+        "codesPathPattern": "obs/{index}.codes.{ext}",
         "outlierPathPattern": None,
         "outlierExt": None,
         "outlierDtype": None,
@@ -244,8 +246,8 @@ def test_anndata_adapter_preserves_boolean_category_identity() -> None:
     )
 
     categorical_fields = adapter.get_obs_manifest()["_categoricalFields"]
-    flag = next(field for field in categorical_fields if field[0] == "flag")
-    assert flag[1] == [False, True]
+    flag = next(field for field in categorical_fields if field[1] == "flag")
+    assert flag[2] == [False, True]
     _data, categories, missing_value = adapter.get_obs_categorical_codes("flag")
     assert categories == [False, True]
     assert missing_value == 255
@@ -318,7 +320,8 @@ def test_portable_filename_component_rejects_every_cross_platform_hazard(
         _require_portable_filename_component(component)
 
 
-def test_prepared_components_are_portable_while_direct_routes_preserve_case() -> None:
+def test_dataset_directory_identity_stays_portable_while_fields_are_free_text() -> None:
+    """A dataset_id is a real directory; a field identity is not a path any more."""
     valid = [
         "A",
         "A.b_c-",
@@ -326,11 +329,12 @@ def test_prepared_components_are_portable_while_direct_routes_preserve_case() ->
     ]
     assert [_require_portable_filename_component(component) for component in valid] == valid
 
-    with pytest.raises(ValueError, match="case-insensitively"):
-        _assert_unique_filename_components(
-            ["Field", "field"],
-            label="Observation field",
-        )
+    # Every hazard the filename rule existed to stop is now unreachable: the
+    # payload is named by index, so these are ordinary identities.
+    assert _require_field_identities(
+        ["Field", "field", "A/B", "A B", "ümlaut", "CON", "a" * 400],
+        label="Observation field",
+    ) == ["Field", "field", "A/B", "A B", "ümlaut", "CON", "a" * 400]
 
     adata = _adata_with_current_fields()
     adata.obs = pd.DataFrame(
@@ -346,10 +350,7 @@ def test_prepared_components_are_portable_while_direct_routes_preserve_case() ->
         dataset_name="Case-distinct obs",
         dataset_id="case-distinct-obs",
     )
-    assert [field[0] for field in adapter.get_obs_manifest()["_continuousFields"]] == [
-        "Field",
-        "field",
-    ]
+    assert adapter.get_obs_manifest()["_continuousFields"] == [[0, "Field"], [1, "field"]]
 
     adata = _adata_with_current_fields()
     adata.var_names = ["Gene", "gene"]
@@ -359,16 +360,36 @@ def test_prepared_components_are_portable_while_direct_routes_preserve_case() ->
         dataset_name="Case-distinct var",
         dataset_id="case-distinct-var",
     )
-    assert adapter.get_var_manifest()["fields"] == [["Gene"], ["gene"]]
+    assert adapter.get_var_manifest()["fields"] == [[0, "Gene"], [1, "gene"]]
 
     adata.var_names = ["A/B", "A B"]
-    with pytest.raises(ValueError, match="collide.*A_B"):
-        AnnDataAdapter(
-            adata,
-            latent_key="X_latent",
-            dataset_name="Wire collision",
-            dataset_id="wire-collision",
-        )
+    adapter = AnnDataAdapter(
+        adata,
+        latent_key="X_latent",
+        dataset_name="Former wire collision",
+        dataset_id="former-wire-collision",
+    )
+    assert adapter.get_var_manifest()["fields"] == [[0, "A/B"], [1, "A B"]]
+
+
+@pytest.mark.parametrize(
+    ("identifiers", "message"),
+    [
+        ([" padded"], "displayed verbatim"),
+        (["padded "], "displayed verbatim"),
+        (["cell​type"], "displayed verbatim"),
+        (["cell\ttype"], "displayed verbatim"),
+        ([""], "non-empty"),
+        (["gene", "gene"], "duplicated"),
+        ([7], "must be a string"),
+    ],
+)
+def test_field_identities_keep_the_rules_a_drawn_name_still_needs(
+    identifiers: list[object],
+    message: str,
+) -> None:
+    with pytest.raises((TypeError, ValueError), match=message):
+        _require_field_identities(identifiers, label="Gene")
 
 
 def test_portable_filename_component_requires_a_native_string() -> None:

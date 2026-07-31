@@ -172,15 +172,17 @@ If your `.h5ad` is large:
 
 **Likely causes (ordered)**
 1) No gene expression provided (`adata.X` missing/empty), so there is nothing to query.
-2) Gene identifiers are not where Cellucid expects (e.g., you want symbols but stored elsewhere).
+2) The genes were named from the wrong `var` column, so the names you search for are not the ones published.
 3) Data is extremely large and gene fetch is slow (looks like “nothing”).
 
 **How to confirm**
 - AnnData: `print(adata.X is None)`, `print(adata.n_vars)`, `print(adata.var.head())`
 - Exports: ensure `var_manifest.json` and `var/` exist (gene expression exported).
+  The files under `var/` are numbered, so read the names out of
+  `var_manifest.json` rather than out of the directory listing.
 
 **Fix**
-- Provide a valid gene expression matrix and gene ids; if needed, pick the right gene id column in server/Jupyter mode (`gene_id_column=...`).
+- Provide a valid gene expression matrix, and name the genes from the `var` column your readers will search — `gene_id_column=...` in server/Jupyter mode, `var_gene_id_column=...` when exporting.
 - For very large datasets, use server mode (best reliability): {doc}`04_server_tutorial`
 
 ---

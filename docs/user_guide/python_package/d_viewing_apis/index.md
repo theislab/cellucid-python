@@ -77,7 +77,7 @@ viewer = show("./export_dir", height=600)
 ```{important}
 By design, the Python server serves **both**:
 
-1) your dataset API (e.g. `/dataset_identity.json`, `/points_3d.bin`, `/var/*.values.f32`), and
+1) your dataset API (e.g. `/dataset_identity.json`, `/points_3d.bin`, `/var/<index>.values.f32`), and
 2) the **viewer UI** (HTML/JS/CSS) by downloading it from `https://www.cellucid.com` and caching it locally.
 
 This verified same-origin generation approach:

@@ -42,7 +42,7 @@ The web viewer expects files like:
 - `dataset_identity.json`
 - `obs_manifest.json`
 - `points_2d.bin`, `points_3d.bin`
-- `var/<gene>.values.f32.bin`
+- `var/<index>.values.f32` (payload files are named by index, never by gene name)
 
 In AnnData mode, the adapter serves these as **virtual endpoints** computed from AnnData on demand.
 
@@ -68,8 +68,9 @@ In AnnData mode, the adapter serves these as **virtual endpoints** computed from
 ## Edge cases (do not skip)
 
 - If your embedding keys are missing or have unexpected shapes, the adapter cannot serve `points_*d.bin`.
-- Duplicate gene IDs and portable filename collisions are rejected during
-  adapter construction.
+- Duplicate gene names, and names carrying characters with no glyph, are
+  rejected during adapter construction. Names are not routes, so nothing else
+  about them is constrained.
 - If `adata.X` is CSR, the adapter may materialize a CSC copy for efficient column access (memory trade-off).
 
 ---

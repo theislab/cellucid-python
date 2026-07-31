@@ -138,10 +138,11 @@ def test_obs_keys_serves_the_named_columns_and_nothing_else() -> None:
     try:
         assert adapter.get_obs_keys() == ["leiden", "total_counts"]
         manifest = adapter.get_obs_manifest()
-        served = {entry[0] for entry in manifest["_categoricalFields"]}
-        served |= {entry[0] for entry in manifest["_continuousFields"]}
+        served = {entry[1] for entry in manifest["_categoricalFields"]}
+        served |= {entry[1] for entry in manifest["_continuousFields"]}
         assert served == {"leiden", "total_counts"}
-        assert adapter.get_obs_key_for_payload_component("collection_date") is None
+        # Only the two served indices resolve; a third payload route does not exist.
+        assert adapter.get_obs_key_for_payload_index("2") is None
         with pytest.raises(KeyError, match="collection_date"):
             adapter.get_obs_categorical_codes("collection_date")
     finally:

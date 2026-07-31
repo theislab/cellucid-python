@@ -128,6 +128,10 @@ This matters because derived fields are still “real fields”:
 
 - If a continuous field has no finite values, Cellucid still renders a safe default range (so the UI doesn’t break).
 - If all values are identical, the UI will still show a non-zero range so the colormap can render.
+- Constant fields and constant genes are published, not dropped: the export
+  format encodes them as `minValue == maxValue` with every code `0`, and the
+  viewer decodes that back to the exact constant. A gene detected in no cell of
+  a published subset is therefore still in the gene menu, at its exact value.
 
 ### Negative values + log scale
 

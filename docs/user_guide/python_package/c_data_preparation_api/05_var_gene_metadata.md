@@ -6,9 +6,13 @@
 
 `var` is the gene/feature metadata table associated with `gene_expression`.
 
-In the current Python exporter, `var` is primarily used to determine the **gene identifiers** that:
+In the current Python exporter, `var` is primarily used to determine the **gene
+names** that:
 - appear in the UI (gene search / gene overlay names),
-- and become the “keys” in `var_manifest.json`.
+- and are recorded in `var_manifest.json`.
+
+A gene name is never a filename. Payload files under `var/` are named by integer
+index, so `var_manifest.json` is the only place a gene's identity lives.
 
 ```{important}
 The exporter assumes `var` row order matches `gene_expression` column order.
@@ -68,22 +72,22 @@ prepare(
 
 ### Uniqueness (do not skip this)
 
-`prepare()` requires unique gene IDs, and requires the **exported** ones to be
-exact portable filename components. Duplicates, unsafe IDs, and case-insensitive
-filesystem collisions fail before the export is published.
+`prepare()` requires distinct gene names, and requires the **exported** ones to
+read on screen as the value they store. Duplicates and names carrying
+characters with no glyph fail before the export is published.
 
 The two rules have different scopes, because they answer different questions:
 
 | Rule | Scope | Why |
 | --- | --- | --- |
-| IDs are non-empty strings and **distinct** | every row of `var` | `gene_identifiers` addresses rows by ID, so a repeated ID names no single row |
-| IDs are **portable filename components**, unique case-insensitively | only the genes actually exported | the rule is about the file the gene is written to, and a deselected gene is written to none |
+| names are non-empty strings and **distinct** | every row of `var` | `gene_identifiers` addresses rows by name, so a repeated name names no single row |
+| names are **drawable exactly as stored** | only the genes actually exported | the rule is about text the viewer shows, and a deselected gene is never shown |
 
-So a `var` that carries `HLA-DRB1/2` still exports cleanly as long as
-`gene_identifiers` leaves that gene out. This is the same scoping `obs_keys`
-already has (see {doc}`04_obs_cell_metadata`): narrowing the export narrows the
-filename contract with it. `cellucid_prepare()` in the R package applies the
-identical scopes.
+`HLA-DRB1/2` is a real HGNC symbol and exports fine, exported or not: it is
+never a path. `'MS4A1 '` with a trailing space does not, because the legend
+would draw it identically to `'MS4A1'`. This is the same scoping `obs_keys`
+already has (see {doc}`04_obs_cell_metadata`). `cellucid_prepare()` in the R
+package applies the identical scopes.
 
 Preflight check:
 
@@ -119,9 +123,8 @@ If any requested gene is absent, the exporter raises `KeyError` and publishes
 nothing. A repeated request raises `ValueError` naming the repeated identifier.
 
 `gene_identifiers` is also the supported way past a gene the exporter cannot
-write: an ID that is not a portable filename component, or that collides
-case-insensitively with another ID, only has to be resolved when the gene is
-among the exported ones.
+draw: a name carrying invisible characters only has to be cleaned when the gene
+is among the exported ones.
 
 Reproducibility tip:
 - store the exact gene list used for export in your pipeline (and ideally version-control it).
@@ -137,17 +140,20 @@ However:
 
 ---
 
-## Naming rules (exact portable IDs)
+## Naming rules
 
-Exported gene IDs are not rewritten. They must be 1–180-byte ASCII components
-that begin with a letter or digit, contain only letters, digits, `.`, `_`, or
-`-`, do not end with `.`, are not dot segments or Windows device names, and are
-unique under case-insensitive comparison among the exported IDs. IDs containing
-spaces, slashes, or other unsafe characters are rejected before publication.
-Collisions are possible (rare for Ensembl IDs, more common for messy symbols).
+Exported gene names are never rewritten and never become paths, so there is no
+character set, length limit, reserved name, or case-collision rule. `Gene` and
+`gene` are two distinct genes and export as two payloads.
 
-An ID that stays in `var` but is left out by `gene_identifiers` is never checked
-against these rules, because it is never written to a path.
+An exported name must be text the viewer can draw exactly as it is stored: no
+control characters, none of the zero-width characters `U+200B`, `U+2060`,
+`U+FEFF`, and no leading or trailing whitespace of any kind. A name that breaks
+this rejects the complete candidate before publication and the message names it.
+
+A name that stays in `var` but is left out by `gene_identifiers` is never
+checked against the display rule, because it is never drawn. Distinctness across
+all of `var` is still required either way.
 
 ---
 
@@ -162,7 +168,8 @@ Likely causes:
 
 How to confirm:
 - Does `<out_dir>/var_manifest.json` exist?
-- Open it and see which gene IDs are present in `fields`.
+- Open it and read `fields`: each entry is `[index, name]`, or
+  `[index, name, minValue, maxValue]` when quantized.
 
 Fix:
 - Export gene expression, or export the genes you need, and re-export with `force=True`.

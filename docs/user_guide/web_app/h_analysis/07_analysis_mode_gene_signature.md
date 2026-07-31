@@ -45,9 +45,10 @@ If you paste one gene per line, also include commas or convert to comma-separate
 :::
 
 Gene matching rules (practical):
-- matching is **exact** to the dataset’s gene keys,
-- no alias mapping is applied (e.g., symbol ↔ Ensembl),
-- case sensitivity depends on your dataset’s gene keys (treat it as case-sensitive).
+- matching is **exact** to the one name each gene is published under,
+- no alias mapping is applied: Cellucid ships no symbol table and performs no
+  lookup, so a name your export does not publish matches nothing,
+- treat matching as case-sensitive.
 
 ### 2) Pages (“Compare pages”)
 
@@ -150,14 +151,14 @@ If you need per-cell mapping:
 
 Likely causes:
 - gene expression is not available in this dataset/loading method,
-- gene keys don’t match (symbols vs Ensembl, case mismatch),
+- the names don’t match the ones the dataset publishes (different vocabulary, case mismatch),
 - signature input formatting is wrong (newline-only or extra punctuation).
 
 How to confirm:
 - try a single known gene (e.g., `MS4A1`) as a “signature” and see if it produces non-empty output.
 
 Fix:
-- correct gene identifiers to match your dataset,
+- correct the names to the ones the field selector shows,
 - ensure comma-separated input,
 - load the dataset with gene expression (see {doc}`../b_data_loading/index`).
 

@@ -122,7 +122,7 @@ def test_prepare_requires_one_exact_categorical_storage_dtype(tmp_path: Path) ->
     manifest = json.loads(
         (tmp_path / "uint16" / "obs_manifest.json").read_text(encoding="utf-8")
     )
-    assert manifest["_categoricalFields"][0][2] == "uint16"
+    assert manifest["_categoricalFields"][0][3] == "uint16"
     identity = json.loads(
         (tmp_path / "uint16" / "dataset_identity.json").read_text(encoding="utf-8")
     )

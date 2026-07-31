@@ -99,11 +99,14 @@ curl -I http://127.0.0.1:<port>/obs_manifest.json
 curl -I http://127.0.0.1:<port>/points_3d.bin
 ```
 
-If you want to test gene/obs endpoints, pick a known key and try:
+To test a gene or obs endpoint, read the payload index out of the manifest
+first — routes are named by index, never by identifier. The index of a field is
+element `[0]` of its manifest entry:
 
 ```bash
-curl -I http://127.0.0.1:<port>/var/FOXP1.values.f32
-curl -I http://127.0.0.1:<port>/obs/cell_type.codes.u8
+curl -s http://127.0.0.1:<port>/var_manifest.json | python -m json.tool | head -20
+curl -I http://127.0.0.1:<port>/var/0.values.f32
+curl -I http://127.0.0.1:<port>/obs/0.codes.u8
 ```
 
 ---

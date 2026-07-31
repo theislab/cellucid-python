@@ -28,9 +28,19 @@ If you want share links, session bundles, or community annotation to behave pred
 ## How `cellucid-r` accepts `dataset_id`
 
 `dataset_id` and `dataset_name` are required explicit arguments.
-`cellucid_prepare()` does not derive or rewrite either value. `dataset_id`
-must satisfy the same exact portable identifier contract as exported field and
-gene IDs.
+`cellucid_prepare()` does not derive or rewrite either value.
+
+`dataset_id` names the dataset's directory and appears in share links, so it is
+the one identifier in an export that really is a path component: 1–180 ASCII
+bytes, starting with a letter or digit, otherwise only letters, digits, `.`,
+`_`, or `-`, not ending with `.`, and not a Windows device name. Exported obs
+keys, gene IDs, and vector-field IDs carry none of those rules — they are
+manifest entries, not filenames (see
+{doc}`../c_data_preparation_api/02_input_requirements_global`).
+
+`dataset_name` is shown to the reader verbatim, so it obeys the display-text
+rule instead: non-empty, no control or zero-width characters, and no leading or
+trailing whitespace.
 
 ### Recommendation
 

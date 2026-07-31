@@ -171,10 +171,11 @@ viewer = show_anndata(
 ```
 
 ```{warning}
-AnnData construction rejects duplicate gene IDs and gene IDs whose portable
-filename components collide, including case-insensitive collisions. Choose a
-unique, portable identifier in `var.index` or the selected
-`gene_id_column`.
+AnnData construction rejects duplicate gene names, and names carrying
+characters with no glyph (control, zero-width, or edge whitespace). Payload
+routes are integer indices, so `HLA-DRB1/2` and `Gene A` are served fine, and
+`Gene` and `gene` are two distinct genes. Choose a distinct name in `var.index`
+or the selected `gene_id_column`.
 ```
 
 ## Vector fields (velocity/drift overlays)

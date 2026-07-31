@@ -95,20 +95,21 @@ from .connectivity_contract import (
     validate_connectivity_edges,
 )
 from .prepare_data import (
-    _assert_unique_filename_components,
     _json_category_values,
     _normalize_finite_float32_embedding,
     _require_continuous_obs_values,
     _require_dataset_id,
     _require_dataset_name,
+    _require_field_identities,
+    _require_finite_embedding_source,
     _require_finite_float32_array,
     _require_native_boolean,
     _require_nonempty_string,
     _require_positive_native_integer,
-    _require_string_identifiers,
 )
 from .vector_fields import (
     SUPPORTED_EMBEDDING_KEYS,
+    _finite_float32_matrix,
     embedding_declaration_hints,
     is_vector_field_declaration_key,
     scale_vector_field,
@@ -180,56 +181,16 @@ def _classify_anndata_path(path: str | Path) -> Literal["h5ad", "zarr"]:
     )
 
 
-_DIRECT_PAYLOAD_UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]+", flags=re.ASCII)
-_DIRECT_PAYLOAD_EDGE_RE = re.compile(r"^[._]+|[._]+$", flags=re.ASCII)
+# A payload route is the field's integer index, written exactly as the manifest
+# writes it, so '0' resolves and '00', '+0', and ' 0' do not.
+_PAYLOAD_INDEX_PATTERN = re.compile(r"0|[1-9][0-9]*", flags=re.ASCII)
 
 
-def _direct_payload_component(name: object, *, label: str) -> str:
-    """Encode one display identifier as the current direct-server route key."""
-    if not isinstance(name, str):
-        raise TypeError(f"{label} must be a native string.")
-    if not name:
-        raise ValueError(f"{label} must be non-empty.")
-    component = _DIRECT_PAYLOAD_UNSAFE_RE.sub("_", name)
-    component = _DIRECT_PAYLOAD_EDGE_RE.sub("", component)
-    if not component:
-        raise ValueError(
-            f"{label} {name!r} has no ASCII letters, digits, '.', '_', or '-' "
-            "for its direct-server payload route."
-        )
-    return component
-
-
-def _assert_unique_direct_payload_components(
-    keys: list[str],
-    *,
-    label: str,
-) -> list[str]:
-    """Require unique raw identifiers and collision-free direct route keys."""
-    raw_keys: set[str] = set()
-    component_to_raw: dict[str, str] = {}
-    components: list[str] = []
-    for key in keys:
-        if key in raw_keys:
-            raise ValueError(f"{label} key {key!r} is duplicated.")
-        component = _direct_payload_component(
-            key,
-            label=f"{label} key",
-        )
-        previous = component_to_raw.get(component)
-        if previous is not None:
-            raise ValueError(
-                f"{label} keys {previous!r} and {key!r} collide at direct "
-                f"payload component {component!r}."
-            )
-        raw_keys.add(key)
-        component_to_raw[component] = key
-        components.append(component)
-    return components
-
-
-def _validate_manifest_field_keys(keys: list[str], *, label: str) -> None:
-    _assert_unique_direct_payload_components(keys, label=label)
+def _payload_route_index(component: str) -> int | None:
+    """Resolve one canonical decimal payload index, or None when it is not one."""
+    if _PAYLOAD_INDEX_PATTERN.fullmatch(component) is None:
+        return None
+    return int(component)
 
 
 def _obs_field_kind(series: pd.Series, *, key: str) -> Literal["continuous", "category"]:
@@ -480,13 +441,9 @@ class AnnDataAdapter:
                 )
             raw_gene_ids = self.adata.var[self.gene_id_column].tolist()
             gene_label = f"var column {self.gene_id_column!r}"
-        gene_ids = _require_string_identifiers(
+        gene_ids = _require_field_identities(
             raw_gene_ids,
             label=gene_label,
-        )
-        gene_payload_components = _assert_unique_direct_payload_components(
-            gene_ids,
-            label="Gene",
         )
 
         # Public source attribution never includes the local filesystem path.
@@ -502,6 +459,7 @@ class AnnDataAdapter:
         # Structure matches dataset_identity.json: {"default_field": ..., "fields": {...}}.
         self._vector_fields_metadata: dict[str, Any] | None = None
         self._vector_field_obsm_keys: dict[str, dict[int, str]] = {}
+        self._vector_field_payload_index_by_id: dict[str, int] = {}
         self._vector_field_cache: dict[tuple[str, int], np.ndarray] = {}
         self._centroid_cache: dict[str, list[dict[str, Any]]] = {}
         self._outlier_quantile_cache: dict[str, np.ndarray] = {}
@@ -510,12 +468,11 @@ class AnnDataAdapter:
         self._gene_id_to_idx_cache: dict[str, int] | None = {
             gene_id: index for index, gene_id in enumerate(gene_ids)
         }
-        self._gene_payload_component_by_id: dict[str, str] = dict(
-            zip(gene_ids, gene_payload_components, strict=True)
-        )
-        self._gene_id_by_payload_component: dict[str, str] = dict(
-            zip(gene_payload_components, gene_ids, strict=True)
-        )
+        # A gene's payload index is its position in the served gene list, which
+        # is exactly the index its var manifest entry declares.
+        self._gene_payload_index_by_id: dict[str, int] = {
+            gene_id: index for index, gene_id in enumerate(gene_ids)
+        }
 
         self._connectivity_cache: ConnectivityEdgePairs | None = None
         self._connectivity_manifest: dict[str, Any] | None = None
@@ -535,21 +492,16 @@ class AnnDataAdapter:
         self._closed: bool = False
         self._close_complete: bool = False
 
-        selected_obs_keys = _require_string_identifiers(
+        selected_obs_keys = _require_field_identities(
             _resolve_obs_keys(self.adata.obs, obs_keys),
-            label="obs columns",
-        )
-        obs_payload_components = _assert_unique_direct_payload_components(
-            selected_obs_keys,
             label="Observation field",
         )
         self._obs_keys: list[str] = selected_obs_keys
-        self._obs_payload_component_by_key: dict[str, str] = dict(
-            zip(selected_obs_keys, obs_payload_components, strict=True)
-        )
-        self._obs_key_by_payload_component: dict[str, str] = dict(
-            zip(obs_payload_components, selected_obs_keys, strict=True)
-        )
+        # obs/ carries both continuous and categorical payloads, so one index
+        # space spans both manifest arrays, in the served column order.
+        self._obs_payload_index_by_key: dict[str, int] = {
+            key: index for index, key in enumerate(selected_obs_keys)
+        }
         # Every served column is classified now, so an unservable dtype fails
         # here with its exact escape hatch instead of inside a later request.
         for key in selected_obs_keys:
@@ -750,7 +702,7 @@ class AnnDataAdapter:
             key = f"X_umap_{dim}d"
             if key not in self.adata.obsm:
                 continue
-            embedding = _require_finite_float32_array(
+            embedding = _require_finite_embedding_source(
                 self.adata.obsm[key],
                 label=f"Embedding {key!r}",
             )
@@ -829,21 +781,26 @@ class AnnDataAdapter:
             return None
 
         fields: dict[str, dict[str, Any]] = {}
-        _assert_unique_filename_components(
+        field_ids = _require_field_identities(
             list(validated.fields),
             label="Vector field",
         )
+        self._vector_field_payload_index_by_id = {
+            field_id: index for index, field_id in enumerate(field_ids)
+        }
         for field_id, vectors_by_dimension in validated.fields.items():
             dimensions = sorted(vectors_by_dimension)
+            payload_index = self._vector_field_payload_index_by_id[field_id]
+            # Same key order as the prepared export and as cellucid-r.
             fields[field_id] = {
                 "label": field_id,
-                "basis": "umap",
                 "available_dimensions": dimensions,
                 "default_dimension": max(dimensions),
                 "files": {
-                    f"{dimension}d": (f"vectors/{field_id}_{dimension}d.bin")
+                    f"{dimension}d": (f"vectors/{payload_index}_{dimension}d.bin")
                     for dimension in dimensions
                 },
+                "basis": "umap",
             }
 
         return {
@@ -859,7 +816,10 @@ class AnnDataAdapter:
         """
         Get embedding coordinates for a dimension.
 
-        Returns normalized Float32 array of shape (n_cells, dim).
+        Returns a normalized float64 array of shape (n_cells, dim). The payload
+        is float32, but the rounding happens once, in ``get_points_binary()``,
+        so a centroid measured from these coordinates is not measured from
+        already-rounded ones.
         """
         self._check_closed()
         dim = _require_dimension(dim)
@@ -879,7 +839,10 @@ class AnnDataAdapter:
                 f"Could not find embedding for dimension {dim}. "
                 f"Expected an embedding resolved for {dim}D. Available obsm keys: {list(self.adata.obsm.keys())}"
             )
-        raw = _require_finite_float32_array(
+        # Precision-preserving, like the prepared export: the extents are
+        # measured at the input's own precision and the coordinates are
+        # rounded to float32 once, in get_points_binary().
+        raw = _require_finite_embedding_source(
             self.adata.obsm[key],
             label=f"Embedding {key!r}",
         )
@@ -900,7 +863,7 @@ class AnnDataAdapter:
             }
         else:
             self._embedding_norm[dim] = {
-                "center": np.zeros((dim,), dtype=np.float32),
+                "center": np.zeros((dim,), dtype=np.float64),
                 "scale_factor": 1.0,
             }
 
@@ -914,12 +877,15 @@ class AnnDataAdapter:
         1D -> (x, 0, 0)
         2D -> (x, y, 0)
         3D -> (x, y, z)
+
+        This is a render payload, so it carries the same float32 values
+        ``get_points_binary()`` writes.
         """
         embedding = self.get_embedding(dim)
         n_cells = embedding.shape[0]
 
         if dim == 3:
-            return embedding
+            return embedding.astype(np.float32)
         elif dim == 2:
             result = np.zeros((n_cells, 3), dtype=np.float32)
             result[:, :2] = embedding
@@ -970,9 +936,14 @@ class AnnDataAdapter:
 
         cache_key = (field, dimension)
         if cache_key not in self._vector_field_cache:
-            raw = _require_finite_float32_array(
+            # The same validator the prepared export uses, so the served
+            # bytes are the prepared bytes: the caller's own values are scaled
+            # and rounded to float32 exactly once, in scale_vector_field().
+            raw, _dimension = _finite_float32_matrix(
                 self.adata.obsm[obsm_key],
                 label=f"Vector field {obsm_key!r}",
+                n_rows=self.n_cells,
+                declared_dimension=dimension,
             )
             expected_shape = (self.n_cells, dimension)
             if raw.ndim != 2 or raw.shape != expected_shape:
@@ -1032,22 +1003,25 @@ class AnnDataAdapter:
 
     def _obs_series(self, key: str) -> pd.Series:
         """Return one served obs column, naming the served set when it is absent."""
-        if key not in self._obs_payload_component_by_key:
+        if key not in self._obs_payload_index_by_key:
             raise KeyError(f"obs field '{key}' not found. Available fields: {self._obs_keys}")
         return cast(pd.Series, self.adata.obs[key])
 
-    def get_obs_payload_component(self, key: str) -> str:
-        """Return the exact direct-server route component for one obs key."""
+    def get_obs_payload_index(self, key: str) -> int:
+        """Return the exact payload index one obs key is served under."""
         self._check_closed()
         try:
-            return self._obs_payload_component_by_key[key]
+            return self._obs_payload_index_by_key[key]
         except KeyError as error:
-            raise KeyError(f"Observation field {key!r} has no direct payload route.") from error
+            raise KeyError(f"Observation field {key!r} has no payload index.") from error
 
-    def get_obs_key_for_payload_component(self, component: str) -> str | None:
-        """Resolve one direct-server route component to its exact obs key."""
+    def get_obs_key_for_payload_index(self, component: str) -> str | None:
+        """Resolve one payload-index route component to its exact obs key."""
         self._check_closed()
-        return self._obs_key_by_payload_component.get(component)
+        index = _payload_route_index(component)
+        if index is None or not 0 <= index < len(self._obs_keys):
+            return None
+        return self._obs_keys[index]
 
     def get_obs_field_kind(self, key: str) -> Literal["continuous", "category"]:
         """
@@ -1285,37 +1259,43 @@ class AnnDataAdapter:
             values = self.adata.var[self.gene_id_column].tolist()
             label = f"var column {self.gene_id_column!r}"
 
-        self._gene_ids_cache = _require_string_identifiers(
+        self._gene_ids_cache = _require_field_identities(
             values,
             label=label,
-        )
-        payload_components = _assert_unique_direct_payload_components(
-            self._gene_ids_cache,
-            label="Gene",
         )
 
         # Build index for O(1) lookup
         self._gene_id_to_idx_cache = {gid: idx for idx, gid in enumerate(self._gene_ids_cache)}
-        self._gene_payload_component_by_id = dict(
-            zip(self._gene_ids_cache, payload_components, strict=True)
-        )
-        self._gene_id_by_payload_component = dict(
-            zip(payload_components, self._gene_ids_cache, strict=True)
-        )
+        self._gene_payload_index_by_id = dict(self._gene_id_to_idx_cache)
         return self._gene_ids_cache
 
-    def get_gene_payload_component(self, gene_id: str) -> str:
-        """Return the exact direct-server route component for one gene."""
+    def get_gene_payload_index(self, gene_id: str) -> int:
+        """Return the exact payload index one gene is served under."""
         self._check_closed()
         try:
-            return self._gene_payload_component_by_id[gene_id]
+            return self._gene_payload_index_by_id[gene_id]
         except KeyError as error:
-            raise KeyError(f"Gene {gene_id!r} has no direct payload route.") from error
+            raise KeyError(f"Gene {gene_id!r} has no payload index.") from error
 
-    def get_gene_id_for_payload_component(self, component: str) -> str | None:
-        """Resolve one direct-server route component to its exact gene identifier."""
+    def get_gene_id_for_payload_index(self, component: str) -> str | None:
+        """Resolve one payload-index route component to its exact gene identifier."""
         self._check_closed()
-        return self._gene_id_by_payload_component.get(component)
+        gene_ids = self.get_gene_ids()
+        index = _payload_route_index(component)
+        if index is None or not 0 <= index < len(gene_ids):
+            return None
+        return gene_ids[index]
+
+    def get_vector_field_id_for_payload_index(self, component: str) -> str | None:
+        """Resolve one payload-index route component to its exact vector field id."""
+        self._check_closed()
+        index = _payload_route_index(component)
+        if index is None:
+            return None
+        for field_id, payload_index in self._vector_field_payload_index_by_id.items():
+            if payload_index == index:
+                return field_id
+        return None
 
     def _get_gene_idx(self, gene_id: str) -> int:
         """Get gene index with O(1) lookup."""
@@ -1548,11 +1528,11 @@ class AnnDataAdapter:
         obs_manifest = self.get_obs_manifest()
         continuous_fields = obs_manifest["_continuousFields"]
         categorical_fields = obs_manifest["_categoricalFields"]
-        obs_fields = [{"key": field[0], "kind": "continuous"} for field in continuous_fields] + [
+        obs_fields = [{"key": field[1], "kind": "continuous"} for field in continuous_fields] + [
             {
-                "key": field[0],
+                "key": field[1],
                 "kind": "category",
-                "n_categories": len(field[1]),
+                "n_categories": len(field[2]),
             }
             for field in categorical_fields
         ]
@@ -1619,16 +1599,16 @@ class AnnDataAdapter:
     def get_obs_manifest(self) -> dict:
         """Generate obs_manifest.json content."""
         obs_keys = self.get_obs_keys()
-        _validate_manifest_field_keys(obs_keys, label="Observation field")
 
         continuous_fields = []
         categorical_fields = []
 
         for key in obs_keys:
+            payload_index = self.get_obs_payload_index(key)
             kind = self.get_obs_field_kind(key)
 
             if kind == "continuous":
-                continuous_fields.append([key])
+                continuous_fields.append([payload_index, key])
             else:
                 # Categorical
                 s = self._obs_series(key)
@@ -1649,7 +1629,7 @@ class AnnDataAdapter:
 
                 # Outlier quantile min/max (always 0-1 since it's a quantile)
                 categorical_fields.append(
-                    [key, categories, dtype_str, missing_value, centroids_by_dim]
+                    [payload_index, key, categories, dtype_str, missing_value, centroids_by_dim]
                 )
 
         # Build compact manifest format
@@ -1659,7 +1639,7 @@ class AnnDataAdapter:
         obs_schemas = {}
         if continuous_fields:
             obs_schemas["continuous"] = {
-                "pathPattern": "obs/{key}.values.f32",
+                "pathPattern": "obs/{index}.values.f32",
                 "ext": "f32",
                 "dtype": "float32",
                 "quantized": False,
@@ -1667,7 +1647,7 @@ class AnnDataAdapter:
         if categorical_fields:
             if self.latent_key is None:
                 obs_schemas["categorical"] = {
-                    "codesPathPattern": "obs/{key}.codes.{ext}",
+                    "codesPathPattern": "obs/{index}.codes.{ext}",
                     "outlierPathPattern": None,
                     "outlierExt": None,
                     "outlierDtype": None,
@@ -1675,8 +1655,8 @@ class AnnDataAdapter:
                 }
             else:
                 obs_schemas["categorical"] = {
-                    "codesPathPattern": "obs/{key}.codes.{ext}",
-                    "outlierPathPattern": "obs/{key}.outliers.f32",
+                    "codesPathPattern": "obs/{index}.codes.{ext}",
+                    "outlierPathPattern": "obs/{index}.outliers.f32",
                     "outlierExt": "f32",
                     "outlierDtype": "float32",
                     "outlierQuantized": False,
@@ -1698,16 +1678,16 @@ class AnnDataAdapter:
         if self.adata.X is None:
             fields = []
         else:
-            gene_ids = self.get_gene_ids()
-            _validate_manifest_field_keys(gene_ids, label="Gene")
-            fields = [[gid] for gid in gene_ids]
+            fields = [
+                [self.get_gene_payload_index(gene_id), gene_id] for gene_id in self.get_gene_ids()
+            ]
 
         # Path pattern must match prepare format for consistency
         # Note: We don't use compression (.gz) in adapter mode - gzip is applied
         # at the HTTP level when client supports Accept-Encoding: gzip
         var_schema = {
             "kind": "continuous",
-            "pathPattern": "var/{key}.values.f32",
+            "pathPattern": "var/{index}.values.f32",
             "ext": "f32",
             "dtype": "float32",
             "quantized": False,
@@ -1778,6 +1758,7 @@ class AnnDataAdapter:
         self._embedding_norm.clear()
         self._vector_field_cache.clear()
         self._vector_field_obsm_keys.clear()
+        self._vector_field_payload_index_by_id.clear()
         self._vector_fields_metadata = None
         self._centroid_cache.clear()
         self._outlier_quantile_cache.clear()
@@ -1788,10 +1769,8 @@ class AnnDataAdapter:
         self._has_connectivity = False
         self._gene_ids_cache = None
         self._gene_id_to_idx_cache = None
-        self._gene_payload_component_by_id.clear()
-        self._gene_id_by_payload_component.clear()
-        self._obs_payload_component_by_key.clear()
-        self._obs_key_by_payload_component.clear()
+        self._gene_payload_index_by_id.clear()
+        self._obs_payload_index_by_key.clear()
 
         # Clear CSC cache (can be large for sparse matrices).
         self._X_csc_cache = None

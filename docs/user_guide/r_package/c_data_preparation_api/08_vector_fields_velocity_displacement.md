@@ -36,21 +36,27 @@ array's shape is a mistake worth catching rather than a shape to trust. This is
 the same rule the Python package enforces, so the same field is named the same
 way from either writer.
 
-## Field IDs must be filesystem-safe
+## Field IDs are names, not filenames
 
-Like every exported identifier, vector-field IDs must already be portable.
+A field id is recorded in `dataset_identity.json` and is never used as a path.
+Its payload is written to `vectors/<index>_<dim>d.bin`, where `<index>` is the
+field's position once the ids are sorted by code point. So a field id carries no
+filename rule at all — no character restriction, no length limit, no Windows
+device-name rule.
 
-Allowed characters are effectively:
-- letters, numbers, `.`, `_`, `-`
+What remains is the key grammar above (`<field>_umap_<1|2|3>d`) and the identity
+rules every exported identifier obeys: a field id must be a non-empty string,
+**distinct**, and text the viewer can draw verbatim — no control or zero-width
+characters and no leading or trailing whitespace, because the id becomes a UI
+label. Two list names that produce the same field id and dimension are rejected
+with `vector_fields names must be unique.` before any array is read, and
+duplicate ids are rejected with `Vector field ids must be unique. Duplicates: …`.
 
-The ID must be 1–180 ASCII bytes, must start with a letter or digit, must not
-end with `.`, and must not be a Windows device name. Nothing is stripped or
-rewritten.
-
-If an ID is not safe, export fails with an error that states the rule, for
-example `Vector field ids 'CON.velocity_umap' is reserved on Windows.` The ID
-is checked after the key is parsed, so the reported name is the field id without
-its dimensional suffix.
+```{note}
+Sorting by code point is what makes `cellucid-r` and the `cellucid` Python
+package assign the same index to the same field, so the two writers produce
+byte-identical layouts from the same input.
+```
 
 ## Embedding coupling and automatic scaling
 
@@ -79,10 +85,11 @@ Each file is:
 - row-major
 - shape `(n_cells, dim)`
 
-Example:
-- `vectors/velocity_umap_2d.bin` (or `.gz`)
+Example, for the field at payload index `0`:
+- `vectors/0_2d.bin` (or `.gz`)
 
-Metadata is written into `dataset_identity.json` under `vector_fields`.
+Metadata is written into `dataset_identity.json` under `vector_fields`, and that
+is what maps each field id to its files.
 
 The exporter records one exact `default_field`:
 - with one vector field, that field is the default;
@@ -130,9 +137,11 @@ Export fails if:
 Export fails if:
 - the key is not exactly `<field>_umap_<1|2|3>d` (no suffix, a suffix other than
   `1`/`2`/`3`, or no `_umap` before it)
-- the field ID contains spaces or slashes
-- the field ID begins with `.`, `_`, or `-`
-- the field ID is longer than 180 bytes or is a Windows device name
+
+The part before `_umap` is otherwise unconstrained: interior spaces, slashes, a
+leading `.`, and non-ASCII characters are all accepted, because the id names a
+field in the identity metadata and never a file. Only invisible characters are
+rejected, and only because the id is drawn as a UI label.
 
 ### Duplicate definitions
 
@@ -141,15 +150,15 @@ same field and dimension are two identical list names, and `cellucid_prepare()`
 rejects them with `vector_fields names must be unique.` before reading any
 array. No declaration overrides another.
 
-Field ids that differ only in case, such as `Velocity_umap_2d` and
-`velocity_umap_3d`, collide at one payload path and are rejected too.
+`Velocity_umap_2d` and `velocity_umap_3d` are two different fields and both
+export: they no longer share a payload path, so case alone is not a collision.
 
 ## Troubleshooting pointers
 
 - `Vector field key '…' must exactly match '<field>_umap_<1|2|3>d'.` → add or
   correct the dimensional suffix on the list name.
-- `Vector field ids '…' is not a portable identifier. …` → rename the list key
-  to a safe identifier.
+- `Vector field ids must be unique. Duplicates: …` → two list names reduce to
+  the same field id; rename one of them.
 - `Vector field '…' declares 2D but contains 1 components.` → check `ncol(...)`;
   a plain vector counts as one component.
 - `Vector field '…' requires a matching 3D embedding.` → export `X_umap_3d`, or

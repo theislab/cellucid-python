@@ -84,6 +84,15 @@ def _finite_float32_matrix(
     n_rows: int | None,
     declared_dimension: int | None,
 ) -> tuple[np.ndarray, int]:
+    """Validate one matrix as float32-publishable and return it in float64.
+
+    The payload is float32, but the rounding to float32 belongs to the one
+    place that writes the bytes. Rounding here as well would round twice --
+    once on the input and once on the scaled result -- and every component
+    whose two roundings disagree lands one ULP away from the correctly rounded
+    value. cellucid-r scales the caller's doubles and rounds once, so a second
+    rounding here is also what made the two writers disagree on vectors/*.
+    """
     if values is None:
         raise ValueError(f"{label} must not be None.")
     array = _dense_array(values)
@@ -113,10 +122,9 @@ def _finite_float32_matrix(
     if not np.isfinite(array).all():
         raise ValueError(f"{label} must contain only finite values.")
     with np.errstate(over="ignore", invalid="ignore"):
-        float32_array = array.astype(np.float32, copy=False)
-    if not np.isfinite(float32_array).all():
-        raise ValueError(f"{label} contains values outside the finite float32 range.")
-    return float32_array, dimension
+        if not np.isfinite(array.astype(np.float32, copy=False)).all():
+            raise ValueError(f"{label} contains values outside the finite float32 range.")
+    return array.astype(np.float64, copy=False), dimension
 
 
 def validate_vector_fields(
@@ -218,7 +226,12 @@ def scale_vector_field(
     scale_factor: object,
     label: str,
 ) -> np.ndarray:
-    """Scale vectors using one required finite positive scale."""
+    """Scale vectors using one required finite positive scale.
+
+    This is the only float32 rounding a vector payload gets: the caller's own
+    values are scaled at their own precision and the product is rounded once,
+    exactly as cellucid-r does.
+    """
     if isinstance(scale_factor, bool) or not isinstance(scale_factor, Real):
         raise ValueError(f"{label} requires a finite positive scale factor.")
     numeric_scale = float(scale_factor)
@@ -273,18 +286,21 @@ def compute_transition_drift(
     *,
     normalize_rows: bool,
 ) -> np.ndarray:
-    """Compute exact per-cell transition drift in embedding space."""
+    """Compute exact per-cell transition drift in embedding space.
+
+    The drift is returned in float64 because it is an input to the export, not
+    a payload: rounding it here would round once more than the export does.
+    """
     if type(normalize_rows) is not bool:
         raise TypeError("normalize_rows must be exactly True or False.")
-    embedding_array, _dimension = _finite_float32_matrix(
+    working_embedding, _dimension = _finite_float32_matrix(
         embedding,
         label="embedding",
         n_rows=None,
         declared_dimension=None,
     )
-    n_cells = int(embedding_array.shape[0])
+    n_cells = int(working_embedding.shape[0])
     matrix = _transition_matrix(transition_matrix, n_cells=n_cells)
-    working_embedding = embedding_array.astype(np.float64)
     product = np.asarray(matrix @ working_embedding, dtype=np.float64)
 
     if normalize_rows:
@@ -301,7 +317,7 @@ def compute_transition_drift(
         drift,
         label="computed transition drift",
         n_rows=n_cells,
-        declared_dimension=int(embedding_array.shape[1]),
+        declared_dimension=int(working_embedding.shape[1]),
     )
     return drift_array
 

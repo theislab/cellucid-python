@@ -181,9 +181,10 @@ If that happens, pass the exact browser-reachable HTTP(S) base URL as
 - Cellucid supports 1D/2D/3D embeddings; if the embedding is missing or has an unexpected shape, you’ll see missing plot / errors.
 
 ### Duplicate gene identifiers
-- Direct AnnData viewing rejects duplicate gene IDs and portable filename
-  collisions during adapter construction; provide a unique identifier through
-  `var.index` or `gene_id_column` (see {doc}`export` and {doc}`adapters`).
+- Direct AnnData viewing rejects duplicate gene names during adapter
+  construction; provide a distinct name through `var.index` or `gene_id_column`
+  (see {doc}`export` and {doc}`adapters`). Names are not filenames, so only
+  exact duplicates collide.
 
 ---
 

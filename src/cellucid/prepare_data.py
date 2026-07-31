@@ -210,35 +210,6 @@ def _require_unique_identifiers(
     return unique
 
 
-def _assert_unique_filename_components(
-    keys: list[str],
-    *,
-    label: str,
-) -> list[str]:
-    """Require one writable, non-colliding payload path per exported key.
-
-    This is the path rule, so it holds over exactly the keys that become files.
-    A supplied key that is never written names no path and is not checked here.
-    """
-    _require_unique_identifiers(keys, label=label)
-    portable_to_raw: dict[str, str] = {}
-    portable_keys: list[str] = []
-    for key in keys:
-        portable_key = _require_portable_filename_component(
-            key,
-            label=f"{label} key",
-        )
-        collision_key = portable_key.casefold()
-        if collision_key in portable_to_raw:
-            raise ValueError(
-                f"{label} keys {portable_to_raw[collision_key]!r} and "
-                f"{key!r} collide case-insensitively at one payload path."
-            )
-        portable_to_raw[collision_key] = key
-        portable_keys.append(portable_key)
-    return portable_keys
-
-
 def _require_string_identifiers(
     values: Sequence[object],
     *,
@@ -315,6 +286,109 @@ def _require_display_text(value: object, *, label: str, allow_empty: bool) -> st
             "the exact text you want shown."
         )
     return value
+
+
+def _require_field_identities(
+    values: Sequence[object],
+    *,
+    label: str,
+) -> list[str]:
+    """Require one distinct, drawable identity per exported field on one axis.
+
+    A payload filename is an integer index, so an identifier is never a path and
+    carries no filename rule at all: no ASCII restriction, no case-collision
+    rule, no reserved Windows name. What survives is what the identity is
+    actually for. It names one field in the manifest, so it must be a non-empty
+    string, distinct within its axis so a lookup resolves one field, and text
+    the viewer can draw exactly as it is stored -- the same rule every category
+    label obeys, because a gene name and a category label are shown in the same
+    legend.
+    """
+    identifiers = _require_string_identifiers(values, label=label)
+    for position, identifier in enumerate(identifiers):
+        _require_display_text(
+            identifier,
+            label=f"{label} identifier at position {position}",
+            allow_empty=False,
+        )
+    return _require_unique_identifiers(identifiers, label=label)
+
+
+def _require_dense_payload_indices(
+    indices: Sequence[object],
+    *,
+    axis: str,
+) -> None:
+    """Require the payload indices of one axis to be exactly 0..N-1, each once.
+
+    The index *is* the filename, so two fields holding one index write into one
+    file: the second overwrites the first and the viewer then draws one field's
+    values under the other field's name. Nothing downstream can detect that, so
+    it is asserted here in the writer, against the manifest that was just built,
+    rather than only in a test.
+    """
+    resolved: list[int] = []
+    for position, index in enumerate(indices):
+        if type(index) is not int:
+            raise RuntimeError(
+                f"{axis} payload index at position {position} must be a native "
+                f"integer, got {index!r}."
+            )
+        resolved.append(index)
+    if sorted(resolved) != list(range(len(resolved))):
+        raise RuntimeError(
+            f"{axis} payload indices must be exactly 0..{len(resolved) - 1}, each "
+            f"used once; got {sorted(resolved)}."
+        )
+
+
+def _expand_payload_pattern(
+    pattern: object,
+    *,
+    index: int,
+    label: str,
+    extension: str | None = None,
+) -> str:
+    """Substitute one payload index, and one codes extension, into a pattern."""
+    if not isinstance(pattern, str) or not pattern:
+        raise RuntimeError(f"{label} must be a non-empty path pattern.")
+    expanded = pattern.replace("{index}", str(index))
+    if extension is not None:
+        expanded = expanded.replace("{ext}", extension)
+    if "{" in expanded or "}" in expanded:
+        raise RuntimeError(f"{label} retains an unsubstituted placeholder: {expanded!r}.")
+    return expanded
+
+
+def _require_declared_payloads_on_disk(
+    out_dir: Path,
+    *,
+    directory_name: str,
+    declared: set[str],
+    axis: str,
+) -> None:
+    """Require one axis directory to hold exactly the payloads its manifest declares.
+
+    The manifest is the only index the viewer has: a payload it does not declare
+    is invisible, and a payload it declares but that was never written fails the
+    dataset at read time, in the browser, long after the export succeeded. Both
+    are caught here by re-expanding the emitted path patterns and comparing them
+    against the directory that was actually written.
+    """
+    directory = out_dir / directory_name
+    on_disk: set[str] = set()
+    if directory.exists():
+        for entry in sorted(directory.iterdir()):
+            if not entry.is_file():
+                raise RuntimeError(f"{axis} payload directory holds a non-file entry: {entry}")
+            on_disk.add(f"{directory_name}/{entry.name}")
+    missing = sorted(declared - on_disk)
+    undeclared = sorted(on_disk - declared)
+    if missing or undeclared:
+        raise RuntimeError(
+            f"{axis} manifest does not describe the payloads that were written. "
+            f"Declared but absent: {missing}. Written but undeclared: {undeclared}."
+        )
 
 
 def _require_dataset_name(value: object, *, label: str = "dataset_name") -> str:
@@ -449,7 +523,14 @@ def _normalize_finite_float32_embedding(
     *,
     label: str,
 ) -> tuple[np.ndarray, np.ndarray, float, float]:
-    """Normalize one validated embedding with a required nonzero range."""
+    """Normalize one validated embedding with a required nonzero range.
+
+    The normalized coordinates stay in float64. They are published as float32,
+    but the rounding belongs to the single place that writes the bytes:
+    rounding here would also round the centroids that are measured from these
+    coordinates and published as JSON doubles. cellucid-r normalizes in double
+    and rounds at the write too, so this is what keeps the two writers equal.
+    """
     if embedding.ndim != 2 or embedding.shape[0] == 0:
         raise ValueError(f"{label} must be a non-empty 2D array.")
     working = embedding.astype(np.float64)
@@ -460,10 +541,11 @@ def _normalize_finite_float32_embedding(
         raise ValueError(f"{label} has no coordinate variation and cannot be normalized.")
     center = (axis_mins + axis_maxs) / 2
     scale_factor = 2.0 / max_range
-    normalized = ((working - center) * scale_factor).astype(np.float32)
-    if not np.isfinite(normalized).all():
-        raise ValueError(f"{label} normalization produced non-finite coordinates.")
-    return normalized, center.astype(np.float32), scale_factor, max_range
+    normalized = (working - center) * scale_factor
+    with np.errstate(over="ignore", invalid="ignore"):
+        if not np.isfinite(normalized.astype(np.float32)).all():
+            raise ValueError(f"{label} normalization produced non-finite coordinates.")
+    return normalized, center, scale_factor, max_range
 
 
 def _require_displayable_category_labels(
@@ -601,48 +683,134 @@ def _identity_obs_fields_from_compact_manifest(
 
     identity_fields: list[dict] = []
     manifest_keys: list[str] = []
+    # Both arrays write into obs/, so their payload indices share one space.
+    payload_indices: list[object] = []
     for field in continuous_fields:
         if (
             not isinstance(field, list)
-            or len(field) not in (1, 3)
-            or not isinstance(field[0], str)
-            or not field[0]
+            or len(field) not in (2, 4)
+            or type(field[0]) is not int
+            or not isinstance(field[1], str)
+            or not field[1]
         ):
             raise ValueError(
                 "compact_v1 continuous observation fields must be exact "
-                "[key] or [key, minValue, maxValue] tuples."
+                "[index, key] or [index, key, minValue, maxValue] tuples."
             )
-        key = field[0]
+        payload_indices.append(field[0])
+        key = field[1]
         manifest_keys.append(key)
         identity_fields.append({"key": key, "kind": "continuous"})
 
     for field in categorical_fields:
         if (
             not isinstance(field, list)
-            or len(field) not in (5, 7)
-            or not isinstance(field[0], str)
-            or not field[0]
-            or not isinstance(field[1], list)
+            or len(field) not in (6, 8)
+            or type(field[0]) is not int
+            or not isinstance(field[1], str)
+            or not field[1]
+            or not isinstance(field[2], list)
         ):
             raise ValueError(
                 "compact_v1 categorical observation fields must be exact "
-                "five- or seven-member tuples with a category array."
+                "six- or eight-member tuples with a category array."
             )
-        key = field[0]
+        payload_indices.append(field[0])
+        key = field[1]
         manifest_keys.append(key)
         identity_fields.append(
             {
                 "key": key,
                 "kind": "category",
-                "n_categories": len(field[1]),
+                "n_categories": len(field[2]),
             }
         )
 
-    _assert_unique_filename_components(
-        manifest_keys,
-        label="Observation field",
-    )
+    _require_unique_identifiers(manifest_keys, label="Observation field")
+    _require_dense_payload_indices(payload_indices, axis="Observation")
     return identity_fields
+
+
+def _gene_names_from_compact_manifest(manifest: dict) -> list[str]:
+    """Validate one emitted var manifest and return its exact gene names."""
+    fields = manifest["fields"]
+    if not isinstance(fields, list):
+        raise ValueError("compact_v1 var manifest fields must be a list.")
+
+    names: list[str] = []
+    payload_indices: list[object] = []
+    for field in fields:
+        if (
+            not isinstance(field, list)
+            or len(field) not in (2, 4)
+            or type(field[0]) is not int
+            or not isinstance(field[1], str)
+            or not field[1]
+        ):
+            raise ValueError(
+                "compact_v1 var fields must be exact [index, name] or "
+                "[index, name, minValue, maxValue] tuples."
+            )
+        payload_indices.append(field[0])
+        names.append(field[1])
+
+    _require_unique_identifiers(names, label="Gene")
+    _require_dense_payload_indices(payload_indices, axis="Gene")
+    return names
+
+
+_CODES_EXTENSION_BY_DTYPE = {"uint8": "u8", "uint16": "u16"}
+
+
+def _declared_obs_payload_paths(manifest: dict) -> set[str]:
+    """Re-derive every obs payload path the emitted manifest points a reader at."""
+    schemas = manifest["_obsSchemas"]
+    continuous_schema = schemas.get("continuous") or {}
+    categorical_schema = schemas.get("categorical") or {}
+    declared: set[str] = set()
+    for field in manifest["_continuousFields"]:
+        declared.add(
+            _expand_payload_pattern(
+                continuous_schema.get("pathPattern"),
+                index=field[0],
+                label="obs continuous pathPattern",
+            )
+        )
+    for field in manifest["_categoricalFields"]:
+        extension = _CODES_EXTENSION_BY_DTYPE.get(field[3])
+        if extension is None:
+            raise RuntimeError(
+                f"Categorical obs field {field[1]!r} declares an unknown codes dtype {field[3]!r}."
+            )
+        declared.add(
+            _expand_payload_pattern(
+                categorical_schema.get("codesPathPattern"),
+                index=field[0],
+                extension=extension,
+                label="obs categorical codesPathPattern",
+            )
+        )
+        declared.add(
+            _expand_payload_pattern(
+                categorical_schema.get("outlierPathPattern"),
+                index=field[0],
+                label="obs categorical outlierPathPattern",
+            )
+        )
+    return declared
+
+
+def _declared_var_payload_paths(manifest: dict) -> set[str]:
+    """Re-derive every var payload path the emitted manifest points a reader at."""
+    schema = manifest["_varSchema"]
+    return {
+        _expand_payload_pattern(
+            schema.get("pathPattern"),
+            index=field[0],
+            label="var pathPattern",
+        )
+        for field in manifest["fields"]
+    }
 
 
 def _to_dense(arr: np.ndarray | sparse.spmatrix) -> np.ndarray:
@@ -1425,6 +1593,24 @@ def _as_c_contiguous_byte_view(data: np.ndarray) -> memoryview:
 
 _QUANTIZATION_ARITHMETIC_CHUNK_SIZE = 1_048_576
 
+def _is_constant_continuous_range(min_val: float, max_val: float) -> bool:
+    """Name compact_v1's constant-field case from one payload's bounds.
+
+    A gene detected in no published cell, or an obs column a subset flattened,
+    is ordinary scientific data, so the format encodes it rather than rejecting
+    it. The case is declared by equal bounds -- the entry stays exactly
+    ``[index, key, minValue, maxValue]``, so neither its shape nor its length
+    moves -- and every code is written as ``0``. Writer and reader then take
+    the same named branch instead of the general arithmetic: the writer never
+    divides by ``maxValue - minValue``, and the reader fills ``minValue``
+    straight through. The value returns bit-exact, not within a quantization
+    step.
+
+    Sole derivation point on the writer side, so the quantizer, the exporter
+    and the tests cannot drift apart over what "constant" means.
+    """
+    return min_val == max_val
+
 
 def _quantize_continuous(
     values: np.ndarray,
@@ -1453,7 +1639,7 @@ def _quantize_continuous(
     max_val : float
         Maximum value (for dequantization).
     scale : float
-        Scale factor (for dequantization).
+        Scale factor (for dequantization), exactly ``0.0`` for a constant field.
     """
     if type(bits) is not int or bits not in (8, 16):
         raise ValueError("Quantization bits must be exactly 8 or 16.")
@@ -1468,18 +1654,20 @@ def _quantize_continuous(
     min_val = float(np.min(values))
     max_val = float(np.max(values))
 
-    if max_val == min_val:
-        raise ValueError(
-            f"Continuous field {field_name!r} cannot be quantized because "
-            f"all values are the constant {min_val!r}."
-        )
-
     if bits == 8:
         max_quant = 254  # 255 is the categorical-outlier missing marker.
         dtype: type[np.uint8] | type[np.uint16] = np.uint8
     else:  # 16 bits
         max_quant = 65534  # 65535 is the categorical-outlier missing marker.
         dtype = np.uint16
+
+    if _is_constant_continuous_range(min_val, max_val):
+        # The constant case, taken before any scaling exists. The general path
+        # divides by (max - min), which is exactly zero here, so a constant
+        # field must never reach it. Every code is 0 and both published bounds
+        # are the constant itself, which is what CONSTANT_FIELD_ENCODING
+        # describes and what the reader's matching constant branch decodes.
+        return np.zeros(values.shape, dtype=dtype), min_val, max_val, 0.0
 
     scale = max_quant / (max_val - min_val)
     quantized = np.empty(values.shape, dtype=dtype)
@@ -1544,10 +1732,11 @@ def _gene_expression_column(
 ) -> np.ndarray:
     """Materialize exactly the float32 column that one gene would be exported as.
 
-    The pre-flight quantizability scan and the export loop must agree to the
-    last bit, because the rejection depends on float32 rounding: a source range
-    that only exists in float64 collapses to one exported value. Both callers
-    go through this function so neither can drift from the other.
+    The pre-flight finiteness scan and the export loop must agree to the last
+    bit, because both the rejection and the published bounds depend on float32
+    rounding: a source range that only exists in float64 collapses to one
+    exported value, which is exported as a constant field. Both callers go
+    through this function so neither can drift from the other.
     """
     if is_sparse:
         column = cast(sparse.csc_matrix, matrix).getcol(gene_index).toarray().flatten()
@@ -1565,98 +1754,47 @@ def _gene_expression_column(
     return values
 
 
-def _quantizable_range_defect(values: np.ndarray) -> str | None:
-    """Name why one finite float32 vector has no quantized encoding, or None."""
-    if values.size == 0:
-        return "it has no values"
-    min_val = float(np.min(values))
-    max_val = float(np.max(values))
-    if min_val == max_val:
-        return f"every value is the constant {min_val!r}"
-    return None
+def _all_missing_outlier_defect(values: np.ndarray, *, centroid_min_points: int) -> str | None:
+    """Name why one generated outlier-quantile set has nothing to encode, or None.
 
-
-def _quantizable_outlier_defect(values: np.ndarray, *, centroid_min_points: int) -> str | None:
-    """Name why one generated outlier-quantile vector cannot be quantized, or None."""
-    finite = values[~np.isnan(values)]
-    if finite.size == 0:
+    A set whose every quantile is missing has no value anywhere -- not one
+    constant, none at all -- so there is no bound to publish and nothing for a
+    reader to decode. That is a ``centroid_min_points`` that no category
+    reaches, which is a setting the caller can change, and it is the only
+    remaining reason a continuous payload cannot be encoded.
+    """
+    if np.isnan(values).all():
         return (
             "no category holds at least centroid_min_points="
             f"{centroid_min_points} cells, so every generated quantile is missing"
         )
-    return _quantizable_range_defect(finite)
+    return None
 
 
-# compact_v1 writes a quantized field as [key, minValue, maxValue] and the
-# viewer's manifest expander rejects any tuple whose minValue is not strictly
-# below its maxValue, discarding the whole manifest rather than the one field.
-# A field with no variation therefore has no quantized encoding at all, and the
-# only honest options are to leave it out or to store it at full precision.
-_QUANTIZATION_VARIATION_RULE = (
-    "compact_v1 records a quantized field as [key, minValue, maxValue] and the "
-    "viewer rejects an entire manifest that declares minValue >= maxValue, so a "
-    "field with no variation has no quantized encoding."
-)
-
-
-def _require_quantizable_continuous_payloads(
+def _require_encodable_outlier_quantiles(
     *,
-    gene_defects: list[tuple[str, str]],
-    obs_defects: list[tuple[str, str]],
     outlier_defects: list[tuple[str, str]],
-    var_quantization: int | None,
     obs_continuous_quantization: int | None,
 ) -> None:
-    """Reject every unquantizable continuous payload at once, before any output.
+    """Reject every unencodable outlier-quantile set at once, before any output.
 
-    Quantization bounds are per field, so the export loop would otherwise fail
-    on the first offender, after the fields ahead of it were already written.
-    A dataset whose gene set was subset to one lineage routinely carries several
-    genes detected in no remaining cell, and reporting them one run at a time
-    turns a single fixable condition into one failed export per gene.
+    The check is per field, so the export loop would otherwise fail on the
+    first offender, after the fields ahead of it were already written. One run
+    names every affected field instead of one run per field.
     """
-    if not gene_defects and not obs_defects and not outlier_defects:
+    if not outlier_defects:
         return
 
-    total = len(gene_defects) + len(obs_defects) + len(outlier_defects)
-    sections: list[str] = []
-
-    if gene_defects:
-        listing = "\n".join(f"    {name!r}: {reason}" for name, reason in gene_defects)
-        sections.append(
-            f"  {len(gene_defects)} gene(s) with var_quantization={var_quantization}:\n"
-            f"{listing}\n"
-            "  Fix: exclude them through gene_identifiers=, or pass "
-            "var_quantization=None to export every gene as full-precision float32, "
-            "which carries no manifest bounds."
-        )
-
-    if obs_defects:
-        listing = "\n".join(f"    {name!r}: {reason}" for name, reason in obs_defects)
-        sections.append(
-            f"  {len(obs_defects)} continuous obs field(s) with "
-            f"obs_continuous_quantization={obs_continuous_quantization}:\n"
-            f"{listing}\n"
-            "  Fix: exclude them through obs_keys=, or pass "
-            "obs_continuous_quantization=None to export every continuous obs field "
-            "as full-precision float32, which carries no manifest bounds."
-        )
-
-    if outlier_defects:
-        listing = "\n".join(f"    {name!r}: {reason}" for name, reason in outlier_defects)
-        sections.append(
-            f"  {len(outlier_defects)} generated categorical outlier quantile set(s) with "
-            f"obs_continuous_quantization={obs_continuous_quantization}:\n"
-            f"{listing}\n"
-            "  Fix: lower centroid_min_points so a category qualifies, drop the field "
-            "from obs_keys=, or pass obs_continuous_quantization=None to export the "
-            "generated quantiles as full-precision float32."
-        )
-
-    body = "\n".join(sections)
+    listing = "\n".join(f"    {name!r}: {reason}" for name, reason in outlier_defects)
     raise ValueError(
-        f"{total} continuous payload(s) cannot be quantized. "
-        f"{_QUANTIZATION_VARIATION_RULE}\n{body}"
+        f"{len(outlier_defects)} generated categorical outlier quantile set(s) cannot be "
+        "encoded: a set with no quantile at all has no value to publish.\n"
+        f"  {len(outlier_defects)} set(s) with "
+        f"obs_continuous_quantization={obs_continuous_quantization}:\n"
+        f"{listing}\n"
+        "  Fix: lower centroid_min_points so a category qualifies, drop the field "
+        "from obs_keys=, or pass obs_continuous_quantization=None to export the "
+        "generated quantiles as full-precision float32."
     )
 
 
@@ -1879,16 +2017,16 @@ def _prepare_generation(
     var_quantization : int or None
         Bits for gene expression quantization (8, 16, or None for full float32).
         8-bit reduces file size by 4x with minimal visual impact for colormapping.
-        Codes and bounds derive from the viewer-visible float32 values. A
-        source range that collapses to one float32 value is rejected, while an
-        individual nonzero source value may round to zero if the range remains
-        non-collapsed. Every gene is checked before the first output file is
-        created, and one failure names every gene that cannot be quantized.
+        Codes and bounds derive from the viewer-visible float32 values. A gene
+        whose values are all one float32 value -- including a source range that
+        collapses to one under float32 rounding, and including a gene detected
+        in no exported cell -- is published as a constant field: equal bounds
+        and every code 0, which decodes back to that exact value.
     obs_continuous_quantization : int or None
         Bits for continuous obs field quantization (8, 16, or None for full float32).
         It follows the same viewer-visible float32 domain as var quantization,
-        and it also governs the generated categorical outlier quantiles. Its
-        payloads are checked in the same pre-flight as the genes.
+        including the constant-field encoding, and it also governs the
+        generated categorical outlier quantiles.
     obs_categorical_dtype : 'uint8' or 'uint16'
         - 'uint8': Store up to 255 categories
         - 'uint16': Store up to 65,535 categories
@@ -1951,19 +2089,21 @@ def _prepare_generation(
     gene_expression : np.ndarray or sparse matrix, optional
         Gene expression matrix, shape (n_cells, n_genes).
     var_gene_id_column : str or None
-        Exact non-empty column name in var containing string gene identifiers.
-        None uses string identifiers from var.index. Every identifier in the
+        Exact non-empty column name in var containing string gene names. None
+        uses string names from var.index. Whatever this selects is recorded
+        faithfully: Cellucid performs no symbol lookup and ships no mapping, so
+        the caller decides what a gene is called. Every identifier in the
         selected axis must be a non-empty string and must be distinct, because
         ``gene_identifiers`` addresses var rows by identifier and a repeated one
         names no single row.
     gene_identifiers : sequence of str, optional
         Unique gene identifiers to export. Every identifier must be a non-empty
-        string present in var. If None, all genes are exported. Narrowing the
-        export narrows the filename contract with it: only the exported
-        identifiers must be portable filename components unique under
-        case-insensitive comparison, exactly as ``obs_keys`` narrows which
-        observation keys are held to that rule. A var row this argument leaves
-        out is written to no path and is not checked against it.
+        string present in var. If None, all genes are exported. Payload files
+        are named by integer index, so an identifier is never a path; the
+        exported ones must additionally be text the viewer can draw exactly as
+        stored, exactly as ``obs_keys`` narrows which observation keys are held
+        to that rule. A var row this argument leaves out reaches no manifest and
+        is not checked against it.
     connectivities : array or sparse matrix, optional
         Exact weighted undirected graph, shape ``(n_cells, n_cells)``. Values
         must be finite and non-negative, the topology and weights must be
@@ -2181,10 +2321,13 @@ def _prepare_generation(
                 f"obs_keys contain columns not in obs: {missing}. "
                 f"Available columns: {list(obs.columns)}"
             )
-    safe_obs_keys = _assert_unique_filename_components(
+    obs_keys = _require_field_identities(
         obs_keys,
         label="Observation field",
     )
+    # obs/ holds both continuous and categorical payloads, so one index space
+    # spans both manifest arrays and follows the order the fields were selected.
+    obs_payload_index_by_key = {key: index for index, key in enumerate(obs_keys)}
 
     validated_continuous_obs: dict[str, np.ndarray] = {}
     validated_categorical_obs: dict[str, tuple[list[JsonScalar], np.ndarray]] = {}
@@ -2274,7 +2417,7 @@ def _prepare_generation(
     # be written.
     genes_to_export: list[str] = []
     gene_id_to_idx: dict[str, int] = {}
-    safe_gene_id_by_id: dict[str, str] = {}
+    gene_payload_index_by_id: dict[str, int] = {}
     gene_expr_is_sparse = False
     gene_expression_for_export: np.ndarray | sparse.csc_matrix | None = None
     if gene_expression is not None:
@@ -2327,13 +2470,12 @@ def _prepare_generation(
                 var[var_gene_id_column].tolist(),
                 label=f"var column {var_gene_id_column!r}",
             )
-        # Identity over the whole var, payload paths over the exported subset.
+        # Uniqueness over the whole var, display text over the exported subset.
         # Every var row is addressable through gene_identifiers=, so a repeated
         # identifier anywhere in var makes that lookup ambiguous and is rejected
-        # here. Portability and case-insensitive collision are properties of the
-        # file a gene is written to, so they are checked on genes_to_export
-        # below: an unexported gene names no path, exactly as an obs column left
-        # out of obs_keys= names none.
+        # here. Being drawable is a property of a name the viewer shows, so it
+        # is checked on genes_to_export below: an unexported gene reaches no
+        # manifest, exactly as an obs column left out of obs_keys= does.
         _require_unique_identifiers(all_gene_ids, label="Gene")
         gene_id_to_idx = {gene_id: index for index, gene_id in enumerate(all_gene_ids)}
 
@@ -2357,11 +2499,13 @@ def _prepare_generation(
                     f"gene_identifiers contain identifiers not present in var: {missing_genes}."
                 )
 
-        safe_gene_ids = _assert_unique_filename_components(
+        genes_to_export = _require_field_identities(
             genes_to_export,
             label="Gene",
         )
-        safe_gene_id_by_id = dict(zip(genes_to_export, safe_gene_ids, strict=True))
+        gene_payload_index_by_id = {
+            gene_id: index for index, gene_id in enumerate(genes_to_export)
+        }
 
     validated_vector_fields = validate_vector_fields(
         vector_fields,
@@ -2370,16 +2514,21 @@ def _prepare_generation(
         vector_field_default=vector_field_default,
     )
     scaled_vector_fields: dict[str, dict[int, np.ndarray]] = {}
+    vector_field_payload_index_by_id: dict[str, int] = {}
     vector_fields_identity: dict[str, object] | None = None
     if validated_vector_fields.fields:
         fields_metadata: dict[str, dict[str, object]] = {}
         gzip_suffix = ".gz" if compression else ""
-        _assert_unique_filename_components(
+        vector_field_ids = _require_field_identities(
             list(validated_vector_fields.fields),
             label="Vector field",
         )
+        vector_field_payload_index_by_id = {
+            field_id: index for index, field_id in enumerate(vector_field_ids)
+        }
         for field_id, vectors_by_dimension in validated_vector_fields.fields.items():
             dimensions = sorted(vectors_by_dimension)
+            payload_index = vector_field_payload_index_by_id[field_id]
             scaled_vector_fields[field_id] = {}
             for dimension, vectors in vectors_by_dimension.items():
                 scale_factor = normalization_info[dimension]["scale_factor"]
@@ -2389,15 +2538,17 @@ def _prepare_generation(
                     label=f"Vector field {field_id!r} {dimension}D",
                 )
 
+            # Key order is the one the output format specification prints and
+            # the one cellucid-r emits, so both writers produce the same file.
             fields_metadata[field_id] = {
                 "label": field_id,
-                "basis": "umap",
                 "available_dimensions": dimensions,
                 "default_dimension": max(dimensions),
                 "files": {
-                    f"{dimension}d": (f"vectors/{field_id}_{dimension}d.bin{gzip_suffix}")
+                    f"{dimension}d": (f"vectors/{payload_index}_{dimension}d.bin{gzip_suffix}")
                     for dimension in dimensions
                 },
+                "basis": "umap",
             }
 
         vector_fields_identity = {
@@ -2406,22 +2557,19 @@ def _prepare_generation(
         }
 
     # =========================================================================
-    # QUANTIZABILITY PRE-FLIGHT
+    # ENCODABILITY PRE-FLIGHT
     # =========================================================================
-    # Every quantized continuous payload is checked here, before the first
-    # output path exists, so one run reports every field that cannot be encoded
-    # instead of failing on each one in turn partway through the export.
-    gene_range_defects: list[tuple[str, str]] = []
-    obs_range_defects: list[tuple[str, str]] = []
+    # Every continuous payload is checked here, before the first output path
+    # exists, so one run reports every field that cannot be encoded instead of
+    # failing on each one in turn partway through the export. A constant field
+    # is not one of them: it has its own encoding (equal bounds, every code 0),
+    # so the only payload left with nothing to publish is a generated
+    # outlier-quantile set in which every quantile is missing.
     outlier_range_defects: list[tuple[str, str]] = []
 
     if obs_continuous_quantization is not None:
-        for key, values in validated_continuous_obs.items():
-            defect = _quantizable_range_defect(values)
-            if defect is not None:
-                obs_range_defects.append((key, defect))
         for key, quantiles in generated_outlier_quantiles.items():
-            defect = _quantizable_outlier_defect(
+            defect = _all_missing_outlier_defect(
                 quantiles,
                 centroid_min_points=centroid_min_points,
             )
@@ -2429,24 +2577,20 @@ def _prepare_generation(
                 outlier_range_defects.append((key, defect))
 
     if gene_expression_for_export is not None:
+        # Materializing every column here is what makes a non-finite value in
+        # any gene fail before the first output path is created rather than
+        # partway through the export.
         for gene_id in genes_to_export:
-            gene_values = _gene_expression_column(
+            _gene_expression_column(
                 gene_expression_for_export,
                 is_sparse=gene_expr_is_sparse,
                 gene_index=gene_id_to_idx[gene_id],
                 gene_id=gene_id,
                 n_cells=n_cells,
             )
-            if var_quantization is not None:
-                defect = _quantizable_range_defect(gene_values)
-                if defect is not None:
-                    gene_range_defects.append((gene_id, defect))
 
-    _require_quantizable_continuous_payloads(
-        gene_defects=gene_range_defects,
-        obs_defects=obs_range_defects,
+    _require_encodable_outlier_quantiles(
         outlier_defects=outlier_range_defects,
-        var_quantization=var_quantization,
         obs_continuous_quantization=obs_continuous_quantization,
     )
 
@@ -2456,12 +2600,13 @@ def _prepare_generation(
     # =========================================================================
     # SAVE DIMENSIONAL EMBEDDING FILES
     # =========================================================================
+    # This cast is the one and only float32 rounding a coordinate gets.
     for dim, arr in embeddings.items():
         dim_filename = f"points_{dim}d.bin"
         dim_path = out_dir / dim_filename
         check_path = Path(str(dim_path) + ".gz") if compression and compression > 0 else dim_path
         if _output_path_is_writable(check_path, check_path.name):
-            actual_path = _write_binary(dim_path, arr, compression)
+            actual_path = _write_binary(dim_path, arr.astype(np.float32), compression)
             suffix = " (gzip)" if compression else ""
             console_print(
                 f"✓ Wrote {dim}D positions ({arr.shape[0]:,} cells × {dim} dims) "
@@ -2475,8 +2620,9 @@ def _prepare_generation(
         vectors_dir = out_dir / "vectors"
         vectors_dir.mkdir(parents=True, exist_ok=True)
         for field_id, vectors_by_dimension in scaled_vector_fields.items():
+            payload_index = vector_field_payload_index_by_id[field_id]
             for dimension, vectors in vectors_by_dimension.items():
-                filename = f"{field_id}_{dimension}d.bin"
+                filename = f"{payload_index}_{dimension}d.bin"
                 path = vectors_dir / filename
                 check_path = Path(str(path) + ".gz") if compression and compression > 0 else path
                 if _output_path_is_writable(check_path, check_path.name):
@@ -2498,8 +2644,9 @@ def _prepare_generation(
         continuous_dtype_info: dict = {}
         categorical_dtype_info: dict = {}
 
-        for key, safe_key in zip(obs_keys, safe_obs_keys, strict=True):
+        for key in obs_keys:
             s = obs[key]
+            payload_index = obs_payload_index_by_key[key]
 
             # Decide kind: continuous vs categorical
             if isinstance(s.dtype, pd.CategoricalDtype) or pd.api.types.is_bool_dtype(s):
@@ -2525,17 +2672,11 @@ def _prepare_generation(
                         dtype_str = "uint16"
                         ext = "u16"
 
-                    value_fname = f"{safe_key}.values.{ext}"
-                    value_path = obs_binary_dir / value_fname
-                    actual_path = _write_binary(value_path, quantized, compression)
+                    value_path = obs_binary_dir / f"{payload_index}.values.{ext}"
+                    _write_binary(value_path, quantized, compression)
 
-                    # Adjust path in manifest if compressed
-                    manifest_path = f"{obs_binary_dirname}/{value_fname}"
-                    if compression:
-                        manifest_path += ".gz"
-
-                    # Compact format: [key, minValue, maxValue]
-                    obs_continuous_fields.append([key, min_val, max_val])
+                    # Compact format: [index, key, minValue, maxValue]
+                    obs_continuous_fields.append([payload_index, key, min_val, max_val])
                     if not continuous_dtype_info:
                         continuous_dtype_info["ext"] = ext
                         continuous_dtype_info["dtype"] = dtype_str
@@ -2543,12 +2684,11 @@ def _prepare_generation(
                         continuous_dtype_info["quantizationBits"] = obs_continuous_quantization
                 else:
                     # Full precision
-                    value_fname = f"{safe_key}.values.f32"
-                    value_path = obs_binary_dir / value_fname
-                    actual_path = _write_binary(value_path, values, compression)
+                    value_path = obs_binary_dir / f"{payload_index}.values.f32"
+                    _write_binary(value_path, values, compression)
 
-                    # Compact format: [key]
-                    obs_continuous_fields.append([key])
+                    # Compact format: [index, key]
+                    obs_continuous_fields.append([payload_index, key])
                     if not continuous_dtype_info:
                         continuous_dtype_info["ext"] = "f32"
                         continuous_dtype_info["dtype"] = "float32"
@@ -2581,18 +2721,14 @@ def _prepare_generation(
                 codes_typed[valid_mask] = codes[valid_mask].astype(dtype)
 
                 if dtype == np.uint8:
-                    codes_fname = f"{safe_key}.codes.u8"
+                    codes_fname = f"{payload_index}.codes.u8"
                     dtype_str = "uint8"
                 else:
-                    codes_fname = f"{safe_key}.codes.u16"
+                    codes_fname = f"{payload_index}.codes.u16"
                     dtype_str = "uint16"
 
                 codes_path = obs_binary_dir / codes_fname
-                actual_path = _write_binary(codes_path, codes_typed, compression)
-
-                manifest_codes_path = f"{obs_binary_dirname}/{codes_fname}"
-                if compression:
-                    manifest_codes_path += ".gz"
+                _write_binary(codes_path, codes_typed, compression)
 
                 # Compute centroids for all available dimensions
                 if centroid_outlier_quantile is None:
@@ -2623,21 +2759,18 @@ def _prepare_generation(
                         oq_dtype_str = "uint16"
                         oq_ext = "u16"
 
-                    outlier_fname = f"{safe_key}.outliers.{oq_ext}"
-                    outlier_path = obs_binary_dir / outlier_fname
+                    outlier_path = obs_binary_dir / f"{payload_index}.outliers.{oq_ext}"
                     _write_binary(outlier_path, oq_quantized, compression)
 
-                    manifest_outlier_path = f"{obs_binary_dirname}/{outlier_fname}"
-                    if compression:
-                        manifest_outlier_path += ".gz"
-
-                    # Compact format: [key, categories, codesDtype, codesMissingValue, centroidsByDim, outlierMinValue, outlierMaxValue]
+                    # Compact format: [index, key, categories, codesDtype,
+                    # codesMissingValue, centroidsByDim, outlierMinValue, outlierMaxValue]
                     # centroidsByDim is a dict keyed by dimension: {"1": [...], "2": [...], "3": [...]}
                     centroids_serializable = {
                         str(dim): cents for dim, cents in centroids_by_dim.items()
                     }
                     obs_categorical_fields.append(
                         [
+                            payload_index,
                             key,
                             categories,
                             dtype_str,
@@ -2654,17 +2787,24 @@ def _prepare_generation(
                         categorical_dtype_info["outlierQuantized"] = True
                 else:
                     # Full precision outliers
-                    outlier_fname = f"{safe_key}.outliers.f32"
-                    outlier_path = obs_binary_dir / outlier_fname
+                    outlier_path = obs_binary_dir / f"{payload_index}.outliers.f32"
                     _write_binary(outlier_path, outlier_quantiles.astype(np.float32), compression)
 
-                    # Compact format: [key, categories, codesDtype, codesMissingValue, centroidsByDim]
+                    # Compact format: [index, key, categories, codesDtype,
+                    # codesMissingValue, centroidsByDim]
                     # centroidsByDim is a dict keyed by dimension: {"1": [...], "2": [...], "3": [...]}
                     centroids_serializable = {
                         str(dim): cents for dim, cents in centroids_by_dim.items()
                     }
                     obs_categorical_fields.append(
-                        [key, categories, dtype_str, int(missing_value), centroids_serializable]
+                        [
+                            payload_index,
+                            key,
+                            categories,
+                            dtype_str,
+                            int(missing_value),
+                            centroids_serializable,
+                        ]
                     )
                     if not categorical_dtype_info:
                         categorical_dtype_info["codesExt"] = "u8" if dtype == np.uint8 else "u16"
@@ -2678,7 +2818,7 @@ def _prepare_generation(
         obs_schemas = {}
         if continuous_dtype_info:
             obs_schemas["continuous"] = {
-                "pathPattern": f"{obs_binary_dirname}/{{key}}.values.{continuous_dtype_info['ext']}{gz_suffix}",
+                "pathPattern": f"{obs_binary_dirname}/{{index}}.values.{continuous_dtype_info['ext']}{gz_suffix}",
                 "ext": continuous_dtype_info["ext"],
                 "dtype": continuous_dtype_info["dtype"],
                 "quantized": continuous_dtype_info.get("quantized", False),
@@ -2690,8 +2830,8 @@ def _prepare_generation(
 
         if categorical_dtype_info:
             obs_schemas["categorical"] = {
-                "codesPathPattern": f"{obs_binary_dirname}/{{key}}.codes.{{ext}}{gz_suffix}",
-                "outlierPathPattern": f"{obs_binary_dirname}/{{key}}.outliers.{categorical_dtype_info['outlierExt']}{gz_suffix}",
+                "codesPathPattern": f"{obs_binary_dirname}/{{index}}.codes.{{ext}}{gz_suffix}",
+                "outlierPathPattern": f"{obs_binary_dirname}/{{index}}.outliers.{categorical_dtype_info['outlierExt']}{gz_suffix}",
                 "outlierExt": categorical_dtype_info["outlierExt"],
                 "outlierDtype": categorical_dtype_info["outlierDtype"],
                 "outlierQuantized": categorical_dtype_info.get("outlierQuantized", False),
@@ -2753,6 +2893,12 @@ def _prepare_generation(
             f"Observation manifest {obs_manifest_path} fields do not match "
             "the requested observation fields. Use force=True to replace it."
         )
+    _require_declared_payloads_on_disk(
+        out_dir,
+        directory_name=obs_binary_dirname,
+        declared=_declared_obs_payload_paths(obs_manifest_payload),
+        axis="Observation",
+    )
 
     # Process gene expression if provided
     exported_var_field_count = 0
@@ -2768,7 +2914,7 @@ def _prepare_generation(
             var_manifest_fields: list[list[Any]] = []
 
             for gene_id in tqdm.tqdm(genes_to_export, desc="Exporting genes"):
-                safe_gene_id = safe_gene_id_by_id[gene_id]
+                payload_index = gene_payload_index_by_id[gene_id]
 
                 gene_values = _gene_expression_column(
                     gene_expression_for_export,
@@ -2793,24 +2939,18 @@ def _prepare_generation(
                         dtype_str = "uint16"
                         ext = "u16"
 
-                    value_fname = f"{safe_gene_id}.values.{ext}"
-                    value_path = var_binary_dir / value_fname
+                    value_path = var_binary_dir / f"{payload_index}.values.{ext}"
                     _write_binary(value_path, quantized, compression)
 
-                    manifest_path = f"{var_binary_dirname}/{value_fname}"
-                    if compression:
-                        manifest_path += ".gz"
-
-                    # Compact format: [key, minValue, maxValue]
-                    var_manifest_fields.append([gene_id, min_val, max_val])
+                    # Compact format: [index, name, minValue, maxValue]
+                    var_manifest_fields.append([payload_index, gene_id, min_val, max_val])
                 else:
                     # Full precision
-                    value_fname = f"{safe_gene_id}.values.f32"
-                    value_path = var_binary_dir / value_fname
+                    value_path = var_binary_dir / f"{payload_index}.values.f32"
                     _write_binary(value_path, gene_values, compression)
 
-                    # Compact format: [key] for non-quantized
-                    var_manifest_fields.append([gene_id])
+                    # Compact format: [index, name] for non-quantized
+                    var_manifest_fields.append([payload_index, gene_id])
 
             # Build compact manifest with schema
             gz_suffix = ".gz" if compression else ""
@@ -2819,7 +2959,7 @@ def _prepare_generation(
                 dtype_str = "uint8" if var_quantization == 8 else "uint16"
                 var_schema = {
                     "kind": "continuous",
-                    "pathPattern": f"{var_binary_dirname}/{{key}}.values.{ext}{gz_suffix}",
+                    "pathPattern": f"{var_binary_dirname}/{{index}}.values.{ext}{gz_suffix}",
                     "ext": ext,
                     "dtype": dtype_str,
                     "quantized": True,
@@ -2828,7 +2968,7 @@ def _prepare_generation(
             else:
                 var_schema = {
                     "kind": "continuous",
-                    "pathPattern": f"{var_binary_dirname}/{{key}}.values.f32{gz_suffix}",
+                    "pathPattern": f"{var_binary_dirname}/{{index}}.values.f32{gz_suffix}",
                     "ext": "f32",
                     "dtype": "float32",
                     "quantized": False,
@@ -2845,6 +2985,19 @@ def _prepare_generation(
             }
             var_manifest_path.write_text(json.dumps(var_manifest_payload), encoding="utf-8")
             exported_var_field_count = len(var_manifest_fields)
+
+            exported_gene_names = _gene_names_from_compact_manifest(var_manifest_payload)
+            if exported_gene_names != genes_to_export:
+                raise ValueError(
+                    f"Gene manifest {var_manifest_path} names do not match the "
+                    "requested genes. Use force=True to replace it."
+                )
+            _require_declared_payloads_on_disk(
+                out_dir,
+                directory_name=var_binary_dirname,
+                declared=_declared_var_payload_paths(var_manifest_payload),
+                axis="Gene",
+            )
 
             compression_info = f", gzip level {compression}" if compression else ""
             quant_info = f", {var_quantization}-bit quantized" if var_quantization else ""
@@ -2910,6 +3063,21 @@ def _prepare_generation(
                 json.dumps(connectivity_manifest_payload), encoding="utf-8"
             )
 
+            declared_connectivity_paths: set[str] = set()
+            for path_key in ("sourcesPath", "destinationsPath", "weightsPath"):
+                declared_path = connectivity_manifest_payload[path_key]
+                if not isinstance(declared_path, str) or not declared_path:
+                    raise RuntimeError(
+                        f"connectivity_manifest.json {path_key} must be one payload path."
+                    )
+                declared_connectivity_paths.add(declared_path)
+            _require_declared_payloads_on_disk(
+                out_dir,
+                directory_name=CONNECTIVITY_BINARY_DIRNAME,
+                declared=declared_connectivity_paths,
+                axis="Connectivity",
+            )
+
             console_print(
                 f"✓ Wrote connectivity ({connectivity_edges.n_edges:,} edges, "
                 f"max {connectivity_edges.max_neighbors} neighbors/cell, "
@@ -2918,6 +3086,21 @@ def _prepare_generation(
             )
     else:
         console_print("INFO: Connectivity was not requested; no connectivity artifact was emitted.")
+
+    if vector_fields_identity is not None:
+        declared_vector_paths: set[str] = set()
+        for field_metadata in cast(dict[str, Any], vector_fields_identity["fields"]).values():
+            declared_vector_paths.update(field_metadata["files"].values())
+        _require_dense_payload_indices(
+            list(vector_field_payload_index_by_id.values()),
+            axis="Vector field",
+        )
+        _require_declared_payloads_on_disk(
+            out_dir,
+            directory_name="vectors",
+            declared=declared_vector_paths,
+            axis="Vector field",
+        )
 
     # =========================================================================
     # Generate dataset_identity.json (metadata for multi-dataset support)
@@ -3032,15 +3215,20 @@ def prepare(
     pass an exact ``YYYY-MM-DDTHH:MM:SSZ`` UTC timestamp; it is validated and
     preserved byte-for-byte in ``dataset_identity.json``.
 
-    A quantized continuous payload is published as ``[key, minValue, maxValue]``
-    and the viewer discards a whole manifest whose ``minValue`` is not strictly
-    below its ``maxValue``, so a gene, continuous obs field, or generated
-    outlier-quantile set with no variation has no quantized encoding. Those
-    payloads are all checked before any output path is created, and a single
-    failure names every one of them; a gene detected in no cell of a subset is
-    the usual cause. Either leave the payload out, through ``gene_identifiers``
-    or ``obs_keys``, or publish at full precision with ``var_quantization=None``
-    or ``obs_continuous_quantization=None``, which writes float32 values and no
+    A quantized continuous payload is published with a trailing
+    ``minValue``/``maxValue``. A gene, continuous obs field, or generated
+    outlier-quantile set that carries one value is published as a constant
+    field: ``minValue == maxValue`` and every code ``0``, which the viewer
+    decodes back to that exact value rather than to an approximation of it. A
+    gene detected in no cell of a subset is the usual cause, and it is
+    published like any other gene.
+
+    A generated outlier-quantile set in which *every* quantile is missing is
+    the one continuous payload with nothing to publish, because no category
+    holds ``centroid_min_points`` cells. Those sets are all checked before any
+    output path is created and a single failure names every one of them: lower
+    ``centroid_min_points``, drop the field from ``obs_keys``, or pass
+    ``obs_continuous_quantization=None`` to write float32 values and no
     manifest bounds.
     """
     force = _require_native_boolean(force, label="force")

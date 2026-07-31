@@ -35,7 +35,13 @@ Recommendation:
 
 Common choices:
 - gene symbols (`MS4A1`, `CD3D`, …)
-- Ensembl IDs (`ENSG000001...`)
+- accessions (`ENSG00000156738`, …)
+
+Whichever you choose is the **only** identity the export records, and it is
+exactly what a reader types into the gene search box. An accession-keyed export
+therefore matches nothing when a reader searches `MS4A1`. If you want symbols to
+be searchable, resolve them into a `var` column yourself and select that column;
+`cellucid_prepare()` never performs a symbol lookup and ships no mapping.
 
 ### Custom column
 
@@ -64,9 +70,6 @@ Behavior:
 - a repeated identifier stops the export with
   `gene_identifiers must not contain duplicate identifiers.`
 - nothing is skipped and no partial export is written
-- narrowing the export narrows the filename contract with it: only the
-  identifiers you actually export must be portable filename components (see
-  below)
 
 Intersect your panel with your gene IDs before the call when a marker list may
 not apply to the dataset:
@@ -77,43 +80,44 @@ markers <- intersect(markers, rownames(var))
 
 This is the single best lever for reducing disk size for large datasets.
 
-## Filename safety and collisions
+## A gene ID is a name, not a filename
 
-Gene IDs are used in two places:
+Gene IDs are used in exactly one place: `var_manifest.json`, as the **true gene
+key**. They never become paths. Each gene's expression payload is written to
+`var/<index>.values.*`, where `<index>` is the gene's position in the manifest's
+`fields` array, so a gene name has only to be readable and unambiguous.
 
-1) In the manifest (`var_manifest.json`) as the **true gene key**
-2) As part of the output filename under `var/`
-
-The exporter uses each gene ID exactly. Every **exported** ID must already
-satisfy the portable identifier contract and be unique under case-insensitive
-filesystem comparison.
-
-The two identifier rules have different scopes, because they answer different
+That leaves two rules, with different scopes because they answer different
 questions:
 
 | Rule | Scope | Why |
 | --- | --- | --- |
-| IDs are non-empty strings and **distinct** | every row of `var` | `gene_identifiers` addresses rows by ID, so a repeated ID names no single row, and the export stops with `Gene identifiers must be unique.` |
-| IDs are **portable filename components**, unique case-insensitively | only the genes actually exported | the rule is about the file the gene is written to, and a deselected gene is written to none |
+| IDs are **distinct** | every row of `var` | `gene_identifiers` addresses rows by ID, so a repeated ID names no single row, and the export stops with `Gene identifiers must be unique. Duplicates: …` |
+| IDs are non-empty and **drawable verbatim** — no control or zero-width characters, no leading or trailing whitespace | only the genes actually exported | being drawable is a property of a name the viewer shows, and a deselected gene reaches no manifest and no legend |
 
-So a `var` that carries `HLA-DRB1/2` still exports cleanly as long as
-`gene_identifiers` leaves that gene out. This is the same scoping `obs_keys`
-already has (see {doc}`04_obs_cell_metadata`). `prepare()` in the Python package
-applies the identical scopes.
+A `var` that carries `HLA-DRB1/2`, `Wnt/β-catenin target`, or a gene name with an
+interior space exports cleanly. There is nothing to rename and nothing to escape.
+`prepare()` in the Python package applies the identical rules and scopes.
+
+There is also only **one** identity per gene. Whatever `var_gene_id_column`
+selects is the name recorded in the manifest and the name a reader searches for.
+No accession is kept beside it, and there is no separate display-name argument:
+if you want symbols in the viewer, put symbols in the column you select.
 
 ```{warning}
-An unsafe ID or case-insensitive collision **among the exported genes** rejects
-the complete candidate before publication.
+A duplicate gene ID anywhere in `var` rejects the complete candidate before
+publication, even when `gene_identifiers` leaves that row out.
 ```
 
 Practical recommendation:
-- avoid gene IDs containing `/`, `\\`, whitespace, trailing `.`, or non-ASCII
-  characters
-- check `anyDuplicated(tolower(gene_ids)) == 0` over the IDs you export
+- check `anyDuplicated(gene_ids) == 0` over every row of `var`
+- check `identical(gene_ids, trimws(gene_ids))` over the IDs you export
+- resolve accessions to symbols *before* the call if that is what you want
+  searchable; `cellucid_prepare()` performs no lookup and ships no mapping
 
 ## Troubleshooting pointers
 
 - “var has X rows but gene_expression has Y genes” → your expression orientation is wrong or var is mismatched.
-- “My gene IDs are rejected” → check `var_gene_id_column`, portability,
-  duplicates, and case-insensitive collisions.
+- “My gene IDs are rejected” → check `var_gene_id_column`, duplicates, and
+  invisible characters in the IDs you export.
 - See also: {doc}`06_gene_expression_matrix` and {doc}`11_troubleshooting_prepare_export`

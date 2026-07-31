@@ -99,8 +99,9 @@ Quantization rules (current exporter):
   to the viewer's `float32` domain; otherwise the complete candidate is
   rejected before publication,
 - codes and bounds derive from those exact viewer-visible values; a source
-  range that collapses to one `float32` value is rejected, while an individual
-  nonzero source value may round to zero if the range remains non-collapsed,
+  range that collapses to one `float32` value is published as a constant gene,
+  while an individual nonzero source value may round to zero if the range
+  remains non-collapsed,
 - `minValue`/`maxValue` are stored in `var_manifest.json` and used for dequantization.
 
 Dequantization in the web app is:
@@ -110,6 +111,13 @@ value = minValue + q * (maxValue - minValue) / maxQuant
 ```
 
 Where `maxQuant = 254` (8-bit) or `65534` (16-bit).
+
+A gene expressed at one level in every exported cell — including a gene
+detected in no exported cell at all, which is routine once an atlas is subset
+to one lineage — is published as a constant gene: `minValue == maxValue` and
+every code `0`. The formula above is exact for it, so the browser recovers the
+constant itself rather than an approximation. See
+{ref}`How a quantized continuous payload decodes <python_package-quantized-continuous-payloads>`.
 
 Practical guidance:
 - For visualization and interactive exploration, 8-bit is usually fine.
@@ -164,8 +172,9 @@ If you need full gene access on large datasets, prefer server mode:
 
 - **Wrong orientation** (`genes × cells`): fix by transposing to `(cells × genes)`.
 - **Mismatch between `var` and matrix columns**: leads to wrong gene names/values.
-- **Duplicate or filename-colliding gene IDs**: the complete candidate is
-  rejected before publication (see {doc}`05_var_gene_metadata`).
+- **Duplicate or undrawable gene names**: the complete candidate is rejected
+  before publication (see {doc}`05_var_gene_metadata`). A name is not a path, so
+  characters like `/` are fine; invisible characters are not.
 - **All-zero genes**: export is valid but gene overlays will be flat.
 - **NaNs introduced by preprocessing**: common after invalid log transforms or normalization artifacts.
 - **Huge file counts**: tens of thousands of gene files can be slow on some filesystems (especially networked).

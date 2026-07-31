@@ -131,45 +131,100 @@ Fix:
 Docs:
 - {doc}`../c_data_preparation_api/04_obs_cell_metadata`
 
-### “Gene identifiers 'HLA-DRB1/2' is not a portable identifier. …”
+### “Gene identifiers must be unique. Duplicates: 'MS4A1', 'CD3D'”
 
 Meaning:
-- an exported identifier cannot become a filename.
+- an identifier names more than one row, so a lookup by that identifier
+  resolves nothing definite.
 
 Every message of this family opens with the axis that raised it, so the first
 words tell you which input to go and fix:
 
 | Opening words | What was rejected |
 |---|---|
-| `Gene identifiers` | a gene ID selected for export |
+| `Gene identifiers` | a gene ID in `rownames(var)` or `var_gene_id_column` |
 | `Observation field keys` | a key read out of a `compact_v1` obs manifest |
 | `obs_keys` | a name you passed in the `obs_keys` argument |
 | `Vector field ids` | a `vector_fields` field id |
-| `dataset_id` | the `dataset_id` argument |
 
 `Observation field keys` and `obs_keys` are two different inputs, not two names
 for one: the first is parsed out of a manifest you supplied, the second is the
 argument you passed.
 
-The full message states the rule: `Use 1-180 ASCII letters, numbers, '.', '_',
-or '-', beginning with a letter or number and not ending with '.'.` Windows
-device names get their own message under the same axis name, for example
-`Vector field ids 'CON.velocity_umap' is reserved on Windows.`
-Case-insensitive collisions are reported the same way and then list each
-colliding group:
+The message lists the first five duplicates and appends `...` when there are
+more. There is no filename rule behind any of these axes: a payload file is
+named by an integer index, so `HLA-DRB1/2`, `CON`, a name with interior spaces,
+and a non-ASCII name all export.
 
-```text
-Vector field ids contains names that collide on case-insensitive filesystems.
-Rename the identifiers. Collisions:
-  - 'velocity_umap' <- 'Velocity_UMAP', 'velocity_umap'
-```
+The same axes also raise the display-text message when an exported identifier
+carries a character with no glyph, opening with the axis name and the position:
+`Gene identifiers identifier at position 3 is displayed verbatim, so it must not
+carry characters that have no glyph: …`. Positions are zero-based.
 
 A vector-field ID is checked after its key is parsed, so the ID reported is the
 part before the dimensional suffix.
 
 Docs:
+- {doc}`../c_data_preparation_api/02_input_requirements_global`
 - {doc}`../c_data_preparation_api/05_var_gene_metadata`
 - {doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement`
+- {doc}`../c_data_preparation_api/09_output_format_specification_exports_directory`
+
+### “dataset_id 'my dataset' is not a portable identifier. …”
+
+Meaning:
+- `dataset_id` names a directory and appears in share links, so it is the one
+  identifier that really is a path component.
+
+The full message states the rule: `Use 1-180 ASCII letters, numbers, '.', '_',
+or '-', beginning with a letter or number and not ending with '.'.` A Windows
+device name gets its own message, `dataset_id 'CON' is reserved on Windows.`
+
+Fix:
+- pick a stable, versioned id such as `pbmc3k_v1`.
+
+Docs:
+- {doc}`../b_concepts_mental_models/03_dataset_identity_and_reproducibility`
+
+### “Observation payload indices must be exactly 0..5, each used once; got …”
+
+Meaning:
+- the declared payload indices on one axis are not a dense `0 … N-1` space.
+
+Payload filenames *are* those integers, so two fields sharing an index would
+overwrite one payload with another and the viewer would draw one field's values
+under another field's name with nothing raised. `cellucid_prepare()` proves the
+space before publishing rather than letting that happen, and the message lists
+the sorted indices it actually found.
+
+Three axes raise it under their own names: `Observation`, `Gene`, and
+`Vector field`. A non-integer index gets its own message,
+`Observation payload index at position 2 must be a native integer.`, with
+zero-based positions.
+
+For `obs` the space is shared: `_continuousFields` and `_categoricalFields` both
+write into `obs/`, so their indices are checked together.
+
+Docs:
+- {doc}`../c_data_preparation_api/09_output_format_specification_exports_directory`
+
+### “Gene manifest does not describe the payloads that were written. …”
+
+Meaning:
+- a payload directory and the manifest that describes it disagree. The message
+  names both sides: `Declared but absent: …` and `Written but undeclared: …`.
+
+This runs on four axes before publication — `Observation`, `Gene`,
+`Connectivity`, and `Vector field` — so a stale file from an earlier generation
+cannot survive beside a current manifest. A directory entry that is not a
+regular file gets its own message,
+`Gene payload directory holds a non-file entry: …`.
+
+Fix:
+- export to a fresh `out_dir`, or re-run with `force = TRUE` for an atomic
+  replacement. Do not hand-edit a published directory.
+
+Docs:
 - {doc}`../c_data_preparation_api/09_output_format_specification_exports_directory`
 
 ### “Categorical field 'organ' has 2 labels the viewer cannot show as written”
@@ -202,8 +257,9 @@ count of the rest), so one edit fixes the column. Two labels that a
 whitespace-collapsing renderer draws identically get their own message naming
 both, for example `'T  cell'` and `'T cell'`.
 
-`dataset_name`, `dataset_description`, `source_name`, `source_url`, and
-`source_citation` use the same vocabulary and open with the argument name:
+`dataset_name`, `dataset_description`, `source_name`, `source_url`,
+`source_citation`, and every exported obs key, gene ID, and vector-field ID use
+the same vocabulary and open with the argument or axis name:
 `source_name is displayed verbatim, so it must not carry characters that have
 no glyph: 'Suo\u200b' contains U+200B ZERO WIDTH SPACE. ...`
 
@@ -268,9 +324,9 @@ Docs:
 Meaning:
 - a value would become zero or infinity once written as float32
 
-Related quantization messages read `Cannot quantize field '<name>': its
-native-double variation collapses to one value in the viewer's float32 domain.`
-and `Cannot quantize field '<name>': all values are constant, …`.
+A field whose native-double variation is finer than float32 resolution is not
+an error: it is one float32 value, so it publishes as a constant field
+(`minValue == maxValue`, every code `0`).
 
 Docs:
 - {doc}`../c_data_preparation_api/06_gene_expression_matrix`

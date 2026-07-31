@@ -190,9 +190,10 @@ Notes:
 ### NaN/Inf and constant-value fields
 - Scientific arrays must contain real finite values representable as
   `float32`; invalid values reject before publication.
-- Constant continuous fields are valid without quantization. Quantization
-  rejects a constant field because the current compact contract requires
-  `minValue < maxValue`.
+- Constant continuous fields are valid with and without quantization. Quantized,
+  they take the compact contract's constant case: `minValue == maxValue` and
+  every code `0`, which decodes back to the exact constant. A gene detected in
+  no exported cell is published like any other gene.
 
 ### Very large datasets
 - Export size scales with:

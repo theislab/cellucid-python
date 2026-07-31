@@ -112,13 +112,16 @@ str(obs_manifest, max.level = 3)
 ```
 
 Look for:
-- `_continuousFields` and `_categoricalFields`
-- file patterns under `_obsSchemas`
+- `_continuousFields` and `_categoricalFields`; every entry begins with its
+  payload index, then its key
+- file patterns under `_obsSchemas`, which are templates over `{index}`
 
-Read categorical codes:
+Read categorical codes. The filename is the field's payload index — take it from
+the manifest entry rather than guessing from the key:
 
 ```r
-codes_path <- file.path(out_dir, "obs", "cluster.codes.u8")
+field <- obs_manifest$`_categoricalFields`[[1]]
+codes_path <- file.path(out_dir, "obs", sprintf("%d.codes.u8", field[[1]]))
 con <- file(codes_path, open = "rb")
 on.exit(close(con), add = TRUE)
 codes <- readBin(con, what = "integer", size = 1, n = n_cells, endian = "little")
@@ -197,10 +200,12 @@ Remember:
 
 ## Part 6 — Vector fields: naming + scaling
 
-Vector binaries live in `vectors/`.
+Vector binaries live in `vectors/`, named by the field's payload index. The
+`vector_fields` section of `dataset_identity.json` records the exact path for
+each field and dimension.
 
 ```r
-vec_path <- file.path(out_dir, "vectors", "velocity_umap_2d.bin")
+vec_path <- file.path(out_dir, "vectors", "0_2d.bin")
 con <- file(vec_path, open = "rb")
 on.exit(close(con), add = TRUE)
 vec_vals <- readBin(con, what = "numeric", size = 4, endian = "little", n = n_cells * 2)
@@ -228,18 +233,19 @@ Root cause:
 Prevention:
 - choose a canonical `cells` vector and reorder everything explicitly
 
-### 2) Unsafe or colliding identifiers
+### 2) Duplicate identifiers
 
 Symptoms:
 - missing genes
-- overwritten fields
+- a lookup by gene ID or obs key resolving the wrong row
 
 Root cause:
-- an ID is not a portable filename component, or two IDs collide under
-  case-insensitive comparison
+- two rows of `var`, or two entries of `obs_keys`, carry the same identifier
 
 Prevention:
-- validate exact portability and case-insensitive uniqueness before export
+- check `anyDuplicated(ids) == 0` before export. Visible character content is
+  not a problem — identifiers never become filenames, so nothing needs escaping
+  — but invisible ones are, so check `identical(ids, trimws(ids))` too.
 
 ---
 

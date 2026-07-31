@@ -150,7 +150,7 @@ Most “bugs” are one of these.
 
 ### Likely causes (ordered)
 
-1) You’re searching with a gene naming convention that isn’t in the dataset (symbols vs Ensembl IDs).
+1) You’re searching with a name the dataset does not publish.
 2) The search is substring-based; a short query matches many genes and Enter picks the top one.
 3) The gene list is present but very large; your query is too broad.
 
@@ -158,17 +158,22 @@ Most “bugs” are one of these.
 
 - Try a longer, more specific substring.
 - If results show `...and N more`, you’re matching too many.
-- Try searching by an alternate identifier style if you have it (e.g., `ENSG...` vs `MS4A1`).
+- Open the field selector and read a few gene names directly. Every gene has
+  exactly one name in an export, and search matches that one name — there is no
+  second identifier to search instead, and no alias mapping.
 
 ### Fix
 
 1) Type a more specific query and click the correct gene explicitly (don’t rely on Enter).
-2) If you don’t know the identifier convention:
-   - check the dataset’s gene IDs in your preprocessing notebook/export code.
+2) If the name you expected is not there, the export published a different one:
+   - check which `var` column the export named its genes from
+     (`prepare(var_gene_id_column=...)`, `show_anndata(gene_id_column=...)`).
 
 ### Prevention
 
-- Standardize gene identifiers in your export and document it for collaborators (symbols vs Ensembl).
+- Name genes in your export with the vocabulary your readers will type — the
+  symbols on your figures, not an accession they would have to look up — and
+  say which vocabulary it is for collaborators.
 
 ---
 

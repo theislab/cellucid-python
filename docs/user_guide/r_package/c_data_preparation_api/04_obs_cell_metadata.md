@@ -53,22 +53,28 @@ This is especially important for columns like:
 All `obs` binaries live under:
 - `<out_dir>/obs/`
 
+Every file is named by the field's **payload index**, not by its key. The index
+is the field's position in `obs_keys`, and `obs_manifest.json` is what maps it
+back to the column name. Continuous and categorical payloads share one `obs/`
+directory, so they share one index space: across `_continuousFields` and
+`_categoricalFields` together the indices run `0 … N-1`, each used once.
+
 ### Continuous fields
 
-For a continuous field `score`:
+For a continuous field at payload index `0`:
 
-- float32 (default): `obs/score.values.f32`
-- 8-bit quantized: `obs/score.values.u8`
-- 16-bit quantized: `obs/score.values.u16`
+- float32 (default): `obs/0.values.f32`
+- 8-bit quantized: `obs/0.values.u8`
+- 16-bit quantized: `obs/0.values.u16`
 
 Quantized exports also record `min_val` and `max_val` in `obs_manifest.json` so the viewer can recover approximate real values.
 
 ### Categorical fields
 
-For a categorical field `cluster`:
+For a categorical field at payload index `1`:
 
-- codes: `obs/cluster.codes.u8` or `obs/cluster.codes.u16`
-- outlier quantiles: `obs/cluster.outliers.f32` (or `.u8/.u16` if quantized)
+- codes: `obs/1.codes.u8` or `obs/1.codes.u16`
+- outlier quantiles: `obs/1.outliers.f32` (or `.u8/.u16` if quantized)
 
 The **categories list** (levels) is stored in `obs_manifest.json`.
 
@@ -193,14 +199,21 @@ Choose `obs_categorical_dtype = "uint8"` or `"uint16"` explicitly for every
 export. `uint8` stores at most 255 categories; choose `uint16` for larger
 categorical fields.
 
-## Naming and filename safety
+## Naming
 
-Obs column names are used exactly in manifests and filenames. They must satisfy
-the portable identifier contract and be unique under case-insensitive
-comparison.
+Obs column names are recorded exactly in `obs_manifest.json` and are never used
+as filenames, so they carry no filename rule: any characters, any length, any
+case. `cell type (fine)` and `% mito` both export.
+
+Each exported key must be a non-empty string, **distinct** among the keys you
+export so a lookup by key resolves one field, and **text the viewer can draw
+verbatim** — no control or zero-width characters and no leading or trailing
+whitespace, the same rule category labels obey. A duplicate stops the export
+with `obs_keys must be unique. Duplicates: …`.
 
 Recommendation:
-- keep obs column names simple and stable (letters/numbers/underscores)
+- keep obs column names stable, because a renamed key is a different field to a
+  saved session
 
 ## Edge cases (common in real datasets)
 
@@ -210,8 +223,14 @@ Any `NA`, `NaN`, or infinity rejects the complete candidate.
 
 ### Continuous field is constant
 
-If all valid values are the same:
-- export terminates because compact quantization requires `minValue < maxValue`.
+If all valid values are the same, the field exports normally:
+- quantized, it takes the compact contract's constant case —
+  `minValue == maxValue` and every code `0` — and the viewer decodes it back to
+  the exact constant;
+- unquantized, it is a float32 payload like any other.
+
+The field still colours the embedding one flat colour, which is a property of
+the data rather than of the export.
 
 ### Massive categorical fields
 

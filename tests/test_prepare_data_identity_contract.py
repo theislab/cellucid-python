@@ -72,12 +72,12 @@ def test_identity_obs_fields_follow_emitted_compact_manifest_order(tmp_path):
     identity = json.loads((tmp_path / "dataset_identity.json").read_text(encoding="utf-8"))
 
     manifest_order = [
-        *({"key": field[0], "kind": "continuous"} for field in manifest["_continuousFields"]),
+        *({"key": field[1], "kind": "continuous"} for field in manifest["_continuousFields"]),
         *(
             {
-                "key": field[0],
+                "key": field[1],
                 "kind": "category",
-                "n_categories": len(field[1]),
+                "n_categories": len(field[2]),
             }
             for field in manifest["_categoricalFields"]
         ),
@@ -92,6 +92,22 @@ def test_identity_obs_fields_follow_emitted_compact_manifest_order(tmp_path):
     assert identity["stats"]["n_obs_fields"] == 4
     assert identity["stats"]["n_continuous_fields"] == 2
     assert identity["stats"]["n_categorical_fields"] == 2
+
+    # obs/ is one index space across both arrays, in the order obs declares the
+    # columns: group=0, score=1, selected=2, quality=3.
+    assert manifest["_continuousFields"] == [[1, "score"], [3, "quality"]]
+    assert [field[:2] for field in manifest["_categoricalFields"]] == [
+        [0, "group"],
+        [2, "selected"],
+    ]
+    assert sorted(path.name for path in (tmp_path / "obs").iterdir()) == [
+        "0.codes.u16",
+        "0.outliers.f32",
+        "1.values.f32",
+        "2.codes.u16",
+        "2.outliers.f32",
+        "3.values.f32",
+    ]
 
 
 def test_existing_obs_manifest_must_match_requested_fields(tmp_path):
@@ -320,25 +336,27 @@ def test_prepare_rejects_invalid_continuous_obs_before_output_mutation(
 
 
 @pytest.mark.parametrize(
-    "invalid_key",
-    ["bad key", "bad/key", "_leading", "trailing.", "CON", "a" * 181],
+    "obs_key",
+    ["bad key", "bad/key", "_leading", "trailing.", "CON", "a" * 400, "% mito"],
 )
-def test_prepare_rejects_nonportable_obs_keys_before_output_mutation(
+def test_prepare_accepts_any_obs_key_that_is_no_longer_a_path(
     tmp_path,
-    invalid_key,
+    obs_key,
 ):
-    out_dir = tmp_path / "must-not-exist"
+    """An obs column is named by index on disk, so its key names no file."""
+    out_dir = tmp_path / "generation"
     kwargs = _prepare_identity_kwargs(out_dir)
-    kwargs["obs"] = pd.DataFrame({invalid_key: [1.0, 2.0, 3.0]})
+    kwargs["obs"] = pd.DataFrame({obs_key: [1.0, 2.0, 3.0]})
 
-    with pytest.raises(ValueError, match="ASCII|reserved Windows|end with"):
-        prepare(**kwargs)
+    prepare(**kwargs)
 
-    assert not out_dir.exists()
+    manifest = json.loads((out_dir / "obs_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["_continuousFields"] == [[0, obs_key]]
+    assert sorted(path.name for path in (out_dir / "obs").iterdir()) == ["0.values.f32"]
 
 
-def test_prepare_rejects_case_colliding_obs_keys_before_output_mutation(tmp_path):
-    out_dir = tmp_path / "must-not-exist"
+def test_prepare_accepts_case_distinct_obs_keys_as_two_fields(tmp_path):
+    out_dir = tmp_path / "generation"
     kwargs = _prepare_identity_kwargs(out_dir)
     kwargs["obs"] = pd.DataFrame(
         {
@@ -347,7 +365,31 @@ def test_prepare_rejects_case_colliding_obs_keys_before_output_mutation(tmp_path
         }
     )
 
-    with pytest.raises(ValueError, match="case-insensitively"):
+    prepare(**kwargs)
+
+    manifest = json.loads((out_dir / "obs_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["_continuousFields"] == [[0, "Field"], [1, "field"]]
+
+
+@pytest.mark.parametrize(
+    ("obs_key", "message"),
+    [
+        (" padded", "displayed verbatim"),
+        ("padded ", "displayed verbatim"),
+        ("tab\there", "displayed verbatim"),
+        ("zero​width", "displayed verbatim"),
+    ],
+)
+def test_prepare_rejects_undrawable_obs_keys_before_output_mutation(
+    tmp_path,
+    obs_key,
+    message,
+):
+    out_dir = tmp_path / "must-not-exist"
+    kwargs = _prepare_identity_kwargs(out_dir)
+    kwargs["obs"] = pd.DataFrame({obs_key: [1.0, 2.0, 3.0]})
+
+    with pytest.raises(ValueError, match=message):
         prepare(**kwargs)
 
     assert not out_dir.exists()
@@ -359,13 +401,14 @@ def test_prepare_rejects_case_colliding_obs_keys_before_output_mutation(tmp_path
         ["Gene_A", "bad gene"],
         ["Gene", "gene"],
         ["Gene_A", "NUL.txt"],
+        ["Gene_A", "HLA-DRB1/2"],
     ],
 )
-def test_prepare_rejects_nonportable_or_colliding_gene_ids_before_mutation(
+def test_prepare_accepts_any_gene_name_that_is_no_longer_a_path(
     tmp_path,
     gene_ids,
 ):
-    out_dir = tmp_path / "must-not-exist"
+    out_dir = tmp_path / "generation"
     kwargs = _prepare_identity_kwargs(out_dir)
     kwargs["var"] = pd.DataFrame(index=gene_ids)
     kwargs["gene_expression"] = np.array(
@@ -377,10 +420,14 @@ def test_prepare_rejects_nonportable_or_colliding_gene_ids_before_mutation(
         dtype=np.float32,
     )
 
-    with pytest.raises(ValueError, match="ASCII|reserved Windows|case-insensitively"):
-        prepare(**kwargs)
+    prepare(**kwargs)
 
-    assert not out_dir.exists()
+    manifest = json.loads((out_dir / "var_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["fields"] == [[0, gene_ids[0]], [1, gene_ids[1]]]
+    assert sorted(path.name for path in (out_dir / "var").iterdir()) == [
+        "0.values.f32",
+        "1.values.f32",
+    ]
 
 
 @pytest.mark.parametrize(

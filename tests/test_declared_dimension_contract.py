@@ -52,7 +52,9 @@ def test_a_declared_1d_vector_field_accepts_a_plain_vector_as_its_single_column(
     )
     vectors = validated.fields["velocity_umap"][1]
     assert vectors.shape == (N_CELLS, 1)
-    assert vectors.dtype == np.float32
+    # A validated vector is an input to the export, not a payload: it keeps the
+    # caller's precision so the export rounds to float32 exactly once.
+    assert vectors.dtype == np.float64
     assert np.array_equal(vectors[:, 0], _points_1d())
 
 
@@ -93,7 +95,7 @@ def test_prepare_accepts_a_plain_vector_for_the_declared_1d_embedding(tmp_path: 
     points = np.frombuffer((out_dir / "points_1d.bin").read_bytes(), dtype=np.float32)
     assert points.size == N_CELLS
     vectors = np.frombuffer(
-        (out_dir / "vectors" / "velocity_umap_1d.bin").read_bytes(),
+        (out_dir / "vectors" / "0_1d.bin").read_bytes(),
         dtype=np.float32,
     )
     assert vectors.size == N_CELLS

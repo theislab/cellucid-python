@@ -196,8 +196,8 @@ show_anndata(
 ### Likely causes (ordered)
 - your gene IDs are not in `var.index` (default)
 - wrong `gene_id_column`
-- the chosen gene IDs are duplicated or have portable filename collisions;
-  AnnData construction rejects them
+- the chosen gene names are duplicated, or carry invisible characters; AnnData
+  construction rejects them
 
 ### How to confirm
 

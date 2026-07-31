@@ -261,19 +261,21 @@ See: {doc}`10_performance_tuning_guide_prepare_export`
 
 1) You passed `obs_keys` and did not include the field.
 2) The candidate export failed validation and was never published.
-3) A field identifier was unsafe or collided under case-insensitive filesystem
-   comparison, so publication was rejected.
+3) A field identifier was duplicated, or carried characters with no glyph
+   (control, zero-width, or leading/trailing whitespace), so publication was
+   rejected.
 
 ### How to confirm
 
-- Open `<out_dir>/obs_manifest.json` and search for the key.
-- Check whether a corresponding file exists under `<out_dir>/obs/`.
+- Open `<out_dir>/obs_manifest.json` and search for the key. Each entry is
+  `[index, key, ...]`, whose first member names the file the field owns.
+- Check whether `<out_dir>/obs/<index>.*` exists.
 - Read the exact exporter exception.
 
 ### Fix
 
-- Correct the identifier to an exact portable component and resolve
-  case-insensitive collisions.
+- Rename a duplicate, and strip invisible characters:
+  `obs.columns = obs.columns.str.strip()`.
 - Re-export to a fresh folder or set `force=True` for an intentional complete
   replacement.
 
@@ -433,9 +435,9 @@ my_export/
   obs_manifest.json
   points_3d.bin.gz
   obs/
-    leiden.codes.u8.gz
-    leiden.outliers.u8.gz
-    pct_mito.values.u8.gz
+    0.codes.u8.gz
+    0.outliers.u8.gz
+    1.values.u8.gz
 ```
 
 ### 4) Key JSON files

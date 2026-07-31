@@ -385,17 +385,37 @@ def _read_json_object(path: Path, *, label: str) -> dict:
 def _expand_artifact_pattern(
     pattern: object,
     *,
-    key: str,
+    index: int,
     label: str,
     extension: str | None = None,
 ) -> str:
     pattern_value = _require_artifact_path(pattern, label=label)
-    value = pattern_value.replace("{key}", key)
+    value = pattern_value.replace("{index}", str(index))
     if extension is not None:
         value = value.replace("{ext}", extension)
     if "{" in value or "}" in value:
         raise ValueError(f"{label} contains an unsupported placeholder.")
     return _require_artifact_path(value, label=label)
+
+
+def _require_payload_index(value: object, *, label: str) -> int:
+    """Require one declared payload index, which is also the payload filename."""
+    if type(value) is not int or value < 0:
+        raise ValueError(f"{label} must declare a non-negative integer payload index.")
+    return value
+
+
+def _require_dense_payload_indices(indices: list[int], *, label: str) -> None:
+    """Require one axis to declare exactly the indices 0..N-1, each once.
+
+    Two entries sharing an index name one file, so one field's payload is read
+    under the other field's name. The set of expanded paths hides that -- it
+    simply loses one member -- so the indices are checked directly.
+    """
+    if sorted(indices) != list(range(len(indices))):
+        raise ValueError(
+            f"{label} payload indices must be exactly 0..{len(indices) - 1}, each used once."
+        )
 
 
 def _declared_dataset_artifacts(
@@ -437,17 +457,20 @@ def _declared_dataset_artifacts(
     if not continuous_fields and continuous_schema is not None:
         raise ValueError("Continuous observation schema exists without any fields.")
     continuous_schema_values = continuous_schema if isinstance(continuous_schema, dict) else {}
-    for index, field in enumerate(continuous_fields):
-        if not isinstance(field, list) or not field:
-            raise ValueError(f"obs_manifest.json continuous field {index} is invalid.")
-        key = _require_portable_filename_component(
+    # obs/ carries both arrays, so their payload indices share one space.
+    obs_payload_indices: list[int] = []
+    for position, field in enumerate(continuous_fields):
+        if not isinstance(field, list) or len(field) < 2:
+            raise ValueError(f"obs_manifest.json continuous field {position} is invalid.")
+        payload_index = _require_payload_index(
             field[0],
-            label=f"Observation field {index}",
+            label=f"Observation field {position}",
         )
+        obs_payload_indices.append(payload_index)
         paths.add(
             _expand_artifact_pattern(
                 continuous_schema_values.get("pathPattern"),
-                key=key,
+                index=payload_index,
                 label="obs continuous pathPattern",
             )
         )
@@ -459,20 +482,21 @@ def _declared_dataset_artifacts(
         raise ValueError("Categorical observation schema exists without any fields.")
     categorical_schema_values = categorical_schema if isinstance(categorical_schema, dict) else {}
     dtype_extensions = {"uint8": "u8", "uint16": "u16"}
-    for index, field in enumerate(categorical_fields):
-        if not isinstance(field, list) or len(field) < 3:
-            raise ValueError(f"obs_manifest.json categorical field {index} is invalid.")
-        key = _require_portable_filename_component(
+    for position, field in enumerate(categorical_fields):
+        if not isinstance(field, list) or len(field) < 4:
+            raise ValueError(f"obs_manifest.json categorical field {position} is invalid.")
+        payload_index = _require_payload_index(
             field[0],
-            label=f"Observation field {index}",
+            label=f"Observation field {position}",
         )
-        dtype = field[2]
+        obs_payload_indices.append(payload_index)
+        dtype = field[3]
         if dtype not in dtype_extensions:
-            raise ValueError(f"obs_manifest.json categorical field {index} has an invalid dtype.")
+            raise ValueError(f"obs_manifest.json categorical field {position} has an invalid dtype.")
         paths.add(
             _expand_artifact_pattern(
                 categorical_schema_values.get("codesPathPattern"),
-                key=key,
+                index=payload_index,
                 extension=dtype_extensions[dtype],
                 label="obs categorical codesPathPattern",
             )
@@ -482,10 +506,11 @@ def _declared_dataset_artifacts(
             paths.add(
                 _expand_artifact_pattern(
                     outlier_pattern,
-                    key=key,
+                    index=payload_index,
                     label="obs categorical outlierPathPattern",
                 )
             )
+    _require_dense_payload_indices(obs_payload_indices, label="obs_manifest.json")
 
     stats = identity.get("stats")
     if not isinstance(stats, dict):
@@ -501,20 +526,23 @@ def _declared_dataset_artifacts(
         fields = var_manifest.get("fields")
         if not isinstance(var_schema, dict) or not isinstance(fields, list):
             raise ValueError("var_manifest.json must declare one exact field schema.")
-        for index, field in enumerate(fields):
-            if not isinstance(field, list) or not field:
-                raise ValueError(f"var_manifest.json field {index} is invalid.")
-            key = _require_portable_filename_component(
+        var_payload_indices: list[int] = []
+        for position, field in enumerate(fields):
+            if not isinstance(field, list) or len(field) < 2:
+                raise ValueError(f"var_manifest.json field {position} is invalid.")
+            payload_index = _require_payload_index(
                 field[0],
-                label=f"Gene field {index}",
+                label=f"Gene field {position}",
             )
+            var_payload_indices.append(payload_index)
             paths.add(
                 _expand_artifact_pattern(
                     var_schema.get("pathPattern"),
-                    key=key,
+                    index=payload_index,
                     label="var pathPattern",
                 )
             )
+        _require_dense_payload_indices(var_payload_indices, label="var_manifest.json")
         if len(fields) != n_genes:
             raise ValueError("var_manifest.json field count must match identity stats.n_genes.")
     elif var_manifest_path.exists():

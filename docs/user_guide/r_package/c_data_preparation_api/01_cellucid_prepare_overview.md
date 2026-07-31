@@ -80,8 +80,9 @@ Rule of thumb:
 If you quantize continuous values:
 - valid values map to `0..254` (8-bit) or `0..65534` (16-bit)
 - `NA`, `NaN`, and infinities reject the complete candidate
-- constant fields reject because compact quantization requires
-  `minValue < maxValue`
+- constant fields take the compact contract's constant case:
+  `minValue == maxValue` and every code `0`, which decodes back to the exact
+  constant
 
 The reserved `255`/`65535` marker is used only for missing categorical codes
 and generated `NaN` categorical outlier quantiles.

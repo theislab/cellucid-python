@@ -106,10 +106,12 @@ If your source object has cell IDs (Seurat/SCE), use them to explicitly align in
 ## Common limitations (know these early)
 
 - **Gene expression is “one file per gene”** in the export format; exporting 20k+ genes is possible but can be slow and creates many files.
-- **Every exported identifier is exact**: obs keys, gene IDs, dataset IDs, and
-  vector-field IDs must already be portable filename components and unique
-  under case-insensitive comparison. They are never rewritten (see
-  {doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement`).
+- **Every exported identifier is exact**: obs keys, gene IDs, and vector-field
+  IDs are recorded verbatim in the manifests and are never rewritten. They are
+  not filenames, so they only have to be non-empty, distinct within their axis,
+  and free of invisible characters; `dataset_id` is the exception and must be a
+  portable path component (see
+  {doc}`../c_data_preparation_api/02_input_requirements_global`).
 
 ## Recommended workflow decision tree
 

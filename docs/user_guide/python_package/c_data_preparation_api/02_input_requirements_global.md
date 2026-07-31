@@ -20,8 +20,8 @@ Before you export a real dataset, confirm:
    - `gene_expression.shape == (n_cells, n_genes)`
    - `var` has `n_genes` rows and is aligned to gene_expression columns
 5) Embeddings contain **no NaN/Inf** (must be finite).
-6) Exported identifiers are already **portable exact filename components** and
-   are unique under case-insensitive filesystem comparison (see Rule 5).
+6) Exported identifiers are non-empty, distinct within their axis, and text a
+   reader can see verbatim (see Rule 5).
 7) You are not accidentally reusing an old `out_dir` with `force=False`.
 
 If you want a copy/paste preflight script, jump to:
@@ -137,39 +137,41 @@ Details: {doc}`04_obs_cell_metadata`
 
 ---
 
-## Rule 5: exact portable identifiers (do not ignore)
+## Rule 5: identifiers are names, not filenames
 
-Observation keys, gene IDs, dataset IDs, and vector-field IDs are used as
-contract identifiers and filename components. `prepare()` does not rewrite
-them. Each must:
+Every payload file an export writes is named by an integer index, so an
+identifier is never a path. Use your real names: `HLA-DRB1/2`, `% mito`,
+`细胞`, and the two distinct columns `Field` and `field` all export unchanged.
+There is no ASCII restriction, no length limit, no reserved-name list, and no
+case-insensitive collision rule.
 
-- contain 1–180 ASCII bytes,
-- begin with an ASCII letter or digit,
-- contain only ASCII letters, digits, `.`, `_`, or `-`,
-- not end in `.`,
-- not be `.` or `..`,
-- not be a Windows device name, and
-- be unique under case-insensitive filesystem comparison.
+`prepare()` never rewrites an identifier, so three rules remain. Observation
+keys, gene names, and vector-field IDs must each:
 
-Recommendations:
-- choose stable portable identifiers before export,
-- keep the original scientific/display label separately when it needs spaces
-  or other punctuation, and
-- resolve case-only collisions explicitly.
+- be a non-empty string,
+- be distinct within their axis, and
+- read on screen as the value they store — no control characters, none of the
+  zero-width characters `U+200B`, `U+2060`, `U+FEFF`, and no leading or
+  trailing whitespace of any kind, `U+00A0` included.
 
-This applies to:
-- `obs` column names,
-- gene identifiers (from `var_gene_id_column`),
-- dataset IDs, and
-- vector-field IDs.
+The third rule is the same one string category labels obey, for the same
+reason: a gene name, an obs key, and a category label are all drawn verbatim in
+the legend and the field selector, so `'Liver '` is a different value from
+`'Liver'` while looking identical on screen. Nothing is trimmed for you —
+trimming would rewrite an annotation you did not ask to change.
 
-It applies to the identifiers you **export**, because the rule is about the file
-each one is written to. `obs_keys` and `gene_identifiers` narrow the export, and
-they narrow this rule with it: a column or gene you leave out is written to no
-path and is not checked here. Gene identifiers carry one extra rule that is not
-about paths and so is *not* narrowed — every ID in `var` must be a non-empty
-string and must be distinct, because `gene_identifiers` addresses `var` rows by
-identifier.
+The display rule applies to the identifiers you **export**. `obs_keys` and
+`gene_identifiers` narrow the export, and they narrow this rule with it: a
+column or gene you leave out reaches no manifest and is never drawn. Gene names
+carry one extra rule that is *not* narrowed — every name in `var` must be a
+non-empty string and must be distinct, because `gene_identifiers` addresses
+`var` rows by name.
+
+`dataset_id` is the one exception, because it is not a field identifier: it
+names a real directory in a multi-dataset export root and in a served URL, so
+it must still be 1–180 ASCII bytes, begin with an ASCII letter or digit,
+otherwise use only ASCII letters, digits, `.`, `_`, or `-`, not end in `.`, and
+not be a Windows device name.
 
 ---
 

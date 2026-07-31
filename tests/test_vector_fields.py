@@ -14,7 +14,9 @@ def test_compute_transition_drift_identity_dense():
     X = rng.standard_normal((5, 2), dtype=np.float32)
     T = np.eye(5, dtype=np.float32)
     drift = compute_transition_drift(T, X, normalize_rows=False)
-    assert drift.dtype == np.float32
+    # Drift is an export input, so it is not rounded here; the export rounds
+    # the scaled result once, as cellucid-r does.
+    assert drift.dtype == np.float64
     assert drift.shape == X.shape
     assert np.allclose(drift, 0)
 

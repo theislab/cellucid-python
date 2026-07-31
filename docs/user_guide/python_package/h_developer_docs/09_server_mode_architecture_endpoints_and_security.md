@@ -130,8 +130,13 @@ Examples:
 - `/obs_manifest.json`
 - `/var_manifest.json`
 - `/points_3d.bin`
-- `/obs/<field>.values.f32`
-- `/var/<gene>.values.f32`
+- `/obs/<index>.values.f32`
+- `/var/<index>.values.f32`
+
+`<index>` is the payload index the corresponding manifest entry declares in its
+element `[0]`; identifiers never appear in a route. Only the exact unpadded
+decimal form resolves, so `/var/0.values.f32` is served and `/var/00.values.f32`
+is a 404.
 
 Key behaviors:
 

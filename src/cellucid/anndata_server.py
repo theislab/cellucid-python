@@ -293,15 +293,19 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         Handle vector field requests under /vectors/.
 
         Supported paths:
-        - vectors/{fieldId}_{dim}d.bin
+        - vectors/{index}_{dim}d.bin
         """
-        match = re.fullmatch(r"vectors/(.+)_([123])d\.bin", path)
+        match = re.fullmatch(r"vectors/(\d+)_([123])d\.bin", path)
         if not match:
             self.send_error_response(404, f"Invalid vectors path: {path}")
             return
 
-        field_id = match.group(1)
+        field_id = self.adapter.get_vector_field_id_for_payload_index(match.group(1))
         dim = int(match.group(2))
+
+        if field_id is None:
+            self.send_error_response(404, f"Vector field not found: {match.group(1)}")
+            return
 
         try:
             data = self.adapter.get_vector_field_binary(
@@ -323,9 +327,9 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         Handle obs field requests.
 
         Supported paths:
-        - obs/{field}.values.f32
-        - obs/{field}.codes.u8 or obs/{field}.codes.u16
-        - obs/{field}.outliers.f32
+        - obs/{index}.values.f32
+        - obs/{index}.codes.u8 or obs/{index}.codes.u16
+        - obs/{index}.outliers.f32
         """
         # Remove 'obs/' prefix
         filename = path[4:]
@@ -333,20 +337,20 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         # Compress if client supports gzip (transparent compression)
         compress = supports_gzip
 
-        # Parse filename: {field}.{type}.{dtype}
-        # Examples: cell_type.codes.u8, n_counts.values.f32, cluster.outliers.f32
-        parts = filename.rsplit(".", 2)  # Split from right: [field, type, dtype]
+        # Parse filename: {index}.{type}.{dtype}
+        # Examples: 0.codes.u8, 3.values.f32, 0.outliers.f32
+        parts = filename.rsplit(".", 2)  # Split from right: [index, type, dtype]
         if len(parts) < 3:
             self.send_error_response(404, f"Invalid obs path format: {path}")
             return
 
-        field_name = parts[0]
+        field_index = parts[0]
         data_type = parts[1]  # 'values', 'codes', or 'outliers'
 
-        actual_key = self.adapter.get_obs_key_for_payload_component(field_name)
+        actual_key = self.adapter.get_obs_key_for_payload_index(field_index)
 
         if actual_key is None:
-            self.send_error_response(404, f"Obs field not found: {field_name}")
+            self.send_error_response(404, f"Obs field not found: {field_index}")
             return
 
         try:
@@ -392,7 +396,7 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         Handle var (gene expression) requests.
 
         Supported paths:
-        - var/{gene}.values.f32
+        - var/{index}.values.f32
         """
         # Remove 'var/' prefix
         filename = path[4:]
@@ -400,19 +404,19 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         # Compress if client supports gzip (transparent compression)
         compress = supports_gzip
 
-        # Check format: {gene}.values.f32
+        # Check format: {index}.values.f32
         if not filename.endswith(".values.f32"):
             self.send_error_response(
-                404, f"Invalid var path format: {path} (expected {{gene}}.values.f32)"
+                404, f"Invalid var path format: {path} (expected {{index}}.values.f32)"
             )
             return
 
-        gene_safe = filename[:-11]  # Remove '.values.f32'
+        gene_index = filename[:-11]  # Remove '.values.f32'
 
-        actual_gene = self.adapter.get_gene_id_for_payload_component(gene_safe)
+        actual_gene = self.adapter.get_gene_id_for_payload_index(gene_index)
 
         if actual_gene is None:
-            self.send_error_response(404, f"Gene not found: {gene_safe}")
+            self.send_error_response(404, f"Gene not found: {gene_index}")
             return
 
         try:
@@ -810,37 +814,41 @@ class AnnDataServer:
                 for dim in field["available_dimensions"]:
                     add_payload(field["files"][f"{dim}d"], n_cells * dim * 4)
 
+        # Every payload route is the index the manifest entry itself declares, so
+        # the served path set cannot drift from the manifest the browser reads.
         obs_schemas = obs_manifest["_obsSchemas"]
         continuous_schema = obs_schemas.get("continuous")
         if continuous_schema is not None:
             for field in obs_manifest["_continuousFields"]:
-                key = self.adapter.get_obs_payload_component(field[0])
                 add_payload(
-                    continuous_schema["pathPattern"].format(key=key),
+                    continuous_schema["pathPattern"].replace("{index}", str(field[0])),
                     n_cells * 4,
                 )
 
         categorical_schema = obs_schemas.get("categorical")
         if categorical_schema is not None:
             for field in obs_manifest["_categoricalFields"]:
-                key = self.adapter.get_obs_payload_component(field[0])
-                ext = {"uint8": "u8", "uint16": "u16"}[field[2]]
-                item_size = {"uint8": 1, "uint16": 2}[field[2]]
+                ext = {"uint8": "u8", "uint16": "u16"}[field[3]]
+                item_size = {"uint8": 1, "uint16": 2}[field[3]]
                 add_payload(
-                    categorical_schema["codesPathPattern"].format(
-                        key=key,
-                        ext=ext,
-                    ),
+                    categorical_schema["codesPathPattern"]
+                    .replace("{index}", str(field[0]))
+                    .replace("{ext}", ext),
                     n_cells * item_size,
                 )
                 outlier_pattern = categorical_schema["outlierPathPattern"]
                 if outlier_pattern is not None:
-                    add_payload(outlier_pattern.format(key=key), n_cells * 4)
+                    add_payload(
+                        outlier_pattern.replace("{index}", str(field[0])),
+                        n_cells * 4,
+                    )
 
         var_schema = var_manifest["_varSchema"]
         for field in var_manifest["fields"]:
-            key = self.adapter.get_gene_payload_component(field[0])
-            add_payload(var_schema["pathPattern"].format(key=key), n_cells * 4)
+            add_payload(
+                var_schema["pathPattern"].replace("{index}", str(field[0])),
+                n_cells * 4,
+            )
 
         if connectivity_manifest is not None:
             edge_bytes = connectivity_manifest["n_edges"] * connectivity_manifest["index_bytes"]

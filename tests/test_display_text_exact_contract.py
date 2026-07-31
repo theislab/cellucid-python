@@ -224,7 +224,7 @@ def test_prepare_preserves_every_label_that_reads_as_it_is_stored(tmp_path):
     prepare(**_prepare_kwargs(out_dir, obs))
 
     manifest = json.loads((out_dir / "obs_manifest.json").read_text(encoding="utf-8"))
-    categories = {field[0]: field[1] for field in manifest["_categoricalFields"]}
+    categories = {field[1]: field[2] for field in manifest["_categoricalFields"]}
     assert categories["organ"] == ["T cell", "Îlot de Langerhans", "细胞 🧬"]
     # Case-only differences are visible on screen, so they stay two categories.
     assert categories["case"] == ["LIVER", "Liver", "liver"]

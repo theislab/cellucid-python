@@ -350,7 +350,7 @@ Why this works well:
 
 **Likely causes**
 - Your AnnData has no expression matrix (`adata.X` empty) or no `var`.
-- Your gene IDs are stored under a different `var` column.
+- The names you are searching for are in a different `var` column from the one the genes were named with.
 
 **How to confirm**
 - In Python: `print(adata.X is None)`, `print(adata.var.head())`.

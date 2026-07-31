@@ -86,8 +86,8 @@ which prevents a session for the old identity from being applied implicitly.
   - selections/highlights point to the wrong biological cells
   - cached results apply to the wrong rows
 
-**3) Field keys**
-- `obs` column names and gene identifier conventions should remain stable if you want saved “color-by”, filters, or analysis inputs to restore.
+**3) Field names**
+- `obs` column names and the names you publish your genes under should remain stable if you want saved “color-by”, filters, or analysis inputs to restore. A session records field names, not payload paths, so a field that is renamed between exports is a field a saved session can no longer find.
 
 ### Can change safely (usually)
 
@@ -110,7 +110,7 @@ Good dataset ids are:
 
 Common conventions:
 - `project_sample` (e.g. `crc_patient12`)
-- `study_dataset_v1` (e.g. `miller_atlas_v1`)
+- `study_dataset_v1` (e.g. `smith_atlas_v1`)
 - `assay_tissue` (e.g. `scatac_mouse_brain`)
 
 Avoid:

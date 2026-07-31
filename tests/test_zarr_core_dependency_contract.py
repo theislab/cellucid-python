@@ -136,9 +136,10 @@ def test_real_zarr_v2_store_runs_the_read_and_serve_preparation_path(
             "files": {"2d": "points_2d.bin"},
         }
         obs_manifest = adapter.get_obs_manifest()
-        assert obs_manifest["_continuousFields"] == [["score"]]
+        assert obs_manifest["_continuousFields"] == [[1, "score"]]
         assert obs_manifest["_categoricalFields"] == [
             [
+                0,
                 "cell_type",
                 ["alpha", "beta"],
                 "uint8",
@@ -146,7 +147,7 @@ def test_real_zarr_v2_store_runs_the_read_and_serve_preparation_path(
                 {"2": []},
             ]
         ]
-        assert adapter.get_var_manifest()["fields"] == [["Gene_A"], ["Gene_B"]]
+        assert adapter.get_var_manifest()["fields"] == [[0, "Gene_A"], [1, "Gene_B"]]
         np.testing.assert_allclose(
             np.frombuffer(adapter.get_points_binary(2), dtype=np.float32).reshape(3, 2),
             np.array([[-1.0, 0.5], [0.0, 0.0], [1.0, -0.5]], dtype=np.float32),

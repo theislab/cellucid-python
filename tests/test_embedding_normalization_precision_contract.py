@@ -47,15 +47,18 @@ def test_unit_spacing_survives_a_large_coordinate_magnitude() -> None:
     assert normalized[:, 0].max() == pytest.approx(1.0)
 
 
-def test_exported_coordinates_are_still_float32() -> None:
+def test_normalized_coordinates_keep_the_input_precision() -> None:
+    # The payload is float32, but the rounding belongs to the one place that
+    # writes the bytes: rounding here would round the centroids measured from
+    # these coordinates too, and cellucid-r rounds only at the write.
     embedding = np.array([[0.0, 0.0], [1.0, 2.0]], dtype=np.float64)
     source = _require_finite_embedding_source(embedding, label="X_umap_2d")
     normalized, center, _scale, _range = _normalize_finite_float32_embedding(
         source,
         label="X_umap_2d",
     )
-    assert normalized.dtype == np.float32
-    assert center.dtype == np.float32
+    assert normalized.dtype == np.float64
+    assert center.dtype == np.float64
 
 
 @pytest.mark.parametrize(
