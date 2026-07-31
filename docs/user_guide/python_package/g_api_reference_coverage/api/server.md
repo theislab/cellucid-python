@@ -82,6 +82,11 @@ serve("./my_export")  # blocks until Ctrl+C
 
 - Static or virtual endpoints for dataset files (exported data or AnnData-backed “virtual files”)
 - CORS headers so the viewer UI can request data
+- `Host` validation ahead of routing: only one well-formed authority naming
+  `localhost` or a loopback IP literal on the bound port is served, which is what
+  defeats DNS rebinding. Behind a reverse proxy, declare its host name with
+  `--allowed-host HOST` or `allowed_hosts=[...]`; see
+  {doc}`../../b_concepts_mental_models/06_privacy_security_and_offline_vs_online`
 - Health/info endpoints:
   - `/_cellucid/health`
   - `/_cellucid/info`

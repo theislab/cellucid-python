@@ -7,9 +7,9 @@ This page is a symptom-driven guide for problems with:
 - and “why did points disappear?” filter interactions.
 
 If you’re new to the concepts, read these first:
-- `d_fields_coloring_legends/01_field_types_and_sources`
-- `d_fields_coloring_legends/03_color_by_behavior`
-- `d_fields_coloring_legends/04_legend_behavior`
+- {doc}`01_field_types_and_sources`
+- {doc}`03_color_by_behavior`
+- {doc}`04_legend_behavior`
 
 ---
 
@@ -54,7 +54,7 @@ Most “bugs” are one of these.
 1) Select a field (categorical/continuous) or a gene.
 2) If selection fails, reload the dataset and try again.
 3) If the error persists, jump to:
-   - `b_data_loading/04_troubleshooting_data_loading`
+   - {doc}`../b_data_loading/08_troubleshooting_data_loading`
 
 ### Prevention
 
@@ -428,4 +428,4 @@ If you can reproduce the issue, capture:
 - and your dataset export metadata (obs/var manifests).
 
 Then continue debugging from:
-- `q_troubleshooting_index/index` (broader issues)
+- {doc}`../q_troubleshooting_index/index` (broader issues)

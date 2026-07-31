@@ -105,7 +105,12 @@ html_theme_options = {
     "icon_links": [
         {
             "name": "Cellucid App",
-            "url": "https://cellucid.com",
+            # Navigational link: the canonical browser host is the `www` form,
+            # which is what `cellucid/CNAME` publishes and what the app's own
+            # <link rel="canonical"> declares. The bare apex is reserved for
+            # frozen identifiers (schema $id, figure provenance) and is not
+            # used for links. See docs/contributing/web_app.md.
+            "url": "https://www.cellucid.com",
             "icon": "fa-solid fa-globe",
         },
     ],

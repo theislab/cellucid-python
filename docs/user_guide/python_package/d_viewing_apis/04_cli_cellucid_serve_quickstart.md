@@ -106,6 +106,9 @@ Run `cellucid serve --help` anytime.
 - `--latent-key KEY`: choose the latent space in `adata.obsm` used for some derived quantities (e.g. outlier quantiles / centroids)
 - `--dataset-name NAME`: exact display name, required for direct AnnData input
 - `--dataset-id ID`: exact stable identifier, required for direct AnnData input
+- `--obs-key KEY`: serve only this `adata.obs` column; repeat once per column.
+  Every column is served when it is omitted. Use it to leave out a column
+  Cellucid cannot serve, such as a `datetime64` collection date
 - `--vector-field-default FIELD_ID`: exact default field ID; required when
   direct AnnData declares more than one vector field
 

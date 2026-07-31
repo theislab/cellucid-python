@@ -100,7 +100,7 @@ These work unless you’re typing in an input/select.
 - `?`: open the in-app “Keyboard Shortcuts” section
 
 :::{note}
-If you press keys and nothing happens, click the canvas once (focus issues are the #1 cause). For more, see `c_core_interactions/06_troubleshooting_core_interactions`.
+If you press keys and nothing happens, click the canvas once (focus issues are the #1 cause). For more, see {doc}`06_troubleshooting_core_interactions`.
 :::
 
 ---
@@ -208,4 +208,4 @@ Autoplay remains off until the user explicitly enables it.
 2) Enable **Capture pointer**.
 3) Click the canvas to request pointer lock.
 
-For more symptoms, see `c_core_interactions/06_troubleshooting_core_interactions`.
+For more symptoms, see {doc}`06_troubleshooting_core_interactions`.

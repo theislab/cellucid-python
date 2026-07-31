@@ -238,18 +238,63 @@ install.packages("Matrix")
 
 ---
 
-## Symptom: “Vector field id '...' contains unsupported characters”
+## Symptom: a `vector_fields` list name is rejected
 
 **Likely cause**
-- Your `vector_fields` list key contains spaces, slashes, or starts/ends with `_`/`.`.
+- The key is not exactly `<field>_umap_<1|2|3>d`, and the export stops with
+  `Vector field key '...' must exactly match '<field>_umap_<1|2|3>d'.` An
+  unsuffixed `velocity_umap` is rejected: the key declares the dimension and it
+  is never inferred from the array.
+- Or the field id (the part before the dimensional suffix) contains spaces or
+  slashes, starts with `_`/`.`/`-`, exceeds 180 bytes, or is a Windows device
+  name, and the export stops with
+  `Vector field ids '...' is not a portable identifier. ...`
 
 **Fix**
-- Rename the key to a filesystem-safe identifier:
+- Add or correct the dimensional suffix, then rename the field id to a
+  filesystem-safe identifier:
   ```r
   names(vector_fields) <- gsub("[^A-Za-z0-9._-]+", "_", names(vector_fields))
+  names(vector_fields) <- paste0(names(vector_fields), "_2d")
   ```
 
-Better: choose explicit safe names up front (see {doc}`08_vector_fields_velocity_displacement`).
+Better: choose explicit safe, suffixed names up front (see {doc}`08_vector_fields_velocity_displacement`).
+
+---
+
+## Symptom: “Categorical field 'organ' has 2 labels the viewer cannot show as written”
+
+Cause:
+- a category label carries a character with no glyph — padding such as
+  `"Liver "`, a control character, a zero-width character, or a byte-order mark
+  at the front of a column read from a UTF-8 CSV. An empty label (`""`) is
+  reported the same way.
+
+Confirm:
+
+```r
+labels <- levels(factor(obs$organ))
+labels[labels != trimws(labels, whitespace = "[\\h\\v]")]
+labels[grepl("[\\x01-\\x1f\\x7f]", labels, perl = TRUE)]
+```
+
+Fix:
+
+```r
+obs$organ <- factor(trimws(as.character(obs$organ), whitespace = "[\\h\\v]"))
+```
+
+Check the result before re-exporting: if the column previously held both
+`"Liver"` and `"Liver "`, trimming merges them into one category and moves
+cells between them. That may be exactly what you want — but it is a change to
+your annotation, which is why `cellucid_prepare()` will not make it for you.
+
+A second message covers two labels that render identically:
+`Categorical field 'organ' labels 'T  cell' and 'T cell' are stored as
+different categories but are drawn identically`. Rename one of them.
+
+The same rule covers `dataset_name`, `dataset_description`, `source_name`,
+`source_url`, and `source_citation`.
 
 ---
 

@@ -83,8 +83,10 @@ Figure export is controlled from the **Figure Export** panel in the left sidebar
 - SVG has no preselected strategy. You must explicitly choose **Full vector**,
   **Optimized vector**, or **Hybrid**; Cellucid never changes that choice.
 - **Export blocked** lists an exact missing requirement, such as WebGL2/camera
-  matrices for PNG or Hybrid, or a visible connectivity layer that the current
-  exporter does not include.
+  matrices for PNG or Hybrid, a visible connectivity layer that the current
+  exporter does not include, or a render mode other than **Points** (figure
+  export draws the point layer only, so a volumetric smoke view would export as
+  a different image, not a degraded one).
 
 :::{tip}
 If your preview looks wrong, click **Refresh** in the preview controls (especially after changing views, fields, or filters).
@@ -151,6 +153,18 @@ This is usually what you want for multi-panel figures: pick a plot size first, t
 
 Legend contents are sourced from the same legend model as the viewer, so categorical colors and continuous colormaps should match what you see.
 
+Two things the exported legend spells out that the on-screen legend does not
+have to, because a figure travels without the app around it:
+
+- **Hidden categories keep their entry and are marked `(hidden)`**, with a
+  hollow gray outline instead of their color. The entry stays so a filtered
+  figure cannot be mistaken for a complete one; the color goes so nobody hunts
+  the plot for points that were never drawn.
+- **A logarithmic colorbar is labeled `Log10 color scale`** together with its
+  true midpoint (the geometric mean of the two endpoints), so a reader cannot
+  interpolate the endpoint labels linearly and quote a value that is wrong by
+  orders of magnitude.
+
 ### Axes
 
 - **Axes** is enabled by default.
@@ -162,6 +176,19 @@ How to interpret axes:
 - In 2D/planar views, axes aim to correspond to embedding coordinates (when available).
 - In 3D orbit views, axes show **camera-space** coordinates (useful for orientation, but not the same as “UMAP_1/UMAP_2” in a strict sense). If you want an explicit 3D orientation cue, keep **3D orientation** enabled.
 
+### Reference grid
+
+- **Reference grid** is enabled by default and exports the viewer's grid box —
+  the matplotlib-style walls drawn behind the data by the **Grid (light)** and
+  **Grid (dark)** backgrounds.
+- It follows the viewer: a light-grid view exports a light grid, a dark-grid
+  view exports a dark one. Nothing is hard-coded.
+- In SVG the grid arrives as ordinary vector `<line>` elements, so you can
+  recolour, thin, or delete it in Illustrator or Inkscape. PNG carries the
+  identical geometry.
+- The checkbox is disabled when the viewer background (**White** or **Black**)
+  draws no grid.
+
 ### 3D orientation + depth sort
 
 - **3D orientation** adds a small orientation widget in 3D orbit mode.
@@ -172,6 +199,8 @@ How to interpret axes:
 
 In the **Style** section you can choose:
 - Background: **Match viewer**, **White BG**, **Transparent**, **Custom…**
+  - Annotation ink follows the background you choose: a dark figure gets light
+    titles, ticks, axis labels, and frame instead of near-black ones.
 - Font family: Arial / Helvetica / Times (safe cross-platform defaults)
 - Text sizing:
   - Auto text on/off
@@ -192,6 +221,11 @@ If you have an active selection/highlight and want the exported figure to commun
 This makes non-selected points:
 - turn gray, and
 - drop in opacity (controlled by the **α** input; default ~0.15).
+
+It also stamps an **`n = 1,234 selected`** badge in the top-left corner of the
+plot area, so the count travels with the figure. In a multi-panel export **every
+panel carries its own badge**, counted from the cells that panel actually draws:
+panels carry their own filters, so one number could not be true for all of them.
 
 Practical use cases:
 - A “selected cluster vs background” figure for a talk.
@@ -313,10 +347,45 @@ If you have snapshots and want a multi-panel figure:
 What to expect:
 - The export is arranged as an automatically computed grid.
 - Panels are labeled (e.g., A, B, C…) and include per-panel view labels.
-- A legend is shared only when all panels use the same active color-by field; otherwise legend behavior may be limited (export individual panels if you need separate legends/fields).
+- Every colored panel is explained by a legend — one shared legend beside the
+  grid when the panels agree, otherwise a legend inside each panel (see below).
+- With **Emphasize selection** on, each panel carries its own `n = N selected`
+  badge, counted from that panel's own cells.
+- Embedded metadata describes **every** panel, one record each (see
+  {doc}`05_metadata_and_provenance`).
+
+#### Legends in a multi-panel export
+
+Cellucid draws **one shared legend beside the grid** only when every panel
+really says the same thing: the same color-by field *and* a legend model equal
+in every respect, **including which categories are hidden**. Two panels colored
+by `cell_type` with different categories filtered out do not qualify — a single
+legend would tell the reader both panels draw the same set of categories, which
+is exactly the claim the `(hidden)` marking exists to prevent.
+
+Whenever the panels do not qualify, **each panel gets its own legend drawn
+inside its cell**, on the side you chose with **Legend: Right / Bottom**. The
+panel legend is carved out of the cell before the plot is placed, so the plot
+shrinks rather than being overlapped: a panel legend never covers the plot, the
+axes, or the `A. Live` panel label.
+
+Two things to plan for when you size a grid:
+
+- **Panel legends cost plot area, and tiny cells get none.** A panel legend may
+  claim at most half its cell. Cellucid draws one only when that half, minus an
+  8 px gap, is at least **96 px wide** (Legend: Right) or **44 px tall**
+  (Legend: Bottom) — roughly 208 px of usable cell width, or 104 px of usable
+  cell height below the panel label. Below that the panel is drawn without its
+  legend, because no legend text would be legible at that size. This is a
+  readability limit, not a failure: increase the plot size or export fewer
+  panels at a time.
+- **The shared legend needs room too.** If the grid leaves less than 96 px of
+  spare width beside it (Legend: Right) or 72 px of spare height below it
+  (Legend: Bottom), Cellucid drops the shared legend and gives every panel its
+  own instead — never no legend at all.
 
 :::{tip}
-If you want all panels to be directly comparable, lock cameras across views (see {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`).
+If you want all panels to be directly comparable, lock cameras across views (see {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`). Matching fields, filters, and hidden categories is also what buys you a single shared legend instead of one legend per panel.
 :::
 
 ---

@@ -4,8 +4,8 @@ This page is a **button-by-button** reference for the Community Annotation UI, p
 
 If you want the guided flow first:
 
-- Annotators: `01_annotator_guide`
-- Authors: `02_author_guide`
+- Annotators: {doc}`01_annotator_guide`
+- Authors: {doc}`02_author_guide`
 
 ---
 

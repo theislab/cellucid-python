@@ -13,7 +13,7 @@ Embeddings (UMAP coordinates) are the **minimum required geometry** for Cellucid
 ## Fast path (what you must provide)
 
 You must provide **at least one** of:
-- `X_umap_1d` with shape `(n_cells, 1)`, or
+- `X_umap_1d` with shape `(n_cells, 1)`, or a plain `(n_cells,)` vector, or
 - `X_umap_2d` with shape `(n_cells, 2)`, or
 - `X_umap_3d` with shape `(n_cells, 3)`.
 
@@ -28,7 +28,8 @@ assert np.isfinite(X_umap_2d).all()  # no NaN/Inf
 
 AnnData input must declare the dimension in its key. Store each embedding as
 `X_umap_1d`, `X_umap_2d`, or `X_umap_3d`; Cellucid does not infer a dimension
-from a generic key.
+from a generic key. Scanpy writes `sc.tl.umap()` output to `adata.obsm["X_umap"]`,
+so declare it once with `adata.obsm["X_umap_2d"] = adata.obsm["X_umap"]`.
 
 ---
 
@@ -38,7 +39,7 @@ from a generic key.
 
 | Argument | Shape | Stored as |
 |---|---:|---|
-| `X_umap_1d` | `(n_cells, 1)` | `points_1d.bin(.gz)` |
+| `X_umap_1d` | `(n_cells, 1)` or `(n_cells,)` | `points_1d.bin(.gz)` |
 | `X_umap_2d` | `(n_cells, 2)` | `points_2d.bin(.gz)` |
 | `X_umap_3d` | `(n_cells, 3)` | `points_3d.bin(.gz)` |
 

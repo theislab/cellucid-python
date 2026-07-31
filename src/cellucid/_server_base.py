@@ -11,6 +11,7 @@ It's an internal module (prefixed with _) and not part of the public API.
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import json
 import logging
 import math
@@ -20,16 +21,17 @@ import tempfile
 import threading
 import time
 import zlib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from html.parser import HTMLParser
 from http import HTTPStatus
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, cast
+from typing import TYPE_CHECKING, BinaryIO, NoReturn, cast
 
 from ._console import console_print
 
 if TYPE_CHECKING:
     from http.client import HTTPMessage
+    from http.server import BaseHTTPRequestHandler, HTTPServer
 
 logger = logging.getLogger("cellucid.server")
 
@@ -484,6 +486,233 @@ def _read_exact_request_body(reader: BinaryIO, content_length: int) -> bytes:
     return body
 
 
+# The Cellucid servers only ever speak cleartext HTTP, so an authority that
+# omits its port names port 80.
+_HTTP_DEFAULT_PORT = 80
+_LOOPBACK_HOST_NAME = "localhost"
+
+
+def _parse_authority_port(text: str) -> int | None:
+    """Return one exact decimal authority port, or ``None`` when malformed."""
+    if not text or not text.isascii() or not text.isdigit():
+        return None
+    if len(text) > 1 and text.startswith("0"):
+        return None
+    port = int(text)
+    if port < 1 or port > 65535:
+        return None
+    return port
+
+
+def _parse_host_authority(value: object) -> tuple[str, int | None] | None:
+    """Split one ``Host`` header into ``(host, port)``, or ``None`` when malformed.
+
+    ``host`` is returned unbracketed so an IPv6 literal can be classified
+    directly. A bare ``split(":")`` cannot be used here because an IP-literal
+    authority is bracketed and contains colons of its own.
+    """
+    if not isinstance(value, str) or not value or not value.isascii():
+        return None
+    if any(ord(character) <= 32 or ord(character) == 127 for character in value):
+        return None
+    if "@" in value or "/" in value:
+        return None
+
+    if value.startswith("["):
+        closing = value.find("]")
+        if closing < 0:
+            return None
+        host = value[1:closing]
+        # A scope identifier never names a browser-reachable origin.
+        if "%" in host:
+            return None
+        try:
+            ipaddress.IPv6Address(host)
+        except ValueError:
+            return None
+        remainder = value[closing + 1 :]
+        if not remainder:
+            return host, None
+        if not remainder.startswith(":"):
+            return None
+        port_text = remainder[1:]
+    else:
+        if "[" in value or "]" in value:
+            return None
+        host, separator, port_text = value.partition(":")
+        if not host:
+            return None
+        if not separator:
+            return host, None
+
+    port = _parse_authority_port(port_text)
+    if port is None:
+        return None
+    return host, port
+
+
+# A DNS name is at most 253 characters over dot-separated labels of at most 63.
+_MAXIMUM_HOST_NAME_LENGTH = 253
+_MAXIMUM_HOST_LABEL_LENGTH = 63
+_HOST_LABEL_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-")
+
+
+def _is_dns_host_name(lowered: str) -> bool:
+    """Report whether one lowercase string is a plain LDH DNS name.
+
+    Only letters, digits and hyphens are accepted, because those are the
+    characters a browser can put in an authority without percent-encoding.
+    """
+    if not lowered or len(lowered) > _MAXIMUM_HOST_NAME_LENGTH:
+        return False
+    for label in lowered.split("."):
+        if not label or len(label) > _MAXIMUM_HOST_LABEL_LENGTH:
+            return False
+        if label.startswith("-") or label.endswith("-"):
+            return False
+        if not _HOST_LABEL_CHARACTERS.issuperset(label):
+            return False
+    return True
+
+
+def _normalize_host_name(host: str) -> str | None:
+    """Return the exact comparison form of one authority host, or ``None``.
+
+    Both an allowlist entry and an incoming ``Host`` are reduced through this
+    one function, so ``[0:0:0:0:0:0:0:1]`` and ``::1`` — and ``Hub.Example.Org``
+    and ``hub.example.org`` — cannot be two different answers to the same
+    question.
+    """
+    try:
+        return ipaddress.ip_address(host).compressed
+    except ValueError:
+        pass
+    lowered = host.lower()
+    return lowered if _is_dns_host_name(lowered) else None
+
+
+def _require_allowed_host_entry(entry: str, *, label: str) -> str:
+    """Return one validated allowlist entry in comparison form.
+
+    Every shape this guard does not implement is refused by name rather than
+    ignored: an entry that is silently dropped, or silently widened, is the
+    original rebinding hole with a configuration file in front of it.
+    """
+
+    def refuse(reason: str) -> NoReturn:
+        raise ValueError(f"{label} entry {entry!r} {reason}")
+
+    if not entry:
+        refuse("is empty; give one host name such as 'hub.example.org'")
+    if not entry.isascii():
+        refuse("is not ASCII; use the Punycode (IDNA) form of an international name")
+    if any(character.isspace() for character in entry):
+        refuse("contains whitespace; give exactly one host name per entry")
+    if any(ord(character) <= 32 or ord(character) == 127 for character in entry):
+        refuse("contains a control character; give one plain host name")
+    if "*" in entry:
+        refuse(
+            "uses a wildcard; a wildcard re-admits DNS rebinding under any name it "
+            "covers, so every name must be written out in full"
+        )
+    if "/" in entry:
+        refuse("looks like a URL; give the host name alone, with no scheme and no path")
+    if "@" in entry:
+        refuse("carries credentials; give the host name alone")
+    if "[" in entry or "]" in entry:
+        refuse("is bracketed; write an IPv6 address bare, for example '::1'")
+    if "%" in entry:
+        refuse("carries a zone identifier, which never names a browser-reachable host")
+
+    try:
+        return ipaddress.ip_address(entry).compressed
+    except ValueError:
+        pass
+    if ":" in entry:
+        refuse(
+            "carries a port; write the host name alone, because an allowed name is "
+            "matched on whatever port the proxy in front of it publishes"
+        )
+    lowered = entry.lower()
+    if lowered.endswith("."):
+        refuse("ends with a dot; write the name without its root label")
+    if not _is_dns_host_name(lowered):
+        refuse(
+            "is not a host name; use dot-separated labels of letters, digits and "
+            "hyphens, or one bare IP address"
+        )
+    return lowered
+
+
+def require_allowed_hosts(
+    value: object,
+    *,
+    label: str = "allowed_hosts",
+) -> frozenset[str]:
+    """Validate the extra ``Host`` names one server is allowed to answer to.
+
+    Cellucid binds loopback and answers only its own loopback authority, which
+    is what stops DNS rebinding. A reverse proxy — ``jupyter-server-proxy`` in
+    particular — forwards the front-end's ``Host`` verbatim, and that ``Host``
+    is indistinguishable from a rebound one: both arrive on loopback naming a
+    foreign authority, and a rebound page is same-origin so it can forge any
+    ``X-Forwarded-*`` header it likes. The proxy therefore cannot be detected,
+    only declared, which is what this list is.
+
+    Every entry is one bare host name: a DNS name or an IP address literal. No
+    port, no scheme, no path, no wildcard. An empty list — the default — leaves
+    the loopback-only rule exactly as it is.
+    """
+    if value is None:
+        return frozenset()
+    if isinstance(value, str | bytes):
+        raise TypeError(
+            f"{label} must be a sequence of host names, not one string; "
+            f"pass [{value!r}] to allow exactly that name"
+        )
+    if not isinstance(value, Sequence):
+        raise TypeError(f"{label} must be a list or tuple of host names")
+    names: set[str] = set()
+    for entry in value:
+        if type(entry) is not str:
+            raise TypeError(f"{label} entries must be strings, got {type(entry).__name__}")
+        names.add(_require_allowed_host_entry(entry, label=label))
+    return frozenset(names)
+
+
+def _host_authority_is_loopback(host: str) -> bool:
+    """Report whether one authority host names only the loopback interface.
+
+    IP literals are accepted whenever they are loopback: DNS cannot rebind a
+    literal, so such an authority can only come from a page whose own origin is
+    that literal. ``localhost`` is the one name accepted, because RFC 6761
+    reserves it for the loopback interface; every other name is refused, which
+    is exactly what defeats DNS rebinding.
+    """
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return host.lower() == _LOOPBACK_HOST_NAME
+    return address.is_loopback
+
+
+def _requires_loopback_host_header(bound_host: object) -> bool:
+    """Report whether one bound address must serve only loopback authorities.
+
+    Enforcement is skipped only when the operator positively bound a
+    non-loopback address (``--host 0.0.0.0`` and friends). That is an explicit
+    request for network exposure, and the legitimate names of an exposed
+    deployment are unknowable from here; anything undetermined is enforced.
+    """
+    if not isinstance(bound_host, str):
+        return True
+    try:
+        address = ipaddress.ip_address(bound_host)
+    except ValueError:
+        return True
+    return address.is_loopback
+
+
 class CORSMixin:
     """
     Mixin class providing CORS headers for HTTP handlers.
@@ -495,6 +724,8 @@ class CORSMixin:
     allow_caching: bool = True
 
     if TYPE_CHECKING:
+        allowed_hosts: frozenset[str]
+        close_connection: bool
         command: str
         path: str
         serve_web_ui: bool
@@ -510,10 +741,90 @@ class CORSMixin:
             message: str | None = None,
         ) -> None: ...
 
+    def parse_request(self) -> bool:
+        """Refuse foreign ``Host`` authorities before any route is dispatched.
+
+        A page on any origin can publish a short-lived DNS record that
+        re-resolves its own hostname to ``127.0.0.1`` (DNS rebinding). The
+        browser then considers this server same-origin, so no CORS check runs
+        and the response body — the user's private single-cell data — is handed
+        to that page. Validating ``Host`` is the only defence, and this is the
+        one boundary every request crosses: ``handle_one_request()`` dispatches
+        to ``do_GET``/``do_HEAD``/``do_POST``/``do_OPTIONS`` only after
+        ``parse_request()`` returns ``True``.
+        """
+        base = cast("BaseHTTPRequestHandler", super())
+        if not base.parse_request():
+            return False
+        if self._host_header_is_authorized():
+            return True
+        # Requests are otherwise logged at DEBUG, so a refusal would be silent.
+        # The offending value goes only to the operator's log, never into the
+        # response, and %r keeps a folded header out of the log's line framing.
+        logger.warning(
+            "Refused a request whose Host header does not name this server: %r",
+            self._request_headers().get_all("Host", []),
+        )
+        # The body was never read, so this connection can no longer be framed.
+        self.close_connection = True
+        self.send_error_response(
+            HTTPStatus.MISDIRECTED_REQUEST,
+            "Host header does not name this server",
+        )
+        return False
+
+    def _host_header_is_authorized(self) -> bool:
+        """Report whether ``Host`` names this server's own or a declared authority."""
+        server = self._request_server()
+        allowed = self._allowed_host_names()
+        # Without a declaration this is exactly the loopback-only rule: a
+        # deliberate non-loopback bind is an explicit request for network
+        # exposure whose legitimate names cannot be known from here. Declaring
+        # names is that missing knowledge, so it turns the check on everywhere.
+        if not allowed and not _requires_loopback_host_header(server.server_address[0]):
+            return True
+
+        values = self._request_headers().get_all("Host", [])
+        if len(values) != 1:
+            return False
+        authority = _parse_host_authority(values[0])
+        if authority is None:
+            return False
+        host, port = authority
+        if allowed:
+            normalized = _normalize_host_name(host)
+            # A declared name is matched on any port: the operator's proxy
+            # publishes a front-end port that has nothing to do with the
+            # loopback port bound here, and the port in an attacker's Host is
+            # attacker-chosen anyway, so pinning it would only misconfigure.
+            if normalized is not None and normalized in allowed:
+                return True
+        # ``server_port`` is read back from the bound socket, so a server that
+        # asked for port 0 is checked against the port it was actually given.
+        if (port if port is not None else _HTTP_DEFAULT_PORT) != server.server_port:
+            return False
+        return _host_authority_is_loopback(host)
+
+    def _allowed_host_names(self) -> frozenset[str]:
+        """Return the operator-declared extra authorities, empty unless declared.
+
+        A handler built without a validated declaration must land on the
+        strictest rule, never the weakest, so anything that is not the exact
+        frozenset ``require_allowed_hosts`` produces counts as no declaration.
+        """
+        names = getattr(self, "allowed_hosts", None)
+        return names if type(names) is frozenset else frozenset()
+
     def _request_headers(self) -> HTTPMessage:
         return cast(
             "HTTPMessage",
             object.__getattribute__(self, "headers"),
+        )
+
+    def _request_server(self) -> HTTPServer:
+        return cast(
+            "HTTPServer",
+            object.__getattribute__(self, "server"),
         )
 
     def _request_reader(self) -> BinaryIO:

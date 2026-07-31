@@ -79,6 +79,12 @@ Use these as starting points; then adjust based on your legends and number of pa
 **Multi-panel (2×2 or 3×2 grid)**
 - Use **Export all views (split-view)** in grid compare mode.
 - Increase overall plot size so each panel has enough pixels (e.g., 2000×1500+ as a starting point).
+- Size for the legends you will actually get: panels that disagree (different
+  field, or the same field with different hidden categories) each carry their
+  own legend inside their cell, and a cell needs roughly 208 px of usable width
+  (Legend: Right) or 104 px of usable height below its panel label
+  (Legend: Bottom) before that legend is drawn at all. A 3×2 grid at 2000×1500
+  clears this comfortably; the same grid at 600×450 does not.
 
 ### Readability checklist
 
@@ -124,6 +130,8 @@ Cellucid may block export with an exact requirement:
   camera matrices.
 - **Connectivity overlay not exported**: connectivity is visible, but the
   current figure exporter owns the point layer only.
+- **Volumetric smoke cloud render mode not exported** (or **Active render mode
+  unavailable**): figure export reproduces the **Points** render mode only.
 
 These blockers never change the selected format, SVG strategy, backend, or
 fidelity. Resolve the named condition and submit the same request again.
@@ -136,13 +144,25 @@ fidelity. Resolve the named condition and submit the same request again.
 
 If you have many categories:
 - prefer **Legend: Bottom** (more horizontal space),
-- consider hiding/merging rarely used categories (if your workflow supports it),
+- consider merging rarely used categories (if your workflow supports it),
 - avoid exporting unreadable “wall of legend” figures (it looks unprofessional and is hard to interpret).
+
+:::{note}
+Hiding categories does not shorten the exported legend. A hidden category keeps
+its entry, marked `(hidden)` with a hollow gray swatch, so a filtered figure
+cannot pass as a complete one. Merge or drop categories upstream if you need a
+shorter legend.
+:::
 
 ### Continuous colormaps
 
 - Avoid colormaps that compress contrast (the figure can look “flat” in print).
 - Prefer palettes that remain interpretable when printed in grayscale (when possible).
+- If **Use log scale** is on for the colored field, the exported colorbar is
+  labeled `Log10 color scale` with its true midpoint (the geometric mean of the
+  endpoints). Keep that line in the figure: without it a reader interpolates the
+  two endpoint labels linearly and reads off values that are wrong by orders of
+  magnitude.
 
 ### Colorblindness preview (high value, low effort)
 

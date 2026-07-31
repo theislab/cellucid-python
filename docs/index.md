@@ -12,7 +12,7 @@ saved session, or collaborative annotation round.
 :gutter: 2
 
 :::{grid-item}
-```{button-link} https://cellucid.com
+```{button-link} https://www.cellucid.com
 :color: primary
 :expand:
 

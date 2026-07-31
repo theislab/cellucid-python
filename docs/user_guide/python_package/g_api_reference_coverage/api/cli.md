@@ -51,6 +51,8 @@ cellucid serve <data_path> [--port 8765] [--host 127.0.0.1] [--no-browser] [--qu
 | `--latent-key KEY` | Choose the exact latent key in `obsm` | AnnData-only |
 | `--dataset-name NAME` | Set the display name | Required for direct AnnData input |
 | `--dataset-id ID` | Set the stable dataset identifier | Required for direct AnnData input |
+| `--obs-key KEY` | Serve only this `obs` column; repeat per column | AnnData-only; every column is served when omitted |
+| `--vector-field-default FIELD_ID` | Choose the initial vector field | AnnData-only; required when more than one exists |
 
 ---
 

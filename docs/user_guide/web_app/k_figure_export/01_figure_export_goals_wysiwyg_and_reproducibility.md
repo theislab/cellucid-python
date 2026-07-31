@@ -39,7 +39,14 @@ Figure export is intentionally designed to be **performance-safe**: it does not 
 It helps to separate two promises that people often mix:
 
 - **WYSIWYG** (“what you see is what you get”):  
-  when you press **Export**, the exported figure should match the state you are currently looking at (camera, visibility, colors, legends, highlights).
+  when you press **Export**, the exported figure should match the state you are currently looking at (camera, visibility, colors, legends, highlights, the reference grid your background draws, and the atmospheric fog that carries depth).
+
+  Where a layer cannot be reproduced, Cellucid says so instead of quietly
+  dropping it. Data layers the export cannot draw — connectivity edges, the
+  velocity vector field, volumetric smoke — **block** the export. Interaction
+  chrome — the orbit compass, lasso and selection indicators, multiview panel
+  title chips — is never exported and is disclosed in the Annotations block, so
+  it is stated before you press Export rather than discovered afterwards.
 - **Reproducible export**:  
   if you (or a collaborator) restore the same dataset/version and the same saved state later, exporting again should produce the *same figure* (within stated limits).
 
@@ -79,18 +86,23 @@ When you export a figure, you should expect the following to be captured (subjec
 **Visibility and appearance**
 - Visibility after filters and hide/show logic (invisible points are not drawn).
 - Color-by field + legend mapping (categorical palettes or continuous colormaps).
+- The *fact* of filtering: hidden categories stay in the legend, marked
+  `(hidden)` with a hollow swatch, so a filtered figure cannot be mistaken for
+  a complete one.
 - Current point size and (for PNG/Hybrid) shader-accurate point appearance.
 
 **Annotations and overlays**
 - Title (if set).
 - Axes and axis labels (if enabled).
-- Legend (if enabled; position right/bottom).
+- Legend (if enabled; position right/bottom) — one shared legend when every
+  panel of a multi-panel export matches, otherwise one legend per panel.
 - 3D orientation indicator (if enabled in 3D orbit mode).
-- Highlights and selection emphasis (if enabled; non-selected points can be muted).
+- Highlights and selection emphasis (if enabled; non-selected points can be
+  muted), with an `n = N selected` badge counted per panel.
 - Centroid overlay (if centroids are enabled in the viewer).
 
 :::{tip}
-If you need a “methods-ready” record of what was exported, use {doc}`05_metadata_and_provenance`. PNGs and SVGs embed structured metadata including dataset identity, field key, filter summary, and export settings.
+If you need a “methods-ready” record of what was exported, use {doc}`05_metadata_and_provenance`. PNGs and SVGs embed structured metadata: dataset identity, export settings, and one record per exported panel giving that panel's view, field, and filters.
 :::
 
 ---
@@ -100,6 +112,10 @@ If you need a “methods-ready” record of what was exported, use {doc}`05_meta
 Figure export is intentionally scoped. Common “expected but missing” items include:
 
 - **Connectivity/edges overlay**: even if connectivity lines are enabled in the viewer, export currently exports the **point layer only** (no edges).
+- **Render modes other than Points**: the volumetric smoke cloud mode is not
+  rendered as a figure. Export is blocked instead of drawing a point cloud,
+  which would be a different image carrying metadata that claims to be the
+  current view.
 - **Transient UI**: hover tooltips, lasso outlines, selection handles, notifications/toasts, menus.
 - **Exact point-for-point identity when using reduction**:
   - Optimized vector uses density-preserving reduction; the exported point set is *not* identical to the on-screen set.

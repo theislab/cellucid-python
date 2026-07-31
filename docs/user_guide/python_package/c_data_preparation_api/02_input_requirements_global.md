@@ -163,13 +163,25 @@ This applies to:
 - dataset IDs, and
 - vector-field IDs.
 
+It applies to the identifiers you **export**, because the rule is about the file
+each one is written to. `obs_keys` and `gene_identifiers` narrow the export, and
+they narrow this rule with it: a column or gene you leave out is written to no
+path and is not checked here. Gene identifiers carry one extra rule that is not
+about paths and so is *not* narrowed — every ID in `var` must be a non-empty
+string and must be distinct, because `gene_identifiers` addresses `var` rows by
+identifier.
+
 ---
 
 ## Rule 6: output directory semantics (`out_dir`, `force`)
 
-`out_dir` defaults to `./exports/` under your current working directory, but you should **always set it explicitly**.
+`out_dir` defaults to `./exports` and is resolved against your current working
+directory **at the moment you call `prepare()`**, so a later `os.chdir()` changes
+where the next call writes. You should **always set it explicitly**.
 
 Important behavior:
+- A leading `~` is expanded to your home directory, so
+  `out_dir="~/exports/my_dataset"` writes under `$HOME`.
 - A non-empty target raises `FileExistsError` when `force=False`.
 - `force=True` writes one complete sibling stage, validates it, and atomically
   replaces the previous generation.

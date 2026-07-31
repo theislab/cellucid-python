@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -38,6 +39,18 @@ _WINDOWS_RESERVED_NAMES = {
     *(f"LPT{number}" for number in range(1, 10)),
 }
 _CACHE_LOCK = threading.RLock()
+# RFC 6761 reserves this name for the loopback interface. IP literals are
+# classified by the stdlib instead, which covers all of 127.0.0.0/8, ::1, and
+# the IPv4-mapped forms.
+_LOOPBACK_HOST_NAMES = frozenset({"localhost"})
+
+
+def _is_loopback_host(hostname: str) -> bool:
+    """Report whether a URL host unambiguously names this machine's loopback."""
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return hostname in _LOOPBACK_HOST_NAMES
 
 
 @dataclass(frozen=True)
@@ -103,6 +116,22 @@ def _require_source_url(value: str) -> str:
         _ = parsed.port
     except ValueError as error:
         raise ValueError("source_url contains an invalid host or port") from error
+    # The inventory carrying every asset's SHA-256 is fetched from this same URL
+    # and is not pinned to anything, so over plaintext HTTP an on-path attacker
+    # rewrites the assets and rewrites the inventory hashes to match: per-asset
+    # verification then confirms the attacker's own build, and those bytes are
+    # executed as the application UI. HTTPS is therefore required for any host
+    # reachable across a network. Loopback is exempt because the traffic never
+    # leaves the machine -- there is no on-path position to occupy, and anyone
+    # who can bind 127.0.0.1 already runs code as this user. That exemption is
+    # what makes serving a locally built web app work, which is the documented
+    # developer path (`--web-source-url http://127.0.0.1:4173`).
+    hostname = parsed.hostname or ""
+    if parsed.scheme == "http" and not _is_loopback_host(hostname):
+        raise ValueError(
+            "source_url must use https; plaintext http is accepted only for a "
+            f"loopback host (localhost, 127.0.0.0/8, ::1), not {hostname!r}"
+        )
     return value
 
 
@@ -119,6 +148,11 @@ def _require_content_type(value: Any, *, label: str) -> str:
     if not isinstance(value, str) or not _MIME_RE.fullmatch(value):
         raise ValueError(f"{label} must be an exact normalized MIME type")
     return value
+
+
+def _media_type(content_type: str) -> str:
+    """Return the bare media type, discarding parameters such as ``charset``."""
+    return content_type.split(";", 1)[0].strip().lower()
 
 
 def _require_asset_path(value: Any) -> str:
@@ -410,10 +444,18 @@ def _verify_fetched_asset(asset: WebAsset, response: FetchedWebResponse) -> None
             f"Web asset {asset.path!r} response byte length is "
             f"{response.content_length}, expected {asset.bytes}"
         )
-    if response.content_type != asset.content_type:
+    # The inventory's content_type is the header this package serves the asset
+    # with; it is not a prediction of how the source host formats its own
+    # header. Only the media type is compared, because a host is free to add or
+    # omit parameters such as charset -- GitHub Pages serves .xml without one.
+    # Integrity does not rest on this check: every byte is SHA-256 verified
+    # below, so a mismatched media type only signals a source serving something
+    # of a different kind, such as an HTML error page.
+    if _media_type(response.content_type) != _media_type(asset.content_type):
         raise ValueError(
-            f"Web asset {asset.path!r} response content type is "
-            f"{response.content_type!r}, expected {asset.content_type!r}"
+            f"Web asset {asset.path!r} response media type is "
+            f"{_media_type(response.content_type)!r}, expected "
+            f"{_media_type(asset.content_type)!r}"
         )
     _verify_asset_bytes(asset, response.data)
 

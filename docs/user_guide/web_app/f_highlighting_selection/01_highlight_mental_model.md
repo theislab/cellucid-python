@@ -22,9 +22,9 @@ If you remember one sentence, make it this:
 **Prerequisites**
 - Any dataset loaded (demo is fine)
 - Familiarity with basic navigation + fields:
-  - `../c_core_interactions/index`
-  - `../d_fields_coloring_legends/index`
-  - `../e_filtering/index` (recommended)
+  - {doc}`../c_core_interactions/index`
+  - {doc}`../d_fields_coloring_legends/index`
+  - {doc}`../e_filtering/index` (recommended)
 
 **What you’ll learn**
 - What a highlight page is vs a highlight group
@@ -125,7 +125,7 @@ Only one page is **active** for rendering/highlighting at a time.
 Selection tools only consider cells that are visible in the view you are selecting in.
 
 That includes:
-- standard filters (`../e_filtering/index`),
+- standard filters ({doc}`../e_filtering/index`),
 - view-specific filters in multi-view snapshots (if snapshots have independent filters),
 - LOD/downsampling visibility (for very large datasets).
 
@@ -171,12 +171,12 @@ For categorical “annotation-based” selection, `Alt` acts like **replace** (n
 ## What persists (and where)
 
 ### What persists in a session
-When you save a session (`../l_sessions_sharing/index`), Cellucid can persist:
+When you save a session ({doc}`../l_sessions_sharing/index`), Cellucid can persist:
 - highlight pages (names, colors, active page),
 - highlight groups (labels/types, enabled flags),
 - highlight memberships (cell indices).
 
-Large highlights can make sessions much larger; see `05_edge_cases_highlighting` for guidance.
+Large highlights can make sessions much larger; see {doc}`05_edge_cases_highlighting` for guidance.
 
 ### What does not persist automatically
 - The temporary candidate set (mid-selection)
@@ -284,12 +284,12 @@ Developer reference: {doc}`../../python_package/e_jupyter_hooks/16_reference`
 ---
 
 ## Edge cases and troubleshooting
-- Edge cases checklist: `05_edge_cases_highlighting`
-- Troubleshooting: `06_troubleshooting_highlighting`
+- Edge cases checklist: {doc}`05_edge_cases_highlighting`
+- Troubleshooting: {doc}`06_troubleshooting_highlighting`
 
 ## Next steps / Related pages
-- `02_selection_tools_document_each_tool`
-- `03_highlight_ui`
-- `04_selection_synchronization`
-- `../e_filtering/index`
-- `../l_sessions_sharing/index`
+- {doc}`02_selection_tools_document_each_tool`
+- {doc}`03_highlight_ui`
+- {doc}`04_selection_synchronization`
+- {doc}`../e_filtering/index`
+- {doc}`../l_sessions_sharing/index`

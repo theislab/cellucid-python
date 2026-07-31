@@ -34,6 +34,24 @@ Binding:
 Recommendation:
 - prefer SSH tunneling instead of exposing ports directly.
 
+`Host` validation (defeats DNS rebinding):
+- every request is checked before any route, file read or event delivery
+- accepted: exactly one well-formed `Host` naming `localhost` or a loopback IP
+  literal, on the port actually bound
+- refused: everything else, with `421 Misdirected Request` and a body that never
+  echoes the value; the header goes to the server log only
+- enforced whenever the bound address is loopback
+
+Config:
+- `--allowed-host HOST` (repeatable) or `allowed_hosts=[...]` declares extra
+  exact host names, which is required behind a reverse proxy such as
+  `jupyter-server-proxy` because the proxy forwards the browser's `Host`
+  verbatim and a proxied request is indistinguishable from a rebound one
+- one bare DNS name or IP literal per entry: no port, no scheme, no wildcard;
+  matched on any port
+- declaring names also applies the `Host` check to a non-loopback bind
+- see {doc}`../b_concepts_mental_models/06_privacy_security_and_offline_vs_online`
+
 ### 2) Exact viewer-generation delivery
 
 The server may download the viewer UI from:

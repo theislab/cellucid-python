@@ -172,6 +172,21 @@ raises and does not bind. It never serves a different cached generation.
 
 By default the server binds to `127.0.0.1` (local only). This is the recommended mode for private datasets.
 
+The bind address alone is not the boundary: a page in another tab can re-point
+its own DNS name at `127.0.0.1` (DNS rebinding) and the browser then treats this
+server as same-origin. Cellucid therefore validates the `Host` header on every
+request ahead of routing, accepting only one well-formed authority that names
+`localhost` or a loopback IP literal on the bound port, and answering anything
+else with `421 Misdirected Request`.
+
+Behind a reverse proxy such as `jupyter-server-proxy` the forwarded `Host` is
+the proxy's own, which is byte-for-byte what a rebound page sends, so the proxy
+must be declared rather than detected:
+`--allowed-host hub.example.org` or `allowed_hosts=["hub.example.org"]`. Entries
+are bare host names with no port, scheme or wildcard, and are matched on any
+port. See
+{doc}`../b_concepts_mental_models/06_privacy_security_and_offline_vs_online`.
+
 If you bind to `0.0.0.0` or otherwise expose the server:
 - you are making your dataset accessible to anyone who can reach that host/port,
 - and you should assume events and session uploads can be triggered by others on the network.

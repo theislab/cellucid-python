@@ -187,5 +187,5 @@ Use this when you want to quickly decide whether you have:
    - `Opacity:` 60%
    - `Bloom strength:` 0.00
 6) If it is still slow: reduce window size and reduce number of views.
-7) If you see errors/toasts: go to `07_troubleshooting_velocity_overlay` and match the symptom.
+7) If you see errors/toasts: go to {doc}`07_troubleshooting_velocity_overlay` and match the symptom.
 8) If the entire canvas goes blank or you see “WebGL context lost”: reload the page and consider lowering GPU load (density, trails, bloom, fewer views).

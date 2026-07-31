@@ -69,6 +69,13 @@ adata.obsm["X_umap_2d"] = np.array([[0, 0],
 list(adata.obsm.keys())
 ```
 
+**Coming from Scanpy?** `sc.tl.umap(adata)` writes `adata.obsm["X_umap"]`, and
+Cellucid reads only the keys that declare a dimension. One statement fixes it:
+
+```python
+adata.obsm["X_umap_2d"] = adata.obsm["X_umap"]   # or X_umap_3d for n_components=3
+```
+
 If none of `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` exists, compute
 an embedding and store it under the key that exactly declares its dimension.
 

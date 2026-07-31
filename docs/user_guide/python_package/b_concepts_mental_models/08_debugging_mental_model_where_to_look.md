@@ -113,8 +113,47 @@ Fix patterns:
 ### Option A (recommended): `jupyter-server-proxy`
 
 If installed and enabled, the notebook can proxy the viewer through the
-notebook server origin. Obtain the proxy’s browser base and pass it explicitly
-as `client_server_url=`; Cellucid does not detect or select it.
+notebook server origin. Two things must be passed explicitly, because Cellucid
+detects neither:
+
+1. `client_server_url=` — the proxy’s browser-reachable base URL.
+2. `allowed_hosts=` — the proxy front end’s own host name.
+
+The second is required. The proxy forwards the browser’s `Host` header
+unchanged, so your loopback-bound Cellucid server receives the hub’s host
+(`hub.example.org`) instead of `127.0.0.1`. Cellucid answers only authorities
+that name it, and refuses everything else with **421 Misdirected Request** —
+that is what stops DNS rebinding (see
+{doc}`06_privacy_security_and_offline_vs_online`). Naming the proxy host is how
+you tell Cellucid that this particular foreign `Host` is yours.
+
+```python
+from cellucid import AnnDataViewer
+
+viewer = AnnDataViewer(
+    "data.h5ad",
+    dataset_name="Example",
+    dataset_id="example",
+    client_server_url="https://hub.example.org/user/me/proxy/8765",
+    allowed_hosts=["hub.example.org"],
+)
+```
+
+From the command line:
+
+```bash
+cellucid serve /path/to/data --allowed-host hub.example.org
+```
+
+Each entry is one bare host name — a DNS name or an IP address, with no port,
+no scheme, no path and no wildcard — and it matches whatever port the proxy
+publishes. Repeat `--allowed-host` (or add list entries) for each additional
+name. An unsupported entry is refused at startup with an explicit message
+rather than quietly ignored.
+
+If this step is missing, every request through the proxy returns
+**421 Misdirected Request** and the server log records
+`Refused a request whose Host header does not name this server`.
 
 ### Option B: SSH port forwarding (robust, works everywhere)
 

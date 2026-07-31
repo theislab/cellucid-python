@@ -131,25 +131,63 @@ cellucid serve /path/to/data --web-cache-dir /path/to/cache
 
 ---
 
-## Symptom: “No valid UMAP embeddings found in adata.obsm”
+## Symptom: “No supported UMAP embedding was declared in adata.obsm”
 
 ### Likely causes (ordered)
+- you ran `sc.tl.umap(adata)`, which writes `adata.obsm["X_umap"]` — Cellucid
+  reads only the dimension-declaring keys, so this is the usual first failure
 - UMAP was never computed
-- keys exist but have wrong shape
-- the embedding array has a row mismatch vs `adata.n_obs`
+- keys exist but have the wrong shape, or a row mismatch vs `adata.n_obs`
 
 ### How to confirm
 
 ```python
 print(list(adata.obsm.keys()))
-for k in ["X_umap_1d", "X_umap_2d", "X_umap_3d"]:
+for k in ["X_umap", "X_umap_1d", "X_umap_2d", "X_umap_3d"]:
     if k in adata.obsm:
         print(k, getattr(adata.obsm[k], "shape", None))
 print("n_cells:", adata.n_obs)
 ```
 
 ### Fix
-- compute UMAP and store explicit dimension keys (2D/3D)
+- declare Scanpy’s output under the key for its column count — the error prints
+  this statement for you, with the key it found and its shape:
+
+```python
+adata.obsm["X_umap_2d"] = adata.obsm["X_umap"]
+```
+
+- or compute UMAP and store it under `X_umap_2d` / `X_umap_3d` directly
+- serving a `.h5ad` or `.zarr` path? Re-save the file after the assignment
+
+---
+
+## Symptom: “obs field '…' has unsupported dtype”
+
+### Likely causes (ordered)
+- `adata.obs` carries a `datetime64`, timedelta, or period column; Cellucid
+  serves categorical, boolean, numeric, string, and object columns only
+
+### How to confirm
+
+```python
+print(adata.obs.dtypes)
+```
+
+### Fix
+- convert the column: `adata.obs["collection_date"] = adata.obs["collection_date"].astype(str)`
+- or leave it out by naming the columns to serve:
+
+```python
+show_anndata(
+    adata,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    obs_keys=["cell_type", "leiden", "total_counts"],
+)
+```
+
+- from the CLI, repeat `--obs-key` once per column
 
 ---
 

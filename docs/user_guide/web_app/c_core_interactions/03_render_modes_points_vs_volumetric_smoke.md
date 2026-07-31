@@ -77,8 +77,8 @@ the meaningful render value.
 | UI label | Initial position | Meaning |
 |---|---:|---|
 | `Light absorption:` | 65 | Attenuation through the cloud; the displayed value is resolution-adaptive. |
-| `Light scattering:` | 0 (`0.0`) | Added scattered glow. |
-| `Direct lighting:` | 3 (`0.04x`) | Direct-light contribution. |
+| `Light scattering:` | 50 (`0.8`) | Added scattered glow. |
+| `Direct lighting:` | 50 (`0.75x`) | Direct-light contribution. |
 
 `Cloud density:`, `Fine detail:`, `Light absorption:`, `Light scattering:`, and
 ray work are intentionally adjusted with grid/noise resolution. Record the

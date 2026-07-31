@@ -129,5 +129,5 @@ Common causes:
 
 ## Next steps
 
-- `03_filter_stack_ui_active_filters` (how to disable/remove the outlier filter)
-- `06_edge_cases_filtering` (what happens when all cells are filtered out)
+- {doc}`03_filter_stack_ui_active_filters` (how to disable/remove the outlier filter)
+- {doc}`06_edge_cases_filtering` (what happens when all cells are filtered out)

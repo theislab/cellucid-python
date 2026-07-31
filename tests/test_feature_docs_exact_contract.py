@@ -302,7 +302,7 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
     normalized = " ".join(presets.split())
 
     assert "{doc}`04_official_sample_states`" in index
-    for dataset_id in ("suo", "garcia", "he", "kanemaru", "pancreas"):
+    for dataset_id in ("suo", "garcia", "he", "pancreas"):
         assert f"exports/{dataset_id}/default.cellucid-session" in presets
         assert f"exports/{dataset_id}/state-snapshots.json" in presets
 
@@ -329,6 +329,11 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
         "does not infer sidecar paths",
         "manual, identity-matched working-state file",
         "07_versioning_compatibility_and_dataset_identity",
+        # A published state is regenerated whenever the reviewed view or the
+        # session format changes, so a `state_sha256` copied into prose goes
+        # stale silently. The page has to send readers to the catalog instead.
+        "Read the current value out of the catalog",
+        "all four generation directories",
     ):
         assert exact in normalized
 
@@ -342,6 +347,10 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
         "__close-up.cellucid-session",
         "never restored automatically",
         "Custom and non-advertised sources are not probed",
+        # The four published presets were regenerated; this pinned the digest
+        # they had before, and there is no fifth (kanemaru) generation.
+        "5581569118eaa992",
+        "all five generation directories",
     ):
         assert stale not in presets
 
@@ -373,7 +382,13 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
 
     for exact in (
         "`createdAt`, `datasetFingerprint`, and `chunks`",
-        "`sourceType`, `datasetId`, `cellCount`, and `varCount`",
+        # The fingerprint carries five fields, not four: the viewer records a
+        # `cellOrder` digest so a dataset republished re-sorted under an
+        # unchanged identity cannot silently re-point saved selections.
+        "`sourceType`, `datasetId`, `cellCount`, `varCount`, and `cellOrder`",
+        "`cellOrder` has exactly `dimension` and `digest`",
+        "16 lowercase hexadecimal characters",
+        "All five fingerprint fields must match",
         "`analysis/cache-inventory`",
         "`cinematic/camera`",
         "one for every categorical user-defined field",
@@ -402,6 +417,34 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
         in " ".join(official.split())
     )
 
+    # `07_...` is where every other session page sends the reader for "the exact
+    # matching rules", so it has to state the whole five-field rule and give the
+    # cell-order failures their own outcome rows.
+    identity = " ".join(
+        sources[
+            "l_sessions_sharing/07_versioning_compatibility_and_dataset_identity.md"
+        ].split()
+    )
+    troubleshooting = " ".join(
+        sources["l_sessions_sharing/10_troubleshooting_sessions.md"].split()
+    )
+    for exact in (
+        "The session stores five fields",
+        "All five must equal the currently loaded dataset",
+        "`cellOrder`: a record of *which ordering*",
+        "exactly 1, 2, or 3",
+        "A different embedding dimension is on screen",
+        "stores its cells in a different order",
+        "A session file saved before Cellucid recorded cell order",
+        "accepts a fingerprint **with or without** `cellOrder`",
+    ):
+        assert exact in identity
+    for exact in (
+        "All five must match",
+        "`cellOrder`, itself exactly a `dimension` (1, 2, or 3)",
+    ):
+        assert exact in troubleshooting
+
     for retired in (
         "Restoring only dataset-agnostic layout",
         "dataset-dependent chunks are skipped",
@@ -413,5 +456,11 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
         "isolates chunk restore failures",
         "accept a partial restore",
         "may trigger a background lazy restore",
+        # The fingerprint stopped being four fields when `cellOrder` was added;
+        # these are the exact sentences that said otherwise.
+        "All four fingerprint fields must match",
+        "All four must equal",
+        "The session stores four fields",
+        "All four must match",
     ):
         assert retired not in combined

@@ -50,7 +50,11 @@ Usually because:
 - the kernel/server is remote (JupyterHub/cloud), so `127.0.0.1` is not reachable from your browser.
 
 Fix: expose the Cellucid port through an HTTPS proxy (for example Jupyter
-Server Proxy) and pass that exact browser base as `client_server_url=`.
+Server Proxy), pass that exact browser base as `client_server_url=`, and declare
+the proxy's host name as `allowed_hosts=[...]`. Without the second argument the
+proxied requests are refused with `421 Misdirected Request`, because the proxy
+forwards the browser's `Host` and Cellucid answers only authorities that name
+it.
 
 Details: {doc}`10_notebook_widget_mode_advanced`.
 

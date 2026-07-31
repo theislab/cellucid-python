@@ -48,6 +48,19 @@ def _create_common_server_parser() -> argparse.ArgumentParser:
         help=f"Host to bind to (default: {DEFAULT_HOST}). Use 0.0.0.0 for remote access.",
     )
     parser.add_argument(
+        "--allowed-host",
+        action="append",
+        type=str,
+        default=None,
+        dest="allowed_host",
+        metavar="HOST",
+        help=(
+            "Extra exact Host name this server answers to; repeat once per name. "
+            "Needed only behind a reverse proxy such as jupyter-server-proxy. "
+            "One bare DNS name or IP address, with no port, scheme or wildcard"
+        ),
+    )
+    parser.add_argument(
         "--no-browser",
         action="store_true",
         help="Don't open browser automatically",
@@ -153,8 +166,15 @@ Examples:
     # Serve pre-exported data (auto-detected)
     cellucid serve /path/to/exported_dataset
 
+    # Serve only named obs columns, leaving out one Cellucid cannot serve
+    cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \\
+        --obs-key cell_type --obs-key total_counts
+
     # Serve on a different port
     cellucid serve /path/to/data --port 9000
+
+    # Behind jupyter-server-proxy, name the proxy's host explicitly
+    cellucid serve /path/to/data --allowed-host hub.example.org
 
     # For SSH tunnel access from remote server:
     # On the server: cellucid serve /path/to/data
@@ -189,6 +209,19 @@ Examples:
         default=None,
         metavar="ID",
         help="Explicit stable dataset identifier (required for h5ad and zarr)",
+    )
+    serve_parser.add_argument(
+        "--obs-key",
+        action="append",
+        type=str,
+        default=None,
+        dest="obs_key",
+        metavar="KEY",
+        help=(
+            "Exact AnnData obs column to serve; repeat once per column. "
+            "Every column is served when this is omitted. Naming the columns "
+            "leaves out one Cellucid cannot serve, such as a datetime column"
+        ),
     )
     serve_parser.add_argument(
         "--vector-field-default",
@@ -230,6 +263,7 @@ def _run_serve(args: argparse.Namespace) -> None:
                 ("--latent-key", args.latent_key is not None),
                 ("--dataset-name", args.dataset_name is not None),
                 ("--dataset-id", args.dataset_id is not None),
+                ("--obs-key", args.obs_key is not None),
                 (
                     "--vector-field-default",
                     args.vector_field_default is not None,
@@ -253,6 +287,7 @@ def _run_serve(args: argparse.Namespace) -> None:
             serve_web_ui=not args.no_web_ui,
             web_source_url=args.web_source_url,
             web_cache_dir=args.web_cache_dir,
+            allowed_hosts=args.allowed_host,
         )
     else:
         # AnnData (h5ad or zarr) - use AnnData server
@@ -276,6 +311,7 @@ def _run_serve(args: argparse.Namespace) -> None:
             "latent_key": args.latent_key,
             "dataset_name": args.dataset_name,
             "dataset_id": args.dataset_id,
+            "obs_keys": args.obs_key,
             "vector_field_default": args.vector_field_default,
         }
         serve_anndata(
@@ -287,6 +323,7 @@ def _run_serve(args: argparse.Namespace) -> None:
             serve_web_ui=not args.no_web_ui,
             web_source_url=args.web_source_url,
             web_cache_dir=args.web_cache_dir,
+            allowed_hosts=args.allowed_host,
             **adapter_options,
         )
 

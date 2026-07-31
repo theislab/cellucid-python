@@ -27,12 +27,12 @@ Use this as a decision tree. You can always switch later.
 
 | You have… | Best first choice | Why | Next page |
 |---|---|---|---|
-| A pre-exported folder from `prepare()` | Browser Prepared picker | Fastest, most reliable, no server | `03_browser_file_picker_tutorial` |
-| A portable `.zarr.zip` or `.zip` | Browser Zarr ZIP picker | One validated file selection in every supported browser | `03_browser_file_picker_tutorial` |
-| A `.h5ad` file | Server mode (recommended) or Jupyter | Python opens the file read-only-backed, reducing matrix memory pressure | `04_server_tutorial` or `05_jupyter_tutorial` |
-| A `.zarr` directory | Server mode or Jupyter | Direct Python loading is supported and eager | `04_server_tutorial` or `05_jupyter_tutorial` |
-| An in-memory `AnnData` in a notebook | Jupyter | Fastest way to iterate while analyzing | `05_jupyter_tutorial` |
-| A dataset collection you want to share publicly | GitHub-hosted exports | Exact shareable URLs, no running server | `11_custom_dataset_repository` |
+| A pre-exported folder from `prepare()` | Browser Prepared picker | Fastest, most reliable, no server | {doc}`03_browser_file_picker_tutorial` |
+| A portable `.zarr.zip` or `.zip` | Browser Zarr ZIP picker | One validated file selection in every supported browser | {doc}`03_browser_file_picker_tutorial` |
+| A `.h5ad` file | Server mode (recommended) or Jupyter | Python opens the file read-only-backed, reducing matrix memory pressure | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
+| A `.zarr` directory | Server mode or Jupyter | Direct Python loading is supported and eager | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
+| An in-memory `AnnData` in a notebook | Jupyter | Fastest way to iterate while analyzing | {doc}`05_jupyter_tutorial` |
+| A dataset collection you want to share publicly | GitHub-hosted exports | Exact shareable URLs, no running server | {doc}`11_custom_dataset_repository` |
 
 ---
 

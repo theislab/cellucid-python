@@ -192,5 +192,5 @@ If you’re not using Community Annotation, you can ignore these indicators.
 
 ## Next steps
 
-- For exact color semantics (missing values, log scale, “None” gray), read `d_fields_coloring_legends/03_color_by_behavior`.
-- For every legend interaction (colormaps, sliders, category merges), read `d_fields_coloring_legends/04_legend_behavior`.
+- For exact color semantics (missing values, log scale, “None” gray), read {doc}`03_color_by_behavior`.
+- For every legend interaction (colormaps, sliders, category merges), read {doc}`04_legend_behavior`.

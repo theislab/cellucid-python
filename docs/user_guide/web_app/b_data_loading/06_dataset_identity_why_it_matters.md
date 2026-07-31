@@ -60,6 +60,12 @@ Exact behavior:
   `--dataset-id`.
 - Cellucid does not derive either value from a filename or silently create a
   slug.
+- `dataset_name`, `dataset_description`, and the `source_*` strings are shown
+  to the reader exactly as stored, so none of them may carry a control
+  character, a zero-width character (`U+200B`, `U+2060`, `U+FEFF`), or leading
+  or trailing whitespace of any kind. Category labels obey the same rule. Both
+  writers reject the value and name the offending character rather than
+  trimming it, because trimming rewrites text nobody asked to change.
 
 Use the same exact `dataset_id` whenever you reopen the same dataset
 generation. Changing it intentionally creates a different dataset identity,

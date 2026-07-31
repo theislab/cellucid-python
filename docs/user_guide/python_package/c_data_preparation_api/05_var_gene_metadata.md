@@ -68,9 +68,22 @@ prepare(
 
 ### Uniqueness (do not skip this)
 
-`prepare()` requires unique gene IDs that are already exact portable filename
-components. Duplicates, unsafe IDs, and case-insensitive filesystem collisions
-fail before the export is published.
+`prepare()` requires unique gene IDs, and requires the **exported** ones to be
+exact portable filename components. Duplicates, unsafe IDs, and case-insensitive
+filesystem collisions fail before the export is published.
+
+The two rules have different scopes, because they answer different questions:
+
+| Rule | Scope | Why |
+| --- | --- | --- |
+| IDs are non-empty strings and **distinct** | every row of `var` | `gene_identifiers` addresses rows by ID, so a repeated ID names no single row |
+| IDs are **portable filename components**, unique case-insensitively | only the genes actually exported | the rule is about the file the gene is written to, and a deselected gene is written to none |
+
+So a `var` that carries `HLA-DRB1/2` still exports cleanly as long as
+`gene_identifiers` leaves that gene out. This is the same scoping `obs_keys`
+already has (see {doc}`04_obs_cell_metadata`): narrowing the export narrows the
+filename contract with it. `cellucid_prepare()` in the R package applies the
+identical scopes.
 
 Preflight check:
 
@@ -103,7 +116,12 @@ prepare(
 ```
 
 If any requested gene is absent, the exporter raises `KeyError` and publishes
-nothing.
+nothing. A repeated request raises `ValueError` naming the repeated identifier.
+
+`gene_identifiers` is also the supported way past a gene the exporter cannot
+write: an ID that is not a portable filename component, or that collides
+case-insensitively with another ID, only has to be resolved when the gene is
+among the exported ones.
 
 Reproducibility tip:
 - store the exact gene list used for export in your pipeline (and ideally version-control it).
@@ -121,12 +139,15 @@ However:
 
 ## Naming rules (exact portable IDs)
 
-Gene IDs are not rewritten. They must be 1–180-byte ASCII components that
-begin with a letter or digit, contain only letters, digits, `.`, `_`, or `-`,
-do not end with `.`, are not dot segments or Windows device names, and are
-unique under case-insensitive comparison. IDs containing spaces, slashes, or
-other unsafe characters are rejected before publication.
+Exported gene IDs are not rewritten. They must be 1–180-byte ASCII components
+that begin with a letter or digit, contain only letters, digits, `.`, `_`, or
+`-`, do not end with `.`, are not dot segments or Windows device names, and are
+unique under case-insensitive comparison among the exported IDs. IDs containing
+spaces, slashes, or other unsafe characters are rejected before publication.
 Collisions are possible (rare for Ensembl IDs, more common for messy symbols).
+
+An ID that stays in `var` but is left out by `gene_identifiers` is never checked
+against these rules, because it is never written to a path.
 
 ---
 

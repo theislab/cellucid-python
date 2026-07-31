@@ -217,11 +217,11 @@ Before assuming something is broken:
 4) Look for the neutral “None” gray:
    - It usually means missing values, invalid codes, or log-scale-incompatible values.
 
-For a full symptom catalog, see `d_fields_coloring_legends/05_troubleshooting_fields_legends`.
+For a full symptom catalog, see {doc}`05_troubleshooting_fields_legends`.
 
 ---
 
 ## Next steps
 
-- For the exact UI controls (what each toggle/button does), go to `d_fields_coloring_legends/04_legend_behavior`.
-- For selection, rename, delete, and restore semantics, go to `d_fields_coloring_legends/02_field_selector_ux`.
+- For the exact UI controls (what each toggle/button does), go to {doc}`04_legend_behavior`.
+- For selection, rename, delete, and restore semantics, go to {doc}`02_field_selector_ux`.

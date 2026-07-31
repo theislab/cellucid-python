@@ -59,6 +59,7 @@ def _install_fetch_fixture(
     build_id: str,
     assets: dict[str, tuple[bytes, str]],
     corrupt_path: str | None = None,
+    served_content_types: dict[str, str] | None = None,
 ) -> list[str]:
     from cellucid import web_cache
 
@@ -83,6 +84,10 @@ def _install_fetch_fixture(
         payload, content_type = assets[asset_path]
         if asset_path == corrupt_path:
             payload += b"corrupt"
+        if served_content_types is not None:
+            # Let a test model a source whose header differs from the header the
+            # inventory declares, which is what a real host does.
+            content_type = served_content_types.get(asset_path, content_type)
         return web_cache.FetchedWebResponse(
             data=payload,
             content_type=content_type,
@@ -306,6 +311,79 @@ def test_force_refresh_downloads_one_complete_verified_generation(
     assert verified.build_id == "build-1"
     for path, (payload, _content_type) in assets.items():
         assert (tmp_path / "cache" / path).read_bytes() == payload
+
+
+def test_prefetch_accepts_a_source_that_omits_the_charset_parameter(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """A host may format its own Content-Type differently than we serve it.
+
+    GitHub Pages serves ``.xml`` as ``application/xml`` while the inventory
+    declares ``application/xml; charset=utf-8`` -- the header this package sends
+    when it later serves the asset. Requiring the two to be equal made every
+    viewer-startup path fail against the real deployment.
+    """
+    from cellucid import web_cache
+
+    assets = _asset_payloads("build-1")
+    assets["browserconfig.xml"] = (
+        b"<?xml version='1.0'?><browserconfig/>\n",
+        "application/xml; charset=utf-8",
+    )
+    served = {"browserconfig.xml": "application/xml"}
+    _install_fetch_fixture(
+        monkeypatch,
+        build_id="build-1",
+        assets=assets,
+        served_content_types=served,
+    )
+
+    web_cache.ensure_web_ui_cached(
+        cache_dir=tmp_path / "cache",
+        source_url="https://viewer.example",
+        force=True,
+        show_progress=False,
+    )
+
+    payload, declared = assets["browserconfig.xml"]
+    assert (tmp_path / "cache" / "browserconfig.xml").read_bytes() == payload
+    # The asset is still served with the inventory's own header, not the
+    # source's, so relaxing the fetch check does not change delivery.
+    _data, content_type = web_cache.read_cached_web_asset(
+        tmp_path / "cache",
+        "browserconfig.xml",
+    )
+    assert content_type == declared
+
+
+def test_prefetch_still_rejects_a_genuinely_different_media_type(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from cellucid import web_cache
+
+    assets = _asset_payloads("build-1")
+    assets["browserconfig.xml"] = (
+        b"<?xml version='1.0'?><browserconfig/>\n",
+        "application/xml; charset=utf-8",
+    )
+    # A captive portal or error page served with HTTP 200 in place of the asset.
+    served = {"browserconfig.xml": "text/html; charset=utf-8"}
+    _install_fetch_fixture(
+        monkeypatch,
+        build_id="build-1",
+        assets=assets,
+        served_content_types=served,
+    )
+
+    with pytest.raises(ValueError, match="response media type"):
+        web_cache.ensure_web_ui_cached(
+            cache_dir=tmp_path / "cache",
+            source_url="https://viewer.example",
+            force=True,
+            show_progress=False,
+        )
 
 
 def test_prefetch_rejects_internally_inconsistent_inventory_http_metadata(
@@ -700,6 +778,94 @@ def test_source_url_must_already_be_canonical(tmp_path: Path) -> None:
             source_url="https://viewer.example/",
             show_progress=False,
         )
+
+
+@pytest.mark.parametrize(
+    "source_url",
+    [
+        "http://viewer.example",
+        "http://viewer.example:8080",
+        "http://www.cellucid.com",
+        "http://192.168.1.10:4173",
+        "http://0.0.0.0:4173",
+        # Neither of these is loopback; only an exact match may be exempt.
+        "http://localhost.viewer.example",
+        "http://127.0.0.1.viewer.example",
+        # Integer-encoded 127.0.0.1: not a recognised literal, so not exempt.
+        "http://2130706433",
+    ],
+)
+def test_plaintext_http_web_source_is_refused_for_non_loopback_hosts(
+    source_url: str,
+    tmp_path: Path,
+) -> None:
+    """The unpinned inventory carries the hashes, so http off-machine is rewritable.
+
+    Every asset is SHA-256 verified against ``cellucid-web-assets.json``, but
+    that inventory is fetched from the same origin with nothing pinning it. Over
+    plaintext HTTP an on-path attacker serves its own assets *and* its own
+    hashes, verification passes, and the result is executed as the viewer UI.
+    """
+    from cellucid.web_cache import ensure_web_ui_cached
+
+    with pytest.raises(ValueError, match="must use https"):
+        ensure_web_ui_cached(
+            cache_dir=tmp_path / "cache",
+            source_url=source_url,
+            show_progress=False,
+        )
+
+
+@pytest.mark.parametrize(
+    "source_url",
+    [
+        "http://127.0.0.1:4173",
+        "http://127.0.0.1",
+        "http://127.1.2.3:9000",
+        "http://localhost:4173",
+        "http://LOCALHOST:4173",
+        "http://[::1]:4173",
+        "https://viewer.example",
+        "https://www.cellucid.com",
+    ],
+)
+def test_loopback_http_and_any_https_web_source_stay_accepted(source_url: str) -> None:
+    """Serving a locally built web app over loopback is a documented path.
+
+    ``docs/user_guide/web_app/b_data_loading/04_server_tutorial.md`` pins
+    ``--web-source-url http://127.0.0.1:4173`` for a build from the checked-out
+    repository. Loopback traffic never leaves the machine, so there is no
+    on-path position for an attacker to occupy.
+    """
+    from cellucid.web_cache import _require_source_url
+
+    assert _require_source_url(source_url) == source_url
+
+
+def test_a_cache_recorded_against_a_plaintext_http_source_is_refused(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """The scheme rule also guards the cached source-control file on read."""
+    import json as _json
+
+    from cellucid import web_cache
+
+    _install_fetch_fixture(monkeypatch, build_id="build-1", assets=_asset_payloads("build-1"))
+    cache_dir = tmp_path / "cache"
+    web_cache.ensure_web_ui_cached(
+        cache_dir=cache_dir,
+        source_url="https://viewer.example",
+        force=True,
+        show_progress=False,
+    )
+
+    (cache_dir / ".cellucid-web-source.json").write_text(
+        _json.dumps({"version": 1, "source_url": "http://viewer.example"}, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="must use https"):
+        web_cache.verify_web_ui_cache(cache_dir)
 
 
 def test_cache_establishment_is_the_exact_current_default() -> None:

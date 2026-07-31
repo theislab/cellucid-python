@@ -38,7 +38,6 @@ Every official export generation contains both sidecars:
 | Suo | `exports/suo/default.cellucid-session` | `exports/suo/state-snapshots.json` |
 | Garcia | `exports/garcia/default.cellucid-session` | `exports/garcia/state-snapshots.json` |
 | He | `exports/he/default.cellucid-session` | `exports/he/state-snapshots.json` |
-| Kanemaru | `exports/kanemaru/default.cellucid-session` | `exports/kanemaru/state-snapshots.json` |
 | Pancreas | `exports/pancreas/default.cellucid-session` | `exports/pancreas/state-snapshots.json` |
 
 The manifest has one exact root, `states`, and one exact entry:
@@ -55,7 +54,7 @@ entry declares:
 ```json
 {
   "state_manifest": "state-snapshots.json",
-  "state_sha256": "5581569118eaa992d36cd3ce53cde0aa488d27b45f89b8f1a41d56de8f7b7a67"
+  "state_sha256": "20769ea20075a212811e080392aec08edc1e7209c65a97be4640927f2677a87c"
 }
 ```
 
@@ -64,7 +63,11 @@ entry declares:
 digest of the JSON manifest. Both fields are required for the capability to be
 advertised.
 
-You can inspect all five generation directories in the
+A published state is regenerated whenever the reviewed view or the session
+format changes, and its `state_sha256` changes with it. Read the current value
+out of the catalog rather than copying one from documentation.
+
+You can inspect all four generation directories in the
 [`cellucid-datasets` exports](https://github.com/theislab/cellucid-datasets/tree/main/exports).
 
 ## What the reviewed view changes

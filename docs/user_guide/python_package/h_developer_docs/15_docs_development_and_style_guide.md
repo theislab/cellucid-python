@@ -131,13 +131,48 @@ If you need something to be tested in CI, write a unit test under `tests/` inste
 
 ## Linking and cross-references
 
-Prefer `{doc}` links over raw URLs for internal pages:
+**Every reference to another page on this site is written as a `{doc}` role.**
+Never name a page in bare backticks.
 
 ```md
-See: {doc}`../h_developer_docs/12_debugging_playbook`
+See: {doc}`12_debugging_playbook`
+See: {doc}`../../web_app/e_filtering/index`
 ```
 
-This keeps links stable when the site is reorganized.
+This is not a style preference. A bare backtick is inline literal text, so
+Sphinx does not resolve it, does not check that the target exists, and does not
+turn it into a link. A `{doc}` role does all three, and the docs build runs with
+`-W`, so a `{doc}` target that does not exist **fails the build**. Written in
+backticks, the same wrong target renders as plain grey text and ships silently:
+a reference to `k_sessions_sharing/index` survived in the highlighting section
+long after the directory was renamed to `l_sessions_sharing/`, because nothing
+was ever asked to resolve it.
+
+Rules:
+
+- **Targets are relative to the page doing the linking**, exactly as a file path
+  would be: `06_troubleshooting_highlighting` for a sibling page,
+  `../e_filtering/index` for another section, `../../python_package/index` for
+  the other guide. Do not write the path from the `docs/` root or from a section
+  root — Sphinx resolves it against the current document, so
+  `` {doc}`a_orientation/04_ui_glossary_terminology` `` written *inside*
+  `a_orientation/` points at a page that does not exist.
+- **Use custom link text when the page title does not fit the sentence.** The
+  default renders the target page's title, which is usually what you want:
+
+  ```md
+  Load it over HTTP with {doc}`Python server <04_server_tutorial>`.
+  ```
+
+- **Keep bare backticks for things that really are literals**: filenames and
+  paths (`dataset_identity.json`), JSON keys and API parameters
+  (`vector_fields`), CSS classes, code identifiers, and literal values
+  (`local-user`). Converting one of those to `{doc}` is a regression that no
+  test will catch — `vector_fields` happens to collide with a generated API page
+  name, so it *would* resolve, and it would still be wrong.
+
+Section `index.md` pages also list their children in a `{toctree}`; that is
+navigation, and it does not remove the need for `{doc}` roles in prose.
 
 ---
 

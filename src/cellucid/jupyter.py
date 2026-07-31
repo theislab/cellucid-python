@@ -56,7 +56,7 @@ import threading
 import time
 import weakref
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
@@ -73,6 +73,7 @@ from ._server_base import (
     cancel_session_bundle_request,
     register_event_callback,
     register_session_bundle_request,
+    require_allowed_hosts,
     require_server_port,
     unregister_event_callback,
 )
@@ -727,9 +728,11 @@ class BaseViewer:
         client_server_url: str | None = None,
         web_source_url: str = CELLUCID_WEB_URL,
         web_cache_dir: str | Path | None = None,
+        allowed_hosts: Sequence[str] | None = None,
     ):
         """Initialize common viewer properties."""
         self.port = 0 if port is None else require_server_port(port)
+        self.allowed_hosts = require_allowed_hosts(allowed_hosts)
         self.height = height
         self._client_server_url = (
             _require_client_server_url(client_server_url) if client_server_url is not None else None
@@ -1738,18 +1741,24 @@ class CellucidViewer(BaseViewer):
         client_server_url: str | None = None,
         web_source_url: str = CELLUCID_WEB_URL,
         web_cache_dir: str | Path | None = None,
+        allowed_hosts: Sequence[str] | None = None,
     ):
         """
         Initialize the viewer.
 
         Args:
-            data_dir: Path to the cellucid dataset directory
+            data_dir: Path to the cellucid dataset directory. A leading ``~`` is
+                expanded to the user's home directory and the path is resolved
+                to an absolute path.
             port: Port for the data server (auto-selected if None)
             height: Height of the embedded viewer in pixels
             auto_open: Automatically display when created
             client_server_url: Exact browser-reachable data server base URL.
             web_source_url: Origin publishing the web asset inventory.
             web_cache_dir: Directory holding the active verified web build.
+            allowed_hosts: Extra ``Host`` names the data server answers to.
+                Required when ``client_server_url`` points at a reverse proxy
+                such as ``jupyter-server-proxy``: name that proxy's host here.
         """
         super().__init__(
             port=port,
@@ -1757,10 +1766,11 @@ class CellucidViewer(BaseViewer):
             client_server_url=client_server_url,
             web_source_url=web_source_url,
             web_cache_dir=web_cache_dir,
+            allowed_hosts=allowed_hosts,
         )
 
         try:
-            self.data_dir = Path(data_dir).resolve()
+            self.data_dir = Path(data_dir).expanduser().resolve()
 
             if not self.data_dir.exists():
                 raise FileNotFoundError(f"Data directory not found: {self.data_dir}")
@@ -1785,6 +1795,7 @@ class CellucidViewer(BaseViewer):
             serve_web_ui=True,
             web_source_url=self.web_source_url,
             web_cache_dir=self.web_cache_dir,
+            allowed_hosts=sorted(self.allowed_hosts),
         )
         self._server.start_background()
         self.port = self._server.port
@@ -1802,16 +1813,22 @@ def show(
     client_server_url: str | None = None,
     web_source_url: str = CELLUCID_WEB_URL,
     web_cache_dir: str | Path | None = None,
+    allowed_hosts: Sequence[str] | None = None,
 ) -> CellucidViewer:
     """
     Quick function to display a cellucid dataset in a notebook.
 
     Args:
-        data_dir: Path to the dataset directory
+        data_dir: Path to the dataset directory. A leading ``~`` is expanded to
+            the user's home directory and the path is resolved to an absolute
+            path.
         height: Height of the viewer in pixels
         client_server_url: Exact browser-reachable data server base URL.
         web_source_url: Origin publishing the web asset inventory.
         web_cache_dir: Directory holding the active verified web build.
+        allowed_hosts: Extra ``Host`` names the data server answers to.
+            Required when ``client_server_url`` points at a reverse proxy such
+            as ``jupyter-server-proxy``: name that proxy's host here.
 
     Returns:
         CellucidViewer instance for interaction via hooks.
@@ -1831,6 +1848,7 @@ def show(
         client_server_url=client_server_url,
         web_source_url=web_source_url,
         web_cache_dir=web_cache_dir,
+        allowed_hosts=allowed_hosts,
     )
 
 
@@ -1900,16 +1918,19 @@ class AnnDataViewer(BaseViewer):
         centroid_min_points: int = 10,
         dataset_name: str,
         dataset_id: str,
+        obs_keys: Sequence[str] | None = None,
         vector_field_default: str | None = None,
         client_server_url: str | None = None,
         web_source_url: str = CELLUCID_WEB_URL,
         web_cache_dir: str | Path | None = None,
+        allowed_hosts: Sequence[str] | None = None,
     ) -> None:
         """
         Initialize the AnnData viewer.
 
         Args:
-            data: AnnData object or path to h5ad file or zarr directory.
+            data: AnnData object or path to h5ad file or zarr directory. A
+                leading ``~`` in a path is expanded to the user's home directory.
             port: Port for the data server (auto-selected if None).
             height: Height of the embedded viewer in pixels.
             auto_open: Automatically display when created.
@@ -1925,11 +1946,17 @@ class AnnDataViewer(BaseViewer):
             dataset_id: Portable 1-180 byte ASCII identifier beginning with a
                 letter or digit and otherwise using letters, digits, ``.``,
                 ``_``, or ``-``; no trailing ``.`` or Windows device name.
+            obs_keys: Exact ``obs`` columns to serve, in this order. If None,
+                every column is served. Naming the columns leaves out a column
+                Cellucid cannot serve, such as a ``datetime64`` collection date.
             vector_field_default: Exact field id required when multiple UMAP
                 vector fields exist.
             client_server_url: Exact browser-reachable data server base URL.
             web_source_url: Origin publishing the web asset inventory.
             web_cache_dir: Directory holding the active verified web build.
+            allowed_hosts: Extra ``Host`` names the data server answers to.
+                Required when ``client_server_url`` points at a reverse proxy
+                such as ``jupyter-server-proxy``: name that proxy's host here.
         """
         dataset_name = _require_dataset_name(
             dataset_name,
@@ -1945,6 +1972,7 @@ class AnnDataViewer(BaseViewer):
             client_server_url=client_server_url,
             web_source_url=web_source_url,
             web_cache_dir=web_cache_dir,
+            allowed_hosts=allowed_hosts,
         )
 
         try:
@@ -1958,6 +1986,7 @@ class AnnDataViewer(BaseViewer):
                 centroid_min_points=centroid_min_points,
                 dataset_name=dataset_name,
                 dataset_id=dataset_id,
+                obs_keys=obs_keys,
                 vector_field_default=vector_field_default,
             )
             self._activate()
@@ -1978,6 +2007,7 @@ class AnnDataViewer(BaseViewer):
         centroid_min_points: int,
         dataset_name: str,
         dataset_id: str,
+        obs_keys: Sequence[str] | None,
         vector_field_default: str | None,
     ) -> None:
         """Start the AnnData server."""
@@ -1992,6 +2022,7 @@ class AnnDataViewer(BaseViewer):
             serve_web_ui=True,
             web_source_url=self.web_source_url,
             web_cache_dir=self.web_cache_dir,
+            allowed_hosts=sorted(self.allowed_hosts),
             latent_key=latent_key,
             gene_id_column=gene_id_column,
             normalize_embeddings=normalize_embeddings,
@@ -1999,6 +2030,7 @@ class AnnDataViewer(BaseViewer):
             centroid_min_points=centroid_min_points,
             dataset_name=dataset_name,
             dataset_id=dataset_id,
+            obs_keys=obs_keys,
             vector_field_default=vector_field_default,
         )
         self._server.start_background()
@@ -2048,10 +2080,12 @@ def show_anndata(
     centroid_min_points: int = 10,
     dataset_name: str,
     dataset_id: str,
+    obs_keys: Sequence[str] | None = None,
     vector_field_default: str | None = None,
     client_server_url: str | None = None,
     web_source_url: str = CELLUCID_WEB_URL,
     web_cache_dir: str | Path | None = None,
+    allowed_hosts: Sequence[str] | None = None,
 ) -> AnnDataViewer:
     """
     Quickly display an AnnData object, h5ad file, or zarr store in a notebook.
@@ -2060,7 +2094,8 @@ def show_anndata(
     prepare first. However, it's slower than using pre-exported data.
 
     Args:
-        data: AnnData object, path to h5ad file, or path to zarr directory.
+        data: AnnData object, path to h5ad file, or path to zarr directory. A
+            leading ``~`` in a path is expanded to the user's home directory.
         height: Height of the viewer in pixels.
         latent_key: Explicit key in ``obsm`` for the latent space.
         gene_id_column: Exact column in ``var`` containing gene identifiers.
@@ -2074,11 +2109,17 @@ def show_anndata(
         dataset_id: Portable 1-180 byte ASCII identifier beginning with a
             letter or digit and otherwise using letters, digits, ``.``, ``_``,
             or ``-``; no trailing ``.`` or Windows device name.
+        obs_keys: Exact ``obs`` columns to serve, in this order. If None, every
+            column is served. Naming the columns leaves out a column Cellucid
+            cannot serve, such as a ``datetime64`` collection date.
         vector_field_default: Exact field id required when multiple UMAP
             vector fields exist.
         client_server_url: Exact browser-reachable data server base URL.
         web_source_url: Origin publishing the web asset inventory.
         web_cache_dir: Directory holding the active verified web build.
+        allowed_hosts: Extra ``Host`` names the data server answers to.
+            Required when ``client_server_url`` points at a reverse proxy such
+            as ``jupyter-server-proxy``: name that proxy's host here.
 
     Returns:
         AnnDataViewer instance for interaction via hooks.
@@ -2125,8 +2166,10 @@ def show_anndata(
         centroid_min_points=centroid_min_points,
         dataset_name=dataset_name,
         dataset_id=dataset_id,
+        obs_keys=obs_keys,
         vector_field_default=vector_field_default,
         client_server_url=client_server_url,
         web_source_url=web_source_url,
         web_cache_dir=web_cache_dir,
+        allowed_hosts=allowed_hosts,
     )

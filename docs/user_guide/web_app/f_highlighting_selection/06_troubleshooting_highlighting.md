@@ -8,21 +8,65 @@ Format: **Symptom → likely causes → how to confirm → fix → prevention**.
 
 These checks solve most “it’s broken” reports in under a minute:
 
-1) **Filters:** are you filtering out the cells you expect to see?
-   - See `../e_filtering/index`
-2) **Active page:** are you on the highlight page you think you are on?
+1) **Read the line under the Highlight mode buttons.** A gesture the app
+   consumed but could not turn into a step explains itself there, in words.
+   See **What the app tells you** below before assuming a tool is broken.
+2) **Filters:** are you filtering out the cells you expect to see?
+   - See {doc}`../e_filtering/index`
+3) **Active page:** are you on the highlight page you think you are on?
    - Switching pages changes what is highlighted.
-3) **Group enabled:** is the group checkbox enabled?
+4) **Group enabled:** is the group checkbox enabled?
    - Disabled groups do not contribute to highlighting.
-4) **Visible vs total:** does the highlight count say “X of Y visible”?
+5) **Visible vs total:** does the highlight count say “X of Y visible”?
    - That usually means highlights exist, but are hidden by filters or LOD.
-5) **View panel:** are you selecting in the right panel (live vs snapshot)?
-   - See `../c_core_interactions/04_view_layout_live_snapshots_small_multiples`
-6) **Modifier keys:** are you holding `Alt` to start a selection gesture?
+6) **View panel:** are you selecting in the right panel (live vs snapshot)?
+   - See {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`
+7) **Modifier keys:** are you holding `Alt` to start a selection gesture?
    - `Shift+Alt` = add; `Ctrl/Cmd+Alt` = subtract.
-7) **Tool mode:** are you in the tool you think you are in (Lasso vs Proximity vs KNN vs Annotation based)?
+8) **Tool mode:** are you in the tool you think you are in (Lasso vs Proximity vs KNN vs Annotation based)?
+9) **Where you released:** did the mouse come up over the plot, or over the
+   sidebar / a notification? A release off the plot abandons the gesture on
+   purpose.
 
 If these do not resolve it, jump to the symptom that matches what you see.
+
+---
+
+## What the app tells you
+
+Selection tools write one short line under the **Highlight mode** buttons in the
+**Highlighting** panel. That is the only place these messages appear — they are
+not toasts and there is no message history, because every tool reuses the same
+one-line slot. Repeating a gesture that fails the same way repaints an identical
+line rather than stacking a second one.
+
+Two rules hold for every message in the table below:
+
+- **A gesture that produced no step is not a step.** It does not advance the
+  step counter and it does not consume an undo.
+- **Your standing selection survives.** The preview highlight is repainted from
+  the candidate set you already had, even though the drag preview wiped it
+  while you were gesturing. The readout above the message tells you which case
+  you are in: `Step N: … current selection` if the gesture interrupted a
+  selection that still stands, or the tool’s ordinary help text if nothing was
+  in progress.
+
+| What you see | What happened | What to do |
+|---|---|---|
+| “That click did not land on a cell, so there is nothing to select. Zoom in, or raise Point size under Visualization, to make cells easier to hit.” | `Alt+click` hit no point. Points draw about a pixel wide when zoomed out, so this is ordinary rather than exceptional. | Zoom in, or raise **Point size**, then click again. |
+| “That gesture ended outside the view, so nothing was selected.” | You released the mouse somewhere other than the plot. The gesture was abandoned deliberately — see the symptom below. | Repeat the gesture and release over the plot. |
+| “That cell has no value on the active field, so there is nothing to select.” | Annotation based: the clicked cell is missing a value on the active field, so the rule resolves to no cells. | Click a cell that has a value, or switch to a field that covers it. |
+| “That gesture did not change the selection.” | The gesture resolved to exactly the set you already had. | Nothing is wrong. Draw elsewhere, or change the modifier key. |
+| “Annotation selection needs an active field. Choose a Categorical obs or Continuous obs field under Coloring & Filtering, then Alt+click a cell.” | Annotation based is selected but no field is coloured, so the viewer never starts the gesture at all. | Choose a categorical or continuous field first. |
+
+Which tools report which:
+
+- **“did not land on a cell”** comes from **Annotation based**, **KNN drag**,
+  and **Proximity drag** — the tools that need a cell under the pointer to
+  begin. Lasso does not need one, so it never reports this. Proximity reports it
+  only when it cannot place a centre at all; with a candidate set already
+  standing it places one anyway (see the proximity symptom below).
+- **“ended outside the view”** comes from all four tools, Lasso included.
 
 ---
 
@@ -53,7 +97,7 @@ If these do not resolve it, jump to the symptom that matches what you see.
 
 ### Prevention
 - Name pages clearly (e.g., `Control`, `Treated`, `Hypothesis A`).
-- Save a session after creating important highlights (`../k_sessions_sharing/index`).
+- Save a session after creating important highlights ({doc}`../l_sessions_sharing/index`).
 - When selecting, avoid having “surprise filters” active (especially if using categorical selection).
 
 ---
@@ -77,7 +121,7 @@ If these do not resolve it, jump to the symptom that matches what you see.
 
 ### Prevention
 - When validating a selection, use a plain or high-contrast coloring.
-- Capture “before/after” screenshots when documenting a workflow (`07_screenshots`).
+- Capture “before/after” screenshots when documenting a workflow ({doc}`07_screenshots`).
 
 ---
 
@@ -93,6 +137,13 @@ If these do not resolve it, jump to the symptom that matches what you see.
 - If you are in 3D: rotate the camera and repeat the same lasso. If the selected set changes a lot, you are seeing projection ambiguity.
 - If you are in multi-view grid: start the lasso clearly inside the intended panel (not near borders).
 - Check the step label (it often indicates whether you are intersecting/adding/subtracting).
+- **Watch the preview while you draw.** The lasso preview shows the set the
+  release would commit under the modifier you are holding, not the raw contents
+  of the polygon. Drawing with `Shift+Alt` shows your existing selection
+  *plus* what the polygon adds; drawing with `Ctrl/Cmd+Alt` shows what would be
+  *left* after the removal. If the preview does not look like the outcome you
+  want, you are holding the wrong modifier — release outside the plot to throw
+  the gesture away rather than committing it.
 
 ### Fix
 - In 3D, use the intended workflow:
@@ -118,6 +169,10 @@ If these do not resolve it, jump to the symptom that matches what you see.
 4) Browser/OS intercepts `Alt` in your environment (rare but possible).
 
 ### How to confirm
+- **Look under the Highlight mode buttons first.** If the app consumed the
+  gesture and threw it away, it says so there in words. No message at all means
+  the gesture never started, which is a different problem — one of the causes
+  above.
 - Click the **Lasso** mode button again.
 - Hold `Alt` and look for the cursor change (crosshair) or lasso overlay.
 - Verify in a clean/private window with extensions disabled.
@@ -135,18 +190,71 @@ If these do not resolve it, jump to the symptom that matches what you see.
 
 ---
 
+## Symptom: “I drew a lasso, let go, and nothing was selected”
+
+You released the mouse somewhere other than the plot — over the floating
+sidebar, over a notification toast that appeared mid-drag, or outside the
+browser window. The message under the **Highlight mode** buttons reads:
+
+> That gesture ended outside the view, so nothing was selected.
+
+### This is deliberate, not a bug
+
+The render canvas fills the window and the controls float on top of it, so a
+drag that wanders onto the sidebar keeps appending points to the polygon
+*behind* the panel. Committing that release would select cells the sidebar was
+covering — cells you never saw, let alone enclosed. Cellucid therefore treats
+the release as belonging to whatever you released over, abandons the gesture,
+and says so.
+
+The same rule applies to **Proximity drag**, **KNN drag**, and **Annotation
+based** selection, not only Lasso.
+
+### What survives
+- Your existing candidate set, exactly as it was: no step was recorded, no undo
+  was spent, and the preview highlight is repainted from it.
+- The readout above the message: `Step N: … current selection` when the gesture
+  interrupted a selection that still stands, or the tool’s ordinary help text
+  when nothing was in progress.
+
+### Fix
+- Repeat the gesture and make sure the mouse button comes up over the plot.
+- If a toast keeps landing where you draw, wait for it to clear (or draw in a
+  different part of the plot) before starting the gesture.
+
+### Prevention
+- Start and finish selection gestures well inside the plot area, away from the
+  sidebar edge and away from where notifications appear.
+
+---
+
 ## Symptom: “Proximity selection selects nothing / selects the wrong region”
 
 ### Likely causes (ordered)
-1) You clicked empty space, so there was no valid center (especially with no existing candidate set).
-2) Your radius is too small (tiny drag) or too large (huge drag).
-3) Filters are hiding nearby cells; selection only considers visible cells.
-4) You expected screen-space selection; proximity is embedding-space distance.
+1) You clicked empty space with **no** candidate set standing, so there was no
+   valid centre and the gesture never started. The app says so: *“That click did
+   not land on a cell, so there is nothing to select…”*
+2) You clicked empty space **with** a candidate set standing, so the tool placed
+   a centre anyway — and it is not where you expected. See below.
+3) Your radius is too small (tiny drag) or too large (huge drag).
+4) Filters are hiding nearby cells; selection only considers visible cells.
+5) You expected screen-space selection; proximity is embedding-space distance.
 
 ### How to confirm
+- Read the line under the **Highlight mode** buttons: a refused click names
+  itself; a click that places a centre anyway does not.
 - Start by `Alt+click` directly on a clearly visible cell (zoom in).
 - Drag slowly and watch the overlay radius.
 - Temporarily disable filters and try again.
+
+### Clicking empty space (what the centre actually is)
+When you `Alt+click` empty space and a candidate set already exists, the centre
+is **not** the centroid of that selection. It is the point where your click ray
+crosses the plane that passes through the centroid facing the camera — in
+effect, *where you clicked, at the selection’s depth*. That is what makes
+“grow/shrink around the current selection” work in 3D without picking a cell
+first, and it is why the resulting blob is centred on your pointer rather than
+on the selection.
 
 ### Fix
 - Zoom in and click on a cell to set a stable center.
@@ -170,6 +278,9 @@ If these do not resolve it, jump to the symptom that matches what you see.
 - Look for an edges/graph toggle (e.g., “Show edges”) and enable it.
 - If there is an edges overlay, confirm you can see edges.
 - If you cannot enable edges, assume connectivities are missing.
+- If the line under the **Highlight mode** buttons instead reads *“That click
+  did not land on a cell…”*, the graph is not the problem: your `Alt+click`
+  missed every point. Zoom in, or raise **Point size**, and seed the drag again.
 
 ### Fix
 - Re-export your dataset including connectivities (if you control the export pipeline).
@@ -192,6 +303,15 @@ If these do not resolve it, jump to the symptom that matches what you see.
 - Confirm the active field in the UI (legend/field selector).
 - Temporarily disable filters and repeat the selection.
 - Try a known categorical field with obvious labels (e.g., `cell_type`) to validate semantics.
+- If **nothing at all** is selected, read the line under the **Highlight mode**
+  buttons. Two states are reported there and they mean different things:
+  - *“Annotation selection needs an active field…”* replaces the usual
+    `Alt+click` invitation whenever no field is coloured. The viewer never
+    starts the gesture in that state, so there is nothing to debug beyond
+    choosing a field.
+  - *“That cell has no value on the active field, so there is nothing to
+    select.”* means the field is fine but the cell you clicked is missing a
+    value on it. Click a different cell.
 
 ### Fix
 - For categorical:
@@ -217,10 +337,18 @@ If these do not resolve it, jump to the symptom that matches what you see.
 ### How to confirm
 - Perform one fresh selection step (e.g., a small lasso) and see whether step controls appear.
 - If step controls appear but Confirm is disabled, you likely have an empty candidate set.
+- **Undo** is enabled immediately after the first step: the empty state before
+  that step is recorded like any other, so one undo takes you back to it. A
+  greyed-out Undo right after a gesture landed means the gesture produced no
+  step — read the message line to find out why.
 
 ### Fix
 - Build a non-empty candidate set, then Confirm.
 - If you got into a weird state, click Cancel and start a fresh selection.
+- `Escape` does the same thing as **Cancel** for whichever tool is active. It is
+  only consumed when a selection is actually in progress, so it still closes a
+  dialog or leaves a text field alone when there is nothing to abandon. The
+  Cancel button’s tooltip advertises it.
 
 ### Prevention
 - Confirm or cancel before switching pages.
@@ -332,6 +460,8 @@ If these do not resolve it, jump to the symptom that matches what you see.
 ## When to file a bug report
 
 If you believe you hit a real bug (not one of the expected edge cases), include:
+- The exact text of the line under the **Highlight mode** buttons at the moment
+  it went wrong — or “no message at all”, which is itself a useful report
 - Browser + OS (and whether you’re on a laptop with integrated GPU)
 - Dataset format and rough size (`n_cells`, `n_genes`, whether connectivities exist)
 - Whether multi-view snapshots are enabled (and how many)
@@ -339,10 +469,10 @@ If you believe you hit a real bug (not one of the expected edge cases), include:
 - Whether filters were active
 - A minimal reproduction recipe (click-by-click)
 - Screenshots with callouts:
-  - use `07_screenshots` for capture specs
+  - use {doc}`07_screenshots` for capture specs
 
 ---
 
 ## Related pages
-- `05_edge_cases_highlighting`
-- `07_screenshots`
+- {doc}`05_edge_cases_highlighting`
+- {doc}`07_screenshots`

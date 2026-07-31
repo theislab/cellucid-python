@@ -28,12 +28,12 @@ dataset declares a vector field for the selected 1D, 2D, or 3D embedding.
 
 ## Recommended reading order
 
-1) `01_what_vector_fields_are_user_facing` (what you’re looking at)
-2) `02_enabling_overlay_and_selecting_field` (how to turn it on reliably)
-3) `03_core_parameters_document_exact_ui_labels` (the knobs most users touch)
-4) `05_performance_and_quality` (if it looks wrong or runs slow)
-5) `06_edge_cases` and `07_troubleshooting_velocity_overlay` (when something breaks)
-6) `04_advanced_parameters_document_every_setting` (polish / cinematic tuning)
+1) {doc}`01_what_vector_fields_are_user_facing` (what you’re looking at)
+2) {doc}`02_enabling_overlay_and_selecting_field` (how to turn it on reliably)
+3) {doc}`03_core_parameters_document_exact_ui_labels` (the knobs most users touch)
+4) {doc}`05_performance_and_quality` (if it looks wrong or runs slow)
+5) {doc}`06_edge_cases` and {doc}`07_troubleshooting_velocity_overlay` (when something breaks)
+6) {doc}`04_advanced_parameters_document_every_setting` (polish / cinematic tuning)
 
 ---
 

@@ -12,10 +12,10 @@ This section is the “source of truth” for:
 ## Fast path
 
 If you just want to “select a cluster and save it”:
-1) Read `01_highlight_mental_model` (5–10 min, avoids most confusion)
-2) Use `02_selection_tools_document_each_tool` to pick the right tool (lasso vs proximity vs KNN vs annotation-based)
-3) Use `03_highlight_ui` to understand pages/groups and what **Confirm**/**Clear** actually do
-4) If something feels wrong, jump to `06_troubleshooting_highlighting`
+1) Read {doc}`01_highlight_mental_model` (5–10 min, avoids most confusion)
+2) Use {doc}`02_selection_tools_document_each_tool` to pick the right tool (lasso vs proximity vs KNN vs annotation-based)
+3) Use {doc}`03_highlight_ui` to understand pages/groups and what **Confirm**/**Clear** actually do
+4) If something feels wrong, jump to {doc}`06_troubleshooting_highlighting`
 
 ```{toctree}
 :maxdepth: 1

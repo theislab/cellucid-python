@@ -60,7 +60,36 @@ Document these explicitly:
 - mismatched `n_cells` across inputs (`obs`, embeddings, `gene_expression`, `latent_space`)
 - embedding keys whose suffix and column count disagree
 - NaN/Inf handling in continuous quantization
+- text the viewer prints verbatim -- category labels, `dataset_name`,
+  `dataset_description`, `source_name`, `source_url`, `source_citation` --
+  carrying a character with no glyph
 - “export folder huge / slow export” performance guidance
+
+Display text is a family of its own because the defect is invisible. A label
+with a trailing space renders exactly like the clean label beside it, so the
+message has to make the character visible and say why the writer will not
+remove it:
+
+```text
+Categorical field 'organ' has 2 labels the viewer cannot show as written:
+  - 'Gut ' ends with U+0020 SPACE
+  - 'Liver ' ends with U+0020 SPACE
+Labels are drawn verbatim in the legend, the field selector, and exported
+figures, so these characters are invisible on screen while still making the
+label a different value from the one it looks like. Cellucid does not clean
+them for you: trimming a label rewrites your annotation and can merge two
+categories into one, moving cells between them. Clean the column and export
+again, for example:
+    obs['organ'] = obs['organ'].astype('string').str.strip()
+    obs['organ'] = obs['organ'].astype('category')
+```
+
+Every offending label in the field is listed in one message (up to ten, then a
+count of the rest), so one edit fixes the column. Two labels that a
+whitespace-collapsing renderer draws identically get their own message naming
+both. Identity arguments use the same vocabulary, opening with the argument
+name: `source_name is displayed verbatim, so it must not carry characters that
+have no glyph: 'Suo\u200b' contains U+200B ZERO WIDTH SPACE. ...`
 
 Where documented:
 - {doc}`api/export`

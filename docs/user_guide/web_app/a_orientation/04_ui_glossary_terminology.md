@@ -147,7 +147,7 @@ Scope note:
 
 Scope note:
 
-- Highlights can be global or per-view depending on the feature; always check the page you’re using (highlighting is documented under `f_highlighting_selection/index`).
+- Highlights can be global or per-view depending on the feature; always check the page you’re using (highlighting is documented under {doc}`../f_highlighting_selection/index`).
 
 ---
 
@@ -171,5 +171,5 @@ Scope note:
 
 ## Next steps
 
-- Choose a workflow: `a_orientation/05_which_workflow_is_for_me_decision_tree`
-- Learn navigation + multiview: `c_core_interactions/index`
+- Choose a workflow: {doc}`05_which_workflow_is_for_me_decision_tree`
+- Learn navigation + multiview: {doc}`../c_core_interactions/index`

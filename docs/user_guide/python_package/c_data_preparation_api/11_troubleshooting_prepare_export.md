@@ -42,6 +42,8 @@ Read the exact exception message; the exporter raises clear errors such as:
 - `ValueError: latent_space is required for outlier quantile calculation.`
 - `ValueError: obs DataFrame is required.`
 - `ValueError: At least one dimensional embedding must be provided.`
+- `TypeError: obs must be a pandas DataFrame, got dict.` (also raised for
+  `var`, naming whatever type you actually passed)
 
 ### Fix
 
@@ -145,6 +147,46 @@ Pick one:
 Adopt an iteration convention:
 - `exports/<dataset_id>/v001/`, `v002/`, etc. for major changes
 - or `exports/tmp/` for scratch and `exports/final/` for publish
+
+---
+
+## Symptom: a category label or an identity string is rejected as “not shown as written”
+
+### Likely causes
+
+- A source annotation carries padding: `"Liver "` instead of `"Liver"`. Reading
+  a fixed-width table, a hand-edited spreadsheet column, or a CSV exported from
+  Excel are the usual origins.
+- A byte-order mark (`U+FEFF`) leads the first label of a UTF-8 CSV column.
+- A label is empty (`""`), often from `.fillna("")`.
+- Two labels differ only by a run of whitespace: `"T cell"` and `"T  cell"`.
+
+### How to confirm
+
+```python
+labels = adata.obs["organ"].astype("string").dropna().unique()
+print([label for label in labels if label != label.strip()])
+print([label for label in labels if any(ord(c) < 32 or 0x7f <= ord(c) <= 0x9f for c in label)])
+```
+
+### Fix
+
+```python
+adata.obs["organ"] = adata.obs["organ"].astype("string").str.strip()
+adata.obs["organ"] = adata.obs["organ"].astype("category")
+```
+
+Check the result before re-exporting: if the column previously held both
+`"Liver"` and `"Liver "`, stripping merges them into one category and moves
+cells between them. That may be exactly what you want — but it is a change to
+your annotation, which is why `prepare()` will not make it for you.
+
+### Prevention
+
+- Strip and re-factor categorical columns as part of the analysis pipeline, not
+  at export time.
+- Read CSVs with `encoding="utf-8-sig"` so a byte-order mark never reaches a
+  label.
 
 ---
 

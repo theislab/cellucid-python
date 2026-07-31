@@ -20,8 +20,8 @@ Legend:
 | Classic Jupyter Notebook (local) | OK | OK | OK | Usually simplest; notebook is often `http://localhost`. |
 | JupyterLab (local) | OK | OK | OK | If JupyterLab is served from **HTTPS**, expose the Cellucid port through an HTTPS route and pass that route explicitly. |
 | VSCode notebooks (local) | OK | OK | OK | If VSCode runs in Remote/SSH containers, treat it like “remote kernel”. |
-| Google Colab | Setup | OK | OK | Obtain Colab's HTTPS proxy base and pass it as `client_server_url=`; Cellucid does not call the proxy API. |
-| JupyterHub / remote notebooks (HTTPS) | Setup | OK | OK | Configure an HTTPS route for the selected port and pass its exact base as `client_server_url=`. |
+| Google Colab | Setup | OK | OK | Obtain Colab's HTTPS proxy base, pass it as `client_server_url=`, and declare its host as `allowed_hosts=[...]`; Cellucid does not call the proxy API. |
+| JupyterHub / remote notebooks (HTTPS) | Setup | OK | OK | Configure an HTTPS route for the selected port, pass its exact base as `client_server_url=`, and declare the route's host as `allowed_hosts=[...]`. |
 
 ### Network requirements
 
@@ -53,10 +53,14 @@ Common caveat:
 - If your notebook page is served from **HTTPS** (rare locally but common on managed systems), the browser can block an `http://127.0.0.1:<port>` iframe (“mixed content”).
 
 Fixes:
-- Configure an HTTPS route for the Cellucid port and pass its exact
-  browser-reachable base as `client_server_url=`. The Python package already
+- Configure an HTTPS route for the Cellucid port, pass its exact
+  browser-reachable base as `client_server_url=`, and pass the route's host
+  name as `allowed_hosts=["hub.example.org"]`. The Python package already
   depends on `jupyter-server-proxy`; installation alone does not select or
-  configure a route.
+  configure a route. The second argument is required because the proxy forwards
+  the browser's `Host` header verbatim and Cellucid refuses an undeclared
+  authority with `421 Misdirected Request`
+  (see {doc}`../b_concepts_mental_models/06_privacy_security_and_offline_vs_online`).
 - Or skip embedding and use the browser workflow (`cellucid serve ...`) and open the URL directly.
 
 ### VSCode notebooks
@@ -96,6 +100,8 @@ Typical pattern:
 2) Load data in the runtime filesystem (uploaded, mounted Drive, etc.)
 3) Create the viewer on that same fixed port:
    ```python
+   from urllib.parse import urlparse
+
    from cellucid import AnnDataViewer
    from google.colab.output import eval_js
 
@@ -107,14 +113,19 @@ Typical pattern:
        dataset_name="Example",
        dataset_id="example",
        client_server_url=browser_base,
+       allowed_hosts=[urlparse(browser_base).hostname],
    )
    ```
+
+   Colab's proxy also forwards the browser's `Host`, so its host name must be
+   declared exactly as for any other reverse proxy.
 
 Cellucid does not call `google.colab.kernel.proxyPort(...)` itself.
 
 If it fails:
 - Run `viewer.debug_connection()` and look at:
   - `client_server_url`
+  - `allowed_hosts`
   - `server_health`
   - `dataset_identity_probes`
   - `frontend_roundtrip` and `frontend_debug_snapshot`
@@ -176,7 +187,9 @@ served as a substitute.
 
 **Fix**
 - Configure an HTTPS proxy route or use port forwarding, then pass that exact
-  browser-reachable base as `client_server_url=`.
+  browser-reachable base as `client_server_url=`. Behind a proxy, also declare
+  the proxy's host name as `allowed_hosts=[...]`, otherwise every request is
+  refused with `421 Misdirected Request`.
 - Confirm source access with `ensure_web_ui_cached(force=True)` and correct the
   reported source, inventory, object, or cache-directory failure. A previous
   generation is intentionally not substituted.

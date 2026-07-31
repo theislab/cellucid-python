@@ -171,6 +171,114 @@ def test_missing_requested_gene_identifier_is_rejected(tmp_path):
         )
 
 
+def _exported_gene_payloads(export_dir):
+    return sorted(path.name for path in (export_dir / "var").iterdir())
+
+
+@pytest.mark.parametrize(
+    ("unexported_id", "defect"),
+    [
+        ("HLA-DRB1/2", "unsafe character"),
+        ("CON", "reserved Windows device name"),
+        ("trailing.", "trailing dot"),
+    ],
+    ids=["slash", "windows-device", "trailing-dot"],
+)
+def test_unexported_gene_ids_are_not_validated_as_payload_paths(
+    tmp_path,
+    unexported_id,
+    defect,
+):
+    """A gene left out by gene_identifiers= names no file, so it names no rule.
+
+    Filename portability is a property of the payload path, and obs_keys=
+    already narrows which observation keys are held to it. Rejecting a var row
+    that is never written would fail an export whose every published path is
+    valid, purely because of a gene the caller deselected.
+    """
+    _prepare_gene_export(
+        tmp_path,
+        var=pd.DataFrame(index=["gene_a", unexported_id, "gene_c"]),
+        gene_identifiers=["gene_a", "gene_c"],
+    )
+
+    assert _exported_gene_payloads(tmp_path) == [
+        "gene_a.values.f32",
+        "gene_c.values.f32",
+    ], defect
+
+
+def test_case_insensitive_collision_outside_the_exported_subset_is_allowed(tmp_path):
+    _prepare_gene_export(
+        tmp_path,
+        var=pd.DataFrame(index=["gene_a", "GENE_B", "gene_b"]),
+        gene_identifiers=["gene_a", "gene_b"],
+    )
+
+    assert _exported_gene_payloads(tmp_path) == [
+        "gene_a.values.f32",
+        "gene_b.values.f32",
+    ]
+
+
+def test_unexported_row_of_the_selected_gene_id_column_is_not_validated(tmp_path):
+    _prepare_gene_export(
+        tmp_path,
+        var=pd.DataFrame(
+            {"gene_id": ["gene_a", "HLA-DRB1/2", "gene_c"]},
+            index=["row_a", "row_b", "row_c"],
+        ),
+        var_gene_id_column="gene_id",
+        gene_identifiers=["gene_a", "gene_c"],
+    )
+
+    assert _exported_gene_payloads(tmp_path) == [
+        "gene_a.values.f32",
+        "gene_c.values.f32",
+    ]
+
+
+def test_exported_gene_ids_are_still_validated_as_payload_paths(tmp_path):
+    with pytest.raises(
+        ValueError,
+        match=r"Gene key 'HLA-DRB1/2' must be 1-180 ASCII bytes",
+    ):
+        _prepare_gene_export(
+            tmp_path,
+            var=pd.DataFrame(index=["gene_a", "HLA-DRB1/2", "gene_c"]),
+            gene_identifiers=["gene_a", "HLA-DRB1/2"],
+        )
+
+
+def test_case_insensitive_collision_inside_the_exported_subset_is_rejected(tmp_path):
+    with pytest.raises(
+        ValueError,
+        match="collide case-insensitively at one payload path",
+    ):
+        _prepare_gene_export(
+            tmp_path,
+            var=pd.DataFrame(index=["gene_a", "GENE_B", "gene_b"]),
+            gene_identifiers=["GENE_B", "gene_b"],
+        )
+
+
+def test_unexported_duplicate_var_identifiers_are_still_rejected(tmp_path):
+    """Identity is checked over the whole var even when the export is narrowed.
+
+    Every var row is addressable through gene_identifiers=, so a repeated
+    identifier makes that lookup ambiguous no matter which genes are selected.
+    """
+    with pytest.raises(
+        ValueError,
+        match="Gene key 'gene_c' is duplicated",
+    ):
+        _prepare_gene_export(
+            tmp_path,
+            var=pd.DataFrame(index=["gene_a", "gene_c", "gene_c"]),
+            gene_identifiers=["gene_a"],
+        )
+
+
 def test_none_selects_var_index_and_literal_index_selects_the_column(tmp_path):
     var = pd.DataFrame(
         {"index": ["column_a", "column_b", "column_c"]},

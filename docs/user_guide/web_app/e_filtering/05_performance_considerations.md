@@ -114,5 +114,5 @@ If you routinely need heavy gating on very large datasets:
 
 ## Next steps
 
-- `06_edge_cases_filtering` (what to expect when filters eliminate most cells)
-- `07_troubleshooting_filtering` (performance-specific symptoms)
+- {doc}`06_edge_cases_filtering` (what to expect when filters eliminate most cells)
+- {doc}`07_troubleshooting_filtering` (performance-specific symptoms)

@@ -29,6 +29,7 @@ import stat
 import sys
 import tempfile
 import threading
+import unicodedata
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
@@ -57,7 +58,6 @@ from .connectivity_contract import (
 )
 from .vector_fields import scale_vector_field, validate_vector_fields
 
-DEFAULT_EXPORT_DIR = Path.cwd() / "exports"
 DEFAULT_OBS_DIRNAME = "obs"
 DEFAULT_VAR_DIRNAME = "var"
 
@@ -72,6 +72,30 @@ _CANONICAL_UTC_TIMESTAMP_PATTERN = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$",
     flags=re.ASCII,
 )
+# Text the viewer prints verbatim -- a category label, a dataset name, a
+# description, a source line -- is rendered with the browser's default
+# white-space handling, in the legend, the field selector, and every exported
+# figure. Characters that carry no glyph therefore change the value without
+# changing the picture: 'Liver ' and 'Liver' are two distinct categories that
+# look identical on screen and in an exported SVG.
+#
+# All three classes below are rejected rather than repaired. Trimming would
+# rewrite a scientific label the caller never asked to change, and would merge
+# two distinct categories into one, silently moving cells between them.
+_CONTROL_CHARACTER_PATTERN = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+# Zero-width characters with no meaning of their own: ZERO WIDTH SPACE, WORD
+# JOINER, and the byte-order mark a spreadsheet leaves at the front of a
+# UTF-8 CSV. U+200C and U+200D are deliberately absent: they join Indic,
+# Persian, and emoji sequences, so banning them would reject real text.
+_INVISIBLE_CHARACTER_PATTERN = re.compile("[\u200b\u2060\ufeff]")
+# Every Unicode whitespace character that is not already a control character.
+_EDGE_WHITESPACE_CHARACTERS = (
+    "\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000"
+)
+_EDGE_WHITESPACE_PATTERN = re.compile(
+    f"^[{_EDGE_WHITESPACE_CHARACTERS}]|[{_EDGE_WHITESPACE_CHARACTERS}]$"
+)
+_WHITESPACE_RUN_PATTERN = re.compile(f"[{_EDGE_WHITESPACE_CHARACTERS}]+")
 _WINDOWS_RESERVED_COMPONENTS = {
     "CON",
     "PRN",
@@ -165,12 +189,38 @@ def _require_portable_filename_component(
     return name
 
 
+def _require_unique_identifiers(
+    values: Sequence[str],
+    *,
+    label: str,
+) -> list[str]:
+    """Require one distinct identifier per position.
+
+    This is the identity rule, not the payload-path rule. It is what makes a
+    lookup by identifier resolve exactly one row, so it holds over every
+    identifier supplied, whether or not that row is among the exported ones.
+    """
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in values:
+        if value in seen:
+            raise ValueError(f"{label} key {value!r} is duplicated.")
+        seen.add(value)
+        unique.append(value)
+    return unique
+
+
 def _assert_unique_filename_components(
     keys: list[str],
     *,
     label: str,
 ) -> list[str]:
-    raw_keys: set[str] = set()
+    """Require one writable, non-colliding payload path per exported key.
+
+    This is the path rule, so it holds over exactly the keys that become files.
+    A supplied key that is never written names no path and is not checked here.
+    """
+    _require_unique_identifiers(keys, label=label)
     portable_to_raw: dict[str, str] = {}
     portable_keys: list[str] = []
     for key in keys:
@@ -178,15 +228,12 @@ def _assert_unique_filename_components(
             key,
             label=f"{label} key",
         )
-        if key in raw_keys:
-            raise ValueError(f"{label} key {key!r} is duplicated.")
         collision_key = portable_key.casefold()
         if collision_key in portable_to_raw:
             raise ValueError(
                 f"{label} keys {portable_to_raw[collision_key]!r} and "
                 f"{key!r} collide case-insensitively at one payload path."
             )
-        raw_keys.add(key)
         portable_to_raw[collision_key] = key
         portable_keys.append(portable_key)
     return portable_keys
@@ -219,14 +266,60 @@ def _require_nonempty_string(value: object, *, label: str) -> str:
     return value
 
 
+def _describe_character(character: str) -> str:
+    """Name one character exactly, so an invisible defect can be read aloud."""
+    codepoint = f"U+{ord(character):04X}"
+    name = unicodedata.name(character, "")
+    if name:
+        return f"{codepoint} {name}"
+    # The C0/C1 ranges carry no Unicode name at all, so say what they are.
+    return f"{codepoint} (control character)"
+
+
+def _display_text_defect(text: str) -> str | None:
+    """Describe why one string cannot be shown verbatim, or None when it can.
+
+    The three rejected classes are the ones that occupy no glyph: a control
+    character, a zero-width character, and whitespace at either edge. Each of
+    them changes the stored value without changing the drawn text, which is how
+    'Liver ' reaches a legend that reads exactly like the separate 'Liver'
+    category beside it.
+    """
+    control = _CONTROL_CHARACTER_PATTERN.search(text)
+    if control is not None:
+        return f"contains {_describe_character(control.group())}"
+    invisible = _INVISIBLE_CHARACTER_PATTERN.search(text)
+    if invisible is not None:
+        return f"contains {_describe_character(invisible.group())}"
+    edge = _EDGE_WHITESPACE_PATTERN.search(text)
+    if edge is not None:
+        position = "starts with" if edge.start() == 0 else "ends with"
+        return f"{position} {_describe_character(edge.group())}"
+    return None
+
+
+def _require_display_text(value: object, *, label: str, allow_empty: bool) -> str:
+    """Require one string the viewer can draw exactly as it is stored."""
+    if not isinstance(value, str):
+        raise TypeError(f"{label} must be a string.")
+    if not value:
+        if allow_empty:
+            return value
+        raise ValueError(f"{label} must be a non-empty string.")
+    defect = _display_text_defect(value)
+    if defect is not None:
+        raise ValueError(
+            f"{label} is displayed verbatim, so it must not carry characters that "
+            f"have no glyph: {value!r} {defect}. Cellucid does not remove them for "
+            "you, because that would change text you did not ask to change. Pass "
+            "the exact text you want shown."
+        )
+    return value
+
+
 def _require_dataset_name(value: object, *, label: str = "dataset_name") -> str:
     """Require one exact unpadded, nonblank human-readable dataset name."""
-    name = _require_nonempty_string(value, label=label)
-    if name != name.strip() or re.search(r"[\x00-\x1f\x7f-\x9f]", name):
-        raise ValueError(
-            f"{label} must be one non-empty, unpadded string without control characters."
-        )
-    return name
+    return _require_display_text(value, label=label, allow_empty=False)
 
 
 def _require_dataset_id(value: object, *, label: str = "dataset_id") -> str:
@@ -261,9 +354,9 @@ def _require_optional_native_string(
         return None
     if type(value) is not str:
         raise TypeError(f"{label} must be None or a native string.")
-    if not allow_empty and (not value or not value.strip()):
+    if not allow_empty and not value:
         raise ValueError(f"{label} must be None or a non-empty string.")
-    return value
+    return _require_display_text(value, label=label, allow_empty=True)
 
 
 def _resolve_created_at(value: object) -> str:
@@ -302,6 +395,35 @@ def _require_finite_float32_array(
     if not np.isfinite(float32_array).all():
         raise ValueError(f"{label} contains values outside the finite float32 range.")
     return float32_array
+
+
+def _require_finite_embedding_source(
+    values: object,
+    *,
+    label: str,
+) -> np.ndarray:
+    """Validate one embedding without discarding precision before normalization.
+
+    Exported coordinates are float32, but the normalization extents have to be
+    computed at the input's own precision. Casting first collapses any axis
+    whose spread is finer than float32 resolution at its magnitude -- a UMAP
+    around 1e8 loses unit spacing entirely and the axis is exported as a
+    constant, silently flattening the embedding to a line. The R exporter
+    normalizes from the source doubles for this reason.
+
+    The float32 range check is kept: the centre is exported as float32, so a
+    magnitude that cannot survive the conversion is still rejected here.
+    """
+    dense = cast(sparse.spmatrix, values).toarray() if sparse.issparse(values) else values
+    array = np.asarray(dense)
+    if array.dtype.kind not in {"i", "u", "f"}:
+        raise TypeError(f"{label} must contain real numeric values.")
+    if not np.isfinite(array).all():
+        raise ValueError(f"{label} must contain only finite values.")
+    with np.errstate(over="ignore", invalid="ignore"):
+        if not np.isfinite(array.astype(np.float32, copy=False)).all():
+            raise ValueError(f"{label} contains values outside the finite float32 range.")
+    return array.astype(np.float64, copy=False)
 
 
 def _require_continuous_obs_values(
@@ -344,6 +466,74 @@ def _normalize_finite_float32_embedding(
     return normalized, center.astype(np.float32), scale_factor, max_range
 
 
+def _require_displayable_category_labels(
+    categories: Sequence[JsonScalar],
+    *,
+    field_key: str,
+) -> None:
+    """Require every category label to read on screen as the value it stores.
+
+    A label is drawn verbatim in the legend, the field selector, and every
+    exported figure, so a character with no glyph makes the stored value differ
+    from the one the reader sees. Two failures follow from that, and both are
+    rejected here rather than repaired:
+
+    * a label carrying an invisible character -- ``'Liver '`` reads as
+      ``'Liver'`` but never matches it;
+    * two labels that a whitespace-collapsing renderer draws identically --
+      ``'T cell'`` and ``'T  cell'`` are two legend rows with one appearance.
+
+    Trimming instead of rejecting would rewrite an annotation the caller never
+    asked to change, and would merge two distinct categories into one, moving
+    cells between them without saying so.
+    """
+    defects: list[str] = []
+    for label in categories:
+        if not isinstance(label, str):
+            continue
+        if not label:
+            defects.append("'' is empty")
+            continue
+        defect = _display_text_defect(label)
+        if defect is not None:
+            defects.append(f"{label!r} {defect}")
+    if defects:
+        shown = defects[:10]
+        remainder = len(defects) - len(shown)
+        listed = "\n".join(f"  - {defect}" for defect in shown)
+        if remainder:
+            listed += f"\n  - ... and {remainder} more"
+        counted = "1 label" if len(defects) == 1 else f"{len(defects)} labels"
+        raise ValueError(
+            f"Categorical field {field_key!r} has {counted} the viewer "
+            f"cannot show as written:\n{listed}\n"
+            "Labels are drawn verbatim in the legend, the field selector, and "
+            "exported figures, so these characters are invisible on screen while "
+            "still making the label a different value from the one it looks like. "
+            "Cellucid does not clean them for you: trimming a label rewrites your "
+            "annotation and can merge two categories into one, moving cells "
+            "between them. Clean the column and export again, for example:\n"
+            f"    obs[{field_key!r}] = obs[{field_key!r}].astype('string').str.strip()\n"
+            f"    obs[{field_key!r}] = obs[{field_key!r}].astype('category')"
+        )
+
+    collapsed_to_label: dict[str, str] = {}
+    for label in categories:
+        if not isinstance(label, str):
+            continue
+        collapsed = _WHITESPACE_RUN_PATTERN.sub(" ", label)
+        existing = collapsed_to_label.get(collapsed)
+        if existing is not None:
+            raise ValueError(
+                f"Categorical field {field_key!r} labels {existing!r} and {label!r} "
+                "are stored as different categories but are drawn identically: a "
+                "run of whitespace collapses to a single space in the legend, the "
+                "field selector, and exported figures. Rename one of them so the "
+                "two categories can be told apart, then export again."
+            )
+        collapsed_to_label[collapsed] = label
+
+
 def _json_category_values(
     values: Iterable[object],
     *,
@@ -380,6 +570,7 @@ def _json_category_values(
             )
         seen.add(token)
         categories.append(value)
+    _require_displayable_category_labels(categories, field_key=field_key)
     return categories
 
 
@@ -1343,6 +1534,132 @@ def _quantize_nullable_outlier_quantiles(
     return quantized, min_val, max_val, scale
 
 
+def _gene_expression_column(
+    matrix: np.ndarray | sparse.csc_matrix,
+    *,
+    is_sparse: bool,
+    gene_index: int,
+    gene_id: str,
+    n_cells: int,
+) -> np.ndarray:
+    """Materialize exactly the float32 column that one gene would be exported as.
+
+    The pre-flight quantizability scan and the export loop must agree to the
+    last bit, because the rejection depends on float32 rounding: a source range
+    that only exists in float64 collapses to one exported value. Both callers
+    go through this function so neither can drift from the other.
+    """
+    if is_sparse:
+        column = cast(sparse.csc_matrix, matrix).getcol(gene_index).toarray().flatten()
+    else:
+        column = cast(np.ndarray, matrix)[:, gene_index]
+
+    values = _require_finite_float32_array(
+        column,
+        label=f"Gene {gene_id!r} expression",
+    )
+    if values.ndim != 1 or values.shape[0] != n_cells:
+        raise ValueError(
+            f"Gene {gene_id!r} expression must have shape ({n_cells},), got {values.shape}."
+        )
+    return values
+
+
+def _quantizable_range_defect(values: np.ndarray) -> str | None:
+    """Name why one finite float32 vector has no quantized encoding, or None."""
+    if values.size == 0:
+        return "it has no values"
+    min_val = float(np.min(values))
+    max_val = float(np.max(values))
+    if min_val == max_val:
+        return f"every value is the constant {min_val!r}"
+    return None
+
+
+def _quantizable_outlier_defect(values: np.ndarray, *, centroid_min_points: int) -> str | None:
+    """Name why one generated outlier-quantile vector cannot be quantized, or None."""
+    finite = values[~np.isnan(values)]
+    if finite.size == 0:
+        return (
+            "no category holds at least centroid_min_points="
+            f"{centroid_min_points} cells, so every generated quantile is missing"
+        )
+    return _quantizable_range_defect(finite)
+
+
+# compact_v1 writes a quantized field as [key, minValue, maxValue] and the
+# viewer's manifest expander rejects any tuple whose minValue is not strictly
+# below its maxValue, discarding the whole manifest rather than the one field.
+# A field with no variation therefore has no quantized encoding at all, and the
+# only honest options are to leave it out or to store it at full precision.
+_QUANTIZATION_VARIATION_RULE = (
+    "compact_v1 records a quantized field as [key, minValue, maxValue] and the "
+    "viewer rejects an entire manifest that declares minValue >= maxValue, so a "
+    "field with no variation has no quantized encoding."
+)
+
+
+def _require_quantizable_continuous_payloads(
+    *,
+    gene_defects: list[tuple[str, str]],
+    obs_defects: list[tuple[str, str]],
+    outlier_defects: list[tuple[str, str]],
+    var_quantization: int | None,
+    obs_continuous_quantization: int | None,
+) -> None:
+    """Reject every unquantizable continuous payload at once, before any output.
+
+    Quantization bounds are per field, so the export loop would otherwise fail
+    on the first offender, after the fields ahead of it were already written.
+    A dataset whose gene set was subset to one lineage routinely carries several
+    genes detected in no remaining cell, and reporting them one run at a time
+    turns a single fixable condition into one failed export per gene.
+    """
+    if not gene_defects and not obs_defects and not outlier_defects:
+        return
+
+    total = len(gene_defects) + len(obs_defects) + len(outlier_defects)
+    sections: list[str] = []
+
+    if gene_defects:
+        listing = "\n".join(f"    {name!r}: {reason}" for name, reason in gene_defects)
+        sections.append(
+            f"  {len(gene_defects)} gene(s) with var_quantization={var_quantization}:\n"
+            f"{listing}\n"
+            "  Fix: exclude them through gene_identifiers=, or pass "
+            "var_quantization=None to export every gene as full-precision float32, "
+            "which carries no manifest bounds."
+        )
+
+    if obs_defects:
+        listing = "\n".join(f"    {name!r}: {reason}" for name, reason in obs_defects)
+        sections.append(
+            f"  {len(obs_defects)} continuous obs field(s) with "
+            f"obs_continuous_quantization={obs_continuous_quantization}:\n"
+            f"{listing}\n"
+            "  Fix: exclude them through obs_keys=, or pass "
+            "obs_continuous_quantization=None to export every continuous obs field "
+            "as full-precision float32, which carries no manifest bounds."
+        )
+
+    if outlier_defects:
+        listing = "\n".join(f"    {name!r}: {reason}" for name, reason in outlier_defects)
+        sections.append(
+            f"  {len(outlier_defects)} generated categorical outlier quantile set(s) with "
+            f"obs_continuous_quantization={obs_continuous_quantization}:\n"
+            f"{listing}\n"
+            "  Fix: lower centroid_min_points so a category qualifies, drop the field "
+            "from obs_keys=, or pass obs_continuous_quantization=None to export the "
+            "generated quantiles as full-precision float32."
+        )
+
+    body = "\n".join(sections)
+    raise ValueError(
+        f"{total} continuous payload(s) cannot be quantized. "
+        f"{_QUANTIZATION_VARIATION_RULE}\n{body}"
+    )
+
+
 def _validate_prepare_codec_options(
     *,
     compression: int | None,
@@ -1526,7 +1843,6 @@ def _prepare_generation(
     var_gene_id_column: str | None = None,
     gene_identifiers: Sequence[str] | None = None,
     connectivities: np.ndarray | sparse.spmatrix | None = None,
-    out_dir: Path | str = DEFAULT_EXPORT_DIR,
     obs_keys: Sequence[str] | None = None,
     centroid_outlier_quantile: float = 0.95,
     centroid_min_points: int = 10,
@@ -1536,6 +1852,7 @@ def _prepare_generation(
     compression: int | None = None,
     # Dataset metadata parameters (for dataset_identity.json)
     *,
+    out_dir: Path,
     _published_out_dir: Path,
     obs_categorical_dtype: Literal["uint8", "uint16"],
     dataset_name: str,
@@ -1565,10 +1882,13 @@ def _prepare_generation(
         Codes and bounds derive from the viewer-visible float32 values. A
         source range that collapses to one float32 value is rejected, while an
         individual nonzero source value may round to zero if the range remains
-        non-collapsed.
+        non-collapsed. Every gene is checked before the first output file is
+        created, and one failure names every gene that cannot be quantized.
     obs_continuous_quantization : int or None
         Bits for continuous obs field quantization (8, 16, or None for full float32).
-        It follows the same viewer-visible float32 domain as var quantization.
+        It follows the same viewer-visible float32 domain as var quantization,
+        and it also governs the generated categorical outlier quantiles. Its
+        payloads are checked in the same pre-flight as the genes.
     obs_categorical_dtype : 'uint8' or 'uint16'
         - 'uint8': Store up to 255 categories
         - 'uint16': Store up to 65,535 categories
@@ -1589,7 +1909,9 @@ def _prepare_generation(
     fills the viewing area optimally without requiring manual zoom adjustment.
 
     X_umap_1d : np.ndarray, optional
-        1D embedding coordinates, shape (n_cells, 1). Stored as points_1d.bin.
+        1D embedding coordinates, shape (n_cells, 1). A plain ``(n_cells,)``
+        vector is accepted as the single column it declares. Stored as
+        points_1d.bin.
     X_umap_2d : np.ndarray, optional
         2D embedding coordinates, shape (n_cells, 2). Stored as points_2d.bin.
     X_umap_3d : np.ndarray, optional
@@ -1603,7 +1925,8 @@ def _prepare_generation(
         ``T_fwd_umap_3d``).
 
         Each value must be shaped exactly ``(n_cells, dim)`` and contain finite
-        real values representable as float32.
+        real values representable as float32. A ``<field>_umap_1d`` key also
+        accepts a plain ``(n_cells,)`` vector as the single column it declares.
         Vectors are scaled by the same per-dimension normalization scale as points.
         A field's metadata ``default_dimension`` is exactly its highest available
         vector dimension.
@@ -1616,33 +1939,45 @@ def _prepare_generation(
     latent_space : np.ndarray or sparse matrix
         Latent space for outlier quantile calculation, shape (n_cells, n_dims).
     obs : pd.DataFrame
-        Cell metadata, shape (n_cells, n_obs_columns).
+        Cell metadata, shape (n_cells, n_obs_columns). Every string category
+        label must be text the viewer can show as written: non-empty, free of
+        control characters and of the zero-width characters U+200B, U+2060, and
+        U+FEFF, and without leading or trailing whitespace. Two labels that a
+        whitespace-collapsing renderer draws identically are rejected too. No
+        label is ever trimmed: trimming rewrites an annotation the caller did
+        not ask to change and can merge two categories into one.
     var : pd.DataFrame, optional
         Gene/feature metadata. Required if gene_expression is provided.
     gene_expression : np.ndarray or sparse matrix, optional
         Gene expression matrix, shape (n_cells, n_genes).
     var_gene_id_column : str or None
         Exact non-empty column name in var containing string gene identifiers.
-        None uses string identifiers from var.index.
+        None uses string identifiers from var.index. Every identifier in the
+        selected axis must be a non-empty string and must be distinct, because
+        ``gene_identifiers`` addresses var rows by identifier and a repeated one
+        names no single row.
     gene_identifiers : sequence of str, optional
         Unique gene identifiers to export. Every identifier must be a non-empty
-        string present in var. If None, all genes are exported.
+        string present in var. If None, all genes are exported. Narrowing the
+        export narrows the filename contract with it: only the exported
+        identifiers must be portable filename components unique under
+        case-insensitive comparison, exactly as ``obs_keys`` narrows which
+        observation keys are held to that rule. A var row this argument leaves
+        out is written to no path and is not checked against it.
     connectivities : array or sparse matrix, optional
         Exact weighted undirected graph, shape ``(n_cells, n_cells)``. Values
         must be finite and non-negative, the topology and weights must be
         exactly symmetric, and the diagonal must be zero. Sparse inputs must
         not contain duplicate coordinates or stored zero entries.
-    out_dir : Path or str
-        Output directory (default: exports/ under the current working directory).
+    out_dir : Path
+        Staging directory that receives the candidate generation. It is always
+        supplied by :func:`prepare` and must be absent or empty.
     obs_keys : sequence of str or None
         Which obs columns to export. If None, all columns are exported.
     centroid_outlier_quantile : float
         Quantile of distances to keep as inliers when computing centroids.
     centroid_min_points : int
         Minimum number of points in a category to compute a centroid.
-    force : bool
-        If True, replace files in the export directory. If False, the export
-        directory must be absent or empty.
 
     Dataset Metadata Parameters
     ---------------------------
@@ -1650,7 +1985,7 @@ def _prepare_generation(
         Exact non-empty human-readable name without surrounding whitespace or
         control characters. Unicode is preserved.
     dataset_description : str, optional
-        Description of the dataset.
+        Description of the dataset. May be empty.
     dataset_id : str
         Portable 1-180 byte ASCII identifier: begin with a letter or digit,
         then use only letters, digits, ``.``, ``_``, or ``-``. It cannot end
@@ -1661,6 +1996,12 @@ def _prepare_generation(
         URL to the data source.
     source_citation : str, optional
         Citation text for the data source.
+
+    ``dataset_name``, ``dataset_description``, and the three ``source_*``
+    strings are shown to the reader verbatim, so each obeys the same rule as a
+    string category label: no control character, none of the zero-width
+    characters U+200B, U+2060, or U+FEFF, and no leading or trailing whitespace
+    of any kind, U+00A0 NO-BREAK SPACE included.
     """
     _validate_prepare_codec_options(
         compression=compression,
@@ -1678,7 +2019,6 @@ def _prepare_generation(
         label="dataset_id",
     )
 
-    out_dir = Path(out_dir)
     if out_dir.exists():
         if not out_dir.is_dir():
             raise NotADirectoryError(f"Export path exists but is not a directory: {out_dir}")
@@ -1699,17 +2039,17 @@ def _prepare_generation(
     # Collect all provided embeddings
     embeddings: dict[int, np.ndarray] = {}
     if X_umap_1d is not None:
-        embeddings[1] = _require_finite_float32_array(
+        embeddings[1] = _require_finite_embedding_source(
             X_umap_1d,
             label="X_umap_1d",
         )
     if X_umap_2d is not None:
-        embeddings[2] = _require_finite_float32_array(
+        embeddings[2] = _require_finite_embedding_source(
             X_umap_2d,
             label="X_umap_2d",
         )
     if X_umap_3d is not None:
-        embeddings[3] = _require_finite_float32_array(
+        embeddings[3] = _require_finite_embedding_source(
             X_umap_3d,
             label="X_umap_3d",
         )
@@ -1723,6 +2063,13 @@ def _prepare_generation(
     # Validate each embedding has correct dimensions
     n_cells = None
     for dim, arr in embeddings.items():
+        if arr.ndim == 1 and dim == 1:
+            # X_umap_1d declares one coordinate per cell, so a plain length-n
+            # vector already is the (n, 1) column it declares. AnnData performs
+            # exactly this reshape when such an array is put in obsm, so the
+            # AnnData path already accepts it.
+            arr = arr.reshape(-1, 1)
+            embeddings[dim] = arr
         if arr.ndim != 2:
             raise ValueError(f"X_umap_{dim}d must be a 2D array, got shape {arr.shape}.")
         if arr.shape[1] != dim:
@@ -1815,6 +2162,8 @@ def _prepare_generation(
     # Validate obs
     if obs is None:
         raise ValueError("obs DataFrame is required.")
+    if not isinstance(obs, pd.DataFrame):
+        raise TypeError(f"obs must be a pandas DataFrame, got {type(obs).__name__}.")
     if len(obs) != n_cells:
         raise ValueError(f"obs has {len(obs)} rows, but embeddings have {n_cells} cells.")
 
@@ -1838,6 +2187,8 @@ def _prepare_generation(
     )
 
     validated_continuous_obs: dict[str, np.ndarray] = {}
+    validated_categorical_obs: dict[str, tuple[list[JsonScalar], np.ndarray]] = {}
+    generated_outlier_quantiles: dict[str, np.ndarray] = {}
     obs_field_summaries: list[dict[str, object]] = []
     for key in obs_keys:
         series = obs[key]
@@ -1880,6 +2231,18 @@ def _prepare_generation(
             categorical.cat.categories,
             field_key=key,
         )
+        codes = categorical.cat.codes.to_numpy(dtype=np.int32)  # -1 for NaN
+        if codes.shape[0] != n_cells:
+            raise ValueError(f"Length mismatch for obs['{key}']: {codes.shape[0]} vs {n_cells}")
+        validated_categorical_obs[key] = (categories, codes)
+        # Outlier quantiles are generated here, not in the export loop, so the
+        # quantizability of this generated payload is known before any write.
+        generated_outlier_quantiles[key] = _compute_latent_space_quantiles(
+            latent=latent,
+            codes=codes,
+            categories=categories,
+            min_points=centroid_min_points,
+        )
         n_categories = len(categories)
         if obs_categorical_dtype == "uint8":
             if n_categories > 255:
@@ -1917,6 +2280,8 @@ def _prepare_generation(
     if gene_expression is not None:
         if var is None:
             raise ValueError("var DataFrame must be provided when gene_expression is given.")
+        if not isinstance(var, pd.DataFrame):
+            raise TypeError(f"var must be a pandas DataFrame, got {type(var).__name__}.")
 
         if sparse.issparse(gene_expression):
             gene_expr_is_sparse = True
@@ -1962,12 +2327,15 @@ def _prepare_generation(
                 var[var_gene_id_column].tolist(),
                 label=f"var column {var_gene_id_column!r}",
             )
-        safe_all_gene_ids = _assert_unique_filename_components(
-            all_gene_ids,
-            label="Gene",
-        )
+        # Identity over the whole var, payload paths over the exported subset.
+        # Every var row is addressable through gene_identifiers=, so a repeated
+        # identifier anywhere in var makes that lookup ambiguous and is rejected
+        # here. Portability and case-insensitive collision are properties of the
+        # file a gene is written to, so they are checked on genes_to_export
+        # below: an unexported gene names no path, exactly as an obs column left
+        # out of obs_keys= names none.
+        _require_unique_identifiers(all_gene_ids, label="Gene")
         gene_id_to_idx = {gene_id: index for index, gene_id in enumerate(all_gene_ids)}
-        safe_gene_id_by_id = dict(zip(all_gene_ids, safe_all_gene_ids, strict=True))
 
         if gene_identifiers is None:
             genes_to_export = all_gene_ids
@@ -1980,10 +2348,7 @@ def _prepare_generation(
                 gene_identifiers,
                 label="Requested gene",
             )
-            _assert_unique_filename_components(
-                genes_to_export,
-                label="Requested gene",
-            )
+            _require_unique_identifiers(genes_to_export, label="Requested gene")
             missing_genes = [
                 gene_id for gene_id in genes_to_export if gene_id not in gene_id_to_idx
             ]
@@ -1991,6 +2356,12 @@ def _prepare_generation(
                 raise KeyError(
                     f"gene_identifiers contain identifiers not present in var: {missing_genes}."
                 )
+
+        safe_gene_ids = _assert_unique_filename_components(
+            genes_to_export,
+            label="Gene",
+        )
+        safe_gene_id_by_id = dict(zip(genes_to_export, safe_gene_ids, strict=True))
 
     validated_vector_fields = validate_vector_fields(
         vector_fields,
@@ -2033,6 +2404,51 @@ def _prepare_generation(
             "default_field": validated_vector_fields.default_field,
             "fields": fields_metadata,
         }
+
+    # =========================================================================
+    # QUANTIZABILITY PRE-FLIGHT
+    # =========================================================================
+    # Every quantized continuous payload is checked here, before the first
+    # output path exists, so one run reports every field that cannot be encoded
+    # instead of failing on each one in turn partway through the export.
+    gene_range_defects: list[tuple[str, str]] = []
+    obs_range_defects: list[tuple[str, str]] = []
+    outlier_range_defects: list[tuple[str, str]] = []
+
+    if obs_continuous_quantization is not None:
+        for key, values in validated_continuous_obs.items():
+            defect = _quantizable_range_defect(values)
+            if defect is not None:
+                obs_range_defects.append((key, defect))
+        for key, quantiles in generated_outlier_quantiles.items():
+            defect = _quantizable_outlier_defect(
+                quantiles,
+                centroid_min_points=centroid_min_points,
+            )
+            if defect is not None:
+                outlier_range_defects.append((key, defect))
+
+    if gene_expression_for_export is not None:
+        for gene_id in genes_to_export:
+            gene_values = _gene_expression_column(
+                gene_expression_for_export,
+                is_sparse=gene_expr_is_sparse,
+                gene_index=gene_id_to_idx[gene_id],
+                gene_id=gene_id,
+                n_cells=n_cells,
+            )
+            if var_quantization is not None:
+                defect = _quantizable_range_defect(gene_values)
+                if defect is not None:
+                    gene_range_defects.append((gene_id, defect))
+
+    _require_quantizable_continuous_payloads(
+        gene_defects=gene_range_defects,
+        obs_defects=obs_range_defects,
+        outlier_defects=outlier_range_defects,
+        var_quantization=var_quantization,
+        obs_continuous_quantization=obs_continuous_quantization,
+    )
 
     out_dir.mkdir(parents=True, exist_ok=True)
     obs_binary_dir.mkdir(parents=True, exist_ok=True)
@@ -2139,19 +2555,9 @@ def _prepare_generation(
                         continuous_dtype_info["quantized"] = False
 
             else:
-                # Categorical
-                cat = s.astype("category")
-                categories = _json_category_values(
-                    cat.cat.categories,
-                    field_key=key,
-                )
-                codes = cat.cat.codes.to_numpy(dtype=np.int32)  # -1 for NaN
-
-                if codes.shape[0] != n_cells:
-                    raise ValueError(
-                        f"Length mismatch for obs['{key}']: {codes.shape[0]} vs {n_cells}"
-                    )
-
+                # Categorical: identity and generated quantiles were resolved
+                # before any output path existed.
+                categories, codes = validated_categorical_obs[key]
                 n_categories = len(categories)
 
                 dtype: type[np.uint8] | type[np.uint16]
@@ -2200,13 +2606,7 @@ def _prepare_generation(
                         min_points=centroid_min_points,
                     )
 
-                # Compute per-cell outlier quantiles based on latent space
-                outlier_quantiles = _compute_latent_space_quantiles(
-                    latent=latent,
-                    codes=codes,
-                    categories=categories,
-                    min_points=centroid_min_points,
-                )
+                outlier_quantiles = generated_outlier_quantiles[key]
 
                 # Quantize outlier quantiles (they're always 0-1)
                 if obs_continuous_quantization is not None:
@@ -2368,28 +2768,15 @@ def _prepare_generation(
             var_manifest_fields: list[list[Any]] = []
 
             for gene_id in tqdm.tqdm(genes_to_export, desc="Exporting genes"):
-                gene_idx = gene_id_to_idx[gene_id]
                 safe_gene_id = safe_gene_id_by_id[gene_id]
 
-                if gene_expr_is_sparse:
-                    sparse_expression = cast(
-                        sparse.csc_matrix,
-                        gene_expression_for_export,
-                    )
-                    col = sparse_expression.getcol(gene_idx).toarray().flatten()
-                else:
-                    col = gene_expression_for_export[:, gene_idx]
-
-                gene_values = _require_finite_float32_array(
-                    col,
-                    label=f"Gene {gene_id!r} expression",
+                gene_values = _gene_expression_column(
+                    gene_expression_for_export,
+                    is_sparse=gene_expr_is_sparse,
+                    gene_index=gene_id_to_idx[gene_id],
+                    gene_id=gene_id,
+                    n_cells=n_cells,
                 )
-
-                if gene_values.ndim != 1 or gene_values.shape[0] != n_cells:
-                    raise ValueError(
-                        f"Gene {gene_id!r} expression must have shape ({n_cells},), "
-                        f"got {gene_values.shape}."
-                    )
 
                 # Apply quantization if requested
                 if var_quantization is not None:
@@ -2611,7 +2998,7 @@ def prepare(
     var_gene_id_column: str | None = None,
     gene_identifiers: Sequence[str] | None = None,
     connectivities: np.ndarray | sparse.spmatrix | None = None,
-    out_dir: Path | str = DEFAULT_EXPORT_DIR,
+    out_dir: Path | str = "./exports",
     obs_keys: Sequence[str] | None = None,
     centroid_outlier_quantile: float = 0.95,
     centroid_min_points: int = 10,
@@ -2636,9 +3023,25 @@ def prepare(
 ) -> None:
     """Build and atomically publish one complete canonical Cellucid export generation.
 
+    ``out_dir`` defaults to ``./exports`` and is resolved against the current
+    working directory at call time, so a later :func:`os.chdir` changes where a
+    subsequent call writes. A leading ``~`` is expanded to the user's home
+    directory.
+
     ``created_at`` defaults to the current UTC time. Reproducible builders can
     pass an exact ``YYYY-MM-DDTHH:MM:SSZ`` UTC timestamp; it is validated and
     preserved byte-for-byte in ``dataset_identity.json``.
+
+    A quantized continuous payload is published as ``[key, minValue, maxValue]``
+    and the viewer discards a whole manifest whose ``minValue`` is not strictly
+    below its ``maxValue``, so a gene, continuous obs field, or generated
+    outlier-quantile set with no variation has no quantized encoding. Those
+    payloads are all checked before any output path is created, and a single
+    failure names every one of them; a gene detected in no cell of a subset is
+    the usual cause. Either leave the payload out, through ``gene_identifiers``
+    or ``obs_keys``, or publish at full precision with ``var_quantization=None``
+    or ``obs_continuous_quantization=None``, which writes float32 values and no
+    manifest bounds.
     """
     force = _require_native_boolean(force, label="force")
     dataset_name = _require_dataset_name(
@@ -2679,7 +3082,7 @@ def prepare(
             "source_name is required whenever source_url or source_citation is provided."
         )
 
-    target_dir = Path(out_dir)
+    target_dir = Path(out_dir).expanduser()
     if target_dir.name == "":
         raise ValueError("out_dir must name a child export directory.")
     target_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -2747,7 +3150,7 @@ def prepare(
 
 
 def generate_datasets_manifest(
-    exports_dir: str | Path = DEFAULT_EXPORT_DIR,
+    exports_dir: str | Path = "./exports",
     *,
     default_dataset: str,
 ) -> Path:
@@ -2760,7 +3163,9 @@ def generate_datasets_manifest(
     Parameters
     ----------
     exports_dir : Path or str
-        Directory containing dataset subdirectories (default: exports/).
+        Directory containing dataset subdirectories. Defaults to ``./exports``,
+        resolved against the current working directory at call time. A leading
+        ``~`` is expanded to the user's home directory.
     default_dataset : str
         Exact ID of the dataset selected by default.
 
@@ -2774,7 +3179,7 @@ def generate_datasets_manifest(
     >>> from cellucid.prepare_data import generate_datasets_manifest
     >>> generate_datasets_manifest("./exports", default_dataset="my_dataset")
     """
-    exports_dir = Path(exports_dir)
+    exports_dir = Path(exports_dir).expanduser()
     if not exports_dir.exists():
         raise FileNotFoundError(f"Exports directory not found: {exports_dir}")
     if not exports_dir.is_dir():
@@ -2840,11 +3245,6 @@ def generate_datasets_manifest(
             identity.get("name"),
             label=f"{identity_file} dataset_name",
         )
-        if dataset_name != dataset_name.strip():
-            raise ValueError(
-                f"{identity_file} dataset_name must not contain surrounding whitespace."
-            )
-
         dataset_entry: dict[str, object] = {
             "id": dataset_id,
             "path": f"{directory_name}/",
@@ -2854,7 +3254,11 @@ def generate_datasets_manifest(
             description = identity["description"]
             if not isinstance(description, str):
                 raise TypeError(f"{identity_file} description must be a string.")
-            dataset_entry["description"] = description
+            dataset_entry["description"] = _require_display_text(
+                description,
+                label=f"{identity_file} description",
+                allow_empty=True,
+            )
 
         stats = identity.get("stats")
         if not isinstance(stats, dict):

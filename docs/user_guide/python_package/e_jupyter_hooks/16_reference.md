@@ -36,15 +36,18 @@ from cellucid import show, show_anndata
       centroid_min_points=10,
       dataset_name=<required string>,
       dataset_id=<required string>,
+      obs_keys=None,
       vector_field_default=None,
       client_server_url=None,
       web_source_url="https://www.cellucid.com",
       web_cache_dir=None,
+      allowed_hosts=None,
   )
   ```
 
-  `vector_field_default` is required when direct AnnData declares more than one
-  vector field. The convenience function does not accept `port`; construct
+  `obs_keys` names the exact `adata.obs` columns to serve; every column is served
+  when it is omitted. `vector_field_default` is required when direct AnnData
+  declares more than one vector field. The convenience function does not accept `port`; construct
   `AnnDataViewer` for a fixed port.
 
 ### Basic properties
@@ -287,6 +290,7 @@ Behavior:
 | `web_cache_dir` | Directory for the active verified web generation | Controlled writable location or explicit inspection |
 | `web_source_url` | Exact origin publishing `cellucid-web-assets.json` | Testing or an explicitly operated source |
 | `client_server_url` | Exact browser-facing HTTP(S) server base used in iframe embeds | Remote kernels, custom proxies, unusual notebook frontends |
+| `allowed_hosts` | Extra exact `Host` names the data server answers to; one bare host name per entry, no port, scheme or wildcard | Required behind a reverse proxy, which forwards the browser's `Host` verbatim |
 
 ---
 

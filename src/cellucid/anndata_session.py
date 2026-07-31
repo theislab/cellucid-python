@@ -242,12 +242,19 @@ def _require_nonnegative_int(value: Any, *, label: str) -> int:
     return int(value)
 
 
-def _require_exact_keys(value: Any, expected: set[str], *, label: str) -> dict[str, Any]:
+def _require_exact_keys(
+    value: Any,
+    expected: set[str],
+    *,
+    label: str,
+    optional_keys: set[str] | None = None,
+) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise TypeError(f"{label} must be an object")
-    if set(value) != expected:
+    allowed = expected | (optional_keys or set())
+    if not expected <= set(value) or not set(value) <= allowed:
         missing = sorted(expected - set(value))
-        unknown = sorted(set(value) - expected)
+        unknown = sorted(set(value) - allowed)
         details: list[str] = []
         if missing:
             details.append("missing " + ", ".join(missing))
@@ -487,11 +494,18 @@ def _validate_fingerprint(
     *,
     expected_dataset_id: str,
 ) -> dict[str, Any]:
+    # cellOrder ties the session to the cell ordering it was saved against. It
+    # is accepted but not required, and never re-derived here: this applies a
+    # session to an AnnData whose row order the caller controls, and the
+    # viewer's digest is over exported coordinates an AnnData need not contain.
+    # Enforcing that identity is the viewer's job; accepting both shapes is what
+    # lets the viewer add the field without stranding existing session files.
     expected_keys = {"sourceType", "datasetId", "cellCount", "varCount"}
     fp = _require_exact_keys(
         fingerprint,
         expected_keys,
         label="session datasetFingerprint",
+        optional_keys={"cellOrder"},
     )
     _require_nonempty_string(fp["sourceType"], label="datasetFingerprint.sourceType")
     dataset_id = _require_nonempty_string(

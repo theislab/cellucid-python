@@ -39,6 +39,7 @@ import re
 import stat
 import threading
 import webbrowser
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import partial
 from http import HTTPStatus
@@ -58,6 +59,7 @@ from ._server_base import (
     print_server_banner,
     print_step,
     print_success,
+    require_allowed_hosts,
     require_server_port,
 )
 from .prepare_data import (
@@ -295,7 +297,7 @@ def _read_exported_dataset_entry(
 
 def _list_exported_datasets(data_dir: Path) -> list[dict[str, str]]:
     """Classify one exact prepared dataset or a root containing only datasets."""
-    data_dir = Path(data_dir)
+    data_dir = Path(data_dir).expanduser()
     if not data_dir.is_dir():
         raise NotADirectoryError(f"Prepared-data path must be a directory: {data_dir}")
 
@@ -665,6 +667,7 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         artifact_inventory: dict[str, _PreparedArtifact],
         serve_web_ui: bool,
         web_cache_dir: Path,
+        allowed_hosts: frozenset[str],
         **kwargs,
     ):
         self.data_dir = data_dir
@@ -673,6 +676,8 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         self.artifact_inventory = artifact_inventory
         self.serve_web_ui = serve_web_ui
         self.web_cache_dir = web_cache_dir
+        # Read by CORSMixin.parse_request, which runs inside super().__init__().
+        self.allowed_hosts = allowed_hosts
         # Must call super().__init__ last because it calls do_GET immediately
         super().__init__(*args, directory=str(data_dir), **kwargs)
 
@@ -932,12 +937,15 @@ class CellucidServer:
         serve_web_ui: bool = True,
         web_source_url: str = CELLUCID_WEB_URL,
         web_cache_dir: str | Path | None = None,
+        allowed_hosts: Sequence[str] | None = None,
     ):
         """
         Initialize the server.
 
         Args:
-            data_dir: Path to the dataset directory (single dataset or multi-dataset)
+            data_dir: Path to the dataset directory (single dataset or
+                multi-dataset). A leading ``~`` is expanded to the user's home
+                directory and the path is resolved to an absolute path.
             port: Port to serve on (default: 8765)
             host: Host to bind to (default: 127.0.0.1 for localhost only)
             open_browser: Whether to open the browser on start
@@ -945,10 +953,16 @@ class CellucidServer:
             serve_web_ui: Establish and serve the exact current web build.
             web_source_url: Origin publishing the web asset inventory.
             web_cache_dir: Directory holding the active verified web build.
+            allowed_hosts: Extra ``Host`` names this server answers to, needed
+                only behind a reverse proxy such as ``jupyter-server-proxy``.
+                Each entry is one bare DNS name or IP literal — no port, no
+                scheme, no wildcard — and is matched on any port. Declaring
+                names also applies the ``Host`` check to a non-loopback bind.
         """
-        self.data_dir = Path(data_dir).resolve()
+        self.data_dir = Path(data_dir).expanduser().resolve()
         self.port = require_server_port(port)
         self.host = host
+        self.allowed_hosts = require_allowed_hosts(allowed_hosts)
         if type(open_browser) is not bool:
             raise TypeError("open_browser must be a boolean")
         if type(quiet) is not bool:
@@ -1095,6 +1109,7 @@ class CellucidServer:
                 artifact_inventory=self._artifact_inventory,
                 serve_web_ui=self.serve_web_ui,
                 web_cache_dir=self.web_cache_dir,
+                allowed_hosts=self.allowed_hosts,
             )
 
             self._server = HTTPServer((self.host, self.port), handler)
@@ -1263,6 +1278,7 @@ def serve(
     serve_web_ui: bool = True,
     web_source_url: str = CELLUCID_WEB_URL,
     web_cache_dir: str | Path | None = None,
+    allowed_hosts: Sequence[str] | None = None,
 ):
     """
     Serve a cellucid dataset directory.
@@ -1271,7 +1287,9 @@ def serve(
     that serves the dataset files with CORS headers enabled.
 
     Args:
-        data_dir: Path to the dataset directory
+        data_dir: Path to the dataset directory. A leading ``~`` is expanded to
+            the user's home directory and the path is resolved to an absolute
+            path.
         port: Port to serve on (default: 8765)
         host: Host to bind to (default: 127.0.0.1)
         open_browser: Whether to open the viewer in browser (default: True)
@@ -1279,6 +1297,10 @@ def serve(
         serve_web_ui: Establish and serve the exact current web build.
         web_source_url: Origin publishing the web asset inventory.
         web_cache_dir: Directory holding the active verified web build.
+        allowed_hosts: Extra ``Host`` names this server answers to, needed only
+            behind a reverse proxy such as ``jupyter-server-proxy``. Each entry
+            is one bare DNS name or IP literal — no port, no scheme, no
+            wildcard — and is matched on any port.
 
     Example:
         >>> from cellucid import serve
@@ -1297,5 +1319,6 @@ def serve(
         serve_web_ui=serve_web_ui,
         web_source_url=web_source_url,
         web_cache_dir=web_cache_dir,
+        allowed_hosts=allowed_hosts,
     )
     server.start()

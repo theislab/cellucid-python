@@ -198,7 +198,7 @@ This is powerful for comparisons (e.g., one view in planar 2D, another in orbit 
 
 ## Troubleshooting (navigation)
 
-For a complete symptom catalog, see `c_core_interactions/06_troubleshooting_core_interactions`.
+For a complete symptom catalog, see {doc}`06_troubleshooting_core_interactions`.
 
 ### Symptom: “I can’t rotate/pan/zoom anymore”
 

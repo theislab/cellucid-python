@@ -91,8 +91,10 @@ Notebook embedding can fail for two common reasons:
 
 Best fixes:
 
-- configure a browser-reachable HTTPS route for one fixed Cellucid port and
-  pass its exact base as `client_server_url=`
+- configure a browser-reachable HTTPS route for one fixed Cellucid port, pass
+  its exact base as `client_server_url=`, and declare the route's host name as
+  `allowed_hosts=[...]` (a proxy forwards the browser's `Host`, and an
+  undeclared authority is refused with `421 Misdirected Request`)
 - or open the viewer in a separate tab using an SSH tunnel (works everywhere)
 
 Deep dive: {doc}`10_notebook_widget_mode_advanced`.

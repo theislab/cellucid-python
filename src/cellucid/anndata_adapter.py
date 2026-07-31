@@ -79,8 +79,8 @@ import logging
 import math
 import re
 from collections import OrderedDict
+from collections.abc import Sequence
 from datetime import UTC, datetime
-from numbers import Integral, Real
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -96,6 +96,7 @@ from .connectivity_contract import (
 )
 from .prepare_data import (
     _assert_unique_filename_components,
+    _json_category_values,
     _normalize_finite_float32_embedding,
     _require_continuous_obs_values,
     _require_dataset_id,
@@ -107,6 +108,8 @@ from .prepare_data import (
     _require_string_identifiers,
 )
 from .vector_fields import (
+    SUPPORTED_EMBEDDING_KEYS,
+    embedding_declaration_hints,
     is_vector_field_declaration_key,
     scale_vector_field,
     validate_vector_fields,
@@ -229,38 +232,45 @@ def _validate_manifest_field_keys(keys: list[str], *, label: str) -> None:
     _assert_unique_direct_payload_components(keys, label=label)
 
 
-def _json_category_values(values: Any, *, field_key: str) -> list[str | bool | int | float]:
-    categories: list[str | bool | int | float] = []
-    seen: set[tuple[str, Any]] = set()
-    for raw_value in values:
-        value = raw_value.item() if isinstance(raw_value, np.generic) else raw_value
-        token: tuple[str, object]
-        if isinstance(value, bool):
-            token = ("boolean", value)
-        elif isinstance(value, str):
-            token = ("string", value)
-        elif isinstance(value, Integral):
-            integer_value = int(value)
-            if abs(integer_value) > 9_007_199_254_740_991:
-                raise ValueError(
-                    f"Categorical field {field_key!r} contains integer label "
-                    f"{integer_value!r} outside JavaScript's exact integer range"
-                )
-            value = integer_value
-            token = ("number", value)
-        elif isinstance(value, Real) and math.isfinite(value):
-            value = float(value)
-            token = ("number", value)
-        else:
-            raise ValueError(f"Categorical field {field_key!r} labels must be finite JSON scalars")
-        if token in seen:
-            raise ValueError(
-                f"Categorical field {field_key!r} labels must be unique "
-                "after exact JSON representation"
-            )
-        seen.add(token)
-        categories.append(value)
-    return categories
+def _obs_field_kind(series: pd.Series, *, key: str) -> Literal["continuous", "category"]:
+    """Classify one obs column, naming the exact escape hatch when it cannot be served.
+
+    Classification rules:
+    - Categorical dtype → category
+    - Boolean dtype → category
+    - Numeric dtype → continuous
+    - String/object → category (treated as labels)
+    """
+    if isinstance(series.dtype, pd.CategoricalDtype) or pd.api.types.is_bool_dtype(series):
+        return "category"
+    if pd.api.types.is_numeric_dtype(series):
+        return "continuous"
+    if pd.api.types.is_string_dtype(series) or pd.api.types.is_object_dtype(series):
+        return "category"
+    raise TypeError(
+        f"obs field {key!r} has unsupported dtype {series.dtype!r}. Cellucid serves "
+        "categorical, boolean, numeric, string, and object obs columns. Fix: convert "
+        f'it, for example adata.obs[{key!r}] = adata.obs[{key!r}].astype(str), or '
+        f"leave it out with obs_keys=[...] naming only the fields to serve."
+    )
+
+
+def _resolve_obs_keys(obs: pd.DataFrame, requested: Any) -> list[str]:
+    """Resolve the exact obs columns this adapter serves."""
+    available = list(obs.columns)
+    if requested is None:
+        return available
+    if isinstance(requested, str | bytes):
+        raise TypeError("obs_keys must be a sequence of strings, not a string scalar.")
+    resolved = list(requested)
+    if not resolved:
+        raise ValueError("obs_keys must name at least one obs column.")
+    missing = [key for key in resolved if key not in available]
+    if missing:
+        raise KeyError(
+            f"obs_keys contain columns not in obs: {missing}. Available columns: {available}"
+        )
+    return resolved
 
 
 def _categorical_storage(
@@ -367,6 +377,7 @@ class AnnDataAdapter:
         *,
         dataset_name: str,
         dataset_id: str,
+        obs_keys: Sequence[str] | None = None,
         vector_field_default: str | None = None,
     ) -> None:
         """
@@ -395,6 +406,11 @@ class AnnDataAdapter:
             Portable 1-180 byte ASCII identifier: begin with a letter or
             digit, then use only letters, digits, ``.``, ``_``, or ``-``.
             It cannot end in ``.`` or use a reserved Windows device name.
+        obs_keys : sequence of str, optional
+            Exact ``obs`` columns to serve, in this order. If None, every
+            column is served. Naming the columns is how a dataset carrying an
+            unservable column, such as a ``datetime64`` collection date, is
+            served without editing ``adata``.
         vector_field_default : str, optional
             Exact field id to select when multiple UMAP vector fields exist.
         """
@@ -519,27 +535,26 @@ class AnnDataAdapter:
         self._closed: bool = False
         self._close_complete: bool = False
 
-        obs_keys = _require_string_identifiers(
-            self.adata.obs.columns.tolist(),
+        selected_obs_keys = _require_string_identifiers(
+            _resolve_obs_keys(self.adata.obs, obs_keys),
             label="obs columns",
         )
         obs_payload_components = _assert_unique_direct_payload_components(
-            obs_keys,
+            selected_obs_keys,
             label="Observation field",
         )
+        self._obs_keys: list[str] = selected_obs_keys
         self._obs_payload_component_by_key: dict[str, str] = dict(
-            zip(obs_keys, obs_payload_components, strict=True)
+            zip(selected_obs_keys, obs_payload_components, strict=True)
         )
         self._obs_key_by_payload_component: dict[str, str] = dict(
-            zip(obs_payload_components, obs_keys, strict=True)
+            zip(obs_payload_components, selected_obs_keys, strict=True)
         )
-        for key in obs_keys:
+        # Every served column is classified now, so an unservable dtype fails
+        # here with its exact escape hatch instead of inside a later request.
+        for key in selected_obs_keys:
             series = self.adata.obs[key]
-            if (
-                not isinstance(series.dtype, pd.CategoricalDtype)
-                and not pd.api.types.is_bool_dtype(series)
-                and pd.api.types.is_numeric_dtype(series)
-            ):
+            if _obs_field_kind(series, key=key) == "continuous":
                 _require_continuous_obs_values(
                     series.to_numpy(),
                     key=key,
@@ -576,6 +591,7 @@ class AnnDataAdapter:
         centroid_min_points: int = 10,
         dataset_name: str,
         dataset_id: str,
+        obs_keys: Sequence[str] | None = None,
         vector_field_default: str | None = None,
     ) -> AnnDataAdapter:
         """
@@ -609,6 +625,9 @@ class AnnDataAdapter:
             Portable 1-180 byte ASCII identifier: begin with a letter or
             digit, then use only letters, digits, ``.``, ``_``, or ``-``.
             It cannot end in ``.`` or use a reserved Windows device name.
+        obs_keys : sequence of str, optional
+            Exact ``obs`` columns to serve, in this order. If None, every
+            column is served.
         vector_field_default : str, optional
             Exact field id required when multiple UMAP vector fields exist.
         Returns
@@ -668,6 +687,7 @@ class AnnDataAdapter:
                 centroid_min_points=centroid_min_points,
                 dataset_name=dataset_name,
                 dataset_id=dataset_id,
+                obs_keys=obs_keys,
                 vector_field_default=vector_field_default,
             )
         except BaseException:
@@ -756,12 +776,24 @@ class AnnDataAdapter:
             self._umap_embedding_key_by_dim[dim] = key
 
         if not available:
-            raise ValueError(
-                "No supported UMAP embedding was declared in adata.obsm. "
-                "Declare exactly one or more of 'X_umap_1d', 'X_umap_2d', "
-                "or 'X_umap_3d'. "
+            message = (
+                "No supported UMAP embedding was declared in adata.obsm. Cellucid "
+                "reads the exact keys 'X_umap_1d', 'X_umap_2d', and 'X_umap_3d', so "
+                "every embedding declares its dimensionality instead of Cellucid "
+                "guessing it. "
                 f"Available obsm keys: {list(self.adata.obsm.keys())}."
             )
+            hints = embedding_declaration_hints(
+                self.adata.obsm,
+                n_cells=self.n_cells,
+            )
+            if hints:
+                joined = "\n".join(f"    {hint}" for hint in hints)
+                message += (
+                    "\n  Fix: declare an existing array under the key for its "
+                    f"column count, then re-run (re-save the file if you serve a path):\n{joined}"
+                )
+            raise ValueError(message)
 
         return sorted(available)
 
@@ -781,12 +813,7 @@ class AnnDataAdapter:
                 raise TypeError("AnnData obsm keys must be native strings.")
             if not key:
                 raise ValueError("AnnData obsm keys must be non-empty strings.")
-            if key in {
-                "X_umap",
-                "X_umap_1d",
-                "X_umap_2d",
-                "X_umap_3d",
-            }:
+            if key == "X_umap" or key in SUPPORTED_EMBEDDING_KEYS:
                 continue
             if is_vector_field_declaration_key(key):
                 candidates[key] = self.adata.obsm[key]
@@ -999,9 +1026,15 @@ class AnnDataAdapter:
     # =========================================================================
 
     def get_obs_keys(self) -> list[str]:
-        """Get list of obs column names."""
+        """Get the exact obs column names this adapter serves."""
         self._check_closed()
-        return list(self.adata.obs.columns)
+        return list(self._obs_keys)
+
+    def _obs_series(self, key: str) -> pd.Series:
+        """Return one served obs column, naming the served set when it is absent."""
+        if key not in self._obs_payload_component_by_key:
+            raise KeyError(f"obs field '{key}' not found. Available fields: {self._obs_keys}")
+        return cast(pd.Series, self.adata.obs[key])
 
     def get_obs_payload_component(self, key: str) -> str:
         """Return the exact direct-server route component for one obs key."""
@@ -1028,21 +1061,7 @@ class AnnDataAdapter:
         - Empty column → category (safe default)
         """
         self._check_closed()
-
-        if key not in self.adata.obs.columns:
-            raise KeyError(
-                f"Field '{key}' not found in obs. Available: {list(self.adata.obs.columns)}"
-            )
-
-        s = self.adata.obs[key]
-
-        if isinstance(s.dtype, pd.CategoricalDtype) or pd.api.types.is_bool_dtype(s):
-            return "category"
-        elif pd.api.types.is_numeric_dtype(s):
-            return "continuous"
-        elif pd.api.types.is_string_dtype(s) or pd.api.types.is_object_dtype(s):
-            return "category"
-        raise TypeError(f"obs field {key!r} has unsupported dtype {s.dtype!r}.")
+        return _obs_field_kind(self._obs_series(key), key=key)
 
     def get_obs_continuous_values(self, key: str, compress: bool = False) -> bytes:
         """
@@ -1058,13 +1077,8 @@ class AnnDataAdapter:
         self._check_closed()
         compress = _require_native_boolean(compress, label="compress")
 
-        if key not in self.adata.obs.columns:
-            raise KeyError(
-                f"obs field '{key}' not found. Available fields: {list(self.adata.obs.columns)}"
-            )
-
         values = _require_continuous_obs_values(
-            self.adata.obs[key].to_numpy(),
+            self._obs_series(key).to_numpy(),
             key=key,
             n_cells=self.n_cells,
         )
@@ -1097,12 +1111,7 @@ class AnnDataAdapter:
         self._check_closed()
         compress = _require_native_boolean(compress, label="compress")
 
-        if key not in self.adata.obs.columns:
-            raise KeyError(
-                f"obs field '{key}' not found. Available fields: {list(self.adata.obs.columns)}"
-            )
-
-        s = self.adata.obs[key]
+        s = self._obs_series(key)
         cat = s.astype("category")
         categories = _json_category_values(
             cat.cat.categories,
@@ -1147,7 +1156,7 @@ class AnnDataAdapter:
             return self._centroid_cache[cache_key]
 
         coords = self.get_embedding(dim)
-        s = self.adata.obs[key]
+        s = self._obs_series(key)
         cat = s.astype("category")
         categories = _json_category_values(
             cat.cat.categories,
@@ -1213,7 +1222,7 @@ class AnnDataAdapter:
                 "the dataset has no declared latent space"
             )
 
-        s = self.adata.obs[key]
+        s = self._obs_series(key)
         cat = s.astype("category")
         categories = _json_category_values(
             cat.cat.categories,
@@ -1622,7 +1631,7 @@ class AnnDataAdapter:
                 continuous_fields.append([key])
             else:
                 # Categorical
-                s = self.adata.obs[key]
+                s = self._obs_series(key)
                 cat = s.astype("category")
                 categories = _json_category_values(
                     cat.cat.categories,

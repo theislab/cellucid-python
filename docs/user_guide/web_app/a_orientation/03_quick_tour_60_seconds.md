@@ -5,7 +5,7 @@
 **What you’ll do:** enter → move → color → keep a snapshot → highlight → export/save
 
 :::{tip}
-If you prefer to learn by definition-first, read `a_orientation/04_ui_glossary_terminology` before this tour.
+If you prefer to learn by definition-first, read {doc}`04_ui_glossary_terminology` before this tour.
 :::
 
 ---
@@ -70,7 +70,7 @@ A loaded dataset in Cellucid: the sidebar controls the active view while the cat
 :::{note}
 You can also load your own data from **Local data** (Prepared, H5AD, or Zarr
 ZIP) or from a **Remote server**, but those workflows are documented in
-`b_data_loading/index`.
+{doc}`../b_data_loading/index`.
 :::
 
 ### 2) Move the camera
@@ -137,19 +137,19 @@ Python package version.
 
 ### “The canvas is blank” / “WebGL2 required”
 
-Go to `a_orientation/02_system_requirements`.
+Go to {doc}`02_system_requirements`.
 
 ### “I can’t rotate/zoom/pan”
 
-Go to `c_core_interactions/06_troubleshooting_core_interactions` (focus, pointer lock, nav mode confusion).
+Go to {doc}`../c_core_interactions/06_troubleshooting_core_interactions` (focus, pointer lock, nav mode confusion).
 
 ### “Keep view does nothing”
 
-You are likely in smoke mode (multiview is points‑only). See `c_core_interactions/04_view_layout_live_snapshots_small_multiples`.
+You are likely in smoke mode (multiview is points‑only). See {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`.
 
 ---
 
 ## Next steps
 
-- Learn navigation + multiview properly: `c_core_interactions/index`
-- Learn the language of the UI: `a_orientation/04_ui_glossary_terminology`
+- Learn navigation + multiview properly: {doc}`../c_core_interactions/index`
+- Learn the language of the UI: {doc}`04_ui_glossary_terminology`

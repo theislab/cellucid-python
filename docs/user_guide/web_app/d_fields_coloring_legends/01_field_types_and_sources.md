@@ -139,6 +139,6 @@ If you enable log scale on a field with zeros/negatives:
 
 ## Next steps
 
-- To learn how selection, rename, delete, and restore behave in detail, go to `d_fields_coloring_legends/02_field_selector_ux`.
-- To understand exactly what the legend controls do (including filters), go to `d_fields_coloring_legends/04_legend_behavior`.
-- If something looks wrong, jump to `d_fields_coloring_legends/05_troubleshooting_fields_legends`.
+- To learn how selection, rename, delete, and restore behave in detail, go to {doc}`02_field_selector_ux`.
+- To understand exactly what the legend controls do (including filters), go to {doc}`04_legend_behavior`.
+- If something looks wrong, jump to {doc}`05_troubleshooting_fields_legends`.

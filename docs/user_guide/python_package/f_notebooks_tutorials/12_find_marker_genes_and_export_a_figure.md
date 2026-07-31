@@ -144,9 +144,11 @@ viewer
 ```
 
 ```{important}
-Gene IDs must be stable, unique, and valid portable filename components.
-Direct AnnData viewing and export reject duplicates and filename collisions.
-Choose one identifier or disambiguate it before constructing the viewer.
+Gene IDs must be stable and unique, and the ones that become files must be
+valid portable filename components. Direct AnnData viewing serves every gene in
+`var`, so it holds all of them to that rule; `prepare()` holds only the genes
+`gene_identifiers` actually exports. Both reject duplicate IDs anywhere in
+`var`. Choose one identifier or disambiguate it before constructing the viewer.
 ```
 
 ---

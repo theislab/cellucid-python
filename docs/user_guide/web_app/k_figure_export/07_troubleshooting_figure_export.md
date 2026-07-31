@@ -59,6 +59,15 @@ Common blockers and what they mean:
   Connectivity edges are visible, but figure export covers the point layer only.
   Disable the overlay before exporting.
 
+- **“Volumetric smoke cloud render mode not exported”**  
+  The viewer is drawing a volumetric density field, but figure export renders
+  the point layer only, so the file would show different data from the active
+  view. Switch the render mode to **Points** before exporting.
+
+- **“Active render mode unavailable”**  
+  The render-mode control could not be read, so the mode the viewer is drawing
+  with cannot be confirmed. Restore the rendering controls before exporting.
+
 There is no “export anyway” action: resolve every listed blocker first.
 
 ---
@@ -197,15 +206,18 @@ There is no “export anyway” action: resolve every listed blocker first.
 ### Likely causes (ordered)
 
 - Legend/axes are disabled in export settings.
-- Multi-panel export: a shared legend is only shown when all panels share the same active field (otherwise legend behavior is limited).
+- The panel has no active color-by field, so there is nothing for a legend to explain.
+- Multi-panel export, and the cells are too small to carry a readable panel
+  legend (see below).
 - Plot size is too small for the requested legend/category count, causing layout crowding.
 - Font substitution in your downstream editor shifts text widths.
 
 ### How to confirm
 
 - Ensure **Legend** and **Axes** are enabled in the export panel.
-- Export a single-view figure (disable “Export all views”) to isolate multiview legend behavior.
-- Increase plot size and export again.
+- Confirm a color-by field is active in the panel you expected a legend for.
+- Increase plot size and export again; if the panel legends appear, the cells
+  were below the readability floor.
 - Open the SVG in a browser to see whether it’s a renderer issue or an editor-specific issue.
 
 ### Fix
@@ -214,6 +226,42 @@ There is no “export anyway” action: resolve every listed blocker first.
 2) Move legend to **Bottom** or disable legend.
 3) For large datasets, use **Hybrid** (reduces SVG complexity).
 4) If the issue is editor-specific, try Inkscape vs Illustrator vs browser rendering.
+
+:::{note}
+**A colored panel is never exported without a legend because the panels
+disagree.** When the panels do not all share one field and one legend model
+(hidden categories included), Cellucid gives each panel its own legend inside
+its cell instead of one shared legend. The one case where a panel legend is
+deliberately not drawn is size: a panel legend may take at most half its cell,
+and it is skipped when that half minus an 8 px gap falls under **96 px wide**
+(Legend: Right) or **44 px tall** (Legend: Bottom) — roughly 208 px of usable
+cell width, or 104 px of usable cell height below the panel label. That is a
+legibility floor, not a bug: no legend text would be readable at that size.
+Increase the plot size or export fewer panels.
+:::
+
+---
+
+## Symptom: “My multi-panel file lost the color field in its name and metadata”
+
+### What’s happening
+
+This is deliberate. The filename segment `<color-field>`, the PNG `Color Field`
+chunk, and the SVG `cellucid:colorField` tag are figure-level claims, so they are
+written **only when every exported panel uses the same color field**. A grid
+whose panels are colored by different fields omits all three rather than naming
+one panel's field for the whole file.
+
+Nothing is lost: the per-panel records in the PNG `Comment` / SVG
+`cellucid:json` blob (and the human-readable `Description`) name each panel's
+field individually. See {doc}`05_metadata_and_provenance`.
+
+### Fix
+
+- If you want the field back in the filename and metadata, give every panel the
+  same color field and re-export.
+- Otherwise read `views[].field.key` from the embedded JSON, which is accurate
+  either way.
 
 ---
 

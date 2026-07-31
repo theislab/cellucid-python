@@ -14,9 +14,9 @@ Highlighting feels “simple” until you use multi-view snapshots, change filte
 
 **Prerequisites**
 - Familiarity with views/snapshots:
-  - `../c_core_interactions/04_view_layout_live_snapshots_small_multiples`
+  - {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`
 - Familiarity with the highlight UI:
-  - `03_highlight_ui`
+  - {doc}`03_highlight_ui`
 
 **What you’ll learn**
 - What syncs across views/snapshots
@@ -170,8 +170,8 @@ First-line diagnostic:
 ---
 
 ## Related pages
-- `01_highlight_mental_model`
-- `02_selection_tools_document_each_tool`
-- `03_highlight_ui`
-- `05_edge_cases_highlighting`
-- `06_troubleshooting_highlighting`
+- {doc}`01_highlight_mental_model`
+- {doc}`02_selection_tools_document_each_tool`
+- {doc}`03_highlight_ui`
+- {doc}`05_edge_cases_highlighting`
+- {doc}`06_troubleshooting_highlighting`

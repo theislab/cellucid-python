@@ -8,11 +8,11 @@ These pages are the fastest way to get oriented in the Cellucid web app:
 
 **Recommended reading order**
 
-1) `a_orientation/03_quick_tour_60_seconds`
-2) `a_orientation/04_ui_glossary_terminology`
-3) `a_orientation/05_which_workflow_is_for_me_decision_tree`
-4) `a_orientation/02_system_requirements` (or sooner if anything feels “off”)
-5) `a_orientation/01_what_is_cellucid` (concept + mental model)
+1) {doc}`03_quick_tour_60_seconds`
+2) {doc}`04_ui_glossary_terminology`
+3) {doc}`05_which_workflow_is_for_me_decision_tree`
+4) {doc}`02_system_requirements` (or sooner if anything feels “off”)
+5) {doc}`01_what_is_cellucid` (concept + mental model)
 
 ::::{grid} 1 2 2 2
 :gutter: 3

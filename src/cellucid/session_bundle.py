@@ -36,6 +36,14 @@ _MANIFEST_KEYS = {
     "chunks",
 }
 _FINGERPRINT_KEYS = {"sourceType", "datasetId", "cellCount", "varCount"}
+# The viewer records which cell ordering a session was saved against. This
+# reader accepts a bundle with or without it: it cannot verify the digest, which
+# is taken over exported coordinates, so enforcing identity is the viewer's job.
+# Accepting both forms is what lets the writer change without stranding the
+# session files that already exist.
+_FINGERPRINT_OPTIONAL_KEYS = {"cellOrder"}
+_CELL_ORDER_KEYS = {"dimension", "digest"}
+_CELL_ORDER_DIGEST_RE = re.compile(r"\A[0-9a-f]{16}\Z")
 _CHUNK_REQUIRED_KEYS = {
     "id",
     "contributorId",
@@ -83,7 +91,7 @@ def _validate_fingerprint(value: Any) -> None:
     if not isinstance(value, dict):
         raise ValueError("Invalid session manifest (datasetFingerprint must be an object)")
     missing = _FINGERPRINT_KEYS - set(value)
-    unknown = set(value) - _FINGERPRINT_KEYS
+    unknown = set(value) - _FINGERPRINT_KEYS - _FINGERPRINT_OPTIONAL_KEYS
     if missing or unknown:
         details: list[str] = []
         if missing:
@@ -105,6 +113,48 @@ def _validate_fingerprint(value: Any) -> None:
             value[key],
             label=f"datasetFingerprint.{key}",
             maximum=(1 << 32) - 1,
+        )
+    if "cellOrder" in value:
+        _validate_cell_order(value["cellOrder"])
+
+
+def _validate_cell_order(value: Any) -> None:
+    """Validate the cell-order record that ties a session to a cell ordering.
+
+    The viewer records a digest of the coordinates a session was saved against,
+    so a dataset republished with the same name and counts but a different row
+    order cannot silently re-point every saved selection at different cells.
+    The digest is over one embedding, and the three embeddings are normalized
+    independently, so the dimension it was taken in is part of the record.
+    """
+    if not isinstance(value, dict):
+        raise ValueError(
+            "Invalid session manifest (datasetFingerprint.cellOrder must be an object)"
+        )
+    missing = _CELL_ORDER_KEYS - set(value)
+    unknown = set(value) - _CELL_ORDER_KEYS
+    if missing or unknown:
+        details: list[str] = []
+        if missing:
+            details.append("missing " + ", ".join(sorted(missing)))
+        if unknown:
+            details.append("unknown " + ", ".join(sorted(unknown)))
+        raise ValueError(
+            "Invalid session manifest (datasetFingerprint.cellOrder fields: "
+            + "; ".join(details)
+            + ")"
+        )
+    dimension = value["dimension"]
+    if type(dimension) is not int or dimension not in (1, 2, 3):
+        raise ValueError(
+            "Invalid session manifest (datasetFingerprint.cellOrder.dimension "
+            "must be exactly 1, 2, or 3)"
+        )
+    digest = value["digest"]
+    if not isinstance(digest, str) or not _CELL_ORDER_DIGEST_RE.match(digest):
+        raise ValueError(
+            "Invalid session manifest (datasetFingerprint.cellOrder.digest must be "
+            "16 lowercase hexadecimal characters)"
         )
 
 

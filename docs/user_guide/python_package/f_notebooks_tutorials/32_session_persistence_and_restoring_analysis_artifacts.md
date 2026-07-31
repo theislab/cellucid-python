@@ -184,10 +184,61 @@ selected
 
 ## Exact dataset identity (read this!)
 
-Session bundles include a dataset fingerprint (cell count, var count, dataset id).
+A bundle's `datasetFingerprint` carries `sourceType`, `datasetId`, `cellCount`,
+and `varCount`, and — for any session saved by a current viewer — a `cellOrder`
+record:
+
+```python
+bundle.dataset_fingerprint
+```
+
+```text
+{'sourceType': 'jupyter',
+ 'datasetId': 'my-study-v1',
+ 'cellCount': 3696,
+ 'varCount': 3753,
+ 'cellOrder': {'dimension': 2, 'digest': '9f2c41a0b7d3e185'}}
+```
 
 `expected_dataset_id` is required. If the ID, cell count, or variable count
 does not match, application raises before mutating the target.
+
+### What `cellOrder` is, and why Python does not check it
+
+Everything a session records about your cells is a **row number**. That is safe
+only for as long as row 417 keeps meaning the same cell. Re-export a dataset
+from a re-sorted `AnnData` and the id, the cell count, and the gene count are
+all still identical, while every stored row number now denotes something else.
+
+`cellOrder` closes that hole in the viewer. It is a digest of the coordinates
+the session was saved against, plus the embedding dimension (1, 2, or 3) it was
+taken in — the 1D, 2D, and 3D embeddings are exported and normalized as separate
+files, so a digest only means anything within one of them.
+
+Python accepts a fingerprint with or without `cellOrder`, validates its shape
+strictly when it is there (`dimension` exactly 1, 2, or 3; `digest` exactly 16
+lowercase hex characters), and never checks its value. There is nothing here to
+check it against: the digest covers exported coordinates, which your `AnnData`
+need not contain, and you — not Cellucid — chose the row order of the object you
+are applying the session to. Verifying cell-order identity is the viewer's job.
+
+The practical consequence: **apply a session only to the `AnnData` that produced
+it, in the same row order.** In the notebook that is your responsibility, and
+no exception will tell you if you get it wrong. If you have subset or re-sorted
+`adata`, go back to the unmodified object.
+
+```python
+# Safe: the object the viewer was opened on, untouched.
+adata2 = viewer.apply_session_to_anndata(adata, inplace=False)
+
+# Not safe: a re-sorted view. The counts still match, so nothing raises.
+resorted = adata[adata.obs.sort_values("cell_type").index].copy()
+```
+
+With `store_uns=True` the whole fingerprint, `cellOrder` included, is written to
+`adata.uns["cellucid"]["session"]["dataset_fingerprint"]`, so the applied result
+carries a record of the ordering the session was saved on even though Python did
+not act on it.
 
 ---
 
@@ -240,6 +291,31 @@ Fix:
 Cellucid rejects an existing target column. Choose distinct
 `highlights_prefix` and `user_defined_prefix` values or remove the conflicting
 column explicitly before applying.
+
+### Symptom: Python applies a bundle the web app refuses to open
+
+The two readers are not symmetric. The web app **requires** `cellOrder` and
+refuses a session file saved before that record existed; Python accepts such a
+file, because it could not verify the record anyway.
+
+How to confirm:
+```python
+"cellOrder" in bundle.dataset_fingerprint
+```
+
+Fix: re-create the state in the viewer and save a new session file. There is no
+way to add the record to an existing file — a digest is only meaningful if it
+was taken at the moment the state was captured.
+
+### Symptom: the web app reports a dimension mismatch
+
+The saved `cellOrder.dimension` is not the dimension currently on screen. This
+is not a data problem: switch the viewer back to the dimension named in the
+message and load the session again.
+
+```python
+bundle.dataset_fingerprint["cellOrder"]["dimension"]
+```
 
 ---
 

@@ -30,10 +30,17 @@ The existing tests validate:
   reserved markers, while gene and continuous-observation inputs are finite-only
 - connectivity export writes edge pairs and chooses the right dtype
 - vector fields are exported and scaled correctly
+- `DESCRIPTION` agrees with every other in-repo version site (`NEWS.md`,
+  `CITATION.cff`, `README.md`, `vignettes/installation.Rmd`)
+- the hand-written help page under `man/` still matches the formals of
+  `cellucid_prepare()`: the `\usage` block is read back out of the `.Rd` file
+  and compared to the real signature, the same comparison `R CMD check` makes
 
 ## Optional dependencies in tests
 
-Some features/tests require `Matrix`. Tests typically skip gracefully if it’s missing.
+`Matrix` is a `Suggests` dependency, and `tests/testthat/test-connectivity-contract.R`
+calls `Matrix::` directly without guarding for it. Install `Matrix` before
+running the suite; without it those tests error rather than skip.
 
 ## CI
 

@@ -116,13 +116,41 @@ restore aborts the older operation without publishing false success.
 
 ### Dataset identity (the first restore check)
 
-Each session carries an exact four-part **dataset fingerprint**: source type,
-dataset id, cell count, and variable count.
+Each session carries a **dataset fingerprint** with five parts: source type,
+dataset id, cell count, variable count, and a **cell-order record**.
 
-If the session’s dataset fingerprint does not match the currently loaded dataset:
+The first four say *which* dataset. The cell-order record says *which ordering
+of its cells*, which the first four cannot: a session stores your selections as
+row numbers, and a dataset republished under the same name with the same number
+of cells and genes but its rows in a different order matches all four scalars
+while every row number now points at a different cell. The record is a short
+digest of the coordinates the session was saved against, plus the dimension
+(1D, 2D, or 3D) the digest was taken in — the three embeddings are separate
+files, so a digest only means anything within one of them.
+
+If any part of the fingerprint does not match the currently loaded dataset:
 - Cellucid rejects the complete restore;
 - no layout-only subset is accepted; and
 - the existing app state remains intact or is recovered by rollback.
+
+You will see one of four messages, each naming what actually happened:
+
+| What you see | What it means | What to do |
+|---|---|---|
+| The session was saved on a different dataset (with both cell and gene counts named) | it is not this dataset | open the dataset the session was saved on |
+| The session was saved while a different dimension was shown | the check reads the coordinates on screen, and 2D and 3D coordinates differ | switch back to the dimension named in the message, then load again |
+| The dataset has the same name and counts but stores its cells in a different order | this is a re-ordered republication of the dataset | load the version the session was saved on, or re-create the selections here |
+| The file was saved before Cellucid started recording which cells a selection contains | it is a session file older than this check | re-create the selections and save a new session file |
+
+The dimension message is the recoverable one. It is not a report of damaged
+data — it means only that the view on screen is not the view the session was
+saved in, and switching back resolves it.
+
+The last case is a deliberate refusal, not a limitation. Such a file records
+selections as bare row numbers with nothing tying them to cell content, so
+there is no way to confirm they still mark the same cells. Opening it anyway
+would reproduce exactly the silent mis-selection the record was added to
+prevent.
 
 See {doc}`07_versioning_compatibility_and_dataset_identity` for the exact
 matching rules and safe collaboration recipes.

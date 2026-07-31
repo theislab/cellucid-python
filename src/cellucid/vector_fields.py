@@ -18,10 +18,40 @@ if TYPE_CHECKING:
 
 _VECTOR_KEY_PATTERN = re.compile(r"^(?P<field>.+_umap)_(?P<dimension>[123])d$")
 
+SUPPORTED_EMBEDDING_KEYS: tuple[str, ...] = ("X_umap_1d", "X_umap_2d", "X_umap_3d")
+
 
 def is_vector_field_declaration_key(value: object) -> bool:
     """Return whether an AnnData ``obsm`` key exactly declares a vector field."""
     return isinstance(value, str) and _VECTOR_KEY_PATTERN.fullmatch(value) is not None
+
+
+def embedding_declaration_hints(obsm: Any, *, n_cells: int) -> list[str]:
+    """Return one exact rename per undeclared obsm array that could be an embedding.
+
+    ``sc.tl.umap()`` writes ``adata.obsm['X_umap']`` without a dimensional
+    suffix, so the most common first failure is one declaration away from
+    working. Each hint is a complete, copy-pasteable statement.
+    """
+    hints: list[str] = []
+    for key in obsm:
+        if not isinstance(key, str):
+            continue
+        if key in SUPPORTED_EMBEDDING_KEYS or is_vector_field_declaration_key(key):
+            continue
+        shape = getattr(obsm[key], "shape", None)
+        if not isinstance(shape, tuple) or len(shape) != 2:
+            continue
+        rows, columns = shape
+        if int(rows) != n_cells or int(columns) not in (1, 2, 3):
+            continue
+        hints.append(
+            f'adata.obsm["X_umap_{int(columns)}d"] = adata.obsm[{key!r}]'
+            f"  # {key!r} has shape {(int(rows), int(columns))}"
+        )
+    # Scanpy's own key is the one a first-time user almost always means.
+    hints.sort(key=lambda hint: (0 if "'X_umap'" in hint else 1, hint))
+    return hints
 
 
 @dataclass(frozen=True)
@@ -59,6 +89,11 @@ def _finite_float32_matrix(
     array = _dense_array(values)
     if array.dtype.kind not in {"i", "u", "f"}:
         raise TypeError(f"{label} must contain real numeric values.")
+    if array.ndim == 1 and declared_dimension == 1:
+        # A declared 1D quantity carries one coordinate per cell, so a plain
+        # length-n vector already is the (n, 1) column it declares. AnnData
+        # performs exactly this reshape when such an array is put in obsm.
+        array = array.reshape(-1, 1)
     if array.ndim != 2:
         raise ValueError(f"{label} must be a 2D array, got shape {array.shape}.")
     if array.shape[0] <= 0:
@@ -289,10 +324,19 @@ def _umap_embeddings(
         embeddings[dimension] = (key, array)
 
     if not embeddings:
-        raise ValueError(
+        message = (
             "AnnData must contain one or more exact UMAP embedding keys: "
-            "'X_umap_1d', 'X_umap_2d', or 'X_umap_3d'."
+            "'X_umap_1d', 'X_umap_2d', or 'X_umap_3d'. "
+            f"Available obsm keys: {list(adata.obsm.keys())}."
         )
+        hints = embedding_declaration_hints(adata.obsm, n_cells=n_cells)
+        if hints:
+            joined = "\n".join(f"    {hint}" for hint in hints)
+            message += (
+                "\n  Fix: declare an existing array under the key for its "
+                f"column count:\n{joined}"
+            )
+        raise ValueError(message)
     return embeddings
 
 

@@ -203,7 +203,7 @@ Filtering notes:
 If the active field provides latent outlier quantiles, you’ll see:
 - **Outlier filter (latent space)** slider
 
-See `d_fields_coloring_legends/03_color_by_behavior` for semantics and edge cases.
+See {doc}`03_color_by_behavior` for semantics and edge cases.
 
 ### Centroids (categorical fields only)
 
@@ -232,5 +232,5 @@ If you don’t use Community Annotation, you can ignore this.
 
 ## Next steps
 
-- For selection/rename/delete/restore behavior around fields, read `d_fields_coloring_legends/02_field_selector_ux`.
-- For a symptom-driven debug guide, read `d_fields_coloring_legends/05_troubleshooting_fields_legends`.
+- For selection/rename/delete/restore behavior around fields, read {doc}`02_field_selector_ux`.
+- For a symptom-driven debug guide, read {doc}`05_troubleshooting_fields_legends`.

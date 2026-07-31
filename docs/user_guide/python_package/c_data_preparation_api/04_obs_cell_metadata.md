@@ -142,6 +142,48 @@ Missing values:
   - `255` for `uint8`
   - `65535` for `uint16`
 
+(python_package-category-label-display-text)=
+#### Category labels must read as the value they store
+
+A category label is drawn **verbatim** — in the legend, in the field selector,
+and in every exported figure. A character with no glyph therefore changes the
+stored value without changing the picture, so `prepare()` rejects a string label
+that:
+
+- is empty,
+- contains a control character (`U+0000`–`U+001F`, `U+007F`–`U+009F`, which
+  includes tab and newline),
+- contains a zero-width character (`U+200B` ZERO WIDTH SPACE, `U+2060` WORD
+  JOINER, or `U+FEFF`, the byte-order mark a spreadsheet leaves at the front of
+  a UTF-8 CSV), or
+- starts or ends with whitespace of any kind, including `U+00A0` NO-BREAK SPACE.
+
+It also rejects two labels in one field that a whitespace-collapsing renderer
+draws identically — `"T cell"` and `"T  cell"` are two legend rows with one
+appearance.
+
+Boolean and numeric labels are unaffected. Case-only differences are not
+rejected: `"Liver"` and `"liver"` look different on screen, so they remain two
+categories.
+
+```{important}
+`prepare()` never trims a label for you. Trimming rewrites an annotation you did
+not ask to change, and where both `"Liver"` and `"Liver "` exist it would merge
+two distinct categories into one and move cells between them.
+```
+
+The error names every offending label in the field at once, so one pass fixes
+the column:
+
+```python
+adata.obs["organ"] = adata.obs["organ"].astype("string").str.strip()
+adata.obs["organ"] = adata.obs["organ"].astype("category")
+```
+
+The same rule applies to `dataset_name`, `dataset_description`, `source_name`,
+`source_url`, and `source_citation`, which the viewer also prints verbatim.
+`dataset_description` may be the empty string; the others may not.
+
 #### `obs_categorical_dtype` (required storage choice)
 
 `obs_categorical_dtype` controls how codes are stored:
@@ -193,15 +235,13 @@ If you set `centroid_outlier_quantile=None`, centroids are exported as empty lis
 
 ## Naming rules (safe filenames)
 
-Obs keys are converted to safe filenames using:
-
-```text
-safe = re.sub(r"[^A-Za-z0-9._-]+", "_", key)
-safe = safe.strip("._")
-safe = safe or "field"
-```
-
-This affects the filenames under `obs/`, and can create collisions.
+An obs key becomes a filename under `obs/`, so `prepare()` requires it to
+already be a portable filename component and does not rewrite it. Each key must
+be 1–180 ASCII bytes, start with an ASCII letter or digit, otherwise use only
+ASCII letters, digits, `.`, `_`, or `-`, not end with `.`, and not be a reserved
+Windows device name. No two keys may collide under case-insensitive comparison.
+`prepare()` rejects the complete candidate export before publication when any of
+those fails, and the message names the offending key.
 
 Recommendation:
 - keep your exported keys already-safe and unique (`cluster`, `cell_type`, `sample_id`, `pct_mito`)

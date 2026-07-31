@@ -81,6 +81,16 @@ Important keys (high level):
 - `_continuousFields`: list of continuous field entries
 - `_categoricalFields`: list of categorical field entries (categories, dtype, missing marker, centroids, outlier ranges if quantized)
 
+Every **string** category label published here must be text a reader can
+see: non-empty, free of control characters (`U+0001`-`U+001F`,
+`U+007F`-`U+009F`), free of the zero-width characters `U+200B`, `U+2060`,
+and `U+FEFF`, and without leading or trailing whitespace. No two string
+labels in one field may collapse to the same text when runs of whitespace
+are reduced to one space. `cellucid_prepare()` rejects the complete
+candidate export rather than trimming a label; the Python writer enforces
+the identical rule. See
+[Category labels must read as the value they store](r_package-category-label-display-text).
+
 ## Obs binaries: `obs/`
 
 ### Continuous
@@ -203,6 +213,10 @@ Important keys (high level):
 - `obs_fields`: summary list of exported obs fields
 - `export_settings`: compression/quantization settings
 - optional `source` (name/url/citation)
+
+`name`, `description`, and every `source` string are shown to the reader
+verbatim, so they obey the same display-text rule as a string category
+label. `description` may be `""`; the others may not be empty.
 - optional `vector_fields` metadata
 
 ## Vector fields: `vectors/` (optional)

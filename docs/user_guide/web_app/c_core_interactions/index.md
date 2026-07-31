@@ -7,12 +7,12 @@ These pages explain how to *drive the viewer* confidently: navigation, camera, r
 
 **Recommended reading order**
 
-1) `c_core_interactions/01_navigation_modes_orbit_planar_free_fly`
-2) `c_core_interactions/04_view_layout_live_snapshots_small_multiples`
-3) `c_core_interactions/05_dimension_switching_1d_2d_3d`
-4) `c_core_interactions/03_render_modes_points_vs_volumetric_smoke`
-5) `c_core_interactions/02_camera_controls_advanced` (when you want to tune)
-6) `c_core_interactions/06_troubleshooting_core_interactions` (when something feels “stuck”)
+1) {doc}`01_navigation_modes_orbit_planar_free_fly`
+2) {doc}`04_view_layout_live_snapshots_small_multiples`
+3) {doc}`05_dimension_switching_1d_2d_3d`
+4) {doc}`03_render_modes_points_vs_volumetric_smoke`
+5) {doc}`02_camera_controls_advanced` (when you want to tune)
+6) {doc}`06_troubleshooting_core_interactions` (when something feels “stuck”)
 
 ::::{grid} 1 2 2 2
 :gutter: 3

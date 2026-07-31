@@ -50,13 +50,13 @@ Selecting a categorical observation field colors the embedding and exposes its c
 
 ## Recommended reading order
 
-1) `01_filtering_mental_model` (how filtering works conceptually)
-2) `03_filter_stack_ui_active_filters` (how to see what’s active and undo safely)
-3) `02_outlier_filtering_per_active_field` (the “fastest” common filter)
-4) `04_common_filter_types_document_every_filter_the_ui_exposes` (reference: every filter you can create)
-5) `05_performance_considerations` + `06_edge_cases_filtering` (avoid surprises)
-6) `07_troubleshooting_filtering` (symptom → diagnosis → fix)
-7) `08_screenshots` (verified interface capture)
+1) {doc}`01_filtering_mental_model` (how filtering works conceptually)
+2) {doc}`03_filter_stack_ui_active_filters` (how to see what’s active and undo safely)
+3) {doc}`02_outlier_filtering_per_active_field` (the “fastest” common filter)
+4) {doc}`04_common_filter_types_document_every_filter_the_ui_exposes` (reference: every filter you can create)
+5) {doc}`05_performance_considerations` + {doc}`06_edge_cases_filtering` (avoid surprises)
+6) {doc}`07_troubleshooting_filtering` (symptom → diagnosis → fix)
+7) {doc}`08_screenshots` (verified interface capture)
 
 ---
 

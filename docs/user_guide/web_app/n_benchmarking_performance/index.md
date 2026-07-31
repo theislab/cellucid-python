@@ -33,12 +33,12 @@ Use this table when you’re in the middle of work and just need relief.
 
 | What you see | Most likely bottleneck | Do this first (safe) | Next page |
 |---|---|---|---|
-| Navigation (orbit/pan/zoom) feels choppy | GPU | Switch to **Points** mode, clear snapshots, close other GPU-heavy tabs | `01_performance_mental_model` |
-| Slider scrubbing (filters) stutters | CPU | Turn **Live filtering** off and use **FILTER** to apply once | `02_performance_considerations_what_gets_slow_and_why` |
-| Loading takes forever or tab freezes | I/O or memory | Prefer **Server Mode** for large `.h5ad`/`.zarr` and large exports | `03_large_dataset_best_practices` |
-| Fans spin up / laptop throttles | GPU + thermals | Lower quality knobs (smoke/grid, overlays), reduce window size, fewer views | `06_edge_cases_performance` |
-| “WebGL context lost” / blank canvas | GPU memory | Reload, then reduce GPU load (no smoke, fewer views, lower overlay density) | `07_troubleshooting_performance` |
-| “It got slower after a change” | Regression | Run a small benchmark loop and compare numbers | `04_benchmarking_methodology_and_metrics` |
+| Navigation (orbit/pan/zoom) feels choppy | GPU | Switch to **Points** mode, clear snapshots, close other GPU-heavy tabs | {doc}`01_performance_mental_model` |
+| Slider scrubbing (filters) stutters | CPU | Turn **Live filtering** off and use **FILTER** to apply once | {doc}`02_performance_considerations_what_gets_slow_and_why` |
+| Loading takes forever or tab freezes | I/O or memory | Prefer **Server Mode** for large `.h5ad`/`.zarr` and large exports | {doc}`03_large_dataset_best_practices` |
+| Fans spin up / laptop throttles | GPU + thermals | Lower quality knobs (smoke/grid, overlays), reduce window size, fewer views | {doc}`06_edge_cases_performance` |
+| “WebGL context lost” / blank canvas | GPU memory | Reload, then reduce GPU load (no smoke, fewer views, lower overlay density) | {doc}`07_troubleshooting_performance` |
+| “It got slower after a change” | Regression | Run a small benchmark loop and compare numbers | {doc}`04_benchmarking_methodology_and_metrics` |
 
 If you suspect an environment/browser issue (not your data), also read:
 - {doc}`../a_orientation/02_system_requirements`
@@ -47,12 +47,12 @@ If you suspect an environment/browser issue (not your data), also read:
 
 ## Recommended reading order
 
-1) `01_performance_mental_model` (learn the 3-bottleneck model once)
-2) `02_performance_considerations_what_gets_slow_and_why` (what actually scales with `n_cells`, `n_views`, etc.)
-3) `03_large_dataset_best_practices` (how to stay fast on huge datasets)
-4) `07_troubleshooting_performance` (symptom → diagnosis → fix)
-5) If you are measuring/optimizing: `04_benchmarking_methodology_and_metrics` → `05_benchmark_tools`
-6) If you’re reporting an issue: `09_reporting_performance_bugs`
+1) {doc}`01_performance_mental_model` (learn the 3-bottleneck model once)
+2) {doc}`02_performance_considerations_what_gets_slow_and_why` (what actually scales with `n_cells`, `n_views`, etc.)
+3) {doc}`03_large_dataset_best_practices` (how to stay fast on huge datasets)
+4) {doc}`07_troubleshooting_performance` (symptom → diagnosis → fix)
+5) If you are measuring/optimizing: {doc}`04_benchmarking_methodology_and_metrics` → {doc}`05_benchmark_tools`
+6) If you’re reporting an issue: {doc}`09_reporting_performance_bugs`
 
 ---
 

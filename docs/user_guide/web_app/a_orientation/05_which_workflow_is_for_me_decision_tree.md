@@ -119,11 +119,11 @@ Choose workflows based on your constraints:
 
 ### Symptom: “My colleague sent me a folder but the app can’t load it”
 
-Likely you need the data-loading troubleshooting section (`b_data_loading/index`) and/or the system requirements page (`a_orientation/02_system_requirements`).
+Likely you need the data-loading troubleshooting section ({doc}`../b_data_loading/index`) and/or the system requirements page ({doc}`02_system_requirements`).
 
 ---
 
 ## Next steps
 
-- If you picked a web workflow: continue to `b_data_loading/index`
-- If you picked the notebook/Python workflow: go to `python_package/index`
+- If you picked a web workflow: continue to {doc}`../b_data_loading/index`
+- If you picked the notebook/Python workflow: go to {doc}`../../python_package/index`

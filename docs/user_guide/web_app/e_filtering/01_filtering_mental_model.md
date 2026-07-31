@@ -120,7 +120,7 @@ High-level performance model:
   - continuous filtering can be applied only on demand (turn off Live filtering → click FILTER),
   - outlier slider updates are throttled to avoid too many recomputations while dragging.
 
-For practical guidance, see `05_performance_considerations`.
+For practical guidance, see {doc}`05_performance_considerations`.
 
 ---
 
@@ -136,7 +136,7 @@ Clearing the active field affects **coloring** (points become neutral gray), but
 
 ### “My gene filter worked, then stopped working when I switched fields.”
 
-Current behavior: gene-range filters apply only while that gene is the active field (see `04_common_filter_types_document_every_filter_the_ui_exposes`).
+Current behavior: gene-range filters apply only while that gene is the active field (see {doc}`04_common_filter_types_document_every_filter_the_ui_exposes`).
 
 ---
 
@@ -153,6 +153,6 @@ Selecting a categorical observation field colors the embedding and exposes its c
 
 ## Next steps
 
-- `02_outlier_filtering_per_active_field` (how outlier filtering is computed and when to use it)
-- `03_filter_stack_ui_active_filters` (how to inspect/disable/remove filters safely)
-- `07_troubleshooting_filtering` (symptom → diagnosis → fix)
+- {doc}`02_outlier_filtering_per_active_field` (how outlier filtering is computed and when to use it)
+- {doc}`03_filter_stack_ui_active_filters` (how to inspect/disable/remove filters safely)
+- {doc}`07_troubleshooting_filtering` (symptom → diagnosis → fix)

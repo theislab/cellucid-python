@@ -89,6 +89,13 @@ The exact validated identifier is used in both the manifest and path. Any
 unsafe identifier or collision rejects the complete candidate before
 publication.
 
+The contract is scoped to the identifiers that become paths. `obs_keys` and
+`gene_identifiers` narrow what is exported and narrow this contract with it, so
+an `obs` column or `var` gene that is left out is never checked against it. Gene
+IDs carry one additional, unnarrowed rule: every ID in `var` must be a non-empty
+string and must be distinct, since `gene_identifiers` addresses `var` rows by
+identifier and a repeated ID resolves to no single row.
+
 ---
 
 ## Compression semantics (do not confuse these)

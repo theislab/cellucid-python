@@ -62,6 +62,7 @@ def test_public_anndata_entry_points_have_complete_closed_signatures() -> None:
         "centroid_min_points",
         "dataset_name",
         "dataset_id",
+        "obs_keys",
         "vector_field_default",
     ]
     server_parameters = [
@@ -77,10 +78,12 @@ def test_public_anndata_entry_points_have_complete_closed_signatures() -> None:
         "centroid_min_points",
         "dataset_name",
         "dataset_id",
+        "obs_keys",
         "vector_field_default",
         "serve_web_ui",
         "web_source_url",
         "web_cache_dir",
+        "allowed_hosts",
     ]
     assert list(inspect.signature(AnnDataServer).parameters) == server_parameters
     assert list(inspect.signature(serve_anndata).parameters) == server_parameters
@@ -96,10 +99,12 @@ def test_public_anndata_entry_points_have_complete_closed_signatures() -> None:
         "centroid_min_points",
         "dataset_name",
         "dataset_id",
+        "obs_keys",
         "vector_field_default",
         "client_server_url",
         "web_source_url",
         "web_cache_dir",
+        "allowed_hosts",
     ]
     assert list(inspect.signature(show_anndata).parameters) == [
         "data",
@@ -111,10 +116,12 @@ def test_public_anndata_entry_points_have_complete_closed_signatures() -> None:
         "centroid_min_points",
         "dataset_name",
         "dataset_id",
+        "obs_keys",
         "vector_field_default",
         "client_server_url",
         "web_source_url",
         "web_cache_dir",
+        "allowed_hosts",
     ]
 
 

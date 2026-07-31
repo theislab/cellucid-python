@@ -56,7 +56,7 @@ Cellucid (web) is a stateful UI + WebGL viewer:
   `.cellucid-session` bundle with a closed, validated chunk inventory.
 - **Integration:** `cellucid-python` can export the required folder layout and can embed/drive the viewer from notebooks (hooks/events).
 
-If you’re trying to reason about edge cases, start from the UI glossary (`a_orientation/04_ui_glossary_terminology`) and the “Core interactions” section (`c_core_interactions/index`).
+If you’re trying to reason about edge cases, start from the UI glossary ({doc}`04_ui_glossary_terminology`) and the “Core interactions” section ({doc}`../c_core_interactions/index`).
 :::
 
 ::::
@@ -102,7 +102,7 @@ Most non-demo workflows look like this:
    - figures for papers,
    - a `.cellucid-session` bundle for reproducibility and sharing.
 
-If you’re choosing a workflow, use the decision tree: `a_orientation/05_which_workflow_is_for_me_decision_tree`.
+If you’re choosing a workflow, use the decision tree: {doc}`05_which_workflow_is_for_me_decision_tree`.
 
 ---
 
@@ -132,14 +132,14 @@ If you care about reproducibility, prefer **session bundles + exported figures**
 
 If you’re blocked immediately:
 
-- If you see “WebGL2 is required…” or the canvas is blank: go to `a_orientation/02_system_requirements`.
-- If the UI loads but you can’t move the camera: go to `c_core_interactions/06_troubleshooting_core_interactions`.
-- If you can move the camera but no data appears: go to `b_data_loading/index` (data loading section).
+- If you see “WebGL2 is required…” or the canvas is blank: go to {doc}`02_system_requirements`.
+- If the UI loads but you can’t move the camera: go to {doc}`../c_core_interactions/06_troubleshooting_core_interactions`.
+- If you can move the camera but no data appears: go to {doc}`../b_data_loading/index` (data loading section).
 
 ---
 
 ## Next steps
 
-- New user: `a_orientation/03_quick_tour_60_seconds`
-- Confused by terms: `a_orientation/04_ui_glossary_terminology`
-- Ready to learn navigation + multiview: `c_core_interactions/index`
+- New user: {doc}`03_quick_tour_60_seconds`
+- Confused by terms: {doc}`04_ui_glossary_terminology`
+- Ready to learn navigation + multiview: {doc}`../c_core_interactions/index`

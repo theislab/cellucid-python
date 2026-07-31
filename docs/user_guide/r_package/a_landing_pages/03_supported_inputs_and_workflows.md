@@ -44,6 +44,8 @@ Why `latent_space` is required: it is used to compute **per-cell outlier quantil
   - exported as unique undirected edge pairs
 - **Vector fields (`vector_fields`)**:
   - named list of per-cell vectors (1D/2D/3D), used for velocity/displacement overlays
+  - every name must exactly match `<field>_umap_<1|2|3>d` (for example
+    `velocity_umap_2d`); the key declares the dimension
 
 ## Accepted types (what “matrix-like” means)
 

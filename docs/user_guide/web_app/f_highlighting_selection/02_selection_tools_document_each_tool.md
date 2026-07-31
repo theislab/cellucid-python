@@ -28,7 +28,7 @@ This page documents each tool, how the modifier keys work, and the tricky parts 
 
 ## Quick mental model (read this once)
 
-If you haven’t yet, skim `01_highlight_mental_model` first.
+If you haven’t yet, skim {doc}`01_highlight_mental_model` first.
 
 Key idea:
 - You are not “editing a highlight group” live.
@@ -70,7 +70,23 @@ Step controls (per tool) let you:
 Undo/redo history is intentionally short (to keep memory bounded). If you need a very long “edit history”, confirm intermediate groups and keep them (or save a session).
 :::
 
-### Rule 4: you can switch tools mid-selection
+### Rule 4: a gesture must end on the plot
+Release the mouse over the plot. A gesture released anywhere else — over the
+floating sidebar, over a notification toast, outside the window — is abandoned
+on purpose, because the polygon or radius you finished behind a panel would
+select cells the panel was covering. Nothing is committed, no step is recorded,
+no undo is spent, and your standing selection is repainted exactly as it was.
+The tool explains it under the **Highlight mode** buttons: *“That gesture ended
+outside the view, so nothing was selected.”*
+
+### Rule 5: a gesture the app cannot serve says so
+Every gesture the app consumes but cannot turn into a step writes one line under
+the **Highlight mode** buttons — a click that hit no cell, a cell with no value
+on the active field, a gesture that resolved to the selection you already had.
+That line is the first thing to read when a tool “does nothing”; the full list
+is in {doc}`06_troubleshooting_highlighting`.
+
+### Rule 6: you can switch tools mid-selection
 Cellucid keeps one unified candidate set across selection tools.
 
 This enables workflows like:
@@ -203,8 +219,15 @@ Practical implications:
 
 ### Miss-click behavior (important)
 If you click empty space:
-- with no existing candidate set, there may be no meaningful center → selection can do nothing.
-- with an existing candidate set, the tool can behave as if the center is the centroid of the current selection (useful for “grow/shrink around current selection”, but surprising if you weren’t expecting it).
+- with no existing candidate set there is no meaningful center, so the gesture
+  never starts and the tool says *“That click did not land on a cell, so there
+  is nothing to select…”* under the **Highlight mode** buttons.
+- with an existing candidate set the tool places a center anyway, where your
+  click ray crosses the plane through that selection’s centroid facing the
+  camera — that is, *where you clicked, at the selection’s depth*. This is what
+  makes “grow/shrink around the current
+  selection” work in 3D without seeding on a cell, but the blob is centred on
+  your pointer, not on the selection.
 
 ### When to use
 - You want “all cells near this seed cell” in embedding space.
@@ -279,8 +302,8 @@ As degree grows, selection can grow very quickly.
 ---
 
 ## Related pages
-- `01_highlight_mental_model`
-- `03_highlight_ui`
-- `04_selection_synchronization`
-- `05_edge_cases_highlighting`
-- `06_troubleshooting_highlighting`
+- {doc}`01_highlight_mental_model`
+- {doc}`03_highlight_ui`
+- {doc}`04_selection_synchronization`
+- {doc}`05_edge_cases_highlighting`
+- {doc}`06_troubleshooting_highlighting`

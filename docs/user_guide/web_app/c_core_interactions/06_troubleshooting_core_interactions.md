@@ -2,7 +2,7 @@
 
 This page is a **symptom → diagnosis → fix** catalog for navigation, camera, render modes, multiview, and dimension switching.
 
-If you are brand-new to the UI, it may be faster to skim `c_core_interactions/01_navigation_modes_orbit_planar_free_fly` first, then come back here.
+If you are brand-new to the UI, it may be faster to skim {doc}`01_navigation_modes_orbit_planar_free_fly` first, then come back here.
 
 ---
 
@@ -16,7 +16,7 @@ When things feel broken, these are the safest global actions:
 4) Click **Reset Camera**
 5) If multiview is confusing, lock cameras and/or clear snapshots
 
-If the canvas is blank or you see WebGL errors, jump to `a_orientation/02_system_requirements`.
+If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/02_system_requirements`.
 
 ---
 
@@ -225,7 +225,7 @@ This is almost always GPU memory pressure.
 - Reload (Cellucid requires a reload to safely reinitialize GPU resources).
 - After reload, reduce GPU load (fewer views, points mode, lower quality settings).
 
-Full details and prevention: `a_orientation/02_system_requirements` → “WebGL context lost”.
+Full details and prevention: {doc}`../a_orientation/02_system_requirements` → “WebGL context lost”.
 
 ---
 

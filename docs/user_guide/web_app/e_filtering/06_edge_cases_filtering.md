@@ -184,4 +184,4 @@ Two effects can compound:
 
 ## Next steps
 
-- `07_troubleshooting_filtering` (symptom-based debugging)
+- {doc}`07_troubleshooting_filtering` (symptom-based debugging)

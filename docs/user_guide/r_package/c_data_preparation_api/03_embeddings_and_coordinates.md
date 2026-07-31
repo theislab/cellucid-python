@@ -7,11 +7,12 @@
 Cellucid visualizes cells as points. The positions of those points come from one or more **embeddings**.
 
 In `cellucid-r`, the embedding arguments are:
-- `X_umap_1d` (shape `(n_cells, 1)`)
+- `X_umap_1d` (shape `(n_cells, 1)`, or a plain length-`n_cells` numeric vector)
 - `X_umap_2d` (shape `(n_cells, 2)`)
 - `X_umap_3d` (shape `(n_cells, 3)`)
 
-At least one must be provided.
+At least one must be provided. Only `X_umap_1d` accepts a plain vector, as the
+single column it declares; `X_umap_2d` and `X_umap_3d` require the full matrix.
 
 ## What “embedding” means (practical)
 

@@ -10,21 +10,31 @@ In `cellucid_prepare()`, vector fields are provided as:
 
 - `vector_fields`: a **named list** of arrays
 
-Each entry must be either:
-- a numeric vector (interpreted as 1D), or
-- a numeric matrix with **1, 2, or 3 columns**
+Each entry must be a numeric matrix with **exactly the number of columns its key
+declares** and one row per cell. A `_1d` key also accepts a plain numeric vector
+of length `n_cells` as the single column it declares; `_2d` and `_3d` keys
+require the full matrix.
 
 Rows must be cells.
 
 ## Naming conventions (important)
 
-`cellucid-r` requires an explicit dimensional suffix.
+`cellucid-r` requires an explicit dimensional suffix. Every key must exactly
+match `<field>_umap_<1|2|3>d`.
 
 Use keys like:
 - `velocity_umap_2d`
 - `velocity_umap_3d`
 
 The exporter groups these by base field id (`velocity_umap`) and writes one file per dimension that matches an available embedding.
+
+An unsuffixed key such as `velocity_umap` is rejected with
+`Vector field key 'velocity_umap' must exactly match '<field>_umap_<1|2|3>d'.`
+The dimension is always declared, never inferred from an array's width: a field
+can carry both a 2D and a 3D version, and a suffix that disagrees with the
+array's shape is a mistake worth catching rather than a shape to trust. This is
+the same rule the Python package enforces, so the same field is named the same
+way from either writer.
 
 ## Field IDs must be filesystem-safe
 
@@ -33,10 +43,14 @@ Like every exported identifier, vector-field IDs must already be portable.
 Allowed characters are effectively:
 - letters, numbers, `.`, `_`, `-`
 
-The ID must start with a letter or digit, must not end with `.`, and must not
-be a Windows device name. Nothing is stripped or rewritten.
+The ID must be 1–180 ASCII bytes, must start with a letter or digit, must not
+end with `.`, and must not be a Windows device name. Nothing is stripped or
+rewritten.
 
-If an ID is not safe, export fails with an explicit error suggesting a safe alternative.
+If an ID is not safe, export fails with an error that states the rule, for
+example `Vector field ids 'CON.velocity_umap' is reserved on Windows.` The ID
+is checked after the key is parsed, so the reported name is the field id without
+its dimensional suffix.
 
 ## Embedding coupling and automatic scaling
 
@@ -74,7 +88,8 @@ The exporter records one exact `default_field`:
 - with one vector field, that field is the default;
 - with more than one vector field, pass `vector_field_default` explicitly.
 
-If the field id ends with `_umap`, the identity metadata adds:
+Every field id ends with `_umap` by construction, so the identity metadata
+always records:
 - `basis = "umap"`
 and the UI label becomes `"<Title> (UMAP)"`.
 
@@ -107,21 +122,36 @@ cellucid_prepare(
 
 Export fails if:
 - a vector field has a different number of rows than your embeddings (`n_cells`)
-- a vector field claims to be 2D/3D but the array has the wrong number of columns
+- a vector field's array has a different number of columns than its key declares,
+  which includes passing a plain vector under a `_2d` or `_3d` key
 
 ### Bad naming
 
 Export fails if:
+- the key is not exactly `<field>_umap_<1|2|3>d` (no suffix, a suffix other than
+  `1`/`2`/`3`, or no `_umap` before it)
 - the field ID contains spaces or slashes
-- the field ID begins/ends with `.` or `_`
+- the field ID begins with `.`, `_`, or `-`
+- the field ID is longer than 180 bytes or is a Windows device name
 
 ### Duplicate definitions
 
-If two input keys resolve to the same `<field>_umap` and dimension, export
-rejects the duplicate declaration. No declaration overrides another.
+A key determines its field id and dimension exactly, so two declarations of the
+same field and dimension are two identical list names, and `cellucid_prepare()`
+rejects them with `vector_fields names must be unique.` before reading any
+array. No declaration overrides another.
+
+Field ids that differ only in case, such as `Velocity_umap_2d` and
+`velocity_umap_3d`, collide at one payload path and are rejected too.
 
 ## Troubleshooting pointers
 
-- “Vector field id contains unsupported characters” → rename the list key to a safe identifier.
-- “Vector field declared as 2D but has shape mismatch” → check `ncol(...)`.
+- `Vector field key '…' must exactly match '<field>_umap_<1|2|3>d'.` → add or
+  correct the dimensional suffix on the list name.
+- `Vector field ids '…' is not a portable identifier. …` → rename the list key
+  to a safe identifier.
+- `Vector field '…' declares 2D but contains 1 components.` → check `ncol(...)`;
+  a plain vector counts as one component.
+- `Vector field '…' requires a matching 3D embedding.` → export `X_umap_3d`, or
+  drop that vector dimension.
 - “Vectors look too long/short” → remember vectors are scaled by embedding normalization.

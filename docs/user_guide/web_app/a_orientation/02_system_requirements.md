@@ -228,5 +228,5 @@ Cellucid shows an overlay and requires a reload when the GPU context is lost.
 
 ## Next steps
 
-- If the app loads: go to `a_orientation/03_quick_tour_60_seconds`.
-- If navigation feels confusing: go to `c_core_interactions/01_navigation_modes_orbit_planar_free_fly`.
+- If the app loads: go to {doc}`03_quick_tour_60_seconds`.
+- If navigation feels confusing: go to {doc}`../c_core_interactions/01_navigation_modes_orbit_planar_free_fly`.

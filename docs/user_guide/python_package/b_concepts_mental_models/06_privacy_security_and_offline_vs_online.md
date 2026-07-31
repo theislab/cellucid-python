@@ -68,6 +68,76 @@ Safe sharing patterns:
 
 ---
 
+## The `Host` rule (why a foreign host name is refused)
+
+Binding to `127.0.0.1` stops other machines. It does **not** stop a web page you
+happen to have open in another tab.
+
+Any site can publish a DNS record for its own name with a very short lifetime
+and then re-point that name at `127.0.0.1`. This is **DNS rebinding**. After the
+name flips, the browser believes that site and your Cellucid server are the same
+origin: it sends no `Origin` header, applies no CORS check, and hands the page
+whatever the server returns — which is your dataset.
+
+So the bind address is not the last line of defence. The `Host` header is:
+
+- Cellucid reads the `Host` on every request, before any route, file read or
+  event delivery runs.
+- It accepts exactly one well-formed `Host` naming `localhost` or a loopback IP
+  literal, on the port the server actually bound. A literal is safe because DNS
+  cannot rebind one, and RFC 6761 reserves the name `localhost` for loopback.
+- Anything else gets **421 Misdirected Request**, with a fixed body that never
+  echoes the attacker’s value. The refused header is written to your server log
+  only.
+- The rule is applied whenever the bound address is loopback. A deliberate
+  non-loopback bind (`--host 0.0.0.0`) is an explicit request for network
+  exposure whose legitimate names Cellucid cannot know, so it is not enforced
+  there by default.
+
+### Reverse proxies must be declared
+
+A reverse proxy — `jupyter-server-proxy` above all — forwards the browser’s
+`Host` verbatim, so your loopback server receives the proxy’s host name and
+refuses it. That request is indistinguishable from a rebound one: both arrive on
+loopback naming a foreign authority, and a rebound page is same-origin, so it
+can forge `X-Forwarded-For`, `X-Forwarded-Host` and friends at will. **There is
+no header Cellucid could trust to tell them apart**, which is why the proxy is
+never auto-detected — auto-detection would simply re-open the hole.
+
+Name it instead:
+
+```bash
+cellucid serve /path/to/data --allowed-host hub.example.org
+```
+
+```python
+from cellucid import serve
+
+serve("/path/to/data", allowed_hosts=["hub.example.org"])
+```
+
+Rules for an entry, all enforced when the server is constructed:
+
+- one bare host name — a DNS name or an IP address literal,
+- no port, no scheme, no path, no credentials, no brackets, no zone id,
+- **no wildcards**: a wildcard would re-admit rebinding under every name it
+  covers, so each name is written out in full,
+- matched case-insensitively on **any** port, because the proxy’s front-end port
+  is unrelated to the loopback port bound here,
+- anything unsupported is refused by name with an actionable error, never
+  silently dropped.
+
+Declaring names is also a statement that you know the complete set of
+authorities this server should answer to, so it turns the `Host` check on for a
+non-loopback bind as well. Loopback authorities on the bound port keep working
+either way, so a local request to the exact URL Cellucid printed is never broken
+by the declaration.
+
+Leaving `allowed_hosts` unset — the default — leaves the loopback-only rule
+exactly as described above.
+
+---
+
 ## CORS and why it exists
 
 The Python server sets CORS headers so the viewer can load data in different deployment modes.
@@ -185,6 +255,25 @@ Fix:
 - allow the Python runtime to reach the configured `web_source_url`,
 - correct the exact response error reported by Cellucid, and
 - pass a writable `web_cache_dir` or `--web-cache-dir`.
+
+### Symptom: every request returns `421 Misdirected Request`
+
+Likely cause:
+- the browser reaches Cellucid through a reverse proxy (usually
+  `jupyter-server-proxy`), which forwards its own `Host`, and that name has not
+  been declared.
+
+Confirm:
+- the server log contains
+  `Refused a request whose Host header does not name this server`.
+
+Fix:
+- pass the proxy’s host name as `allowed_hosts=["hub.example.org"]` or
+  `--allowed-host hub.example.org`, and keep passing the proxy’s browser base as
+  `client_server_url=`.
+
+See {doc}`08_debugging_mental_model_where_to_look` for the full remote-notebook
+checklist.
 
 ### Symptom: “Someone else on my network can see my dataset”
 

@@ -34,15 +34,20 @@ The root has exactly `createdAt`, `datasetFingerprint`, and `chunks`:
     "sourceType": "local-demo",
     "datasetId": "suo",
     "cellCount": 1000,
-    "varCount": 2000
+    "varCount": 2000,
+    "cellOrder": { "dimension": 2, "digest": "9f2c41a0b7d3e185" }
   },
   "chunks": []
 }
 ```
 
 - `createdAt` is a canonical ISO timestamp.
-- `datasetFingerprint` has exactly `sourceType`, `datasetId`, `cellCount`, and
-  `varCount`.
+- `datasetFingerprint` has exactly `sourceType`, `datasetId`, `cellCount`,
+  `varCount`, and `cellOrder`.
+- `cellOrder` has exactly `dimension` and `digest`. `dimension` is the embedding
+  dimension that was on screen when the session was saved, exactly `1`, `2`, or
+  `3`. `digest` is 16 lowercase hexadecimal characters computed over every cell
+  coordinate of that embedding in dataset row order.
 - `chunks` is the ordered inventory.
 
 Every chunk entry has exactly these nine keys:
@@ -72,15 +77,26 @@ have validated, applied, and committed.
 
 ## Exact dataset identity
 
-All four fingerprint fields must match the currently loaded dataset. A
-different source route, dataset id, cell count, or variable count rejects the
-whole restore. Cellucid does not apply a layout-only subset and does not skip
-dataset-dependent chunks.
+All five fingerprint fields must match the currently loaded dataset. Because
+`cellOrder` is a record with two members, that is six compared values: a
+different source route, dataset id, cell count, variable count, cell-order
+dimension, or cell-order digest rejects the whole restore. Cellucid does not
+apply a layout-only subset and does not skip dataset-dependent chunks.
+
+A fingerprint whose key set is exactly the four pre-`cellOrder` keys is a
+session file written before Cellucid recorded which cells a selection contains.
+It is refused during manifest validation with its own message rather than a
+schema error: such a file records selections as bare row numbers with nothing
+tying them to cell content, so it can never be confirmed. Any other departure
+from the five-key shape is an ordinary schema violation.
 
 This strict equality prevents a session's cell-indexed filters, categorical
-codes, highlights, or cached analysis values from being attached to a
-different dataset. It is still your responsibility not to reuse the same
-identity for reordered or scientifically changed content.
+codes, highlights, or cached analysis values from being attached to a different
+dataset, or to a re-ordered republication of the same one. The four scalars are
+all preserved when a dataset is re-exported at the same id from re-sorted input,
+so `cellOrder` is what makes that case detectable. It is still your
+responsibility not to reuse the same identity for scientifically changed content
+that leaves the coordinates alone.
 
 ## Current user-authored inventory
 
@@ -145,6 +161,11 @@ that internal default and choose **Load State**: the ordinary loader requires
 the complete user-authored profile and rejects it. To create a portable manual
 session for an official sample, choose the sample, wait for its verified
 starting view, then use **Save State**.
+
+Only the chunk profile differs. The published default is read through the same
+manifest validation and the same fingerprint comparison as any other bundle, so
+it too must carry `cellOrder`, and it must have been saved on the dimension the
+dataset publishes as its default.
 
 ## Implementation pointers
 

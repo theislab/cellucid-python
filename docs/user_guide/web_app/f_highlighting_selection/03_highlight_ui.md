@@ -18,7 +18,7 @@ This page is the “UI map” for highlighting:
 **Prerequisites**
 - A dataset loaded
 - Familiarity with selection tools helps:
-  - `02_selection_tools_document_each_tool`
+  - {doc}`02_selection_tools_document_each_tool`
 
 **What you’ll learn**
 - What “Highlight mode”, “Highlight pages”, and “Highlighted groups” each control
@@ -62,7 +62,7 @@ These controls are tool-specific but behave consistently across tools.
 - `Shift+Alt` usually means “add” (union).
 - `Ctrl+Alt` or `Cmd+Alt` usually means “remove” (subtract).
 
-For the annotation-based tool on categorical fields, `Alt` acts like “replace” (details in `02_selection_tools_document_each_tool`).
+For the annotation-based tool on categorical fields, `Alt` acts like “replace” (details in {doc}`02_selection_tools_document_each_tool`).
 
 ---
 
@@ -172,7 +172,7 @@ Interpretation:
 - **visible** = how many of those highlighted cells are currently visible in the current view (after filters and, for very large datasets, LOD/downsampling)
 
 Common reasons “visible < total”:
-- filters hide some highlighted cells (`../e_filtering/index`)
+- filters hide some highlighted cells ({doc}`../e_filtering/index`)
 - multi-view snapshots may have stricter filters than the live view
 - LOD/downsampling is active (large datasets)
 
@@ -190,7 +190,7 @@ In the current UI, group membership is edited by:
 - rebuilding the candidate set (union/subtract/intersect), then confirming a new group, and optionally removing the old one.
 
 For exporting, the most robust current path is:
-- save a session bundle (`../l_sessions_sharing/index`) and treat it as the persisted artifact of your highlights.
+- save a session bundle ({doc}`../l_sessions_sharing/index`) and treat it as the persisted artifact of your highlights.
 
 ---
 
@@ -206,10 +206,10 @@ If you don’t see it, it may be disabled or hidden in your build.
 ---
 
 ## Edge cases and troubleshooting
-- Edge cases: `05_edge_cases_highlighting`
-- Troubleshooting: `06_troubleshooting_highlighting`
+- Edge cases: {doc}`05_edge_cases_highlighting`
+- Troubleshooting: {doc}`06_troubleshooting_highlighting`
 
 ## Related pages
-- `01_highlight_mental_model`
-- `02_selection_tools_document_each_tool`
-- `04_selection_synchronization`
+- {doc}`01_highlight_mental_model`
+- {doc}`02_selection_tools_document_each_tool`
+- {doc}`04_selection_synchronization`

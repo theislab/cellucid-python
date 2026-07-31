@@ -15,13 +15,33 @@ Main exports:
 """
 
 from importlib import metadata as _metadata
+from typing import TYPE_CHECKING, Any
 
 __version__ = _metadata.version("cellucid")
+
+if TYPE_CHECKING:
+    # Type-checking-only re-exports of every name in ``__all__``.
+    #
+    # ``TYPE_CHECKING`` is ``False`` at runtime, so this block never executes and
+    # the lazy ``__getattr__`` below still keeps ``import cellucid`` free of
+    # numpy, pandas, scipy, and anndata. A static checker does read it, and
+    # without it the module ``__getattr__`` erases the public API: every export
+    # resolves to ``Any``, so ``prepare(nonexistent_argument=123)`` checks clean
+    # even though the package ships ``py.typed``.
+    from .anndata_adapter import AnnDataAdapter
+    from .anndata_server import AnnDataServer, serve_anndata
+    from .anndata_session import apply_cellucid_session_to_anndata
+    from .jupyter import AnnDataViewer, CellucidViewer, show, show_anndata
+    from .prepare_data import prepare
+    from .server import CellucidServer, serve
+    from .session_bundle import CellucidSessionBundle
+    from .vector_fields import add_transition_drift_to_obsm, compute_transition_drift
+    from .web_cache import clear_web_cache, get_web_cache_dir
 
 
 # All imports are lazy to ensure fast CLI startup.
 # Heavy dependencies (numpy, scipy, pandas) are only loaded when needed.
-def __getattr__(name):
+def __getattr__(name: str) -> Any:
     # Core export functionality (imports numpy, pandas, scipy)
     if name == "prepare":
         from .prepare_data import prepare

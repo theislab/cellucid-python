@@ -152,6 +152,33 @@ published.
 This prevents the worst failure mode:
 > applying “correct-looking” highlights to the wrong biological cells.
 
+### `cellOrder`: recorded by the viewer, shape-checked here
+
+The manifest fingerprint carries a fifth field beside those four scalars.
+`cellOrder` is exactly a `dimension` (1, 2, or 3) and a 16-character lowercase
+hexadecimal `digest` of the coordinates the session was saved against. It exists
+because the four scalars all survive a re-export of the same dataset from
+re-sorted input, and index-based selections would then silently denote different
+cells.
+
+The two readers are deliberately asymmetric:
+
+| | web app | Python |
+|---|---|---|
+| `cellOrder` present | required | optional |
+| record shape | validated | validated |
+| digest value | compared against the loaded dataset | never checked |
+
+Python cannot check the digest. It is taken over *exported* coordinates, while
+this API applies a session to an `AnnData` whose row order the caller controls
+and which need not contain those coordinates at all. Enforcing cell-order
+identity is the viewer's job; accepting both fingerprint shapes is what keeps
+already-written session files loadable here.
+
+So a bundle this reader accepts may still be refused by the web app. That
+direction is expected. The reverse is not: anything the web app accepts is
+valid input here.
+
 ---
 
 ## Troubleshooting (protocol-level)

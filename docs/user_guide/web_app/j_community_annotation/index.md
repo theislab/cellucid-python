@@ -257,9 +257,9 @@ This link never includes a token; users still need to sign in.
 
 ## Next Steps
 
-- If you maintain the dataset/repo: start with the Author Guide (`02_author_guide`).
-- If you are contributing votes/suggestions: start with the Annotator Guide (`01_annotator_guide`).
-- If you want a button-by-button explanation: see UI Reference (`03_ui_reference`).
+- If you maintain the dataset/repo: start with the Author Guide ({doc}`02_author_guide`).
+- If you are contributing votes/suggestions: start with the Annotator Guide ({doc}`01_annotator_guide`).
+- If you want a button-by-button explanation: see UI Reference ({doc}`03_ui_reference`).
 
 :::{tip}
 Adding more community-annotation docs:

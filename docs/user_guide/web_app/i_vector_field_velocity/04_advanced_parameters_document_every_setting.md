@@ -108,7 +108,7 @@ These are almost entirely aesthetic.
    supplied vectors; add it only when procedural motion is intentional.
 2) Keep `Bloom strength:` low (0–0.08) and `Anamorphic ratio:` close to 1.0.
 3) Avoid chromatic effects (`Chromatic fade:`, `Chromatic aberr.:`, `Film grain:`).
-4) Use shorter trails and moderate density (see `03_core_parameters_document_exact_ui_labels`).
+4) Use shorter trails and moderate density (see {doc}`03_core_parameters_document_exact_ui_labels`).
 
 ### If you want a “presentation / cinematic overlay”
 

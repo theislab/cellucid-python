@@ -215,7 +215,7 @@ viewer-serving startup downloads and verifies the configured web generation
 (see {doc}`06_privacy_security_and_offline_vs_online`), but your dataset is not
 uploaded by default.
 
-### “Why do I see `127.0.0.1:8765` instead of `https://cellucid.com`?”
+### “Why do I see `127.0.0.1:8765` instead of `https://www.cellucid.com`?”
 
 To avoid cross-origin issues, the Python server serves the exact verified
 viewer generation from the same origin as the dataset.

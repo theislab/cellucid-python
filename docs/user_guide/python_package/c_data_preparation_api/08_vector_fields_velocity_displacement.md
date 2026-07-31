@@ -62,14 +62,16 @@ opacity, palette, and LOD controls are visible.
 ### Supported shapes and dtypes
 
 Each vector field is a per-cell array:
-- shape: exactly `(n_cells, dim)`
+- shape: exactly `(n_cells, dim)`, where `dim` is the dimension its key declares
+- a `_1d` key also accepts a plain `(n_cells,)` vector as the single column it
+  declares; `_2d` and `_3d` keys require the full 2D array
 - dtype: converted to `float32` for export
 
 Vectors must be aligned to the same cell order as embeddings and `obs`.
 
 ### Naming convention (required)
 
-Every declaration key must be dimension-suffixed:
+Every declaration key must match `<field>_umap_<1|2|3>d` exactly:
 
 - keys end with `_<dim>d` (e.g., `_2d`, `_3d`)
 - the base id becomes the “field id” in `dataset_identity.json`
@@ -78,7 +80,11 @@ Examples:
 - `velocity_umap_2d`, `velocity_umap_3d` → field id `velocity_umap`
 - `T_fwd_umap_2d` → field id `T_fwd_umap`
 
-An unsuffixed key such as `velocity_umap` is not a vector-field declaration.
+An unsuffixed key such as `velocity_umap` is rejected, and in `adata.obsm` it is
+never picked up as a vector field. The dimension is always declared, never
+inferred from an array's width: a field can carry both a 2D and a 3D version,
+and a suffix that disagrees with the array's shape is a mistake worth catching
+rather than a shape to trust.
 
 #### Safety rule: vector field ids must already be filesystem-safe
 

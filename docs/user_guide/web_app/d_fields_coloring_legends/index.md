@@ -42,12 +42,12 @@ Selecting a categorical observation field colors the embedding and exposes its c
 
 ## Recommended reading order
 
-1) `d_fields_coloring_legends/01_field_types_and_sources` (what “obs” and “var” mean)
-2) `d_fields_coloring_legends/02_field_selector_ux` (how selection/rename/delete/restore actually works)
-3) `d_fields_coloring_legends/03_color_by_behavior` (how colors and filters are computed)
-4) `d_fields_coloring_legends/04_legend_behavior` (what you can do inside the legend)
-5) `d_fields_coloring_legends/05_troubleshooting_fields_legends` (when colors/legends feel “wrong”)
-6) `d_fields_coloring_legends/06_screenshots` (verified interface captures)
+1) {doc}`01_field_types_and_sources` (what “obs” and “var” mean)
+2) {doc}`02_field_selector_ux` (how selection/rename/delete/restore actually works)
+3) {doc}`03_color_by_behavior` (how colors and filters are computed)
+4) {doc}`04_legend_behavior` (what you can do inside the legend)
+5) {doc}`05_troubleshooting_fields_legends` (when colors/legends feel “wrong”)
+6) {doc}`06_screenshots` (verified interface captures)
 
 ---
 

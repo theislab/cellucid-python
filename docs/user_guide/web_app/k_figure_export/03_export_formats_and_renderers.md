@@ -65,7 +65,9 @@ SVG export is a vector-first path designed for editability.
 - **Always vector** (when enabled):
   - title text
   - axes and tick labels
-  - legends (categorical swatches / continuous colorbars)
+  - legends (categorical swatches / continuous colorbars) — one shared legend
+    for a multi-panel figure whose panels match, otherwise one legend per panel
+  - panel labels and the `n = N selected` badge
   - 3D orientation indicator
   - centroid labels (when enabled in the viewer)
 - **Points depend on strategy**:
@@ -154,7 +156,7 @@ PNG export produces a high-DPI raster image that is easy to paste into slides, m
 - *“Files are enormous”*: reduce plot size and/or export at 150 DPI for drafts/slides.
 
 **Provenance**
-- PNG exports embed UTF-8 `iTXt` metadata, including a structured JSON blob with dataset identity, filter summary, and export settings. See {doc}`05_metadata_and_provenance`.
+- PNG exports embed UTF-8 `iTXt` metadata, including a structured JSON blob with dataset identity, export settings, and one record per exported panel (view, field, filters). See {doc}`05_metadata_and_provenance`.
 
 ---
 
@@ -167,6 +169,8 @@ PNG export produces a high-DPI raster image that is easy to paste into slides, m
 - PNG and Hybrid require WebGL2 plus the published camera matrices. If either is
   absent, **Export blocked** names the missing requirement and no file is
   created.
+- Every format additionally requires the **Points** render mode; a volumetric
+  smoke view is blocked rather than exported as a point cloud.
 - Diagnose unexpected output from the embedded metadata, exact export settings,
   and any `[FigureExport]` console error. Changing browsers is not an export
   strategy.

@@ -90,17 +90,36 @@ The fingerprint has exactly:
 
 - `sourceType`;
 - `datasetId`;
-- `cellCount`; and
-- `varCount`.
+- `cellCount`;
+- `varCount`; and
+- `cellOrder`, itself exactly a `dimension` (1, 2, or 3) and a 16-character
+  hexadecimal `digest` of the coordinates the session was saved against.
 
-All four must match. A GitHub load and a local folder load are different even
+All five must match. A GitHub load and a local folder load are different even
 when their files look identical. Fix the route or publication identity, then
 retry the unchanged bundle. Cellucid does not restore floating layout alone or
 skip filters/highlights.
 
-If the sender changed cell order, fields, categories, embeddings, or gene order
-while reusing the same lightweight identity and sizes, publish a new dataset id
-and create a new session. See
+Read the message before changing anything — each cause has its own:
+
+- **"saved on a different dataset"**, naming both cell and gene counts: one of
+  the four scalars differs. Open the intended dataset.
+- **"saved while the *N*D view was shown"**: only the cell-order dimension
+  differs. Nothing is wrong with the data or the file. Switch back to the
+  dimension the message names and load again.
+- **"same name and the same number of cells and genes, but its cells are stored
+  in a different order"**: the dataset was republished re-sorted under an
+  unchanged identity. Load the version the session was saved on, or re-create
+  the selections on this one.
+- **"saved before Cellucid started recording which cells a selection
+  contains"**: the file predates the cell-order record, so its selections can
+  never be confirmed. Re-create them and save a new session file. This one is
+  not repairable by editing the file.
+
+If the sender changed fields, categories, or gene order while reusing the same
+lightweight identity and sizes, publish a new dataset id and create a new
+session — those are not covered by the digest. Changed cell order or changed
+coordinates are now caught for you. See
 {doc}`07_versioning_compatibility_and_dataset_identity`.
 
 ## Current-format rejection

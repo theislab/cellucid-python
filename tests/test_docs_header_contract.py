@@ -29,10 +29,13 @@ def test_docs_start_light_and_only_expose_the_web_app_header_link() -> None:
     assert theme_options["navbar_end"] == ["theme-switcher", "navbar-icon-links"]
     assert theme_options["secondary_sidebar_items"] == ["page-toc"]
     assert "use_edit_page_button" not in theme_options
+    # The header link is navigational, so it must use the canonical browser
+    # host (`www`), not the bare apex reserved for frozen identifiers.
+    # test_canonical_url_contract.py owns the full two-directional rule.
     assert theme_options["icon_links"] == [
         {
             "name": "Cellucid App",
-            "url": "https://cellucid.com",
+            "url": "https://www.cellucid.com",
             "icon": "fa-solid fa-globe",
         }
     ]

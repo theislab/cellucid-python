@@ -60,15 +60,27 @@ serve_anndata(
 
 ### 1) UMAP embedding in `adata.obsm`
 
-Cellucid currently expects UMAP coordinates under one of these keys:
+Cellucid reads exactly these keys:
 
-- explicit (preferred):
-  - `X_umap_1d` (shape `(n_cells, 1)`)
-  - `X_umap_2d` (shape `(n_cells, 2)`)
-  - `X_umap_3d` (shape `(n_cells, 3)`)
+- `X_umap_1d` (shape `(n_cells, 1)`)
+- `X_umap_2d` (shape `(n_cells, 2)`)
+- `X_umap_3d` (shape `(n_cells, 3)`)
 
-If no valid UMAP embedding is found, you’ll get an error like:
-“No valid UMAP embeddings found in `adata.obsm` …”.
+**Scanpy writes `X_umap`, without the suffix.** After `sc.tl.umap(adata)` the
+coordinates sit in `adata.obsm["X_umap"]`, which Cellucid does not read: the
+key is what declares the dimensionality. Declare it once:
+
+```python
+adata.obsm["X_umap_2d"] = adata.obsm["X_umap"]
+```
+
+Use `X_umap_3d` if you ran `sc.tl.umap(adata, n_components=3)`. When you serve
+a `.h5ad` or `.zarr` path rather than an in-memory object, re-save the file
+after the assignment.
+
+If nothing is declared, construction fails with
+“No supported UMAP embedding was declared in adata.obsm …”, and the message
+names every `obsm` array that could be one, with the exact statement to run.
 
 ### 2) (Optional but common) Gene expression in `adata.X`
 
@@ -81,6 +93,24 @@ Cellucid derives obs fields automatically:
 - numeric → continuous
 - categorical/string/bool → categorical
 
+Anything else — a `datetime64` collection date, a timedelta, a period — cannot
+be served, and construction fails naming that column. Either convert it
+(`adata.obs["collection_date"].astype(str)`) or name the columns you want:
+
+```python
+show_anndata(
+    adata,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    obs_keys=["cell_type", "leiden", "total_counts"],
+)
+```
+
+`obs_keys` is accepted by {func}`~cellucid.show_anndata`,
+{func}`~cellucid.serve_anndata`, {class}`~cellucid.AnnDataAdapter`, and
+`cellucid serve … --obs-key`. It also fixes the order fields appear in, and a
+column left out is not served at all.
+
 ## UMAP key resolution rules (detailed, for debugging)
 
 Cellucid reads only the explicitly dimensioned keys
@@ -89,6 +119,8 @@ Cellucid reads only the explicitly dimensioned keys
 ### Common edge cases
 
 - `X_umap_3d` exists but has shape `(n_cells, 2)` → construction fails.
+
+- `X_umap` exists (Scanpy’s own key) → construction fails; declare it as above.
 
 ### Fix pattern (recommended)
 
@@ -204,9 +236,10 @@ Notes:
 
 ## Troubleshooting (AnnData mode)
 
-### “No valid UMAP embeddings found in adata.obsm”
+### “No supported UMAP embedding was declared in adata.obsm”
 
 **Likely causes**
+- you ran `sc.tl.umap(adata)`, which writes the unsuffixed `X_umap`
 - you didn’t compute UMAP yet
 - keys are present but have wrong shape
 - `n_cells` mismatch between `adata.obsm[...]` and `adata.n_obs`
@@ -215,7 +248,18 @@ Notes:
 - print `adata.obsm.keys()` and the shapes of candidate arrays
 
 **Fix**
-- compute UMAP (Scanpy) and store explicit keys (`X_umap_2d` / `X_umap_3d`)
+- run the statement the error prints, e.g.
+  `adata.obsm["X_umap_2d"] = adata.obsm["X_umap"]`
+- or compute UMAP (Scanpy) and store explicit keys (`X_umap_2d` / `X_umap_3d`)
+
+### “obs field ‘…’ has unsupported dtype”
+
+**Likely causes**
+- `adata.obs` carries a `datetime64`, timedelta, or period column
+
+**Fix**
+- convert the column to a string, or pass `obs_keys=[...]` naming the columns
+  to serve (`--obs-key` from the CLI, repeated once per column)
 
 ### “Gene ‘X’ not found in var”
 

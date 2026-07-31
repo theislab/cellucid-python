@@ -118,5 +118,5 @@ Selecting a categorical observation field colors the embedding and exposes its c
 
 ## Next steps
 
-- `04_common_filter_types_document_every_filter_the_ui_exposes` (what filters exist)
-- `07_troubleshooting_filtering` (common “filter stack confusion” failures)
+- {doc}`04_common_filter_types_document_every_filter_the_ui_exposes` (what filters exist)
+- {doc}`07_troubleshooting_filtering` (common “filter stack confusion” failures)

@@ -126,6 +126,10 @@ def test_cli_passes_exact_identity_without_backed_state_to_zarr(
             "CLI fixture",
             "--dataset-id",
             "cli-fixture",
+            "--obs-key",
+            "cell_type",
+            "--obs-key",
+            "total_counts",
             "--vector-field-default",
             "drift_umap",
         ]
@@ -143,9 +147,11 @@ def test_cli_passes_exact_identity_without_backed_state_to_zarr(
         serve_web_ui=True,
         web_source_url="https://www.cellucid.com",
         web_cache_dir=None,
+        allowed_hosts=None,
         latent_key=None,
         dataset_name="CLI fixture",
         dataset_id="cli-fixture",
+        obs_keys=["cell_type", "total_counts"],
         vector_field_default="drift_umap",
     )
 
@@ -203,6 +209,7 @@ def test_cli_quiet_and_verbose_are_mutually_exclusive() -> None:
         (["--latent-key", "latent"], "--latent-key"),
         (["--dataset-name", "Ignored"], "--dataset-name"),
         (["--dataset-id", "ignored"], "--dataset-id"),
+        (["--obs-key", "cell_type"], "--obs-key"),
         (
             ["--vector-field-default", "velocity_umap"],
             "--vector-field-default",
@@ -281,3 +288,98 @@ def test_cli_does_not_reclassify_import_error_by_message_text(
         pytest.raises(ImportError, match="unrelated text"),
     ):
         _run_serve(args)
+
+
+def test_cli_forwards_every_repeated_allowed_host_to_the_prepared_server(
+    tmp_path: Path,
+) -> None:
+    """`--allowed-host` is the operator's explicit reverse-proxy declaration."""
+    from cellucid.cli import _run_serve, create_parser
+
+    export = tmp_path / "export"
+    _write_cli_export(export)
+    args = create_parser().parse_args(
+        [
+            "serve",
+            str(export),
+            "--quiet",
+            "--allowed-host",
+            "hub.example.org",
+            "--allowed-host",
+            "other.example.org",
+        ]
+    )
+
+    with mock.patch("cellucid.server.serve") as serve:
+        _run_serve(args)
+
+    serve.assert_called_once_with(
+        data_dir=str(export),
+        port=8765,
+        host="127.0.0.1",
+        open_browser=True,
+        quiet=True,
+        serve_web_ui=True,
+        web_source_url="https://www.cellucid.com",
+        web_cache_dir=None,
+        allowed_hosts=["hub.example.org", "other.example.org"],
+    )
+
+
+def test_cli_forwards_every_repeated_allowed_host_to_the_anndata_server(
+    tmp_path: Path,
+) -> None:
+    from cellucid.cli import _run_serve, create_parser
+
+    store = tmp_path / "fixture.zarr"
+    store.mkdir()
+    (store / ".zgroup").write_text('{"zarr_format":2}', encoding="utf-8")
+    (store / ".zattrs").write_text("{}", encoding="utf-8")
+    args = create_parser().parse_args(
+        [
+            "serve",
+            str(store),
+            "--quiet",
+            "--dataset-name",
+            "CLI fixture",
+            "--dataset-id",
+            "cli-fixture",
+            "--allowed-host",
+            "hub.example.org",
+        ]
+    )
+
+    with mock.patch("cellucid.anndata_server.serve_anndata") as serve:
+        _run_serve(args)
+
+    assert serve.call_args.kwargs["allowed_hosts"] == ["hub.example.org"]
+
+
+def test_cli_declares_no_allowed_host_by_default(tmp_path: Path) -> None:
+    """No flag must mean exactly the loopback-only rule, not a wider one."""
+    from cellucid.cli import _run_serve, create_parser
+
+    export = tmp_path / "export"
+    _write_cli_export(export)
+    args = create_parser().parse_args(["serve", str(export), "--quiet"])
+
+    with mock.patch("cellucid.server.serve") as serve:
+        _run_serve(args)
+
+    assert serve.call_args.kwargs["allowed_hosts"] is None
+
+
+def test_cli_reports_an_unsupported_allowed_host_without_serving(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    from cellucid.cli import main
+
+    export = tmp_path / "export"
+    _write_cli_export(export)
+    status = main(
+        ["serve", str(export), "--quiet", "--allowed-host", "*.example.org"]
+    )
+
+    assert status == 1
+    assert "wildcard" in capsys.readouterr().err

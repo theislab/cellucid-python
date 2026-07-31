@@ -331,7 +331,8 @@ If you have more categories, use:
 
 If the viewer’s gene search feels wrong:
 - you probably picked the wrong `var_gene_id_column`
-- or gene IDs are duplicated or are not exact portable filename components
+- or gene IDs are duplicated anywhere in `var`, or the exported ones are not
+  exact portable filename components
 
 Confirm:
 ```python

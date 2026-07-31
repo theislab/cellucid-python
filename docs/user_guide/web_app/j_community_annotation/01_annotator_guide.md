@@ -2,7 +2,7 @@
 
 This guide is for people contributing **votes, suggestions, and comments** in Cellucid.
 
-If you are setting up the annotation repo or changing which columns are annotatable, read `02_author_guide`.
+If you are setting up the annotation repo or changing which columns are annotatable, read {doc}`02_author_guide`.
 
 ---
 
@@ -388,7 +388,7 @@ Common causes:
 
 ## 13) Troubleshooting (Massive)
 
-If you don’t find your issue here, also check `03_ui_reference` (it catalogs UI controls and more error messages).
+If you don’t find your issue here, also check {doc}`03_ui_reference` (it catalogs UI controls and more error messages).
 
 ### I can’t find the repo at “Select an annotation repository”
 

@@ -61,7 +61,10 @@ Marker Genes supports three modes:
 
 ### 4) Use cached results
 
-If enabled, Cellucid can reuse cached marker results for the same dataset + group-by field + settings.
+If enabled, Cellucid can reuse cached marker results for the same dataset + group-by field + settings,
+and only when the group-by field still assigns exactly the same cells to the same groups.
+Editing that field — merging two categories, or moving one to unassigned — changes the grouping, so the
+next run is recomputed rather than read from the cache.
 This can make repeated runs much faster.
 
 ### 5) Performance Settings (collapsible)
@@ -93,6 +96,44 @@ Markers are filtered by thresholds (typically controlled in the expanded view):
 - |log2FC| threshold (default ~1.0)
 - and whether to use adjusted p-values by default
 
+### Genes that could not be tested
+
+The minimum group size is checked twice. The first check is on the group as a
+whole and refuses the run (see
+[Small groups can block the whole run](#small-groups-can-block-the-whole-run)).
+The second is **per gene, per group**, on the cells that actually carry a
+measured value for that gene.
+
+A group is compared against the rest for a given gene only when **both sides
+hold at least `max(2, minimum group size)` cells with a measured value** — 10 by
+default, and never fewer than two, because neither the rank test nor Welch says
+anything about a single observation. When either side falls short, no comparison
+is run and the gene is reported as **not tested** for that group. It is not a
+failure: it is a property of the data, and a run that hits it completes
+normally.
+
+An untested gene carries no p-value, so:
+
+- **it is excluded from the Benjamini–Hochberg denominator `m`.** Each group is
+  its own family — one one-vs-rest comparison across every gene in the panel —
+  and `m` is the number of genes that produced a p-value *in that group*, not
+  the size of the panel. Counting untested genes would deflate every adjusted
+  p-value in the group: an untested gene is not a gene with p = 1;
+- **it never enters the Top-N ranking**, because it has no rank to compete with;
+- **it has no adjusted p-value**, and can never be counted as significant.
+
+This is the same rule the differential-expression path applies — see
+{doc}`06_analysis_mode_differential_expression_de` — so an FDR quoted from
+Marker Genes and one quoted from DE mean the same thing.
+
+:::{important}
+`m` is per group, and two groups in the same run can have different denominators.
+When you quote an FDR in a figure caption or a methods section, quote the
+**genes tested** count shown for that group, not the size of your gene panel.
+They are the same number only when every gene passed the per-gene cell check for
+that group.
+:::
+
 ---
 
 ## Outputs (what you see)
@@ -102,6 +143,31 @@ Markers are filtered by thresholds (typically controlled in the expanded view):
 - Select a group from a dropdown.
 - View the top markers for that group.
 - Use Expand (modal) for the full table and exports.
+
+In the expanded view, a line above the marker table reports the denominator that
+group's adjusted p-values were divided by:
+
+```text
+1,204 genes tested (FDR denominator) · 96 not tested (fewer than 10 cells with a measured value in this group or in the rest)
+```
+
+- The `· … not tested (…)` half appears only when that group has at least one
+  untested gene.
+- The number in *fewer than N cells* is the per-side requirement actually
+  applied, `max(2, minimum group size)`.
+- The line is hidden where there is no denominator to report: Custom Genes mode
+  runs no comparison, and partial results shown while a run is still streaming
+  have not corrected anything yet.
+
+When a group has no markers to show, the message distinguishes the two reasons:
+
+- **“No gene could be tested for this group, so it has no markers.”** — the
+  denominator is zero. Nothing was compared, so no threshold could have excluded
+  anything. Lowering the thresholds will not help; see
+  [Genes that could not be tested](#genes-that-could-not-be-tested).
+- **“No markers for selected group at the current thresholds.”** — genes *were*
+  tested, and none passed the current p-value and |log2FC| cutoffs. Relaxing the
+  thresholds may help.
 
 ### Clustered mode
 
@@ -146,6 +212,10 @@ Workarounds:
 - merge rare categories into “Other” in preprocessing,
 - create a derived categorical field that excludes rare categories.
 
+This is the only version of the check that stops a run. A *gene* that falls
+below the minimum on either side is reported as not tested and the run
+continues; see [Genes that could not be tested](#genes-that-could-not-be-tested).
+
 ### No markers found
 
 Common causes:
@@ -153,6 +223,12 @@ Common causes:
 - groups are extremely similar,
 - gene expression scale is inappropriate for the test (e.g., already heavily transformed),
 - missing gene expression.
+
+Read the *genes tested* line above the table before changing anything. If it
+reports zero tested genes for the group, the thresholds are not the cause: no
+gene in the panel had enough cells with a measured value on both sides, and the
+group's own message says so rather than blaming the thresholds. A sparse matrix
+or a heavily subset gene panel is the usual reason.
 
 ### Caching confusion
 

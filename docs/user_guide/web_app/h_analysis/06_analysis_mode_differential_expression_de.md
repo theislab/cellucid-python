@@ -63,7 +63,12 @@ See {doc}`01_analysis_mental_model` for the visibility vs membership distinction
 
 DE requires enough cells in both groups:
 - the implementation enforces a minimum of **10 valid cells** per group (default).
-- if either side is below the minimum, genes may show as invalid/NaN.
+- if either page is smaller than the minimum, the whole run is refused.
+- the check is then repeated **per gene**, on the cells that actually carry a
+  measured value for that gene. A gene that falls below the minimum on either
+  side is skipped: it gets no p-value, no adjusted p-value, and is excluded from
+  the FDR correction. The summary reports how many genes this happened to — see
+  [Which genes the correction is applied to](#which-genes-the-correction-is-applied-to).
 
 ---
 
@@ -128,6 +133,29 @@ Default behavior:
 - the volcano plot uses **adjusted p-values** by default,
 - and many summary counts are framed as “FDR < 0.05”.
 
+### Which genes the correction is applied to
+
+Benjamini–Hochberg needs a denominator: the number of tests in the family being
+corrected. Cellucid uses **only the genes that produced a p-value**.
+
+A gene produces no p-value when one of the two groups has fewer than the
+minimum number of cells with a measured value for that gene (10 by default, see
+[Minimum group size](#minimum-group-size)). Such a gene was never tested, so it
+is excluded from the denominator, its **adjustedPValue** stays empty, and it can
+never be counted as significant.
+
+This matters whenever your pages are small or your panel is sparse: with 20,000
+panel genes of which 8,000 fail the minimum cell check, the correction runs at
+**m = 12,000**, not 20,000. Correcting at 20,000 would have produced adjusted
+p-values roughly 1.7× larger.
+
+:::{important}
+When you quote an FDR in a figure caption or a methods section, quote the number
+of **genes tested** — the summary row labelled *Genes tested (FDR denominator)* —
+not the size of your gene panel. They are the same number only when every gene
+passed the minimum cell check.
+:::
+
 ---
 
 ## Outputs (what you see)
@@ -135,10 +163,16 @@ Default behavior:
 ### Summary stats (quick sanity check)
 
 You’ll see:
-- Genes tested
-- Significant (FDR < 0.05)
-- Upregulated
-- Downregulated
+
+| Row | What it counts |
+| --- | --- |
+| **Genes tested (FDR denominator)** | Genes that produced a p-value. This is the `m` Benjamini–Hochberg used. |
+| **Not tested (< N cells with a value)** | Genes skipped before testing because a group had fewer than `N` cells with a measured value (`N` = the minimum group size, 10 by default). These have no p-value and no adjusted p-value. |
+| **Significant (FDR < 0.05)** | Tested genes passing the current p-value and log2FC thresholds. Always a subset of *Genes tested*. |
+| **Upregulated** | Significant genes with log2FC > 0. |
+| **Downregulated** | Significant genes with log2FC < 0. |
+
+*Genes tested* + *Not tested* is the size of the gene panel that was scanned.
 
 Upregulated/downregulated are defined by the sign of log2FC (Page A relative to Page B).
 
@@ -232,6 +266,11 @@ Common causes:
 - thresholds hide most points (p-value threshold or log2FC threshold),
 - adjusted p-values are much larger than raw (expected after BH),
 - many genes have NaN due to insufficient valid cells.
+
+How to confirm the last one:
+- read the **Not tested (< N cells with a value)** row in the summary stats. If
+  it is a large fraction of the panel, most of your genes never entered the
+  analysis and the volcano plot has nothing to draw for them.
 
 Fix:
 - lower log2FC threshold,

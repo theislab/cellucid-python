@@ -7,13 +7,20 @@
 - `cellucid-r/R/cellucid_prepare.R`
   - exports `cellucid_prepare()`
   - contains the exporter implementation and helper functions
+- `cellucid-r/src/export_lock.c`
+  - the native export lock reached through `.Call()`
 - `cellucid-r/man/cellucid_prepare.Rd`
-  - R help page generated/maintained for Bioconductor-style docs
+  - the R help page, hand-written and authoritative. This package runs no
+    documentation generator and `R/` holds no roxygen comments, so edit the
+    `.Rd` file directly.
+- `cellucid-r/NAMESPACE`
+  - hand-written too, and the only place the `useDynLib()` registration for
+    `src/export_lock.c` exists
 - `cellucid-r/tests/testthat/`
   - unit tests validating core files, normalization, quantization, connectivity, vector fields
 - `cellucid-r/vignettes/cellucid.Rmd`
   - minimal vignette showing a small export workflow
-- `cellucid-r/PUBLISHING.md`
+- `cellucid-r/publishing.md`
   - release/publishing checklist
 
 ## Data export pipeline (what happens in `cellucid_prepare()`)

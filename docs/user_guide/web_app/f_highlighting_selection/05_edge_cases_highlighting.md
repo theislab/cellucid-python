@@ -2,7 +2,7 @@
 
 This page is a “weird but expected” checklist for highlighting/selection. It is not a bug tracker; it’s the set of behaviors that commonly surprise users.
 
-If you’re actively stuck, use `06_troubleshooting_highlighting` (it’s organized by symptoms and fixes).
+If you’re actively stuck, use {doc}`06_troubleshooting_highlighting` (it’s organized by symptoms and fixes).
 
 ## Edge case index (scan first)
 
@@ -26,7 +26,7 @@ If you’re actively stuck, use `06_troubleshooting_highlighting` (it’s organi
 - The highlight count can read something like “0 of N highlighted cells visible”.
 
 **Why this happens**
-- Filters can hide *all* cells in the current view (`../e_filtering/index`).
+- Filters can hide *all* cells in the current view ({doc}`../e_filtering/index`).
 - In very large datasets, LOD/downsampling can reduce the number of drawn points when zoomed out (so “visible” can drop even if you did not change filters).
 
 **What to do**
@@ -198,6 +198,6 @@ highlights. Load the exact dataset identity, then restore the unchanged session.
 ---
 
 ## Related pages
-- `01_highlight_mental_model`
-- `04_selection_synchronization`
-- `06_troubleshooting_highlighting`
+- {doc}`01_highlight_mental_model`
+- {doc}`04_selection_synchronization`
+- {doc}`06_troubleshooting_highlighting`

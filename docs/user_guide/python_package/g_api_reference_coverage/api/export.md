@@ -66,6 +66,18 @@ not use a reserved Windows device name. `dataset_name` is human-readable
 Unicode, but must be non-empty and have no surrounding whitespace or control
 characters.
 
+Every string Cellucid prints verbatim obeys the same rule: `dataset_name`,
+`dataset_description`, `source_name`, `source_url`, `source_citation`, and every
+string category label in `obs`. Each must be free of control characters
+(`U+0000`–`U+001F`, `U+007F`–`U+009F`), free of the zero-width characters
+`U+200B`, `U+2060`, and `U+FEFF`, and without leading or trailing whitespace of
+any kind — `U+00A0` NO-BREAK SPACE included. `dataset_description` may be the
+empty string; the others may not be empty. `prepare()` rejects the complete
+candidate export and names the offending value rather than trimming it, because
+trimming rewrites an annotation you did not ask to change and can merge two
+distinct categories into one. See
+{doc}`../../c_data_preparation_api/04_obs_cell_metadata`.
+
 ---
 
 ## Practical path (what to decide before you export)
@@ -149,6 +161,8 @@ Notes:
 ### Missing embeddings
 - If none of `X_umap_1d`, `X_umap_2d`, `X_umap_3d` are provided, export fails.
 - Only `X_umap_1d`, `X_umap_2d`, and `X_umap_3d` are accepted keyword names.
+- `X_umap_1d` accepts a plain `(n_cells,)` vector as the single column it
+  declares; `X_umap_2d` and `X_umap_3d` require the full 2D array.
 
 ### Shape mismatches
 - All inputs must agree on `n_cells` (rows).
@@ -165,9 +179,13 @@ Notes:
 
 ### Vector field validation
 - `vector_fields` must be a dict of arrays (or sparse matrices).
-- Each vector field must be 1D or 2D and have 1/2/3 components (for 1D/2D/3D overlays).
 - Keys must match `<field>_umap_1d`, `<field>_umap_2d`, or
-  `<field>_umap_3d`, and the matching embedding dimension must exist.
+  `<field>_umap_3d` exactly, and the matching embedding dimension must exist.
+  An unsuffixed key such as `velocity_umap` is rejected: the key declares the
+  dimension, it is never inferred from the array's width.
+- Each vector field must be shaped `(n_cells, dim)` for the `dim` its key
+  declares. A `_1d` key also accepts a plain `(n_cells,)` vector as the single
+  column it declares, exactly as `X_umap_1d` does.
 
 ### NaN/Inf and constant-value fields
 - Scientific arrays must contain real finite values representable as
@@ -202,6 +220,16 @@ Fix:
 ### Symptom: “obs has N rows, but embeddings have M cells”
 Fix:
 - Ensure `obs` row order corresponds to the embedding row order (and gene expression if present).
+
+### Symptom: “obs must be a pandas DataFrame, got dict” (or `ndarray`, `list`, …)
+What’s happening:
+- `obs` and `var` must be `pandas.DataFrame` objects. Anything else is rejected
+  with a `TypeError` naming the type you passed; the exporter never guesses a
+  row count from a mapping or an array.
+
+Fix:
+- Wrap the columns yourself: `obs=pd.DataFrame({"cell_type": labels})`.
+- From AnnData, pass `obs=adata.obs` and `var=adata.var` directly.
 
 ### Symptom: “Export folder is huge”
 Fix:

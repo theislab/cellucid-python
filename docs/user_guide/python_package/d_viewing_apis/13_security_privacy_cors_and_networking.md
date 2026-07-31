@@ -53,6 +53,19 @@ By default, the server binds to:
 
 Meaning: only your machine can access it.
 
+A loopback bind is still not the whole boundary. Any page you have open can
+re-point its own DNS name at `127.0.0.1` (DNS rebinding), after which the
+browser treats this server as same-origin and applies no CORS check. Cellucid
+closes that by validating `Host` on every request before routing: only one
+well-formed authority naming `localhost` or a loopback IP literal on the bound
+port is served, and everything else gets `421 Misdirected Request`.
+
+Behind a reverse proxy (`jupyter-server-proxy`, a Colab proxy port), the
+forwarded `Host` is the proxy's, so it must be declared:
+`--allowed-host hub.example.org` or `allowed_hosts=["hub.example.org"]`. One
+bare host name per entry, no port, no scheme, no wildcard. Details:
+{doc}`../b_concepts_mental_models/06_privacy_security_and_offline_vs_online`.
+
 ### Risky behavior: `--host 0.0.0.0`
 
 Binding to `0.0.0.0` makes the server reachable from other machines on the network (subject to firewall rules).

@@ -41,6 +41,7 @@ import logging
 import re
 import threading
 import webbrowser
+from collections.abc import Sequence
 from functools import partial
 from http import HTTPStatus
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -60,6 +61,7 @@ from ._server_base import (
     print_server_banner,
     print_step,
     print_success,
+    require_allowed_hosts,
     require_server_port,
 )
 from .anndata_adapter import AnnDataAdapter, _classify_anndata_path
@@ -146,6 +148,7 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         payload_lengths: dict[str, int],
         serve_web_ui: bool,
         web_cache_dir: Path,
+        allowed_hosts: frozenset[str],
         **kwargs,
     ):
         self.adapter = adapter
@@ -154,6 +157,8 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         self.payload_lengths = payload_lengths
         self.serve_web_ui = serve_web_ui
         self.web_cache_dir = web_cache_dir
+        # Read by CORSMixin.parse_request, which runs inside super().__init__().
+        self.allowed_hosts = allowed_hosts
         # We serve "virtual" files via explicit route handlers, but still want
         # the normal BaseHTTPRequestHandler lifecycle (parse_request, etc.).
         # `directory` is unused because we never call the default file-serving
@@ -526,10 +531,12 @@ class AnnDataServer:
         centroid_min_points: int = 10,
         dataset_name: str,
         dataset_id: str,
+        obs_keys: Sequence[str] | None = None,
         vector_field_default: str | None = None,
         serve_web_ui: bool = True,
         web_source_url: str = CELLUCID_WEB_URL,
         web_cache_dir: str | Path | None = None,
+        allowed_hosts: Sequence[str] | None = None,
     ) -> None:
         """
         Initialize the server.
@@ -537,7 +544,8 @@ class AnnDataServer:
         Parameters
         ----------
         data : str, Path, or AnnData
-            Path to h5ad file or AnnData object.
+            Path to h5ad file or AnnData object. A leading ``~`` in a path is
+            expanded to the user's home directory.
         port : int
             Port to serve on.
         host : str
@@ -564,6 +572,10 @@ class AnnDataServer:
             Portable 1-180 byte ASCII identifier beginning with a letter or
             digit and otherwise using only letters, digits, ``.``, ``_``, or
             ``-``; it cannot end in ``.`` or use a Windows device name.
+        obs_keys : sequence of str, optional
+            Exact ``obs`` columns to serve, in this order. If None, every
+            column is served. Naming the columns leaves out a column Cellucid
+            cannot serve, such as a ``datetime64`` collection date.
         vector_field_default : str, optional
             Exact field id required when multiple UMAP vector fields exist.
         serve_web_ui : bool
@@ -572,6 +584,12 @@ class AnnDataServer:
             Origin publishing the web asset inventory.
         web_cache_dir : str or Path, optional
             Directory holding the active verified web build.
+        allowed_hosts : sequence of str, optional
+            Extra ``Host`` names this server answers to, needed only behind a
+            reverse proxy such as ``jupyter-server-proxy``. Each entry is one
+            bare DNS name or IP literal — no port, no scheme, no wildcard — and
+            is matched on any port. Declaring names also applies the ``Host``
+            check to a non-loopback bind.
         """
         dataset_name = _require_dataset_name(
             dataset_name,
@@ -583,6 +601,7 @@ class AnnDataServer:
         )
         self.port = require_server_port(port)
         self.host = host
+        self.allowed_hosts = require_allowed_hosts(allowed_hosts)
         if type(open_browser) is not bool:
             raise TypeError("open_browser must be a boolean")
         if type(quiet) is not bool:
@@ -610,6 +629,7 @@ class AnnDataServer:
         format_name: str
         self.data_format: str
         if isinstance(data, str | Path):
+            data = Path(data).expanduser()
             format_name = _classify_anndata_path(data)
             self.data_source = str(data)
             self.data_format = format_name
@@ -644,6 +664,7 @@ class AnnDataServer:
                 centroid_min_points=centroid_min_points,
                 dataset_name=dataset_name,
                 dataset_id=dataset_id,
+                obs_keys=obs_keys,
                 vector_field_default=vector_field_default,
             )
         else:
@@ -656,6 +677,7 @@ class AnnDataServer:
                 centroid_min_points=centroid_min_points,
                 dataset_name=dataset_name,
                 dataset_id=dataset_id,
+                obs_keys=obs_keys,
                 vector_field_default=vector_field_default,
             )
 
@@ -912,6 +934,7 @@ class AnnDataServer:
                 payload_lengths=self._payload_lengths,
                 serve_web_ui=self.serve_web_ui,
                 web_cache_dir=self.web_cache_dir,
+                allowed_hosts=self.allowed_hosts,
             )
 
             self._server = HTTPServer((self.host, self.port), handler)
@@ -1097,10 +1120,12 @@ def serve_anndata(
     centroid_min_points: int = 10,
     dataset_name: str,
     dataset_id: str,
+    obs_keys: Sequence[str] | None = None,
     vector_field_default: str | None = None,
     serve_web_ui: bool = True,
     web_source_url: str = CELLUCID_WEB_URL,
     web_cache_dir: str | Path | None = None,
+    allowed_hosts: Sequence[str] | None = None,
 ) -> AnnDataServer:
     """
     Serve an AnnData object or h5ad file directly.
@@ -1111,7 +1136,8 @@ def serve_anndata(
     Parameters
     ----------
     data : str, Path, or AnnData
-        Path to h5ad file or AnnData object.
+        Path to h5ad file or AnnData object. A leading ``~`` in a path is
+        expanded to the user's home directory.
     port : int
         Port to serve on (default: 8765).
     host : str
@@ -1138,6 +1164,10 @@ def serve_anndata(
         Portable 1-180 byte ASCII identifier beginning with a letter or digit
         and otherwise using only letters, digits, ``.``, ``_``, or ``-``; it
         cannot end in ``.`` or use a Windows device name.
+    obs_keys : sequence of str, optional
+        Exact ``obs`` columns to serve, in this order. If None, every column is
+        served. Naming the columns leaves out a column Cellucid cannot serve,
+        such as a ``datetime64`` collection date.
     vector_field_default : str, optional
         Exact field id required when multiple UMAP vector fields exist.
     serve_web_ui : bool
@@ -1146,6 +1176,12 @@ def serve_anndata(
         Origin publishing the web asset inventory.
     web_cache_dir : str or Path, optional
         Directory holding the active verified web build.
+    allowed_hosts : sequence of str, optional
+        Extra ``Host`` names this server answers to, needed only behind a
+        reverse proxy such as ``jupyter-server-proxy``. Each entry is one bare
+        DNS name or IP literal — no port, no scheme, no wildcard — and is
+        matched on any port.
+
     Returns
     -------
     AnnDataServer
@@ -1182,10 +1218,12 @@ def serve_anndata(
         centroid_min_points=centroid_min_points,
         dataset_name=dataset_name,
         dataset_id=dataset_id,
+        obs_keys=obs_keys,
         vector_field_default=vector_field_default,
         serve_web_ui=serve_web_ui,
         web_source_url=web_source_url,
         web_cache_dir=web_cache_dir,
+        allowed_hosts=allowed_hosts,
     )
     server.start()
     return server

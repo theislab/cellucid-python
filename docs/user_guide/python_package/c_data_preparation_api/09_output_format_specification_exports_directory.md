@@ -17,16 +17,26 @@ If you just need a high-level overview, start here:
 
 ```text
 my_export/
-├── dataset_identity.json
+├── dataset_identity.json                      # always required
+├── obs_manifest.json                          # always required
+├── obs/                                       # payload per declared obs field
 └── points_2d.bin(.gz) or points_3d.bin(.gz)   # at least one points file required
 ```
+
+`obs_manifest.json` is **not optional and never degrades gracefully**. The web
+app loads it as a required file for every dataset and fails the whole dataset
+when it is absent, exactly as it does for a missing `dataset_identity.json`.
+Neither writer can produce an export without it: `obs` is a required argument of
+{func}`~cellucid.prepare` and of `cellucid_prepare()`, and both create the
+`obs/` directory on every export. `obs/` is empty only when the observation
+frame declares no fields at all.
 
 ### Typical full export folder (recommended)
 
 ```text
 my_export/
-├── dataset_identity.json
-├── obs_manifest.json
+├── dataset_identity.json             # required
+├── obs_manifest.json                 # required
 ├── var_manifest.json                 # optional (gene expression)
 ├── connectivity_manifest.json        # optional (KNN edges)
 ├── points_1d.bin(.gz)                # optional
@@ -42,11 +52,38 @@ my_export/
 
 ## Key naming and safety rules (applies everywhere)
 
-Many paths in manifests use `{key}` template tokens. Observation keys and gene
-IDs must already satisfy the one portable identifier contract; neither the
-exporter nor loader rewrites them. The exact identifier appears in the
-manifest and path. Unsafe identifiers and case-insensitive collisions reject
+Many paths in manifests use `{key}` template tokens. Every exported observation
+key and gene ID must already satisfy the one portable identifier contract;
+neither the exporter nor loader rewrites them. The exact identifier appears in
+the manifest and path. Unsafe identifiers and case-insensitive collisions reject
 the complete candidate (see {doc}`02_input_requirements_global`).
+
+The contract covers exactly the identifiers this directory contains. An `obs`
+column left out by `obs_keys`, or a `var` gene left out by `gene_identifiers`,
+produces no manifest entry and no payload file, so it is not held to it. Gene
+IDs are additionally required to be distinct across all of `var`, which is what
+makes `gene_identifiers` resolve one row per identifier.
+
+## Exact key sets (applies to every manifest)
+
+Every JSON object in this format is validated against an **exact key set**, not
+a minimum one. This is the single rule most often missed when a manifest is
+written or patched by hand:
+
+- a **missing** key is fatal, and
+- an **unknown extra** key is equally fatal — there is no room for private
+  annotations, editor metadata, or comment keys.
+
+The rule governs `dataset_identity.json` (and its nested `stats`, `embeddings`,
+`export_settings`, `source`, and `vector_fields` objects), `obs_manifest.json`,
+`var_manifest.json`, `connectivity_manifest.json`, the manifest schema objects
+(`_obsSchemas.continuous`, `_obsSchemas.categorical`, `_varSchema`), and each
+categorical centroid entry. The key lists in this page are therefore complete
+specifications, not examples: emit every key shown and nothing else.
+
+Only `dataset_identity.json` has optional keys at all — `created_at`,
+`export_settings`, `source`, and `vector_fields` may be absent, and everything
+else in it is required.
 
 ---
 
@@ -64,6 +101,10 @@ It provides:
 
 ### Schema (current exporter)
 
+The reader validates this object against an exact key set, so a key that is not
+listed here makes the dataset fail to load. In this example
+`cellucid_data_version` is `0.9.1`. <!-- CELLUCID_VERSION -->
+
 ```json
 {
   "version": 2,
@@ -71,7 +112,6 @@ It provides:
   "name": "PBMC demo",
   "description": "",
   "created_at": "2026-01-01T00:00:00Z",
-  "_cellucid_version_marker": "CELLUCID_VERSION",
   "cellucid_data_version": "0.9.1",
   "stats": {
     "n_cells": 10000,
@@ -91,8 +131,8 @@ It provides:
     }
   },
   "obs_fields": [
-    { "key": "leiden", "kind": "category", "n_categories": 12 },
-    { "key": "pct_mito", "kind": "continuous" }
+    { "key": "pct_mito", "kind": "continuous" },
+    { "key": "leiden", "kind": "category", "n_categories": 12 }
   ],
   "export_settings": {
     "compression": 6,
@@ -126,7 +166,26 @@ It provides:
 Notes:
 - `vector_fields` is present only if you exported vectors.
 - `source` is present only if you provided `source_*` metadata.
-- `n_genes` currently reflects the input matrix gene count (not necessarily the exported gene subset if you used `gene_identifiers`).
+- `name`, `description`, and `source.name` / `source.url` / `source.citation`
+  are shown to the reader verbatim, so they obey the same display-text rule as
+  a string category label: no control characters, no zero-width characters, and
+  no leading or trailing whitespace. `description` may be the empty string;
+  the others may not be empty. Both writers reject a candidate export that
+  breaks the rule, and `generate_datasets_manifest()` rejects a published
+  `dataset_identity.json` whose `name` or `description` breaks it.
+- `n_genes` is the **exported** gene count, not the input matrix gene count. If
+  you narrow the export with `gene_identifiers`, `n_genes` is the size of that
+  subset. Both writers derive it from the exported field list, and the reader
+  rejects the dataset unless `n_genes` equals `var_manifest.json` `fields`
+  length exactly. Use `0` when no gene expression was exported; neither writer
+  emits `var_manifest.json` in that case.
+- `stats.n_edges` must equal `connectivity_manifest.json` `n_edges`, and
+  `stats.has_connectivity` must agree with whether that manifest exists.
+- `obs_fields` must list **every continuous field first, then every categorical
+  field**, in the same order as `obs_manifest.json`. Both writers always emit
+  that order, and the reader compares the two lists position by position for
+  `key`, `kind`, and `n_categories` — any other order fails to load. Within each
+  group the order is the order the fields were exported in.
 
 ---
 
@@ -150,14 +209,28 @@ For each exported dimensionality:
 
 ### Manifest structure (compact_v1)
 
-Top-level keys:
+Top-level keys — all eight are required, and no other key is allowed:
 
 - `"_format": "compact_v1"`
 - `"n_points": <n_cells>`
+- `"centroid_outlier_quantile": <number in (0, 1) or null>`
+- `"latent_key": "latent_space"`
 - `"compression": <gzip level or null>`
 - `"_obsSchemas": { ... }`
 - `"_continuousFields": [...]`
 - `"_categoricalFields": [...]`
+
+`centroid_outlier_quantile` records the quantile used to compute the per-category
+outlier payloads. Both writers accept `None`/`NULL` or a finite number greater
+than `0.5` and less than `1`, and default to `0.95`; the reader accepts `null`
+or any finite number strictly between `0` and `1`.
+
+`latent_key` is always the exact string `"latent_space"` in exports written by
+either writer. The reader requires the key to be present and to be `null` or a
+non-empty string.
+
+A manifest that omits `centroid_outlier_quantile` or `latent_key` is rejected by
+both writers' own validators and fails to load in the web app.
 
 #### `_obsSchemas`
 
@@ -187,6 +260,11 @@ Example (quantized continuous + quantized outliers):
 Notes:
 - `{key}` is the exact previously validated portable identifier.
 - `{ext}` for codes is chosen based on the field’s codes dtype (`uint8 → u8`, `uint16 → u16`).
+- `_obsSchemas` itself is an exact key set: it holds `continuous` only when
+  `_continuousFields` is non-empty, `categorical` only when
+  `_categoricalFields` is non-empty, and nothing else.
+- `quantizationBits` appears on the continuous schema only when
+  `"quantized": true`.
 
 #### `_continuousFields`
 
@@ -201,10 +279,25 @@ Each entry is either:
 - `[key, categories, codesDtype, codesMissingValue, centroidsByDim, outlierMinValue, outlierMaxValue]` (quantized outliers)
 
 Where:
-- `categories` is a list of strings
+- `categories` is a list of JSON scalars — strings, booleans, or finite numbers
+  — that is unique under its exact JSON representation. Every **string** label
+  must additionally be text a reader can see: non-empty, free of control
+  characters (`U+0000`–`U+001F`, `U+007F`–`U+009F`), free of the zero-width
+  characters `U+200B`, `U+2060`, and `U+FEFF`, and without leading or trailing
+  whitespace. No two string labels may collapse to the same text when runs of
+  whitespace are reduced to one space. Both writers reject a candidate export
+  that breaks either rule; neither writer trims a label. See
+  [Category labels must read as the value they store](python_package-category-label-display-text).
 - `codesDtype` is `"uint8"` or `"uint16"`
 - `codesMissingValue` is `255` or `65535`
-- `centroidsByDim` is a dict keyed by dimension strings (`"1"`, `"2"`, `"3"`) mapping to centroid lists
+- `centroidsByDim` is a dict keyed by dimension strings (`"1"`, `"2"`, `"3"`)
+  mapping to centroid lists. Each centroid is an exact three-key object
+  `{"category": <declared category>, "position": [<dim finite numbers>],
+  "n_points": <0..n_points>}`, with at most one entry per category.
+
+The two arrays are read in order — every `_continuousFields` entry first, then
+every `_categoricalFields` entry — and that concatenation is the order
+`dataset_identity.json` `obs_fields` must reproduce exactly.
 
 ### Binary payload files under `obs/`
 
@@ -227,7 +320,7 @@ Quantized outlier/categorical missing markers:
 
 ### Manifest structure (compact_v1)
 
-Top-level keys:
+Top-level keys — all seven are required, and no other key is allowed:
 - `"_format": "compact_v1"`
 - `"n_points": <n_cells>`
 - `"var_gene_id_column": null | "<exact-column>"`
@@ -235,6 +328,11 @@ Top-level keys:
 - `"quantization": 8 | 16 | null`
 - `"_varSchema": { ... }`
 - `"fields": [...]`
+
+`fields` length must equal `dataset_identity.json` `stats.n_genes`. When
+`stats.n_genes` is `0` neither writer emits this file, and the reader never
+looks for it — `dataset_identity.json` is the index that decides which optional
+manifests are fetched at all.
 
 #### `_varSchema`
 
@@ -291,7 +389,7 @@ edge list:
 - `connectivity/edges.dst.bin(.gz)`
 - `connectivity/edges.weights.f64.bin(.gz)`
 
-`connectivity_manifest.json` contains:
+`connectivity_manifest.json` contains all twelve keys below and no others:
 
 ```json
 {
@@ -310,12 +408,52 @@ edge list:
 }
 ```
 
-Notes:
-- the three arrays are aligned: `src[i]` connects to `dst[i]` with
-  little-endian Float64 weight `weights[i]`
-- indices are 0-based and refer to the exported cell row order
-- weights are finite, non-negative, and exactly symmetric in the validated
-  source graph
+### Cell index width (`index_dtype` / `index_bytes`)
+
+The width is **not fixed at `uint16`**. It is a pure function of `n_cells`, and
+both writers and the reader compute the same one:
+
+| `n_cells` | `index_dtype` | `index_bytes` |
+| --- | --- | --- |
+| `1` … `65536` | `"uint16"` | `2` |
+| `65537` … `4294967296` | `"uint32"` | `4` |
+
+Above `4294967296` cells the export is rejected: the browser contract supports
+at most the complete unsigned 32-bit index domain.
+
+The reader pins these two fields to the **smallest exact** width for the
+declared `n_cells` and rejects anything else, so a `uint32` file cannot be
+described as `uint16` and a small dataset cannot be padded up to `uint32`. Of
+the datasets shipped in `cellucid-datasets`, `garcia` (219,731 cells), `he`
+(71,650 cells), and `suo` (561,947 cells) all use `uint32`/`4`; `pancreas`
+(3,696 cells) uses `uint16`/`2`. Any reader or converter written against this
+format must handle both widths.
+
+`weight_dtype` and `weight_bytes` are the opposite case: they are always exactly
+`"float64"` and `8`.
+
+### Edge array rules
+
+- the three arrays are aligned and equally long (`n_edges` entries each):
+  `src[i]` connects to `dst[i]` with Float64 weight `weights[i]`
+- all three arrays are little-endian: unsigned integers of `index_bytes` width
+  for the endpoints, IEEE-754 binary64 for the weights
+- indices are 0-based and refer to the exported cell row order; every index is
+  less than `n_cells`
+- the graph is undirected and stored once per edge as its upper triangle:
+  every edge satisfies **`src[i] < dst[i]`**
+- edges are in **strict lexicographic order** by `(src, dst)` — strictly
+  increasing, so duplicate pairs are impossible
+- exported weights are **finite and strictly positive**. A zero weight is not a
+  zero-strength edge, it is an absent edge: dense input drops zeros, sparse
+  input must not store an explicit zero coordinate, and the reader rejects any
+  weight that is not `> 0`
+- the input graph must be finite, free of negative weights, exactly symmetric,
+  zero on the diagonal, and free of duplicate sparse coordinates; both writers
+  verify all of that before writing anything
+- `max_neighbors` is the maximum node degree of that undirected graph, counting
+  each edge at both endpoints. It is `0` exactly when `n_edges` is `0`, and it
+  must be less than `n_cells`
 
 ---
 
@@ -429,24 +567,37 @@ Web app docs:
 ### Symptom: web app says “not a valid export”
 
 Likely causes:
-- missing `dataset_identity.json`,
+- missing `dataset_identity.json` or missing `obs_manifest.json` — both are
+  required, and neither has a degraded mode,
 - loading the wrong folder (one level above/below the actual export root),
-- invalid JSON (truncated write).
+- invalid JSON (truncated write),
+- an extra or missing key in any manifest object (see
+  [Exact key sets](#exact-key-sets-applies-to-every-manifest)),
+- a hand-edited manifest whose cross-file counts disagree —
+  `stats.n_genes` vs `var_manifest.json` `fields` length, `stats.n_edges` vs
+  `connectivity_manifest.json` `n_edges`, or `obs_fields` vs the obs manifest
+  field order.
 
 Fix:
-- confirm the folder contains `dataset_identity.json`,
+- confirm the folder contains both `dataset_identity.json` and
+  `obs_manifest.json`,
 - re-export to a clean directory with `force=True`.
 
-### Symptom: web app loads points but fields/genes are missing
+### Symptom: web app rejects a hand-assembled or converted export
 
-Likely causes:
-- `obs_manifest.json` or `var_manifest.json` missing,
-- or a manually modified/incomplete directory that was not produced by the
-  current atomic exporter.
+A directory that was not produced by the current atomic exporter fails as a
+whole rather than loading partially. There is no mode in which the app shows
+points but silently skips a missing or malformed `obs_manifest.json`,
+`var_manifest.json`, or `connectivity_manifest.json`. `dataset_identity.json`
+decides which optional manifests are fetched, so a manifest it declares
+(`stats.n_genes > 0`, `stats.has_connectivity`) but that is missing or malformed
+is fatal, and a manifest present on disk that it does not declare is never
+loaded and its data is invisible.
 
 Fix:
 - re-export with `force=True`,
-- confirm manifest files exist and match the exported content.
+- confirm every manifest exists exactly when `dataset_identity.json` says it
+  should, and that its keys and counts match this page exactly.
 
 ---
 

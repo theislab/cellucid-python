@@ -2,248 +2,86 @@
 
 The `cellucid-r` package exports data to the same on-disk format used by the Cellucid viewer.
 
-If you are editing the R package itself, the canonical contribution guide lives in the `cellucid-r` repo (`cellucid-r/CONTRIBUTING.md`). This page mirrors that guidance so contributors can find it from the main documentation site.
+## Where the R contribution guide lives
+
+`cellucid-r/CONTRIBUTING.md`, in the
+[`cellucid-r`](https://github.com/theislab/cellucid-r) repository, is the
+**authoritative** guide for working on the R package: the development
+environment, `devtools::test()` / `devtools::check()`, how the hand-written
+`man/` pages and `NAMESPACE` are maintained, the design constraints, how to
+validate an export end-to-end, pull request rules, and troubleshooting. It
+ships beside the code it describes and is the file GitHub shows a contributor
+when they open an issue or a pull request, so it is kept self-sufficient.
+
+**This page is not a copy of that file, and neither file is generated from the
+other.** It owns the part of R contribution that only exists on this
+documentation site:
+
+| Question | Answer lives in |
+|---|---|
+| Which repository does my change belong in? | `cellucid-r/CONTRIBUTING.md` and {doc}`../contributing` |
+| How do I set up R, run the tests, and open a pull request? | `cellucid-r/CONTRIBUTING.md` |
+| How are `man/` and `NAMESPACE` maintained? | `cellucid-r/CONTRIBUTING.md` |
+| How do I write or change an R page on this site? | this page, below |
+| Which URL form and version marker do I use across repositories? | {doc}`web_app` |
+
+The split is deliberate, not an oversight, and it is not a mirror that fell out
+of date. The documentation build tree contains only `cellucid-python`
+(`.readthedocs.yaml` clones no siblings and declares no submodules), so this
+page **cannot** `{include}` a file from the `cellucid-r` repository the way
+{doc}`python` includes `cellucid-python/CONTRIBUTING.md` from its own
+repository. The choice was therefore between hand-copying content across a
+repository boundary — which drifts, silently, because no build or test spans
+both repositories — and giving each file one audience and cross-linking. Each
+fact below has exactly one home.
+
+One consequence is worth stating plainly, because a previous revision of this
+page got it wrong in a way that would have broken a contributor's checkout: the
+R package runs **no documentation generator**. `man/*.Rd` and `NAMESPACE` are
+hand-written and authoritative, `R/` contains no roxygen comments, and
+`NAMESPACE` carries a `useDynLib()` registration that no generator would emit.
+Running `devtools::document()` there removes it. `cellucid-r/CONTRIBUTING.md`
+is where that workflow is specified; do not infer it from anywhere else.
 
 ---
 
-## Which repo should I contribute to?
+## I want to work on docs for the R package
 
-Cellucid is split by responsibility:
+The documentation site is built from `cellucid-python/docs/`, so an R
+documentation change on this site is a pull request against `cellucid-python`,
+not against `cellucid-r`. The R pages are {doc}`../user_guide/r_package/index`
+(`cellucid-python/docs/user_guide/r_package/`).
 
-| Repo | What it is | Contribute here when you… |
-|---|---|---|
-| `cellucid` | Web app (UI + state + WebGL rendering) | are fixing UI bugs, rendering/performance, figure export, sessions, or community annotation frontend |
-| `cellucid-python` | Python package + CLI (`prepare`, `serve`, `show_anndata`, hooks) + Sphinx docs | are fixing Python/CLI bugs, data prep/export, server endpoints, Jupyter hooks, or docs on ReadTheDocs |
-| `cellucid-r` | R package for exporting data to the Cellucid viewer format | are changing the R exporter (`cellucid_prepare()`), adding R-side tests/docs, or preparing for Bioconductor |
-| `cellucid-annotation` | GitHub repo template for community annotation | are changing the repo schema/validation/workflows |
+The R package's own documentation — `man/`, `vignettes/`, and
+`cellucid-r/README.md` — lives in the `cellucid-r` repository and is changed
+there. A behaviour change usually needs both: the help page beside the code and
+the page on this site.
 
-If you’re not sure where a bug belongs, open an issue in the repo you’re currently using and include:
-- how you loaded data (Prepared, H5AD, Zarr ZIP, remote server, GitHub, or
-  Jupyter),
-- the UI environment (hosted app vs local app vs Jupyter iframe),
-- and the smallest reproduction you can share.
+When one of those pages points at another page on this site, write the
+reference as a `{doc}` role, never in bare backticks — a backtick is inline
+literal text that Sphinx will not resolve, so a wrong target renders as plain
+text and survives the `-W` build. The rule, the relative-path form, and where
+backticks are still correct are in
+{doc}`../user_guide/python_package/h_developer_docs/15_docs_development_and_style_guide`.
 
----
+The reverse also holds: `cellucid-r/CONTRIBUTING.md` is read on GitHub, where a
+`{doc}` role is meaningless, so references from that file are written as
+repository-relative paths with their `.md` extension. A path in that file and a
+role on this page are not drift; they are the same reference rendered for two
+readers.
 
-## Fast paths (pick your contribution type)
+Build the site before opening the pull request — warnings are errors:
 
-### I want to report a bug
-
-Please include:
-- R version (`R.version.string`)
-- OS (macOS/Windows/Linux)
-- how you generated exports (which function call, which inputs)
-- expected vs actual behavior
-- the smallest dataset you can share (prefer synthetic/reproducible)
-- any `R CMD check` output if relevant
-
-If the bug is “the viewer looks wrong”, also include:
-- which viewer environment you used (hosted app vs local app vs Jupyter iframe)
-- browser + version
-- whether you loaded the export via browser file picker vs remote server vs GitHub exports
-
-### I want to contribute docs only
-
-Docs live in:
-- `cellucid-r/man/` (generated `.Rd` files)
-- `cellucid-r/vignettes/` (BiocStyle vignette)
-- `cellucid-r/README.md`
-
-If you edit `.Rd` files directly, be aware they are usually generated from roxygen comments in `cellucid-r/R/`.
-Prefer editing roxygen in `R/` and re-running `devtools::document()`.
-
-### I want to add/modify R code
-
-Fast workflow:
-1) Set up your R dev environment (see “Development setup”)
-2) Make a small, focused change
-3) Add/adjust tests (`testthat`)
-4) Run `devtools::check()` (and `BiocCheck::BiocCheck()` if relevant)
-5) Submit a PR with a clear “what/why/how to verify”
-
----
-
-## Development setup (cellucid-r)
-
-### Prerequisites
-
-- R `>= 4.3.0` (matches `DESCRIPTION`)
-- Git
-- A C toolchain for package builds: Rtools on Windows, the Xcode Command Line
-  Tools on macOS, or a compiler plus R development headers on Linux
-
-Recommended:
-- RStudio (optional, but convenient for vignettes)
-- Pandoc (needed for some vignette builds; RStudio bundles it)
-
-### Install dev tools
-
-In R:
-
-```r
-install.packages(c("devtools", "roxygen2", "testthat"))
-```
-
-For vignette builds and Bioconductor-style docs:
-
-```r
-if (!requireNamespace("BiocManager", quietly = TRUE)) {
-  install.packages("BiocManager")
-}
-BiocManager::install(c("BiocStyle", "knitr", "rmarkdown"))
-```
-
-Optional (useful during release prep):
-
-```r
-BiocManager::install("BiocCheck")
-install.packages(c("pkgdown", "covr"))
-```
-
-Install package dependencies:
-
-```r
-devtools::install_deps(dependencies = TRUE)
-```
-
-Load the package from source (fast inner loop):
-
-```r
-devtools::load_all()
+```bash
+sphinx-build -W --keep-going -b html docs docs/_build/html
 ```
 
 ---
 
-## Tests
+## Conventions that span every repository
 
-Run tests:
-
-```r
-devtools::test()
-```
-
-Run a full check (recommended before PRs):
-
-```r
-devtools::check()
-```
-
-For Bioconductor submission readiness:
-
-```r
-BiocCheck::BiocCheck(".")
-```
-
-Guidelines:
-- Add tests when behavior changes (especially edge cases like missing values, mismatched dimensions, sparse matrices).
-- Prefer small synthetic inputs; avoid committing real datasets.
-
----
-
-## Documentation (roxygen + vignettes)
-
-### Regenerate `.Rd` files
-
-Most man pages should be generated from roxygen comments in `cellucid-r/R/`.
-
-```r
-devtools::document()
-```
-
-### Build vignettes
-
-```r
-devtools::build_vignettes()
-```
-
-### pkgdown site (optional)
-
-If you’re working on the website output (GitHub Pages):
-
-```r
-pkgdown::build_site()
-```
-
----
-
-## Design constraints (important for contributors)
-
-This package is intentionally:
-
-- **minimal-dependency** (only `jsonlite` is a hard dependency)
-- **format-first** (exports must match what the web app expects)
-- **Bioconductor-friendly** (checks, vignette style, and package structure matter)
-- **cross-process safe** (a small native primitive owns the persistent export
-  lock shared with the Python package)
-
-If you propose adding a new dependency:
-- prefer `Suggests` over `Imports` unless strictly required
-- keep the core exporter usable on minimal installations
-
-If you change the export format or schema:
-- coordinate with `cellucid-python` and the web app (`cellucid`) so the ecosystem stays compatible
-- add tests that validate the new behavior
-
----
-
-## How to validate exports end-to-end
-
-The most reliable validation is to export a tiny dataset and load it in the viewer.
-
-Recommended workflow:
-1) Run `cellucid_prepare()` on a tiny synthetic dataset.
-2) Open the Cellucid web app (hosted or local).
-3) Use “Browse local data…” and select the export folder.
-4) Confirm:
-   - the correct number of cells render
-   - categorical and continuous fields appear
-   - gene expression search works (if exported)
-
-This catches many “format is technically written but semantically wrong” issues.
-
----
-
-## PR guidelines
-
-- Keep PRs small and focused (one feature/bugfix at a time).
-- Include:
-  - what changed
-  - why it changed
-  - how to verify (commands + expected outcome)
-- If user-facing behavior changes:
-  - update docs (README/vignette/man page as appropriate)
-  - add/adjust tests
-  - consider updating `NEWS.md` if it’s release-notable
-
----
-
-## Troubleshooting (common contributor problems)
-
-### `devtools::document()` changes lots of files unexpectedly
-
-Cause:
-- roxygen output depends on roxygen version and formatting.
-
-Fix:
-- ensure you’re using a recent `roxygen2`
-- keep roxygen comments stable and avoid rewrapping large blocks unnecessarily
-
-### `R CMD check` fails on vignettes
-
-Common causes:
-- missing suggested packages (`BiocStyle`, `knitr`, `rmarkdown`)
-- missing Pandoc
-
-Fix:
-- install suggested packages (see setup above)
-- use RStudio’s bundled Pandoc or install Pandoc system-wide
-
-### Windows/macOS differences
-
-Common causes:
-- line ending differences
-- path handling (`\\` vs `/`)
-
-Fix:
-- use `file.path()` in R code
-- avoid assuming writable directories; use `tempdir()` in tests/vignettes
+The canonical URL forms (`www` for links, the bare apex for frozen identifiers)
+and the `CELLUCID_VERSION` marker convention apply to `cellucid-r` as well as
+to this site. They are stated once, in
+{doc}`web_app`, and enforced by
+`cellucid-python/tests/test_canonical_url_contract.py`.

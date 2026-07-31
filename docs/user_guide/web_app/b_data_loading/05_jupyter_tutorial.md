@@ -128,9 +128,16 @@ The viewer UI and the dataset API share the same origin, so the viewer loads dat
 
 - If your notebook kernel is **local**, `127.0.0.1:<port>` is your laptop and everything “just works”.
 - In **Google Colab**, the kernel runs on a remote VM. Obtain Colab's HTTPS
-  proxy base for a fixed port and pass it as `client_server_url=`.
+  proxy base for a fixed port, pass it as `client_server_url=`, and declare its
+  host name as `allowed_hosts=[...]`.
 - For a **remote/HTTPS Jupyter server** (common on JupyterHub), configure a
-  browser-reachable route and pass its exact base as `client_server_url=`.
+  browser-reachable route, pass its exact base as `client_server_url=`, and
+  declare the route's host name as `allowed_hosts=[...]`.
+- `allowed_hosts=` is required behind any proxy: the proxy forwards the
+  browser's `Host` header unchanged, and Cellucid refuses an authority that does
+  not name it with `421 Misdirected Request`. That refusal is what stops DNS
+  rebinding, and a proxied request carries no signal that distinguishes it from
+  a rebound one, so the proxy has to be declared.
 - Cellucid does not discover Jupyter Server Proxy or call Colab's proxy API.
 - If your kernel is remote but your notebook frontend cannot use a server proxy (e.g. unusual VSCode/webview setups), you may still need SSH port forwarding (see {ref}`remote-hpc`).
 
@@ -236,6 +243,9 @@ viewer = show_anndata(
 followed by these exact keyword-only parameters:
 
 - `client_server_url`: exact browser-reachable base URL for remote notebooks
+- `allowed_hosts`: extra exact `Host` names the data server answers to; required
+  when `client_server_url` points at a reverse proxy. One bare host name per
+  entry — no port, no scheme, no wildcard
 - `web_source_url`: exact origin publishing the web asset inventory
 - `web_cache_dir`: directory where the verified generation is published
 - `latent_key`: choose one exact latent-space key in `obsm`; `None` leaves

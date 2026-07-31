@@ -4,11 +4,11 @@ This page is the **map** of how Cellucid can load data.
 
 If you are new, start here. If you already know what you want, jump to the tutorial that matches your workflow:
 
-- `02_local_demo_tutorial`: publish/share a dataset without running a server (GitHub-hosted exports)
-- `03_browser_file_picker_tutorial`: load data from your computer using the browser file picker
-- `04_server_tutorial`: run a local/remote Python server for large datasets
-- `05_jupyter_tutorial`: embed Cellucid inside a notebook and interact programmatically
-- `11_custom_dataset_repository`: publish and validate a public multi-dataset
+- {doc}`02_local_demo_tutorial`: publish/share a dataset without running a server (GitHub-hosted exports)
+- {doc}`03_browser_file_picker_tutorial`: load data from your computer using the browser file picker
+- {doc}`04_server_tutorial`: run a local/remote Python server for large datasets
+- {doc}`05_jupyter_tutorial`: embed Cellucid inside a notebook and interact programmatically
+- {doc}`11_custom_dataset_repository`: publish and validate a public multi-dataset
   repository, starting from a complete reference implementation
 
 ## At A Glance

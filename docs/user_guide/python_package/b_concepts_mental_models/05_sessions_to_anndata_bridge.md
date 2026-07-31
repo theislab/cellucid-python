@@ -165,11 +165,29 @@ Before applying dataset-dependent chunks, Python checks a lightweight fingerprin
 
 Any mismatch raises `ValueError` before Cellucid mutates the target object.
 
+### The fifth fingerprint field: `cellOrder`
+
+A session written by a current viewer also carries `cellOrder` — exactly a
+`dimension` (1, 2, or 3) and a 16-character lowercase hexadecimal `digest` of
+the coordinates the session was saved against. It ties the session to one cell
+ordering, which the four scalars cannot do: they all survive a re-export of the
+same dataset from re-sorted input.
+
+**The web app requires it. Python accepts a bundle with or without it**, and
+when it is present validates only the record's shape, never its value. The
+digest is over exported coordinates and this API targets an `AnnData` whose row
+order the caller controls, so there is nothing here to compare it to; enforcing
+that identity is the viewer's job.
+
+Practical consequence: a bundle this reader accepts may still be refused by the
+web app. Treat that as normal, not as a bug in either reader.
+
 ### Critical constraint: cell identity is index-based (today)
 
 Highlights and user-defined codes are aligned to **cell indices** (row positions).
 
-Only apply a session to an `AnnData` whose row order matches the dataset that produced the session.
+Only apply a session to an `AnnData` whose row order matches the dataset that produced the session. Because `cellOrder` is not checked here, nothing in Python
+will warn you if it does not.
 
 Pass the exact ID used to open the viewer as `expected_dataset_id` (see
 {doc}`04_dataset_identity_and_reproducibility`).

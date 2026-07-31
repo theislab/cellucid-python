@@ -44,7 +44,10 @@ In typical usage, exports include:
   If you enable “Export all views (split-view)”, exports include the full grid (live + snapshots) as a multi-panel figure.
 - **Camera + dimension (1D/2D/3D)** so the exported framing matches what you curated.
 - **Visibility** (filters and hide/show state): invisible points are not exported.
-- **Color-by + legend mapping** sourced from the same legend model used by the viewer.
+- **Color-by + legend mapping** sourced from the same legend model used by the
+  viewer. In a multi-panel export the panels share one legend only when they
+  really agree (same field, same hidden categories); otherwise each panel gets
+  its own legend, so no colored panel is ever exported unexplained.
 - **Point appearance** based on the current viewer render state:
   - PNG exports use shader-accurate rendering (so 3D “spheres” match what you see).
   - Hybrid SVG exports rasterize points but keep annotations vector.
@@ -62,6 +65,7 @@ Figure export settings are intentionally **not persisted in session bundles**. I
 Some things are intentionally not exported:
 
 - **Connectivity/edges overlay** (if enabled in the viewer, export currently includes points only).
+- **Render modes other than Points** (a volumetric smoke view blocks export instead of exporting a different image).
 - **Transient UI**: tooltips, hover labels, toasts, selection lasso UI, etc.
 - **Byte-for-byte identical files** across exports: exports include timestamps and embedded metadata, and SVG rendering can vary by font availability.
 
@@ -91,6 +95,8 @@ Example: a 1200×900 plot at 300 DPI will produce an image roughly `1200×(300/9
   - `<dataset>_<color-field>_<view>_<timestamp>.svg`
   - `<dataset>_<color-field>_<view>_dpi300_<timestamp>.png` (when exporting multiple DPIs)
   - `<dataset>_<color-field>_<view>_batch_<timestamp>.zip` (batch download)
+  - `<view>` is `multiview` for a grid, and `<color-field>` is dropped when the
+    grid's panels do not all use the same field.
 
 :::{important}
 Exports can embed provenance metadata that may include **dataset names/ids and source paths/URLs**. If you are sharing figures publicly, skim {doc}`05_metadata_and_provenance` for how to inspect or strip metadata.

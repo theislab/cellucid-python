@@ -139,6 +139,9 @@ These are forwarded to the `AnnDataAdapter` and affect how your AnnData is inter
 - `dataset_id`: required portable 1–180 character ASCII identity (letter or
   digit first; then letters, digits, `.`, `_`, or `-`; no trailing `.` or
   reserved Windows device name)
+- `obs_keys`: exact `adata.obs` columns to serve, in this order; every column is
+  served when omitted. Use it to leave out a column Cellucid cannot serve, such
+  as a `datetime64` collection date
 - `vector_field_default`: exact default field ID; required when direct AnnData
   declares more than one vector field
 

@@ -92,10 +92,18 @@ components: start with a letter or digit, contain only letters, digits, `.`,
 `_`, or `-`, not end with `.`, not be a Windows device name, and be unique
 under case-insensitive comparison.
 
+This applies to the identifiers you **export**, because the rule is about the
+file each one is written to. `obs_keys` and `gene_identifiers` narrow the export,
+and they narrow this rule with it: a column or gene you leave out is written to
+no path and is not checked here. Gene identifiers carry one extra rule that is
+not about paths and so is *not* narrowed — every ID in `var` must be a non-empty
+string and must be distinct, because `gene_identifiers` addresses `var` rows by
+identifier. The `cellucid` Python package applies the identical scopes.
+
 Recommendation:
 - choose stable portable identifiers before export.
 - `cellucid-r` aborts the complete candidate on any unsafe identifier or
-  collision; it does not rewrite names.
+  collision among the exported ones; it does not rewrite names.
 
 ## Quick “preflight” checks (copy/paste)
 

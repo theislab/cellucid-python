@@ -54,8 +54,8 @@ administrator must still enable and configure its server route; installing the
 package does not make Cellucid discover or select a proxy URL.
 ```
 
-Determine the proxy base that reaches the selected port and pass it when
-constructing the viewer:
+Determine the proxy base that reaches the selected port and pass it — together
+with the proxy’s host name — when constructing the viewer:
 
 ```python
 from cellucid import AnnDataViewer
@@ -66,8 +66,18 @@ viewer = AnnDataViewer(
     dataset_name="Example",
     dataset_id="example",
     client_server_url="https://notebooks.example/user/alice/proxy/8765",
+    allowed_hosts=["notebooks.example"],
 )
 ```
+
+`allowed_hosts=` is required here, not optional. Jupyter Server Proxy forwards
+the browser’s `Host` header verbatim, so the loopback-bound Cellucid server
+receives `notebooks.example` rather than `127.0.0.1` and refuses it with
+`421 Misdirected Request` — the same refusal that stops DNS rebinding. A proxied
+request is indistinguishable from a rebound one, so the proxy can only be
+declared, never detected. Each entry is one bare host name with no port, scheme
+or wildcard; see
+{doc}`../b_concepts_mental_models/06_privacy_security_and_offline_vs_online`.
 
 For an SSH tunnel viewed from an HTTP notebook:
 

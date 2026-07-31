@@ -167,7 +167,7 @@ Think of network activity in three buckets:
 
 ### 1) Loading the app itself
 
-If you use `https://cellucid.com`, your browser downloads:
+If you use `https://www.cellucid.com`, your browser downloads:
 - HTML/CSS/JS assets
 - optional font assets
 
@@ -249,6 +249,28 @@ Safe default:
 
 Risky default in shared networks:
 - binding to `0.0.0.0` exposes to your LAN (anyone on the network may access the dataset if they can reach the port)
+
+Binding to `127.0.0.1` is necessary but not sufficient. Any web page you have
+open can publish a short-lived DNS record that re-points its own name at
+`127.0.0.1` (**DNS rebinding**); the browser then treats your local Cellucid
+server as same-origin, sends no `Origin`, applies no CORS check, and hands the
+page your dataset.
+
+Cellucid closes this by validating the `Host` header on every request before any
+route runs:
+- it accepts exactly one well-formed `Host` naming `localhost` or a loopback IP
+  literal on the port it actually bound (DNS cannot rebind an IP literal),
+- everything else gets `421 Misdirected Request`, with a body that never echoes
+  the attacker’s value.
+
+Consequence for reverse proxies: a proxy such as `jupyter-server-proxy` forwards
+the browser’s `Host` unchanged, so the proxied request looks exactly like a
+rebound one and is refused too. That is deliberate — a rebound page is
+same-origin and can forge `X-Forwarded-*` headers, so no header can distinguish
+the two. Declare the proxy’s host name explicitly on the Python side instead:
+`cellucid serve ... --allowed-host hub.example.org`, or
+`allowed_hosts=["hub.example.org"]`. Wildcards are rejected. Details:
+{doc}`../../python_package/b_concepts_mental_models/06_privacy_security_and_offline_vs_online`.
 
 ### 2) Prefer HTTPS for remote data
 

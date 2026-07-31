@@ -79,6 +79,52 @@ Missing values are encoded as a reserved integer:
 | `uint8` | `255` |
 | `uint16` | `65535` |
 
+(r_package-category-label-display-text)=
+#### Category labels must read as the value they store
+
+A category label — a factor level, or a distinct value of a character column —
+is drawn **verbatim** in the legend, in the field selector, and in every
+exported figure. A character with no glyph therefore changes the stored value
+without changing the picture, so `cellucid_prepare()` rejects a label that:
+
+- is empty (`""`),
+- contains a control character (`U+0001`–`U+001F`, `U+007F`–`U+009F`, which
+  includes tab and newline),
+- contains a zero-width character (`U+200B` ZERO WIDTH SPACE, `U+2060` WORD
+  JOINER, or `U+FEFF`, the byte-order mark a spreadsheet leaves at the front of
+  a UTF-8 CSV), or
+- starts or ends with whitespace of any kind, including `U+00A0` NO-BREAK SPACE.
+
+It also rejects two labels in one field that a whitespace-collapsing renderer
+draws identically — `"T cell"` and `"T  cell"` are two legend rows with one
+appearance.
+
+Logical labels are unaffected. Case-only differences are not rejected:
+`"Liver"` and `"liver"` look different on screen, so they remain two categories.
+An unused factor level is checked like any other, because it is still published
+in `obs_manifest.json`.
+
+```{important}
+`cellucid_prepare()` never trims a label for you. Trimming rewrites an
+annotation you did not ask to change, and where both `"Liver"` and `"Liver "`
+exist it would merge two distinct categories into one and move cells between
+them.
+```
+
+The error names every offending label in the field at once, so one pass fixes
+the column:
+
+```r
+obs[["organ"]] <- factor(
+  trimws(as.character(obs[["organ"]]), whitespace = "[\\h\\v]")
+)
+```
+
+The same rule applies to `dataset_name`, `dataset_description`, `source_name`,
+`source_url`, and `source_citation`, which the viewer also prints verbatim.
+`dataset_description` may be `""`; the others may not. The Python package
+enforces the identical rule in `prepare()`.
+
 ## Quantization (continuous fields and categorical outliers)
 
 ### What quantization does

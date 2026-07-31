@@ -141,6 +141,14 @@ Key flags:
   - Default is `127.0.0.1` (local only).
   - Use `0.0.0.0` only if you need LAN access.
 
+- `--allowed-host HOST`:
+  - Extra exact `Host` name this server answers to; repeat once per name.
+  - Required only behind a reverse proxy such as `jupyter-server-proxy`, which
+    forwards the browser’s `Host` unchanged. Without it those requests return
+    `421 Misdirected Request` — the refusal that stops DNS rebinding.
+  - One bare DNS name or IP address per entry: no port, no scheme, no wildcard.
+    It matches whatever port the proxy publishes.
+
 - `--no-browser`:
   - Don’t auto-open a browser tab.
 

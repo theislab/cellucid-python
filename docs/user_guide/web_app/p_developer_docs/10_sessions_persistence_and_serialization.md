@@ -17,6 +17,8 @@ maintainers serving official starting states
   complete document all-or-nothing.
 - Manifest, chunk profiles, framing, byte lengths, decoded payloads, and the
   complete dataset fingerprint are exact contracts.
+- Row indices are only restored against a dataset whose cell ordering is proven
+  to be the one they were saved on; an unprovable ordering rejects the restore.
 - Eager and lazy are internal ordering classes inside one awaited public
   operation.
 - All contributor state commits or registered state rolls back.
@@ -55,8 +57,10 @@ The container is:
    payload bytes.
 
 The manifest has exactly `createdAt`, `datasetFingerprint`, and `chunks`.
-`datasetFingerprint` has exactly `sourceType`, `datasetId`, `cellCount`, and
-`varCount`. Each chunk has exactly:
+`datasetFingerprint` has exactly `sourceType`, `datasetId`, `cellCount`,
+`varCount`, and `cellOrder`. `cellOrder` has exactly `dimension` (the integer
+1, 2, or 3) and `digest` (16 lowercase hexadecimal characters). Each chunk has
+exactly:
 
 - `id`
 - `contributorId`
@@ -176,13 +180,96 @@ Only an exact-length valid member reaches native decompression.
 
 ## Dataset identity
 
-All four fingerprint values must match. `datasetDependent: false` remains
-useful profile metadata for the dockable-layout owner, but it does not authorize
-layout-only salvage from a mismatched bundle. The entire operation rejects and
-rolls back.
+`getDatasetFingerprint()` in `session-context.js` builds the record that is
+written into the manifest at save and re-derived from live state at restore:
 
-The fingerprint is not a content hash. Dataset publishers must assign a new
-identity when cell/variable order or scientific content changes.
+| Field | Derived from | Notes |
+|---|---|---|
+| `sourceType` | `dataSourceManager.getCurrentSourceType()` | `null` only when no data-source manager owns the loaded state |
+| `datasetId` | `dataSourceManager.getCurrentDatasetId()` | same nullability |
+| `cellCount` | `state.pointCount` | |
+| `varCount` | `state.varData.fields.length` | |
+| `cellOrder.dimension` | `state.getViewDimensionLevel('live')` | exactly 1, 2, or 3 |
+| `cellOrder.digest` | `digestCellOrder(state.positionsArray)` | 16 lowercase hex characters |
+
+`getDatasetFingerprint()` throws unless `state.positionsArray` is a
+`Float32Array` of exactly `cellCount * 3` values, so a fingerprint is never
+produced from a partially published dataset.
+
+### Why `cellOrder` exists
+
+Selections, categorical codes, and cached analysis values persist as raw
+dataset row indices. The four scalars all survive a row permutation: re-export
+a dataset at the same id from re-sorted input and `sourceType`, `datasetId`,
+`cellCount`, and `varCount` are unchanged, so every restored index would denote
+a different cell with nothing to detect it.
+
+Observation and variable names were the alternative and do not work here — they
+are invariant under a row permutation, which is the change being caught.
+Positions are the only per-cell payload the viewer always holds in memory, and
+a re-ordered export permutes them.
+
+`digestCellOrder()` reads the coordinate buffer as 32-bit words and folds two
+32-bit accumulators over it, each updated with a multiply and a rotation per
+word, then emits them as one 64-bit hex value. Per-word rotation is what makes
+the result depend on the order of the words rather than only on their multiset.
+On 842k cells (9.64 MiB of Float32 coordinates) the digest costs 4.3 ms and the
+complete fingerprint 5.6 ms. The result is memoized in a `WeakMap` keyed by the
+coordinate array itself; that array is replaced, never rewritten, when the
+dataset or the displayed embedding changes, so the per-contributor re-derivations
+during a capture cost 0.06 ms in total.
+
+`cellOrder.dimension` is part of the record because the 1D, 2D, and 3D
+embeddings are separate exported files, normalized independently. A digest is
+therefore only comparable within one of them, and the dimension is what lets a
+mismatch be attributed to the view on screen instead of to the data.
+
+### Validation and comparison
+
+`assertDatasetFingerprint(value, context)` validates one record from untrusted
+input: exact five-key set, nullable strings for the source identity, safe
+integers for the counts, and `cellOrder` with exactly `dimension` in 1–3 and a
+`/^[0-9a-f]{16}$/` digest. It runs one check before the schema check: a record
+whose key set is exactly the four pre-`cellOrder` keys is a session file written
+before the record existed, and is refused with
+`SESSION_WITHOUT_CELL_IDENTITY_MESSAGE` rather than reported as a schema
+violation. `session-serializer.js` calls it from `validateManifest()`, so this
+refusal happens before any contributor is consulted.
+
+`datasetFingerprintMatches(a, b)` validates both records and then compares all
+six scalars. `describeDatasetFingerprintMismatch(saved, current)` returns `null`
+when they match and otherwise the sentence the session controls surface
+verbatim. `_restoreFromBundleSource()` throws that string as a `RangeError`.
+
+Four refusals are distinguished, and attributing one to the wrong cause would be
+its own integrity failure — telling a user their data was re-ordered when they
+merely switched the view would make them distrust a sound dataset:
+
+| Cause | Detected by | Message |
+|---|---|---|
+| A session file written before `cellOrder` existed | `assertDatasetFingerprint` during manifest validation | says the file predates cell-content recording, so its selections can never be confirmed, and asks for the selections to be re-created and saved again |
+| A different dataset | any of the four scalars differs | names the saved and current cell and gene counts and asks for the dataset the session was saved on |
+| A different embedding on screen | `cellOrder.dimension` differs | names both dimensions, explains that the check reads the coordinates on screen, and asks for a switch back to the saved dimension |
+| A re-ordered dataset | `cellOrder.digest` differs, everything else matches | says the dataset has the same name and the same cell and gene counts but stores its cells in a different order, so every saved selection would mark the wrong cells |
+
+None of these messages carry identifiers or internal vocabulary.
+
+A file predating the record is refused rather than accepted. Accepting it would
+mean keeping exactly the unverifiable state the record exists to eliminate,
+permanently, for every file already written.
+
+`datasetDependent: false` remains useful profile metadata for the
+dockable-layout owner, but it does not authorize layout-only salvage from a
+mismatched bundle. The entire operation rejects and rolls back. This applies to
+`restorePublishedDefaultState()` too: the published-default profile shares
+`validateManifest()` and the same fingerprint comparison, so an advertised
+`default.cellucid-session` must carry `cellOrder` and must have been saved on
+the dimension the dataset publishes as its default.
+
+The fingerprint is still not a content hash: the digest covers coordinates, not
+expression or metadata. Dataset publishers must assign a new identity when
+scientific content changes. What `cellOrder` adds is that a re-ordered
+republication under an unchanged identity is now detected instead of trusted.
 
 ## Official sample profile
 

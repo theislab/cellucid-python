@@ -173,11 +173,11 @@ When active and set below 100%, Active filters shows a line like:
 - **Disable** keeps the slider value but stops it from filtering.
 - **Remove** resets the outlier slider to `100%`.
 
-See `02_outlier_filtering_per_active_field` for a deeper explanation and troubleshooting.
+See {doc}`02_outlier_filtering_per_active_field` for a deeper explanation and troubleshooting.
 
 ---
 
 ## Next steps
 
-- `05_performance_considerations` (what gets slow and why)
-- `06_edge_cases_filtering` (failure modes and surprising states)
+- {doc}`05_performance_considerations` (what gets slow and why)
+- {doc}`06_edge_cases_filtering` (failure modes and surprising states)

@@ -215,27 +215,41 @@ def validate_release(tag: str | None, *, verify_local_tags: bool = False) -> str
             ),
         )
 
-    exact_text = {
-        "CITATION.cff": f"version: {version}",
-        "docs/conf.py": f'release = version = "{version}"  # CELLUCID_VERSION',
+    exact_text: dict[str, tuple[str, ...]] = {
+        "CITATION.cff": (f"version: {version}",),
+        "docs/conf.py": (f'release = version = "{version}"  # CELLUCID_VERSION',),
         "docs/user_guide/python_package/installation.md": (
-            f'pip install "cellucid=={version}"  # CELLUCID_VERSION'
+            f'pip install "cellucid=={version}"  # CELLUCID_VERSION',
         ),
         "docs/user_guide/python_package/h_developer_docs/04_build_install_and_packaging.md": (
-            f'`version = "{version}"` (beta) <!-- CELLUCID_VERSION -->'
+            f'`version = "{version}"` (beta) <!-- CELLUCID_VERSION -->',
         ),
         "docs/user_guide/python_package/h_developer_docs/14_release_process.md": (
-            f"`cellucid` is currently in beta (`{version}`). <!-- CELLUCID_VERSION -->"
+            f"`cellucid` is currently in beta (`{version}`). <!-- CELLUCID_VERSION -->",
+            # The commands a maintainer copies. A bump that misses these tags and
+            # publishes the previous version.
+            f'git tag -a v{version} -m "Cellucid Python {version}"',
+            f"git push origin v{version}",
+            f"python scripts/validate_release.py --tag v{version}",
+            f"python -c \"import cellucid; assert cellucid.__version__ == '{version}'\"",
+            f'python -m pip install "cellucid=={version}"',
         ),
         "docs/user_guide/r_package/installation.md": (
-            f"Version `{version}` from `packageVersion` <!-- CELLUCID_VERSION -->"
+            f"Version `{version}` from `packageVersion` <!-- CELLUCID_VERSION -->",
         ),
+        (
+            "docs/user_guide/python_package/c_data_preparation_api/"
+            "09_output_format_specification_exports_directory.md"
+        ): (f"`cellucid_data_version` is `{version}`. <!-- CELLUCID_VERSION -->",),
     }
-    for relative_path, required_text in exact_text.items():
-        _require(
-            required_text in _read(relative_path),
-            f"{relative_path} does not declare release {version}",
-        )
+    for relative_path, required_texts in exact_text.items():
+        contents = _read(relative_path)
+        for required_text in required_texts:
+            _require(
+                required_text in contents,
+                f"{relative_path} does not declare release {version} "
+                f"at {required_text!r}",
+            )
     citation = _read("CITATION.cff")
     _require(
         "date-released:" not in citation,

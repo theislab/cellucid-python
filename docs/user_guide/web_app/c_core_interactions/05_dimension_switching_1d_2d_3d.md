@@ -118,7 +118,7 @@ A two-dimensional embedding opens with Planar navigation and a flat, screen-alig
 
 ## Troubleshooting (dimension switching)
 
-For a full catalog, see `c_core_interactions/06_troubleshooting_core_interactions`.
+For a full catalog, see {doc}`06_troubleshooting_core_interactions`.
 
 ### Symptom: “I can’t find 2D / the dropdown is missing”
 

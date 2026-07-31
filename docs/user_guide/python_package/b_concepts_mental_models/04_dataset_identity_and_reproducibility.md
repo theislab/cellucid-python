@@ -94,7 +94,7 @@ viewer = show_anndata("data.h5ad", dataset_name="My study (raw)", dataset_id="my
 
 ## How sessions decide “same dataset or not”
 
-A `.cellucid-session` bundle contains a lightweight **dataset fingerprint** in its manifest (not the full dataset).
+A `.cellucid-session` bundle contains a lightweight **dataset fingerprint** in its manifest (not the full dataset). It has four scalars — `sourceType`, `datasetId`, `cellCount`, `varCount` — and a fifth field, `cellOrder`, recording *which ordering* of the cells the session was saved against.
 
 In Python, `apply_cellucid_session_to_anndata(...)` uses this fingerprint as a safety guard:
 - compares `cellCount` to `adata.n_obs`,
@@ -104,9 +104,33 @@ In Python, `apply_cellucid_session_to_anndata(...)` uses this fingerprint as a s
 Any mismatch raises `ValueError` before AnnData is mutated. Application is
 strict and atomic.
 
+### `cellOrder` is accepted here, enforced in the viewer
+
+`cellOrder` is exactly a `dimension` (1, 2, or 3) and a 16-character lowercase
+hexadecimal `digest` of the coordinates the session was saved against. It closes
+a hole the four scalars cannot: sessions store selections as row numbers, and a
+dataset re-exported at the same id from re-sorted input matches all four scalars
+while every row number now denotes a different cell.
+
+Python's readers are deliberately **asymmetric** with the web app's:
+
+- the **web app requires** `cellOrder` and compares both of its members, so a
+  session file written before the record existed is refused;
+- **Python accepts a bundle with or without it**, and when it is present
+  validates only its shape — exactly `dimension` and `digest`, `dimension`
+  exactly 1, 2, or 3, `digest` exactly 16 lowercase hexadecimal characters.
+
+This is not an oversight. Python cannot verify the digest: it is taken over
+*exported* coordinates, and `apply_cellucid_session_to_anndata(...)` targets an
+`AnnData` whose row order the caller controls, so there is nothing here to check
+it against. Enforcing cell-order identity is the viewer's job.
+
+The consequence runs one way: **a bundle Python accepts may still be refused by
+the web app.** Do not read that as a disagreement between the two readers.
+
 ```{important}
 These guards prevent the most dangerous failure mode: silently applying highlights/labels to the wrong cells.
-They do not guarantee perfect identity (e.g., two datasets can have the same shape).
+They do not guarantee perfect identity (e.g., two datasets can have the same shape), and on the Python side the row-order assumption is yours to keep — see Rule 4 below.
 Use stable IDs + versioning to make identity meaningful.
 ```
 
@@ -148,6 +172,12 @@ Even a short description helps collaborators interpret sessions correctly.
 Many Cellucid interactions use **row index** as identity.
 
 If you reorder cells, previously saved sessions/highlights can map to different biological cells even if the shape is unchanged.
+
+The web app now catches that for a re-exported dataset, because `cellOrder`
+digests the exported coordinates. **Python does not**, and cannot: applying a
+session to an `AnnData` you reordered in memory is checked only against
+`n_obs`, `n_vars`, and `datasetId`, all of which a permutation leaves intact.
+Keeping row order stable remains your responsibility on this side.
 
 If you must reorder/subset:
 - treat it as a new dataset version (new `dataset_id`),
@@ -201,7 +231,13 @@ Be mindful when sharing debug reports or screenshots (privacy/security covered i
 Likely causes:
 - different number of cells/genes,
 - different dataset ID,
-- you are loading a different export folder than you think.
+- you are loading a different export folder than you think,
+- a different embedding dimension is on screen than the one the session was
+  saved in — the message names both, and switching back resolves it,
+- the dataset was re-exported at the same ID from re-sorted input, so the
+  counts match but the cell order does not,
+- the session file predates the `cellOrder` record, so its selections can never
+  be confirmed and it is refused outright.
 
 How to confirm:
 - inspect `dataset_identity.json` in the export folder you loaded,
@@ -209,6 +245,7 @@ How to confirm:
 
 Fix:
 - load the correct dataset export folder,
+- switch back to the dimension the message names, if that is what it reports,
 - or create a fresh session from the dataset generation you intend to use.
 
 The current web and Python readers do not accept a layout-only partial
@@ -219,7 +256,13 @@ restore. Identity or format mismatch rejects the complete operation.
 Likely causes:
 - `expected_dataset_id` does not match the bundle's `datasetId`,
 - cell or variable counts differ,
-- you applied to an AnnData with different row order or subset.
+- the bundle's `cellOrder` record is malformed — Python does not require the
+  field, but it rejects a present one that is not exactly a `dimension` of 1,
+  2, or 3 and a 16-character lowercase hexadecimal `digest`.
+
+A different row order is *not* on that list. Python compares counts and the
+dataset ID, and a permutation changes neither, so it will apply the session
+without complaint. Only apply to the same dataset generation and row order.
 
 Fix:
 - pass the exact ID used to create the matching viewer as

@@ -2,7 +2,7 @@
 
 This guide is for **dataset authors / maintainers** who want to run a community annotation round and keep it healthy at scale.
 
-If you are an annotator (voting only), go to `01_annotator_guide`.
+If you are an annotator (voting only), go to {doc}`01_annotator_guide`.
 
 ---
 
@@ -882,7 +882,7 @@ Notes:
 
 ## 13) Author Troubleshooting (Massive)
 
-If you don’t find your issue here, also check `03_ui_reference` (it includes additional UI-specific guidance and error messages).
+If you don’t find your issue here, also check {doc}`03_ui_reference` (it includes additional UI-specific guidance and error messages).
 
 ### Before you debug: capture your “scope”
 

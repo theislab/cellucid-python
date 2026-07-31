@@ -200,7 +200,7 @@ Examples:
 
 You don’t need perfect metrics. A stopwatch + “feels smoother” is enough to pick a direction.
 
-If you are comparing versions/settings, use `04_benchmarking_methodology_and_metrics` for a repeatable approach.
+If you are comparing versions/settings, use {doc}`04_benchmarking_methodology_and_metrics` for a repeatable approach.
 
 ### Step 4 — Lock in a “safe preset”
 

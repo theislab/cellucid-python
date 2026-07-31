@@ -109,6 +109,27 @@ def test_readme_cross_references_the_current_cellucid_ecosystem() -> None:
         assert url in readme
 
 
+def test_readme_renders_completely_outside_the_repository() -> None:
+    """PyPI serves the long description with no repository to resolve against."""
+    readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+    relative_targets = [
+        target
+        for target in re.findall(r"\]\(([^)\s]+)\)", readme)
+        if not target.startswith(("https://", "http://", "#", "mailto:"))
+    ]
+    assert relative_targets == []
+
+
+def test_readme_claims_only_what_the_project_can_evidence() -> None:
+    readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+    # No conda-forge feedstock exists for this package.
+    assert "conda-forge" not in readme
+    assert "anaconda.org" not in readme
+    # Unmeasured scale and speed claims must not be advertised.
+    for unmeasured in ("millions", "10x faster", "10× faster", "fastest"):
+        assert unmeasured.lower() not in readme.lower()
+
+
 def test_mypy_uses_each_ci_interpreter_and_ci_keeps_the_supported_boundaries() -> None:
     pyproject = (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     mypy_section = pyproject.split("[tool.mypy]", maxsplit=1)[1].split(
