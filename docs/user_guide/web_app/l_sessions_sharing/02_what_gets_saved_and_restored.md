@@ -108,12 +108,15 @@ panel showing something the viewer never accepted.
 
 :::{note}
 **`Antialiasing (smooth point edges)` is the one exception, and it says so on
-screen.** It is captured and restored like every other checkbox, and restoring
-it saves your choice — but the browser fixes antialiasing when it creates the
-drawing buffer, so it cannot change while the page is open. Restoring a session
-that turned it off leaves the panel showing a line telling you to reload, and
-the view keeps its current antialiasing until you do. Nothing else in a session
-behaves this way.
+screen.** It is recorded in a session, but loading one **never changes it**.
+Antialiasing is a property of the machine drawing the picture: the browser fixes
+it when it creates the drawing buffer, so it cannot change while the page is
+open, and your choice is stored in this browser rather than in the file.
+
+That means a session you open — including the starting view every built-in
+sample publishes — keeps *your* setting rather than the one whoever saved it was
+using. It also means the setting stays where you put it: turn it off, reload,
+and it is still off. Nothing else in a session behaves this way.
 :::
 
 The four renderer settings are the easiest instance of this to check yourself,
