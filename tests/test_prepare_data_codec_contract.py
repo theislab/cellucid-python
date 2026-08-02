@@ -2,11 +2,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cellucid.prepare_data import (
-    _as_c_contiguous_byte_view,
+from cellucid.prepare_data import prepare
+from cellucid.prepare_data._quantization import (
     _quantize_continuous,
     _quantize_nullable_outlier_quantiles,
-    prepare,
 )
 
 
@@ -29,20 +28,6 @@ def _prepare_with_options(out_dir, **options):
         force=True,
         **options,
     )
-
-
-def test_compressed_writer_borrows_contiguous_payload_bytes_without_reordering():
-    contiguous = np.arange(12, dtype="<f4").reshape(3, 4)
-    contiguous_view = _as_c_contiguous_byte_view(contiguous)
-
-    assert contiguous_view.obj is contiguous
-    assert contiguous_view.tobytes() == contiguous.tobytes(order="C")
-
-    fortran_ordered = np.asfortranarray(contiguous)
-    fortran_view = _as_c_contiguous_byte_view(fortran_ordered)
-
-    assert fortran_view.obj is not fortran_ordered
-    assert fortran_view.tobytes() == fortran_ordered.tobytes(order="C")
 
 
 @pytest.mark.parametrize(

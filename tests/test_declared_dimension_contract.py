@@ -92,11 +92,11 @@ def test_prepare_accepts_a_plain_vector_for_the_declared_1d_embedding(tmp_path: 
         vector_fields={"velocity_umap_1d": _points_1d()},
     )
 
-    points = np.frombuffer((out_dir / "points_1d.bin").read_bytes(), dtype=np.float32)
+    points = np.frombuffer((out_dir / "points_1d.bin").read_bytes(), dtype="<f4")
     assert points.size == N_CELLS
     vectors = np.frombuffer(
         (out_dir / "vectors" / "0_1d.bin").read_bytes(),
-        dtype=np.float32,
+        dtype="<f4",
     )
     assert vectors.size == N_CELLS
 

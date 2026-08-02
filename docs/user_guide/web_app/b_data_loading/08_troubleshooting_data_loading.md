@@ -50,18 +50,63 @@ If your `.h5ad` is large:
 
 ---
 
+## Read the message before anything else
+
+Cellucid's loading failures are written to be diagnostic, and the wording tells
+you which of the three layers failed. Connection failures for the remote-server
+and GitHub paths take the shape:
+
+> *`<subject>` `<what happened>`: `<cause>` `<what to do>`*
+
+and the middle clause is the one that identifies the layer:
+
+| The message says | It means | Look at |
+|---|---|---|
+| nothing is published at that address (the server answered "not found") | The address resolved, but there is nothing there | Your path, folder, or branch |
+| the server refused access | Reached, but not public | Repository visibility |
+| the server rejected the request | Reached, but the request was malformed | Your address |
+| the server reported a problem of its own | Reached; the far side failed | Wait, then retry |
+| what is published there is not in a format Cellucid can read | Reached and readable, but not a Cellucid export | Re-export with `prepare()` |
+| nothing readable came back — the connection may have failed, or that address may not hold Cellucid data | Ambiguous: no usable response arrived | Your network *and* your address |
+
+There is one message that does **not** carry a cause clause, and its punctuation
+is the tell — a full stop where the others have a colon:
+
+> *`<subject>` `<what happened>`. Try again; if it keeps failing, check the
+> address and your connection. Details: `<raw error text>`*
+
+That is what Cellucid says when it could not classify the failure at all, and
+naming a cause anyway would be a guess. It is rare, because the ordinary
+outcomes above are all classified — a connection you cancel yourself, and one
+that runs past its timeout, both read as *nothing readable came back*. What is
+left is a transfer the browser abandoned from underneath the request, or a
+defect inside Cellucid. That is why the trailing `Details:` exists at all, and
+why it appears in this case only: it is the raw error text, and it is the only
+evidence anyone has. Quote it if you report the problem.
+
+Local file failures use neither shape. They quote the specific defect instead —
+for example `The selected file is not a valid HDF5/H5AD file…` or
+`No exact UMAP embedding found in obsm…`.
+
+---
+
 ## Symptom → diagnosis → fix (common issues)
 
 ### Symptom: “I clicked Prepared / H5AD / Zarr ZIP, but nothing happens”
 
 **Likely causes (ordered)**
-1) You denied the file or directory permission prompt.
-2) The app is embedded in a context that blocks file access.
-3) A managed-browser policy disabled local file access.
-4) The selected object does not match the control: directory for **Prepared**,
+1) **You cancelled the file chooser.** This is by far the most common cause and
+   it is deliberately silent: Cellucid shows no error, starts no spinner, and
+   leaves the current dataset in place.
+2) You denied the file or directory permission prompt.
+3) The app is embedded in a context that blocks file access.
+4) A managed-browser policy disabled local file access.
+5) The selected object does not match the control: directory for **Prepared**,
    `.h5ad` for **H5AD**, or one `.zarr.zip`/`.zip` for **Zarr ZIP**.
 
 **How to confirm**
+- Click the same button again and confirm the dialog. Silence after a *confirmed*
+  selection is a real problem; silence after a dismissed one is expected.
 - Open the standalone Cellucid page in a supported current desktop browser.
 - Use a small known-current fixture with the matching control.
 
@@ -78,8 +123,17 @@ If your `.h5ad` is large:
 
 ### Symptom: “It loads forever / spinner never ends”
 
+:::{note}
+An `.h5ad` **above 512 MiB never gets this far**. It is refused immediately,
+before a byte is read, with `H5AD direct browser files must have a positive safe
+size no larger than 512 MiB; use the Cellucid server or prepared format`. An
+endless spinner therefore means a file under the ceiling that is still too big
+once decompressed — or one of the network causes below.
+:::
+
 **Likely causes (ordered)**
-1) Very large `.h5ad` loaded directly in the browser (browser memory pressure).
+1) Large `.h5ad` under 512 MiB loaded directly in the browser (memory pressure
+   from the decompressed matrix).
 2) Remote server URL is wrong or unreachable.
 3) GitHub raw fetch blocked (corporate firewall/content blocker).
 
@@ -108,6 +162,24 @@ If your `.h5ad` is large:
 ---
 
 ### Symptom: “No embedding / it says no UMAP”
+
+The exact wording for an AnnData input is:
+
+```text
+No exact UMAP embedding found in obsm. Expected one or more of X_umap_1d,
+X_umap_2d, or X_umap_3d. Available obsm keys: <what your file has>.
+```
+
+A file with an empty `obsm` reads `Available obsm keys: (none).`
+
+```{figure} ../../../_static/screenshots/data_loading/fail-missing-umap-embedding.png
+:alt: A Cellucid notification listing the expected X_umap_1d, X_umap_2d and X_umap_3d keys and then the single obsm key the selected file actually contained, X_pca.
+:width: 760px
+
+The trailing list is the useful half: it names the `obsm` keys your file does
+have, so you can see immediately whether the embedding is missing or merely
+named differently.
+```
 
 **Likely causes**
 - AnnData is missing required `obsm` keys.
@@ -221,12 +293,22 @@ For overlay behavior and deeper diagnostics, see:
 4) Corporate network blocks `raw.githubusercontent.com`.
 
 **How to confirm**
-- Open the raw URL in a browser after substituting your exact repository
-  coordinates:
+- Cellucid raises two notifications, and the first one names the exact address
+  it requested:
 
   ```text
-  https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>/datasets.json
+  Resource not found: https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>/datasets.json
   ```
+
+- Open that URL in a browser tab. If it 404s there, the path or branch is wrong.
+
+```{figure} ../../../_static/screenshots/data_loading/fail-github-catalog-not-found.png
+:alt: Two stacked Cellucid notifications, the upper naming the raw.githubusercontent.com URL that returned not found, the lower explaining that the GitHub repository could not be reached and asking the reader to check for a typo.
+:width: 776px
+
+Both notifications for one wrong path. Debug with the upper one; it is the exact
+request that failed.
+```
 
 **Fix**
 - Generate and commit `datasets.json` at the exports root.
@@ -243,18 +325,49 @@ Compare your repository with the known-good
 
 ### Symptom: “Remote server connect fails / CORS blocked / mixed content”
 
+```{figure} ../../../_static/screenshots/data_loading/fail-remote-server-unreachable.png
+:alt: A Cellucid notification reading The remote server could not be reached, followed by the explanation that nothing readable came back, that the connection may have failed or the address may not hold Cellucid data, and advice to check the network and the address.
+:width: 776px
+
+Connecting to a port with nothing listening on it. Cellucid deliberately names
+*both* possibilities, because a failed connection and a wrong address are
+indistinguishable from the browser's side.
+```
+
 **Likely causes**
-- Wrong URL (host/port mismatch).
+- Wrong URL (host/port mismatch) — this and a dead server produce the same
+  message.
 - Server is bound to `127.0.0.1` on a remote machine, but you’re trying to access it directly.
 - Browser blocks non-localhost HTTP in some cases (mixed content).
 
 **How to confirm**
 - Check server banner output and copy the exact viewer URL printed by the server.
-- Visit the health endpoint.
+- Visit the health endpoint — it separates the two causes the message cannot:
+
+  ```text
+  http://127.0.0.1:8765/_cellucid/health
+  ```
+
+  JSON back means the address was wrong; nothing back means the server is not
+  running or not reachable.
 
 **Fix**
 - For remote machines: use an SSH tunnel (recommended): {doc}`04_server_tutorial`
 - Keep the server bound to `127.0.0.1` and access via `http://localhost:<port>` through the tunnel.
+
+**Reassurance**
+
+A failed connection does not throw away what you already had. The dataset that
+was open stays open, and the control returns to its unconnected state:
+
+```{figure} ../../../_static/screenshots/data_loading/keep-dataset-after-failed-connect.png
+:alt: The full Cellucid window after a failed connection attempt: the previously loaded dataset is still rendered in the canvas and still summarised in the Session panel, while two error notifications sit in the lower right corner.
+:width: 1440px
+
+After a refused connection the previous dataset is untouched — same points, same
+summary, same fields. Only the notifications changed. You can correct the
+address and try again without reloading the page.
+```
 
 ---
 

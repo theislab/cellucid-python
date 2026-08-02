@@ -58,7 +58,7 @@ Use the browser file picker workflow:
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
 :alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
-:width: 246px
+:width: 524px
 
 The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```

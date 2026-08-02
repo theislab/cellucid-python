@@ -50,6 +50,15 @@ What to do earlier to avoid the issue next time.
 
 ## Symptom: “Analysis is empty / shows no results”
 
+```{figure} ../../../_static/screenshots/analysis/analysis-empty-no-pages.png
+:alt: The Quick panel reading "Page 1: 0 cells" with a Composition section stating "No composition data available." and a Statistics section stating "No statistics data available."
+:width: 488px
+
+What this looks like. The heading `Page 1: 0 cells` is the whole diagnosis: a page
+exists, and nothing has been confirmed into it. Selecting cells is not enough —
+press **Confirm** in the Highlighting panel. See {doc}`11_screenshots` step 1.
+```
+
 ### Likely causes (ordered)
 
 1) **No pages are defined / selected**
@@ -148,6 +157,31 @@ Do the least invasive thing that answers your question:
 ---
 
 ## Symptom: “Volcano plot looks wrong / missing points”
+
+Before anything else, check the thresholds. The same completed run produces both
+of these, and neither is a bug:
+
+::::{grid} 1 1 2 2
+:gutter: 3
+
+:::{grid-item}
+```{figure} ../../../_static/screenshots/analysis/volcano-threshold-a.png
+:alt: A volcano plot at a log2 fold-change threshold of 0.5, with broad red and blue clouds of coloured points either side of a narrow grey band, and a legend below the axis title reading Up (750), Down (841) and Not significant (2162).
+:width: 1160px
+
+`|log₂FC| ≥ 0.5` — 1,591 genes called.
+```
+:::
+
+:::{grid-item}
+```{figure} ../../../_static/screenshots/analysis/volcano-threshold-b.png
+:alt: The same volcano plot at a log2 fold-change threshold of 3, with the dashed threshold lines pushed far apart and nearly every point grey, and a legend below the axis title reading Up (0), Down (192) and Not significant (3561).
+:width: 1160px
+
+`|log₂FC| ≥ 3` — 192 genes called, from the identical run.
+```
+:::
+::::
 
 ### Likely causes (ordered)
 

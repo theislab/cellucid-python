@@ -53,6 +53,8 @@ This returns a structured dict that checks:
     origin, and browser identification.
 - `recent_events`
   - Confirms which accepted event types reached Python.
+  - `command_errors` lists the commands the viewer refused. A non-empty list
+    means messaging works and the *argument* was wrong.
 - `client_server_url`
   - This must be the exact HTTP(S) base that the browser can reach.
 

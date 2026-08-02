@@ -102,6 +102,24 @@ If you don’t have an export directory yet, create one with `cellucid.prepare(.
 See {doc}`02_local_demo_tutorial` for a complete export workflow.
 ```
 
+### What success looks like
+
+```{figure} ../../../_static/screenshots/jupyter/pancreas-notebook-embed.png
+:alt: A JupyterLab window with a notebook file browser on the left. The notebook's output cell holds an interactive Cellucid viewer with its Session panel and a rendered single-cell embedding, and beneath it a printed ready report and a ViewerState line.
+:width: 1440px
+
+A real notebook after one `show_anndata(...)` call. The viewer is *inside* the
+output cell, not a separate tab or window — you scroll the notebook and the
+viewer scrolls with it. Below it, ordinary Python output continues: the ready
+report and the cell counts printed by the next cell.
+```
+
+Three things confirm the call worked:
+
+1. an interactive viewer appears in the output cell (not a blank area);
+2. `viewer.wait_for_ready(...)` returns rather than timing out;
+3. the cell and dimension counts it reports match the data you passed.
+
 ## How It Works (Mental Model)
 
 When you call `show(...)` or `show_anndata(...)`, Cellucid does two things:
@@ -252,6 +270,9 @@ followed by these exact keyword-only parameters:
   latent-derived outlier quantiles unavailable
 - `gene_id_column`: `None` uses `var.index`; any non-blank string names that
   exact `var` column (default: `None`)
+- `obs_keys`: exact `obs` columns to serve; `None` (the default) serves every
+  column. Name them to leave out a column Cellucid cannot serve, such as a
+  datetime column
 - `normalize_embeddings`: normalize coordinates to `[-1, 1]` (default: True)
 - `centroid_outlier_quantile`: quantile used for categorical centroids
 - `centroid_min_points`: minimum category size used for categorical centroids
@@ -433,13 +454,15 @@ Cell indices refer to the **row order** Cellucid is serving.
 
 ## Reacting to the UI (Hooks: Viewer → Python)
 
-The viewer can send events back to Python so your notebook can react to selection/hover/click.
+The viewer can send events back to Python so your notebook can react to selection/hover/click, and to a command the viewer refused.
 
 Supported hooks:
 - `@viewer.on_ready`
 - `@viewer.on_selection`
 - `@viewer.on_hover`
 - `@viewer.on_click`
+- `@viewer.on_command_error` (a command this notebook sent was rejected by the
+  viewer; only the web build that emits `command_error` sends it)
 - `@viewer.on_message` (raw debugging)
 
 ### Minimal: print selections
@@ -527,6 +550,32 @@ This checks server endpoints (`/_cellucid/health`, `/_cellucid/info`,
 `/_cellucid/datasets`), probes every declared identity under its exact id/path,
 performs a ping/pong roundtrip, and reports recent accepted-event counts.
 It also includes a frontend “debug snapshot” (the iframe’s `location.href`, origin, and user agent), which is useful in proxied notebook environments.
+
+```{figure} ../../../_static/screenshots/jupyter/pancreas-debug-connection.png
+:alt: A JupyterLab notebook whose output cell holds the debug_connection dictionary, showing the viewer and server URLs, the web build identity, a health status of ok, the dataset identity probe, and the frontend round-trip result, followed by a viewer.stop() cell.
+:width: 1440px
+
+`viewer.debug_connection()` returns a dictionary; it prints nothing by itself.
+Read it top to bottom: `server_health` proves the server is alive,
+`dataset_identity_probes` proves it is serving the dataset you think it is, and
+`frontend_roundtrip` proves the browser can talk back to Python. A hook problem
+that survives all three is a proxy or extension problem, not a Cellucid one.
+```
+
+:::{note}
+`debug_connection()` is a diagnostic, and it degrades rather than raising. Any
+probe that fails is recorded as a `*_error` string beside the others instead of
+stopping the report, so read the keys rather than assuming an exception would
+have told you.
+
+When `show()` serves a prepared export that ships a published default session,
+each such entry in `server_datasets` carries two extra fields —
+`state_manifest` and `state_sha256` — beside `id`, `path`, and `name`. They are
+the same pair the catalog advertises (see
+{doc}`../l_sessions_sharing/04_official_sample_states`), and
+`dataset_identity_probes` is reported for those datasets exactly as for any
+other.
+:::
 
 ## Cleanup (Do This If You Re-run Cells Often)
 

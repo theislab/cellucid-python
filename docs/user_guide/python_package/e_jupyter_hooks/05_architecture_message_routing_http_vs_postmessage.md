@@ -65,7 +65,7 @@ Security:
 - so Cellucid authenticates commands using a per-viewer `viewerToken` rather than strict origin allowlisting.
 
 Where to look:
-- Python send path: `cellucid-python/src/cellucid/jupyter.py` (`BaseViewer.send_message`)
+- Python send path: `cellucid-python/src/cellucid/jupyter/_base.py` (`BaseViewer.send_message`)
 - JS receive path: `cellucid/assets/js/data/jupyter-source.js` (`_handleMessage`)
 
 ### Channel B: iframe → Python (events) via HTTP POST
@@ -79,7 +79,7 @@ Where to look:
 - JS send path: `cellucid/assets/js/data/jupyter-source.js` (`_postEventToPython`)
 - Python receive path: `cellucid-python/src/cellucid/_server_base.py` (`handle_event_post`)
 - Python routing path: `cellucid-python/src/cellucid/_server_base.py` (`route_event`)
-- Python hook dispatch: `cellucid-python/src/cellucid/jupyter.py` (`_handle_frontend_message`, `HookRegistry`)
+- Python hook dispatch: `cellucid-python/src/cellucid/jupyter/_base.py` (`_handle_frontend_message`) and `jupyter/_hooks.py` (`HookRegistry`)
 
 ## How the iframe URL is chosen (mixed-content avoidance)
 

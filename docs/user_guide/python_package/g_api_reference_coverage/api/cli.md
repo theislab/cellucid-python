@@ -86,6 +86,17 @@ This H5AD command prints `?anndata=true`; a prepared export prints
 - `1`: error (e.g., path not found, format not detected)
 - `130`: interrupted by user (Ctrl+C)
 
+## What a failure prints
+
+The last line always begins `Error:` and carries the whole message — what
+failed and what to change. Conditions you can correct (a missing flag, a taken
+port, an unbindable host, an input that is not a dataset, an optional package
+that is not installed) print that line and nothing else.
+
+A Python traceback above the `Error:` line means Cellucid itself failed; that
+line then names the issue tracker and asks you to include the traceback. Add
+`--verbose` to see the traceback for any failure.
+
 ---
 
 ## Troubleshooting

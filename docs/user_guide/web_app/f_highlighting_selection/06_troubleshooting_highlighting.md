@@ -24,6 +24,9 @@ These checks solve most “it’s broken” reports in under a minute:
 7) **Modifier keys:** are you holding `Alt` to start a selection gesture?
    - `Shift+Alt` = add; `Ctrl/Cmd+Alt` = subtract.
 8) **Tool mode:** are you in the tool you think you are in (Lasso vs Proximity vs KNN vs Annotation based)?
+   - **Annotation based** additionally needs a coloured field. With none, the
+     panel replaces its `Alt+click` invitation with the sentence that asks for
+     one; the other three tools never read the active field.
 9) **Where you released:** did the mouse come up over the plot, or over the
    sidebar / a notification? A release off the plot abandons the gesture on
    purpose.
@@ -53,11 +56,20 @@ Two rules hold for every message in the table below:
 
 | What you see | What happened | What to do |
 |---|---|---|
-| “That click did not land on a cell, so there is nothing to select. Zoom in, or raise Point size under Visualization, to make cells easier to hit.” | `Alt+click` hit no point. Points draw about a pixel wide when zoomed out, so this is ordinary rather than exceptional. | Zoom in, or raise **Point size**, then click again. |
+| “That click did not land on a cell, so there is nothing to select. Zoom in to make cells easier to hit: only the cells the viewer is currently drawing can be clicked.” | `Alt+click` hit no point. Points draw about a pixel wide when zoomed out, so this is ordinary rather than exceptional. | Zoom in, then click again. **Point size** does not help: picking uses a fixed radius in data space and never reads the drawn size. |
 | “That gesture ended outside the view, so nothing was selected.” | You released the mouse somewhere other than the plot. The gesture was abandoned deliberately — see the symptom below. | Repeat the gesture and release over the plot. |
 | “That cell has no value on the active field, so there is nothing to select.” | Annotation based: the clicked cell is missing a value on the active field, so the rule resolves to no cells. | Click a cell that has a value, or switch to a field that covers it. |
 | “That gesture did not change the selection.” | The gesture resolved to exactly the set you already had. | Nothing is wrong. Draw elsewhere, or change the modifier key. |
 | “Annotation selection needs an active field. Choose a Categorical obs or Continuous obs field under Coloring & Filtering, then Alt+click a cell.” | Annotation based is selected but no field is coloured, so the viewer never starts the gesture at all. | Choose a categorical or continuous field first. |
+
+```{figure} ../../../_static/screenshots/highlighting_selection/read-missed-click-notice.png
+:alt: A proximity Alt+click on empty space, with the pointer pressed where no cell is drawn and the Highlighting panel showing the notice that the click did not land on a cell and that only the cells the viewer is currently drawing can be clicked.
+:width: 1440px
+
+Where to look. The pointer was pressed in empty space on the right; the
+explanation appears on the left, under the **Highlight mode** buttons. It is
+appended to the mode's usual help text, not shown in its place.
+```
 
 Which tools report which:
 
@@ -67,6 +79,12 @@ Which tools report which:
   only when it cannot place a centre at all; with a candidate set already
   standing it places one anyway (see the proximity symptom below).
 - **“ended outside the view”** comes from all four tools, Lasso included.
+
+:::{note}
+These lines are not cleared. A notice stays on screen until some later gesture
+replaces it, so a line you are reading may describe a gesture from a minute ago.
+Repeat the gesture you are actually debugging before you trust the line.
+:::
 
 ---
 
@@ -238,7 +256,13 @@ based** selection, not only Lasso.
    a centre anyway — and it is not where you expected. See below.
 3) Your radius is too small (tiny drag) or too large (huge drag).
 4) Filters are hiding nearby cells; selection only considers visible cells.
-5) You expected screen-space selection; proximity is embedding-space distance.
+5) The camera is far out with **Visualization → Renderer settings →
+   Level-of-Detail (LOD)** enabled. The seed `Alt+click` picks the cell under
+   the pointer, and it can only land on a cell the view is actually drawing —
+   so a zoomed-out camera can refuse a click over a region that does have
+   cells in it. Only the seed click is affected; the drag that follows still
+   evaluates every unfiltered cell ({doc}`01_highlight_mental_model`).
+6) You expected screen-space selection; proximity is embedding-space distance.
 
 ### How to confirm
 - Read the line under the **Highlight mode** buttons: a refused click names
@@ -246,6 +270,8 @@ based** selection, not only Lasso.
 - Start by `Alt+click` directly on a clearly visible cell (zoom in).
 - Drag slowly and watch the overlay radius.
 - Temporarily disable filters and try again.
+- If a click is refused only when zoomed out, zoom in and seed again — or turn
+  **Level-of-Detail (LOD)** off for the seed click.
 
 ### Clicking empty space (what the centre actually is)
 When you `Alt+click` empty space and a candidate set already exists, the centre
@@ -280,7 +306,7 @@ on the selection.
 - If you cannot enable edges, assume connectivities are missing.
 - If the line under the **Highlight mode** buttons instead reads *“That click
   did not land on a cell…”*, the graph is not the problem: your `Alt+click`
-  missed every point. Zoom in, or raise **Point size**, and seed the drag again.
+  missed every point. Zoom in and seed the drag again.
 
 ### Fix
 - Re-export your dataset including connectivities (if you control the export pipeline).
@@ -291,13 +317,16 @@ on the selection.
 
 ---
 
-## Symptom: “Annotation based selection selects too many / too few cells”
+## Symptom: “Annotation based selection selects nothing / too many / too few cells”
 
 ### Likely causes (ordered)
-1) Filters are hiding part of the category/range (selection only considers visible cells).
-2) You are selecting on a different active field than you think.
-3) The field has missing values or extreme distribution (continuous).
-4) You expected “Alt = intersect” but on categorical fields it behaves like “replace”.
+1) **No field is coloured at all**, so the tool has nothing to read. The panel
+   says so in place of the usual invitation, and the viewer never starts the
+   gesture.
+2) Filters are hiding part of the category/range (selection only considers visible cells).
+3) You are selecting on a different active field than you think.
+4) The field has missing values or extreme distribution (continuous).
+5) You expected “Alt = intersect” but on categorical fields it behaves like “replace”.
 
 ### How to confirm
 - Confirm the active field in the UI (legend/field selector).
@@ -314,6 +343,9 @@ on the selection.
     value on it. Click a different cell.
 
 ### Fix
+- If the panel is asking for a field, choose a **Categorical obs** or
+  **Continuous obs** entry under **Coloring & Filtering**; `Alt+click` works
+  from that moment on.
 - For categorical:
   - use `Alt` to replace,
   - `Shift+Alt` to add,

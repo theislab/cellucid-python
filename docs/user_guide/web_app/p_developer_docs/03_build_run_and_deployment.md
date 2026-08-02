@@ -47,10 +47,24 @@ Any static host works (GitHub Pages, Netlify, S3+CloudFront, Cloudflare Pages, n
 
 3) **CSP expectations**
    - `cellucid/index.html` defines CSP in a `<meta http-equiv="Content-Security-Policy">`.
+   - The policy is `default-src 'self'`. Every JavaScript dependency is vendored
+     under `assets/external/` and served from the app's own origin; the only
+     external script origin allowed is Google's tag manager. Adding a CDN
+     dependency requires editing this policy, which is the intended friction.
+   - `script-src` also carries `'wasm-unsafe-eval'`, which is what lets the
+     bundled HDF5 WebAssembly module compile without granting general `eval`.
    - If you move CSP into an HTTP header (recommended for production), keep it consistent with required endpoints (datasets, GitHub worker, analytics).
    - If you edit the inline JSON-LD `<script type="application/ld+json">`, the CSP hash in `script-src` must be updated or the browser will block it.
 
-4) **Catch-all route rewrites**
+4) **Know what your hostname turns on**
+   - Analytics initialises **only** on `cellucid.com`, `www.cellucid.com` and
+     `theislab.github.io`. A deployment on any other hostname — including a
+     staging copy of the production site — reports nothing, by design.
+   - If you deploy an internal instance for sensitive data, that is the property
+     you are relying on. Document it for your reviewers:
+     {doc}`../o_accessibility_privacy_security/02_privacy_model`.
+
+5) **Catch-all route rewrites**
    - Cellucid is a single page, but it is not using a framework router that needs wildcard rewrites.
    - Do not serve `index.html` for missing data files; that turns a missing-file
      response into a misleading JSON parse error.

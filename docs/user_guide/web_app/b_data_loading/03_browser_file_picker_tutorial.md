@@ -35,10 +35,11 @@ If your dataset is large or you want maximum reliability/performance, use **Serv
 
 1) Open [Cellucid](https://www.cellucid.com/).
 2) Expand **Session** in the left sidebar and find **Local data:**.
-3) Choose the button matching exactly what you have:
-   - **Prepared** — a folder created by `prepare()`
+3) Choose the button matching exactly what you have. The three sit together, in
+   this order:
    - **H5AD** — one current-schema `.h5ad`, no larger than 512 MiB
    - **Zarr ZIP** — one `.zarr.zip` or `.zip` archive
+   - **Prepared** — a folder created by `prepare()`
 4) Wait for the dataset to load.
 5) Confirm success:
    - you see points rendered in the canvas
@@ -46,12 +47,31 @@ If your dataset is large or you want maximum reliability/performance, use **Serv
 
 If you don’t see points after loading, jump to the troubleshooting section at the end.
 
-```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
-:width: 246px
+```{figure} ../../../_static/screenshots/data_loading/choose-local-data-control.png
+:alt: Close-up of the Local data controls: an H5AD button and a Zarr ZIP button side by side, a full-width Prepared button beneath them, and a mouse pointer resting on Prepared.
+:width: 496px
 
-The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
+The three local-data controls, with the pointer on **Prepared**. Each one opens
+a different kind of picker, so choosing the wrong button is the most common
+reason a selection is refused: **Prepared** asks for a *folder*, the other two
+ask for a single *file*.
 ```
+
+```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
+:alt: The full Session panel: a dataset summary table, a Sample datasets dropdown, the three Local data buttons, a Remote server field with a Connect button, a GitHub data field with a Connect button, and Save State and Load State buttons.
+:width: 524px
+
+Where the local-data controls sit in the whole Session panel. Every loading path
+has its own labelled group, and **Save State** / **Load State** stay beside them.
+```
+
+:::{important}
+**If you cancel the file chooser, Cellucid says nothing at all.** No error, no
+notification, no spinner — the app simply carries on with whatever was already
+loaded. So “I clicked **Prepared** and nothing happened” almost always means the
+dialog was dismissed rather than confirmed. Click the button again and complete
+the selection.
+:::
 
 ## Option #3 — Load a Prepared Export Folder
 
@@ -91,6 +111,7 @@ A loaded dataset in Cellucid: the sidebar controls the active view while the cat
 - You have a **small** `.h5ad` and just want a quick look.
 - You do not want to run Python locally.
 
+(h5ad-size-ceiling)=
 ### Important performance limitation (do not skip)
 
 Browser `.h5ad` loading is **not truly lazy**.
@@ -98,8 +119,25 @@ Browser `.h5ad` loading is **not truly lazy**.
 Due to browser limitations, the viewer must load the entire `.h5ad` file into memory
 before it can read data.
 
-Practical consequence:
-- large `.h5ad` files can freeze the tab or crash the browser
+Practical consequences:
+- **Files over 512 MiB are refused outright.** Cellucid checks the file size
+  before reading a single byte and reports:
+
+  ```text
+  H5AD direct browser files must have a positive safe size no larger than
+  512 MiB; use the Cellucid server or prepared format
+  ```
+
+- Files comfortably under that ceiling can still exhaust the tab, because the
+  decompressed matrix is larger than the file on disk.
+
+```{figure} ../../../_static/screenshots/data_loading/fail-h5ad-over-size-limit.png
+:alt: A Cellucid notification reading H5AD direct browser files must have a positive safe size no larger than 512 MiB; use the Cellucid server or prepared format.
+:width: 776px
+
+Selecting an `.h5ad` above the ceiling. This appears immediately, because the
+size is checked before any read — nothing is uploaded and nothing is parsed.
+```
 
 ### Recommended alternative for larger `.h5ad`
 Use server mode (recommended):
@@ -157,11 +195,42 @@ directory. It must preserve dotfiles such as `.zgroup`, `.zattrs`, and
 `velocity_umap_2d`, `T_fwd_umap_3d`, and other
 `<field>_umap_<dim>d` keys.
 
+## What each refusal looks like on screen
+
+Cellucid names the cause rather than saying “invalid file”, so the message is
+usually the diagnosis. These are the three you are most likely to meet.
+
+### You picked something that is not an H5AD
+
+```{figure} ../../../_static/screenshots/data_loading/fail-h5ad-wrong-file.png
+:alt: A Cellucid notification reading "The selected file is not a valid HDF5/H5AD file. Choose an AnnData .h5ad file or regenerate it with AnnData.", with a dismiss button at its right.
+:width: 760px
+
+A CSV renamed to `.h5ad`. Cellucid checks the file's leading bytes, not its
+name, so renaming a file never makes it loadable.
+```
+
+### The file is an H5AD, but it has no UMAP
+
+```{figure} ../../../_static/screenshots/data_loading/fail-missing-umap-embedding.png
+:alt: A Cellucid notification reading "No exact UMAP embedding found in obsm. Expected one or more of X_umap_1d, X_umap_2d, or X_umap_3d. Available obsm keys: X_pca.", with a dismiss button at its right.
+:width: 760px
+
+The message lists the `obsm` keys your file *does* have — here only `X_pca` —
+so you can see at a glance what to rename or recompute.
+```
+
+### The file is bigger than the browser ceiling
+
+Shown above under {ref}`the performance limitation <h5ad-size-ceiling>`: the
+512 MiB refusal, raised before any byte is read.
+
 ## Common Failure Modes (and Why They Happen)
 
 ### “It worked for a demo dataset but not my data”
 - Your file is missing required embeddings.
-- Your `.h5ad` is too large for browser memory.
+- Your `.h5ad` is over 512 MiB, or large enough that the decompressed matrix
+  exhausts the tab.
 - Your Zarr ZIP is incomplete, contains multiple roots, or omits required
   `.zgroup`, `.zattrs`, or `.zarray` entries.
 
@@ -205,11 +274,15 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 ### Symptom: “I clicked Prepared, but nothing happens”
 
 **Likely causes (ordered)**
-1) You denied directory access or a managed-browser policy blocked it.
-2) The UI is open in an embedded context that disallows directory access.
-3) You clicked H5AD or Zarr ZIP instead of **Prepared**.
+1) **You dismissed the file chooser.** A cancelled selection is deliberately
+   silent — Cellucid shows no error and keeps the dataset you already had.
+2) You denied directory access or a managed-browser policy blocked it.
+3) The UI is open in an embedded context that disallows directory access.
+4) You clicked H5AD or Zarr ZIP instead of **Prepared**.
 
 **How to confirm**
+- Click **Prepared** again and complete the selection. If a dataset then loads,
+  cause 1 was it.
 - Open Cellucid as a standalone page and click **Prepared**.
 - Try selecting a different folder (a very small test export).
 
@@ -243,6 +316,8 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
   `obsm['X_umap_2d']`, or `obsm['X_umap_3d']`—is present.
 
 **How to confirm**
+- Read the message itself: it ends with `Available obsm keys: …`, which lists
+  what your file actually contains.
 - In Python:
 
   ```python

@@ -149,13 +149,13 @@ def test_real_zarr_v2_store_runs_the_read_and_serve_preparation_path(
         ]
         assert adapter.get_var_manifest()["fields"] == [[0, "Gene_A"], [1, "Gene_B"]]
         np.testing.assert_allclose(
-            np.frombuffer(adapter.get_points_binary(2), dtype=np.float32).reshape(3, 2),
+            np.frombuffer(adapter.get_points_binary(2), dtype="<f4").reshape(3, 2),
             np.array([[-1.0, 0.5], [0.0, 0.0], [1.0, -0.5]], dtype=np.float32),
         )
         np.testing.assert_array_equal(
             np.frombuffer(
                 adapter.get_gene_expression("Gene_B"),
-                dtype=np.float32,
+                dtype="<f4",
             ),
             np.array([10.0, 20.0, 30.0], dtype=np.float32),
         )

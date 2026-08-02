@@ -37,6 +37,9 @@ cellucid_prepare(
   latent_space = latent_space,
   obs = obs,
   X_umap_2d = X_umap_2d,
+  obs_categorical_dtype = "uint8",
+  dataset_name = "Raw Minimal",
+  dataset_id = "raw_minimal",
   out_dir = out_dir,
   force = TRUE
 )
@@ -62,6 +65,9 @@ cellucid_prepare(
   var = var,
   gene_expression = gene_expression,
   X_umap_2d = X_umap_2d,
+  obs_categorical_dtype = "uint8",
+  dataset_name = "Raw Minimal",
+  dataset_id = "raw_minimal",
   out_dir = out_dir,
   force = TRUE,
   var_quantization = 8,

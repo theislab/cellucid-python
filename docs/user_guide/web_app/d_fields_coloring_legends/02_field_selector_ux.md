@@ -28,12 +28,22 @@ In multiview (live + snapshots), the sidebar controls apply to the **currently a
 If you’re in Grid compare, click a panel first to make it the active view, then pick a field.
 :::
 
-```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
-:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
-:width: 246px
+```{figure} ../../../_static/screenshots/web_app/field-selectors-three-routes.png
+:alt: Three stacked field controls labelled CATEGORICAL OBS with a dropdown reading clusters, CONTINUOUS OBS with a dropdown reading None, and GENE EXPRESSION with a text box reading Search genes; each is followed by four small square icon buttons showing two overlapping rectangles, a pencil, a bin and a cross, greyed out on the two unused rows, with the mouse pointer pressing the clusters dropdown.
+:width: 488px
 
-Selecting a categorical observation field colors the embedding and exposes its complete category legend.
+The three selectors, in the order they appear. The four small buttons to the
+right of each are **Duplicate**, **Rename**, **Delete** and **Clear**; they are
+greyed out until that selector holds a field, which is why they look inert on
+the two empty rows here.
 ```
+
+:::{tip}
+The buttons are icon-only, and their meaning lives in the tooltip rather than a
+label. Hovering the first one on the categorical row shows
+`Duplicate the selected categorical obs field` — note the app says *duplicate*,
+not *copy*.
+:::
 
 ---
 
@@ -63,13 +73,20 @@ If there are no fields of a kind, the dropdown shows an empty-state label:
 - `(no categorical obs fields)`
 - `(no continuous obs fields)`
 
-### The `*` marker and “Original:” tooltips
+### The `*` marker for renamed fields
 
-If you rename a field, Cellucid shows:
-- a trailing `*` in the dropdown label (example: `clusters_cleaned *`)
-- a tooltip with the original name (`Original: clusters`)
+If you rename a field, Cellucid shows a trailing `*` in the dropdown label
+(example: `clusters_cleaned *`).
 
 This is not cosmetic: the app keeps the original key internally so it can still load data correctly after a rename.
+
+:::{note}
+**The obs dropdowns carry no `Original:` tooltip.** The option text is the only
+thing the app sets there, so hovering a renamed obs option shows nothing. An
+`Original: <old name>` tooltip does exist in two other places — on **gene
+search results**, and on rows in the **Deleted Fields** panel — so if you need
+to see what a renamed field used to be called, look there.
+:::
 
 ---
 
@@ -89,9 +106,40 @@ Result limit:
 - the dropdown shows up to **100** matches
 - if there are more, you’ll see a message like `...and 2,341 more. Type to narrow results.`
 
+```{figure} ../../../_static/screenshots/web_app/gene-search-dropdown-open.png
+:alt: A field row labelled GENE EXPRESSION with a text box containing the letters Rp, and an open dropdown list below it showing gene names that contain Rp, one per row.
+:width: 480px
+
+Typing into the box opens the list immediately and filters it on every
+keystroke. Matching is a case-insensitive substring test, so `Rp` matches
+anywhere in the name, not only at the start.
+```
+
+If nothing matches, the dropdown says so rather than going blank:
+
+```{figure} ../../../_static/screenshots/web_app/gene-search-no-match.png
+:alt: The same field row with CD19 typed into the box and a dropdown below reading No gene matches, followed by a sentence stating how many gene names this dataset publishes and warning that it may be a subset of the source data and to check for typos, and a link reading Why a gene may be missing.
+:width: 480px
+
+The empty state names the number of genes **this** dataset publishes, which is
+the number you need in order to tell “I mistyped it” apart from “this export
+does not contain it”. See {doc}`07_genes_in_the_built_in_samples`.
+```
+
 :::{note}
 Loading a gene can take time (especially on remote datasets). While a gene is loading, Cellucid temporarily disables other selectors so the active field state can’t race.
 :::
+
+### What the list contains
+
+The dropdown holds exactly the gene names the loaded dataset published, plus any
+gene fields you created inside Cellucid. There is no second identifier to search
+instead and no alias table, so a name the export did not publish matches nothing
+even when the gene exists in the underlying study.
+
+That is worth knowing before you conclude a gene is missing from your data: the
+four human built-in samples publish only part of their prepared gene axis, for a
+documented reason. See {doc}`07_genes_in_the_built_in_samples`.
 
 
 
@@ -164,9 +212,17 @@ Each deleted item has two actions:
 
 ### Restore (undo delete)
 
-Brings the field back into the dropdowns.
+Brings the field back into the dropdowns, and reports `Restored "<name>"`.
 
-If restoring would create a name collision, Cellucid auto-renames the restored field (for example: `clusters (restored)`), and shows a notification.
+:::{important}
+**A restore that would collide with a visible name is refused, not renamed.**
+Cellucid stops with
+`Cannot restore "<name>" while that visible field name exists` and the field
+stays in Deleted Fields. There is no automatic `(restored)` suffix.
+
+To get the field back, rename the field that is currently holding the name,
+then restore again.
+:::
 
 ### Confirm (purge restore capability)
 

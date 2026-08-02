@@ -91,6 +91,7 @@ serve("./my_export")  # blocks until Ctrl+C
   - `/_cellucid/health`
   - `/_cellucid/info`
   - `/_cellucid/datasets`
+  - `/_cellucid/protocol` (which wire capabilities this `cellucid` accepts)
 
 ### Viewer UI hosting and source requirements
 

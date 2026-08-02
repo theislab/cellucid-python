@@ -267,19 +267,35 @@ which is what maps each field id to its files.
 
 ## The writer proves the layout before publishing
 
-Before a candidate generation is published, `cellucid_prepare()` checks each
-payload directory against the manifest that describes it, on four axes —
-`Observation`, `Gene`, `Connectivity`, and `Vector field`. Every path a manifest
-declares must exist, and every file present must be declared. A mismatch stops
-the export with, for example:
+Before a candidate generation is published, `cellucid_prepare()` reconciles what
+is on disk against what the export declares, on **five** surfaces: the four
+payload directories — `Observation`, `Gene`, `Connectivity`, and `Vector field` —
+and the `Export` root itself. On each one, every path the export declares must
+exist and every file present must be declared. A mismatch stops the export with,
+for example:
 
 ```text
 Gene manifest does not describe the payloads that were written. Declared but
-absent: var/7.values.u8.gz. Written but undeclared: var/8.values.u8.gz.
+absent: c("var/7.values.u8.gz"). Written but undeclared: c("var/8.values.u8.gz").
 ```
 
 That is what makes the index space trustworthy: a stale file from an earlier
 generation cannot survive beside a current manifest.
+
+The root is checked for a reason of its own. `points_<dim>d.bin(.gz)` is the only
+payload this format declares by path *from the export root* — in
+`dataset_identity.json`, under `embeddings.files` — so no axis manifest can speak
+for it, and its declared name and its written name are two expressions of one
+`compression` setting. After a successful export the root holds exactly
+`dataset_identity.json`, `obs_manifest.json`, the declared point payloads,
+whichever of `var_manifest.json` and `connectivity_manifest.json` the export
+wrote, and the payload directories it created — and nothing else. A leftover
+scratch file, or a directory the export did not create, is refused rather than
+published.
+
+`prepare()` in the `cellucid` Python package performs the same five
+reconciliations and refuses the same generations. Only the rendering of the two
+lists differs, as `['var/7.values.u8.gz']` rather than `c("var/7.values.u8.gz")`.
 
 ## Validation checklist (quick)
 

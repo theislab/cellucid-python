@@ -20,9 +20,13 @@ Its published identity contains exactly 3,696 cells and 3,753 genes.
    pin the exact inventory of **3,753 genes**.
 
 The sample opens in its declared default 3D embedding with **Orbit**
-navigation. Selecting 1D or 2D changes the dimension-specific default to
-**Planar**, unless you explicitly chose another navigation mode. No camera path
-is created or played automatically.
+navigation, restored from the reviewed starting view it publishes beside its
+scientific files (see {doc}`../l_sessions_sharing/04_official_sample_states`).
+Orbit is what a 3D embedding gets anyway, so the starting view is not treated as
+a mode you chose. Selecting 1D or 2D afterwards therefore moves
+**Navigation → Mode** to **Planar** for you. Pick a mode yourself and it stays
+until you set it back to the dimension's own default. No camera path is created
+or played automatically.
 
 ## Verify the scientific controls
 
@@ -89,9 +93,24 @@ in `cellucid-datasets`. It pins:
 - deterministic embedding and velocity parameters;
 - semantic digests for coordinates, vectors, metadata, genes, expression, and
   connectivity;
-- the exact Cellucid 0.9.1 producer-source digest; and
-- the complete 3,774-file, 2,477,205-byte generation digest
-  `268a36b0c62f1e872bc4ebc271283fe09b9036c2b8db2b7bbf2d7d737556c865`.
+- the exact Cellucid 0.9.1 producer-source digest, over the modules the export
+  path executes; and
+- the total byte size and the SHA-256 generation digest covering all 3,774
+  exported files.
+
+Those last two are recorded in `sources/pancreas.json` rather than repeated
+here, because they change whenever the dataset is regenerated. Read them from
+that file if you are verifying a build.
+
+Pancreas is the only one of the five built-in samples with a build contract of
+this kind. The build refuses to start in a different environment and refuses to
+publish an export that does not match the recorded generation digest, so it can
+be rebuilt and checked from the recipe in `cellucid-datasets`. That pin covers
+the producer and the output, not the upstream file itself, which the build
+downloads from the URL above unless it is handed a local copy. The other four
+samples are published artifacts whose exact bytes are recorded but whose build
+is not pinned; {doc}`12_sample_dataset_provenance` states what is and is not
+established for each of the five.
 
 The source data correspond to
 [GSE132188](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE132188).

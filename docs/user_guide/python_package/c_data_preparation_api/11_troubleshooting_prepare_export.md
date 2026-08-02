@@ -150,6 +150,35 @@ Adopt an iteration convention:
 
 ---
 
+## Symptom: `out_dir` is rejected as not a dedicated dataset output directory
+
+### Likely causes
+
+- You passed the directory you are working in (`.`, `./`, or `os.getcwd()`),
+  your home directory (`~`), the filesystem root, or the directory holding
+  every home (`..`, `/Users`, `/home`) — directly or through a symbolic link.
+
+### How to confirm
+
+The call raises, before anything is created or removed:
+
+```text
+ValueError: out_dir must name a dedicated dataset output directory, not /home/you.
+```
+
+### Fix (safe)
+
+Name a child directory of your own, such as
+`prepare(..., out_dir="./exports/my_dataset")`.
+
+### Prevention
+
+Publishing replaces the whole `out_dir`, and `force=True` removes everything the
+previous generation held, so `out_dir` should never be a directory you keep
+anything else in. Keep one directory per dataset under a single `exports/` root.
+
+---
+
 ## Symptom: a category label or an identity string is rejected as “not shown as written”
 
 ### Likely causes

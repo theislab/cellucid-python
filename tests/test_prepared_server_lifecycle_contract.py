@@ -170,7 +170,7 @@ def test_prepared_server_thread_start_failure_releases_bound_socket(
     def fail_start(_thread: object) -> None:
         raise original
 
-    monkeypatch.setattr("cellucid.server.threading.Thread.start", fail_start)
+    monkeypatch.setattr("cellucid.server._server.threading.Thread.start", fail_start)
     with pytest.raises(RuntimeError, match="exact prepared thread") as raised:
         server.start_background()
 
@@ -192,7 +192,7 @@ def test_prepared_server_browser_failure_rolls_back_live_thread(
     def fail_browser(_url: str) -> bool:
         raise original
 
-    monkeypatch.setattr("cellucid.server.webbrowser.open", fail_browser)
+    monkeypatch.setattr("cellucid.server._server.webbrowser.open", fail_browser)
     with pytest.raises(RuntimeError, match="exact prepared browser") as raised:
         server.start_background()
 
@@ -209,7 +209,7 @@ def test_prepared_server_false_browser_result_is_a_start_failure(
 ) -> None:
     server = _server(tmp_path, open_browser=True)
     monkeypatch.setattr(
-        "cellucid.server.webbrowser.open",
+        "cellucid.server._server.webbrowser.open",
         lambda _url: False,
     )
 
@@ -233,7 +233,7 @@ def test_prepared_background_failure_is_retained_for_wait(
         raise original
 
     monkeypatch.setattr(
-        "cellucid.server.HTTPServer.serve_forever",
+        "cellucid.server._server.HTTPServer.serve_forever",
         fail_serve,
     )
     server.start_background()

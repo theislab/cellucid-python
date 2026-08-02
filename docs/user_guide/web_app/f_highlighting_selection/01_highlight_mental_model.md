@@ -41,7 +41,7 @@ Think of highlighting as a bookkeeping layer on top of what the view is currentl
 ```text
 Dataset (N cells; fixed order)
 │
-├─ View A filters → visibility mask A (which cells are interactable/drawn in View A)
+├─ View A filters → visibility mask A (which cells are interactable in View A)
 ├─ View B filters → visibility mask B (can differ in snapshots)
 │
 └─ Highlight pages (global, dataset-scoped)
@@ -56,7 +56,21 @@ Renderer (per view):
 
 Two key consequences:
 - You can have highlighted cells that are *not currently visible*.
-- You cannot select cells that are not currently visible.
+- You cannot select cells that a filter has hidden. Level of detail is a
+  different thing: when a large dataset is drawn at reduced detail, the cells it
+  leaves undrawn are still selectable.
+
+Here is what that looks like once one selection has been confirmed:
+
+```{figure} ../../../_static/screenshots/highlighting_selection/04-view-highlighted-cells.png
+:alt: The whole window after confirming the lasso group, with the enclosed cells drawn in the highlight colour across the embedding and the panel reporting 870 cells highlighted.
+:width: 1440px
+
+One confirmed group. The panel counts membership (`870 cells highlighted`); the
+canvas draws the members it is currently allowed to draw. Those are two
+different numbers whenever a filter is active, and the panel says so by
+switching to *“N of M highlighted cells visible”*.
+```
 
 ---
 
@@ -122,14 +136,33 @@ Only one page is **active** for rendering/highlighting at a time.
 ## The pipeline: visibility first, then highlights
 
 ### Step 1: filters decide what is selectable
-Selection tools only consider cells that are visible in the view you are selecting in.
+Selection tools only consider cells that are not filtered out in the view you are selecting in.
 
 That includes:
 - standard filters ({doc}`../e_filtering/index`),
-- view-specific filters in multi-view snapshots (if snapshots have independent filters),
-- LOD/downsampling visibility (for very large datasets).
+- view-specific filters in multi-view snapshots (if snapshots have independent filters).
 
-This is why “I can’t lasso those points” often means “they are not visible in this view”.
+It does **not** include LOD/downsampling. With **Visualization → Renderer settings →
+Level-of-Detail (LOD)** enabled ({doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke`),
+a zoomed-out camera makes Cellucid draw only a subset of the points — but a lasso,
+proximity drag, or KNN growth still evaluates every unfiltered cell. So a gesture can
+select cells the view is not currently drawing, and the group you confirm can be larger
+than the dots you drew around. That is deliberate: a selection that changed with the
+camera would not be reproducible.
+
+To see how much of a result is actually on screen, read the
+“*N* of *M* highlighted cells visible” counter above the group list
+({doc}`03_highlight_ui`). That counter *does* account for LOD, so “visible” there can be
+a smaller number than “selected”.
+
+One exception: the `Alt+click` that *starts* a gesture picks the cell under the pointer,
+and that pick can only land on a cell the view is drawing. Annotation-based, proximity,
+and KNN selection all begin that way, so with LOD on and the camera far out a click can
+report “no cell” even where cells exist — zoom in to seed, then drag. Lasso has no seed
+click and is never affected.
+
+This is why “I can’t lasso those points” means “they are filtered out in this view”,
+not “they are too small to be drawn right now”.
 
 ### Step 2: highlights decide what is emphasized
 Permanent highlights come from:
@@ -199,6 +232,18 @@ Goal: select a cluster and make it persist.
 5) Release mouse → you should see a “Step 1” count and the points preview-highlighted.
 6) Click **Confirm** (in the step controls).
 7) You now have a highlight group in the list, and the highlight remains even if you change fields.
+
+```{figure} ../../../_static/screenshots/highlighting_selection/choose-highlight-mode.png
+:alt: The Highlighting panel with the four Highlight mode buttons — Annotation based, KNN drag, Proximity drag, Lasso — the pointer on Lasso, and the empty group list reading "No cells highlighted".
+:width: 516px
+
+Step 3 in the panel. The line under the buttons always describes the mode that
+is currently active, so it is the fastest way to confirm you are in the tool you
+think you are in.
+```
+
+The four steps as they actually look, gesture by gesture, are in
+{doc}`07_screenshots`.
 
 Try this once to learn the key idea:
 - Apply a filter that hides that cluster → the group still exists, but becomes invisible.

@@ -6,6 +6,7 @@ If you want the guided flow first:
 
 - Annotators: {doc}`01_annotator_guide`
 - Authors: {doc}`02_author_guide`
+- Every screen in order, with pictures: {doc}`04_lifecycle_walkthrough`
 
 ---
 
@@ -38,6 +39,15 @@ still be edited, but it cannot be Pulled or Published.
 The Community Annotation entry point reports that no repository is connected and offers the explicit Connect repo action.
 ```
 
+```{figure} ../../../_static/screenshots/community_annotation/lifecycle-06-connected-status.png
+:alt: The connected panel showing Dataset, GitHub and Repo rows, a GitHub sync button, a Profile block reporting the signed-in user, and collapsed sections for Manage annotation, Derived consensus column, and Consensus snapshot and local cache.
+:width: 488px
+
+The same panel after a repository is connected. The three header rows —
+**Dataset**, **Github**, **Repo** — are the annotation scope; the sections below
+them are the working surface.
+```
+
 ### Status panel fields (what to read when debugging)
 
 Depending on your state, the panel can show:
@@ -66,6 +76,14 @@ Notes:
 - This uses a GitHub App OAuth flow (no token paste).
 - Tokens are stored only in `sessionStorage` (closing the tab signs you out).
 
+```{figure} ../../../_static/screenshots/community_annotation/lifecycle-02-signin.png
+:alt: Step 1 of 4 of the GitHub sync wizard, headed "Sign in with GitHub", with a Continue with GitHub button, and a header showing Dataset, GitHub not connected, and Repo not connected.
+:width: 1040px
+
+Step 1 of 4. The four step names stay visible down the left, and the header
+tracks the dataset, the GitHub identity, and the bound repository throughout.
+```
+
 ### 2) Install the GitHub App
 
 Buttons:
@@ -75,12 +93,29 @@ Buttons:
 
 If your annotation repo does not appear later, this step is the usual cause.
 
+```{figure} ../../../_static/screenshots/community_annotation/lifecycle-03-install-app.png
+:alt: Step 2 of 4 listing three repositories as cards marked Public or Private, with Add repo and Reload buttons above and a status line reading "Showing 1-3 of 3 repositories. Page 1 of 1." below.
+:width: 1040px
+
+Step 2 of 4. The status line always states the exact count and page, because an
+organisation can expose thousands of repositories.
+```
+
 ### 3) Select an annotation repository
 
 - Filter input: **Filter repositories…**
 - Repos are shown as cards (public/private).
 - Select a repo card, then use the wizard navigation button **Connect**.
 - If replacing an existing repository, the same button reads **Switch repo**.
+
+```{figure} ../../../_static/screenshots/community_annotation/state-no-repository-matches-filter.png
+:alt: Step 3 of 4 with a filter applied that matches no repository, showing "No repositories match this filter." above a status line reading "No repositories to display."
+:width: 1040px
+
+The empty filter result on step 3. `No repositories match this filter.` is a
+filter outcome, not a permission problem — clear the filter to see the full
+list.
+```
 
 What “connect” means:
 
@@ -108,6 +143,22 @@ Navigation:
 
 - **Back** / **Next** buttons navigate the wizard.
 - A status line at the bottom shows progress, warnings, and error text.
+
+```{figure} ../../../_static/screenshots/community_annotation/lifecycle-05-sync.png
+:alt: Step 4 of 4, headed "Sync (pull / publish)", with Pull latest and Publish buttons, an Auto pull selector offering 10, 15 and 60 minute intervals, and a status line reading "Pulled latest annotations."
+:width: 1040px
+
+Step 4 of 4 after a successful **Pull latest**. The status line under the
+buttons is where every outcome is reported verbatim.
+```
+
+```{figure} ../../../_static/screenshots/community_annotation/lifecycle-17-publish.png
+:alt: The same step 4 panel with a status line reading "Publish complete."
+:width: 1040px
+
+The same panel after **Publish**. `Publish complete.` means GitHub accepted the
+write.
+```
 
 ### What Pull does (technical)
 
@@ -214,6 +265,28 @@ Per-column consensus settings (shown only when the column is annotatable):
 
 Remember: config changes become shared only after the author clicks **Publish** in the GitHub sync modal.
 
+```{figure} ../../../_static/screenshots/community_annotation/lifecycle-07-manage-annotation.png
+:alt: The Manage annotation section expanded, showing a categorical obs dropdown with Add, Remove and Close buttons, and an Annotatable consensus settings block with a Threshold slider reading 50 percent, a Min annotators field, and Apply and Reset buttons.
+:width: 488px
+
+**Manage annotation** with a column already annotatable, so the per-column
+consensus settings are shown. **Threshold** is edited in whole percent; it is
+stored as a signed fraction whose full range is −100 % to +100 %, because
+confidence is itself signed.
+```
+
+The defaults, for a column with no explicit settings, are **1** minimum
+annotator and a **0.5** threshold.
+
+```{figure} ../../../_static/screenshots/community_annotation/lifecycle-08-votable-badge.png
+:alt: The Coloring and Filtering panel with the categorical obs dropdown showing an entry prefixed by a ballot-box emoji.
+:width: 458px
+
+A column that is open for annotation is prefixed with 🗳️ wherever it is
+offered. A column an author has closed is prefixed with 🗳️🏁 instead, and a
+column that was never opened has no prefix at all.
+```
+
 ---
 
 ## DERIVED CONSENSUS COLUMN (Optional)
@@ -279,13 +352,55 @@ dataset/repo/branch/user scope. See
 
 You open this by clicking a category label in the categorical legend when the selected field is annotatable.
 
+```{figure} ../../../_static/screenshots/community_annotation/lifecycle-11-consensus.png
+:alt: The full application window with the Community voting modal open over the viewer, showing a disputed status banner, two suggestion cards with vote buttons, attribution lines and comment boxes, and a New suggestion form at the bottom.
+:width: 996px
+
+The complete voting modal for one category, over the viewer it belongs to.
+```
+
 ### What you see at a glance
 
 - A **consensus status line** (Consensus / Disputed / Pending)
 - A list of suggestion cards
 - A **New suggestion** form
 
+The status line is exact about which of the three states applies and why:
+
+| State | Status line | When |
+|---|---|---|
+| Consensus | `Consensus: "<label>" (<confidence>% • <n> voters)` | at least `minAnnotators` voters, one clear leader, and confidence ≥ threshold |
+| Disputed | `Disputed: "<label(s)>" (<confidence>% • <n> voters)` | enough voters, but the leader is tied or confidence is below threshold |
+| Pending | `Pending (<n> voters)` | fewer than `minAnnotators` voters; no confidence is reported |
+
+```{figure} ../../../_static/screenshots/community_annotation/lifecycle-12-disputed.png
+:alt: A voting modal whose status banner reads Disputed, "Alpha cell, Alpha/PP doublet", 0 percent, 4 voters, above two suggestion cards each at net 0 with two upvotes and two downvotes.
+:width: 996px
+
+**Disputed by a tie.** Both suggestions have identical net votes and identical
+upvote counts, so neither leads. A tie is disputed regardless of confidence, and
+the banner names every tied label alphabetically.
+```
+
+```{figure} ../../../_static/screenshots/community_annotation/lifecycle-09-pending.png
+:alt: A voting modal whose status banner reads "Pending (2 voters)" above one suggestion card showing net 2.
+:width: 996px
+
+**Pending.** Two voters against a three-annotator minimum. No confidence figure
+is reported, because the column's own rule says there is not yet enough
+participation to compute one.
+```
+
 ### Suggestion card anatomy
+
+```{figure} ../../../_static/screenshots/community_annotation/lifecycle-10-vote.png
+:alt: One suggestion card headed "Alpha cell" with net 0 at the right, Ontology, Markers and Evidence lines, up and down vote buttons at 2 each, Edit, Delete and Merge buttons, an attribution line naming the proposer and their title, and a comment input showing a 0 of 500 counter.
+:width: 1028px
+
+One card, with every element named below present: label, `net` score, the three
+evidence rows, the vote buttons, the owner-only actions, the attribution line,
+and the comment box with its character counter.
+```
 
 Each suggestion card shows:
 

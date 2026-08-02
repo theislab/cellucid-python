@@ -19,6 +19,10 @@ At minimum, always confirm:
 :::
 
 :::{tip}
+**New here? Read {doc}`11_screenshots` first.** It walks one analysis from a
+mouse click to an exported table, in eight numbered steps with a screenshot at
+each one, and assumes nothing.
+
 If you’re here because “analysis is empty / missing results”, start with {doc}`10_troubleshooting_analysis`.
 :::
 
@@ -29,11 +33,14 @@ If you’re here because “analysis is empty / missing results”, start with {
 | You want to… | Start with | When it’s the right choice | Next page |
 |---|---|---|---|
 | Get a quick read on a selection/group | Quick | You want a fast “is this different?” summary | {doc}`03_analysis_mode_quick_insights` |
-| Inspect distributions and details | Detailed Analysis | You need shape/variance/outliers, not just a single number | {doc}`04_analysis_mode_detailed_analysis` |
-| See relationships between genes/fields | Correlation Analysis | You’re asking “do these move together?” | {doc}`05_analysis_mode_correlation_analysis` |
-| Compare genes between two groups | Differential Expression (DE) | You have gene expression and two pages to compare (A vs B) | {doc}`06_analysis_mode_differential_expression_de` |
+| Inspect distributions and details | Detailed | You need shape/variance/outliers, not just a single number | {doc}`04_analysis_mode_detailed_analysis` |
+| See relationships between genes/fields | Correlation | You’re asking “do these move together?” | {doc}`05_analysis_mode_correlation_analysis` |
+| Compare genes between two groups | Differential Expression | You have gene expression and two pages to compare (A vs B) | {doc}`06_analysis_mode_differential_expression_de` |
 | Score a curated gene program | Gene Signature | You have a predefined gene set (pathway/module) | {doc}`07_analysis_mode_gene_signature` |
-| Find markers for many groups at once | Marker Genes (Genes Panel) | You want one-vs-rest markers for every group in a categorical field | {doc}`08_analysis_mode_genes_panel` |
+| Find markers for many groups at once | Marker Genes | You want one-vs-rest markers for every group in a categorical field | {doc}`08_analysis_mode_genes_panel` |
+
+The names in the second column are the labels the app itself uses, exactly as
+they appear in the panel.
 
 ---
 
@@ -49,23 +56,26 @@ If you’re here because “analysis is empty / missing results”, start with {
 
 ## Interface reference
 
-```{figure} ../../../_static/screenshots/analysis/analysis-panel-tabs.png
-:alt: Analysis panel listing Quick, Detailed, Correlation, Differential Expression, Gene Signature, and Marker Genes modes.
-:width: 246px
+```{figure} ../../../_static/screenshots/analysis/analysis-panel-modes.png
+:alt: Six stacked rows reading Quick (Automatic insights), Detailed (Full control over options), Correlation (Explore variable relationships), Differential Expression (Find DE genes between groups), Gene Signature (Compute signature scores) and Marker Genes (Discover markers across groups). Each row carries a small copy-window icon and a chevron.
+:width: 808px
 
-The Analysis panel exposes six explicit modes, each with its own validated inputs and result area.
+The Analysis panel exposes six explicit modes, each with its own validated inputs
+and result area. The icon on each row undocks that mode into a floating window;
+the chevron opens it in place.
 ```
 
 ---
 
 ## Recommended reading order
 
-1) {doc}`01_analysis_mental_model` (what analysis operates on + what is cached)
-2) {doc}`02_analysis_ui_overview` (where things live; copy/restore behaviors)
-3) Mode pages (`03`–`08`) for the specific analysis you need
-4) {doc}`09_exporting_analysis_results` (tables/plots, what is reproducible)
-5) {doc}`10_troubleshooting_analysis` (symptom → diagnosis → fix)
-6) {doc}`11_screenshots` (verified result captures)
+1) {doc}`11_screenshots` — **one analysis from start to finish**, in eight
+   screenshotted steps. Start here if you have not used the panel before.
+2) {doc}`01_analysis_mental_model` (what analysis operates on + what is cached)
+3) {doc}`02_analysis_ui_overview` (where things live; sidebar vs expanded; copy/restore behaviors)
+4) Mode pages (`03`–`08`) for the specific analysis you need
+5) {doc}`09_exporting_analysis_results` (tables/plots, what is reproducible)
+6) {doc}`10_troubleshooting_analysis` (symptom → diagnosis → fix)
 
 ```{toctree}
 :maxdepth: 1

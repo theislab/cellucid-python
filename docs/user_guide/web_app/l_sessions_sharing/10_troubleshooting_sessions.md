@@ -116,6 +116,16 @@ Read the message before changing anything — each cause has its own:
   never be confirmed. Re-create them and save a new session file. This one is
   not repairable by editing the file.
 
+```{figure} ../../../_static/screenshots/sessions_sharing/refusal-01-different-dataset.png
+:alt: Two notifications carrying the same message, that the session was saved on a different dataset than the one open now, naming 120 cells and 6 genes when it was saved against 3,696 cells and 3,753 genes now, and advising to open the dataset the session was saved on.
+:width: 760px
+
+The first of the four messages, as it appears. It names **both** sizes — what
+the file was saved against and what is open now — so you can tell at a glance
+which of the two is the one you meant to open. The message appears twice because
+the loading indicator carries it as well as the final result.
+```
+
 If the sender changed fields, categories, or gene order while reusing the same
 lightweight identity and sizes, publish a new dataset id and create a new
 session — those are not covered by the digest. Changed cell order or changed
@@ -138,6 +148,22 @@ include:
 
 Obtain a fresh bundle from **Save State** in the current app. The reader accepts
 only the exact schema produced by that current writer.
+
+### You picked a file that is not a session at all
+
+The commonest version of this is not a format problem: it is choosing the wrong
+file. Session files are binary and their names are easy to confuse with the
+figures and exports saved beside them.
+
+```{figure} ../../../_static/screenshots/sessions_sharing/refusal-02-not-a-session-file.png
+:alt: Two notifications reading "Invalid session file (bad MAGIC header)." — one on a loading entry and one as the final result.
+:width: 760px
+
+`Invalid session file (bad MAGIC header).` means the file does not begin with
+the session container's signature — so it is not a `.cellucid-session` file,
+whatever it is named. Check that you picked the right file before investigating
+anything else.
+```
 
 ### Did you download an official `default.cellucid-session`?
 

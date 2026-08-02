@@ -8,6 +8,8 @@ from typing import Any
 import pytest
 
 import cellucid.jupyter as jupyter
+import cellucid.jupyter._base as jupyter_base
+import cellucid.jupyter._wire as wire
 from cellucid.anndata_server import AnnDataRequestHandler
 from cellucid.server import CORSRequestHandler
 
@@ -143,6 +145,21 @@ def test_valid_message_serialization_is_strict_json(
     assert "Cellucid viewer command target is unavailable" in source
 
 
+def test_command_error_names_only_commands_a_viewer_can_send() -> None:
+    """The failure channel and the command channel share one command list.
+
+    A `command_error` may only name a command Python can actually send, and
+    every such command must have a public method to name in the notice --
+    otherwise a viewer could either report a command that does not exist or
+    report one Cellucid cannot describe.
+    """
+    assert set(jupyter_base._COMMAND_PYTHON_CALLERS) == set(wire._COMMAND_MESSAGE_FIELDS)
+    for command, caller in jupyter_base._COMMAND_PYTHON_CALLERS.items():
+        assert caller.startswith("viewer.") and caller.endswith(")"), command
+        method = caller[len("viewer.") : caller.index("(")]
+        assert callable(getattr(jupyter.BaseViewer, method)), command
+
+
 def test_debug_connection_exposes_only_current_diagnostics() -> None:
     parameters = inspect.signature(jupyter.BaseViewer.debug_connection).parameters
     assert list(parameters) == ["self", "timeout"]
@@ -222,3 +239,48 @@ def test_debug_connection_probes_every_declared_dataset_by_exact_id_and_path(
     assert "dataset_identity_error" not in report
     assert requested.count("http://127.0.0.1:8765/alpha/dataset_identity.json") == 1
     assert requested.count("http://127.0.0.1:8765/beta/dataset_identity.json") == 1
+
+
+def test_debug_connection_reports_the_commands_the_viewer_rejected(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    viewer = jupyter.BaseViewer(
+        port=8765,
+        client_server_url="http://127.0.0.1:8765",
+        web_cache_dir=tmp_path / "web-cache",
+    )
+    viewer.register_hook("command_error", lambda _event: None)
+
+    def unreachable(*_args: Any, **_kwargs: Any):
+        raise OSError("diagnostic probes are out of scope for this test")
+
+    monkeypatch.setattr("urllib.request.urlopen", unreachable)
+
+    limit = jupyter_base._DEBUG_COMMAND_ERROR_LIMIT
+    for index in range(limit + 2):
+        viewer._handle_frontend_message(
+            {
+                "type": "command_error",
+                "viewerId": viewer._viewer_id,
+                "command": "setColorBy",
+                "reason": f"failure {index}",
+            }
+        )
+    viewer._handle_frontend_message(
+        {
+            "type": "ready",
+            "viewerId": viewer._viewer_id,
+            "n_cells": 3,
+            "dimensions": 2,
+        }
+    )
+
+    recent = viewer.debug_connection()["recent_events"]
+    assert recent["count"] == limit + 3
+    assert recent["by_type"] == {"command_error": limit + 2, "ready": 1}
+    # The most recent failures, oldest first, bounded so one key stays readable.
+    assert recent["command_errors"] == [
+        {"command": "setColorBy", "reason": f"failure {index}"}
+        for index in range(2, limit + 2)
+    ]

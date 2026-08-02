@@ -180,10 +180,31 @@ Fix:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/analysis/quick-insights.png
-:alt: Quick analysis results showing group composition and summary statistics.
-:width: 246px
+:alt: The Quick panel headed "Page 1: 262 cells" with a Composition section showing one stacked bar per field with the top categories named beneath it, and a Statistics section with a Field / Mean / Median / Std table listing S_score and G2M_score.
+:width: 488px
 
-Quick Insights summarizes the selected highlight page with composition and numeric statistics.
+Quick opens with no configuration at all. **Composition** draws one stacked bar
+per selected categorical field, segment width proportional to the share of cells
+in that category, with the top three named underneath. **Statistics** gives mean,
+median and standard deviation for each selected continuous field. The `⋯` button
+on each section heading chooses which fields are shown; by default it is the
+first two of each kind.
+```
+
+Quick is the only mode with **no expanded view** — there is no `⤢ Expand` button,
+because there is no plot to enlarge and no table that would not already fit. If
+you need a distribution rather than a summary, that is
+{doc}`04_analysis_mode_detailed_analysis`.
+
+Before any page has cells, the panel says so rather than showing an empty table:
+
+```{figure} ../../../_static/screenshots/analysis/analysis-empty-no-pages.png
+:alt: The Quick panel reading "Page 1: 0 cells" with a Composition section stating "No composition data available." and a Statistics section stating "No statistics data available."
+:width: 488px
+
+The no-pages state. `Page 1: 0 cells` is the diagnosis: the page exists but
+nothing has been confirmed into it yet. Fix it in **Highlighting**, not here —
+see {doc}`11_screenshots` step 1.
 ```
 
 ---

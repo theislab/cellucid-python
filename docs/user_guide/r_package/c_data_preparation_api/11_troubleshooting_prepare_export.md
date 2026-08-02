@@ -245,8 +245,8 @@ install.packages("Matrix")
   `Vector field key '...' must exactly match '<field>_umap_<1|2|3>d'.` An
   unsuffixed `velocity_umap` is rejected: the key declares the dimension and it
   is never inferred from the array.
-- Or two list names reduce to the same field id, and the export stops with
-  `Vector field ids must be unique. Duplicates: ...`
+- Or the same list name is declared twice, and the export stops with
+  `vector_fields names must be unique.` before any array is read.
 
 The field id itself carries no character rule: it names a field in
 `dataset_identity.json`, and the payload is written to

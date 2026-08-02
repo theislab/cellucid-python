@@ -13,15 +13,46 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import errno
 import logging
+import socket
 import sys
+import traceback
 from pathlib import Path
+from typing import Final
 
 # Import shared configuration from _server_base
 from ._console import console_print
 from ._server_base import CELLUCID_WEB_URL, DEFAULT_HOST, DEFAULT_PORT
 
-logger = logging.getLogger("cellucid.cli")
+ISSUE_TRACKER_URL = "https://github.com/theislab/cellucid-python/issues"
+
+# Every way ``cellucid serve`` can end early falls on one of two sides, and the
+# side decides whether a traceback is printed.
+#
+# These types are the ones an *operator condition* arrives as: a flag that is
+# missing or does not apply, a path that is not a dataset, a manifest that does
+# not parse, a port another program already holds, an optional package that is
+# not installed. Cellucid raises the first group deliberately through the
+# exception taxonomy its documentation defines -- ``ValueError``, ``TypeError``,
+# ``KeyError``, ``RuntimeError`` -- and the operating system reports its own as
+# ``OSError``, of which ``socket.gaierror`` and ``urllib``'s ``URLError`` are
+# subclasses. None of them is a defect, and the person reading the terminal is
+# usually a biologist, so each is reported as one named line saying what failed
+# and what to do about it.
+#
+# Everything else -- ``AttributeError``, ``IndexError``, ``AssertionError``,
+# ``NameError`` and the rest -- means Cellucid did something it did not intend.
+# That traceback is the bug report, so it is printed in full, always, even under
+# ``--quiet``, and the message says where to send it.
+_OPERATOR_ERROR_TYPES: Final = (
+    ValueError,
+    TypeError,
+    KeyError,
+    RuntimeError,
+    OSError,
+    ImportError,
+)
 
 
 def _create_common_server_parser() -> argparse.ArgumentParser:
@@ -134,7 +165,7 @@ def _detect_data_format(path: Path) -> str:
         except ValueError:
             return "unknown"
 
-    from .server import _list_exported_datasets
+    from .server._datasets import _list_exported_datasets
 
     if _list_exported_datasets(path):
         return "exported"
@@ -273,7 +304,9 @@ def _run_serve(args: argparse.Namespace) -> None:
         ]
         if inapplicable:
             raise ValueError(
-                f"{', '.join(inapplicable)} may only be used with direct AnnData input."
+                f"{', '.join(inapplicable)} may only be used with direct AnnData input. "
+                "A prepared export already declares its identity and its columns in "
+                "dataset_identity.json, so remove the flag and run the command again."
             )
         # Pre-exported dataset - use standard server
         from .server import serve
@@ -290,11 +323,26 @@ def _run_serve(args: argparse.Namespace) -> None:
             allowed_hosts=args.allowed_host,
         )
     else:
-        # AnnData (h5ad or zarr) - use AnnData server
-        if not isinstance(args.dataset_name, str) or not args.dataset_name:
-            raise ValueError("--dataset-name is required when serving h5ad or zarr data")
-        if not isinstance(args.dataset_id, str) or not args.dataset_id:
-            raise ValueError("--dataset-id is required when serving h5ad or zarr data")
+        # AnnData (h5ad or zarr) - use AnnData server.
+        #
+        # Both flags are reported together. Naming only the first sends someone
+        # who supplied neither back to the terminal twice for one mistake.
+        missing_identity = [
+            flag
+            for flag, value in (
+                ("--dataset-name", args.dataset_name),
+                ("--dataset-id", args.dataset_id),
+            )
+            if not isinstance(value, str) or not value
+        ]
+        if missing_identity:
+            verb = "are" if len(missing_identity) > 1 else "is"
+            raise ValueError(
+                f"{' and '.join(missing_identity)} {verb} required when serving h5ad or "
+                "zarr data. An .h5ad file and a Zarr store carry no Cellucid identity of "
+                "their own, so name the dataset on the command line, for example: "
+                '--dataset-name "My study" --dataset-id my-study-v1'
+            )
         if not args.quiet:
             console_print(
                 "\nImporting dependencies (anndata, numpy, scipy)...",
@@ -326,6 +374,86 @@ def _run_serve(args: argparse.Namespace) -> None:
             allowed_hosts=args.allowed_host,
             **adapter_options,
         )
+
+
+def _report_error(message: str) -> None:
+    """Write one final ``Error:`` line to stderr, after everything already said.
+
+    Progress output goes to stdout and is block-buffered whenever the command is
+    piped into a file or a pager, so without this flush the failure line lands
+    above the banner and steps it followed. The documentation tells readers to
+    read the last ``Error:`` line; that has to hold when the transcript is saved,
+    not only when it is watched live.
+    """
+    sys.stdout.flush()
+    console_print(f"Error: {message}", file=sys.stderr)
+
+
+def _bind_target(args: argparse.Namespace) -> str:
+    """Describe the address the operator asked the server to bind."""
+    return f"{getattr(args, 'host', DEFAULT_HOST)}:{getattr(args, 'port', DEFAULT_PORT)}"
+
+
+def _operating_system_message(error: OSError, args: argparse.Namespace) -> str:
+    """Name the operating-system condition and the flag that resolves it."""
+    host = getattr(args, "host", DEFAULT_HOST)
+    port = getattr(args, "port", DEFAULT_PORT)
+
+    if isinstance(error, socket.gaierror) or error.errno == errno.EADDRNOTAVAIL:
+        return (
+            f"Host {host!r} is not an address this machine can serve from. Use "
+            "--host 127.0.0.1 to serve only this computer, which is the default, or "
+            "--host 0.0.0.0 to accept connections from other machines."
+        )
+    if error.errno == errno.EADDRINUSE:
+        return (
+            f"Port {port} is already in use on {host}, so Cellucid could not start its "
+            "server there. Another program is listening on that port, often an earlier "
+            "Cellucid that was never stopped. Serve on a different port with "
+            "--port 9000, or let the operating system pick a free one with --port 0 and "
+            "use the Viewer URL it prints."
+        )
+    if error.errno in {errno.EACCES, errno.EPERM} and error.filename is None:
+        return (
+            f"The operating system refused to let Cellucid bind {_bind_target(args)}. "
+            "Ports below 1024 need administrator rights on most systems, so choose a "
+            "higher port such as --port 8765, or --port 0 for any free port."
+        )
+    if error.filename is not None:
+        detail = error.strerror or "could not be read"
+        return (
+            f"{detail}: {error.filename}. Check the path and its permissions, then run "
+            "the command again."
+        )
+    return str(error)
+
+
+def _operator_error_message(error: Exception, args: argparse.Namespace) -> str:
+    """Return one exact line naming a condition the operator can correct."""
+    if isinstance(error, ImportError):
+        if error.name:
+            return (
+                f"Cellucid needs the {error.name!r} package to read this input and it "
+                "is not installed in this environment. Install it and run the command "
+                f"again: pip install {error.name}"
+            )
+        return (
+            f"Cellucid could not import a package it needs for this input: {error}. "
+            "Install it into the same environment as cellucid and run the command "
+            "again."
+        )
+    if isinstance(error, OSError):
+        message = _operating_system_message(error, args)
+    elif type(error) is KeyError and len(error.args) == 1 and type(error.args[0]) is str:
+        # ``str(KeyError("no such column"))`` is ``"'no such column'"``. The
+        # quotes make a written instruction read like a dumped value.
+        message = error.args[0]
+    else:
+        message = str(error)
+    # The documented CLI contract is one actionable line, so that the advice
+    # "read the last Error: line" is literally true. Nothing raised on the serve
+    # path wraps its message today; this keeps that guarantee if one ever does.
+    return " ".join(message.split())
 
 
 def _configure_logging(args: argparse.Namespace) -> None:
@@ -436,15 +564,27 @@ def main(args: list[str] | None = None) -> int:
         # Execute the command
         parsed_args.func(parsed_args)
         return 0
-    except FileNotFoundError as e:
-        console_print(f"Error: {e}", file=sys.stderr)
-        return 1
     except KeyboardInterrupt:
         console_print("\nInterrupted by user", file=sys.stderr)
         return 130
-    except Exception as e:
-        logger.exception("Unexpected error")
-        console_print(f"Error: {e}", file=sys.stderr)
+    except _OPERATOR_ERROR_TYPES as error:
+        # The stack is written to stderr rather than to a logger so that it does
+        # not depend on whether ``--quiet`` skipped ``logging.basicConfig`` or on
+        # how an embedding process configured logging.
+        if getattr(parsed_args, "verbose", False):
+            sys.stdout.flush()
+            traceback.print_exception(error, file=sys.stderr)
+        _report_error(_operator_error_message(error, parsed_args))
+        return 1
+    except Exception as error:
+        sys.stdout.flush()
+        traceback.print_exception(error, file=sys.stderr)
+        _report_error(
+            f"Cellucid failed unexpectedly with {type(error).__name__}: "
+            f"{' '.join(str(error).split())}. This is a defect in Cellucid rather than "
+            "a problem with your data or your command, so please report it at "
+            f"{ISSUE_TRACKER_URL} and include the traceback printed above."
+        )
         return 1
 
 

@@ -8,6 +8,7 @@ If you’re actively stuck, use {doc}`06_troubleshooting_highlighting` (it’s o
 
 - [Zero visible cells](#highlighting-with-zero-visible-cells)
 - [Changing the active field](#highlighting-after-field-changes-active-field-changed)
+- [No active field at all](#annotation-based-with-no-field-at-all)
 - [Cells in multiple groups](#cells-in-multiple-highlight-groups)
 - [Switching pages mid-selection](#switching-highlight-pages-while-a-selection-is-active)
 - [Huge highlight groups (1M+)](#huge-highlight-groups-performance-memory-and-session-size)
@@ -52,6 +53,23 @@ If you’re actively stuck, use {doc}`06_troubleshooting_highlighting` (it’s o
 
 **Best practice**
 - If you are mid-selection, confirm/cancel before switching the active field to avoid mixing steps driven by different semantics.
+
+## Annotation based with no field at all
+
+Set both **Categorical obs** and **Continuous obs** to `None` and the tool has
+nothing to work from. It says so rather than failing silently:
+
+```{figure} ../../../_static/screenshots/highlighting_selection/read-no-active-field-notice.png
+:alt: The Highlighting panel in Annotation based mode with no coloured field, showing the line that annotation selection needs an active field chosen under Coloring and Filtering.
+:width: 516px
+
+With no coloured field the usual `Alt+click` invitation is replaced by an
+instruction. In this state the viewer never starts the gesture, so there is
+nothing to debug beyond choosing a field.
+```
+
+The other three tools are unaffected: lasso, proximity and KNN are geometric or
+graph-based and do not read the coloured field at all.
 
 ---
 
@@ -124,10 +142,18 @@ Highlight groups store explicit arrays of indices, and highlight recomputation s
 - Depending on point size, background, and color palette, the highlight overlay can be subtle.
 
 **What to try**
-- Increase point size (if available).
+- Zoom in: highlights are easiest to see when points are not subpixel-sized.
+- Raise **Point size (log)** under **Visualization** to make the drawn points —
+  and therefore their halos — larger.
 - Switch to a simpler color-by (e.g., a single color) just to visually validate highlights.
-- Change background mode (if available) to increase contrast.
-- Zoom in: highlights are easiest to see when points are larger on screen.
+- Change background mode to increase contrast.
+
+:::{warning}
+**Point size** changes only what is *drawn*. It has no effect on what can be
+*clicked*: picking uses a fixed radius in data space and never reads the drawn
+size. If an `Alt+click` is missing cells, zoom in — do not reach for the point
+size slider. See {doc}`06_troubleshooting_highlighting`.
+:::
 
 ---
 

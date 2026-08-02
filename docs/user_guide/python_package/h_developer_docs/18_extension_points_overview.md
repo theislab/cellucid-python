@@ -70,7 +70,7 @@ This is the most coordination-heavy extension point.
 Checklist:
 - follow {doc}`19_extension_point_add_new_export_feature`
 - update both:
-  - `prepare_data.py` (export writer)
+  - `prepare_data/` (export writer)
   - `anndata_adapter.py` + `anndata_server.py` (dynamic mode parity), if applicable
 - update the web app loader to consume it
 - update the export spec docs
@@ -81,7 +81,7 @@ Checklist:
 - follow {doc}`20_extension_point_add_new_hook_event_or_command`
 - update:
   - frontend event/command handlers (web app)
-  - Python viewer helpers (jupyter.py) if adding a new public method
+  - Python viewer helpers (`jupyter/`) if adding a new public method
   - docs and examples
 
 ### E) Extend session bundle parsing

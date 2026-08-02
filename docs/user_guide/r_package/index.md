@@ -41,7 +41,7 @@ matching CRAN and official-source installation paths.
 :link: installation
 :link-type: doc
 
-Install version 0.9.1 from the source currently available to you, verify the
+Install version 0.9.1 from the source currently available to you, verify the <!-- CELLUCID_VERSION -->
 loaded package, and diagnose dependency or environment problems.
 :::
 

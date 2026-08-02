@@ -10,6 +10,8 @@ If you are new, start here. If you already know what you want, jump to the tutor
 - {doc}`05_jupyter_tutorial`: embed Cellucid inside a notebook and interact programmatically
 - {doc}`11_custom_dataset_repository`: publish and validate a public multi-dataset
   repository, starting from a complete reference implementation
+- {doc}`12_sample_dataset_provenance`: what each built-in sample is an export
+  of, what to cite, and how far its build is pinned
 
 ## At A Glance
 
@@ -143,7 +145,9 @@ This is the canonical list used throughout the documentation.
 | 13 | Jupyter | `cellucid.show_anndata(<data.h5ad>, dataset_name="My dataset", dataset_id="my-dataset")` | `.h5ad` | ✅ | Notebook-based exploration of `.h5ad` |
 | 14 | Jupyter | `cellucid.show_anndata(<data.zarr or AnnData>, dataset_name="My dataset", dataset_id="my-dataset")` | `.zarr` / in-memory | ✅ | Notebook-based exploration of `.zarr` or in-memory |
 
-\* Browser `.h5ad` loading is **not truly lazy**: the whole file is loaded into browser memory before use.
+\* Browser `.h5ad` loading is **not truly lazy**: the whole file is loaded into
+browser memory before use, and a file larger than **512 MiB** is refused outright
+before any byte is read. Options 7, 10, and 13 have no such ceiling.
 
 † Browser Zarr ZIP loading indexes and validates archive metadata before
 adoption, then reads gene-expression chunks on demand. Archive extraction and
@@ -250,10 +254,12 @@ def summarize_anndata(path: str | Path) -> dict:
 For the complete verified loading gallery, see {doc}`09_screenshots`.
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
-:width: 246px
+:alt: The Cellucid Session panel with a dataset loaded, showing the dataset summary table, the Sample datasets dropdown, the H5AD, Zarr ZIP and Prepared buttons, the Remote server and GitHub data fields with their Connect buttons, and the Save State and Load State buttons.
+:width: 524px
 
-The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
+Options 1–5 in the table above are the controls in this panel; options 6–11 are
+reached through **Remote server**, and options 12–14 need no control at all
+because the notebook supplies the address.
 ```
 
 ## Edge Cases (Read This If Something Feels “Weird”)
@@ -268,7 +274,10 @@ The Session panel presents each loading path separately and keeps Save State and
 - **Huge categorical fields** (e.g., 100k unique categories): legends and color assignment become unusable.
 
 ### Scale edge cases
-- **Browser `.h5ad`**: if the file is large, the browser may freeze or crash due to memory pressure.
+- **Browser `.h5ad` over 512 MiB**: refused immediately, with a message naming
+  the ceiling and pointing at server mode.
+- **Browser `.h5ad` under 512 MiB**: accepted, but the browser may still freeze
+  or crash, because the decompressed matrix is larger than the file on disk.
 - **Millions of cells + dense gene matrix**: even with lazy loading, gene queries can be slow or memory-heavy.
 
 ### Environment edge cases

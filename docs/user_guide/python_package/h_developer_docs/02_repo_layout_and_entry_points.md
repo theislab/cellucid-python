@@ -34,15 +34,53 @@ cellucid-python/
     cellucid/
       __init__.py
       cli.py
-      prepare_data.py
-      server.py
+      _contracts.py
+      _byte_order.py
+      _compression.py
+      _console.py
+      connectivity_contract.py
+      prepare_data/
+        __init__.py
+        _export.py
+        _generation.py
+        _catalog.py
+        _manifest.py
+        _arrays.py
+        _categories.py
+        _quantization.py
+        _centroids.py
+        _binary_io.py
+        _filesystem.py
+        _transaction.py
+        _locking.py
+      server/
+        __init__.py
+        _state.py
+        _datasets.py
+        _artifacts.py
+        _handler.py
+        _server.py
       anndata_adapter.py
       anndata_server.py
-      jupyter.py
+      jupyter/
+        __init__.py
+        _wire.py
+        _hooks.py
+        _base.py
+        _exported.py
+        _anndata.py
       _server_base.py
       session_bundle.py
       session_codecs.py
-      anndata_session.py
+      anndata_session/
+        __init__.py
+        _schema.py
+        _records.py
+        _primitives.py
+        _chunks.py
+        _highlights.py
+        _fields.py
+        _apply.py
       vector_fields.py
       web_cache.py
   tests/
@@ -88,7 +126,7 @@ If you add a new public API:
 
 There are two server implementations:
 
-- Exported/static: `cellucid-python/src/cellucid/server.py`
+- Exported/static: `cellucid-python/src/cellucid/server/`
   - public function: `cellucid.serve(...)`
 - AnnData/dynamic: `cellucid-python/src/cellucid/anndata_server.py`
   - public function: `cellucid.serve_anndata(...)`
@@ -99,7 +137,7 @@ Both share CORS + web-asset proxy + event/session upload handlers from:
 ### 4) Jupyter entry point
 
 Notebook embedding lives in:
-- `cellucid-python/src/cellucid/jupyter.py`
+- `cellucid-python/src/cellucid/jupyter/`
 
 Public functions/classes (via `cellucid.__init__`):
 - `show(...)`, `show_anndata(...)`
@@ -113,15 +151,15 @@ See: {doc}`10_jupyter_embedding_architecture`
 
 | You want to change… | Start in | Notes |
 |---|---|---|
-| Export filenames/manifests | `src/cellucid/prepare_data.py` | Coordinate with web app; see {doc}`08_export_format_spec_and_invariants` |
-| Quantization behavior | `src/cellucid/prepare_data.py` | Finite gene/continuous domains and generated nullable outlier markers must match viewer expectations |
+| Export filenames/manifests | `src/cellucid/prepare_data/_manifest.py` | Coordinate with web app; see {doc}`08_export_format_spec_and_invariants` |
+| Quantization behavior | `src/cellucid/prepare_data/_quantization.py` | Finite gene/continuous domains and generated nullable outlier markers must match viewer expectations |
 | AnnData lazy loading and caching | `src/cellucid/anndata_adapter.py` | Watch memory blowups (CSR→CSC), LRU cache |
 | HTTP routes for AnnData | `src/cellucid/anndata_server.py` | Keep behavior consistent with export mode |
 | CORS / origin rules | `src/cellucid/_server_base.py` | Security-sensitive |
 | Verified web-generation establishment | `src/cellucid/web_cache.py` | Preserve inventory, byte-verification, staging, and atomic-publication invariants |
-| Notebook embedding issues | `src/cellucid/jupyter.py` | Remote notebook environments are tricky |
+| Notebook embedding issues | `src/cellucid/jupyter/_base.py` | Remote notebook environments are tricky |
 | Session bundle parsing | `src/cellucid/session_bundle.py` | Treat bundles as untrusted input |
-| Applying sessions to AnnData | `src/cellucid/anndata_session.py` | Exact fingerprint validation and output-column collision rejection |
+| Applying sessions to AnnData | `src/cellucid/anndata_session/_apply.py` | Exact fingerprint validation and output-column collision rejection |
 | Vector field helpers | `src/cellucid/vector_fields.py` | Keep naming conventions stable (`*_umap_2d`, etc.) |
 
 ---
@@ -135,8 +173,8 @@ Examples (run from the `cellucid-python/` folder):
 ```bash
 rg "dataset_identity\\.json" src/cellucid
 rg "web_cache_dir" src/cellucid
-rg "requestSessionBundle" src/cellucid/jupyter.py
-rg "obs_manifest" src/cellucid/prepare_data.py
+rg "requestSessionBundle" src/cellucid/jupyter
+rg "obs_manifest" src/cellucid/prepare_data
 ```
 
 ---
@@ -149,7 +187,7 @@ rg "obs_manifest" src/cellucid/prepare_data.py
 
 Look here:
 - `cellucid-python/src/cellucid/__init__.py` (`__getattr__`)
-- `cellucid-python/src/cellucid/prepare_data.py` (`def prepare(...)`)
+- `cellucid-python/src/cellucid/prepare_data/_export.py` (`def prepare(...)`)
 
 ### Symptom: “I changed a module but the CLI got slow”
 

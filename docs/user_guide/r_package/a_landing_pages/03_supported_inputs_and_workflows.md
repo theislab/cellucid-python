@@ -27,6 +27,10 @@ If you want server mode and notebook embedding, see {doc}`../../python_package/i
   - numeric matrix-like, shape `(n_cells, n_dims)`
 - **`obs`**:
   - `data.frame` with `n_cells` rows
+- **`obs_categorical_dtype`**, **`dataset_name`**, and **`dataset_id`**:
+  - these three carry no default at all, so leaving one out stops the call with
+    `cellucid_prepare() is missing 1 required argument:` and what a valid value
+    would be
 
 Why `latent_space` is required: it is used to compute **per-cell outlier quantiles** for categorical fields (see {doc}`../c_data_preparation_api/04_obs_cell_metadata`).
 

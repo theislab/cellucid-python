@@ -11,7 +11,12 @@ Core docs:
 - full API behavior: {doc}`../c_data_preparation_api/index`
 
 Signature (high level):
-- required:
+- required, and carrying no default at all, so leaving one out is reported as a
+  missing argument:
+  - `obs_categorical_dtype`
+  - `dataset_name`
+  - `dataset_id`
+- required data:
   - `latent_space`
   - `obs`
   - at least one of `X_umap_1d`, `X_umap_2d`, `X_umap_3d`

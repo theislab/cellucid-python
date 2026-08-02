@@ -21,7 +21,7 @@ A notebook viewer is:
 ### Viewer classes
 
 Implementation:
-- `cellucid-python/src/cellucid/jupyter.py`
+- `cellucid-python/src/cellucid/jupyter/`
 
 Key classes:
 - `BaseViewer`: shared notebook embedding + hooks/event handling
@@ -115,7 +115,9 @@ In Python, `BaseViewer`:
 - records the event into `viewer.state` (latest snapshot),
 - stores recent events in an internal ring buffer,
 - triggers hook callbacks registered via:
-  - `@viewer.on_selection`, `@viewer.on_hover`, `@viewer.on_click`, `@viewer.on_ready`
+  - `@viewer.on_selection`, `@viewer.on_hover`, `@viewer.on_click`,
+    `@viewer.on_ready`, `@viewer.on_command_error` (sent only by the web build
+    that emits `command_error`), and `@viewer.on_message`
 
 Protocol details are documented here:
 {doc}`11_hooks_events_protocol_and_schema`.

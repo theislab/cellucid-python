@@ -200,6 +200,9 @@ cellucid_prepare(
   obs = obs,
   X_umap_2d = umap2,
   # X_umap_3d = umap3,  # optional
+  obs_categorical_dtype = "uint16",
+  dataset_name = "Seurat Export",
+  dataset_id = "seurat_export",
   out_dir = out_dir,
   force = TRUE,
   compression = 6,

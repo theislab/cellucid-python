@@ -1,5 +1,6 @@
 {% set name = "cellucid" %}
 {% set version = "0.9.1" %}
+# CELLUCID_VERSION
 
 package:
   name: {{ name|lower }}

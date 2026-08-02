@@ -85,7 +85,10 @@ PNG exports include standard uncompressed `iTXt` fields:
   export whose panels use different fields omits the key entirely rather than
   claiming one panel's field for the figure. The per-panel record below is then
   the only truthful answer.
-- `Source File` (may be a URL or a local path, depending on how the dataset was loaded)
+- `Source File` — a URL for a remote dataset, or, for a local one, just the
+  **name** you gave the folder or file. It is never an absolute path: a browser
+  does not hand a page one, so nothing above that name can appear here. See
+  {ref}`figure-export-source-file-privacy` below.
 - `Description`: a human-readable summary, one clause per panel
 - `Comment`: a compact JSON blob with the structured record
 
@@ -101,7 +104,7 @@ Views: Live (Field: cell_type; Filters: none) • Source: https://example.org/pa
 A grid names each panel separately:
 
 ```text
-Views: A. Live (Field: cell_type; Filters: total_counts: 500.00 – 12000.00) | B. Endoderm (Field: leiden; Filters: none) • Source: /Users/you/exports/pancreas
+Views: A. Live (Field: cell_type; Filters: total_counts: 500.00 – 12000.00) | B. Endoderm (Field: leiden; Filters: none) • Source: pancreas-exports
 ```
 
 Read it as: `Views:` then one `Panel. Label (Field: …; Filters: …)` clause per
@@ -251,20 +254,92 @@ To make a figure reproducible for a collaborator, share:
 If you need to share figures publicly, inspect embedded metadata first. It may contain local file paths or private URLs depending on your loading workflow.
 :::
 
-Related pages:
-- {doc}`../l_sessions_sharing/index`
-- {doc}`01_figure_export_goals_wysiwyg_and_reproducibility`
-
 ---
 
-## Interface reference
+## Say it plainly: what an exported file can carry that you did not intend to share
+
+Every Cellucid figure — PNG and SVG, every time, with no opt-out in the panel —
+carries a machine-readable provenance record. Some of what goes into it is
+information a reader would not think of as part of a picture. Before a figure
+leaves your machine, know that it can contain:
+
+- **Where the data came from.** The URL the dataset was fetched from. If you
+  loaded from a GitHub repository, that URL contains the account, repository and
+  branch names — including for a private repository you happened to have access
+  to.
+- **A name from your own disk.** If you opened a local prepared export, the file
+  or folder name you chose is embedded, and it is the *first* thing used for the
+  human-readable source line.
+- **What you coloured by — including gene symbols.** The colour field key of
+  every exported panel. For a gene, that is the gene symbol.
+- **Your filters, in words.** Each panel's active filter lines, including the
+  names of the categories you hid.
+- **Every panel, not just the one you were looking at.** A multiview export
+  stamps all its panels' fields and filters.
+- **The names you gave things.** View labels and user-created field and category
+  names — which, if you built a categorical field from highlight pages, are
+  names you typed.
+- **When.** A UTC timestamp in the metadata and a local-clock timestamp in the
+  filename. Comparing the two reveals your time zone.
+
+Two of these also land in the **filename**, before anyone opens the file: the
+colour field key and the view label.
+
+What is **not** embedded, which is worth knowing so you do not over-worry: no
+session identifier, no serialised app state, no page URL, no `localStorage`, no
+browser or user-agent string, and no GitHub credential or token of any kind.
+
+And one thing that is not metadata at all but travels just as far — the **Title**
+box is pre-filled for you, from the dataset name and the visible categories of
+the coloured field, and it is *drawn into the image*:
 
 ```{figure} ../../../_static/screenshots/figure_export/labels-annotations.png
-:alt: Figure Export Labels and Annotations controls for title, axes, legend, and annotation visibility.
-:width: 224px
+:alt: The Figure Export Labels and Annotations group with the Title box pre-filled with the dataset name followed by the coloured field and its visible categories, above the annotation checkboxes and the line listing elements that are never exported.
+:width: 472px
 
-Labels and Annotations makes title, axis, legend, and annotation choices explicit.
+The **Title:** box is not empty by default. It is pre-filled with the dataset
+name, the coloured field, and up to three of its visible categories. Clear it if
+you do not want the dataset's name printed on the figure.
 ```
+
+(figure-export-source-file-privacy)=
+### What the file can and cannot reveal about you
+
+Every dynamic value was traced to the code that produces it:
+
+- `Creation Time` is UTC, so it does not reveal your timezone.
+- `Source File` carries a **name**, never a path. Opening a prepared directory
+  contributes the root folder's name; opening an `.h5ad` or `.zarr` contributes
+  the file's name; a GitHub dataset contributes its public raw URL; a Jupyter
+  session contributes `jupyter://<viewer-id>/`, not a filesystem location.
+- There is no access token in any of these. The GitHub data source has no token
+  support at all, and the Jupyter viewer token never enters the URL.
+- No session identifier, page URL, browser storage, or user-agent string is
+  written.
+
+The one identifying thing that **is** written is the name you chose for your
+folder or file. That is deliberate — it is what makes the figure traceable to
+its data — but if that name is itself sensitive, rename the folder before
+loading it, or strip the record as below.
+
+### If you need a figure with none of this
+
+Strip it after export rather than hunting for a switch that does not exist:
+
+- **PNG** — the record lives in `iTXt` chunks. `exiftool -all= figure.png`
+  removes them; `exiftool figure.png` lists them first so you can see what you
+  are removing.
+- **SVG** — the record is one `<metadata>` element at the top of the file, plus
+  a `cellucid:json` element inside it. Both are plain text and can be deleted in
+  any editor.
+
+Removing the record does not change a single drawn pixel. Re-check the **Title**
+separately: that one is pixels.
+
+Related pages:
+- {doc}`../l_sessions_sharing/index`
+- {doc}`../o_accessibility_privacy_security/02_privacy_model`
+- {doc}`01_figure_export_goals_wysiwyg_and_reproducibility`
 
 ---
 

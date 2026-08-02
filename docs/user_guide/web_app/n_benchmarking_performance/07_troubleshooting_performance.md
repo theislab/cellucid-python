@@ -32,21 +32,26 @@ What to do earlier to avoid this next time.
 ## Symptom: “Navigation is choppy / low FPS when I move the camera”
 
 ### Likely causes (ordered)
-1) GPU-bound rendering (too many pixels, too many views, heavy shaders).
-2) GPU-heavy modes enabled (smoke, vector overlays, heavy post-processing).
-3) Hardware acceleration is disabled or GPU drivers are unstable.
+1) GPU-bound rendering (too many pixels — from the window, the point size, or
+   antialiasing).
+2) A two- or three-view row layout (the arrangement that keeps points full size).
+3) GPU-heavy modes enabled (smoke, vector overlays, heavy post-processing).
+4) Hardware acceleration is disabled or GPU drivers are unstable.
 
 ### How to confirm
 - Make the window smaller. If it becomes smoother immediately, you’re pixel/GPU-bound.
-- Clear snapshots (go to single view). If it becomes smoother immediately, you’re view/GPU-bound.
+- Clear snapshots (go to single view). If it becomes smoother immediately, the layout was the cost.
 - Disable overlays/smoke. If it becomes smoother immediately, you’re GPU-bound.
 - In the browser console, confirm
   `document.createElement("canvas").getContext("webgl2") !== null`; then use
   the browser's graphics diagnostics to confirm hardware acceleration.
 
 ### Fix
-1) Reduce **views**: clear snapshots; keep 1–3 views.
-2) Reduce **pixels**: keep the window smaller while exploring.
+1) Reduce **pixels**: keep the window smaller while exploring, and lower
+   `Point size (log):` if points already overlap on screen.
+2) Fix the **layout**: go back to one view. If you need the comparison, note
+   that a four-view 2×2 grid is usually cheaper than a two- or three-view row
+   — see {doc}`06_edge_cases_performance`.
 3) Use **Points** mode (avoid smoke except intentionally).
 4) If using vector overlays: reduce density and disable bloom first.  
    See {doc}`../i_vector_field_velocity/05_performance_and_quality`.
@@ -54,7 +59,7 @@ What to do earlier to avoid this next time.
    operating system, and GPU driver when applicable.
 
 ### Prevention
-- Keep a “laptop-safe preset” (points mode, few views, no heavy overlays).
+- Keep a “laptop-safe preset” (points mode, one view, no heavy overlays).
 - Treat smoke mode as cinematic/presentation, not a default analysis mode.
 
 ---
@@ -64,19 +69,26 @@ What to do earlier to avoid this next time.
 ### Likely causes (ordered)
 1) CPU-bound visibility recomputation (especially with Live filtering on).
 2) Too many enabled filters (work scales with `n_cells × n_filters`).
-3) Multiview multiplier (filters/updates interact with many views).
+3) Snapshots are open, so each change is reconciled across more view contexts.
 
 ### How to confirm
 - Turn Live filtering off and click `FILTER` once; if it becomes smooth, you were stuck in a recompute loop.
 - Disable all but one filter; if performance returns, filter stacking was the multiplier.
-- Clear snapshots and retry; if performance improves, view count was amplifying the cost.
+- Clear snapshots and retry.
 
 ### Fix
 1) For continuous fields: **Live filtering off → adjust sliders → click FILTER once**.  
    See {doc}`../d_fields_coloring_legends/03_color_by_behavior`.
 2) Disable/remove no-op filters (filters that don’t change counts given the other filters).
-3) Keep multiview lean while tuning filters; snapshot after you stabilize.
+3) Tune filters in a single view; snapshot after you stabilize.
 4) For very large datasets: do coarse gating upstream in Python; treat UI filtering as refinement.
+
+:::{note}
+Narrowing a filter does not make the next filter change cheaper. The cost is a
+pass over every cell in the dataset regardless of how many survive, so a slider
+that is already hiding 99% of the data still costs a full pass to move. What
+*does* get cheaper is the drawing that follows.
+:::
 
 ### Prevention
 - Teach “apply once” workflows for large datasets.
@@ -173,21 +185,72 @@ Related docs:
 
 ---
 
-## Symptom: “It’s fine in single view but slow in grid view”
+## Symptom: “It’s fine in single view but slow once I add a snapshot”
 
 ### Likely causes (ordered)
-1) You are simply multiplying GPU work by `n_views`.
-2) Overlays/post-processing scale with pixels × views.
+1) You are in a two- or three-view **row**, where each pane keeps the full canvas
+   height and therefore the full point size.
+2) Overlays/post-processing scale with pixels × views in every layout.
 
 ### How to confirm
-- Clear snapshots; if performance recovers, the view multiplier is the culprit.
+- Clear snapshots; if performance recovers, the layout is the culprit.
+- Then add snapshots until you have four. If performance recovers *again*, the
+  scene is fill-rate bound and the 2×2 grid’s smaller points paid for the extra
+  panes. See {doc}`06_edge_cases_performance` for why.
 
 ### Fix
-- Keep grid view to the minimum number of comparisons you need.
-- Disable overlays while in grid view, or lower overlay density and bloom.
+- Pick the layout that answers your question, then verify both ends of the range
+  rather than assuming fewer is faster.
+- Disable overlays while comparing, or lower overlay density and bloom — those
+  really do get worse with every added view.
 
 ### Prevention
 - Adopt the workflow: tune in live view → snapshot for comparison.
+
+---
+
+## Symptom: “Filtering down to a few thousand cells didn’t make navigation faster”
+
+### Likely causes (ordered)
+1) You are not fill-rate bound in the first place — the frame is limited by
+   overlays, post-processing, or window pixels, none of which care how many
+   cells are visible.
+2) Smoke mode is active. Volumetric rendering marches rays through a grid whose
+   cost is set by resolution and ray quality, not by the visible-cell count.
+3) A vector-field overlay is running; its particle system has its own budget.
+
+### How to confirm
+- Switch to **Points** mode and disable overlays, then filter again. Drawing
+  cost should now fall visibly as you hide cells.
+
+### Background
+Filtered-out cells are rejected before rasterisation, so they genuinely cost
+nothing to draw. If hiding most of the dataset changes nothing, the points were
+not what was slow.
+
+### Fix
+- Attack the actual bottleneck: window size first, then overlays, then smoke
+  settings.
+
+---
+
+## Symptom: “The benchmark or renderer controls are greyed out”
+
+### Likely cause
+The data-source, renderer and benchmark controls ship disabled and are enabled
+only once the code that responds to them is wired up. During a slow start you
+can see them briefly inert.
+
+### How to confirm
+- Look under the dataset picker. While the app is still starting it reads
+  *“Starting Cellucid — the data controls below open as soon as it is ready.”*
+- If it has changed, the controls are live.
+
+### Fix
+- Wait. This is deliberate: it replaced an older behaviour where a control could
+  be clicked before anything was listening and the click did nothing at all.
+- If they never enable, that is a startup failure — see
+  {doc}`../q_troubleshooting_index/index`.
 
 ---
 

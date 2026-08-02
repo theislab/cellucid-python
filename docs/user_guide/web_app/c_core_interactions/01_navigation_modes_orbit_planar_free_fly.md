@@ -40,6 +40,44 @@ Keyboard shortcuts (global, unless you’re typing in an input):
 - `P` → Planar
 - `G` → Free-fly
 
+You do not have to set the mode at all: the view's dimension picks one for you —
+**Orbit** in 3D, **Planar** in 1D and 2D — and keeps doing so every time the
+dimension changes. Choosing a mode that differs from that takes the control over
+for that view. See {doc}`05_dimension_switching_1d_2d_3d`.
+
+The **Mode** dropdown is followed by a box of options that belong to the chosen
+mode only, so the panel looks different in each of the three. A still cannot
+show a camera moving — but it can show you exactly which knobs you have, and
+that is what people actually get lost looking for.
+
+```{figure} ../../../_static/screenshots/web_app/navigation-controls-orbit.png
+:alt: A panel headed NAVIGATION with a small circled i button, a MODE dropdown reading Orbit with the mouse pointer pressing it, and a bordered box below containing a KEYBOARD SPEED slider reading 0.40x, a ticked GOOGLE EARTH-STYLE DRAG checkbox and a ticked SHOW ORBIT ANCHOR checkbox.
+:width: 472px
+
+**Orbit** — a keyboard speed slider and two checkboxes.
+```
+
+```{figure} ../../../_static/screenshots/web_app/navigation-controls-planar.png
+:alt: The same NAVIGATION panel with the MODE dropdown reading Planar and a bordered box below containing a PAN SPEED slider with a numeric readout, a ZOOM TO CURSOR (PINCH-STYLE) checkbox and an INVERT AXES checkbox.
+:width: 472px
+
+**Planar** — a pan speed slider and two different checkboxes.
+```
+
+```{figure} ../../../_static/screenshots/web_app/navigation-controls-freefly.png
+:alt: The same NAVIGATION panel with the MODE dropdown reading Free-fly and a taller bordered box below containing a LOOK SENSITIVITY slider, a MOVE SPEED slider, both with numeric readouts, an INVERT LOOK AXES checkbox, a PROJECTILE SHOOTING checkbox and a CAPTURE POINTER button.
+:width: 472px
+
+**Free-fly** — two sliders, two checkboxes, and the pointer-lock button that
+does not exist in the other two modes.
+```
+
+:::{note}
+The three boxes are mutually exclusive: only the one belonging to the current
+mode is present, so a setting you remember can genuinely vanish when you change
+mode. It is not lost — switch back and it returns with its value.
+:::
+
 ---
 
 ## Orbit mode (3D exploration)

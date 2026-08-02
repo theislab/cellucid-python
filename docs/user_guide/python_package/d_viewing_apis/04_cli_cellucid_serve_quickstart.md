@@ -145,6 +145,8 @@ If something looks wrong, open these in a browser (replace `<port>`):
 - `http://127.0.0.1:<port>/_cellucid/health` (is the server alive?)
 - `http://127.0.0.1:<port>/_cellucid/info` (server config + version)
 - `http://127.0.0.1:<port>/_cellucid/datasets` (what datasets does it think exist?)
+- `http://127.0.0.1:<port>/_cellucid/protocol` (which wire capabilities does this
+  `cellucid` accept?)
 - `http://127.0.0.1:<port>/dataset_identity.json` (dataset metadata)
 
 ## Edge cases (common)

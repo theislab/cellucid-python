@@ -20,7 +20,7 @@ Before deep debugging, check these three things:
 1) **Active field**: In **Coloring & Filtering**, is the correct selector active?
    - Categorical obs vs Continuous obs vs Gene Expression
 2) **Legend toggles**:
-   - Is **Use log scale** on (and your data has zeros/negatives)?
+   - Is **Log color scale** on (and your data has zeros/negatives)?
    - Is **Rescale colorbar to slider range** on (changing contrast)?
 3) **Active filters**:
    - Do you have hidden categories or a narrowed numeric range from earlier?
@@ -67,20 +67,29 @@ Most “bugs” are one of these.
 ### Likely causes (ordered)
 
 1) No active field selected (Cellucid renders the “no-field” state as neutral gray).
-2) Log scale enabled on data that is mostly zero/negative.
-3) The field is all missing (`NaN`) or did not load correctly.
+2) **Log color scale** enabled on a sparse field, where most cells are zero and
+   therefore drop to the “None” grey.
+3) The field did not load correctly.
 
 ### How to confirm
 
 - If all selectors show **None** → it’s (1).
-- If **Use log scale** is on and you’re coloring by a sparse gene → it’s often (2).
+- If **Log color scale** is on and you’re coloring by a sparse gene → it’s often (2).
 - If you see a load failure notification → it’s (3).
 
 ### Fix
 
 - For (1): pick a categorical/continuous field or gene.
-- For (2): turn off **Use log scale**, or choose a gene/field with positive values.
+- For (2): turn off **Log color scale**, or choose a gene/field with positive values.
 - For (3): reload the dataset; if it persists, inspect export integrity.
+
+:::{note}
+“The field has **no** positive values at all” is not a possible cause here:
+in that case the toggle refuses to turn on
+(`Log color scale requires at least one positive field value.`) and the colours
+never change. Only a field with *some* positives can produce a mostly-grey
+picture this way.
+:::
 
 ### Prevention
 
@@ -150,24 +159,44 @@ Most “bugs” are one of these.
 
 ### Likely causes (ordered)
 
-1) You’re searching with a name the dataset does not publish.
-2) The search is substring-based; a short query matches many genes and Enter picks the top one.
-3) The gene list is present but very large; your query is too broad.
+1) The gene is published under a different name than the one you typed.
+2) The gene is not in this export at all — preparation published only some of
+   the source’s genes.
+3) The search is substring-based; a short query matches many genes and Enter picks the top one.
+4) The gene list is present but very large; your query is too broad.
 
 ### How to confirm
 
-- Try a longer, more specific substring.
+- Try a longer, more specific substring. Matching ignores letter case, so
+  `gata3` finds `GATA3`.
 - If results show `...and N more`, you’re matching too many.
 - Open the field selector and read a few gene names directly. Every gene has
   exactly one name in an export, and search matches that one name — there is no
   second identifier to search instead, and no alias mapping.
+- Compare the count in the empty-state message (“This dataset publishes *N* gene
+  names…”) against the gene count you expect from the source. A large gap means
+  preparation published a subset.
+
+### If you are using a built-in sample
+
+The four human samples — Suo, Garcia, He, and Kanemaru — publish only the genes
+whose Ensembl accession resolved to a symbol, which is between 45.1% and 70.2%
+of the gene axis of the file each was prepared from. A gene that is genuinely in
+the study can therefore be absent, under any spelling. The rule, the per-sample
+counts, and what to do instead are in
+{doc}`07_genes_in_the_built_in_samples`.
 
 ### Fix
 
 1) Type a more specific query and click the correct gene explicitly (don’t rely on Enter).
-2) If the name you expected is not there, the export published a different one:
+2) If the name you expected is not there, it is either published under another
+   name or not published at all:
    - check which `var` column the export named its genes from
-     (`prepare(var_gene_id_column=...)`, `show_anndata(gene_id_column=...)`).
+     (`prepare(var_gene_id_column=...)`, `show_anndata(gene_id_column=...)`);
+   - if that column does not contain your name either, the gene is absent from
+     the export and no viewer setting brings it back — re-export the dataset
+     with the genes and names you need, or load the source through server mode
+     or Jupyter.
 
 ### Prevention
 
@@ -277,7 +306,7 @@ Most “bugs” are one of these.
 
 ### Fix
 
-- Use log scale only on fields with meaningful positive values.
+- Turn **Log color scale** on only for fields with meaningful positive values.
 - For sparse genes:
   - log scale can be useful to highlight the non-zero tail, but expect many zeros to remain gray.
 
@@ -337,23 +366,33 @@ Most “bugs” are one of these.
 
 ---
 
-## Symptom: “I restored a field and its name changed”
+## Symptom: “Restore did nothing and I got an error about the name”
 
 ### Likely causes (ordered)
 
-1) The restored field name conflicted with an existing visible field, so Cellucid auto-renamed it (e.g., `(... restored)`).
+1) A **visible field already holds that name**. Restore is refused rather than
+   renamed, so the field stays in **Deleted Fields**.
 
 ### How to confirm
 
-- Look for a notification like `Restored "X" as "X (restored)"`.
+- The error reads `Cannot restore "X" while that visible field name exists`.
+- The row is still listed under **Deleted Fields**.
 
 ### Fix
 
-- Rename the restored field to a clearer name (unique keys are required).
+1) Rename the *visible* field that is occupying the name (or delete it).
+2) Restore again. The success message is a plain `Restored "X"`.
 
 ### Prevention
 
-- Avoid creating multiple derived fields with identical names; use meaningful suffixes.
+- Avoid creating a derived field whose name matches something you have deleted;
+  use meaningful suffixes.
+
+:::{note}
+Cellucid never appends a `(restored)` suffix. If you are looking for one, it
+does not exist — the restore either succeeds under the original name or is
+refused.
+:::
 
 ---
 

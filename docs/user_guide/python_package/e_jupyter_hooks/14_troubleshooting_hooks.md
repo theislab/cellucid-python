@@ -154,13 +154,29 @@ Python receives indices, but they refer to “the wrong cells” when you index 
 Calling `viewer.highlight_cells(...)` / `viewer.set_color_by(...)` / `viewer.reset_view()` has no visible effect.
 
 ### Likely causes (ordered)
-1. Viewer not displayed (commands are sent via notebook JS injection).
-2. The iframe is stale or not the one tied to this Python viewer.
-3. Connectivity/proxy issues prevent the iframe from fully initializing Jupyter mode.
-4. The frontend and Python package did not come from the same exact current
+1. The viewer **rejected** the command — the field, index or colour was not one
+   it could apply.
+2. Viewer not displayed (commands are sent via notebook JS injection).
+3. The iframe is stale or not the one tied to this Python viewer.
+4. Connectivity/proxy issues prevent the iframe from fully initializing Jupyter mode.
+5. The frontend and Python package did not come from the same exact current
    generation.
 
 ### How to confirm
+- Rejections are reported only by the web build that emits `command_error`.
+  Older builds — including the one currently published — refuse a command
+  silently, so on those the two checks below stay empty even when cause 1 is
+  what happened.
+- A rejected command prints to `sys.stderr` as soon as the viewer reports it:
+  ```text
+  [cellucid] viewer.set_color_by(...) did not take effect in the viewer: ...
+  ```
+  If you missed it, list the rejections after the fact:
+  ```python
+  viewer.debug_connection()["recent_events"]["command_errors"]
+  ```
+  A non-empty list means the command arrived and was refused — fix the
+  argument, not the connection.
 - If `viewer._displayed` is False (notebooks): you didn’t display the viewer.
 - Run:
   ```python
@@ -169,20 +185,34 @@ Calling `viewer.highlight_cells(...)` / `viewer.set_color_by(...)` / `viewer.res
   ```
 
 ### Fix
-1. Display the viewer:
+1. If the command was rejected, correct the argument the reason names — most
+   often a field ID the loaded dataset does not have.
+2. Display the viewer:
    ```python
    viewer.display()
    ```
-2. If the iframe is stale, stop that viewer:
+3. If the iframe is stale, stop that viewer:
    ```python
    viewer.stop()
    ```
    Then construct and display one current viewer.
-3. Use {doc}`13_security_cors_origins_and_mixed_content` to configure the exact
+4. Use {doc}`13_security_cors_origins_and_mixed_content` to configure the exact
    browser-reachable URL.
 
 ### Prevention
 - Always `viewer.wait_for_ready()` before sending commands in scripts/notebooks.
+- In a script, collect rejections and assert on them at a point you control,
+  rather than reading a printed line:
+  ```python
+  rejected = []
+
+  @viewer.on_command_error
+  def record(event):
+      rejected.append(event)
+
+  ...
+  assert not rejected, rejected
+  ```
 
 ---
 

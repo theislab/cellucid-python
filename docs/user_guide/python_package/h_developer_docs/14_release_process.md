@@ -9,7 +9,7 @@ the release candidate is reviewed and publication is explicitly authorized.
 `cellucid` is currently in beta (`0.9.1`). <!-- CELLUCID_VERSION -->
 
 - Package versions use three numeric components.
-- Git tags use the exact package version with a `v` prefix, such as `v0.9.1`.
+- Git tags use the exact package version with a `v` prefix, such as `v0.9.1`. <!-- CELLUCID_VERSION -->
 - PyPI distributions, citation metadata, documentation, and the downstream
   recipe declare the same version.
 - The normalized source distribution has one reproducible byte stream, and its
@@ -109,14 +109,17 @@ python -m twine check --strict dist/*
 
 Record the printed SHA-256 digest as `source.sha256` in
 `scripts/publishing/meta.yaml`, then rerun the validator with `--sdist`.
-`MANIFEST.in` excludes the downstream recipe and repository tests from the
-public source distribution, so recording the digest does not alter the
-candidate archive. `normalize_sdist.py` canonicalizes member ordering,
-timestamps, owners, modes, and the gzip byte stream; rebuilding and normalizing
-the same source with the pinned setuptools 83.0.0 backend must produce the same
-digest. Normalization rejects a source distribution larger than one mebibyte,
-so the deterministic stored-block gzip representation has an explicit network
-cost ceiling.
+Neither the recipe nor the tests reach the public source distribution, so
+recording the digest does not alter the candidate archive — but they are held
+out by two different mechanisms. `scripts/` is not a package and no rule adds
+it, so the downstream recipe never enters the archive's file set at all;
+`MANIFEST.in` is the one line `prune tests`, and that line is what removes the
+repository tests, which setuptools would otherwise carry. `normalize_sdist.py`
+canonicalizes member ordering, timestamps, owners, modes, and the gzip byte
+stream; rebuilding and normalizing the same source with the pinned setuptools
+83.0.0 backend must produce the same digest. Normalization rejects a source
+distribution larger than one mebibyte, so the deterministic stored-block gzip
+representation has an explicit network cost ceiling.
 The fixed build epoch controls archive metadata only; it is not a release date
 or scientific provenance timestamp.
 
@@ -154,7 +157,7 @@ git push origin v0.9.1
 
 The `Publish to PyPI` workflow:
 
-1. checks out complete Git history, validates `v0.9.1`, and requires the tagged
+1. checks out complete Git history, validates `v0.9.1`, and requires the tagged <!-- CELLUCID_VERSION -->
    `GITHUB_SHA` to be an ancestor of the fetched `origin/main`;
 2. runs Ruff, mypy, the complete pytest suite, and a strict documentation build;
 3. builds one wheel and one source distribution;

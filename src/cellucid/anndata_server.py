@@ -50,6 +50,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlparse
 
 from ._console import console_print
+from ._contracts import _require_dataset_id, _require_dataset_name
 from ._server_base import (
     CELLUCID_WEB_URL,
     DEFAULT_HOST,
@@ -66,12 +67,26 @@ from ._server_base import (
 )
 from .anndata_adapter import AnnDataAdapter, _classify_anndata_path
 from .connectivity_contract import build_connectivity_manifest
-from .prepare_data import _require_dataset_id, _require_dataset_name
 
 if TYPE_CHECKING:
     import anndata
 
 logger = logging.getLogger("cellucid.anndata_server")
+
+
+def _protocol_capability_document() -> dict[str, list[str]]:
+    """Return the viewer wire capabilities this installation declares.
+
+    The answer is read from :mod:`cellucid.jupyter._wire`, which is the module
+    the validator itself reads, so the route cannot publish a capability the
+    notebook would then reject. The import is deferred because reaching ``_wire``
+    initializes the whole ``cellucid.jupyter`` package, which pulls in
+    :mod:`cellucid.server`; this package keeps such imports lazy so the CLI
+    starts fast, and one viewer asks this route once.
+    """
+    from .jupyter import _wire
+
+    return _wire._protocol_capability_document()
 
 
 _QVALUE_RE = re.compile(r"(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)\Z")
@@ -134,6 +149,7 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         /connectivity/edges.weights.f64.bin - Edge weights
         /_cellucid/health - Health check
         /_cellucid/info - Server info
+        /_cellucid/protocol - Viewer wire capabilities this installation accepts
         /_cellucid/events - POST endpoint for frontend events (hooks)
     """
 
@@ -228,6 +244,8 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
                 )
             elif path == "_cellucid/info":
                 self.send_json(self.server_info, head_only)
+            elif path == "_cellucid/protocol":
+                self.send_json(_protocol_capability_document(), head_only)
             elif path == "connectivity_manifest.json":
                 self.send_error_response(404, "No connectivity data")
             elif head_only and path in self.payload_lengths:

@@ -7,17 +7,19 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from cellucid._contracts import (
+    _require_field_identities,
+    _require_portable_filename_component,
+)
 from cellucid.anndata_adapter import (
     AnnDataAdapter,
     _categorical_storage,
 )
-from cellucid.prepare_data import (
-    _json_category_values as _prepare_json_category_values,
+from cellucid.prepare_data._categories import (
+    _declared_categorical_storage,
 )
-from cellucid.prepare_data import (
-    _require_field_identities,
-    _require_portable_filename_component,
-    _select_category_dtype,
+from cellucid.prepare_data._categories import (
+    _json_category_values as _prepare_json_category_values,
 )
 
 
@@ -124,12 +126,10 @@ def test_anndata_adapter_emits_exact_current_compact_manifests() -> None:
     assert "_anndata_adapter" not in identity
     assert list(identity["source"]) == ["name"]
     assert identity["source"] == {"name": "In-memory AnnData"}
-    assert identity["export_settings"] == {
-        "compression": None,
-        "var_quantization": None,
-        "obs_continuous_quantization": None,
-        "obs_categorical_dtype": "auto",
-    }
+    # A served AnnData object is not an export and made no writer choices, so
+    # it states no export_settings at all rather than inventing a placeholder
+    # dtype that no export can contain and that the web reader must then admit.
+    assert "export_settings" not in identity
 
 
 def test_identity_obs_fields_follow_the_exact_compact_manifest_order() -> None:
@@ -272,11 +272,25 @@ def test_python_producers_share_exact_categorical_storage_boundaries() -> None:
     with pytest.raises(ValueError, match="at most 65,535"):
         _categorical_storage(65_536, field_key="group")
 
-    assert _select_category_dtype(255) == (np.uint8, 255)
-    assert _select_category_dtype(256) == (np.uint16, 65_535)
-    assert _select_category_dtype(65_535) == (np.uint16, 65_535)
-    with pytest.raises(ValueError, match="at most 65,535"):
-        _select_category_dtype(65_536)
+    # The exporter honours the width its caller declared instead of choosing
+    # one, but it enforces the same boundaries: 255 categories in uint8 and
+    # 65,535 in uint16, each spending its top code on the missing marker.
+    assert _declared_categorical_storage("uint8", 255, field_key="group") == (
+        np.uint8,
+        "uint8",
+        255,
+        "u8",
+    )
+    assert _declared_categorical_storage("uint16", 65_535, field_key="group") == (
+        np.uint16,
+        "uint16",
+        65_535,
+        "u16",
+    )
+    with pytest.raises(ValueError, match="uint8 supports at most 255"):
+        _declared_categorical_storage("uint8", 256, field_key="group")
+    with pytest.raises(ValueError, match="uint16 supports at most 65,535"):
+        _declared_categorical_storage("uint16", 65_536, field_key="group")
 
 
 def test_prepare_producer_preserves_exact_json_category_identity() -> None:
@@ -699,7 +713,7 @@ def test_real_h5ad_backed_loading_reports_actual_state_and_serves_values(
         }
         values = np.frombuffer(
             adapter.get_gene_expression("Gene_A"),
-            dtype=np.float32,
+            dtype="<f4",
         )
         np.testing.assert_array_equal(values, np.array([0.0, 2.0, 4.0]))
 
@@ -724,3 +738,32 @@ def test_real_zarr_loading_reports_materialized_state(tmp_path) -> None:
             adapter.get_gene_ids(),
             ["Gene_A", "Gene-B"],
         )
+
+
+def test_served_identity_carries_no_value_the_web_reader_rejects() -> None:
+    """The served identity must satisfy the reader's export_settings contract.
+
+    The web reader accepts ``export_settings.obs_categorical_dtype`` only as
+    ``uint8`` or ``uint16``. This adapter previously emitted ``auto``, which no
+    export can contain, so removing that arm from the reader made every
+    ``cellucid serve <file>.h5ad`` dataset unopenable. The key is optional in
+    the format, so the adapter states nothing rather than something invalid,
+    and this test pins the property the reader actually depends on.
+    """
+    adata = _adata_with_current_fields()
+    adapter = AnnDataAdapter(
+        adata,
+        dataset_name="Served",
+        dataset_id="served",
+    )
+    identity = adapter.get_dataset_identity()
+
+    settings = identity.get("export_settings")
+    if settings is not None:
+        assert settings["obs_categorical_dtype"] in {"uint8", "uint16"}
+
+    # Every categorical field states its own exact storage width, which is
+    # where the reader actually looks; nothing needs a dataset-wide placeholder.
+    manifest = adapter.get_obs_manifest()
+    for entry in manifest["_categoricalFields"]:
+        assert entry[3] in {"uint8", "uint16"}

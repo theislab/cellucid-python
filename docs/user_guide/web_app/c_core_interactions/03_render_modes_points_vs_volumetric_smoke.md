@@ -28,9 +28,21 @@ Use **Visualization → Render mode:**:
 - `Points` is the default.
 - `Volumetric smoke cloud` reveals **Volumetric smoke:** and hides the
   points-only depth, renderer, connectivity, and vector-field controls.
+  **Image quality** stays, in both modes, because antialiasing applies to the
+  whole drawing buffer rather than to the point sprites.
 
 The small `i` button beside **Volumetric smoke:** explains the mode without
 keeping extra prose open in the sidebar.
+
+```{figure} ../../../_static/screenshots/web_app/render-mode-select.png
+:alt: A control labelled RENDER MODE holding a dropdown that reads Points, ringed in blue with the mouse pointer pressing it, above a dashed box labelled DEPTH PERCEPTION whose first slider, POINT SIZE (LOG), reads 0.75.
+:width: 480px
+
+`Render mode` is the first control in **Visualization**, and it is the switch
+that decides which of the controls beneath it exist at all. The **Depth
+perception** box directly under it, shown here, is one of the blocks that
+disappears in smoke mode.
+```
 
 ## Points mode
 
@@ -41,9 +53,19 @@ Its relevant controls are:
 - **Depth perception:** `Point size (log):`, `3D lighting:`,
   `Atmospheric fog:`, and `Perspective size scaling:`
 - **Shader quality:** `Full (lighting + fog)`, `Light (circular, no lighting)`,
-  or `Ultra-light (square points)`
+  or `Ultra-light (square points)` — a **look** choice, not a speed one. The
+  three measured the same frame time at every point size tested; see
+  {doc}`../n_benchmarking_performance/02_performance_considerations_what_gets_slow_and_why`.
+  Note that `Ultra-light` draws squares rather than round dots, so it also
+  changes far more pixels when antialiasing is off.
 - **Renderer settings:** `Level-of-Detail (LOD)`, `Force LOD level:`, and
   `Frustum culling`
+- **Image quality:** `Antialiasing (smooth point edges)` — on by default, and
+  the one control that applies on the next page load rather than immediately.
+  It sits outside the **Renderer settings** block because it governs the whole
+  drawing buffer and stays available in smoke mode too. See
+  {doc}`../n_benchmarking_performance/02_performance_considerations_what_gets_slow_and_why`
+  for what it costs and what it buys.
 
 For large datasets, begin here and use
 {doc}`../n_benchmarking_performance/03_large_dataset_best_practices`.

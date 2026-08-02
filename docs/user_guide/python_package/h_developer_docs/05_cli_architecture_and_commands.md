@@ -81,6 +81,53 @@ Then:
 
 ---
 
+## How failures are reported (internals)
+
+`main()` classifies every exception that escapes a subcommand into exactly one
+of two kinds, and the kind decides whether a traceback is printed.
+
+**Operator conditions** are things the person at the terminal can correct. They
+are reported as a single `Error:` line naming what failed and what to change,
+with no traceback, and exit `1`. The classification is by exception type, listed
+in `cli._OPERATOR_ERROR_TYPES`:
+
+| Type | Reaches the CLI as |
+|---|---|
+| `ValueError` | a missing or inapplicable flag, an undetectable input, an incomplete export, an invalid `--allowed-host` |
+| `TypeError` | a manifest whose JSON is the wrong shape |
+| `KeyError` | a named `obs` column, gene, or `obsm` key that is not in the data |
+| `RuntimeError` | no browser to open, a viewer-source generation that did not return HTTP 200 |
+| `OSError` | a taken port, an unbindable host, a privileged port, an unreadable file — including the `socket.gaierror` and `urllib` `URLError` subclasses |
+| `ImportError` | an optional dependency such as `zarr` or `anndata` that is not installed |
+
+These are the types the package's own
+{doc}`../g_api_reference_coverage/02_error_messages_and_exceptions_document_patterns`
+taxonomy raises deliberately, each already carrying an actionable message; the
+CLI adds the flag-level fix for the operating-system conditions, which arrive
+with an `errno` and no advice.
+
+**Defects** are everything else — `AttributeError`, `IndexError`,
+`AssertionError`, `NameError` and the rest. Cellucid did something it did not
+intend, so the full traceback is written to `stderr` unconditionally, even under
+`--quiet`, and the `Error:` line names the issue tracker and asks for the
+traceback. Losing that traceback would make real bugs unreportable.
+
+Three properties hold for both kinds and are covered by
+`tests/test_cli_error_reporting_contract.py`:
+
+- `stdout` is flushed before anything is written to `stderr`, so the `Error:`
+  line is last even when the command is piped into a file or a pager;
+- the message is collapsed to one line, so “read the last `Error:` line” is
+  literally true;
+- `--verbose` adds the traceback to an operator condition too, for a bug report
+  that turns out to have been misclassified.
+
+The traceback is written with `traceback.print_exception`, not through a logger,
+so it does not depend on whether `--quiet` skipped `logging.basicConfig` or on
+how an embedding process configured logging.
+
+---
+
 ## Troubleshooting
 
 ### Symptom: “`cellucid serve` says ‘Unable to detect format’”

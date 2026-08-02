@@ -34,7 +34,9 @@ The web app expects this contract (documented fully here):
 ## High-level pipeline stages (the mental model)
 
 Implementation is in:
-- `cellucid-python/src/cellucid/prepare_data.py` (`def prepare(...)`)
+- `cellucid-python/src/cellucid/prepare_data/_export.py` (`def prepare(...)`), which
+  hands the staged generation to
+  `cellucid-python/src/cellucid/prepare_data/_generation.py`
 
 The pipeline stages are:
 

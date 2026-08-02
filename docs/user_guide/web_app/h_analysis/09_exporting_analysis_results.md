@@ -46,7 +46,7 @@ Goal: export **one plot** for reporting and **one table** for re-analysis.
 
 1) Run the analysis you care about (Detailed / Correlation / DE / Gene Signature / Marker Genes)
 2) Open the expanded view
-   - click the plot preview, or click `⤢ Expand` (mode-dependent)
+   - click `⤢ Expand` in the result's action row
 3) In the expanded view, use the export buttons
    - `PNG` / `SVG` for plots
    - `CSV` for tables
@@ -68,8 +68,10 @@ For wet lab / reporting workflows:
 Exports are attached to the **analysis result view**, not to the overall app.
 
 Typical patterns:
-- **Detailed Analysis**: click the plot preview to open an expanded modal; export from there.
-- **DE / Gene Signature / Marker Genes**: use `⤢ Expand` (or click the preview) to open the expanded modal; export from there.
+- **Detailed Analysis / Correlation / DE / Gene Signature / Marker Genes**: every
+  mode that produces an expandable result renders a `⤢ Expand` button in its
+  action row; export from the modal it opens. The button is the only way in —
+  the preview itself is not clickable.
 - **Quick**: no formal “export” controls (use it as a summary; screenshot if needed).
 
 In the expanded view you should see an `Export:` row with buttons:
@@ -155,7 +157,8 @@ If you need to map scores back to specific cells, export a session and recompute
 
 ### Marker Genes (Genes Panel)
 
-Marker Genes exports depend on what you’re looking at:
+All three Marker Genes modes draw the same heatmap, so the export cannot be
+chosen by what is on screen. It is chosen by the **mode recorded in the result**:
 
 - **Heatmap-style exports** (Clustered / Custom Genes)
   - Filename: `marker_genes_heatmap.csv`
@@ -167,15 +170,23 @@ Marker Genes exports depend on what you’re looking at:
 
 - **Ranked markers exports** (Ranked Genes)
   - Filename: `marker_genes_ranked.csv`
-  - Columns:
+  - Columns, in this order:
     - `group`, `gene`, `rank`
     - `log2FoldChange`, `pValue`, `adjustedPValue`
     - `meanInGroup`, `meanOutGroup`
     - `percentInGroup`, `percentOutGroup`
+  - `group` is the **category name** — the grouping field's value for that
+    group, written exactly as the heatmap CSV writes its column headers and as
+    the group dropdown above the ranked table labels its entries. A numeric or
+    boolean category is written as its plain string form. Both exports encode
+    the group through the same rule, so a `marker_genes_ranked.csv` and a
+    `marker_genes_heatmap.csv` taken from one run can be joined on it.
 
 :::{note}
-If your group labels contain commas, `marker_genes_heatmap.csv` may be harder to parse in strict CSV readers.
-If possible, avoid commas in categorical labels used for grouping.
+Both files quote any field that contains a comma, a quote or a newline, and
+double an embedded quote, so a comma inside a category name is carried into one
+cell rather than splitting the row. Read them with a real CSV parser
+(`pandas.read_csv`, `readr::read_csv`) rather than by splitting on commas.
 :::
 
 ---
@@ -230,11 +241,23 @@ Fix:
 
 ## Interface reference
 
-```{figure} ../../../_static/screenshots/analysis/marker-genes-expanded.png
-:alt: Expanded Marker Genes result with heatmap, summary statistics, export controls, and top-marker table.
-:width: 860px
+```{figure} ../../../_static/screenshots/analysis/export-toolbar.png
+:alt: A row labelled EXPORT: followed by three pill buttons reading PNG, SVG and CSV.
+:width: 312px
 
-The expanded Marker Genes result combines the heatmap, method summary, ranked table, and PDF, PNG, and CSV export actions.
+The export row, identical in every mode: **PNG**, **SVG**, **CSV**. There is no
+PDF export anywhere in the analysis panel.
+```
+
+```{figure} ../../../_static/screenshots/analysis/marker-genes-expanded.png
+:alt: The expanded Marker Genes modal headed MARKER GENES: CELL_TYPE with a clustered heatmap and dendrograms in the plot area, an Export row of PNG, SVG and CSV buttons above a PLOT OPTIONS column, a SUMMARY STATISTICS panel naming the category, mode, method and counts, and a STATISTICAL ANALYSIS panel holding the Top Marker Genes table, with a pointer on the CSV button.
+:width: 1440px
+
+The expanded Marker Genes result combines the heatmap, the method summary, the
+ranked table, and the PNG, SVG and CSV export actions. Exports exist **only**
+here — the sidebar preview has none. **Mode** in the summary table is the value
+the CSV button dispatches on: `clustered` here, so `CSV` downloads
+`marker_genes_heatmap.csv`.
 ```
 
 ---

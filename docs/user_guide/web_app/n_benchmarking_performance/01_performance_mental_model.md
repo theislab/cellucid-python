@@ -45,7 +45,10 @@ Cellucid performance is dominated by:
 - **GPU fill + draw cost** (points, post-processing, overlays, smoke raymarch),
 - **I/O and caching** (remote data, expression fetches, “first-time” loads).
 
-The practical trick: many actions you’d consider “UI-only” trigger large buffer updates or recomputation; *avoid repeated recompute loops* and *avoid multiplying work by opening many views*.
+The practical trick: the *CPU* side of an action usually costs a pass over every
+cell even when the action changes almost nothing, while the *GPU* side only
+moves what actually changed. So the thing to avoid is a repeated recompute loop
+(slider scrubbing with Live filtering on), not the size of the resulting change.
 
 :::
 
@@ -54,8 +57,15 @@ The practical trick: many actions you’d consider “UI-only” trigger large b
 At a high level:
 
 - The viewer maintains large arrays (positions, colors, visibility, selection, sometimes per-view buffers).
-- Many UI actions update these arrays and then **upload to GPU** or trigger dependent recompute.
-- Some modules add full-screen passes or per-view framebuffers, making performance scale with **pixel count** and **view count**.
+- A settled frame uploads nothing. Buffer and texture writes are gated behind
+  dirty flags, and the frame that follows a camera move reuses its published
+  index buffer unless the set of admitted spatial nodes actually changed. The
+  steady-state cost is uniforms plus draw calls.
+- A visibility change uploads only the rows of the alpha texture whose bytes
+  moved, so the transfer is proportional to how scattered the change is rather
+  than to the dataset size. Deciding *which* cells changed is still a pass over
+  every cell on the CPU.
+- Some modules add full-screen passes or per-view framebuffers, making performance scale with **pixel count**.
 
 So “performance” is usually about:
 
@@ -78,20 +88,42 @@ So “performance” is usually about:
 - but the rest of the UI may still respond (buttons click, menus open).
 
 **Common triggers in Cellucid:**
-- many views/snapshots visible at once (grid view multiplies work),
-- high visual quality (heavy shaders, large point sizes, volumetric smoke),
+- a two- or three-view layout (see the note below — it is the *shape* of the
+  layout that matters, not just the count),
+- large point sizes, or volumetric smoke (its shaders really are heavy; the
+  points-mode ones are not — see
+  {doc}`02_performance_considerations_what_gets_slow_and_why`),
 - GPU-heavy overlays (vector field / velocity),
 - large browser window on a retina/high-DPI screen (more pixels).
 
 **Fast confirmation tests (no tools required):**
 1) Make the browser window smaller. If it immediately gets smoother, you were pixel/GPU-bound.
-2) Clear snapshots (go back to fewer views). If it immediately gets smoother, you were view/GPU-bound.
+2) Clear snapshots (go back to a single view). If it immediately gets smoother, you were view/GPU-bound.
 3) Disable GPU-heavy modes (smoke mode, vector overlay). If it immediately gets smoother, you were GPU-bound.
 
 **Typical fixes:**
-- reduce the number of views,
+- go back to one view, or go up to four (again, see the note),
 - reduce visual quality knobs (see {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` and {doc}`../i_vector_field_velocity/05_performance_and_quality`),
 - keep the window smaller while exploring.
+
+:::{note}
+**More views is not automatically slower.** Cellucid allows at most four views —
+the live view plus three snapshots — and it lays them out as one row for two or
+three views, and as a 2×2 grid for four.
+
+Point size scales with the height of the pane a point is drawn in, so in the 2×2
+grid every point is drawn at half the diameter, covering roughly a quarter of
+the pixels. Four panes × a quarter of the area each means the four-view grid
+shades about the same total number of pixels as one full-size view. Two and
+three views keep the full pane height, so they really do cost about twice and
+three times a single view.
+
+The practical consequence is counter-intuitive but real: on a fill-rate-limited
+scene, **four views can be no more expensive than one, while two or three are
+the expensive layouts.** This only holds while size attenuation is on (it is by
+default); with attenuation at zero, point size no longer follows the pane and
+every extra view is straightforwardly more work.
+:::
 
 ---
 
@@ -151,17 +183,21 @@ Most costs in Cellucid are not “mysterious”—they scale with a small set of
 
 | Multiplier | Why it matters | Typical symptoms |
 |---|---|---|
-| `n_cells` | Many operations are per-cell (visibility masks, colors, selections) | filters/updates take longer; memory pressure grows |
-| `n_views` (snapshots) | Each view adds GPU work, and sometimes per-view state | grid view stutters; context lost appears sooner |
+| `n_cells` | Many operations are per-cell (visibility recomputation, colors, selections) | filter applies take longer; memory pressure grows |
+| Layout shape (1, 2, 3 or 4 views) | Each view submits its own draw, but point size follows pane height — so the *row* layouts (2, 3) cost most and the 2×2 grid costs about as much as one view | a two-view comparison stutters where a four-view grid does not |
 | Window pixel count (`width × height × dpr²`) | Overlays and post-processing scale with pixels | smoother when window is smaller |
-| `n_enabled_filters` | Filtering often scales like `O(n_cells × n_filters)` | slider scrubbing becomes the main lag source |
+| `n_enabled_filters` | Each filter change re-derives visibility for every cell, testing each enabled filter | slider scrubbing becomes the main lag source |
 | Category count | Legends/counts and color mapping can degrade with huge category explosions | legends slow; UI becomes cluttered/unusable |
 | “First-time” loads | cold cache → extra I/O | first gene switch slow; second is faster |
 
 :::{tip}
-If you’re doing performance work, treat **views** and **pixels** as first-class multipliers.
+If you’re doing performance work, treat **pixels** as the first-class multiplier
+and **layout shape** as the second.
 
-Reducing views (clear snapshots) and reducing pixels (smaller window) are the two fastest “no-risk” ways to confirm a GPU bottleneck.
+Reducing pixels (smaller window) is the fastest “no-risk” way to confirm a GPU
+bottleneck. Changing the view count is a useful second test, but read it
+carefully: going from two views to one should help, and going from three to
+four may also help.
 :::
 
 ---
@@ -216,9 +252,15 @@ Once you find a fast, stable configuration:
 ### Normal (expected)
 
 - First-time gene loads are slower than the second time (cache warming).
-- Filtering is slower when `n_cells` is huge, especially with Live filtering on.
-- Grid view is slower than single view (multiple views draw in parallel).
+- Filtering is slower when `n_cells` is huge, especially with Live filtering on:
+  the cost of *deciding* what is visible is per-cell and does not shrink when
+  the filter hides most of the data.
+- A two- or three-view row is slower than a single view; a 2×2 grid usually is
+  not (see the note above).
 - Smoke mode and vector overlays can be dramatically slower than points mode (they do more GPU work).
+- Navigating a heavily filtered view is *faster* than navigating the same
+  dataset unfiltered. Hidden cells are rejected before rasterisation, so they
+  cost nothing to draw.
 
 ### Suspicious (worth troubleshooting)
 
@@ -233,9 +275,9 @@ If any of these match, start with {doc}`../a_orientation/02_system_requirements`
 
 ## If you remember only five rules
 
-1) **Views multiply work.** Keep snapshots lean while exploring.  
+1) **Pixels matter most.** Smaller windows (or lower-DPI monitors) can dramatically improve GPU-bound workflows.  
 2) **Avoid recompute loops.** Turn Live filtering off and apply once on large data.  
-3) **Pixels matter.** Smaller windows (or lower-DPI monitors) can dramatically improve GPU-bound workflows.  
+3) **Measure the layout, don’t assume it.** One view and a 2×2 grid cost about the same; two- and three-view rows are the expensive ones.  
 4) **Use the right loading mode.** Big `.h5ad` in the browser is a trap; server mode is your friend.  
 5) **Report performance with context.** Dataset size + hardware + steps + a number beats “it’s slow”.
 

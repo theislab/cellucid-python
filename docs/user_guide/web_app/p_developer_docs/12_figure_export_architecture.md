@@ -70,8 +70,9 @@ PNG export uses Canvas2D for composition, but rasterizes points via WebGL2:
 - this preserves shader-accurate appearance (e.g. 3D sphere shading)
 - avoids maintaining two independent point renderers
 
-The PNG exporter also embeds metadata via PNG `tEXt` chunks:
-- `Software`, `Source`, `Creation Time`, `Description`, etc.
+The PNG exporter also embeds metadata via UTF-8 PNG `iTXt` chunks:
+- `Software`, `Website`, `Creation Time`, `Dataset`, `Dataset ID`, `Color Field`,
+  `Source File`, `Description` and a compact JSON `Comment` blob.
 
 This is useful for provenance (“how was this figure made?”) and reproducibility.
 

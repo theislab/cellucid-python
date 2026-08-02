@@ -29,6 +29,16 @@ unsupported and the strict generic reader rejects it. To create a portable
 manual state, choose the sample, wait for this verified view, and then use
 **Save State**.
 
+That is also why a **Save State** file cannot simply be renamed and published: a
+save writes the whole static chunk registry, and a published preset carries only
+five of them. The difference is not cosmetic — the reader refuses a bundle that
+carries the extra chunks, and one of them, a recorded Camera Path, is refused by
+name. The publishing step in `cellucid-datasets`
+(`scripts/publish_session_preset.mjs`) performs the trim, importing the rule
+from the viewer rather than restating it, and refuses to drop any chunk that
+still holds content instead of discarding it silently. If you maintain your own
+catalog, use that script rather than editing a save by hand.
+
 ## The exact publication contract
 
 Every official export generation contains both sidecars:
@@ -49,13 +59,13 @@ The manifest has one exact root, `states`, and one exact entry:
 
 The matching entry in
 [`exports/datasets.json`](https://github.com/theislab/cellucid-datasets/blob/main/exports/datasets.json)
-advertises `state_manifest` and `state_sha256` as a pair. For example, the Suo
-entry declares:
+advertises `state_manifest` and `state_sha256` as a pair. Each entry has this
+shape:
 
 ```json
 {
   "state_manifest": "state-snapshots.json",
-  "state_sha256": "682a065b214eee5e3c7c3bd37dccacf6d39f53de2ac697d0b20d06305f50e578"
+  "state_sha256": "<64 lowercase hexadecimal characters>"
 }
 ```
 
@@ -66,10 +76,15 @@ advertised.
 
 A published state is regenerated whenever the reviewed view or the session
 format changes, and its `state_sha256` changes with it. Read the current value
-out of the catalog rather than copying one from documentation.
+out of the catalog rather than copying one from documentation — that is why the
+example above shows the field's shape instead of a digest. A digest written into
+prose is correct only until the next generation is published, and it then
+becomes a value a reader can check against and be misled by.
 
 You can inspect all five generation directories in the
 [`cellucid-datasets` exports](https://github.com/theislab/cellucid-datasets/tree/main/exports).
+For what each generation is an export of, what to cite, and how far its build is
+pinned, see {doc}`../b_data_loading/12_sample_dataset_provenance`.
 
 ## What the reviewed view changes
 
@@ -79,6 +94,21 @@ Each official state:
 - restores a modest, static close-up in the 3-D **Orbit** camera;
 - uses the light theme and grid background; and
 - starts without active filters or kept snapshots.
+
+```{figure} ../../../_static/screenshots/sessions_sharing/official-01-sample-state-applied.png
+:alt: The full application window shortly after choosing the Pancreas built-in sample, showing the dataset coloured by cell type in a 3-D orbit view on a light grid background, with the Session accordion open and the dataset summary filled in.
+:width: 1440px
+
+The Pancreas sample moments after it was chosen. Nothing was clicked beyond
+picking the sample: the dataset published first, then its verified starting
+state put the view into 3-D **Orbit** on the light grid background with
+`cell_type` active. **Save State** and **Load State** were not involved.
+```
+
+You can confirm each of those four from the sidebar in the figure: the
+**Visualization** accordion shows `Light` theme, `Grid (light)` background and
+`Points` render mode, and the dataset opens on its 3-D embedding with the
+navigation mode set to orbit.
 
 These are deliberately **static-only** presets. They contain no
 `cinematic/camera` chunk, so they never restore a recorded Camera Path,

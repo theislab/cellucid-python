@@ -106,13 +106,24 @@ Rules:
 - if you delete the currently active page, the UI switches to another page automatically.
 
 ### Combine pages (union / intersection)
-You can create a derived page by dragging one page tab onto another.
+You can create a derived page by dragging one page tab onto another, or by
+pressing the `⋈` control on a tab.
 
 On drop, the UI offers:
 - **Intersection (∩)**: cells that are in *both* pages (enabled groups only)
 - **Union (∪)**: cells that are in *either* page (enabled groups only)
 
 This creates a new page whose name reflects the operation (e.g. `Page A ∩ Page B`).
+
+```{figure} ../../../_static/screenshots/highlighting_selection/compare-highlight-pages.png
+:alt: The Highlighting panel with two page tabs, a blue Page 1 carrying 870 and an active red Page 2 carrying 250, the group list showing one Proximity group, and the pointer on the button that adds another page.
+:width: 516px
+
+Two pages. Each tab carries a colour swatch, the page name, and that page's
+total membership. Only the active tab's groups are listed below and only they
+are rendered — which is why “Clear did nothing” is almost always “Clear worked,
+on the other page”.
+```
 
 :::{note}
 If the intersection is empty, the derived page can be created with zero groups (an “empty result”). This is expected.

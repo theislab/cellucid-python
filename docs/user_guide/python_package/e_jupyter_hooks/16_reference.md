@@ -3,7 +3,7 @@
 This page is the “source of truth” reference for the notebook hooks system.
 
 Primary sources in this repo:
-- Python: `cellucid-python/src/cellucid/jupyter.py`
+- Python: `cellucid-python/src/cellucid/jupyter/`
 - Python: `cellucid-python/src/cellucid/_server_base.py`
 - Web app: `cellucid/assets/js/data/jupyter-source.js`
 - Web app: `cellucid/assets/js/app/main.js`
@@ -79,7 +79,10 @@ Decorators:
 - `@viewer.on_selection`
 - `@viewer.on_hover`
 - `@viewer.on_click`
-- `@viewer.on_message` (catches all seven current event types)
+- `@viewer.on_command_error` (a command this notebook sent was rejected by the
+  viewer; registering one also silences the default `sys.stderr` notice, and
+  only the web build that emits `command_error` sends it)
+- `@viewer.on_message` (catches all eight current event types)
 
 Programmatic registration:
 - `viewer.register_hook(event: str, callback) -> callback`
@@ -104,7 +107,8 @@ Synchronous “pull” API:
 
 - `viewer.debug_connection(timeout=5.0)` → structured connectivity report,
   including `dataset_identity_probes`, keyed by every exact server-declared
-  dataset id/path
+  dataset id/path, and `recent_events["command_errors"]`, the most recent
+  commands the viewer rejected
 - `viewer.ensure_web_ui_cached(force=True, show_progress=True)` → establish the
   complete source UI generation
 - `viewer.ensure_web_ui_cached(force=False, show_progress=True)` → verify the
@@ -175,6 +179,15 @@ Every listed field is required and undeclared fields are rejected.
   "status": "ok",
   "bytes": int,
   "path": str,
+}
+```
+
+### `command_error`
+
+```python
+{
+  "command": str,   # one of the command types below
+  "reason": str,    # one line, at most 500 characters
 }
 ```
 
@@ -255,6 +268,16 @@ Returns server metadata (version, mode, etc.).
 ### `GET /_cellucid/datasets`
 
 Returns dataset listings (one dataset in AnnData mode; one or many in exported mode).
+
+### `GET /_cellucid/protocol`
+
+Returns the wire capabilities this installation accepts: `events` (the inbound
+event types it validates) and `commands` (the commands it may send, which is
+also the set of names a `command_error` may report). Both are lists that grow
+between releases; the key set does not, and there is no version number. A web
+build asks this route before emitting an event that older notebooks would
+reject. See
+{doc}`../h_developer_docs/09_server_mode_architecture_endpoints_and_security`.
 
 ### `POST /_cellucid/events`
 

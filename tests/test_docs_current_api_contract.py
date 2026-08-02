@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import binascii
+import hashlib
 import inspect
 import json
 import re
@@ -318,6 +319,37 @@ def test_runnable_python_examples_match_current_public_signatures() -> None:
     assert not failures, "\n".join(failures)
 
 
+_FENCE = re.compile(r"^(?P<ticks>`{3,})(?P<info>.*)$")
+
+# A transcript that documents the *missing-identity failure* has to show the
+# command without its identity flags -- that incomplete command is the whole
+# subject of the example. The exemption is the failure the CLI itself prints for
+# exactly that mistake, so it cannot be spelled over a command that is being
+# recommended rather than diagnosed.
+_MISSING_IDENTITY_REPORT = re.compile(r"^Error: --dataset-(?:name|id)\b")
+
+
+def _fenced_block_of_each_line(text: str) -> list[int | None]:
+    """Return, per line, the index of the fenced block it belongs to."""
+    membership: list[int | None] = []
+    open_ticks: str | None = None
+    block_index = -1
+    for line in text.splitlines():
+        fence = _FENCE.match(line)
+        if open_ticks is None:
+            if fence is not None:
+                open_ticks = fence["ticks"]
+                block_index += 1
+            membership.append(None)
+            continue
+        if fence is not None and len(fence["ticks"]) >= len(open_ticks) and not fence["info"].strip():
+            open_ticks = None
+            membership.append(None)
+            continue
+        membership.append(block_index)
+    return membership
+
+
 def test_cli_examples_use_only_the_exact_current_contract() -> None:
     failures: list[str] = []
     for path in [*_markdown_files(), *_notebook_files()]:
@@ -327,8 +359,17 @@ def test_cli_examples_use_only_the_exact_current_contract() -> None:
             failures.append(f"{relative}: documents a removed backed-mode CLI option")
 
         logical_text = re.sub(r"\\\s*\n\s*", " ", text)
-        for line_number, line in enumerate(logical_text.splitlines(), start=1):
+        lines = logical_text.splitlines()
+        membership = _fenced_block_of_each_line(logical_text)
+        diagnostic_blocks = {
+            block
+            for block, line in zip(membership, lines, strict=True)
+            if block is not None and _MISSING_IDENTITY_REPORT.match(line.strip())
+        }
+        for line_number, line in enumerate(lines, start=1):
             if "cellucid serve" not in line or not re.search(r"\.(?:h5ad|zarr)\b", line):
+                continue
+            if membership[line_number - 1] in diagnostic_blocks:
                 continue
             if "--dataset-name" not in line or "--dataset-id" not in line:
                 failures.append(
@@ -449,7 +490,9 @@ def test_docs_do_not_reintroduce_removed_or_invented_runtime_contracts() -> None
     assert r".\.venv\Scripts\Activate.ps1" in installation_page
     assert r".\.venv\Scripts\activate.bat" in installation_page
 
-    server_source = (REPOSITORY_ROOT / "src/cellucid/server.py").read_text(encoding="utf-8")
+    server_source = (REPOSITORY_ROOT / "src/cellucid/server/_server.py").read_text(
+        encoding="utf-8"
+    )
     anndata_server_source = (REPOSITORY_ROOT / "src/cellucid/anndata_server.py").read_text(
         encoding="utf-8"
     )
@@ -749,10 +792,15 @@ def test_docs_preserve_closed_jupyter_session_and_zarr_contracts() -> None:
         "pong",
         "debug_snapshot",
         "session_bundle",
+        "command_error",
     ):
         assert f"### `{event_type}`" in event_page
     assert "Unknown event types" in event_page
     assert "rejected before any hook runs" in event_page
+    assert "one of eight closed event records" in event_page
+    assert "@viewer.on_command_error" in event_page
+    # A command that failed must not read as one that applied.
+    assert "did not take effect in the viewer" in event_page
 
     session_reference = (
         DOCS_ROOT
@@ -815,7 +863,16 @@ def test_current_startup_screenshots_and_documented_defaults_are_exact() -> None
     assert "1D or 2D starts in **Planar**" in quick_tour
     assert "3D starts in **Orbit**" in quick_tour
     assert "default light grid" in quick_tour
-    assert "Build 2026-07-27.1" in combined
+    # The sidebar footer's build identity bumps on every web release — seven
+    # times in the five days after ``2026-07-27.1``. Pinning a literal here made
+    # the assertion enforce staleness: it kept passing while both pages, and the
+    # screenshot they share, described a build nobody was running, and it turned
+    # every web change into a documentation change. The durable claim is *where*
+    # to read the value and that it is yours, not ours; this forbids a literal
+    # coming back.
+    assert not re.search(r"Build \d{4}-\d{2}-\d{2}\.\d+", combined), combined
+    assert "changes with every web release" in " ".join(quick_tour.split())
+    assert "read yours off your own footer" in " ".join(glossary.split())
     assert "exact value in bug reports" in glossary
     assert "Camera Path** accordion starts collapsed" in camera_page
     assert "Community Annotation** accordion starts collapsed" in annotation_index
@@ -841,8 +898,8 @@ def test_standard_pancreas_sample_contract_is_documented_exactly() -> None:
         "`velocity_umap`",
         "f6cad69fd509be44c8453205309f4c3c3c37ba34",
         "27,998 ordered genes",
-        "3,774-file, 2,477,205-byte",
-        "268a36b0c62f1e872bc4ebc271283fe09b9036c2b8db2b7bbf2d7d737556c865",
+        "SHA-256 generation digest covering all 3,774 exported files",
+        "recorded in `sources/pancreas.json` rather than repeated here",
         "GSE132188",
         "10.1242/dev.173849",
     ):
@@ -992,3 +1049,179 @@ def test_every_documented_screenshot_uses_its_intrinsic_responsive_width() -> No
     assert "figure img {" in stylesheet
     assert "height: auto;" in stylesheet
     assert "max-width: 100%;" in stylesheet
+
+
+# Published images that ``docs/_tooling/screenshots/captures.json`` has no record
+# for. They predate the capture tool — several were made by a script that was
+# never committed — so ``node capture.mjs check`` cannot re-verify them, which is
+# how an empty screenshot once shipped. Backfilling one means authoring a
+# scenario and recapturing, not editing this number.
+#
+# **This number may only go down.** It is a ratchet: it stops the backlog growing
+# while it is worked off, and reaching 0 is what closes the gap.
+UNPROVENANCED_SCREENSHOT_BUDGET = 86
+
+# Records whose ``sha256`` does not describe the file they name, so the published
+# bytes have no provenance even though a record exists. Recapturing the scenario
+# is the fix; correcting the digest in place would be inventing provenance for an
+# image nobody can show came from that run.
+DIVERGENT_SCREENSHOT_RECORDS = frozenset({"annotation-lifecycle-03-install-app"})
+
+
+def test_screenshot_provenance_records_describe_the_published_images() -> None:
+    """``captures.json`` must describe the bytes actually published, and the
+    set of images it cannot account for must only ever shrink."""
+    screenshot_root = (DOCS_ROOT / "_static" / "screenshots").resolve()
+    manifest = json.loads(
+        (DOCS_ROOT / "_tooling" / "screenshots" / "captures.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert manifest["version"] == 1
+
+    recorded: set[Path] = set()
+    divergent: set[str] = set()
+    for capture_id, record in manifest["captures"].items():
+        for field in ("topic", "name", "sha256", "web_repository_revision"):
+            assert record.get(field), (capture_id, field)
+        image = (screenshot_root / record["topic"] / f"{record['name']}.png").resolve()
+        if record["topic"] == "_proof":
+            # ``_proof`` scenarios demonstrate that the tool works and are never
+            # emitted; an on-disk file for one would be an orphan PNG.
+            assert not image.exists(), capture_id
+            continue
+        assert image.is_file(), (capture_id, image)
+        recorded.add(image)
+        digest = hashlib.sha256(image.read_bytes()).hexdigest()
+        if digest != record["sha256"]:
+            divergent.add(capture_id)
+
+    assert divergent == set(DIVERGENT_SCREENSHOT_RECORDS), sorted(
+        divergent.symmetric_difference(DIVERGENT_SCREENSHOT_RECORDS)
+    )
+
+    published = {path.resolve() for path in screenshot_root.rglob("*.png")}
+    unprovenanced = published - recorded
+    assert len(unprovenanced) <= UNPROVENANCED_SCREENSHOT_BUDGET, sorted(
+        str(path.relative_to(screenshot_root)) for path in unprovenanced
+    )
+
+
+# Every page that enumerates the viewer's hook decorators, and the name of the
+# heading or lead-in that makes the list read as complete. A hook added to
+# ``BaseViewer`` has to reach all of them: the web-app Jupyter tutorial silently
+# lost ``on_command_error`` because no check tied these lists to the class.
+HOOK_ENUMERATION_PAGES = (
+    "docs/user_guide/web_app/b_data_loading/05_jupyter_tutorial.md",
+    "docs/user_guide/python_package/e_jupyter_hooks/"
+    "01_overview_bidirectional_communication.md",
+    "docs/user_guide/python_package/e_jupyter_hooks/16_reference.md",
+    "docs/user_guide/python_package/b_concepts_mental_models/"
+    "01_what_is_a_viewer_object.md",
+    "docs/user_guide/python_package/h_developer_docs/"
+    "10_jupyter_embedding_architecture.md",
+)
+
+# ``command_error`` is accepted by the wire protocol ahead of any web build that
+# emits it, so every page naming the hook also has to say the event does not
+# arrive yet. Without that, a reader registers a handler and reads its silence
+# as a viewer that never refuses a command.
+COMMAND_ERROR_AVAILABILITY = re.compile(
+    r"(?:only the web build that emits|sent only by the web build that emits)"
+    r" `command_error`",
+    re.IGNORECASE,
+)
+
+
+def test_every_documented_hook_list_matches_the_viewer_decorator_surface() -> None:
+    from cellucid.jupyter import BaseViewer
+
+    hooks = {
+        name
+        for name, member in inspect.getmembers(BaseViewer, lambda value: isinstance(value, property))
+        if name.startswith("on_")
+    }
+    assert hooks == {
+        "on_selection",
+        "on_hover",
+        "on_click",
+        "on_ready",
+        "on_command_error",
+        "on_message",
+    }, hooks
+
+    failures: list[str] = []
+    for relative in HOOK_ENUMERATION_PAGES:
+        page = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+        # The sentence is wrapped differently on every page, so match it against
+        # the page with its line breaks collapsed rather than as written.
+        unwrapped = " ".join(page.split())
+        for hook in sorted(hooks):
+            if hook not in page:
+                failures.append(f"{relative}: hook list omits {hook}")
+        if COMMAND_ERROR_AVAILABILITY.search(unwrapped) is None:
+            failures.append(
+                f"{relative}: names on_command_error without saying the event arrives "
+                "only from the web build that emits command_error"
+            )
+
+    assert not failures, "\n".join(failures)
+
+
+# Every page that enumerates the routes the Python servers answer, and so reads
+# as complete. ``/_cellucid/protocol`` is how a web build discovers what this
+# installation accepts, which makes an endpoint list that omits it actively
+# misleading rather than merely short.
+ENDPOINT_ENUMERATION_PAGES = (
+    "docs/user_guide/python_package/h_developer_docs/"
+    "09_server_mode_architecture_endpoints_and_security.md",
+    "docs/user_guide/python_package/h_developer_docs/"
+    "17_security_privacy_and_networking.md",
+    "docs/user_guide/python_package/e_jupyter_hooks/16_reference.md",
+    "docs/user_guide/python_package/e_jupyter_hooks/12_security_model.md",
+    "docs/user_guide/python_package/d_viewing_apis/09_server_mode_advanced.md",
+    "docs/user_guide/python_package/d_viewing_apis/"
+    "04_cli_cellucid_serve_quickstart.md",
+    "docs/user_guide/python_package/g_api_reference_coverage/api/server.md",
+)
+
+# The pages that print the route's body. A capability list written out in prose
+# is a claim about what the server answers, so it is checked against the answer
+# rather than proof-read.
+PROTOCOL_BODY_PAGES = (
+    "docs/user_guide/python_package/h_developer_docs/"
+    "09_server_mode_architecture_endpoints_and_security.md",
+    "docs/user_guide/python_package/h_developer_docs/"
+    "11_hooks_events_protocol_and_schema.md",
+)
+
+
+def test_every_documented_endpoint_list_names_the_capability_route() -> None:
+    failures = [
+        f"{relative}: endpoint list omits /_cellucid/protocol"
+        for relative in ENDPOINT_ENUMERATION_PAGES
+        if "/_cellucid/protocol" not in (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+    ]
+
+    assert not failures, "\n".join(failures)
+
+
+def test_every_documented_capability_body_matches_the_served_document() -> None:
+    from cellucid.jupyter._wire import _protocol_capability_document
+
+    served = _protocol_capability_document()
+    failures: list[str] = []
+    for relative in PROTOCOL_BODY_PAGES:
+        page = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+        bodies = [
+            match.group("source")
+            for match in PYTHON_FENCE_PATTERN.finditer(page)
+            if match.group("info").strip() == "json" and '"commands"' in match.group("source")
+        ]
+        if len(bodies) != 1:
+            failures.append(f"{relative}: expected exactly one capability body, found {len(bodies)}")
+            continue
+        if json.loads(bodies[0]) != served:
+            failures.append(f"{relative}: capability body does not match /_cellucid/protocol")
+
+    assert not failures, "\n".join(failures)

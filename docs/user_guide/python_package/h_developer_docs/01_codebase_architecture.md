@@ -7,7 +7,7 @@ This page explains the **architecture of the `cellucid` Python package** (repo f
 
 - If you are a wet-lab user trying to “make the viewer appear”: read the *Fast path* and *Troubleshooting* sections only.
 - If you are a computational user: focus on the export format + server behavior.
-- If you are a developer: read the whole page before editing `prepare_data.py`, `server.py`, `anndata_server.py`, or `jupyter.py`.
+- If you are a developer: read the whole page before editing `prepare_data/`, `server/`, `anndata_server.py`, or `jupyter/`.
 :::
 
 ---
@@ -43,15 +43,17 @@ Most of the public API lives in `cellucid-python/src/cellucid/`:
 | File | What it does | Read when you… |
 |---|---|---|
 | `src/cellucid/__init__.py` | Lazy public API exports via `__getattr__` | want to change public imports without slowing CLI startup |
-| `src/cellucid/prepare_data.py` | `prepare(...)` export pipeline + manifest formats | want to change export layout, quantization, metadata |
-| `src/cellucid/server.py` | static-file server for exported datasets | want to change serving behavior for export folders |
+| `src/cellucid/prepare_data/` | `prepare(...)` export pipeline + manifest formats, split by responsibility across private submodules | want to change export layout, quantization, metadata |
+| `src/cellucid/_contracts.py` | identity, display-text, and output-directory rules, standard library only | want to change what counts as a valid name, label, or export directory |
+| `src/cellucid/_byte_order.py` | the little-endian rule every payload byte obeys, applied at both emission points | want to add a write path, or to know why the exporting host's architecture cannot change an export |
+| `src/cellucid/server/` | static-file server for exported datasets | want to change serving behavior for export folders |
 | `src/cellucid/anndata_adapter.py` | AnnData → virtual export format adapter | want to change lazy loading, caching, mapping of AnnData fields |
 | `src/cellucid/anndata_server.py` | dynamic server that exposes adapter data via HTTP routes | want to add/modify endpoints for AnnData mode |
-| `src/cellucid/jupyter.py` | notebook embedding, postMessage commands, hooks/event routing, session capture | want to change notebook UX or hooks behavior |
+| `src/cellucid/jupyter/` | notebook embedding, postMessage commands, hooks/event routing, session capture | want to change notebook UX or hooks behavior |
 | `src/cellucid/_server_base.py` | shared CORS, web-asset proxy, event + session upload endpoints | want to change security/transport behavior |
 | `src/cellucid/session_bundle.py` | `.cellucid-session` streaming reader | want to parse sessions or add chunk-level tooling |
 | `src/cellucid/session_codecs.py` | session chunk codecs (varint, delta-varint, RLE codes) | want to add/align codecs with the web app |
-| `src/cellucid/anndata_session.py` | apply session bundle → AnnData | want to change “sessions to AnnData bridge” semantics |
+| `src/cellucid/anndata_session/` | apply session bundle → AnnData | want to change “sessions to AnnData bridge” semantics |
 | `src/cellucid/vector_fields.py` | CellRank drift → vector fields | want to add helpers for velocity/drift conventions |
 | `src/cellucid/web_cache.py` | exact inventory-driven viewer generation establishment and verification | want to change source, staging, verification, or atomic publication behavior |
 

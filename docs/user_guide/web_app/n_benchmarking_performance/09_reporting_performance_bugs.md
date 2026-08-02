@@ -69,7 +69,7 @@ Example:
 
 - What action triggers the problem?
 - Is it consistent (every time) or intermittent?
-- Is it worse in grid view (many snapshots) than in single view?
+- Which layout is it worst in: one view, a two- or three-view row, or the 2×2 grid?
 - Does window size change it?
 
 ### Expected vs observed
@@ -84,7 +84,8 @@ If you can share details:
 - Approx size: `<n_cells> cells`, `<n_genes> genes`, `<n_fields> fields`
 - Notable complexity:
   - category counts for key categorical fields (if relevant),
-  - number of views/snapshots in the session,
+  - the layout (one view, a two- or three-view row, or the 2×2 grid),
+  - how many cells are visible after filters,
   - overlays enabled (which ones, settings).
 
 If the dataset is private:
@@ -165,7 +166,7 @@ Options:
 2) **Downsample + anonymize** a small subset that still triggers the issue (e.g., 200k cells instead of 2M).
 3) **Share structure, not values**:
    - “Field X has 25k categories”
-   - “We have 12 snapshots open”
+   - “We are in the 2×2 four-view grid”
    - “Overlay density was 50K”
 
 Even without sharing data, these numbers let developers reason about the bottleneck.

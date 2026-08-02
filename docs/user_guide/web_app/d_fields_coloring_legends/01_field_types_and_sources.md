@@ -59,6 +59,11 @@ In the UI, var fields appear as:
 Cellucid treats gene expression as **continuous**: selecting a gene always creates a continuous-style legend (colorbar + sliders).
 :::
 
+The var axis is whatever the export published — one name per gene, decided when
+the dataset was prepared. It is not necessarily every gene the study measured,
+and Cellucid neither knows nor can recover what was left out. For the built-in
+samples this is documented: see {doc}`07_genes_in_the_built_in_samples`.
+
 ---
 
 ## Categorical vs continuous (what changes in the app)
@@ -77,11 +82,12 @@ In the legend you can typically:
 
 Categorical fields can also expose **centroids** (category centers) if present or computed.
 
-```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
-:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
-:width: 246px
+```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
+:alt: A legend with the hint Click a swatch to pick a color, Show All and Hide All buttons, and eight rows in alphabetical order each holding a checkbox, a coloured square swatch, a category name, a cell count, a pencil icon and a bin icon.
+:width: 428px
 
-Selecting a categorical observation field colors the embedding and exposes its complete category legend.
+A categorical legend. **Checkboxes and swatches** are the tell — if you see
+these, the active field is categorical.
 ```
 
 ### Continuous fields
@@ -96,6 +102,23 @@ In the legend you can typically:
 - optionally enable **log scale** for coloring,
 - adjust the **visible range** with sliders (filtering),
 - optionally rescale the colorbar to match your slider range.
+
+```{figure} ../../../_static/screenshots/web_app/legend-continuous-sscore.png
+:alt: A legend headed COLOR SCALE (VIRIDIS) above a purple to yellow gradient bar labelled minus 0.37 and 1.14 at its ends, a Log color scale toggle reading Off, the note Zero negative and NaN values use the None color, a Rescale colorbar to slider range toggle reading On, the note On colors track sliders Off full data range, then a FILTERING heading, a VISIBLE RANGE subtitle, a Live filtering toggle reading On, Min and Max sliders with numeric readouts, and FILTER and RESET buttons.
+:width: 428px
+
+A continuous legend for the same dataset. **A colour bar with Min/Max sliders**
+is the tell. The same legend appears for a gene — a gene *is* a continuous
+field, just from the var axis instead of the obs axis.
+```
+
+:::{tip}
+Two one-line notes the legend prints for you, which answer questions this page
+would otherwise need paragraphs for:
+
+- `Zero/negative/NaN values use the None color`
+- `On: colors track sliders; Off: full data range`
+:::
 
 ---
 

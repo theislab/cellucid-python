@@ -83,6 +83,16 @@ Free-fly is first-person movement.
   - Pointer lock can be blocked in iframes and some managed browser setups.
 - **Projectile shooting** (optional): enables a “click/hold-to-charge” demo interaction.
 
+```{figure} ../../../_static/screenshots/web_app/navigation-controls-freefly.png
+:alt: A panel headed NAVIGATION with a MODE dropdown reading Free-fly and a bordered box below holding a LOOK SENSITIVITY slider with a numeric readout, a MOVE SPEED slider with its own readout, an INVERT LOOK AXES checkbox, a PROJECTILE SHOOTING checkbox and a CAPTURE POINTER button.
+:width: 472px
+
+The complete Free-fly control set, with the printed readouts beside each
+slider. Those readouts are the value that matters — the slider position is a
+0–100 control position, and the number beside it is what the camera actually
+uses.
+```
+
 ---
 
 ## Keyboard shortcuts that affect camera/navigation
@@ -111,7 +121,12 @@ There are two different “reset” concepts:
 
 1) **Reset Camera button** (in the UI)
    - Resets the camera.
-   - Also restores many visualization + navigation UI controls to their initial defaults (captured at app init).
+   - Also restores many visualization + navigation UI controls to their initial
+     defaults (captured at app init).
+   - **Mode** is the exception to "captured at app init": it goes back to the
+     mode the view's current dimension implies — **Orbit** in 3D, **Planar** in
+     1D and 2D — and hands navigation back to the dimension rule described in
+     {doc}`05_dimension_switching_1d_2d_3d`.
 
 2) **`R` keyboard shortcut**
    - Resets the camera framing only.

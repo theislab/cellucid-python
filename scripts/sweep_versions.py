@@ -19,30 +19,55 @@ equal" is false here and a sweep that pretends otherwise is useless:
                      reservation pinned at 0.0.1 on purpose (see
                      ``cellucid/npm/publishing.md``); flagging it would train
                      maintainers to ignore the sweep.
-* ``artifact``    -- the exporter release that produced a committed export.
-                     Older exports legitimately record older versions; these are
-                     printed for visibility and never counted as drift.
+* ``artifact``    -- the exporter release that produced a committed export, or
+                     prose that describes one. Older exports legitimately record
+                     older values; these are printed for visibility and never
+                     counted as drift.
+
+Every ``release`` declaration must also be reachable from inside its own
+checkout, so each one carries the marker on its declaring line. A line that
+cannot carry a comment — a DCF field, a JSON example, a transcript of a tool's
+output — records how it carries the marker instead and why, in
+``marker_alternative``/``marker_reason``. An unrecorded gap fails the sweep:
+a declaration nobody can grep for is a declaration a bump will miss.
+
+Only files in each repository's Git index are read. A glob that walked the
+working tree would pick up ignored scratch directories, so the verdict would
+depend on what happened to be lying around and a stale local export could inject
+a version into a release report.
 
 Repositories that are not checked out are reported as such rather than skipped
 silently, so a partial workspace cannot produce a falsely clean verdict.
 
-Exit status is 0 only when every repository was swept and every ``release``
-declaration agrees. A partial workspace exits non-zero: an unswept repository
-cannot be confirmed, and a release gate that cannot see a repository must not
-look like a pass.
+Exit status is 0 only when every repository was swept, every ``release``
+declaration agrees, and every one of them is marked. A partial workspace exits
+non-zero: an unswept repository cannot be confirmed, and a release gate that
+cannot see a repository must not look like a pass.
 """
 
 from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 RELEASE = "release"
 INDEPENDENT = "independent"
 ARTIFACT = "artifact"
+
+MARKER = "CELLUCID_VERSION"
+
+# `marker_alternative` sentinel: the marker comment sits on the line after the
+# declaration instead of on it.
+NEXT_LINE = "<next-line>"
+
+# One spelling of "a release version" for every pattern that has no surrounding
+# delimiter to bound the match. The suffix must end alphanumerically, so a
+# version quoted at the end of a sentence yields `0.9.1` and not `0.9.1.`.
+VERSION = r"(\d+\.\d+\.\d+(?:[0-9A-Za-z._-]*[0-9A-Za-z])?)"
 
 REPOSITORIES = (
     "cellucid",
@@ -85,6 +110,14 @@ class Declaration:
     # Changelogs list every past release. Only the topmost heading declares the
     # current version; the history below it must stay as written.
     first_only: bool = False
+    # How this declaration carries its `CELLUCID_VERSION` marker when its own
+    # line cannot. `NEXT_LINE` puts the comment on the following line; any other
+    # value is a literal that must appear somewhere in the file. Empty means the
+    # ordinary rule: the marker is on the declaring line.
+    marker_alternative: str = ""
+    # Why the ordinary rule cannot apply. Required whenever `marker_alternative`
+    # is set, so an exemption is always an argument and never a convenience.
+    marker_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -94,6 +127,20 @@ class Finding:
     line: int
     value: str
     marked: bool
+
+
+@dataclass
+class Sweep:
+    """Everything one pass over a workspace learned."""
+
+    findings: list[Finding] = field(default_factory=list)
+    # Present in `REPOSITORIES` but not checked out here.
+    missing_repositories: list[str] = field(default_factory=list)
+    # Checked out, but with no readable Git index, so "tracked" is unanswerable
+    # and nothing in them can be reported reproducibly.
+    unindexed_repositories: list[str] = field(default_factory=list)
+    # Declarations whose pattern found nothing in a tracked file.
+    unmatched: list[Declaration] = field(default_factory=list)
 
 
 DECLARATIONS: tuple[Declaration, ...] = (
@@ -123,6 +170,11 @@ DECLARATIONS: tuple[Declaration, ...] = (
         RELEASE,
         "current release heading",
         first_only=True,
+        marker_alternative=NEXT_LINE,
+        marker_reason=(
+            "the release validator and the docs contract both require the exact "
+            "line `## [<version>]`, so the marker goes on the line below it"
+        ),
     ),
     Declaration(
         "cellucid-python",
@@ -136,12 +188,46 @@ DECLARATIONS: tuple[Declaration, ...] = (
         r'(?m)^\{% set version = "([^"]+)" %\}',
         RELEASE,
         "conda-forge recipe",
+        marker_alternative=NEXT_LINE,
+        marker_reason=(
+            "the recipe validator requires the exact line "
+            "`{% set version = \"<version>\" %}`, so the YAML comment goes below it"
+        ),
+    ),
+    Declaration(
+        "cellucid-python",
+        "scripts/publishing/PUBLISHING.md",
+        rf"For release {VERSION}, validate the candidate with:",
+        RELEASE,
+        "release-runbook heading",
+    ),
+    Declaration(
+        "cellucid-python",
+        "scripts/publishing/PUBLISHING.md",
+        rf"python scripts/validate_release\.py --tag v{VERSION}",
+        RELEASE,
+        "the tag a maintainer copies out of the runbook; a bump that misses it "
+        "validates the previous release",
     ),
     Declaration(
         "cellucid-python",
         "docs/user_guide/python_package/installation.md",
         r'pip install "cellucid==([^"]+)"',
         RELEASE,
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/python_package/installation.md",
+        rf"lists\n{VERSION}, the normal install and pin commands",
+        RELEASE,
+        "PyPI availability note",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/python_package/installation.md",
+        rf"when validating {VERSION} before publication",
+        RELEASE,
+        "pre-publication source-checkout note",
     ),
     Declaration(
         "cellucid-python",
@@ -157,6 +243,33 @@ DECLARATIONS: tuple[Declaration, ...] = (
     ),
     Declaration(
         "cellucid-python",
+        "docs/user_guide/python_package/h_developer_docs/14_release_process.md",
+        rf"with a `v` prefix, such as `v{VERSION}`",
+        RELEASE,
+        "the tag-naming example",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/python_package/h_developer_docs/14_release_process.md",
+        rf"Cellucid Python release contract is valid for v{VERSION}\.",
+        RELEASE,
+        "the exact line the release validator prints",
+        marker_alternative=f"<!-- {MARKER} -->",
+        marker_reason=(
+            "a documented tool transcript has to reproduce the output byte for "
+            "byte, and the validator prints no comment; the marker is on the "
+            "versioning-policy line of the same page"
+        ),
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/python_package/h_developer_docs/14_release_process.md",
+        rf"checks out complete Git history, validates `v{VERSION}`",
+        RELEASE,
+        "the tag the publishing workflow validates",
+    ),
+    Declaration(
+        "cellucid-python",
         "docs/user_guide/python_package/c_data_preparation_api/"
         "09_output_format_specification_exports_directory.md",
         r"`cellucid_data_version` is `([^`]+)`",
@@ -164,10 +277,83 @@ DECLARATIONS: tuple[Declaration, ...] = (
     ),
     Declaration(
         "cellucid-python",
+        "docs/user_guide/python_package/c_data_preparation_api/"
+        "09_output_format_specification_exports_directory.md",
+        r'"cellucid_data_version": "([^"]+)"',
+        RELEASE,
+        "the worked schema example the prose above it pins",
+        marker_alternative=f"<!-- {MARKER} -->",
+        marker_reason=(
+            "JSON has no comment syntax and the block is validated against the "
+            "reader's key set; the prose line that pins this value is marked"
+        ),
+    ),
+    Declaration(
+        "cellucid-python",
         "docs/user_guide/r_package/installation.md",
         r"Version `([^`]+)` from `packageVersion`",
         RELEASE,
         "R release, declared on the shared documentation site",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/r_package/installation.md",
+        rf"install Cellucid for R, verify version {VERSION}",
+        RELEASE,
+        "page goal",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/r_package/installation.md",
+        rf"### From CRAN when version {VERSION} is listed",
+        RELEASE,
+        "CRAN install section heading",
+        marker_alternative=NEXT_LINE,
+        marker_reason=(
+            "an inline comment inside a heading enters the heading text and the "
+            "anchor MyST generates from it, so the marker goes on the line below"
+        ),
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/r_package/installation.md",
+        rf"When the CRAN package index lists `cellucid` {VERSION}, install it with",
+        RELEASE,
+        "the CRAN install instruction",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/r_package/installation.md",
+        rf"If the index does not list version {VERSION} yet",
+        RELEASE,
+        "the source-install instruction for when CRAN does not list it yet",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/r_package/index.md",
+        rf"Install version {VERSION} from the source currently available",
+        RELEASE,
+        "installation card on the R guide home page",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/web_app/b_data_loading/04_server_tutorial.md",
+        rf"(?m)^cellucid v{VERSION}$",
+        ARTIFACT,
+        "the version banner inside the recorded `cellucid serve` transcripts; it "
+        "states what that run printed, so it changes when the transcript is "
+        "re-recorded, not at a bump. These were screenshots until a capture was "
+        "found to have baked a local path into the image pixels — terminal "
+        "output now ships as text, which is also why this pattern is greppable",
+    ),
+    Declaration(
+        "cellucid-python",
+        "docs/user_guide/web_app/b_data_loading/10_standard_pancreas_dataset.md",
+        rf"the exact Cellucid {VERSION} producer-source digest",
+        ARTIFACT,
+        "describes the exporter release recorded in "
+        "cellucid-datasets/sources/pancreas.json; it changes when the Pancreas "
+        "export is rebuilt, not at a bump",
     ),
     # -- cellucid-r ----------------------------------------------------------
     Declaration(
@@ -177,6 +363,8 @@ DECLARATIONS: tuple[Declaration, ...] = (
         RELEASE,
         "DCF cannot carry a comment; the marker is the "
         "Config/cellucid/version-marker field",
+        marker_alternative=f"Config/cellucid/version-marker: {MARKER}",
+        marker_reason="DCF has no comment syntax, so the convention is a field",
     ),
     Declaration(
         "cellucid-r",
@@ -190,13 +378,13 @@ DECLARATIONS: tuple[Declaration, ...] = (
     Declaration(
         "cellucid-r",
         "README.md",
-        r"Active package version — (\d+\.\d+\.\d+[0-9A-Za-z._-]*)",
+        rf"Active package version — {VERSION}",
         RELEASE,
     ),
     Declaration(
         "cellucid-r",
         "vignettes/installation.Rmd",
-        r"source and documentation version is (\d+\.\d+\.\d+[0-9A-Za-z_-]*)",
+        rf"source and documentation version is {VERSION}",
         RELEASE,
     ),
     # -- cellucid-datasets ---------------------------------------------------
@@ -226,13 +414,13 @@ DECLARATIONS: tuple[Declaration, ...] = (
     Declaration(
         "cellucid-demo-custom-datasets",
         "generate_datasets.py",
-        r'(?m)^CELLUCID_RELEASE = "([^"]+)"$',
+        r'(?m)^CELLUCID_RELEASE = "([^"]+)"',
         RELEASE,
     ),
     Declaration(
         "cellucid-demo-custom-datasets",
         "generate_datasets.py",
-        r'(?m)^#\s+"cellucid==([^"]+)",$',
+        r'(?m)^#\s+"cellucid==([^"]+)",',
         RELEASE,
         "PEP 723 inline script dependency",
     ),
@@ -245,8 +433,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
     Declaration(
         "cellucid-demo-custom-datasets",
         "README.md",
-        r"`(\d+\.\d+\.\d+[0-9A-Za-z._-]*)` is the release these example exports "
-        r"were built with",
+        rf"`{VERSION}` is the release these example exports were built with",
         RELEASE,
     ),
     Declaration(
@@ -265,12 +452,41 @@ def default_workspace() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _resolve(workspace: Path, declaration: Declaration) -> list[Path]:
+def tracked_files(root: Path) -> frozenset[str] | None:
+    """Repository-relative paths in ``root``'s Git index, or None if unreadable.
+
+    The sweep reads only these. A working-tree walk would also pick up ignored
+    scratch directories — `cellucid-datasets/exports/_*/` is ignored precisely
+    so local experiments stay local — and a release verdict that depends on
+    uncommitted files is not reproducible from a clean checkout.
+    """
+    if not (root / ".git").exists():
+        return None
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return frozenset(entry for entry in completed.stdout.split("\0") if entry)
+
+
+def _resolve(
+    workspace: Path, declaration: Declaration, tracked: frozenset[str]
+) -> list[Path]:
     root = workspace / declaration.repository
     if declaration.glob:
-        return sorted(root.glob(declaration.relative_path))
-    candidate = root / declaration.relative_path
-    return [candidate] if candidate.is_file() else []
+        candidates = sorted(root.glob(declaration.relative_path))
+    else:
+        candidates = [root / declaration.relative_path]
+    return [
+        path
+        for path in candidates
+        if path.is_file() and path.relative_to(root).as_posix() in tracked
+    ]
 
 
 def _line_of(text: str, offset: int) -> int:
@@ -280,32 +496,42 @@ def _line_of(text: str, offset: int) -> int:
 def _is_marked(text: str, line_number: int, declaration: Declaration) -> bool:
     """Whether a bump sweep (`grep -rn CELLUCID_VERSION`) would list this line."""
     lines = text.splitlines()
-    if line_number <= len(lines) and "CELLUCID_VERSION" in lines[line_number - 1]:
+    if line_number <= len(lines) and MARKER in lines[line_number - 1]:
         return True
-    # DESCRIPTION is DCF and cannot carry a comment, so cellucid-r declares the
-    # convention with a dedicated field instead.
-    return "Config/cellucid/version-marker: CELLUCID_VERSION" in text
+    alternative = declaration.marker_alternative
+    if not alternative:
+        return False
+    if alternative == NEXT_LINE:
+        return line_number < len(lines) and MARKER in lines[line_number]
+    return alternative in text
 
 
-def collect(workspace: Path) -> tuple[list[Finding], list[str], list[Declaration]]:
-    """Return (findings, missing repositories, declarations with no match)."""
-    findings: list[Finding] = []
-    missing_repositories = [
-        name for name in REPOSITORIES if not (workspace / name).is_dir()
-    ]
-    unmatched: list[Declaration] = []
+def collect(workspace: Path) -> Sweep:
+    """Read every declaration the workspace can answer for."""
+    sweep = Sweep()
+    indexes: dict[str, frozenset[str]] = {}
+    for name in REPOSITORIES:
+        root = workspace / name
+        if not root.is_dir():
+            sweep.missing_repositories.append(name)
+            continue
+        tracked = tracked_files(root)
+        if tracked is None:
+            sweep.unindexed_repositories.append(name)
+            continue
+        indexes[name] = tracked
 
     for declaration in DECLARATIONS:
-        if declaration.repository in missing_repositories:
+        tracked = indexes.get(declaration.repository)
+        if tracked is None:
             continue
-        paths = _resolve(workspace, declaration)
         matched_any = False
-        for path in paths:
+        for path in _resolve(workspace, declaration, tracked):
             text = path.read_text(encoding="utf-8")
             for match in re.finditer(declaration.pattern, text):
                 matched_any = True
                 line = _line_of(text, match.start(1))
-                findings.append(
+                sweep.findings.append(
                     Finding(
                         declaration=declaration,
                         path=path.relative_to(workspace).as_posix(),
@@ -317,9 +543,9 @@ def collect(workspace: Path) -> tuple[list[Finding], list[str], list[Declaration
                 if declaration.first_only:
                     break
         if not matched_any:
-            unmatched.append(declaration)
+            sweep.unmatched.append(declaration)
 
-    return findings, missing_repositories, unmatched
+    return sweep
 
 
 def release_version(workspace: Path) -> str | None:
@@ -339,15 +565,18 @@ def _grouped(findings: list[Finding], kind: str) -> dict[str, list[Finding]]:
 
 
 def report(workspace: Path) -> int:
-    findings, missing_repositories, unmatched = collect(workspace)
+    sweep = collect(workspace)
+    findings = sweep.findings
     expected = release_version(workspace)
     out: list[str] = []
+    unswept = len(sweep.missing_repositories) + len(sweep.unindexed_repositories)
 
     out.append(f"Cellucid version sweep — workspace: {workspace}")
-    out.append(f"Repositories swept: {len(REPOSITORIES) - len(missing_repositories)}"
+    out.append(f"Repositories swept: {len(REPOSITORIES) - unswept}"
                f" of {len(REPOSITORIES)}")
     source = "/".join(VERSION_SOURCE)
     out.append(f"Release version (source of truth: {source}): {expected or 'UNKNOWN'}")
+    out.append("Files read: Git-tracked only")
     out.append("")
 
     release_groups = _grouped(findings, RELEASE)
@@ -391,13 +620,34 @@ def report(workspace: Path) -> int:
         out.append(f"        {reason}")
     out.append("")
 
+    exempted = [
+        finding
+        for finding in findings
+        if finding.declaration.kind == RELEASE and finding.declaration.marker_alternative
+    ]
+    out.append(
+        "MARKERS CARRIED ELSEWHERE — the declaring line cannot hold a comment "
+        f"({len(exempted)} of {total_release})"
+    )
+    for finding in exempted:
+        where = (
+            "next line"
+            if finding.declaration.marker_alternative == NEXT_LINE
+            else finding.declaration.marker_alternative
+        )
+        out.append(f"  {finding.path}:{finding.line}  [{where}]")
+        out.append(f"        {finding.declaration.marker_reason}")
+    if not exempted:
+        out.append("  (none)")
+    out.append("")
+
     unmarked = [
         finding
         for finding in findings
         if finding.declaration.kind == RELEASE and not finding.marked
     ]
     out.append(
-        "MISSING CELLUCID_VERSION MARKER — a bump sweep inside the owning "
+        "UNMARKED RELEASE DECLARATIONS — a bump sweep inside the owning "
         f"checkout will not list these ({len(unmarked)} of {total_release})"
     )
     for finding in unmarked:
@@ -406,43 +656,61 @@ def report(workspace: Path) -> int:
         out.append("  (none)")
     out.append("")
 
-    problems = 0
-    if missing_repositories:
-        problems += len(missing_repositories)
-        out.append("REPOSITORIES NOT CHECKED OUT — not swept, verdict is partial")
-        for name in missing_repositories:
+    failures: list[str] = []
+    if sweep.unindexed_repositories:
+        failures.append(
+            f"{len(sweep.unindexed_repositories)} repositories have no readable "
+            "Git index"
+        )
+        out.append("REPOSITORIES WITHOUT A GIT INDEX — trackedness is unanswerable")
+        for name in sweep.unindexed_repositories:
             out.append(f"  {name}")
         out.append("")
-    if unmatched:
-        problems += len(unmatched)
-        out.append("DECLARATIONS THAT MATCHED NOTHING — the sweep is out of date")
-        for declaration in unmatched:
+    if sweep.missing_repositories:
+        out.append("REPOSITORIES NOT CHECKED OUT — not swept, verdict is partial")
+        for name in sweep.missing_repositories:
+            out.append(f"  {name}")
+        out.append("")
+    if sweep.unmatched:
+        failures.append(f"{len(sweep.unmatched)} declarations matched nothing")
+        out.append(
+            "DECLARATIONS THAT MATCHED NOTHING — the sweep is out of date, or "
+            "the file is not tracked"
+        )
+        for declaration in sweep.unmatched:
             out.append(f"  {declaration.repository}/{declaration.relative_path}")
         out.append("")
 
     drifted = [value for value in release_groups if value != expected]
     if expected is None:
-        problems += 1
-        out.append("VERDICT: FAIL — could not read the release version")
+        failures.append("could not read the release version")
     elif drifted:
-        problems += 1
-        out.append(
-            f"VERDICT: FAIL — release declarations disagree: "
+        failures.append(
+            "release declarations disagree: "
             f"{', '.join(sorted(set(drifted) | {expected}))}"
         )
-    elif missing_repositories:
+    if unmarked:
+        failures.append(
+            f"{len(unmarked)} release declarations carry no {MARKER} marker"
+        )
+
+    if failures:
+        out.append(f"VERDICT: FAIL — {'; '.join(failures)}")
+    elif sweep.missing_repositories:
         out.append(
             f"VERDICT: PARTIAL — {total_release} release declarations agree at "
-            f"{expected}, but {len(missing_repositories)} repositories were not swept"
+            f"{expected}, but {len(sweep.missing_repositories)} repositories "
+            "were not swept"
         )
     else:
         out.append(
             f"VERDICT: OK — all {total_release} release declarations across "
-            f"{len(REPOSITORIES)} repositories agree at {expected}"
+            f"{len(REPOSITORIES)} repositories agree at {expected} and every "
+            f"one of them is reachable from `grep -rn {MARKER}`"
         )
 
     print("\n".join(out))
-    return 1 if problems else 0
+    return 1 if failures or sweep.missing_repositories else 0
 
 
 def main() -> int:

@@ -14,29 +14,47 @@ If you’re here because something is already slow, you can also jump straight t
 
 ---
 
-## Edge case: too many views (snapshots multiply everything)
+## Edge case: the two-view row (the layout that actually costs)
 
 ### What you see
-- Single view feels fine, but grid view becomes choppy or unresponsive.
-- Adding “just one more snapshot” suddenly tanks FPS.
+- A single view feels fine, but adding one snapshot makes navigation choppy.
+- Adding a *fourth* view does not make it noticeably worse — and may improve it.
 
 ### Why it happens
-Each view is effectively another render workload.
+This one surprises people, so it is worth stating precisely.
 
-Many costs scale with:
-- **`n_views`** (more viewports to render),
-- and **pixels × views** for overlay buffers (vector trails, post-processing).
+Cellucid renders at most four views: the live view plus up to three snapshots.
+Two or three views are laid out as **one row**; four are laid out as a **2×2
+grid**.
+
+Point size scales with the height of the pane a point is drawn in. In a one-row
+layout every pane is still full canvas height, so the points stay full size and
+you pay for each pane in full — two views shade about twice the pixels of one.
+In the 2×2 grid each pane is half height, so every point is drawn at half the
+diameter and covers about a quarter of the area. Four panes at a quarter of the
+area each add up to roughly the fill cost of a single view.
+
+So the cost curve is not monotonic: **1 ≈ 4 < 2 < 3.**
+
+Overlay buffers and post-processing passes are allocated per view and do not get
+this benefit, so a heavy vector-field overlay still scales with the view count
+in every layout.
 
 ### How to confirm
-1) Clear snapshots (return to a single view).
-2) If FPS recovers immediately, you found the multiplier.
+1) Go back to a single view. If FPS recovers, the layout was the cost.
+2) If you were on two or three views, try adding one more to reach four. If FPS
+   recovers there too, you were fill-rate bound and the smaller point size fixed
+   it.
 
 ### Fix
 - Tune filters/fields in the live view first.
-- Keep snapshots to a small number (e.g., 2–4) for comparisons.
+- Choose the layout for the comparison you actually want, then check both
+  directions if it is slow — one view and four views are the cheap ones.
+- If overlays are on, reduce their density before blaming the layout.
 
 ### Prevention
-- Treat “Keep view” as a deliberate comparison action, not a running history of everything you tried.
+- Treat “Keep view” as a deliberate comparison action, not a running history of
+  everything you tried. There are only three snapshot slots.
 
 Related docs:
 - {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`
@@ -83,12 +101,18 @@ This hurts:
 ### Why it happens
 Large datasets and GPU-heavy modes allocate big GPU buffers. If the browser/GPU runs out of VRAM, WebGL contexts can be lost (this is common behavior; the browser is protecting system stability).
 
+Highlight overlays are a quiet contributor: a highlighted cell costs GPU memory
+per view it is highlighted in, so a million-cell highlight group across a
+four-view layout is a large standing allocation that never appears in the
+dataset size.
+
 ### How to confirm
 - It often happens right after:
   - enabling smoke mode with high grid density,
   - enabling overlays at high density,
   - loading a very large dataset,
-  - or opening many views.
+  - selecting a very large highlight group,
+  - or adding snapshots.
 
 ### Fix (safe → aggressive)
 1) Reload the page.
@@ -142,10 +166,10 @@ Related docs:
 
 ---
 
-## Edge case: vector field overlay + many views (pixels × views × post-processing)
+## Edge case: vector field overlay across views (pixels × views × post-processing)
 
 ### What you see
-- Overlay is fine in one view but unusable in grid view.
+- Overlay is fine in one view but unusable once snapshots are added.
 - Overlay becomes slow on large screens or with bloom enabled.
 
 ### Why it happens
@@ -159,7 +183,9 @@ Costs scale with:
 ### How to confirm
 1) Disable bloom (or set bloom strength to 0.00) and retry.
 2) Reduce particle density and retry.
-3) Reduce number of views and retry.
+3) Return to a single view and retry. Unlike point drawing, overlay cost really
+   does scale with the number of views in every layout — the smaller points of a
+   2×2 grid do not shrink a particle system or its post-processing passes.
 
 ### Fix
 - Use a conservative preset (low density, short trails, no bloom) during exploration.
@@ -211,7 +237,13 @@ Related docs:
 - CPU usage spikes during slider movement.
 
 ### Why it happens
-With Live filtering enabled, each slider movement can trigger an expensive recomputation.
+With Live filtering enabled, each slider movement triggers a full re-derivation
+of visibility across every cell, testing every enabled filter.
+
+The important detail: that cost depends on the dataset size, **not** on how much
+the filter changed. Nudging a slider so that eight more cells are hidden costs
+the same pass as hiding half the dataset. Only the resulting upload to the GPU
+is proportional to what moved, and the upload is not the part you feel.
 
 This is especially punishing when:
 - `n_cells` is large, and/or

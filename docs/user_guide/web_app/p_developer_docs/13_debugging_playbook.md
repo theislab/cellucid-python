@@ -139,6 +139,23 @@ Likely cause:
 Fix:
 - Open the failed request URL in a new tab; verify it’s real JSON/binary and returns correct status codes.
 
+### Read the failure message before theorising
+
+Four distinct load failures used to report themselves identically. They no
+longer do, and the wording identifies the cause:
+
+| Message contains | Cause | Error code |
+|---|---|---|
+| “was cancelled” | An abort — re-thrown untouched, never relabelled | (the original `AbortError`) |
+| “is larger than the metadata size ceiling” | A bounded reader refused the payload | `VALIDATION_ERROR` |
+| “response body transfer failed” | The connection dropped mid-body | `NETWORK_ERROR` |
+| “must contain valid JSON” | Genuinely malformed content | `INVALID_FORMAT` |
+
+The connection and catalogue UI classifies these by **error code and HTTP
+status**, never by matching message text, so a message you rephrase will keep
+its user-facing sentence — but a code you get wrong will silently move the
+failure into the wrong bucket. Set the code deliberately.
+
 Deep dive:
 - {doc}`09_data_loading_pipeline_and_caching`
 
@@ -180,15 +197,24 @@ Fix:
 
 ### Symptom: “Filter count changes but points don’t”
 
-Likely causes:
-- transparency/visibility updated in state but not pushed to viewer.
+Likely causes (ordered):
+1) transparency/visibility updated in state but not pushed to the viewer;
+2) it *was* pushed, but the alpha bytes did not change, so the upload was
+   correctly skipped — the count you are reading is derived from something else;
+3) the change is below the visible-alpha threshold, so it rounds to the same
+   byte.
 
 How to confirm:
-- Put a breakpoint in `viewer.updateTransparency`.
+- Put a breakpoint in `viewer.updateTransparency` and look at its **return
+  value**: it reports whether the published alpha generation actually moved.
+  `false` means the bytes were identical, and no upload was needed.
 - Check `window._cellucidState.categoryTransparency` length and values.
 
 Fix:
-- Ensure filter manager calls `viewer.updateTransparency(...)` (state→viewer sync is state-owned).
+- Ensure the filter manager calls `viewer.updateTransparency(...)` (state→viewer
+  sync is state-owned).
+- If the return value is `false` but you expected a change, the bug is upstream
+  in how the alpha array was derived, not in the upload.
 
 ---
 
@@ -231,7 +257,9 @@ Fix:
 ### Symptom: “WebGL context lost”
 
 Likely causes:
-- GPU memory pressure, especially with smoke or overlays on large datasets.
+- GPU memory pressure, especially with smoke or overlays on large datasets,
+  or a very large highlight group (highlight geometry costs bytes per selected
+  cell **per view**).
 
 How to confirm:
 - DevTools console logs mention context loss.
@@ -239,10 +267,50 @@ How to confirm:
 Fix:
 - Reduce dataset size and reproduce.
 - Disable smoke/velocity and re-test to isolate.
+- Clear highlights and re-test.
 
 Deep dive:
 - {doc}`07_rendering_pipeline_webgl_and_performance_notes`
 - {doc}`../n_benchmarking_performance/index`
+
+### Symptom: “Frames got slower and I cannot see why”
+
+Start from the baseline: **an idle frame uploads nothing.** If your change made
+frames slower, the most likely cause is that you put work on the draw path
+without a gate.
+
+How to confirm:
+1) Open the **Performance Benchmark** panel once, so the harness module is
+   published on `window._cellucidBenchmarkHarness`.
+2) Build a harness against the live viewer and canvas. It shadows the GL context
+   and counts, per frame: buffer allocations and bytes, sub-updates and bytes,
+   texture uploads and bytes, draw calls, sync stalls, and `getError` /
+   `finish` / `flush` / `readPixels` calls.
+3) Hold the camera still. Every upload counter should be **zero**. A non-zero
+   count while idle is the bug.
+4) Then move the camera. Element-buffer uploads should appear only when the
+   admitted node set changes, not on every frame.
+
+Fix:
+- Gate the new work behind a dirty flag, a cache comparison, or the allocation
+  watermark, following the three gates described in
+  {doc}`07_rendering_pipeline_webgl_and_performance_notes`.
+
+:::{note}
+The headline FPS and frame-time tiles in the benchmark panel are CPU wall-clock
+measurements between frames, so they include everything else the tab is doing.
+Only **Analyze Performance** uses real GPU timer queries, and only where the
+driver provides the extension. Do not attribute a frame-time change to the GPU
+on the strength of the headline tiles alone.
+:::
+
+### Symptom: “A frame rate measurement is not reproducible”
+
+Check, in this order, that between the two runs you did not change: the window
+size, the **layout** (one view / two- or three-view row / 2×2 grid — these are
+three different workloads, not one curve), the filter state (hidden cells are
+rejected before rasterisation and cost nothing), or the machine's background
+load. See {doc}`../n_benchmarking_performance/04_benchmarking_methodology_and_metrics`.
 
 ---
 

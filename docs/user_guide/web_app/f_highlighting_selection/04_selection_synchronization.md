@@ -59,6 +59,27 @@ People typically expect:
 - Are global: once you confirm a selection into a group, those cells are highlighted across all panels.
 - Are still subject to visibility: each panel will only show highlights for cells that are visible in that panel (filters apply per view).
 
+```{figure} ../../../_static/screenshots/highlighting_selection/share-highlight-across-views.png
+:alt: Two 3D panels of the same dataset at different camera angles with the sidebar collapsed; the cells confirmed by one lasso are drawn in the highlight colour in both panels.
+:width: 1440px
+
+One lasso, drawn once in one panel, shown in two. The panels are looking at the
+same cells from different angles; the highlighted membership is identical
+because there is only one membership list for the dataset.
+```
+
+:::{note}
+There is no separate “cross-highlighting” feature to switch on, and no control
+that links or unlinks panels for highlighting. A highlight is one list of cell
+indices held once for the whole dataset, and every panel packs its own draw
+buffer from that same list on every frame. Propagation is the default and the
+only behaviour; the only thing that stops a highlight appearing in a panel is
+that panel not drawing the cell (see below).
+
+Analysis plots are not part of this: highlighting a set of cells in the
+embedding does not mark them in the plots under **Analysis**.
+:::
+
 **In-progress selection (candidate set + preview highlight)**
 - The candidate set is global (shared across selection tools).
 - The preview highlight is global, but rendered per view (visible cells only).
@@ -71,6 +92,21 @@ People typically expect:
 **Proximity/KNN in multi-view**
 - The seed click happens in one panel, but the resulting selected indices are global.
 - Filters in the target panel can affect which cells are selectable (filtered-out cells are excluded).
+
+### The two reasons a panel does not draw a highlight
+
+A panel skips a highlighted cell for exactly two reasons, both of them
+properties of that panel and neither of them a property of the highlight:
+
+1. **The cell is filtered out in that panel.** Panels keep independent
+   visibility, so a snapshot with stricter filters shows fewer highlighted
+   cells than the live view.
+2. **The cell is above that panel's current level of detail.** On a large
+   dataset a zoomed-out panel draws a subset; highlights are packed from the
+   same subset. Zooming in brings them back with no change to membership.
+
+Everything else — camera angle, embedding dimension, coloured field, render
+mode — has no effect on which cells are highlighted.
 
 ### Common confusion patterns (and the mental fix)
 
@@ -90,9 +126,13 @@ People typically expect:
 ## Sync with filtering and color-by
 
 ### Filters and selection
-Selection tools only select **visible** cells. This is intentional:
-- it prevents selecting “ghost” cells you cannot see,
+Selection tools only select cells that are **not filtered out**. This is intentional:
+- it prevents selecting cells you have deliberately excluded,
 - it makes selection consistent across multi-view where each panel may have different filters.
+
+LOD/downsampling is not part of this rule. With Level-of-Detail enabled, a gesture still
+evaluates unfiltered cells the view is not drawing at the current zoom, so a lasso can
+select more cells than you can see ({doc}`01_highlight_mental_model`).
 
 Practical workflow tip:
 - If your goal is “select all cells in category X across the dataset”, disable filters first.

@@ -104,7 +104,12 @@ def test_cli_requires_explicit_identity_for_direct_anndata(tmp_path: Path) -> No
     (store / ".zattrs").write_text("{}", encoding="utf-8")
     args = create_parser().parse_args(["serve", str(store), "--quiet"])
 
-    with pytest.raises(ValueError, match="--dataset-name is required"):
+    # Both flags are named in one message; reporting only the first would send
+    # someone who supplied neither back to the terminal twice for one mistake.
+    with pytest.raises(
+        ValueError,
+        match=r"--dataset-name and --dataset-id are required",
+    ):
         _run_serve(args)
 
 

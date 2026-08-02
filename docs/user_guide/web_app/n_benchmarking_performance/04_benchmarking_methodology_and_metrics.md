@@ -120,8 +120,13 @@ Before you measure:
 
 1) Close other heavy tabs/apps (especially video calls and other WebGL content).
 2) Keep the window size fixed for all runs (don’t benchmark full-screen once and small-window the next time).
-3) Keep the number of views fixed (single view vs grid is not comparable).
-4) Avoid changing multiple quality knobs between runs.
+3) Keep the **layout** fixed, not just the view count. One view, a two-view row
+   and a 2×2 grid are three different workloads because point size follows pane
+   height; they are not points on one curve.
+4) Keep the filter state fixed. Hidden cells are rejected before rasterisation,
+   so a run on a filtered view and a run on the full dataset measure different
+   scenes.
+5) Avoid changing multiple quality knobs between runs.
 
 Thermals matter:
 - On laptops, performance can degrade after a few minutes due to throttling.
@@ -231,14 +236,15 @@ Use this table format in a GitHub issue, lab notebook, or internal doc.
 ### Context
 
 - Dataset: `<name or id>`
-- Size: `<n_cells> cells`, `<n_genes> genes`, `<n_fields> fields`, `<n_views> views`
+- Size: `<n_cells> cells`, `<n_genes> genes`, `<n_fields> fields`
+- Layout: `<1 view / 2-view row / 3-view row / 2x2 grid>`
 - Loading mode: `<export folder / server mode / remote>`
 - Browser: `<Chrome 123>`
 - Machine/GPU: `<e.g., M2 Pro / RTX 3070 / Intel Iris>`
 - Window: `<width × height>`, `<devicePixelRatio>`
 - Render mode: `<Points/Smoke>`
 - Overlays: `<none / vector field overlay settings>`
-- Filters: `<none / N enabled>`
+- Filters: `<none / N enabled>`, visible cells: `<count>`
 
 ### Results
 
@@ -247,7 +253,7 @@ Use this table format in a GitHub issue, lab notebook, or internal doc.
 | TTFR (load → first render) | | | | | |
 | Switch gene (first time) | | | | | |
 | Apply filter (FILTER once) | | | | | |
-| Navigate in grid view (FPS) | | | | | |
+| Navigate in the fixed layout (FPS) | | | | | |
 
 ---
 
@@ -270,13 +276,15 @@ Next step:
 ### FPS got worse (especially when moving camera)
 
 Often GPU-bound:
-- more views open,
 - more pixels,
+- a layout change (a two- or three-view row is the expensive shape),
+- fewer cells filtered out than in the run you are comparing against,
 - heavier shaders/overlays,
 - or a driver/browser regression.
 
 Next step:
-- reduce views and pixels; see if it recovers immediately.
+- reduce pixels first; see if it recovers immediately. Then check that the
+  layout and the filter state match the baseline run.
 
 ### Actions “hitch” (stalls after clicking/filtering)
 

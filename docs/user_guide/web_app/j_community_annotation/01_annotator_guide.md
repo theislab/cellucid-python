@@ -4,6 +4,12 @@ This guide is for people contributing **votes, suggestions, and comments** in Ce
 
 If you are setting up the annotation repo or changing which columns are annotatable, read {doc}`02_author_guide`.
 
+:::{tip}
+If you would rather see each screen before you read about it, work through
+{doc}`04_lifecycle_walkthrough` first. It is the same round in order, with a
+picture of every step and of every failure state.
+:::
+
 ---
 
 ## Quickstart (Pick the Path That Matches You)

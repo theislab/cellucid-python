@@ -37,13 +37,30 @@ Filtering is about **visibility**:
 
 ---
 
-## Interface reference
+## Where all of this lives
 
-```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
-:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
-:width: 246px
+Everything on this page happens inside one sidebar accordion,
+**Coloring & Filtering**. Open it once and keep it open.
 
-Selecting a categorical observation field colors the embedding and exposes its complete category legend.
+```{figure} ../../../_static/screenshots/filtering/panel-clusters-unfiltered.png
+:alt: The Coloring and Filtering panel with a Categorical obs select holding clusters, empty Continuous obs and Gene Expression controls, a dashed Display options box containing an Outlier filter (latent space) slider at 100 percent, Show centroids and Show labels checkboxes, Show All and Hide All buttons and eight category rows with colour swatches and cell counts, and below the box a heading reading ACTIVE FILTERS (SELECTED VIEW ONLY), the line Showing all 3,696 points, and a bordered area reading No filters active.
+:width: 516px
+
+The panel in its resting state on the Pancreas sample. The three selectors at
+the top decide **what colours the points**. The dashed **Display options** box
+and everything below it decide **which points are drawn**. The last two lines —
+the count, and the filter list — are the only place the app tells you the truth
+about what is hidden.
+```
+
+Once you actually filter something, that last block fills up:
+
+```{figure} ../../../_static/screenshots/filtering/active-filters-three-rows.png
+:alt: The Active filters block reading Showing 709 of 3,696 points above three rows, each with a ticked checkbox and a circled cross; the first reads S_score minus 0.15 to 1.14 followed by a cell count, the second reads clusters colon hiding Ductal, Epsilon and is cut off, the third reads clusters colon outlier less than or equal to 95 percent.
+:width: 480px
+
+Three of the four filter types active at once on the same 3,696 cells. Filters
+combine with **AND**: a cell is drawn only if it survives every ticked row.
 ```
 
 ---
@@ -56,7 +73,7 @@ Selecting a categorical observation field colors the embedding and exposes its c
 4) {doc}`04_common_filter_types_document_every_filter_the_ui_exposes` (reference: every filter you can create)
 5) {doc}`05_performance_considerations` + {doc}`06_edge_cases_filtering` (avoid surprises)
 6) {doc}`07_troubleshooting_filtering` (symptom → diagnosis → fix)
-7) {doc}`08_screenshots` (verified interface capture)
+7) {doc}`08_screenshots` (every state above, photographed)
 
 ---
 
@@ -114,11 +131,12 @@ What gets slow, why it gets slow, and safe workflows for large datasets.
 Symptom-based debugging for empty plots, filters that “do nothing”, and slow filtering.
 :::
 
-:::{grid-item-card} {octicon}`image;1.5em;sd-mr-1` Verified capture
+:::{grid-item-card} {octicon}`image;1.5em;sd-mr-1` Verified captures
 :link: 08_screenshots
 :link-type: doc
 
-The current Coloring and Filtering panel in its explicit unfiltered state.
+Every filtering state this section describes, photographed from the running app
+on one reproducible sample.
 :::
 
 ::::

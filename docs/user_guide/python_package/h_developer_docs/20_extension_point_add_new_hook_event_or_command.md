@@ -39,22 +39,37 @@ POST /_cellucid/events
 
 ### Step A3 — Add the Python schema
 
-Add the new type and its complete required-field set to
-`_require_inbound_jupyter_event` in
-`cellucid-python/src/cellucid/jupyter.py`. Implement exact value checks there.
-Until this exists, Python rejects the event before hook dispatch.
+Add the new type and its complete required-field set to `_INBOUND_EVENT_FIELDS`
+in `cellucid-python/src/cellucid/jupyter/_wire.py`, and implement its exact
+value checks in `_require_inbound_jupyter_event`. Until this exists, Python
+rejects the event before hook dispatch.
+
+That one entry does two jobs: it is what the validator accepts, and it is what
+`GET /_cellucid/protocol` publishes. Nothing else needs updating for the web
+build to discover the new capability, and nothing else may be updated instead —
+a list kept anywhere but here can announce an event the validator would reject.
+
+**Release the Python side before the emitter.** The web build must read
+`/_cellucid/protocol` and find the type in its `events` list before it posts
+one; a notebook running an older `cellucid` answers a rejected event with
+`500 Viewer callback failed` and a logged traceback, which is worse than not
+emitting. The reasoning is in “Why the reader ships first” in
+{doc}`11_hooks_events_protocol_and_schema`, and the route itself is
+{ref}`documented here <python-protocol-capability-endpoint>`.
 
 If the event needs a convenience decorator, add a property on `BaseViewer`
 similar to `on_selection`.
 
 ### Step A4 — Update Python event handling if needed
 
-File:
-- `cellucid-python/src/cellucid/jupyter.py`
+Files:
+- `cellucid-python/src/cellucid/jupyter/_wire.py`
+- `cellucid-python/src/cellucid/jupyter/_hooks.py`
 
 Required changes:
-- extend the closed inbound validator
-- extend `ViewerState` only if the event owns a latest-state snapshot
+- extend the closed inbound validator in `_wire.py`
+- extend `ViewerState` in `_hooks.py` only if the event owns a latest-state
+  snapshot
 
 ### Step A5 — Document + test
 
@@ -93,11 +108,12 @@ Important:
 
 ### Step B3 — Implement a Python wrapper method (optional but recommended)
 
-File:
-- `cellucid-python/src/cellucid/jupyter.py`
+Files:
+- `cellucid-python/src/cellucid/jupyter/_wire.py`
+- `cellucid-python/src/cellucid/jupyter/_base.py`
 
-Add the command to `_require_frontend_message`, then add a method on the
-viewer, e.g.:
+Add the command to `_require_frontend_message` in `_wire.py`, then add a
+method on `BaseViewer`, e.g.:
 
 - `def set_threshold(self, value: float): self.send_message({"type": "setThreshold", "value": value})`
 

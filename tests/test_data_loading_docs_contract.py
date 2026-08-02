@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import struct
+import re
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -16,11 +16,36 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _png_dimensions(path: Path) -> tuple[int, int]:
-    payload = path.read_bytes()
-    assert payload[:8] == b"\x89PNG\r\n\x1a\n", path
-    assert payload[12:16] == b"IHDR", path
-    return struct.unpack(">II", payload[16:24])
+# A path that exists only on the machine the documentation was written on. The
+# placeholders the guides teach with — ``/Users/you/…``, ``/home/you``,
+# ``/Users/<username>/`` — are deliberately excluded: they are instructions, not
+# captured output. Everything else naming a real home or scratch directory is a
+# leak, and one shipped in the same commit that added the screenshot checklist.
+_CAPTURE_HOST_PATH = re.compile(
+    r"/(?:Users|home)/(?!you\b|<username>|<user>)[A-Za-z0-9._-]+/"
+    r"|/private/tmp/"
+    r"|\.pyenv/versions/"
+)
+
+
+def test_no_documentation_page_names_a_path_from_the_machine_it_was_written_on() -> None:
+    """Committed docs must not carry the author's home, scratch, or pyenv paths.
+
+    Screenshots hide this class of leak in pixels, where no scan reaches, which
+    is why terminal transcripts ship as ``text`` blocks. Prose has no such
+    excuse, so the same rule is enforced here mechanically. ``docs/**`` is
+    walked directly rather than through Sphinx: the screenshot checklist is in
+    ``exclude_patterns`` and so is never built, but it is still committed to a
+    public repository.
+    """
+    offenders: list[str] = []
+    for page in sorted(DOCS_ROOT.rglob("*.md")):
+        if "_build" in page.parts:
+            continue
+        for number, line in enumerate(page.read_text(encoding="utf-8").splitlines(), 1):
+            if _CAPTURE_HOST_PATH.search(line):
+                offenders.append(f"{page.relative_to(REPOSITORY_ROOT)}:{number}")
+    assert offenders == [], offenders
 
 
 def test_central_navigation_starts_with_only_top_level_sections_open() -> None:
@@ -43,6 +68,17 @@ def test_custom_repository_guide_publishes_the_exact_current_catalog_contract() 
     assert "one root-level" in normalized
     assert "there are no tests, validation harness" in normalized
     assert "workflows, `.github/` directory, or site assets" in normalized
+    # The root enumeration went stale silently once already: it kept claiming
+    # "that is all" after LICENSE and the policy files were added. Pin every
+    # name it now lists so the next addition fails here instead of shipping.
+    for policy_file in (
+        "LICENSE",
+        "CONTRIBUTING.md",
+        "SECURITY.md",
+        "SUPPORT.md",
+        "CODE_OF_CONDUCT.md",
+    ):
+        assert f"`{policy_file}`" in guide
     assert "cross-references this guide" in normalized
 
     for dataset_id, n_cells, n_genes in (
@@ -98,18 +134,34 @@ def test_loading_guides_do_not_reintroduce_stale_branch_or_server_routes() -> No
 
 
 def test_real_pancreas_server_and_jupyter_evidence_is_wired_into_the_guides() -> None:
-    screenshot = DOCS_ROOT / "_static" / "screenshots" / "server" / "pancreas-cli-serve.png"
-    assert _png_dimensions(screenshot) == (1440, 1000)
-
     server_guide = _read(SERVER_GUIDE)
-    assert "```{figure} ../../../_static/screenshots/server/pancreas-cli-serve.png" in server_guide
-    assert ":width: 1440px" in server_guide
+
+    # ``cellucid serve`` on a prepared export prints the *absolute* directory it
+    # resolved (``server/_server.py`` calls ``print_detail("Path", str(self.data_dir))``),
+    # so a photograph of this command necessarily bakes the capture host's path
+    # into the image pixels, where no scan can find it. The transcripts therefore
+    # ship as verbatim ``text`` blocks, never as screenshots.
+    assert "```{figure} ../../../_static/screenshots/server/pancreas-cli-serve.png" not in (
+        server_guide
+    )
+    assert "```{figure} ../../../_static/screenshots/server/serve-anndata-cli.png" not in (
+        server_guide
+    )
+    assert "$ cellucid serve ./pancreas_export --no-browser" in server_guide
+    assert "      Path: /path/to/pancreas_export" in server_guide
+    assert "[1/3] Validating dataset..." in server_guide
     assert "3,696 cells" in server_guide
     assert "3,753 genes" in server_guide
-    assert "429-file web cache" in server_guide
-    assert "--web-source-url http://127.0.0.1:4173" in server_guide
+    assert "486-file web cache" in server_guide
+    assert "--web-source-url http://127.0.0.1:4183" in server_guide
     assert "/?source=remote" in server_guide
     assert "/?anndata=true" in server_guide
+
+    # The direct-AnnData startup prints a different URL from the prepared one, and
+    # both are transcribed, so neither can quietly become the other.
+    assert "$ cellucid serve lung_atlas.h5ad \\" in server_guide
+    assert "[1/4] Detecting format..." in server_guide
+    assert "Mode: read-only backed h5ad" in server_guide
 
     jupyter_guide = _read(JUPYTER_GUIDE)
     assert "Pancreas Jupyter walkthrough" in jupyter_guide

@@ -9,6 +9,8 @@ from typing import Any
 import numpy as np
 from scipy import sparse
 
+from ._byte_order import little_endian_payload_dtype
+
 CONNECTIVITY_MANIFEST_FILENAME = "connectivity_manifest.json"
 CONNECTIVITY_BINARY_DIRNAME = "connectivity"
 CONNECTIVITY_SOURCES_PATH = "connectivity/edges.src.bin"
@@ -110,7 +112,7 @@ def _validated_float64_weights(
         raise ValueError("Sparse connectivity must not contain stored zero entries.")
 
     with np.errstate(over="ignore", invalid="ignore"):
-        weights = values.astype("<f8", copy=False)
+        weights = values.astype(little_endian_payload_dtype(np.float64), copy=False)
     if not np.all(np.isfinite(weights)):
         raise ValueError("Connectivity values must remain finite when represented as Float64.")
 
@@ -255,7 +257,7 @@ def validate_connectivity_edges(
         np.add.at(degrees, destinations, 1)
     max_neighbors = int(degrees.max()) if degrees.size else 0
 
-    little_endian_index_dtype = np.dtype(dtype).newbyteorder("<")
+    little_endian_index_dtype = little_endian_payload_dtype(dtype)
     stored_sources: np.ndarray = sources.astype(
         little_endian_index_dtype,
         copy=False,
@@ -264,7 +266,7 @@ def validate_connectivity_edges(
         little_endian_index_dtype,
         copy=False,
     )
-    stored_weights = weights.astype("<f8", copy=False)
+    stored_weights = weights.astype(little_endian_payload_dtype(np.float64), copy=False)
     return ConnectivityEdgePairs(
         sources=stored_sources,
         destinations=stored_destinations,

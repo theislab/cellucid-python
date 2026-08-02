@@ -158,7 +158,7 @@ shorter legend.
 
 - Avoid colormaps that compress contrast (the figure can look “flat” in print).
 - Prefer palettes that remain interpretable when printed in grayscale (when possible).
-- If **Use log scale** is on for the colored field, the exported colorbar is
+- If **Log color scale** is on for the colored field, the exported colorbar is
   labeled `Log10 color scale` with its true midpoint (the geometric mean of the
   endpoints). Keep that line in the figure: without it a reader interpolates the
   two endpoint labels linearly and reads off values that are wrong by orders of

@@ -84,7 +84,7 @@ Docs:
 - {doc}`../c_data_preparation_api/05_var_gene_metadata`
 - {doc}`../c_data_preparation_api/06_gene_expression_matrix`
 
-### “gene_identifiers contains identifiers not found in var: MS4A1, CD3D”
+### “gene_identifiers contains identifiers not found in var: c("MS4A1", "CD3D").”
 
 Meaning:
 - you requested genes via `gene_identifiers` that are absent from your gene ID
@@ -101,9 +101,11 @@ Fix:
 - check `var_gene_id_column` first: the identifiers are read from
   `rownames(var)` when it is `NULL`, and from that exact column otherwise.
 
-The message lists the first five missing identifiers and appends `...` when
-there are more. Duplicated entries fail separately with
-`gene_identifiers must not contain duplicate identifiers.`
+The message lists the first five missing identifiers as an R vector and appends
+` and N more` when there are more. Every message in the package that shows a set
+of values writes it the way you would write one in R — `c("nope")`, `c(0, 1)` —
+so the value pastes straight back into the failing call. Duplicated entries fail
+separately with `gene_identifiers must not contain duplicate identifiers.`
 
 Docs:
 - {doc}`../c_data_preparation_api/05_var_gene_metadata`
@@ -122,8 +124,9 @@ Docs:
 ### “obs_categorical_dtype must be exactly one of "uint8" or "uint16".”
 
 Meaning:
-- `obs_categorical_dtype` is required and has no default. There is no automatic
-  width selection, so `"auto"` and a missing argument both fail.
+- you passed a value that is not `"uint8"` or `"uint16"`. There is no automatic
+  width selection, so `"auto"` fails. Leaving the argument out is a different
+  mistake and gets the missing-argument message below instead.
 
 Fix:
 - pass `"uint8"` for up to 255 categories per field, `"uint16"` for up to 65,535
@@ -131,7 +134,36 @@ Fix:
 Docs:
 - {doc}`../c_data_preparation_api/04_obs_cell_metadata`
 
-### “Gene identifiers must be unique. Duplicates: 'MS4A1', 'CD3D'”
+### “cellucid_prepare() is missing 1 required argument: …”
+
+Meaning:
+- you left out an argument that has no default. There are exactly three —
+  `obs_categorical_dtype`, `dataset_name`, and `dataset_id` — because no value
+  of any of them is a reasonable guess about your dataset.
+
+The check runs before any value is inspected, so an argument you never passed is
+never described as a value of the wrong type. Every argument you left out is
+named in one message, in signature order, each with what a valid value is:
+
+```text
+cellucid_prepare() is missing 3 required arguments:
+  - obs_categorical_dtype: exactly one of "uint8" or "uint16", the storage width of every categorical code.
+  - dataset_name: one non-empty name for the dataset, shown to the reader verbatim.
+  - dataset_id: one portable identifier of 1-180 ASCII letters, numbers, '.', '_', or '-', beginning with a letter or number and not ending with '.'.
+```
+
+Passing `NULL` is not the same as leaving the argument out. A supplied `NULL` is
+a value, so it is reported as one: `dataset_id must be exactly one string.`
+
+Fix:
+- supply all three. Every other identity argument, `dataset_description`
+  included, is optional and defaults to `NULL`.
+
+Docs:
+- {doc}`../c_data_preparation_api/04_obs_cell_metadata`
+- {doc}`../b_concepts_mental_models/03_dataset_identity_and_reproducibility`
+
+### “Gene key 'MS4A1' is duplicated.”
 
 Meaning:
 - an identifier names more than one row, so a lookup by that identifier
@@ -142,24 +174,21 @@ words tell you which input to go and fix:
 
 | Opening words | What was rejected |
 |---|---|
-| `Gene identifiers` | a gene ID in `rownames(var)` or `var_gene_id_column` |
-| `Observation field keys` | a key read out of a `compact_v1` obs manifest |
-| `obs_keys` | a name you passed in the `obs_keys` argument |
-| `Vector field ids` | a `vector_fields` field id |
+| `Gene key` | a gene ID in `rownames(var)` or `var_gene_id_column`, or a gene name in a `compact_v1` var manifest |
+| `Observation field key` | a name you passed in `obs_keys`, or a key read out of a `compact_v1` obs manifest |
+| `Vector field key` | a `vector_fields` field id |
 
-`Observation field keys` and `obs_keys` are two different inputs, not two names
-for one: the first is parsed out of a manifest you supplied, the second is the
-argument you passed.
-
-The message lists the first five duplicates and appends `...` when there are
-more. There is no filename rule behind any of these axes: a payload file is
-named by an integer index, so `HLA-DRB1/2`, `CON`, a name with interior spaces,
-and a non-ASCII name all export.
+The axis noun is singular because the message names exactly one key: the first
+repeat in supplied order. It is never a list, so there is nothing to truncate —
+fix that key and re-run to find the next one, if any. There is no filename rule
+behind any of these axes: a payload file is named by an integer index, so
+`HLA-DRB1/2`, `CON`, a name with interior spaces, and a non-ASCII name all
+export.
 
 The same axes also raise the display-text message when an exported identifier
-carries a character with no glyph, opening with the axis name and the position:
-`Gene identifiers identifier at position 3 is displayed verbatim, so it must not
-carry characters that have no glyph: …`. Positions are zero-based.
+carries a character with no glyph, opening with the same singular axis noun and
+the position: `Gene identifier at position 3 is displayed verbatim, so it must
+not carry characters that have no glyph: …`. Positions are zero-based.
 
 A vector-field ID is checked after its key is parsed, so the ID reported is the
 part before the dimensional suffix.
@@ -177,8 +206,10 @@ Meaning:
   identifier that really is a path component.
 
 The full message states the rule: `Use 1-180 ASCII letters, numbers, '.', '_',
-or '-', beginning with a letter or number and not ending with '.'.` A Windows
-device name gets its own message, `dataset_id 'CON' is reserved on Windows.`
+or '-', beginning with a letter or number and not ending with '.'.` An empty
+`dataset_id` and one padded with whitespace get that same message, because the
+portable-identifier rule already rejects both. A Windows device name gets its
+own message, `dataset_id 'CON' is reserved on Windows.`
 
 Fix:
 - pick a stable, versioned id such as `pbmc3k_v1`.
@@ -214,11 +245,14 @@ Meaning:
 - a payload directory and the manifest that describes it disagree. The message
   names both sides: `Declared but absent: …` and `Written but undeclared: …`.
 
-This runs on four axes before publication — `Observation`, `Gene`,
-`Connectivity`, and `Vector field` — so a stale file from an earlier generation
-cannot survive beside a current manifest. A directory entry that is not a
-regular file gets its own message,
-`Gene payload directory holds a non-file entry: …`.
+This runs on five surfaces before publication — the four payload directories
+`Observation`, `Gene`, `Connectivity`, and `Vector field`, and the `Export` root
+itself — so a stale file from an earlier generation cannot survive beside a
+current manifest, and the `points_<dim>d.bin(.gz)` payloads that
+`dataset_identity.json` declares are covered by the same rule as every other
+payload. A directory entry that is not a regular file gets its own message,
+`Gene payload directory holds a non-file entry: …`; at the root the same message
+names any directory the export did not create.
 
 Fix:
 - export to a fresh `out_dir`, or re-run with `force = TRUE` for an atomic

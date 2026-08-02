@@ -75,6 +75,8 @@ What the dropdown targets depends on your multiview context:
 ### Changes
 
 - **Point positions** change to the coordinates of the new embedding.
+- **The navigation mode**, unless you have chosen one yourself: 3D selects
+  **Orbit**, 1D and 2D select **Planar** — see below.
 - Any **dimension-specific overlays** update (e.g., vector fields/velocity overlays).
 - Some derived rendering structures (centroids, spatial indices) may rebuild; large datasets can take a moment.
 
@@ -82,7 +84,9 @@ What the dropdown targets depends on your multiview context:
 
 - Your dataset choice (obviously).
 - Most UI selections (fields, filters) unless a feature is inherently dimension-specific.
-- Your camera mode setting (orbit/planar/free-fly), although the *feel* may be better if you switch modes to match the dimension.
+- **A navigation mode you chose yourself.** Once the **Mode** dropdown differs
+  from the mode the current dimension implies, it is yours and dimension changes
+  leave it alone.
 
 :::{tip}
 If switching to a new dimension leaves you “lost in space” (empty-looking view), click **Reset Camera**.
@@ -90,29 +94,60 @@ If switching to a new dimension leaves you “lost in space” (empty-looking vi
 
 ---
 
-## Interface reference
+## What switching actually looks like
 
-```{figure} ../../../_static/screenshots/web_app/dimension-navigation-controls-2d.png
-:alt: Cellucid Compare Views controls showing 2D dimension and Planar navigation selected.
-:width: 246px
+The three frames below are one session on the Pancreas sample (which publishes
+all three embeddings), changed only with the **Dimension** dropdown.
 
-For a 2D embedding, Cellucid selects 2D with Planar navigation; both settings remain explicit if the user chooses another valid configuration.
-```
-
-```{figure} ../../../_static/screenshots/web_app/dimension-2d-planar-default.png
-:alt: Cellucid displaying a two-dimensional embedding with Planar navigation.
+```{figure} ../../../_static/screenshots/web_app/window-dimension-3d.png
+:alt: The whole application window with a three-dimensional point cloud inside a light grid box, the sidebar showing a DIMENSION dropdown reading 3D and a MODE dropdown reading Orbit with orbit options beneath it.
 :width: 1440px
 
-A two-dimensional embedding opens with Planar navigation and a flat, screen-aligned exploration surface.
+**3D**, the Pancreas default. `Dimension: 3D`, `Mode: Orbit`.
 ```
+
+```{figure} ../../../_static/screenshots/web_app/window-dimension-2d.png
+:alt: The same window after choosing 2D; the cells now lie on a single plane seen face-on inside the grid box, the DIMENSION dropdown reads 2D, and the MODE dropdown has followed it to Planar with the planar options — KEYBOARD SPEED, ZOOM TO CURSOR, INVERT AXES — beneath it, with the mouse pointer pressing the dimension dropdown.
+:width: 1440px
+
+**2D.** The coordinates changed — the cells are now coplanar — and the camera
+followed. `Mode` moved to `Planar` on its own, so the embedding is seen
+face-on rather than at an angle.
+```
+
+```{figure} ../../../_static/screenshots/web_app/window-dimension-1d.png
+:alt: The same window after choosing 1D; the cells are strung along a single straight line of colour segments crossing the grid box, the DIMENSION dropdown reads 1D, and the MODE dropdown reads Planar with the planar options beneath it.
+:width: 1440px
+
+**1D.** Every cell keeps its colour but has only one coordinate, so the whole
+dataset becomes a coloured line — an ordering, not a map. `Mode` is `Planar`
+here too: only a 3D embedding gets Orbit.
+```
+
+:::{important}
+**Switching dimension switches navigation mode with it.** The app carries a rule
+that 3D uses **Orbit** and 1D/2D use **Planar**, and it re-applies that rule on
+every dimension change, as the frames above show.
+
+The rule stops applying to a view as soon as the **Mode** dropdown differs from
+what the current dimension implies — pick **Free-fly**, or **Orbit** while you
+are in 2D, and that choice is yours to keep across later dimension changes. Put
+**Mode** back to the dimension's own default and the rule takes over again.
+:::
 
 ---
 
 ## Edge cases
 
-- **You don’t see the dimension dropdown**: the dataset likely provides only one embedding dimension.
+- **You don’t see the dimension dropdown**: the dataset provides only one
+  embedding dimension. None of the five built-in samples do this — all five
+  publish 1D, 2D and 3D — so if you meet it, you are on your own export.
 - **Switching to 2D/1D does nothing**: that dimension may not exist for this dataset.
 - **Switch fails with an error**: the embedding data may be missing/corrupt; check the console and the data loading docs.
+- **The picture changed but the camera feels wrong**: you have chosen a
+  navigation mode at some point in this session, so the dimension rule no longer
+  touches this view. Set **Mode** back to the dimension's default — **Planar**
+  for 1D/2D, **Orbit** for 3D — and it resumes following the dimension.
 
 ---
 

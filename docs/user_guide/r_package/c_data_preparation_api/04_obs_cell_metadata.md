@@ -128,8 +128,10 @@ obs[["organ"]] <- factor(
 
 The same rule applies to `dataset_name`, `dataset_description`, `source_name`,
 `source_url`, and `source_citation`, which the viewer also prints verbatim.
-`dataset_description` may be `""`; the others may not. The Python package
-enforces the identical rule in `prepare()`.
+`dataset_description` is the one that may be empty: it defaults to `NULL`, and
+`NULL`, `""`, and leaving it out all publish the same empty description. The
+Python package enforces the identical rule in `prepare()` and accepts `None` and
+`""` the same way.
 
 ## Quantization (continuous fields and categorical outliers)
 
@@ -209,7 +211,7 @@ Each exported key must be a non-empty string, **distinct** among the keys you
 export so a lookup by key resolves one field, and **text the viewer can draw
 verbatim** — no control or zero-width characters and no leading or trailing
 whitespace, the same rule category labels obey. A duplicate stops the export
-with `obs_keys must be unique. Duplicates: …`.
+with `Observation field key 'cluster' is duplicated.`, naming the first repeat.
 
 Recommendation:
 - keep obs column names stable, because a renamed key is a different field to a

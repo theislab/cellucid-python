@@ -138,8 +138,14 @@ Export folders generally do **not** rely on `Content-Encoding`.
 All binaries are raw, headerless arrays. You must know the shape from context + manifests.
 
 Unless stated otherwise:
-- numeric endianness is the machine-native numpy endianness (practically little-endian on modern systems)
-- the viewer assumes little-endian
+- every multi-byte value is **little-endian**, pinned by the writer rather than
+  inherited from the exporting machine, so an export made on a big-endian host
+  is byte-identical to one made on x86 or ARM
+- arrays are **row-major** (C order)
+- the dtype names below carry no byte-order component, and the viewer builds its
+  typed arrays on the received bytes, so a mismatch would decode as wrong values
+  rather than as a load failure — see
+  {doc}`../c_data_preparation_api/09_output_format_specification_exports_directory`
 
 ### `points_<dim>d.bin`
 

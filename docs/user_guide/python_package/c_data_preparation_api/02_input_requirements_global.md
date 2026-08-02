@@ -151,8 +151,8 @@ keys, gene names, and vector-field IDs must each:
 - be a non-empty string,
 - be distinct within their axis, and
 - read on screen as the value they store — no control characters, none of the
-  zero-width characters `U+200B`, `U+2060`, `U+FEFF`, and no leading or
-  trailing whitespace of any kind, `U+00A0` included.
+  zero-width characters `U+200B`, `U+2060`, `U+FEFF`, no unpaired surrogate,
+  and no leading or trailing whitespace of any kind, `U+00A0` included.
 
 The third rule is the same one string category labels obey, for the same
 reason: a gene name, an obs key, and a category label are all drawn verbatim in
@@ -188,6 +188,24 @@ Important behavior:
 - `force=True` writes one complete sibling stage, validates it, and atomically
   replaces the previous generation.
 - A rejected or interrupted candidate leaves the previous generation unchanged.
+
+`out_dir` must name a directory **dedicated to this one export**, because
+publishing replaces the whole directory and `force=True` removes everything the
+previous one held. These are refused with a `ValueError` before any path is
+created, locked, written, or removed:
+
+- the filesystem root (`/`, or a drive root on Windows),
+- your current working directory (`.`, `./`, or its absolute path),
+- your home directory (`~` or its absolute path),
+- the directory that holds every home (`..`, `/Users`, `/home`).
+
+A symbolic link is resolved first, so an alias to one of those directories is
+refused too. Name a child directory of your own instead:
+`prepare(..., out_dir="./exports/my_dataset")` is correct, while
+`prepare(..., out_dir=".", force=True)` raises before anything is touched.
+
+The R package's `cellucid_prepare()` refuses the same set, so both writers agree
+on which directories are never an export target.
 
 Practical rules:
 - During iteration: use `force=True` for an intentional complete replacement or

@@ -65,8 +65,27 @@ Design rule:
 Most UI modules live under:
 - `cellucid/assets/js/app/ui/modules/`
 
-They are imported/initialized in:
+Most — not all — are imported and initialized by:
 - `cellucid/assets/js/app/ui/core/ui-coordinator.js`
+
+:::{important}
+“Lives under `ui/modules/`” and “is initialized by the coordinator” are two
+different facts, and three of the modules below are initialized by a *sibling
+module* rather than by the coordinator:
+
+- `dataset-connections.js` ← initialized by `dataset-controls.js`
+- `field-selector-gene-expression.js` ← initialized by `field-selector.js`
+- `field-selector-deleted-fields.js` ← initialized by `field-selector.js`
+
+If you are tracing why a control is inert, check which of the two paths owns it
+before assuming the coordinator does.
+
+The `ui/` layer also has directories this page does not otherwise cover:
+`ui/components/` (shared widgets — the coordinator initializes
+`components/info-popovers.js` directly), `ui/category-builder/`,
+`ui/onboarding/` (welcome modal and the global keyboard shortcuts), and
+`ui/keyboard-move.js`.
+:::
 
 ### Core “shell” modules
 
@@ -112,7 +131,23 @@ These are bigger subsystems but still treated as modules:
 |---|---|---|
 | Figure export | `ui/modules/figure-export/` | export UI + engine + SVG/PNG renderers |
 | Community annotation | `ui/modules/community-annotation-controls.js` | auth + pull/publish + voting/moderation UI |
-| Visualization reset | `ui/modules/visualization-reset.js` | reset actions (clear filters/highlights/etc.) |
+| Community annotation (split parts) | `ui/modules/community-annotation/` | the controls module's own submodules (browser integration, connection flow, consensus column, modal shell, auto-pull storage) |
+| Community annotation dialogs | `ui/modules/community-annotation-voting-modal.js`, `ui/modules/community-annotation-modal-owner.js` | the voting dialog and its ownership/lifecycle |
+| Cinematic camera | `ui/modules/cinematic-camera/` | camera-path authoring, transport bar, playback. Initialized by the coordinator; persisted as a mandatory session chunk (see {doc}`10_sessions_persistence_and_serialization`) |
+| Performance benchmark | `ui/modules/benchmark/` | synthetic data generation contract + worker, the configuration-matrix harness, GL upload counters, frame recorder, camera path. The panel’s wiring lives in `main.js`; the measurement code is here and in `assets/js/dev/benchmark.js` |
+| Highlight subsystem | `ui/modules/highlight/` | the four selection tools, their copy, and the highlight-page UI |
+| Legend subsystem | `ui/modules/legend/` | categorical and continuous legend rendering |
+| Visualization reset | `ui/modules/visualization-reset.js` | reset actions (clear filters/highlights/etc.), and the global `R` reset-camera key |
+| Field interaction owner | `ui/modules/field-interaction-owner.js` | arbitrates which module owns a field interaction |
+| Camera input contract | `ui/modules/camera-input-contract.js` | the validated shape of camera control input |
+
+:::{note}
+`ui/modules/cross-highlight/` exists but contains only a `.gitkeep`. There is no
+cross-highlight UI module today — cross-view highlight synchronisation is
+handled in the state layer (`app/state/managers/highlight-manager.js`) and in
+`ui/modules/highlight/`. A reader who trusts a complete module map would go
+looking for a module that is not there.
+:::
 
 :::{note}
 Page Analysis (plots / DE / correlation / etc.) is initialized directly in `cellucid/assets/js/app/main.js` (not via `ui-coordinator.js`).

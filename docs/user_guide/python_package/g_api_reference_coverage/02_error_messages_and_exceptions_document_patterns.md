@@ -29,7 +29,20 @@ Use these consistently and document them the same way:
 
 For CLI:
 - return non-zero exit codes (typically `1` for failure, `130` for Ctrl+C)
-- print a one-line actionable message to stderr
+- print a one-line actionable message to stderr, beginning `Error:`, as the last
+  line the command writes
+- print **no traceback** for any of the types in the table above: they are the
+  conditions a user can correct, and a traceback tells a wet-lab reader nothing
+  they can act on
+- print the **full traceback** for every other exception type — `AttributeError`,
+  `IndexError`, `AssertionError` and the rest — because those mean Cellucid
+  failed, and the traceback is the bug report; the `Error:` line then names the
+  issue tracker
+
+`--verbose` adds the traceback to the first case as well, so a condition that
+turns out to have been misclassified is still reportable. See
+{doc}`../h_developer_docs/05_cli_architecture_and_commands` for the exact
+classification.
 
 ---
 

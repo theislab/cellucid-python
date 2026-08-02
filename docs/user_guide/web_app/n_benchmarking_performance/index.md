@@ -10,11 +10,24 @@ They are written for **mixed audiences**:
 :::{important}
 Cellucid performance is usually limited by **one** of these three resources:
 
-- **GPU-bound** (rendering): too many points/views, high visual quality, volumetric smoke, vector field overlays.
+- **GPU-bound** (rendering): too many *pixels* — from the window, the point size, or antialiasing — plus volumetric smoke and vector field overlays.
 - **CPU-bound** (computation): repeated filtering, heavy analysis, large category accounting.
 - **Network/storage-bound** (I/O): remote server latency, loading large expression chunks, slow disk/remote mounts.
 
 The fastest fix is almost always: **identify which one you hit first**, then change the *one* knob that actually affects it.
+:::
+
+:::{note}
+Two behaviours in this section are the opposite of what most people assume, and
+both are worth knowing before you start tuning:
+
+- **Hiding cells with a filter makes navigation faster**, not slower. Hidden
+  cells are rejected before anything is drawn for them.
+- **A four-view 2×2 grid is not four times the work of one view.** Point size
+  follows pane height, so the grid draws smaller points; the two- and
+  three-view row layouts are the expensive ones.
+
+{doc}`01_performance_mental_model` explains both.
 :::
 
 ```{toctree}
@@ -33,11 +46,11 @@ Use this table when you’re in the middle of work and just need relief.
 
 | What you see | Most likely bottleneck | Do this first (safe) | Next page |
 |---|---|---|---|
-| Navigation (orbit/pan/zoom) feels choppy | GPU | Switch to **Points** mode, clear snapshots, close other GPU-heavy tabs | {doc}`01_performance_mental_model` |
+| Navigation (orbit/pan/zoom) feels choppy | GPU | Make the window smaller, switch to **Points** mode, close other GPU-heavy tabs | {doc}`01_performance_mental_model` |
 | Slider scrubbing (filters) stutters | CPU | Turn **Live filtering** off and use **FILTER** to apply once | {doc}`02_performance_considerations_what_gets_slow_and_why` |
 | Loading takes forever or tab freezes | I/O or memory | Prefer **Server Mode** for large `.h5ad`/`.zarr` and large exports | {doc}`03_large_dataset_best_practices` |
-| Fans spin up / laptop throttles | GPU + thermals | Lower quality knobs (smoke/grid, overlays), reduce window size, fewer views | {doc}`06_edge_cases_performance` |
-| “WebGL context lost” / blank canvas | GPU memory | Reload, then reduce GPU load (no smoke, fewer views, lower overlay density) | {doc}`07_troubleshooting_performance` |
+| Fans spin up / laptop throttles | GPU + thermals | Lower quality knobs (smoke/grid, overlays), reduce window size, clear snapshots | {doc}`06_edge_cases_performance` |
+| “WebGL context lost” / blank canvas | GPU memory | Reload, then reduce GPU load (no smoke, no snapshots, smaller highlights, lower overlay density) | {doc}`07_troubleshooting_performance` |
 | “It got slower after a change” | Regression | Run a small benchmark loop and compare numbers | {doc}`04_benchmarking_methodology_and_metrics` |
 
 If you suspect an environment/browser issue (not your data), also read:
@@ -126,7 +139,8 @@ Symptom-based debugging for lag, freezes, context loss, and slow loads.
 :link: 08_screenshots
 :link-type: doc
 
-The current benchmark panel plus one-view and multiview rendering contexts.
+The benchmark panel, the historical acceptance samples, and what layout shape
+costs.
 :::
 
 :::{grid-item-card} {octicon}`issue-opened;1.5em;sd-mr-1` Reporting bugs

@@ -27,8 +27,28 @@ The UI has three deliberate states.
 
 ### No **Vector Field Overlay:** block
 
-The loaded dataset declares no vector fields in any dimension. Add a field
-using the exact preparation contract in
+The loaded dataset declares no vector fields in any dimension. There is no
+message for this state, and none is needed: the whole block is simply absent,
+and `Show connectivity edges` is followed straight by **Reset Camera**.
+
+```{figure} ../../../_static/screenshots/vector_field_velocity/read-dataset-without-vector-field.png
+:alt: The bottom of the Visualization panel with the Kanemaru developing heart sample loaded: Show connectivity edges is followed straight by Reset Camera, with no Vector Field Overlay block between them.
+:width: 466px
+
+**Kanemaru** — no vector field. Of the five built-in samples only the Pancreas
+sample ships one, so this is what four of the five look like.
+```
+
+```{figure} ../../../_static/screenshots/vector_field_velocity/read-dataset-with-vector-field.png
+:alt: The same stretch of the Visualization panel with the Pancreas sample loaded: a ringed Vector Field Overlay block with an unchecked Show overlay box sits between Show connectivity edges and Reset Camera.
+:width: 466px
+
+**Pancreas** — the same stretch of the same panel, with the block present. This
+is the only difference; if you are looking for the overlay and this block is not
+there, the dataset does not have one.
+```
+
+Add a field using the exact preparation contract in
 {doc}`../../python_package/c_data_preparation_api/08_vector_fields_velocity_displacement`,
 then reload the dataset.
 

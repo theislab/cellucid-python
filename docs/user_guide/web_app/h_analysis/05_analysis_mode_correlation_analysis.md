@@ -189,11 +189,33 @@ Fix:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/analysis/correlation-results.png
-:alt: Correlation analysis configured for two continuous observation fields with a scatter plot.
-:width: 224px
+:alt: The Correlation panel with X Axis Variable set to Continuous obs then S_score, Y Axis Variable set to G2M_score, both pages selected, Color by set to cell_type, a Correlation method select reading Pearson (linear) under a pointer, and a coloured scatter plot with trend lines beneath.
+:width: 488px
 
-Correlation analysis plots two continuous observation fields for the selected cells and reports the computed relationship.
+Correlation on the two cell-cycle scores, both pages selected and points coloured
+by `cell_type`. **Color by** changes only the colouring; the coefficient is always
+computed per page, never per colour.
 ```
+
+```{figure} ../../../_static/screenshots/analysis/correlation-expanded.png
+:alt: The expanded Correlation modal headed "CORRELATION: S_SCORE VS G2M_SCORE" with a coloured scatter and per-page statistic boxes, a PLOT OPTIONS column, a SUMMARY STATISTICS table with columns Page, R, R², P and N, and a STATISTICAL ANALYSIS table with columns Page, Direction, Strength and R.
+:width: 1440px
+
+Expanded Correlation. **SUMMARY STATISTICS** gives one row per page: `r`, `r²`,
+the p-value in exponential notation, and `n` — the number of **paired finite**
+values that actually entered the calculation. **STATISTICAL ANALYSIS** restates
+the same `r` as a direction and a strength band, with the band boundaries printed
+underneath.
+```
+
+:::{important}
+Read `n` and `r` together. In the capture above, `Rest of Page 1` reports
+`r = 0.4671` over `n = 3,434` with `p = 1.063e-185`. That vanishing p-value says
+only that the correlation is not zero; the `r² = 0.2182` beside it says the score
+explains about 22% of the variance. With tens of thousands of cells, a
+scientifically uninteresting `r` of 0.02 will also carry an astronomically small
+p-value. **The p-value answers “is it non-zero?”, never “is it big?”**
+:::
 
 ---
 

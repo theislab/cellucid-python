@@ -82,7 +82,7 @@ def test_a_vector_payload_is_the_scaled_value_rounded_once(tmp_path: Path) -> No
     embedding, vectors = _prepare(tmp_path)
     _center, scale_factor = _normalization(embedding)
 
-    published = np.fromfile(tmp_path / "vectors" / "0_2d.bin", dtype=np.float32)
+    published = np.fromfile(tmp_path / "vectors" / "0_2d.bin", dtype="<f4")
     rounded_once = (vectors * scale_factor).astype(np.float32).reshape(-1)
     rounded_twice = (
         (vectors.astype(np.float32).astype(np.float64) * scale_factor)
@@ -101,7 +101,7 @@ def test_a_points_payload_is_the_normalized_value_rounded_once(tmp_path: Path) -
     embedding, _vectors = _prepare(tmp_path)
     center, scale_factor = _normalization(embedding)
 
-    published = np.fromfile(tmp_path / "points_2d.bin", dtype=np.float32)
+    published = np.fromfile(tmp_path / "points_2d.bin", dtype="<f4")
     rounded_once = ((embedding - center) * scale_factor).astype(np.float32).reshape(-1)
 
     assert np.array_equal(published, rounded_once)
@@ -184,5 +184,5 @@ def test_a_vector_field_of_any_dimension_is_rounded_once(
         **{f"X_umap_{dimension}d": embedding},
     )
     _center, scale_factor = _normalization(embedding)
-    published = np.fromfile(out_dir / "vectors" / f"0_{dimension}d.bin", dtype=np.float32)
+    published = np.fromfile(out_dir / "vectors" / f"0_{dimension}d.bin", dtype="<f4")
     assert np.array_equal(published, (vectors * scale_factor).astype(np.float32).reshape(-1))

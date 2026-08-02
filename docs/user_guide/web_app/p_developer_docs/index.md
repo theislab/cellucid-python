@@ -40,6 +40,22 @@ Start with the web app user guide landing page: {doc}`../index`.
 Privacy/security and telemetry live in a separate user-facing section:
 {doc}`../o_accessibility_privacy_security/index`.
 This developer section links to it, but does not replace it.
+
+Two things there that contributors get wrong often enough to flag here:
+the app **does** ship Google Analytics, gated on three production hostnames and
+inert everywhere else; and two of the browser caches persist **dataset-derived**
+content, not preferences. If you add persistence or egress, that page has to
+change in the same commit.
+:::
+
+:::{important}
+**This section has no screenshots, on purpose.** Every page here documents code
+structure, data flow and invariants — things a picture of the interface cannot
+show and that a picture would misdate on the next CSS change. Where structure is
+genuinely hard to hold in the head, these pages use ASCII diagrams instead: they
+live in the same file as the prose they explain, they diff, and they cannot drift
+from the text around them. If you find a page here where a real screenshot would
+help, it probably belongs in the user guide rather than in this section.
 :::
 
 ```{toctree}

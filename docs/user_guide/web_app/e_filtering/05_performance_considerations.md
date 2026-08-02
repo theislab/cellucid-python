@@ -14,12 +14,59 @@
 
 ## The core cost model
 
-Every time you change a filter, Cellucid recomputes a per-cell visibility mask.
+Every time you change a filter, Cellucid recomputes a per-cell visibility mask
+and then uploads the result to the GPU. Those are two different costs and they
+scale differently.
 
-High-level scaling:
-- **Visibility recomputation is roughly O(n_cells × n_enabled_filters)**.
+**Recomputing the mask** is roughly **O(n_cells × n_enabled_filters)**. A cell
+that is already hidden short-circuits — the mask is tested before any filter
+predicate — so the constant is smaller than the formula suggests, but the
+sweep is still over every cell.
 
-This is why “small” UI actions (like moving a slider) can feel expensive on million-cell datasets.
+**Uploading the mask** costs what actually changed, not what the dataset
+contains. The upload compares row by row and sends only runs of changed rows,
+up to thirty-two separate regions, or one bounding range once there are more
+than that.
+Hiding a handful of cells in a ten-million-cell dataset moves kilobytes, not
+megabytes. A filter scattered across the whole dataset still touches every row
+and still costs a full upload — that is the honest limit of a row-granular
+texture, not an oversight.
+
+This is why “small” UI actions (like moving a slider) can feel expensive on
+million-cell datasets: it is the mask sweep, not the upload.
+
+---
+
+## Filtering makes drawing cheaper
+
+:::{important}
+**A heavily filtered view now renders faster than an unfiltered one.** With
+ninety percent of the cells hidden, drawing is close to six times faster than
+drawing all of them.
+:::
+
+This has not always been true, and the reason it was not is worth knowing if
+you are comparing against an older recollection or an older screenshot.
+
+Hidden points used to be shrunk to zero size in the vertex shader. That is not
+enough: the driver clamps point size to a minimum of one pixel, so every hidden
+point was still assembled, rasterised and shaded before being thrown away in
+the fragment stage. Filtering therefore made rendering *slower*. Hidden points
+are now rejected in clip space instead, before rasterisation, so they cost
+essentially nothing.
+
+The same change fixed a **correctness** bug that matters more than the speed:
+
+:::{warning}
+In the **Ultra-light (square points)** shader quality, the fragment shader has
+no discard, so a hidden point still wrote depth and could **occlude visible
+points behind it**. Filtering could silently remove cells you had asked to see.
+
+If you have an older screenshot, exported figure, or memory of a filtered view
+taken in Ultra-light quality, it may show **fewer** cells than the same state
+shows now. The other two quality modes were unaffected and are byte-identical
+before and after.
+:::
 
 ---
 
@@ -35,7 +82,10 @@ On large datasets, “scrubbing” sliders back and forth is the most common cau
 
 Outlier filtering also recomputes visibility.
 
-The UI throttles updates while dragging, but on large datasets it can still feel slow.
+The UI throttles the expensive part to at most one recomputation every 50 ms
+(about twenty per second) while you drag, and applies the exact final value
+once you let go — so the readout stays smooth even when the recomputation
+cannot. On large datasets it can still feel slow.
 
 ### Many stacked filters
 
@@ -74,6 +124,16 @@ For continuous fields:
 3) Click `FILTER` once
 
 This avoids recomputing on every slider step.
+
+```{figure} ../../../_static/screenshots/filtering/type-numeric-range.png
+:alt: The continuous legend Filtering block with the Live filtering toggle reading Off, the hint below it reading Drag sliders then click Filter, Min and Max sliders with numeric readouts, and a black clickable FILTER button beside RESET with the mouse pointer on FILTER.
+:width: 428px
+
+The state you want on a large dataset: `Live filtering` **Off**, so `FILTER`
+becomes clickable and one recomputation replaces one per slider step. While
+`Live filtering` is On the button is greyed out entirely, which is the quickest
+way to tell which mode you are in.
+```
 
 ### 2) Change one thing at a time
 

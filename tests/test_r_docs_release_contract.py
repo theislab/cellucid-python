@@ -23,6 +23,7 @@ def _package_version() -> str:
 
 
 def test_r_installation_is_a_first_class_guide_page() -> None:
+    version = _package_version()
     installation_path = R_GUIDE / "installation.md"
     installation = _read(installation_path)
     home = _read(R_GUIDE / "index.md")
@@ -38,7 +39,7 @@ def test_r_installation_is_a_first_class_guide_page() -> None:
     assert not (R_GUIDE / "a_landing_pages" / "02_installation.md").exists()
     for exact in (
         "# Installation",
-        "**Active package version: 0.9.1.**",
+        f"**Active package version: {version}.**",
         "install.packages(\"cellucid\")",
         "remotes::install_github(\"theislab/cellucid-r\")",
         "packageVersion(\"cellucid\")",
@@ -66,6 +67,15 @@ def test_r_home_describes_the_active_submission_without_claiming_publication() -
     assert "and the CRAN submission release" in home
     assert "is authoritative for registry availability" in home
     assert f"**Active package version: {version}.**" in installation
-    assert "when the index lists `cellucid` 0.9.1" in normalized_installation
+    assert f"when the index lists `cellucid` {version}" in normalized_installation
+    # The note at the top of the page is not the only place the page promises a
+    # CRAN version. The install section states it again, and nothing else
+    # compares that sentence to `pyproject.toml`.
+    assert (
+        f"When the CRAN package index lists `cellucid` {version}, install it with:"
+        in normalized_installation
+    )
+    assert f"### From CRAN when version {version} is listed" in installation
+    assert f"If the index does not list version {version} yet" in normalized_installation
     assert "published on CRAN" not in home
     assert "available on CRAN" not in home

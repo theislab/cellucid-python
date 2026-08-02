@@ -10,7 +10,8 @@ This page focuses on the second style, which is often easier for notebook workfl
 ## `viewer.state`: latest-event snapshot
 
 `viewer.state` is a small thread-safe container with:
-- `ready`, `selection`, `hover`, `click`: the *latest payload* for those event types (or `None`)
+- `ready`, `selection`, `hover`, `click`, `command_error`: the *latest payload*
+  for those event types (or `None`)
 - `last_event_type`, `last_event`, `last_updated_at`: generic “what happened most recently”
 
 Example:
@@ -22,6 +23,7 @@ print(viewer.state.ready)
 print("Last selection:", viewer.state.selection)
 print("Last hover:", viewer.state.hover)
 print("Last click:", viewer.state.click)
+print("Last rejected command:", viewer.state.command_error)
 ```
 
 When to use `viewer.state`:

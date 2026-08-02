@@ -58,6 +58,22 @@ Notes:
 - The `.gz` suffix appears when you export with compression enabled (gzip).
 - The viewer reads `dataset_identity.json` first; it describes what dimensions/files exist.
 - If you load a folder and Cellucid says “not a valid export”, it usually means `dataset_identity.json` is missing or malformed.
+- Payload files are named by an **integer index**, never by a field name. Read
+  the paths out of the manifests rather than assembling them from a label.
+
+### Every binary payload is little-endian
+
+Multi-byte values in `.bin` / `.bin.gz` payloads are stored least-significant
+byte first, on every platform, by contract — not by whatever the exporting
+machine happened to use. Both writers pin it: the Python exporter converts the
+payload before writing, and `cellucid_prepare()` in R passes
+`endian = "little"` at every `writeBin`. An export produced on a big-endian
+machine is therefore byte-identical to one produced anywhere else, and the
+browser can read it without inspecting a byte-order flag.
+
+You only need to care about this if you are writing an exporter or reading the
+payloads yourself. The exact rule, and what it means for each dtype, is in
+{doc}`../../python_package/c_data_preparation_api/09_output_format_specification_exports_directory`.
 
 See also:
 - Export API reference + high-level format: {doc}`../../python_package/g_api_reference_coverage/api/export`
@@ -239,7 +255,16 @@ Fix:
   indistinguishable in the field selector, the legend, and every exported
   figure.
 - **Huge categorical fields**: legends/palettes don’t scale to 50k–100k categories; consider filtering/aggregating.
-- **Browser `.h5ad`**: for large files, this often fails due to memory limits (prefer server mode or exports).
+- **Browser byte ceilings**: the browser paths refuse anything that would need
+  more than **512 MiB** for a single working set — an `.h5ad` larger than that on
+  disk, a declared prepared payload larger than that, or a gzip stream that says
+  it decompresses to more. JSON metadata has a separate, smaller ceiling of
+  64 MiB. None of these apply to server mode or Jupyter, where Python holds the
+  data and the browser receives only what it asks for.
+- **Byte order**: never a compatibility problem. Prepared payloads are
+  little-endian by contract; H5AD is byte-order-agnostic, because HDF5 converts
+  to host order while reading; Zarr records its own byte order per array and the
+  reader swaps when it has to.
 
 ---
 

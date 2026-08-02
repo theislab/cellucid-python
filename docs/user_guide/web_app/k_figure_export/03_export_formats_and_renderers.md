@@ -191,7 +191,7 @@ Yes: it’s a fast way to confirm the export is not corrupted and that legends/a
 
 ```{figure} ../../../_static/screenshots/figure_export/download.png
 :alt: Figure Export Download controls with output format, DPI, and split-view choice.
-:width: 224px
+:width: 472px
 
 Download settings choose output format, resolution, and whether all views are exported.
 ```

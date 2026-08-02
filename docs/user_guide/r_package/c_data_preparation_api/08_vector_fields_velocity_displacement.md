@@ -48,9 +48,9 @@ What remains is the key grammar above (`<field>_umap_<1|2|3>d`) and the identity
 rules every exported identifier obeys: a field id must be a non-empty string,
 **distinct**, and text the viewer can draw verbatim — no control or zero-width
 characters and no leading or trailing whitespace, because the id becomes a UI
-label. Two list names that produce the same field id and dimension are rejected
-with `vector_fields names must be unique.` before any array is read, and
-duplicate ids are rejected with `Vector field ids must be unique. Duplicates: …`.
+label. Two list names that produce the same field id and dimension are the same
+list name, so they are rejected with `vector_fields names must be unique.`
+before any array is read.
 
 ```{note}
 Sorting by code point is what makes `cellucid-r` and the `cellucid` Python
@@ -117,6 +117,9 @@ cellucid_prepare(
   obs = obs,
   X_umap_2d = umap2,
   vector_fields = vector_fields,
+  obs_categorical_dtype = "uint8",
+  dataset_name = "My dataset",
+  dataset_id = "my_dataset",
   out_dir = out_dir,
   centroid_min_points = 1,
   force = TRUE
@@ -157,8 +160,8 @@ export: they no longer share a payload path, so case alone is not a collision.
 
 - `Vector field key '…' must exactly match '<field>_umap_<1|2|3>d'.` → add or
   correct the dimensional suffix on the list name.
-- `Vector field ids must be unique. Duplicates: …` → two list names reduce to
-  the same field id; rename one of them.
+- `vector_fields names must be unique.` → the same list name is declared twice;
+  remove or rename one of them.
 - `Vector field '…' declares 2D but contains 1 components.` → check `ncol(...)`;
   a plain vector counts as one component.
 - `Vector field '…' requires a matching 3D embedding.` → export `X_umap_3d`, or

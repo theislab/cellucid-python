@@ -63,7 +63,12 @@ These caches are shared across views and are critical for performance on large d
 
 Cellucid supports:
 - one **live** view (`viewId = "live"`)
-- many **snapshot** views (“Keep view”)
+- at most **three** snapshot views (“Keep view”)
+
+The cap is enforced viewer-side: requesting a fourth snapshot raises a
+`RangeError`. Four total views is therefore the maximum, and it is what the
+grid-layout arithmetic in the renderer assumes. Do not write UI or state code
+that treats the snapshot count as unbounded.
 
 `DataState` maintains a `viewContexts` map (`viewId → context`) so each view can have:
 - independent active field selections (obs/var)
@@ -192,6 +197,30 @@ Common flows:
   - updates `categoryTransparency`
   - calls `viewer.updateTransparency(categoryTransparency)`
   - triggers `visibility:changed`
+
+:::{important}
+The two halves of a visibility change have very different costs, and code
+written as if they were the same has been a recurring source of regressions.
+
+- **Deriving `categoryTransparency` is `O(pointCount)` every time**, no matter
+  how few cells moved. Do not add another full-dataset pass beside it; fold new
+  conditions into the existing loop.
+- **Publishing it to the GPU is proportional to what changed.** The viewer
+  compares the new alpha bytes against the uploaded texture and re-uploads only
+  the dirty rows, coalesced into a bounded number of contiguous regions. A
+  republication in which nothing moved uploads nothing *and* reports that fact
+  back, so dependent work — notably repacking the highlight geometry — is
+  skipped entirely.
+
+Two consequences for contributors:
+
+1. Never call `updateTransparency` with a freshly allocated array that happens to
+   hold identical values expecting it to be free; it is free because the *bytes*
+   match, and it is your job not to perturb them.
+2. If you add a consumer that must react to visibility, hang it off the
+   “generation moved” signal rather than off the call itself, or you reintroduce
+   the cost the comparison exists to avoid.
+:::
 
 - Dimension changes:
   - loads new positions for the requested dimension

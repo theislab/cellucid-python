@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlparse
 
+from ._contracts import _protected_export_directories
 from ._server_base import (
     CELLUCID_WEB_URL,
     WEB_ASSET_INVENTORY_FILENAME,
@@ -135,11 +136,70 @@ def _require_source_url(value: str) -> str:
     return value
 
 
+def _protected_cache_directories() -> frozenset[Path]:
+    """Return every directory that must never be claimed as the web cache.
+
+    This is the same set ``prepare()`` refuses as ``out_dir``, taken from the
+    one place it is defined. Both guards protect the same thing -- a directory
+    the caller keeps unrelated work in, or a filesystem landmark -- against the
+    same kind of operation, so they must not be able to drift into disagreeing
+    about which directories those are.
+
+    ``_contracts`` holds nothing but standard-library rules, so importing it
+    keeps this module on the CLI and server startup path that
+    ``cellucid/__init__.py`` deliberately keeps free of numpy, pandas, scipy,
+    and tqdm.
+    """
+    return _protected_export_directories()
+
+
+def _require_dedicated_cache_dir(value: str | Path) -> Path:
+    """Require one dedicated cache directory that is safe to remove whole.
+
+    ``clear_web_cache`` removes the named directory outright, and a forced
+    refresh renames the whole existing directory aside and then removes it, so
+    every file the named directory holds is destroyed either way. A directory
+    nobody set aside for the web build -- the filesystem root, the working
+    directory, the home directory, or the directory holding every home -- is
+    refused here, where the argument is first resolved and before any path is
+    inspected, staged, renamed, or removed.
+
+    A leading ``~`` and every symbolic link are resolved before the
+    comparison, both on the whole path and on the parent alone, so neither an
+    alias to a protected directory nor a symbolic link standing in for one is
+    accepted as a cache directory.
+    """
+    if not isinstance(value, str | os.PathLike):
+        raise TypeError("cache_dir must be a native string or os.PathLike path.")
+    cache_dir = Path(value)
+    expanded = cache_dir.expanduser()
+    resolved = expanded.resolve()
+    protected = _protected_cache_directories()
+    if (
+        expanded.name in {"", ".."}
+        or resolved.parent == resolved
+        or resolved in protected
+        or expanded.parent.resolve() / expanded.name in protected
+    ):
+        raise ValueError(
+            f"cache_dir must name a dedicated web cache directory, not {resolved}. "
+            "Clearing or refreshing the cache removes the whole directory, so the "
+            "filesystem root, the current working directory, the home directory, "
+            "and the directory holding it are refused. Pass a child directory of "
+            "your own, such as './cellucid-web-cache'."
+        )
+    return expanded
+
+
 def _require_cache_dir(value: str | Path | None) -> Path:
-    cache_dir = Path(value) if value is not None else _web_cache_dir()
-    cache_dir = Path(os.path.abspath(cache_dir.expanduser()))
-    if cache_dir == Path(cache_dir.anchor):
-        raise ValueError("The filesystem root cannot be used as the web cache directory")
+    # The default location is validated on the same terms as a caller's path:
+    # every route to the destructive sinks passes through here, so this is the
+    # one place the invariant has to hold.
+    selected = _web_cache_dir() if value is None else value
+    # The lexical absolute path is preserved deliberately: a cache reached
+    # through a symlinked parent is removed and republished at the name the
+    # caller gave, not at the name the link resolves to.
+    cache_dir = Path(os.path.abspath(_require_dedicated_cache_dir(selected)))
     _require_web_cache_directory_or_missing(cache_dir)
     return cache_dir
 
@@ -557,7 +617,14 @@ def get_web_cache_dir() -> Path:
 
 
 def clear_web_cache(*, cache_dir: str | Path | None = None) -> Path:
-    """Delete the selected cache generation and propagate any cleanup failure."""
+    """Delete the selected cache generation and propagate any cleanup failure.
+
+    ``cache_dir`` must name a directory dedicated to the web build, because the
+    whole directory is removed. The filesystem root, the current working
+    directory, the home directory, and the directory holding every home are
+    refused before anything is inspected or removed, whether they are named
+    directly, through ``~``, or through a symbolic link.
+    """
     resolved = _require_cache_dir(cache_dir)
     with _CACHE_LOCK:
         _require_web_cache_directory_or_missing(resolved)
@@ -573,7 +640,13 @@ def ensure_web_ui_cached(
     show_progress: bool = True,
     timeout: float = 15.0,
 ) -> WebCachePrefetchSummary:
-    """Establish the source build, or verify only when ``force=False``."""
+    """Establish the source build, or verify only when ``force=False``.
+
+    ``cache_dir`` must name a directory dedicated to the web build, because
+    ``force=True`` renames the whole existing directory aside and then removes
+    it. The same directories ``clear_web_cache`` refuses are refused here,
+    before any asset is fetched.
+    """
     if type(force) is not bool:
         raise TypeError("force must be a boolean")
     if type(show_progress) is not bool:

@@ -111,10 +111,15 @@ Encoding rules (current exporter):
 - every continuous input must be real and finite and must remain finite after
   conversion to the viewer's `float32` domain; otherwise the complete candidate
   is rejected before publication
-- codes and bounds derive from those exact viewer-visible values; a source
-  range that collapses to one `float32` value is published as a constant field,
-  while an individual nonzero source value may round to zero if the range
-  remains non-collapsed
+- a nonzero value that `float32` cannot represent at all is rejected with it.
+  That is the underflow end of the same range: anything below `2^-149` in
+  magnitude converts to exactly `0.0`, which is finite, so it would otherwise
+  pass the check above and publish a field whose every value had been replaced
+  by zero. The R writer refuses the same inputs, so both writers accept exactly
+  the same columns
+- codes and bounds derive from those exact viewer-visible values; an individual
+  nonzero source value may still round to zero under quantization, which is the
+  8-bit or 16-bit code resolution rather than the `float32` conversion
 - validated values map to `0..254` (8-bit) or `0..65534` (16-bit)
 - per-field `minValue`/`maxValue` are recorded in the manifest and used to dequantize in the browser.
 
@@ -162,7 +167,9 @@ that:
   includes tab and newline),
 - contains a zero-width character (`U+200B` ZERO WIDTH SPACE, `U+2060` WORD
   JOINER, or `U+FEFF`, the byte-order mark a spreadsheet leaves at the front of
-  a UTF-8 CSV), or
+  a UTF-8 CSV),
+- contains an unpaired surrogate (`U+D800`–`U+DFFF`), which Python will hold and
+  write but a browser draws as the replacement character, or
 - starts or ends with whitespace of any kind, including `U+00A0` NO-BREAK SPACE.
 
 It also rejects two labels in one field that a whitespace-collapsing renderer
@@ -249,7 +256,8 @@ two distinct columns `Field` and `field` all export unchanged.
 `prepare()` never rewrites a key, and requires each exported key to be a
 non-empty string, distinct within `obs`, and text the viewer can draw exactly as
 stored: no control characters, none of the zero-width characters `U+200B`,
-`U+2060`, `U+FEFF`, and no leading or trailing whitespace. It rejects the
+`U+2060`, `U+FEFF`, no unpaired surrogate, and no leading or trailing
+whitespace. It rejects the
 complete candidate export before publication when that fails, and the message
 names the offending key.
 

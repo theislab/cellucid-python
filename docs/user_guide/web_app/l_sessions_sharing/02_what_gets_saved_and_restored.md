@@ -93,6 +93,47 @@ Restored early so you see the correct view quickly:
 Eager describes ordering, not an intermediate success state. Treat the view as
 restored only after the terminal **Session fully restored** notification.
 
+:::{note}
+“Captured by id” means the control's DOM identifier is the key — not the label
+you read beside it. Renaming a control's visible text does not change what a
+saved session restores; changing its id does, and would make older bundles stop
+carrying it.
+
+Restoring a control writes its value and then fires the event its owner listens
+for, and the owner's own handler is what publishes the value onward. This is why
+a restored control and the thing it drives must never disagree: if the owner
+rejects the value, the mismatch fails the whole restore instead of leaving the
+panel showing something the viewer never accepted.
+:::
+
+:::{note}
+**`Antialiasing (smooth point edges)` is the one exception, and it says so on
+screen.** It is captured and restored like every other checkbox, and restoring
+it saves your choice — but the browser fixes antialiasing when it creates the
+drawing buffer, so it cannot change while the page is open. Restoring a session
+that turned it off leaves the panel showing a line telling you to reload, and
+the view keeps its current antialiasing until you do. Nothing else in a session
+behaves this way.
+:::
+
+The four renderer settings are the easiest instance of this to check yourself,
+because you can see both the control and its effect:
+
+```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-06-renderer-controls-changed.png
+:alt: The renderer settings block with Shader quality set to Light, Level-of-Detail checked, Force LOD level set to 4, and Frustum culling checked.
+:width: 480px
+
+Four sidebar controls set to non-default values before **Save State**.
+```
+
+```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-08-renderer-controls-restored.png
+:alt: The renderer settings block after a restore, showing the same four values as the saved state.
+:width: 480px
+
+The same four after **Load State** into a freshly started app that began at the
+defaults. Walked through step by step in {doc}`03_save_restore_ux`.
+```
+
 ### 2) Filtering state (per view) — eager
 
 Filters are restored as “modified-only” deltas to keep session files small.

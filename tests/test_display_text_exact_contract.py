@@ -48,6 +48,20 @@ UNDISPLAYABLE_LABELS = [
         "contains U+0009 (control character)",
         id="tab",
     ),
+    # A lone surrogate survives every step of the writer - Python holds it,
+    # json.dumps escapes it - and then the browser's JSON.parse yields an
+    # unpaired code unit that draws as the replacement character. Stored and
+    # drawn differ, which is exactly what this validator exists to stop.
+    pytest.param(
+        ["Li\ud800ver", "Gut", "Gut"],
+        "contains U+D800 (unpaired surrogate)",
+        id="lone-surrogate-high",
+    ),
+    pytest.param(
+        ["Liver\udfff", "Gut", "Gut"],
+        "contains U+DFFF (unpaired surrogate)",
+        id="lone-surrogate-low",
+    ),
     pytest.param(
         ["Li\nver", "Gut", "Gut"],
         "contains U+000A (control character)",

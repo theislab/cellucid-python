@@ -21,8 +21,9 @@ import pandas as pd
 import pytest
 from scipy import sparse
 
-import cellucid.prepare_data as prepare_data
 from cellucid import prepare
+from cellucid.prepare_data import _generation as prepare_generation
+from cellucid.prepare_data import _quantization as prepare_quantization
 
 LINEAGE_CELLS = 60
 OTHER_CELLS = 40
@@ -34,7 +35,10 @@ CONSTANT_NONZERO_GENE = "GENE22"
 CONSTANT_NONZERO_LEVEL = 2.5
 
 MAX_QUANT = {8: 254, 16: 65534}
-DTYPE = {8: np.uint8, 16: np.uint16}
+# The dtypes a reader decodes a payload with: uint8 codes are single bytes and
+# have no byte order, uint16 codes carry the format's published little-endian
+# order, which is not the host's on every architecture.
+DTYPE = {8: np.dtype(np.uint8), 16: np.dtype("<u2")}
 
 
 def _gene_ids() -> list[str]:
@@ -139,7 +143,7 @@ def _assert_constant_field_round_trips(out_dir, schema, entry, *, constant, bits
     # The manifest declares the constant case: equal bounds, both the constant.
     assert minimum == maximum, "a constant field must publish equal bounds"
     assert np.float32(minimum) == np.float32(constant)
-    assert prepare_data._is_constant_continuous_range(minimum, maximum)
+    assert prepare_quantization._is_constant_continuous_range(minimum, maximum)
 
     codes = np.frombuffer(
         _read_payload(out_dir, schema["pathPattern"], payload_index),
@@ -237,7 +241,7 @@ def test_full_precision_export_recovers_the_constant_genes_exactly(tmp_path):
         _, _, entry = _read_var_field(out_dir, gene_id)
         values = np.frombuffer(
             _read_payload(out_dir, schema["pathPattern"], entry[0]),
-            dtype=np.float32,
+            dtype="<f4",
         )
         np.testing.assert_array_equal(values, np.full(LINEAGE_CELLS, constant, dtype=np.float32))
 
@@ -351,7 +355,7 @@ def test_full_precision_export_recovers_the_constant_obs_field_exactly(tmp_path)
     assert all(len(field) == 2 for field in manifest["_continuousFields"])
     values = np.frombuffer(
         _read_payload(out_dir, schema["pathPattern"], entry[0]),
-        dtype=np.float32,
+        dtype="<f4",
     )
     np.testing.assert_array_equal(values, np.full(LINEAGE_CELLS, 1.5, dtype=np.float32))
 
@@ -414,7 +418,7 @@ def test_unencodable_outlier_quantiles_are_reported_before_any_file_is_written(
     def _forbidden_write(*args, **kwargs):
         raise AssertionError("prepare() wrote an output payload before validating encodability")
 
-    monkeypatch.setattr(prepare_data, "_write_binary", _forbidden_write)
+    monkeypatch.setattr(prepare_generation, "_write_binary", _forbidden_write)
 
     with pytest.raises(ValueError, match="cannot be encoded"):
         _prepare_lineage_subset(tmp_path / "lineage-subset", obs=obs)
@@ -433,7 +437,7 @@ def test_nonfinite_gene_values_are_rejected_before_any_file_is_written(tmp_path,
     def _forbidden_write(*args, **kwargs):
         raise AssertionError("prepare() wrote an output payload before validating gene values")
 
-    monkeypatch.setattr(prepare_data, "_write_binary", _forbidden_write)
+    monkeypatch.setattr(prepare_generation, "_write_binary", _forbidden_write)
 
     with pytest.raises(ValueError, match="Gene 'GENE11' expression must contain only finite values"):
         prepare(

@@ -72,12 +72,31 @@ Config:
 - used for frontend → Python hooks
 
 Important:
-- events are routed by `viewerId` but are not authenticated beyond that.
+- events are routed by `viewerId` and delivered only after the registered
+  viewer's exact `viewerToken` is compared with `hmac.compare_digest`. An
+  unknown viewer gets `404`; a missing or wrong token gets `403`.
 
 Implication:
-- if others can reach your server, they can trigger your hook callbacks (which may run arbitrary Python code you wrote in handlers).
+- the token is generated per viewer and embedded in the iframe URL, so anyone
+  who can read that URL — or who can reach a viewer you opened — can trigger
+  your hook callbacks, which run the Python you wrote in your handlers.
 
-### 4) Session bundle upload endpoint
+### 4) Wire capability endpoint
+
+- `GET /_cellucid/protocol`
+- used by the web build to learn which events this `cellucid` accepts before
+  emitting one
+
+No credentials:
+- the body is the same for every viewer, every dataset and every request — it
+  describes the installed `cellucid` version's protocol, not your data — so
+  there is nothing here for a token to protect, and it creates no state.
+
+Implication:
+- reaching this route tells someone which `cellucid` protocol generation you
+  are running. So does `/_cellucid/health`, which already returns the version.
+
+### 5) Session bundle upload endpoint
 
 - `POST /_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
 - used for notebook “no download” session capture
@@ -136,7 +155,7 @@ Python-side parsing and application takes a defensive stance:
 
 Related code:
 - `cellucid-python/src/cellucid/session_bundle.py`
-- `cellucid-python/src/cellucid/anndata_session.py`
+- `cellucid-python/src/cellucid/anndata_session/`
 
 If you extend session parsing, keep the “untrusted input” stance.
 

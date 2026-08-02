@@ -19,11 +19,14 @@ This glossary is written to match the app UI language, even when a “technical�
 
 ## UI map (one screenshot you’ll reuse everywhere)
 
-```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
-:alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
+```{figure} ../../../_static/screenshots/web_app/window-orientation-map.png
+:alt: The Cellucid window with a scrollable sidebar of collapsible panels down the left and a canvas on the right; the sidebar is scrolled to COLORING AND FILTERING showing a CATEGORICAL OBS dropdown reading clusters, a dashed DISPLAY OPTIONS box containing an outlier slider and an eight-row category legend with colour swatches and cell counts, and an ACTIVE FILTERS (SELECTED VIEW ONLY) block reading Showing all 3,696 points; the canvas holds a three-dimensional point cloud in a light grid box coloured in the same eight colours.
 :width: 1440px
 
-A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
+The vocabulary below maps onto this picture. **Sidebar** on the left,
+**canvas** on the right, **legend** inside the sidebar's dashed *Display
+options* box, and the **count line** at the very bottom of *Coloring &
+Filtering* telling you how many of the dataset's cells are currently drawn.
 ```
 
 ---
@@ -45,12 +48,13 @@ A loaded dataset in Cellucid: the sidebar controls the active view while the cat
   version.
 
 ```{figure} ../../../_static/screenshots/web_app/startup-loaded-build.png
-:alt: Loaded Suo point cloud on a light grid with Community Annotation and Camera Path collapsed and Build 2026-07-27.1 in the footer.
+:alt: Loaded Suo point cloud on a light grid with Community Annotation and Camera Path collapsed and a dated Build line in the sidebar footer.
 :width: 1440px
 
 Fresh startup after closing the welcome overlay: Suo is loaded on the light grid,
-**Community Annotation** and **Camera Path** are collapsed, and the footer
-identifies this capture as Build 2026-07-27.1.
+**Community Annotation** and **Camera Path** are collapsed, and the footer names
+the build. The capture shows the build it was taken from, not the one you are
+running — read yours off your own footer.
 ```
 
 ---
@@ -92,6 +96,24 @@ keyboard and screen-reader behavior.
   - Categorical legend shows categories and their colors.
   - Continuous legend shows a numeric color scale.
 - **Color-by**: the act of selecting a field to drive coloring.
+
+The two legends look nothing alike, and telling them apart at a glance is the
+fastest way to know what kind of field you are looking at:
+
+```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
+:alt: A legend with the hint Click a swatch to pick a color, Show All and Hide All buttons, and eight rows each holding a checkbox, a coloured square swatch, a category name, a cell count, a pencil icon and a bin icon.
+:width: 428px
+
+**Categorical legend** — checkboxes and swatches.
+```
+
+```{figure} ../../../_static/screenshots/web_app/legend-continuous-sscore.png
+:alt: A legend headed COLOR SCALE (VIRIDIS) above a purple to yellow gradient bar labelled minus 0.37 and 1.14, a Log color scale toggle reading Off, a Rescale colorbar to slider range toggle reading On, and a FILTERING block with a Live filtering toggle, Min and Max sliders and FILTER and RESET buttons.
+:width: 428px
+
+**Continuous legend** — a colour bar and Min/Max sliders. A gene uses this one
+too.
+```
 
 Scope note:
 

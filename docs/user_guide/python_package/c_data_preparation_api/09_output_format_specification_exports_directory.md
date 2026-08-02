@@ -50,6 +50,43 @@ my_export/
 
 ---
 
+## Binary payload conventions (apply to every payload file)
+
+Every binary file an export contains — `points_<dim>d.bin`, everything under
+`obs/`, `var/`, `connectivity/`, and `vectors/` — obeys the same three rules.
+None of them is recorded anywhere in the export, so they hold unconditionally:
+
+- **Little-endian.** Every multi-byte value is stored least-significant byte
+  first, whatever the byte order of the machine that produced the export.
+  `uint8` payloads are single bytes and have no byte order.
+- **Row-major (C order).** A payload of shape `(n_cells, dim)` stores all of
+  cell 0's components, then all of cell 1's, and so on.
+- **Raw and headerless.** No magic number, no length prefix, no padding, no
+  alignment gap. The file is exactly `n_elements × itemsize` bytes; the element
+  count and the dtype come from the manifest.
+
+Byte order is the rule a reader cannot check, which is why it is stated here
+once and normatively rather than left to each payload section. The dtype
+strings the manifests publish — `float32`, `float64`, `uint8`, `uint16`,
+`uint32` — name a width and a scalar kind and carry **no byte-order
+component**, and the web app constructs its typed arrays directly on the bytes
+it received, which is host order by definition in JavaScript. A big-endian
+payload therefore does not fail to load. It loads as different numbers, and the
+coordinates, expression values, and edge weights that result are entirely
+plausible. There is no field to check and no error the reader could raise.
+
+Both writers pin the order explicitly rather than inheriting the host's:
+{func}`~cellucid.prepare` converts every payload at the write, and
+`cellucid_prepare()` names `endian = "little"` at every `writeBin`. An export
+produced on a big-endian machine — s390x is the realistic case — is therefore
+byte-identical to one produced on x86 or ARM from the same input.
+
+Anything else that writes this format must do the same. Emitting the host's
+native order is correct on x86 and ARM by accident, not by contract, and the
+mistake is invisible until an export crosses architectures.
+
+---
+
 ## Payload naming: a filename never carries dataset content
 
 Every scientific payload file in an export is named by its **integer index**, or
@@ -120,8 +157,8 @@ numerator is `0` — so a constant field decodes back to its exact value in
 every reader, bit for bit, rather than to an approximation of it.
 
 Both writers implement this: `_quantize_continuous()` in
-`cellucid/prepare_data.py` and `.quantize_continuous()` in
-`R/cellucid_prepare.R`, each guarded by a single named predicate
+`cellucid/prepare_data/_quantization.py` and `.quantize_continuous()` in
+`R/quantization.R`, each guarded by a single named predicate
 (`_is_constant_continuous_range` / `.is_constant_continuous_range`).
 
 A **non**-constant payload is the complementary case, and its two terminal
@@ -185,9 +222,13 @@ The rule governs `dataset_identity.json` (and its nested `stats`, `embeddings`,
 categorical centroid entry. The key lists in this page are therefore complete
 specifications, not examples: emit every key shown and nothing else.
 
-Only `dataset_identity.json` has optional keys at all — `created_at`,
-`export_settings`, `source`, and `vector_fields` may be absent, and everything
-else in it is required.
+Optional keys exist in exactly two places, both in `dataset_identity.json`. At
+its top level, `created_at`, `export_settings`, `source`, and `vector_fields`
+may be absent. Inside the nested `source` object, `name` is required while `url`
+and `citation` are each optional, because both writers write them only when the
+corresponding `source_*` argument was supplied. Everything else in the format —
+every other key of `dataset_identity.json`, every key of every other manifest
+object — is required whenever its containing object is present.
 
 ---
 
@@ -220,9 +261,9 @@ listed here makes the dataset fail to load. In this example
   "stats": {
     "n_cells": 10000,
     "n_genes": 2000,
-    "n_obs_fields": 12,
-    "n_categorical_fields": 4,
-    "n_continuous_fields": 8,
+    "n_obs_fields": 2,
+    "n_categorical_fields": 1,
+    "n_continuous_fields": 1,
     "has_connectivity": true,
     "n_edges": 123456
   },
@@ -245,7 +286,7 @@ listed here makes the dataset fail to load. In this example
     "obs_categorical_dtype": "uint16"
   },
   "source": {
-    "name": "Optional source name",
+    "name": "Source dataset name",
     "url": "https://...",
     "citation": "..."
   },
@@ -253,7 +294,7 @@ listed here makes the dataset fail to load. In this example
     "default_field": "velocity_umap",
     "fields": {
       "velocity_umap": {
-        "label": "Velocity (UMAP)",
+        "label": "velocity_umap",
         "available_dimensions": [2, 3],
         "default_dimension": 3,
         "files": {
@@ -268,8 +309,23 @@ listed here makes the dataset fail to load. In this example
 ```
 
 Notes:
-- `vector_fields` is present only if you exported vectors.
-- `source` is present only if you provided `source_*` metadata.
+- `vector_fields` is present only if you exported vectors. Inside a field
+  entry, `label` and `basis` are **derived by the writer, not chosen by you**:
+  `label` is always the field id character for character, and `basis` is always
+  the string `"umap"`. The reader compares both and rejects the dataset when
+  either differs, so `"label": "Velocity (UMAP)"` on a field called
+  `velocity_umap` fails to load. There is no display-name field in this format.
+- `source` is present only if you provided `source_*` metadata, and inside it
+  only `name` is required. `url` and `citation` are each written only when you
+  supplied that argument, so `"source": {"name": "Cellucid browser CI"}` is a
+  complete and valid `source` object. The reader also accepts a `source.filename`
+  key, which is **not part of the export format**: the app's in-browser
+  H5AD/Zarr adapters set it to record the file a dataset was opened from.
+  Neither writer emits it, and an export must not contain it.
+- `stats.n_obs_fields` must equal `stats.n_categorical_fields +
+  stats.n_continuous_fields`, and `obs_fields` must hold exactly
+  `stats.n_obs_fields` elements. The example above is one complete small
+  dataset, not an excerpt: two obs fields, one of each kind.
 - `name`, `description`, and `source.name` / `source.url` / `source.citation`
   are shown to the reader verbatim, so they obey the same display-text rule as
   a string category label: no control characters, no zero-width characters, and
@@ -369,7 +425,12 @@ Notes:
 - `{index}` is the entry's own element `[0]`, written in plain decimal with no
   padding: `0`, `1`, … `N-1`.
 - `{ext}` for codes is chosen based on the field’s codes dtype (`uint8 → u8`, `uint16 → u16`).
-- `_obsSchemas` itself is an exact key set: it holds `continuous` only when
+- `_obsSchemas` is always a JSON **object**, including when it is empty — an
+  export with no observation fields writes `{}`, never `[]`. The reader refuses
+  an array. This is worth stating because the two writers reach it through
+  different serialisers, and a language whose empty map and empty list share a
+  representation will emit the wrong one unless it is forced.
+- `_obsSchemas` is otherwise an exact key set: it holds `continuous` only when
   `_continuousFields` is non-empty, `categorical` only when
   `_categoricalFields` is non-empty, and nothing else.
 - `quantizationBits` appears on the continuous schema only when
@@ -404,7 +465,11 @@ Where:
   that breaks either rule; neither writer trims a label. See
   [Category labels must read as the value they store](python_package-category-label-display-text).
 - `codesDtype` is `"uint8"` or `"uint16"`
-- `codesMissingValue` is `255` or `65535`
+- `codesMissingValue` is `255` or `65535`. That value is reserved for "missing",
+  so it caps how many categories a field may declare: **at most 255 categories
+  under `"uint8"` codes and at most 65,535 under `"uint16"`**. Both writers
+  reject an export whose field exceeds the cap for the requested
+  `obs_categorical_dtype` and name the offending field.
 - `centroidsByDim` is a dict keyed by dimension strings (`"1"`, `"2"`, `"3"`)
   mapping to centroid lists. Each centroid is an exact three-key object
   `{"category": <declared category>, "position": [<dim finite numbers>],
@@ -588,8 +653,9 @@ format must handle both widths.
 
 - the three arrays are aligned and equally long (`n_edges` entries each):
   `src[i]` connects to `dst[i]` with Float64 weight `weights[i]`
-- all three arrays are little-endian: unsigned integers of `index_bytes` width
-  for the endpoints, IEEE-754 binary64 for the weights
+- the endpoints are unsigned integers of `index_bytes` width and the weights are
+  IEEE-754 binary64, in the little-endian row-major encoding every payload file
+  in the export uses
 - indices are 0-based and refer to the exported cell row order; every index is
   less than `n_cells`
 - the graph is undirected and stored once per edge as its upper triangle:
@@ -606,6 +672,28 @@ format must handle both widths.
 - `max_neighbors` is the maximum node degree of that undirected graph, counting
   each edge at both endpoints. It is `0` exactly when `n_edges` is `0`, and it
   must be less than `n_cells`
+
+### Browser working-set ceiling (`n_edges`)
+
+Neither writer caps `n_edges`, but the reader does. It budgets a fixed
+**536,870,912 bytes (512 MiB)** working set for the edge list and rejects the
+manifest before fetching a single edge byte when the declared graph would exceed
+it. The budget charges every copy the browser holds at once — the canonical
+endpoint and weight arrays, the render-owned copy of both, the GPU topology and
+Float32 weight staging buffers, one `uint32` degree counter per cell, and, when
+`index_bytes` is not `4`, the raw file buffer as well:
+
+| `index_dtype` | bytes charged |
+| --- | --- |
+| `"uint32"` | `44 × n_edges + 4 × n_cells` |
+| `"uint16"` | `48 × n_edges + 4 × n_cells` |
+
+That is a ceiling of about **12.2 million edges** for a `uint32` export and about
+**11.1 million** for a `uint16` one. The largest graph shipped in
+`cellucid-datasets` is `suo` — 6,279,148 edges over 561,947 cells, charging
+about 266 MiB — so every shipped dataset clears the limit with room to spare. An
+export above the line is a well-formed export that the web app still refuses to
+open, so thin the neighbour graph before exporting rather than after.
 
 ---
 
@@ -625,7 +713,30 @@ Vector fields are stored as:
 as on the other axes; the field id itself never appears in a path. Vector
 presence and file locations are indexed in
 `dataset_identity.json["vector_fields"]`, whose per-field `files` object states
-the complete path, so a reader never has to build one.
+the complete path.
+
+That path is **not** free-form, and this is the rule a hand-written or converted
+export trips on most often. The reader rebuilds each path from the manifest —
+
+```text
+vectors/{index}_{dim}d.bin      when export_settings.compression is null
+vectors/{index}_{dim}d.bin.gz   otherwise
+```
+
+— where `{index}` is the field's position in the key order of the
+`vector_fields.fields` object, and it rejects the dataset when the declared
+string is anything else. A path that resolves to a real file is not enough: it
+must be the exact string the producer rule generates. Two further rules come
+with it:
+
+- `available_dimensions` is strictly increasing and is a subset of
+  `embeddings.available_dimensions` — a vector field cannot advertise a
+  dimension the dataset has no points file for — and `files` holds exactly one
+  key per entry in it, named `"1d"`, `"2d"`, or `"3d"`, and no others;
+- `default_dimension` must be the **largest** entry of `available_dimensions`,
+  not merely one of them. Both writers emit `max(available_dimensions)`. (The
+  top-level `embeddings.default_dimension` is the looser case: there, any
+  available dimension is accepted.)
 
 ---
 
@@ -645,28 +756,118 @@ Browser requirement:
 
 ---
 
+## The writer proves the layout before publishing
+
+A candidate generation is built in a staging directory and is reconciled against
+its own declarations before the transaction publishes it. {func}`~cellucid.prepare`
+checks **five** surfaces: the four payload directories — `Observation`, `Gene`,
+`Connectivity`, and `Vector field` — and the `Export` root itself. On each one,
+every path the export declares must exist and every file present must be
+declared. A mismatch aborts the run and rolls the whole generation back, so a
+partial or self-contradictory export is never published:
+
+```text
+Gene manifest does not describe the payloads that were written. Declared but
+absent: ['var/7.values.u8.gz']. Written but undeclared: ['var/8.values.u8.gz'].
+```
+
+That is what makes the index space trustworthy: a stale file from an earlier
+generation cannot survive beside a current manifest.
+
+The root is checked for a reason of its own. `points_<dim>d.bin(.gz)` is the only
+payload this format declares by path *from the export root* — in
+`dataset_identity.json`, under `embeddings.files` — so no axis manifest can speak
+for it. Its declared name and its written name are two expressions of one
+`compression` setting, and a generation whose points disagree would otherwise
+publish successfully and then fail in the browser with no coordinates:
+
+```text
+Export manifest does not describe the payloads that were written. Declared but
+absent: ['points_2d.bin.gz']. Written but undeclared: ['points_2d.bin'].
+```
+
+The root check covers the whole directory rather than only the points. After a
+successful export the root holds exactly `dataset_identity.json`,
+`obs_manifest.json`, the declared point payloads, whichever of
+`var_manifest.json` and `connectivity_manifest.json` the export wrote, and the
+`obs/`, `var/`, `connectivity/`, and `vectors/` directories it created — and
+nothing else. A leftover scratch file or a directory the export did not create is
+refused rather than published. A directory standing where a payload file belongs
+gets its own message, `Export payload directory holds a non-file entry: …`, which
+is also what an axis directory raises for a subdirectory inside it.
+
+`cellucid_prepare()` in the R package performs the same five reconciliations and
+refuses the same generations. Only the rendering of the two lists differs, as
+`c("var/7.values.u8.gz")` rather than `['var/7.values.u8.gz']`.
+
+---
+
 ## Determinism and reproducibility
 
-Scientific binary payloads, including their gzip bytes, are deterministic given:
+Within one writer, scientific binary payloads, including their gzip bytes, are
+deterministic given:
 - the exact input arrays and DataFrames,
-- the same exporter version and compression level.
+- the same exporter version and compression level,
+- the same zlib build underneath it.
 
-They are also deterministic across the two writers. One input written by
-`cellucid.prepare()` and by `cellucid_prepare()` produces byte-identical
-`points_<dim>d.bin`, `vectors/<index>_<dim>d.bin`, `obs/` payloads, `var/`
-payloads, and connectivity payloads, and an equal `dataset_identity.json`,
-`obs_manifest.json`, `var_manifest.json`, and `connectivity_manifest.json`.
-The single float32 rounding described above is what makes that true of the
-coordinate and vector payloads.
+### What the two writers guarantee about each other
 
-Two encoder differences remain, and neither changes a value a reader parses:
-the JSON separators (`, ` / `: ` from Python's `json` module against `,` / `:`
-from **jsonlite**), and non-ASCII escaping (Python escapes, **jsonlite** writes
-UTF-8; both decode to the same string). One numeric residual remains as well:
-a categorical centroid `position` may differ in the last float64 digit, because
-the two languages sum a category's coordinates in a different order. It is a
-JSON double either way and is ~9 orders of magnitude below the float32
-precision the coordinates are drawn at.
+The cross-writer guarantee is **semantic equality of every export, plus byte
+identity of the uncompressed binary payloads**. One input written by
+`cellucid.prepare()` and by `cellucid_prepare()` produces:
+
+- **byte-identical `points_<dim>d.bin`, `vectors/<index>_<dim>d.bin`, `obs/`,
+  `var/`, and connectivity payloads** when `compression=None` — same bytes, same
+  length, same order. The single float32 rounding described above is what makes
+  that true of the coordinate and vector payloads, and the pinned little-endian
+  byte order is what makes it true on any architecture rather than only on the
+  little-endian ones;
+- **equal** `dataset_identity.json`, `obs_manifest.json`, `var_manifest.json`,
+  and `connectivity_manifest.json` — the same keys with the same parsed values,
+  which is what a reader consumes.
+
+Byte identity does **not** extend to the JSON files as bytes. It does extend to
+the compressed `.gz` payloads, but only as far as the two zlib builds agree.
+Every known difference is listed here; none of them changes a value a reader
+parses.
+
+The **whole ten-byte gzip member header is identical between the two writers, on
+every platform, unconditionally**: the magic `1f 8b`, deflate, no optional header
+fields, `MTIME = 0`, the RFC 1952 §2.3.1 extra-flags byte for the level (`0x04`
+at level 1, `0x02` at level 9, `0x00` in between), and `OS = 0xff`, the
+"unknown" code. Python writes it through `gzip.GzipFile(filename="", mtime=0)`;
+`cellucid_prepare()` replaces the header `gzfile()` produced with those same ten
+bytes, because `gzfile()` would otherwise stamp the code of the platform zlib was
+built for and `XFL = 0x00` at every level. The CRC32 and ISIZE trailer bytes
+always match as well.
+
+A **complete compressed member is byte-identical across the writers whenever the
+two zlib builds agree** — verified for a 4 KiB float32 payload at all nine
+compression levels. When the builds differ, only the deflate stream between that
+header and that trailer differs. Measured with R linked against zlib 1.3.2 and
+Python against zlib 1.2.12, one 4,495,576-byte payload compressed at level 6 to
+4,160,196 bytes under R and 4,163,855 bytes under Python. That version pairing is
+an example of build skew rather than a property of the packages: link both
+languages against one zlib and the compressed bytes match. The cause is the zlib
+build and not either writer, which two measurements pin down — within a single
+zlib, chunked deflate equals one-shot deflate, which rules out R's 16 KiB
+streaming, and the two writers agree at every level on the 4 KiB payload, which
+could not happen if their `deflateInit2` parameters differed.
+
+| # | Where | Python writes | R writes |
+| --- | --- | --- | --- |
+| 1 | end of every JSON file | no trailing newline (`write_text(json.dumps(...))`) | one trailing `\n` (`writeLines()`) |
+| 2 | `dataset_identity.json` layout | `json.dumps(indent=2)` | `jsonlite::prettify(indent = 2)` — a different pretty-printer, with its own array and whitespace layout |
+| 3 | separators in the three compact manifests | `, ` and `: ` | `,` and `:` |
+| 4 | non-ASCII text in any JSON file | escaped as `\uXXXX` | written as UTF-8; both decode to the same string |
+| 5 | categorical centroid `position` | — | may differ from Python in the last float64 digit, because the two languages sum a category's coordinates in a different order |
+
+Difference 5 is the only numeric one; it is a JSON double either way and is ~9
+orders of magnitude below the float32 precision the coordinates are drawn at.
+
+To compare two exports across writers, compare parsed JSON rather than JSON
+bytes, and compare the payloads either uncompressed or after decompression — that
+comparison holds whichever zlib each language was built against.
 
 Gzip payloads use a fixed timestamp and no filename header, so repeated exports
 do not change their compressed bytes because of the clock or output directory.
@@ -759,8 +960,10 @@ Likely causes:
   [Exact key sets](#exact-key-sets-applies-to-every-manifest)),
 - a hand-edited manifest whose cross-file counts disagree —
   `stats.n_genes` vs `var_manifest.json` `fields` length, `stats.n_edges` vs
-  `connectivity_manifest.json` `n_edges`, or `obs_fields` vs the obs manifest
-  field order.
+  `connectivity_manifest.json` `n_edges`, `stats.n_obs_fields` vs the
+  `obs_fields` array length or vs
+  `n_categorical_fields + n_continuous_fields`, or `obs_fields` vs the obs
+  manifest field order.
 
 Fix:
 - confirm the folder contains both `dataset_identity.json` and

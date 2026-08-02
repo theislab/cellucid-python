@@ -19,7 +19,7 @@ Use when:
 - you want to share/host a stable export folder.
 
 Implementation:
-- `cellucid-python/src/cellucid/server.py`
+- `cellucid-python/src/cellucid/server/`
 
 ### 2) AnnData server (`AnnDataServer`)
 
@@ -66,6 +66,46 @@ Server metadata (version, mode, counts):
 ```bash
 curl -s http://127.0.0.1:8765/_cellucid/info | python -m json.tool
 ```
+
+(python-protocol-capability-endpoint)=
+### `GET /_cellucid/protocol`
+
+The wire capabilities this installation accepts:
+
+```bash
+curl -s http://127.0.0.1:8765/_cellucid/protocol | python -m json.tool
+```
+
+```json
+{
+  "commands": ["clearHighlights", "debug_snapshot", "freeze", "highlight",
+               "ping", "requestSessionBundle", "resetCamera", "setColorBy",
+               "setVisibility"],
+  "events": ["click", "command_error", "debug_snapshot", "hover", "pong",
+             "ready", "selection", "session_bundle"]
+}
+```
+
+- `events` — every event type `_require_inbound_jupyter_event` accepts on
+  `POST /_cellucid/events`. A viewer emits only the types named here.
+- `commands` — every command this installation may send into the iframe, which
+  is also exactly the set of names a `command_error` may report as having
+  failed.
+
+Both are lists that grow; the key set does not, and there is deliberately no
+version number to compare against. A viewer validates payloads against exact
+key sets, so a capability announced as a new key would break the builds this
+route exists to protect, and a version string would be a proxy for the
+capability rather than evidence of it. Read
+{doc}`11_hooks_events_protocol_and_schema` for why the route exists at all.
+
+The body is a constant of the installed package — no viewer id, no token, no
+dataset — so this route needs no credentials, exactly like `/_cellucid/health`
+and `/_cellucid/info`. It is answered from the same declaration the validator
+reads, so it cannot announce a capability the notebook would then reject.
+
+Implementation:
+- `_protocol_capability_document` in `src/cellucid/jupyter/_wire.py`
 
 ### `POST /_cellucid/events`
 
@@ -210,6 +250,16 @@ It is not a firewall and does not stop:
 `viewerToken`, and `type`. The server authenticates the token before delivering
 the event exactly once. Unknown viewers return `404`; missing or incorrect
 credentials return `403`.
+
+### The capability route carries no credentials, because it carries no secret
+
+`GET /_cellucid/protocol` answers anyone who can reach the port, exactly as
+`/_cellucid/health` and `/_cellucid/info` do. Its body is the same for every
+viewer, every dataset and every request — it is a property of the installed
+`cellucid` version, not of your data — so there is nothing in it a token would
+be protecting. It is also read-only: no state is created, consumed or
+authenticated. The `Host` check and the CORS rules above apply to it like any
+other route.
 
 ### Session bundle upload is token-bound and one-shot
 

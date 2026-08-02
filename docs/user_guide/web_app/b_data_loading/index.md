@@ -39,10 +39,12 @@ Use this as a decision tree. You can always switch later.
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
-:width: 246px
+:alt: The Cellucid Session panel with a dataset loaded: a summary table of dataset, description, source, URL, cells, genes, obs fields and connectivity; a Sample datasets dropdown; H5AD, Zarr ZIP and Prepared buttons under Local data; Remote server and GitHub data text fields each with a Connect button; and Save State and Load State buttons.
+:width: 524px
 
-The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
+Every loading path lives in its own labelled group of the Session panel, and
+Save State and Load State stay beside the dataset controls. The summary table at
+the top always describes the dataset currently loaded, whichever path loaded it.
 ```
 
 :::{note}
@@ -89,6 +91,14 @@ catalog contract, and publish stable dataset-specific links.
 
 Load the scVelo pancreas sample and verify its 1D/2D/3D embeddings,
 dimension-matched velocity, metadata, genes, connectivity, and provenance.
+:::
+
+:::{grid-item-card} {octicon}`verified;1.5em;sd-mr-1` Sample Provenance
+:link: 12_sample_dataset_provenance
+:link-type: doc
+
+What to cite for each built-in sample, which one can be rebuilt and checked
+from its recipe, and what is recorded for the four that cannot.
 :::
 
 ::::

@@ -23,8 +23,8 @@ If you are new to the codebase, start here before diving into any single module.
 
 ```
 cellucid/index.html
-  ├─ defines: sidebar DOM + <canvas id="glcanvas">
-  ├─ loads:   early theme/analytics bootstraps
+  ├─ defines: sidebar DOM + <canvas id="glcanvas">, CSP, deferred (disabled) controls
+  ├─ loads:   ui/core/theme-init.js, ui/core/ga-init.js   (classic, pre-module)
   └─ runs:    assets/js/app/main.js  (ES module)
 
 main.js (orchestrator)
@@ -34,12 +34,21 @@ main.js (orchestrator)
   ├─ data sources       → data/data-source-manager.js (local/remote/GitHub/Jupyter)
   ├─ data loaders       → data/data-loaders.js (binary + manifests + h5ad/zarr adapters)
   ├─ sessions           → app/session/session-serializer.js (.cellucid-session bundles)
-  └─ analysis           → app/analysis/* (compute backends + plots + UI)
+  ├─ analysis           → app/analysis/* (compute backends + plots + UI)
+  └─ admits deferred controls once their listeners exist
 
 DataState (state coordinator)
-  ├─ emits events: visibility/field/highlight/page/dimension changes
+  ├─ emits events: visibility/field/highlight/page/dimension/vectorFields changes
   ├─ owns: typed arrays + per-view contexts
   └─ calls viewer: updateColors/updateTransparency/updatePositions/etc
+
+  the one-way rule
+  ───────────────
+  UI module ──event──▶ DataState ──explicit method──▶ viewer ──▶ GPU
+       ▲                    │
+       └────event───────────┘
+  A UI module never reaches past DataState into the viewer, and the viewer
+  never reads the DOM. Both shortcuts have been the source of regressions.
 ```
 
 Design goal: **keep “hot” work** (per-frame render and per-point math) inside the renderer and state managers, not in `main.js` or UI modules.
@@ -50,8 +59,12 @@ Design goal: **keep “hot” work** (per-frame render and per-point math) insid
 
 The high-level startup flow is:
 
-1) `cellucid/index.html` loads `assets/js/app/main.js` as an ES module.
-2) `main.js` creates a WebGL2 viewer: `createViewer({ canvas, labelLayer, viewTitleLayer, sidebar })`.
+1) `cellucid/index.html` runs its two classic bootstraps (`ui/core/theme-init.js`,
+   `ui/core/ga-init.js`), then loads `assets/js/app/main.js` as an ES module.
+2) `main.js` creates a WebGL2 viewer: `createViewer({ canvas, labelLayer, viewTitleLayer })`.
+   The full signature also accepts `onViewFocus`; the bootstrap does not pass it.
+   If the canvas yields no `webgl2` context this throws immediately and the
+   startup-failure card replaces the app. There is no software renderer.
 3) `main.js` creates the app state: `createDataState({ viewer, labelLayer })`.
 4) `main.js` initializes notifications and analytics, then sets up the `DataSourceManager`.
 5) The app decides what to load first:
@@ -63,6 +76,18 @@ The high-level startup flow is:
    - points buffers (embedding positions, colors, outlier quantiles, etc.)
    - optional connectivity (KNN graph edges)
 7) The app initializes the UI coordinator (`initUI`) which wires the sidebar modules to state/viewer.
+8) Only once their listeners exist are the deferred controls (data sources,
+   renderer toggles, benchmark) enabled, and the live-region line under the
+   dataset picker switches from *“Starting Cellucid…”* to *“Data sources are
+   ready…”*.
+
+:::{important}
+Step 8 is an invariant, not a nicety. Any control whose handler is wired after
+an `await` in this bootstrap must be authored `disabled` in `index.html` and
+registered with `ui/core/deferred-control-readiness.js`. A control that is
+clickable before its listener exists silently discards the click, which is
+indistinguishable from a bug to the user.
+:::
 
 ---
 

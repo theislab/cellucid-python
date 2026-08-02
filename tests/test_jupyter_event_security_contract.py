@@ -5,6 +5,8 @@ import inspect
 import json
 import struct
 import tempfile
+import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -17,6 +19,9 @@ import pytest
 
 import cellucid._server_base as server_base
 import cellucid.jupyter as jupyter
+import cellucid.jupyter._base as jupyter_base
+import cellucid.jupyter._exported as jupyter_exported
+import cellucid.jupyter._wire as wire
 from cellucid.anndata_server import AnnDataServer
 
 VIEWER_ID = "security-contract-viewer"
@@ -119,6 +124,16 @@ def _known_inbound_events(viewer_id: str) -> list[tuple[str, dict[str, object], 
                 "bytes": 1024,
                 "path": "/tmp/session bundle.cellucid-session",
             },
+        ),
+        (
+            "command_error",
+            {
+                "type": "command_error",
+                "viewerId": viewer_id,
+                "command": "setColorBy",
+                "reason": "Field CD8A is not loaded",
+            },
+            {"command": "setColorBy", "reason": "Field CD8A is not loaded"},
         ),
     ]
 
@@ -533,7 +548,7 @@ def test_every_known_inbound_event_preserves_its_exact_payload() -> None:
     assert len(delivered) == len(known_events)
 
 
-@pytest.mark.parametrize("event_index", range(7))
+@pytest.mark.parametrize("event_index", range(len(_known_inbound_events("probe"))))
 def test_inbound_event_rejects_every_undeclared_property_before_callback_dispatch(
     event_index: int,
 ) -> None:
@@ -588,6 +603,250 @@ def test_inbound_event_rejects_unknown_types_missing_fields_and_routing_extras(
 
     assert delivered == []
     assert viewer.state.last_event is None
+
+
+def _command_error(viewer_id: str, **overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "type": "command_error",
+        "viewerId": viewer_id,
+        "command": "setColorBy",
+        "reason": "Jupyter set-color-by field must be exact non-empty text",
+    }
+    record.update(overrides)
+    return record
+
+
+def test_command_error_reaches_every_notebook_surface(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    viewer = jupyter.BaseViewer()
+    handled: list[dict[str, object]] = []
+    viewer.register_hook("command_error", handled.append)
+
+    viewer._handle_frontend_message(_command_error(viewer._viewer_id))
+
+    payload = {
+        "command": "setColorBy",
+        "reason": "Jupyter set-color-by field must be exact non-empty text",
+    }
+    assert handled == [payload]
+    assert viewer.state.command_error == payload
+    assert viewer.state.last_event_type == "command_error"
+    assert [entry[1:] for entry in viewer._recent_events] == [
+        ("command_error", payload)
+    ]
+    # A notebook that took the event over is not also reported to.
+    assert capsys.readouterr().err == ""
+
+
+def test_command_error_wakes_a_notebook_blocked_on_wait_for_event() -> None:
+    viewer = jupyter.BaseViewer()
+    viewer.register_hook("command_error", lambda _event: None)
+    received: list[dict[str, Any]] = []
+
+    def wait() -> None:
+        received.append(viewer.wait_for_event("command_error", timeout=10.0))
+
+    waiter = threading.Thread(target=wait)
+    waiter.start()
+    try:
+        # `wait_for_event` returns the *next* matching event, so publish until
+        # the waiter has entered the wait rather than racing it once.
+        deadline = time.monotonic() + 10.0
+        while waiter.is_alive() and time.monotonic() < deadline:
+            viewer._handle_frontend_message(_command_error(viewer._viewer_id))
+            waiter.join(timeout=0.05)
+    finally:
+        waiter.join(timeout=10.0)
+
+    assert not waiter.is_alive()
+    assert received == [
+        {
+            "command": "setColorBy",
+            "reason": "Jupyter set-color-by field must be exact non-empty text",
+        }
+    ]
+
+
+def test_unhandled_command_error_is_printed_where_the_notebook_looks(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    viewer = jupyter.BaseViewer()
+    observed: list[dict[str, object]] = []
+    viewer.register_hook("message", observed.append)
+
+    viewer._handle_frontend_message(_command_error(viewer._viewer_id))
+    viewer._handle_frontend_message(
+        _command_error(
+            viewer._viewer_id,
+            command="highlight",
+            reason="Jupyter highlight cells must be a non-empty array",
+        )
+    )
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    # Named by the Python call that sent it, not by the wire type, and repeated
+    # for every failure rather than deduplicated.
+    assert captured.err == (
+        "[cellucid] viewer.set_color_by(...) did not take effect in the viewer: "
+        "Jupyter set-color-by field must be exact non-empty text\n"
+        "[cellucid] The viewer is unchanged. Handle this in code with "
+        "@viewer.on_command_error.\n"
+        "[cellucid] viewer.highlight_cells(...) did not take effect in the viewer: "
+        "Jupyter highlight cells must be a non-empty array\n"
+        "[cellucid] The viewer is unchanged. Handle this in code with "
+        "@viewer.on_command_error.\n"
+    )
+    assert [entry["event"] for entry in observed] == [
+        "command_error",
+        "command_error",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("overrides", "match"),
+    [
+        ({"command": "notACommand"}, "one current Jupyter command"),
+        ({"command": "command_error"}, "one current Jupyter command"),
+        ({"command": ""}, "command_error command"),
+        ({"command": None}, "command_error command"),
+        ({"command": "setColorBy "}, "command_error command"),
+        ({"reason": ""}, "command_error reason"),
+        ({"reason": None}, "command_error reason"),
+        ({"reason": "line one\nline two"}, "command_error reason"),
+        # This text is printed to a terminal, so escape sequences must not
+        # survive the wire.
+        ({"reason": "\x1b[31mred"}, "command_error reason"),
+        ({"reason": "carriage\rreturn"}, "command_error reason"),
+        ({"reason": "x" * 501}, "at most 500 characters"),
+        ({"requestId": "unexpected"}, "unknown requestId"),
+    ],
+)
+def test_command_error_rejects_unnamed_commands_and_unbounded_reasons(
+    overrides: dict[str, object],
+    match: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    viewer = jupyter.BaseViewer()
+    delivered: list[dict[str, object]] = []
+    viewer.register_hook("message", delivered.append)
+
+    with pytest.raises((TypeError, ValueError), match=match):
+        viewer._handle_frontend_message(
+            _command_error(viewer._viewer_id, **overrides)
+        )
+
+    assert delivered == []
+    assert viewer.state.command_error is None
+    assert list(viewer._recent_events) == []
+    assert capsys.readouterr().err == ""
+
+
+def test_command_error_accepts_the_longest_declared_reason() -> None:
+    viewer = jupyter.BaseViewer()
+    handled: list[dict[str, object]] = []
+    viewer.register_hook("command_error", handled.append)
+
+    viewer._handle_frontend_message(
+        _command_error(viewer._viewer_id, reason="x" * 500)
+    )
+
+    assert handled == [{"command": "setColorBy", "reason": "x" * 500}]
+
+
+def test_the_published_events_are_exactly_the_events_a_viewer_may_send() -> None:
+    """``/_cellucid/protocol`` publishes what the validator accepts, no more.
+
+    ``_known_inbound_events`` is the independent list here: every entry in it is
+    driven through ``_handle_frontend_message`` by
+    ``test_every_known_inbound_event_preserves_its_exact_payload``, so tying the
+    published set to it means the route can only name types this installation
+    demonstrably accepts, and can only omit one by leaving a type untested.
+    """
+    published = wire._protocol_capability_document()["events"]
+
+    assert set(published) == {name for name, _message, _payload in _known_inbound_events(VIEWER_ID)}
+
+
+def test_no_published_event_is_refused_by_the_validator_as_an_unknown_type() -> None:
+    for event_type in wire._protocol_capability_document()["events"]:
+        with pytest.raises((TypeError, ValueError)) as rejection:
+            wire._require_inbound_jupyter_event(
+                {"type": event_type, "viewerId": VIEWER_ID},
+                expected_viewer_id=VIEWER_ID,
+            )
+        # The stripped-down probe must fail on its missing fields, never on the
+        # type: a type rejection here would mean the route advertised an event
+        # the notebook turns into `500 Viewer callback failed`.
+        assert "Unknown inbound Jupyter event type" not in str(rejection.value)
+
+    with pytest.raises(ValueError, match="Unknown inbound Jupyter event type"):
+        wire._require_inbound_jupyter_event(
+            {"type": "command_success", "viewerId": VIEWER_ID},
+            expected_viewer_id=VIEWER_ID,
+        )
+
+
+def test_the_published_commands_are_exactly_the_commands_python_can_send() -> None:
+    published = wire._protocol_capability_document()["commands"]
+
+    # `_COMMAND_PYTHON_CALLERS` is declared in a different module, and every key
+    # of it names a real `BaseViewer` method, so a command published here is one
+    # a notebook can actually issue.
+    assert set(published) == set(jupyter_base._COMMAND_PYTHON_CALLERS)
+
+
+def test_every_published_command_may_be_named_by_a_command_error() -> None:
+    viewer = jupyter.BaseViewer()
+    handled: list[dict[str, object]] = []
+    viewer.register_hook("command_error", handled.append)
+    published = wire._protocol_capability_document()["commands"]
+
+    for command in published:
+        viewer._handle_frontend_message(
+            _command_error(viewer._viewer_id, command=command)
+        )
+
+    assert [entry["command"] for entry in handled] == list(published)
+
+    with pytest.raises(ValueError, match="one current Jupyter command"):
+        viewer._handle_frontend_message(
+            _command_error(viewer._viewer_id, command="setPointSize")
+        )
+
+
+def test_command_error_arrives_through_the_authenticated_http_path() -> None:
+    viewer = jupyter.BaseViewer()
+    handled: list[dict[str, object]] = []
+    viewer.register_hook("command_error", handled.append)
+    viewer._activate()
+    body = json.dumps(
+        _command_error(
+            viewer._viewer_id,
+            viewerToken=viewer._viewer_token,
+        )
+    ).encode("utf-8")
+
+    try:
+        with _running_server() as (host, port):
+            status, response = _request(
+                host,
+                port,
+                "/_cellucid/events",
+                body=body,
+                headers={"Content-Type": "application/json"},
+            )
+        assert status == 200
+        assert response == {"status": "ok", "delivered": True}
+        assert handled == [
+            {
+                "command": "setColorBy",
+                "reason": "Jupyter set-color-by field must be exact non-empty text",
+            }
+        ]
+    finally:
+        viewer.stop()
 
 
 def test_event_http_path_rejects_undeclared_property_without_hook_delivery() -> None:
@@ -845,7 +1104,7 @@ def test_session_callback_absence_or_failure_is_non_success_and_removes_temp_fil
 
 
 def _routing_snapshot() -> tuple[dict[str, object], set[object]]:
-    return dict(server_base._event_callbacks), set(jupyter._active_viewers)
+    return dict(server_base._event_callbacks), set(jupyter_base._active_viewers)
 
 
 def test_missing_prepared_data_does_not_change_viewer_registries(
@@ -884,7 +1143,9 @@ def test_server_start_failure_rolls_back_viewer_registration_and_server_resource
 
     before = _routing_snapshot()
     if viewer_type == "prepared":
-        monkeypatch.setattr(jupyter, "CellucidServer", FailingServer)
+        # ``CellucidViewer._start_server`` resolves ``CellucidServer`` in the
+        # module that defines the viewer, so the patch has to name that module.
+        monkeypatch.setattr(jupyter_exported, "CellucidServer", FailingServer)
 
         def constructor() -> object:
             return jupyter.CellucidViewer(
@@ -938,9 +1199,12 @@ def test_display_failure_rolls_back_started_server_and_viewer_registries(
     def fail_display(_viewer: object) -> None:
         raise RuntimeError("display failed")
 
-    monkeypatch.setattr(jupyter, "CellucidServer", StartedServer)
+    # Each patch names the module where the caller resolves the symbol:
+    # ``CellucidServer`` in the viewer module, ``_detect_jupyter_context`` in
+    # the base module whose ``__init__`` calls it.
+    monkeypatch.setattr(jupyter_exported, "CellucidServer", StartedServer)
     monkeypatch.setattr(
-        jupyter,
+        jupyter_base,
         "_detect_jupyter_context",
         lambda: {"in_jupyter": True},
     )

@@ -29,6 +29,12 @@
 
 The Active filters UI is the **source of truth** for current visibility.
 
+:::{important}
+Its label in the app is **`Active filters (selected view only):`**, not just
+“Active filters”. The parenthesis is the whole story: this block describes one
+view, and in multiview a different panel can have a completely different list.
+:::
+
 It has two parts:
 
 - A **count line**:
@@ -39,24 +45,67 @@ It has two parts:
 
 ### Empty state
 
-If no filters are active, the list shows:
-- `No filters active`
+If no filters are active, the list shows `No filters active`:
+
+```{figure} ../../../_static/screenshots/filtering/active-filters-empty.png
+:alt: A block headed ACTIVE FILTERS (SELECTED VIEW ONLY) with a small circled i button beside the heading, the line Showing all 3,696 points, and a bordered area containing the words No filters active.
+:width: 480px
+
+The resting state. `Showing all N points` and `No filters active` always agree —
+if they ever disagree, you are looking at a different view.
+```
+
+Click the small `i` next to the heading to see why the label says
+*selected view only*:
+
+```{figure} ../../../_static/screenshots/filtering/active-filters-scope-tooltip.png
+:alt: The Active filters heading with its circled i button pressed and ringed, and a pop-up panel opened to its right reading that filters stay with the selected panel when its coloring changes while other panels remain unchanged.
+:width: 908px
+
+The app's own explanation of filter scope, in its own words.
+```
 
 ### Filter rows (what the UI contains)
+
+```{figure} ../../../_static/screenshots/filtering/active-filters-one-row.png
+:alt: The Active filters block reading Showing 1,876 of 3,696 points above a single row containing a ticked blue checkbox, the text clusters colon hiding Ductal, Ngn3 cut off with an ellipsis, and a circled cross button at the right edge.
+:width: 480px
+
+One row, left to right: the enable checkbox, the summary text, the `×` that
+removes it.
+```
 
 Each filter row includes:
 
 - a **checkbox**:
   - checked = filter enabled (affects visibility)
   - unchecked = filter disabled (does not affect visibility)
+  - its tooltip reads `Disable this filter` / `Enable this filter`
 - a **text summary** (human-readable):
-  - continuous range: `Field: min – max`
-  - categorical hides: `Field: hiding A, B, ...`
+  - continuous range: `Field: min – max`, both bounds to two decimal places
+  - categorical hides: `Field: hiding A, B, C, D` — at most four names, then
+    ` +N more`
   - outlier filter: `Field: outlier ≤ 95%`
-- a **remove button** `×`:
+- a **remove button** `×` (tooltip `Remove this filter`):
   - removes the filter and resets it to its default “no filter” state
 
-Disabled filters remain listed and are labeled `(disabled)` so you can re-enable them.
+:::{tip}
+**The row text is usually too long for the sidebar and is cut off with an
+ellipsis.** The full, untruncated text is the row's tooltip — hover the row to
+read it. This is also why a `(disabled)` suffix is often invisible; see below.
+:::
+
+Disabled filters stay in the list. Internally their summary text gains a
+` (disabled)` suffix, but the reliable visual cue is that **the whole row is
+greyed and struck through**:
+
+```{figure} ../../../_static/screenshots/filtering/active-filters-row-disabled.png
+:alt: Three filter rows where the middle row has an empty checkbox and is drawn grey and struck through while the rows above and below stay black with ticked checkboxes, the mouse pointer on the cleared checkbox.
+:width: 480px
+
+The middle row is disabled. Its configuration is intact and one click restores
+it.
+```
 
 ### “Remove” vs “Reset” vs “Disable”
 
@@ -90,8 +139,19 @@ Interpretation:
 
 This is extremely useful for diagnosing which filter is “doing the work” in a large filter stack.
 
+```{figure} ../../../_static/screenshots/filtering/active-filters-three-rows.png
+:alt: The Active filters block reading Showing 709 of 3,696 points above three ticked rows; the first reads S_score minus 0.15 to 1.14 followed by a cell count, the second reads clusters colon hiding Ductal, Epsilon cut off with an ellipsis, and the third reads clusters colon outlier less than or equal to 95 percent with nothing after it.
+:width: 480px
+
+Three filters of three different kinds on the same 3,696 cells. The first two
+carry a `visible / available` suffix; the outlier row carries none.
+```
+
 :::{note}
-Not every filter type currently shows per-filter counts (for example, outlier filters may only affect the overall “Showing X of Y points” line).
+**Category and numeric-range filters carry per-filter counts. Outlier filters
+do not** — an outlier row only ever moves the overall `Showing X of Y points`
+line. That is a property of the row, not a sign that the outlier filter is
+inactive.
 :::
 
 ### View/snapshot awareness (easy pitfall)
@@ -102,17 +162,6 @@ Active filters is **view-scoped**:
 - In Live + Snapshots mode, each snapshot can have a different filter stack.
 
 If you’re in grid mode, click the view/snapshot you care about first, then check Active filters.
-
----
-
-## Interface reference
-
-```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
-:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
-:width: 246px
-
-Selecting a categorical observation field colors the embedding and exposes its complete category legend.
-```
 
 ---
 

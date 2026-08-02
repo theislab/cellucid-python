@@ -69,7 +69,9 @@ When you create a viewer, Python starts a **local HTTP server** (by default on `
 The viewer object also owns:
 - a **viewer ID** (`viewerId`) and **token** (`viewerToken`) used to route/authenticate messages,
 - a **URL** you can open manually (`viewer.viewer_url`),
-- hook registries for `on_selection`, `on_hover`, `on_click`, `on_ready`, `on_message`,
+- hook registries for `on_selection`, `on_hover`, `on_click`, `on_ready`,
+  `on_command_error` (only the web build that emits `command_error` sends it),
+  and `on_message`,
 - a small, thread-safe **latest-event snapshot** (`viewer.state`),
 - lifecycle methods (`viewer.display()`, `viewer.stop()`).
 

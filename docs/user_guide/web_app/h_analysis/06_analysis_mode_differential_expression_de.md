@@ -48,6 +48,25 @@ If you have many pages, the selector shows:
 - base pages under **Pages**
 - derived options under **Wildcards**, including **Rest of \<page\>**
 
+```{figure} ../../../_static/screenshots/analysis/de-page-selection.png
+:alt: The Differential Expression form with the heading "Select pages to compare:", a Page A select showing "Page 1", the word "vs", a Page B select showing "Rest of Page 1", a Statistical method select reading Wilcoxon with its description line, a collapsed Performance Settings row, and a Run Differential Expression button.
+:width: 488px
+
+The configured form. Pages with **zero** cells are listed but disabled, so an
+invalid pair cannot be assembled by accident.
+```
+
+Until two non-empty options exist, the selector replaces itself with a notice:
+
+```{figure} ../../../_static/screenshots/analysis/de-needs-two-groups.png
+:alt: The Differential Expression panel showing the notice "Differential expression requires two non-empty cell groups." above two greyed rows reading "Page 1 (0 cells)" and "Rest of Page 1 (3,696 cells)", with the Statistical method select and the Run button still below.
+:width: 488px
+
+`Differential expression requires two non-empty cell groups.` — shown whenever
+fewer than two of the available pages have any cells in them. The counts beside
+each row tell you which one is empty.
+```
+
 ### What “Rest of \<page\>” means here
 
 `Rest of Page A` means “all cells not in Page A”.
@@ -63,12 +82,18 @@ See {doc}`01_analysis_mental_model` for the visibility vs membership distinction
 
 DE requires enough cells in both groups:
 - the implementation enforces a minimum of **10 valid cells** per group (default).
-- if either page is smaller than the minimum, the whole run is refused.
-- the check is then repeated **per gene**, on the cells that actually carry a
+- the run itself is only refused when a chosen page has **zero** cells; a page with
+  one to nine cells is accepted and started.
+- the check is applied **per gene**, on the cells that actually carry a
   measured value for that gene. A gene that falls below the minimum on either
   side is skipped: it gets no p-value, no adjusted p-value, and is excluded from
   the FDR correction. The summary reports how many genes this happened to — see
   [Which genes the correction is applied to](#which-genes-the-correction-is-applied-to).
+- so a page of five cells does not error. It runs, every gene fails the per-gene
+  check, and you get a result reading `Genes tested (FDR denominator) 0` with the
+  entire panel counted under *Not tested*. An empty volcano with a zero
+  denominator is the app telling you the group was too small, not that nothing
+  differs.
 
 ---
 
@@ -168,7 +193,7 @@ You’ll see:
 | --- | --- |
 | **Genes tested (FDR denominator)** | Genes that produced a p-value. This is the `m` Benjamini–Hochberg used. |
 | **Not tested (< N cells with a value)** | Genes skipped before testing because a group had fewer than `N` cells with a measured value (`N` = the minimum group size, 10 by default). These have no p-value and no adjusted p-value. |
-| **Significant (FDR < 0.05)** | Tested genes passing the current p-value and log2FC thresholds. Always a subset of *Genes tested*. |
+| **Significant (FDR ≤ 0.05, \|log₂FC\| ≥ 1)** | Tested genes passing the current p-value **and** fold-change thresholds. The row label is rebuilt from the two cutoffs in force, so it changes when you change them. Always a subset of *Genes tested*. |
 | **Upregulated** | Significant genes with log2FC > 0. |
 | **Downregulated** | Significant genes with log2FC < 0. |
 
@@ -176,7 +201,48 @@ You’ll see:
 
 Upregulated/downregulated are defined by the sign of log2FC (Page A relative to Page B).
 
+```{figure} ../../../_static/screenshots/analysis/de-fdr-denominator.png
+:alt: A five-row table reading Genes tested (FDR denominator) 3,753; Not tested (< 10 cells with a value) 0; Significant (FDR ≤ 0.05, |log₂FC| ≥ 1) 1,097; Upregulated 396; Downregulated 701.
+:width: 906px
+
+Both halves of the panel are reported, which is what makes the false-discovery
+rate reconstructable from this table alone. *Not tested* reads `0` here because
+this export stores a value for every cell; on a sparser matrix it will not.
+```
+
+### While it runs
+
+```{figure} ../../../_static/screenshots/analysis/de-running.png
+:alt: The Differential Expression panel mid-run, with the run button disabled and reading "Running..." and a progress bar above it labelled with the phase "Loading & Computing".
+:width: 488px
+
+The two phases are named literally: `Loading & Computing`, then
+`Multiple Testing Correction`. Changing any control while a run is in flight
+cancels it.
+```
+
 ### Volcano plot
+
+```{figure} ../../../_static/screenshots/analysis/de-sidebar-result.png
+:alt: A small volcano plot in the sidebar with a red cloud on the right, a blue cloud on the left and a grey cloud in the middle, its axes labelled and no legend, and an "⤢ Expand" button below it with a pointer on it.
+:width: 448px
+
+The sidebar shows the volcano **and nothing else**. Summary statistics, the ranked
+gene table and every threshold control live behind `⤢ Expand`. The legend is
+absent on purpose: at this width the band under the axis has room for the tick
+labels and the axis title or for the legend, and the labels win. Set **Show
+legend** to any explicit position in the expanded view and it is drawn there
+regardless.
+```
+
+```{figure} ../../../_static/screenshots/analysis/de-volcano-expanded.png
+:alt: The expanded Differential Expression modal headed "DIFFERENTIAL EXPRESSION: PAGE 1 VS REST OF PAGE 1" with a labelled volcano plot over a legend reading Up (396), Down (701) and Not significant (2656) drawn below its axis title, an Export row of PNG SVG CSV, a PLOT OPTIONS column holding the p-value threshold, log2 FC threshold, FDR checkbox and label controls, a SUMMARY STATISTICS table, and a Top Differentially Expressed Genes table with a Top 5 select.
+:width: 1440px
+
+The expanded view, where DE is actually read. Four regions: plot, options and
+export, summary statistics, and the ranked gene table. There is room for the
+legend here, so it is drawn — below the axis title, never across it.
+```
 
 Axes:
 - **x-axis:** log2 fold change (A vs B)
@@ -189,25 +255,73 @@ Coloring (conceptual):
 
 Threshold controls (in the plot options):
 - p-value threshold (0.001 / 0.01 / 0.05 / 0.1)
-- log2FC threshold (slider, default 1.0 = 2-fold)
-- use adjusted vs raw p-values
-- label top N genes
-- point size and other rendering toggles
+- log2FC threshold (slider, 0 to 3 in steps of 0.25; default 1.0 = 2-fold)
+- use adjusted vs raw p-values (**on** by default)
+- maximum gene labels (0 to 50 in steps of 5; default 15)
+- point size, threshold lines, legend position, colour scheme
 
-### Top genes table (sidebar convenience)
+None of these re-runs the test. The statistics were fixed when the run finished;
+the thresholds only decide which genes are called significant, coloured and
+listed. That is why moving them is instant — and why the same run can report very
+different counts.
 
-The sidebar shows a small “Top Differentially Expressed Genes” table:
-- filtered by adjusted p-value threshold (default 0.05),
-- sorted by absolute log2FC,
-- limited to a small number of rows (for readability).
+::::{grid} 1 1 2 2
+:gutter: 3
 
-For the full ranked list, export CSV.
+:::{grid-item}
+```{figure} ../../../_static/screenshots/analysis/volcano-threshold-a.png
+:alt: A volcano plot at a log2 fold-change threshold of 0.5, with broad red and blue clouds of coloured points either side of a narrow grey band, and a legend below the axis title reading Up (750), Down (841) and Not significant (2162).
+:width: 1160px
+
+**|log₂FC| ≥ 0.5** — 1,591 genes significant, 750 up and 841 down.
+```
+:::
+
+:::{grid-item}
+```{figure} ../../../_static/screenshots/analysis/volcano-threshold-b.png
+:alt: The same volcano plot at a log2 fold-change threshold of 3, with the dashed threshold lines pushed far apart and nearly every point grey, and a legend below the axis title reading Up (0), Down (192) and Not significant (3561).
+:width: 1160px
+
+**|log₂FC| ≥ 3** — the same run, now 192 significant genes, all downregulated.
+```
+:::
+::::
+
+:::{warning}
+Do not untick **Use FDR-adjusted p-values** to get more hits. With thousands of
+genes tested at once, raw p-values below 0.05 will include hundreds of genes that
+are there by chance alone — that is exactly what the adjustment exists to remove.
+:::
+
+### Top genes table (expanded view only)
+
+“Top Differentially Expressed Genes” is drawn in the **expanded view**, never in
+the sidebar — the sidebar holds the volcano and the `⤢ Expand` button and nothing
+else. The table is:
+- filtered by the current p-value threshold (adjusted while **Use FDR-adjusted
+  p-values** is ticked, raw when it is not),
+- sorted by **absolute** log2FC, so the strongest movers in either direction come
+  first,
+- limited to the row count chosen in the `Top 5 / 10 / 20 / 100 / All` select
+  beside it.
+
+`All` shows every significant gene. To get the genes that did *not* pass the
+thresholds as well, export the CSV.
 
 ---
 
 ## Performance settings (when DE is slow)
 
 DE is gene-heavy: it can touch thousands of genes and hundreds of thousands of cells.
+```{figure} ../../../_static/screenshots/analysis/de-performance-settings.png
+:alt: The Performance Settings disclosure expanded under the Differential Expression form, showing four selects: Batch size set to "500 genes (recommended)", Memory budget set to 512 MB, Network parallelism set to 12 parallel, and Compute parallelism set to Auto.
+:width: 488px
+
+The four performance controls. They change how fast a run goes and never what it
+computes, so a slow run and a fast run of the same configuration return the same
+numbers.
+```
+
 Use **Performance Settings** (collapsible) to tune:
 
 - **Batch size**: how many genes to preload ahead of compute (higher can be faster but uses more memory).
@@ -234,10 +348,14 @@ Recommended workflow for very large datasets:
 
 ## Troubleshooting (DE)
 
-### Symptom: “Need at least 1 page for comparison”
+### Symptom: “Differential expression requires two non-empty cell groups.”
+
+This notice replaces the page selector when fewer than two of the available pages
+have any cells. Pressing **Run** with an incomplete pair instead reports
+`Select two non-empty cell groups to run differential expression`.
 
 Cause:
-- you don’t have enough pages/wildcards to populate A and B.
+- you don’t have enough non-empty pages/wildcards to populate A and B.
 
 Fix:
 - create highlight pages in Highlighted Cells (see {doc}`../f_highlighting_selection/index`),

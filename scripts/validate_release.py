@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import re
 import subprocess
+import tarfile
 import tomllib
 from pathlib import Path
 
@@ -114,6 +115,22 @@ def validate_recipe(version: str) -> str:
     return _validate_recipe_text(_read("scripts/publishing/meta.yaml"), version)
 
 
+#: Top-level directories that must never reach the public source distribution.
+#: ``tests`` is held out by the single ``prune tests`` line in ``MANIFEST.in``;
+#: ``scripts`` is absent only because it is not a package and no rule adds it.
+#: Neither exclusion is self-announcing, so both are asserted on the artifact.
+EXCLUDED_SDIST_DIRECTORIES = ("tests", "scripts")
+
+
+def _sdist_excluded_members(archive: tarfile.TarFile, version: str) -> tuple[str, ...]:
+    prefixes = tuple(
+        f"cellucid-{version}/{directory}/" for directory in EXCLUDED_SDIST_DIRECTORIES
+    )
+    return tuple(
+        sorted(name for name in archive.getnames() if name.startswith(prefixes))
+    )
+
+
 def validate_sdist(path: Path, version: str, expected_digest: str) -> Path:
     """Require one normalized source distribution to match the recipe digest."""
     if path.is_dir():
@@ -132,6 +149,16 @@ def validate_sdist(path: Path, version: str, expected_digest: str) -> Path:
     _require(
         actual_digest == expected_digest,
         (f"source-distribution SHA-256 {actual_digest} does not match meta.yaml {expected_digest}"),
+    )
+    with tarfile.open(path, mode="r:gz") as archive:
+        excluded = _sdist_excluded_members(archive, version)
+    _require(
+        not excluded,
+        (
+            "source distribution must not ship "
+            + " or ".join(EXCLUDED_SDIST_DIRECTORIES)
+            + f": found {', '.join(excluded)}"
+        ),
     )
     return path
 

@@ -233,11 +233,20 @@ If your export is too large for GitHub:
 
 ### 4.4 What repo path to enter in Cellucid
 
-In the Cellucid UI (GitHub connection), you will enter one of these:
+Expand **Session**, type the path into the **GitHub data:** field, and press
+**Connect**. Enter one of these:
 
 - `owner/repo` (if `datasets.json` is at repo root)
 - `owner/repo/exports` (if your exports root is in a folder)
 - `owner/repo@my-branch/exports` (if your exports root is on a custom branch)
+
+```{figure} ../../../_static/screenshots/data_loading/connect-github-catalog.png
+:alt: Close-up of the GitHub data control with an owner/repo/exports path typed into the text field and a mouse pointer resting on the Connect button beside it.
+:width: 496px
+
+The **GitHub data:** field takes the exports root, not a full URL and not a
+single dataset directory. Press **Connect** beside it.
+```
 
 Cellucid will then:
 - fetch and validate `datasets.json`
@@ -300,13 +309,23 @@ Use this section like a lookup table.
 3) Your exports root is in a different branch than you think.
 
 **How to confirm**
-- Open this URL in a browser (replace values):
+- Read the second notification. Cellucid prints the exact address it asked for,
+  in the form:
 
   ```text
-  https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>/datasets.json
+  Resource not found: https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>/datasets.json
   ```
 
-- If that URL 404s, Cellucid will also fail.
+- Open that URL in a browser tab. If it 404s there too, the path or branch is
+  wrong; if it loads there but not in Cellucid, suspect the network.
+
+```{figure} ../../../_static/screenshots/data_loading/fail-github-catalog-not-found.png
+:alt: Two stacked Cellucid notifications, the upper naming the raw.githubusercontent.com URL that returned not found and the lower explaining that the GitHub repository could not be reached and suggesting a check for a typo.
+:width: 776px
+
+What a wrong repository path looks like. The upper notification hands you the
+URL to test by hand.
+```
 
 **Fix**
 - Regenerate `datasets.json` with an explicit catalog default:

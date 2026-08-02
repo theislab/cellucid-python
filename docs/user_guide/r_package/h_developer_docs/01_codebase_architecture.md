@@ -1,12 +1,61 @@
 # Codebase Architecture
 
-`cellucid-r` is intentionally small. Most of the implementation lives in one file.
+`cellucid-r` exposes one public function, `cellucid_prepare()`, and splits the
+writer behind it across `R/` by responsibility: one module per axis, per encoding
+concern, and per publication step.
 
 ## Repository layout (high level)
 
 - `cellucid-r/R/cellucid_prepare.R`
-  - exports `cellucid_prepare()`
-  - contains the exporter implementation and helper functions
+  - exports `cellucid_prepare()`, the only public function
+  - validates the arguments, then drives the export in order and delegates each
+    step to the modules below
+- `cellucid-r/R/` — argument and identity rules
+  - `validate-arguments.R` — one function per argument value rule, plus the
+    reporter for arguments that were never supplied at all
+  - `validate-display-text.R` — the rule for text the viewer draws verbatim
+    (names, descriptions, source lines, category labels, field identifiers);
+    a cross-writer contract with `_display_text_defect()` in the Python package
+  - `identifiers.R` — what a name may be: the portable-filename rule for
+    `dataset_id`, and the display-text plus uniqueness rules for field
+    identifiers
+  - `dataset-identity.R` — the dataset's own name, id, description, creation
+    time, and source
+  - `output-path.R` — where the export may be written
+  - `error-messages.R` — the one list syntax every message uses to show a set of
+    values back to the caller
+- `cellucid-r/R/` — input axes
+  - `matrix-input.R` — base matrix, numeric data frame, or `Matrix::Matrix` into
+    one internal storage
+  - `embeddings.R` — the drawn coordinates, centered and scaled; keeps the scale
+    for the vector fields drawn on top of them
+  - `obs.R` — field-kind detection, categories and codes, and every obs payload
+  - `var.R` — naming the exported genes and reading one gene's column
+  - `connectivity.R` — the KNN graph, published as edge pairs from the strict
+    upper triangle
+  - `vector-fields.R` — per-cell vectors, scaled by their embedding's own scale
+    and ordered by code point so both writers assign the same indices
+  - `centroids.R` — category label positions and per-cell outlier distances
+- `cellucid-r/R/` — encoding and manifests
+  - `quantization.R` — continuous values narrowed to an integer code range,
+    including the named constant-range case
+  - `binary-payloads.R` — every payload byte, in the little-endian widths the
+    browser contract names
+  - `gzip-header.R` — the fixed ten-byte gzip header that makes a compressed
+    payload byte-identical on every machine
+  - `dtype-names.R` — the one place the bit width, the manifest dtype, and the
+    payload file extension are derived from each other
+  - `manifest.R` — the manifests, re-expanded and compared against the payloads
+    actually written before the generation is published
+- `cellucid-r/R/` — publication safety
+  - `export-lock.R` — one export generation at a time per output directory:
+    the native advisory lock plus the in-process registry
+  - `export-transaction.R` — publishing a generation is one step or none, with a
+    journal that resolves an interrupted export from what is on disk
+  - `export-filesystem.R` — guarded filesystem operations shared by the lock and
+    the transaction; a symlink or unexpected file type stops the export
+  - `native.R` — the complete `.Call()` surface of `src/export_lock.c`
+  - `zzz.R` — package unload hook that drains the native lock
 - `cellucid-r/src/export_lock.c`
   - the native export lock reached through `.Call()`
 - `cellucid-r/man/cellucid_prepare.Rd`

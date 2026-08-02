@@ -142,6 +142,16 @@ exclude_patterns = [
     "**.ipynb_checkpoints",
     "Thumbs.db",
     ".DS_Store",
+    # Authoring material for the documentation itself, not documentation. Both
+    # live inside the source tree so they sit beside what they describe, and
+    # both are excluded so Sphinx neither reads them nor reports them as pages
+    # missing from a toctree — which, under `-W`, would fail the build.
+    #
+    # Exclusion here does not exempt them from `tests/`: the Python contract
+    # suite walks `docs/**/*.md` directly. See
+    # `_tooling/screenshots/capture.mjs` and the checklist's conventions page.
+    "_tooling",
+    "user_guide/web_app/r_screenshot_checklist",
 ]
 
 source_suffix = {

@@ -155,14 +155,30 @@ This helps you reproduce edge cases quickly without waiting for large loads.
 
 ### Symptom: “Blank page / canvas is black”
 
+First, check whether you got a **“Cellucid could not start”** card. If you did,
+the bootstrap failed deliberately and the line beneath the heading is the reason
+— read it before anything else. A truly blank page means the module graph never
+ran at all, which is a serving problem, not an application one.
+
 Likely causes (ordered):
-1) WebGL2 not available (browser/GPU issue).
+1) WebGL2 not available (browser/GPU issue) — you will get the card, reading
+   “WebGL2 is required but not supported in this browser.”
 2) A JS exception during startup prevented viewer initialization.
 3) The app cannot fetch required files due to server/CORS/missing paths.
 
 How to confirm:
 - DevTools → Console: look for the first error after “Starting…”.
 - DevTools → Network: reload and look for `404` or blocked requests.
+
+### Symptom: “The data-source buttons are disabled”
+
+That is the intended initial state. Controls whose listeners are wired after an
+`await` in the bootstrap are authored `disabled` and enabled only once they are
+live; the line under the dataset picker says which phase you are in. If they
+never enable, the bootstrap threw — look for the startup card or the console.
+
+Locally this window is short enough to miss; throttle the network in DevTools if
+you need to observe it.
 
 Fix:
 - Confirm the current browser exposes WebGL2 with

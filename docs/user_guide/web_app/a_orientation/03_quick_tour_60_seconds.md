@@ -28,25 +28,40 @@ Choose **Choose a dataset** to open the data controls, or press {kbd}`Escape`
 to inspect the loaded default dataset first.
 
 ```{figure} ../../../_static/screenshots/web_app/startup-loaded-build.png
-:alt: Loaded Suo point cloud on a light grid with Community Annotation and Camera Path collapsed and Build 2026-07-27.1 in the footer.
+:alt: Loaded Suo point cloud on a light grid with Community Annotation and Camera Path collapsed and a dated Build line in the sidebar footer.
 :width: 1440px
 
 The fresh loaded state uses the light grid background. **Community Annotation** and
 **Camera Path** start collapsed, and the footer reports the exact web build
-identity; this capture is Build 2026-07-27.1.
+identity. Yours will read a later build than this capture — the value changes
+with every web release, which is why bug reports should quote your own.
 ```
 
 ---
 
 ## One screenshot “map” (recommended)
 
-This tour references UI areas by name (the app labels). A single annotated screenshot makes the rest of the docs much easier to follow.
+This tour references UI areas by name (the app labels). One screenshot makes
+the rest of the docs much easier to follow.
 
-```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
-:alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
+```{figure} ../../../_static/screenshots/web_app/window-orientation-map.png
+:alt: The Cellucid window with a scrollable sidebar down the left side and a large canvas on the right; the sidebar is scrolled to a COLORING AND FILTERING panel holding a CATEGORICAL OBS dropdown reading clusters, a dashed DISPLAY OPTIONS box with an outlier slider and an eight-row legend of coloured category names with cell counts, and an ACTIVE FILTERS block reading Showing all 3,696 points; the canvas shows a three-dimensional point cloud inside a light grid box, coloured in the same eight colours as the legend.
 :width: 1440px
 
-A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
+The whole app on the Pancreas sample. **Left**: one scrollable sidebar of
+collapsible accordions — every control in Cellucid is in there. **Right**: the
+canvas. The legend swatches and the point colours are the same palette, which
+is the single most useful correspondence to internalise: the sidebar and the
+picture are always describing the same thing.
+```
+
+```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
+:alt: The Cellucid web app with the sidebar scrolled to a SESSION panel listing a dataset summary of 562K cells and 8K genes above sample and local-data controls, and a large multicoloured single-cell embedding filling the canvas on a light grid.
+:width: 1440px
+
+A much larger dataset — the **Suo** sample, 562,000 cells — with the sidebar
+scrolled up to the **Session** panel instead. Same two-part layout, and the
+same performance.
 ```
 
 ---
@@ -93,14 +108,34 @@ setting is restored from a session.
 
 1) Open **Coloring & Filtering**.
 2) Pick one:
-   - **Categorical obs** (clusters, batch, sample), or
-   - **Continuous obs** (QC metrics, scores).
+   - **Categorical obs** (clusters, batch, sample),
+   - **Continuous obs** (QC metrics, scores), or
+   - **Gene Expression** (type a gene name into the search box).
 3) Look for the legend changing on the left.
+
+```{figure} ../../../_static/screenshots/web_app/field-selectors-three-routes.png
+:alt: Three stacked controls labelled CATEGORICAL OBS holding clusters, CONTINUOUS OBS holding None and GENE EXPRESSION showing the placeholder Search genes, each followed by four small icon buttons, with the mouse pointer pressing the first dropdown.
+:width: 488px
+
+The three ways in, in the order they appear. Only one can be active at a time —
+choosing in one clears the other two.
+```
 
 **What success looks like**
 
 - The points change color.
 - A legend appears/updates (categories or a color scale).
+
+Colouring by a gene looks like this:
+
+```{figure} ../../../_static/screenshots/web_app/window-color-by-gene-ins1.png
+:alt: The whole application window coloured by expression of the gene Ins1 on a dark-purple to yellow Viridis scale, most of the embedding dark and one region bright yellow, with a continuous colour-scale legend open in the sidebar.
+:width: 1440px
+
+`Ins1` on the Pancreas sample. Dark means little or no expression, bright means
+high — and the bright region is exactly the beta-cell arm of the embedding,
+which is what you would want a marker gene to do.
+```
 
 ### 4) Keep a snapshot (small multiple)
 

@@ -50,6 +50,13 @@ Gene matching rules (practical):
   lookup, so a name your export does not publish matches nothing,
 - treat matching as case-sensitive.
 
+:::{note}
+An export can publish fewer genes than its source measured, so a signature gene
+can be absent from the dataset rather than misspelled. The built-in samples all
+publish a subset; see
+{doc}`../d_fields_coloring_legends/07_genes_in_the_built_in_samples`.
+:::
+
 ### 2) Pages (“Compare pages”)
 
 You select pages under **Compare pages:**.
@@ -167,11 +174,31 @@ Fix:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/analysis/gene-signature.png
-:alt: Gene Signature analysis showing a multi-gene score distribution.
-:width: 224px
+:alt: The Gene Signature panel with a Signature Genes textarea containing "Ins1, Ins2, Iapp", both pages selected under Compare pages, Scoring method set to Mean expression, a Normalization select reading None under a pointer, Visualization set to Violin plot, and two violins plotted beneath.
+:width: 488px
 
-Gene Signature analysis computes and plots the selected multi-gene score for the chosen cell group.
+Three genes, both pages, mean scoring, no normalisation. The two violins are the
+score distribution for each page — which is the whole point of the mode: a
+signature is only interpretable **relative to** something else.
 ```
+
+```{figure} ../../../_static/screenshots/analysis/gene-signature-expanded.png
+:alt: The expanded Gene Signature modal headed with the gene list, two violins in the plot area, a PLOT OPTIONS column, a SUMMARY STATISTICS table with a column per page, and a STATISTICAL ANALYSIS panel showing a Welch's t-test card and a Mann-Whitney U card, each with a statistic, a p-value and an effect size.
+:width: 1440px
+
+Expanded Gene Signature. With exactly two pages selected the statistical panel
+runs **both** a Welch's t-test and a Mann-Whitney U test and shows them
+side by side, each with its own effect size — Cohen's *d* for the t-test,
+rank-biserial *r* for Mann-Whitney. The gene chips at the bottom confirm which
+names actually resolved.
+```
+
+:::{tip}
+Compare the two cards rather than picking one. If they disagree — a significant
+t-test beside a non-significant Mann-Whitney, or vice versa — the disagreement is
+information: it usually means the distributions differ in shape rather than in
+location, or that a handful of extreme cells is carrying the mean.
+:::
 
 ---
 

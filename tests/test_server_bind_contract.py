@@ -268,6 +268,7 @@ def test_jupyter_none_port_requests_one_os_assigned_bind(
     tmp_path: Path,
 ) -> None:
     import cellucid.jupyter as jupyter
+    import cellucid.jupyter._exported as jupyter_exported
 
     seen_ports: list[int] = []
 
@@ -290,7 +291,9 @@ def test_jupyter_none_port_requests_one_os_assigned_bind(
         def stop(self) -> None:
             return None
 
-    monkeypatch.setattr(jupyter, "CellucidServer", DummyServer)
+    # ``CellucidViewer._start_server`` resolves ``CellucidServer`` in the module
+    # that defines the viewer, so the patch has to name that module.
+    monkeypatch.setattr(jupyter_exported, "CellucidServer", DummyServer)
     viewer = jupyter.CellucidViewer(
         data_dir=tmp_path,
         port=None,

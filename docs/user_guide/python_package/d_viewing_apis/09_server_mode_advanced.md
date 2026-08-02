@@ -97,6 +97,7 @@ These endpoints are useful for “is the server alive” and “what does it thi
 - `/_cellucid/health`
 - `/_cellucid/info`
 - `/_cellucid/datasets`
+- `/_cellucid/protocol`
 
 ### Example: health probe
 
@@ -117,6 +118,17 @@ http://127.0.0.1:<port>/_cellucid/datasets
 ```
 
 This is especially useful when serving a directory that contains multiple export subfolders.
+
+### Example: which wire capabilities does this `cellucid` accept?
+
+```text
+http://127.0.0.1:<port>/_cellucid/protocol
+```
+
+Two lists — `events` and `commands` — describing what the notebook side of the
+protocol accepts. The web build reads this before emitting an event that an
+older `cellucid` would reject; it is also the quickest way to confirm which
+version of the protocol a running server speaks.
 
 ## Frontend ↔ Python communication endpoints
 

@@ -63,6 +63,17 @@ viewer.highlight_cells([0, 1, 2], color="#00ff00")
 viewer.reset_view()
 ```
 
+These calls return `None` without waiting for the viewer. If the viewer refuses
+one, it reports a `command_error` back to Python, which Cellucid prints to
+`sys.stderr` unless you take it over. Only the web build that emits
+`command_error` sends it; older builds refuse a command silently.
+
+```python
+@viewer.on_command_error
+def on_command_error(event):
+    print("Rejected:", event["command"], event["reason"])
+```
+
 ### 3) Robust notebooks: wait for readiness
 
 ```python

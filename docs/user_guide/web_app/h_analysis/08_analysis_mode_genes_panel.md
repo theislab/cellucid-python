@@ -140,9 +140,14 @@ that group.
 
 ### Ranked Genes mode
 
-- Select a group from a dropdown.
-- View the top markers for that group.
-- Use Expand (modal) for the full table and exports.
+- The **sidebar preview is a heatmap**, the same plot Clustered mode draws. The
+  difference between the two modes is that Ranked Genes applies no clustering, so
+  no dendrograms are computed and the Clustering settings are hidden.
+- The **ranked table lives in the expanded view**: press `⤢ Expand`, then choose a
+  group from the dropdown above the table. The dropdown lists each group by its
+  category name — the same label the heatmap draws on its own axis, and the same
+  string the ranked CSV's `group` column carries.
+- Exports are in the expanded view too.
 
 In the expanded view, a line above the marker table reports the denominator that
 group's adjusted p-values were divided by:
@@ -188,10 +193,20 @@ When a group has no markers to show, the message distinguishes the two reasons:
 
 ## Export (CSV)
 
-Marker Genes exports depend on what you’re viewing:
+**The CSV follows the mode the result was computed in**, not the plot on screen —
+which matters because all three modes draw the same heatmap:
 
-- **Heatmap CSV**: `gene` column + one column per group (matrix values)
-- **Ranked markers CSV**: `group,gene,rank,log2FoldChange,pValue,adjustedPValue,meanInGroup,meanOutGroup,percentInGroup,percentOutGroup`
+- **Ranked Genes** exports the per-group ranking behind `⤢ Expand`:
+  `marker_genes_ranked.csv`, columns
+  `group,gene,rank,log2FoldChange,pValue,adjustedPValue,meanInGroup,meanOutGroup,percentInGroup,percentOutGroup`
+- **Clustered** and **Custom Genes** export the wide matrix the heatmap is drawn
+  from: `marker_genes_heatmap.csv`, a `gene` column followed by one column per
+  group.
+
+The mode is read from the result, so the file always matches the run you are
+looking at even if the form has moved on since. Group labels and gene names are
+quoted where they need to be, so a comma inside a category name cannot split a
+row.
 
 Use exports when you need:
 - reproducible reports,
@@ -267,12 +282,32 @@ Fix:
 
 ## Interface reference
 
-```{figure} ../../../_static/screenshots/analysis/marker-genes.png
-:alt: Marker Genes analysis showing ranked marker output for a selected group.
-:width: 224px
+```{figure} ../../../_static/screenshots/analysis/marker-genes-ranked.png
+:alt: The Marker Genes panel with Mode set to Ranked Genes and the help line "Show top markers sorted by significance", a Wilcoxon method select, a Discover Markers button, and beneath it a heatmap of eight cell-type rows against many gene columns with a Z-score colour bar, its gene axis carrying evenly spaced, separated names.
+:width: 488px
 
-Marker Genes ranks candidate genes for the selected group and exposes an expanded result view.
+**Ranked Genes** after **Discover Markers**. Note that the sidebar draws a
+heatmap here, not a list — the ranked table is behind `⤢ Expand`. Every group is
+named down the left, but only a handful of the gene names fit across the bottom,
+so expand when you need to read which gene a column is.
 ```
+
+```{figure} ../../../_static/screenshots/analysis/marker-genes-clustered.png
+:alt: A heatmap with cell-type groups down one axis and gene names across the other, dendrograms attached to both axes, and a colour bar for the Z-scored expression.
+:width: 1160px
+
+**Clustered** mode, shown in the expanded view. Genes and groups are each
+reordered by hierarchical clustering, and the two dendrograms are drawn along
+the axes. The wider box prints many more of the gene names than the sidebar can,
+which is the practical reason to expand this one.
+```
+
+:::{note}
+Both Ranked Genes and Clustered produce the same kind of plot. Choose **Ranked
+Genes** when you only want the per-group tables and do not want to pay for
+clustering; choose **Clustered** when the point is to see which genes and which
+groups travel together.
+:::
 
 ---
 

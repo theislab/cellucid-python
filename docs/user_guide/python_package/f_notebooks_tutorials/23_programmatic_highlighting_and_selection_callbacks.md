@@ -39,7 +39,11 @@ Events include:
 - `selection`
 - `hover`
 - `click`
-- `message` (catch-all / custom types)
+
+`message` is not one of them. It is a hook that receives every event in that
+list and nothing else — there is no custom or app-specific event type. An
+inbound event whose `type` this `cellucid` does not declare is rejected before
+any hook runs, so a viewer cannot invent one.
 
 ### Python → Viewer (commands)
 

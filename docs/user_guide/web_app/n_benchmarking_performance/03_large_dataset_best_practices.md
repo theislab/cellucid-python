@@ -24,10 +24,22 @@
 
 Practical (very rough) intuition:
 - **< 100k cells**: usually fine on most modern machines.
-- **100k–500k**: you need good habits (avoid recompute loops, keep views lean).
-- **500k–2M+**: you are living on the edge of GPU memory and CPU time; you must choose workflows intentionally.
+- **100k–500k**: you need good habits (avoid recompute loops, keep the window modest).
+- **500k–2M+**: drawing is usually still fine; what bites first is the *CPU* cost
+  of each filter change and the memory footprint of large highlight groups.
+- **Beyond that**: the built-in benchmark offers presets up to 20 million points
+  precisely because the renderer is not the first thing to give way. Run it on
+  your own machine before assuming a dataset is too big — the answer is a
+  property of your GPU, not of the cell count.
 
 If you hit “WebGL context lost”, jump to {doc}`07_troubleshooting_performance` and {doc}`../a_orientation/02_system_requirements`.
+
+:::{tip}
+The single most useful habit on a large dataset is to **filter early**. Cells
+that filters have hidden are rejected before they are drawn, so a working view
+that shows the population you care about costs less to navigate than the full
+atlas — the reverse of what most people expect.
+:::
 
 ---
 
@@ -48,13 +60,18 @@ If you only do one thing from this page, do this list in order.
 - Keep the browser window modest (pixels matter; retina is expensive).
 - Close other GPU-heavy tabs (video calls + WebGL + Cellucid = sadness).
 
-### 3) Keep views (snapshots) lean
+### 3) Tune in one view, then choose a layout deliberately
 
-Rule of thumb: treat **each extra view as a multiplier**.
+Cellucid gives you the live view plus at most three snapshots.
 
 Workflow:
-1) Tune fields/filters in the live view.
-2) Only then create 1–3 snapshots for comparison.
+1) Tune fields/filters in the live view — it is unambiguously the cheapest state
+   to iterate in.
+2) Only then add snapshots for the comparison you actually want.
+
+Do not assume “fewer views = faster”. Two and three views are laid out as a row
+and keep full-size points; four are laid out as a 2×2 grid with half-size points
+and often cost about the same as one view. See {doc}`06_edge_cases_performance`.
 
 ### 4) Filter like a grown-up (avoid recompute loops)
 
@@ -223,10 +240,13 @@ This is often more reproducible than doing many incremental heavy operations in 
 
 These are so common that it’s worth recognizing them immediately.
 
-- **Too many views open**: performance collapses in grid view even if single view is fine.
+- **The two-view row**: adding one snapshot doubles the pixels shaded, while
+  adding two more (reaching the 2×2 grid) usually does not.
 - **High-DPI + large window**: smooth on an external monitor, choppy on a laptop retina display.
 - **Smoke mode on a laptop**: looks great, then crashes (context lost) when grid density is too high.
-- **Overlay + many views**: overlays scale with pixels × views; performance can drop suddenly.
+- **Overlay across views**: overlays scale with pixels × views in every layout.
+- **Huge highlight groups**: highlighting costs GPU memory per highlighted cell
+  per view, and it does not go away when you look elsewhere.
 - **Category explosion**: the UI becomes slow and unusable even if rendering is fine.
 
 For a deeper list, see {doc}`06_edge_cases_performance`.
@@ -238,12 +258,13 @@ For a deeper list, see {doc}`06_edge_cases_performance`.
 If large datasets are unusable, triage in this order:
 
 1) Confirm WebGL2 + hardware acceleration: {doc}`../a_orientation/02_system_requirements`.
-2) Reduce views: clear snapshots and retry.
-3) Reduce pixels: make the window smaller and retry.
+2) Reduce pixels: make the window smaller and retry.
+3) Clear snapshots and retry.
 4) Disable smoke mode and overlays and retry.
 5) Change filtering workflow: Live filtering off → FILTER once.
-6) If still slow: switch loading method (server mode) and retry.
-7) If still slow: treat it as a dataset/export issue; go to {doc}`09_reporting_performance_bugs`.
+6) Clear large highlight groups and retry.
+7) If still slow: switch loading method (server mode) and retry.
+8) If still slow: treat it as a dataset/export issue; go to {doc}`09_reporting_performance_bugs`.
 
 ---
 
@@ -253,7 +274,9 @@ If large datasets are unusable, triage in this order:
 :alt: Cellucid showing two side-by-side views of the same dataset.
 :width: 1440px
 
-Two kept views support side-by-side comparison while retaining one dataset identity.
+Two kept views support side-by-side comparison while retaining one dataset
+identity. Note that both panes are full canvas height: this row layout keeps
+points at full size, which is why it is the costliest arrangement per pane.
 ```
 
 ---

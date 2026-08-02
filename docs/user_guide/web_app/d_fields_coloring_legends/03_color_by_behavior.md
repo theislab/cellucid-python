@@ -51,11 +51,14 @@ The legend list is sorted alphabetically (human-friendly), but:
 
 So “the first visible row” is not a special color; it’s just the first in alphabetical sort order.
 
-```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
-:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
-:width: 246px
+```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
+:alt: A legend headed Click a swatch to pick a color, then Show All and Hide All buttons, then eight rows in alphabetical order — Alpha, Beta, Delta, Ductal, Epsilon, Ngn3 high EP, Ngn3 low EP, Pre-endocrine — each with a checkbox, a coloured swatch, a label, a cell count, a pencil icon and a bin icon.
+:width: 428px
 
-Selecting a categorical observation field colors the embedding and exposes its complete category legend.
+The `clusters` legend on the Pancreas sample. The rows run in alphabetical
+order — `Alpha`, `Beta`, `Delta`, `Ductal`, … — which is *not* the order the
+categories were defined in, and the palette is attached to the category, not to
+the row position.
 ```
 
 ---
@@ -69,10 +72,19 @@ Continuous fields (continuous obs and gene expression) map numbers → colors us
 ### Neutral “None” gray (missing values)
 
 Continuous values use the neutral gray “None” color when:
-- the value is missing (`NaN`/null), or
+- the value is `NaN`, or
 - log scale is enabled and the value is ≤ 0 (log is undefined there).
 
 This makes missing/invalid values obvious without forcing you to filter them out.
+
+:::{note}
+In practice the second case is the one you will meet. A **prepared export
+cannot contain `NaN`** in a continuous obs field or a gene — both the Python and
+the R writer refuse it with
+`Continuous obs field '<key>' must contain only finite values.` — so a `NaN`
+grey only appears when you open a raw `.h5ad` or Zarr archive directly in the
+browser.
+:::
 
 ### Filtering vs coloring (two separate concepts)
 
@@ -86,7 +98,7 @@ That’s why Cellucid also provides **Rescale colorbar to slider range**.
 
 ### Log scale (coloring only)
 
-The **Use log scale** toggle affects the *color mapping*, not the filter math:
+The **Log color scale** toggle affects the *color mapping*, not the filter math:
 
 - With log scale **off**: values map linearly across the color domain.
 - With log scale **on**: values map by `log10(value)` across the log-domain.
@@ -95,9 +107,25 @@ Important consequences:
 - Values `<= 0` cannot be placed on a log axis, so they render as the neutral “None” gray.
 - Your **Min/Max filter sliders still operate in the original units** (not log units).
 
-If you enable log scale on a field with no positive values, the colorbar uses
-the sentinel range `0–1` and all non-positive points appear gray. That is a
-data-domain issue, not a rendering bug.
+The legend prints this rule beside the toggle itself, as
+`Zero/negative/NaN values use the None color`.
+
+:::{important}
+**The toggle is refused rather than approximated when it cannot work.**
+
+- A field with **no positive value at all** rejects the change with
+  `Log color scale requires at least one positive field value.` The toggle
+  stays off. No substitute `0–1` range is invented for it.
+- A field that *does* have positive values but whose **currently selected
+  colour range excludes them** rejects the change with
+  `Log color scale requires the selected color range to include a positive
+  value.` Widen the range, or turn off **Rescale colorbar to slider range**,
+  and try again.
+
+So “I turned log scale on and everything went grey” can never be caused by a
+field with no positives — that case cannot turn the toggle on in the first
+place.
+:::
 
 ---
 

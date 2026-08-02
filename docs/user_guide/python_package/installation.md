@@ -7,9 +7,10 @@
 :::{note}
 **Active package version: 0.9.1.** Version 0.9.1 is the PyPI submission
 release. If the [PyPI package page](https://pypi.org/project/cellucid/) lists
-0.9.1, the normal install and pin commands below retrieve it. Until then, they
-resolve only to versions available from PyPI; use the source-checkout install
-under **Deep path** when validating 0.9.1 before publication.
+0.9.1, the normal install and pin commands below retrieve it. Until then, they <!-- CELLUCID_VERSION -->
+resolve only to versions available from PyPI; install the active source
+straight from the official GitHub repository (see **From the official source
+repository** below) when validating 0.9.1 before publication. <!-- CELLUCID_VERSION -->
 :::
 
 ## Requirements
@@ -74,9 +75,27 @@ python -m pip install -U pip
 
 ### 2) Install Cellucid (Python)
 
+From PyPI:
+
 ```bash
 pip install cellucid
 ```
+
+#### From the official source repository
+
+The [PyPI package page](https://pypi.org/project/cellucid/) is authoritative for
+registry availability. Until it lists the active version, `pip install cellucid`
+resolves only to the versions PyPI already holds, and those are earlier
+generations whose API differs from the one this guide describes. To install the
+active source directly, without cloning:
+
+```bash
+pip install "cellucid @ git+https://github.com/theislab/cellucid-python"
+```
+
+This is the same one-liner the repository `README.md` gives. Clone the
+repository instead only when you intend to edit it — see **Deep path** for the
+editable install.
 
 ### 3) Verify the installation
 

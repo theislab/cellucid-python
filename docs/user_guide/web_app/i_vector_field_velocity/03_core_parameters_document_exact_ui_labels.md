@@ -6,6 +6,15 @@
 These controls appear under **Visualization → Vector Field Overlay:** after
 `Show overlay` is enabled.
 
+```{figure} ../../../_static/screenshots/vector_field_velocity/set-core-overlay-controls.png
+:alt: The Vector Field Overlay controls with Show overlay checked, the Vector field selector showing velocity_umap, and the Particle density, Flow speed, Trail length, Particle size, Opacity, Color scheme and Sync with LOD controls at their initial values, above a collapsed Advanced Visual Settings group.
+:width: 472px
+
+Every core control, at the values the table below records as initial: `15K`,
+`3.0×`, `8.0s`, size `1`, `60%`, `Viridis`, `Sync with LOD` on. The numeric
+readout beside each slider is the *transformed* value, not the slider position.
+```
+
 ## Exact labels, ranges, and initial values
 
 | UI label | Exact range/options | Initial value | What changes |
@@ -21,6 +30,28 @@ These controls appear under **Visualization → Vector Field Overlay:** after
 
 The controls update the renderer while the overlay is active. They do not
 rewrite `adata.obsm`, prepared vector binaries, or the dataset identity.
+
+:::{warning}
+`Sync with LOD` is a fidelity control, not only a performance one. It scales
+particle count down in steps as the level of detail coarsens, and past a
+threshold it **disposes the overlay entirely** — the flow vanishes with the
+camera zoomed out and no message. If the animation disappears while you are
+zooming out, that is this control, not a missing field. Turn it off, or zoom
+back in.
+
+It only has an effect when **Visualization → Renderer settings →
+Level-of-Detail (LOD)** is itself enabled; with LOD off, this checkbox does
+nothing.
+:::
+
+:::{note}
+At most 65,536 distinct cells can ever seed particles, chosen deterministically
+from the currently visible cells. On a dataset larger than that, the flow is
+drawn from a sample of your cells, not from all of them. The sample is stable
+for a given visible set, so the picture is reproducible — but a sparse-looking
+region in a very large dataset may be a sampling artefact rather than a
+low-magnitude one.
+:::
 
 ## Scientific reading preset
 

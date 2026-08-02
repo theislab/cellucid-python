@@ -65,8 +65,9 @@ cellucid_prepare(..., gene_identifiers = markers)
 Behavior:
 - every requested identifier must be present in the gene ID list
 - a gene ID that is absent stops the export with
-  `gene_identifiers contains identifiers not found in var: …`, which lists the
-  first five and appends `...` when there are more
+  `gene_identifiers contains identifiers not found in var: c("MS4A1").`, which
+  lists the first five as an R vector and appends ` and N more` when there are
+  more
 - a repeated identifier stops the export with
   `gene_identifiers must not contain duplicate identifiers.`
 - nothing is skipped and no partial export is written
@@ -92,7 +93,7 @@ questions:
 
 | Rule | Scope | Why |
 | --- | --- | --- |
-| IDs are **distinct** | every row of `var` | `gene_identifiers` addresses rows by ID, so a repeated ID names no single row, and the export stops with `Gene identifiers must be unique. Duplicates: …` |
+| IDs are **distinct** | every row of `var` | `gene_identifiers` addresses rows by ID, so a repeated ID names no single row, and the export stops with `Gene key 'MS4A1' is duplicated.` |
 | IDs are non-empty and **drawable verbatim** — no control or zero-width characters, no leading or trailing whitespace | only the genes actually exported | being drawable is a property of a name the viewer shows, and a deselected gene reaches no manifest and no legend |
 
 A `var` that carries `HLA-DRB1/2`, `Wnt/β-catenin target`, or a gene name with an

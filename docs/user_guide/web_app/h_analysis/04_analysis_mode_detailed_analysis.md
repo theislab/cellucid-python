@@ -221,11 +221,47 @@ Fix:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/analysis/detailed-categorical.png
-:alt: Detailed analysis configured for a categorical observation field with a bar plot.
-:width: 224px
+:alt: The Detailed panel with Variable set to Categorical obs then cell_type, a Compare pages block with Page 1 and Rest of Page 1 both selected, a Plot Type select reading Bar Plot under a pointer, and a grouped bar plot of cell-type counts beneath it whose horizontal axis carries a single category name.
+:width: 488px
 
-Detailed analysis displays a categorical observation field as a bar plot for the selected page.
+Detailed with one variable (`cell_type`) across two pages. The plot-type choice
+is filtered by the **kind** of the variable, so a categorical field offers **Bar
+Plot**, **Pie / Donut** and **Heatmap** — and nothing else.
 ```
+
+:::{note}
+**The category axis prints only the names that fit.** A categorical axis draws
+as many labels as its box can show without one name touching the next, and the
+ones it cannot show are dropped whole — every label you can see is a real
+category, spelled in full, and the two ends of the axis are kept where there is
+room for more than one. How many survive is a property of the drawn box, not of
+your data: eight cell types leave room for **one** name in the 224-pixel sidebar
+above and **five** in the expanded view below. The bars are all there either
+way; it is the labels that are rationed. Read the shape in the sidebar, read the
+names in the full view, and read every name in the exported CSV.
+:::
+
+The full view is where the numbers are:
+
+```{figure} ../../../_static/screenshots/analysis/detailed-expanded.png
+:alt: The expanded Detailed modal headed COMPARING: CELL_TYPE with a grouped bar plot top-left whose horizontal axis prints five of the eight category names, an Export row and PLOT OPTIONS column on the right, a SUMMARY STATISTICS table bottom-left, and a STATISTICAL ANALYSIS panel bottom-right holding a chi-squared card reading N/A, with a pointer on the CSV button.
+:width: 1440px
+
+Expanded Detailed. **SUMMARY STATISTICS** is a per-page table — category counts
+and percentages for a categorical variable, or Count / Mean / Median / Min / Max
+/ Std Dev for a continuous one, and it names every category whether or not the
+axis had room to. **STATISTICAL ANALYSIS** runs the tests below it.
+```
+
+:::{note}
+The chi-squared card in that capture reads **N/A**, with the explanation
+*“Pearson chi-squared inference is unavailable because an expected count is below
+5; use an exact test or combine sparse categories.”* That is the intended
+behaviour, not a failure: the comparison is one pure cell type against seven
+others, so most cells of the contingency table are expected to be empty and a
+chi-squared p-value would be meaningless. The app declines to print one rather
+than printing a wrong one.
+:::
 
 ---
 

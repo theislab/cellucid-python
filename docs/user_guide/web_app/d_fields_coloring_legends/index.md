@@ -29,13 +29,34 @@ Cellucid treats “coloring” and “filtering” as coupled:
 
 ---
 
-## Interface reference
+## The three routes, on screen
 
-```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
-:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
-:width: 246px
+All three rows of the table above live in the same place, one under the other:
 
-Selecting a categorical observation field colors the embedding and exposes its complete category legend.
+```{figure} ../../../_static/screenshots/web_app/field-selectors-three-routes.png
+:alt: Three stacked controls labelled CATEGORICAL OBS holding clusters, CONTINUOUS OBS holding None, and GENE EXPRESSION holding the placeholder Search genes, each followed by four small icon buttons, with the mouse pointer pressing the first dropdown.
+:width: 488px
+
+Only one of the three can be active at a time. Choosing a field in one selector
+clears the other two.
+```
+
+Which one you choose decides which legend you get, and the legend is where most
+of the work happens:
+
+```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
+:alt: A legend with the hint Click a swatch to pick a color, Show All and Hide All buttons, and eight rows each with a checkbox, a coloured swatch, a category name, a cell count, a pencil icon and a bin icon.
+:width: 428px
+
+**Categorical** → a list of rows you can tick, recolour, rename and merge.
+```
+
+```{figure} ../../../_static/screenshots/web_app/legend-continuous-sscore.png
+:alt: A legend headed COLOR SCALE (VIRIDIS) with a purple to yellow gradient bar under it, the numbers minus 0.37 and 1.14 at its ends, a Log color scale toggle reading Off with the note Zero negative and NaN values use the None color, a Rescale colorbar to slider range toggle reading On with the note On colors track sliders Off full data range, then a FILTERING section with a VISIBLE RANGE subtitle, a Live filtering toggle reading On, Min and Max sliders with numeric readouts, and FILTER and RESET buttons.
+:width: 428px
+
+**Continuous or gene** → a colour bar, two colour-mapping toggles, and a
+filtering block.
 ```
 
 ---
@@ -48,6 +69,7 @@ Selecting a categorical observation field colors the embedding and exposes its c
 4) {doc}`04_legend_behavior` (what you can do inside the legend)
 5) {doc}`05_troubleshooting_fields_legends` (when colors/legends feel “wrong”)
 6) {doc}`06_screenshots` (verified interface captures)
+7) {doc}`07_genes_in_the_built_in_samples` (why a real gene can be missing from a sample)
 
 ---
 
@@ -96,6 +118,14 @@ Symptom → diagnosis → fix for missing fields, slow genes, “everything is g
 :link-type: doc
 
 Current coloring and categorical-legend states captured from the running app.
+:::
+
+:::{grid-item-card} {octicon}`beaker;1.5em;sd-mr-1` Genes in the built-in samples
+:link: 07_genes_in_the_built_in_samples
+:link-type: doc
+
+Which genes each sample publishes, why the rest are not there, and what to do
+when you need one that is missing.
 :::
 
 ::::

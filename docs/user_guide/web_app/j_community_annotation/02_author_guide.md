@@ -212,7 +212,14 @@ Treat dataset id like a **contract**:
 
 In Cellucid, the Community Annotation status panel displays the dataset id (this is the id your `annotations/config.json` must match).
 
+```{figure} ../../../_static/screenshots/community_annotation/lifecycle-06-connected-status.png
+:alt: The connected Community Annotation panel with a status block listing Dataset, Github and Repo, above a GitHub sync button, a Profile block naming the signed-in user, and the Manage annotation, Derived consensus column and Consensus snapshot sections.
+:width: 488px
 
+The status block at the top of the connected panel. **Dataset** is the id your
+`annotations/config.json` must carry verbatim; **Github** and **Repo** complete
+the scope your local annotation state is filed under.
+```
 
 ---
 
@@ -651,6 +658,16 @@ Inside **MANAGE ANNOTATION**, after you select a column that is already annotata
 - **Min annotators** input (maps to `minAnnotators`)
 - **Apply** (apply locally)
 - **Reset** (discard local edits)
+
+```{figure} ../../../_static/screenshots/community_annotation/lifecycle-07-manage-annotation.png
+:alt: The Manage annotation section expanded, showing the categorical obs picker with Add, Remove and Close buttons above an Annotatable consensus settings block containing a Threshold slider, a Min annotators field, and Apply and Reset buttons.
+:width: 488px
+
+**Annotatable consensus settings** appear only once you select a column that is
+already annotatable — the block belongs to the selected column, not to the
+repository. The **Threshold** slider is in whole percent; the stored value is a
+signed fraction spanning −1 to +1, because confidence itself is signed.
+```
 
 After applying locally, **Publish** to write the settings to `annotations/config.json` so all annotators receive them on Pull.
 

@@ -44,10 +44,17 @@ The `event` discriminator is one of:
 - `pong`
 - `debug_snapshot`
 - `session_bundle`
+- `command_error`
 
 The remaining fields are the exact payload for that discriminator. See
 {doc}`../e_jupyter_hooks/07_frontend_to_python_events` for every field and
 value constraint.
+
+```{note}
+`command_error` arrives only from the web build that emits `command_error`.
+Older builds — including the one currently published — apply or refuse a
+command silently, so this tutorial will not observe one.
+```
 
 ## Exercise the request/response diagnostics
 

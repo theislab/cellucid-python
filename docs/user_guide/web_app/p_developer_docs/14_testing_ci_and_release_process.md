@@ -22,6 +22,23 @@ The goal here is to make validation repeatable.
 
 This page focuses on “what you can do today” to validate changes.
 
+### Running two browser suites at once
+
+The browser suite binds two loopback ports: `4173` for the application and
+`4174` for the same tree with permissive CORS. A second run on the same machine
+collides, reports the taken address, and stops rather than waiting on it. Move
+it instead:
+
+```bash
+CELLUCID_BROWSER_TEST_PORT=4183 npm run test:browser
+```
+
+`CELLUCID_BROWSER_TEST_SAMPLE_PORT` defaults to `CELLUCID_BROWSER_TEST_PORT + 1`
+and can be set separately. The servers and the specs resolve the address from
+the same module, so a moved run also fetches its fixtures from the port it was
+moved to, and failure artifacts land in `test-results/<port>/` where concurrent
+runs cannot overwrite each other's evidence.
+
 ---
 
 ## Manual smoke test checklist (recommended)

@@ -23,6 +23,9 @@ The Cellucid server exposes dataset endpoints (exported or AnnData-backed) plus:
 - `/_cellucid/health`
 - `/_cellucid/info`
 - `/_cellucid/datasets`
+- `/_cellucid/protocol` (the wire capabilities this `cellucid` version accepts —
+  the same answer for every viewer and every dataset, so it exposes nothing
+  about your data)
 - `/_cellucid/events` (POST)
 - `/_cellucid/session_bundle` (POST)
 

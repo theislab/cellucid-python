@@ -28,14 +28,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from cellucid.prepare_data import (
+from cellucid.prepare_data import _generation, prepare
+from cellucid.prepare_data._binary_io import _write_binary
+from cellucid.prepare_data._manifest import (
     _gene_names_from_compact_manifest,
     _identity_obs_fields_from_compact_manifest,
     _require_declared_payloads_on_disk,
     _require_dense_payload_indices,
-    prepare,
 )
-from cellucid.server import _declared_dataset_artifacts
+from cellucid.server._artifacts import _declared_dataset_artifacts
 
 # Identifiers that no filesystem could carry, and that no longer have to.
 HOSTILE_OBS_KEYS = ["% mito", "cell type", "CON", "Field", "field"]
@@ -260,6 +261,203 @@ def test_a_manifest_that_does_not_describe_its_own_files_is_rejected(
             declared=set(),
             axis="Gene",
         )
+
+    # An axis directory declares files and nothing else, so a directory inside
+    # one is refused by kind rather than compared against a declared name.
+    (directory / "nested").mkdir()
+    with pytest.raises(
+        RuntimeError,
+        match=r"Gene payload directory holds a non-file entry: .*/var/nested$",
+    ):
+        _require_declared_payloads_on_disk(
+            tmp_path,
+            directory_name="var",
+            declared={"var/0.values.f32"},
+            axis="Gene",
+        )
+
+
+def test_the_export_root_must_hold_exactly_what_the_export_declares(
+    tmp_path: Path,
+) -> None:
+    """The root carries the point payloads, and they are declared by path there."""
+    root = tmp_path / "export"
+    (root / "obs").mkdir(parents=True)
+    for name in ("dataset_identity.json", "obs_manifest.json", "points_2d.bin.gz"):
+        (root / name).write_bytes(b"")
+
+    def reconcile(directories: set[str] | None = None) -> None:
+        _require_declared_payloads_on_disk(
+            root,
+            directory_name=None,
+            declared={"dataset_identity.json", "obs_manifest.json", "points_2d.bin.gz"},
+            axis="Export",
+            declared_directories={"obs"} if directories is None else directories,
+        )
+
+    reconcile()
+
+    # The mutation that reached disk once: the coordinates were written
+    # uncompressed while dataset_identity.json declared the compressed name.
+    (root / "points_2d.bin.gz").rename(root / "points_2d.bin")
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            r"Declared but absent: \['points_2d\.bin\.gz'\]\. "
+            r"Written but undeclared: \['points_2d\.bin'\]\."
+        ),
+    ):
+        reconcile()
+    (root / "points_2d.bin").rename(root / "points_2d.bin.gz")
+    reconcile()
+
+    # A payload directory the export never created is absent, not invisible.
+    with pytest.raises(
+        RuntimeError,
+        match=r"Declared but absent: \['var'\]\. Written but undeclared: \[\]\.",
+    ):
+        reconcile(directories={"obs", "var"})
+
+    # A directory the export does not declare is refused by kind, so it can
+    # never be mistaken for a declared payload of the same name.
+    (root / "vectors").mkdir()
+    with pytest.raises(
+        RuntimeError,
+        match=r"Export payload directory holds a non-file entry: .*/vectors$",
+    ):
+        reconcile()
+    (root / "vectors").rmdir()
+
+    # A declared directory that reached disk as a regular file is reported on
+    # both sides, because it is neither the directory declared nor a file
+    # anything declared.
+    (root / "var").write_bytes(b"")
+    with pytest.raises(
+        RuntimeError,
+        match=r"Declared but absent: \['var'\]\. Written but undeclared: \['var'\]\.",
+    ):
+        reconcile(directories={"obs", "var"})
+    (root / "var").unlink()
+
+    (root / "scratch.tmp").write_bytes(b"")
+    with pytest.raises(
+        RuntimeError,
+        match=r"Declared but absent: \[\]\. Written but undeclared: \['scratch\.tmp'\]\.",
+    ):
+        reconcile()
+
+
+def _root_reconciliation_export(out_dir: Path) -> None:
+    coordinates = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]], dtype=np.float32)
+    prepare(
+        latent_space=coordinates,
+        obs=pd.DataFrame({"group": pd.Categorical(["a", "b", "a"])}),
+        X_umap_2d=coordinates,
+        out_dir=out_dir,
+        dataset_id="root-reconciliation",
+        dataset_name="Root reconciliation",
+        created_at="2026-01-01T00:00:00Z",
+        obs_categorical_dtype="uint16",
+        centroid_min_points=1,
+        compression=6,
+    )
+
+
+def test_a_generation_that_declares_the_points_it_wrote_publishes(tmp_path: Path) -> None:
+    out_dir = tmp_path / "points"
+    _root_reconciliation_export(out_dir)
+
+    identity = json.loads((out_dir / "dataset_identity.json").read_text(encoding="utf-8"))
+    assert identity["embeddings"]["files"] == {"2d": "points_2d.bin.gz"}
+    assert (out_dir / "points_2d.bin.gz").is_file()
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected"),
+    [
+        (
+            "uncompressed",
+            r"Declared but absent: \['points_2d\.bin\.gz'\]\. "
+            r"Written but undeclared: \['points_2d\.bin'\]\.",
+        ),
+        (
+            "unwritten",
+            r"Declared but absent: \['points_2d\.bin\.gz'\]\. Written but undeclared: \[\]\.",
+        ),
+        (
+            "stray",
+            r"Declared but absent: \[\]\. Written but undeclared: \['scratch\.tmp'\]\.",
+        ),
+    ],
+)
+def test_a_published_generation_cannot_disagree_with_its_own_export_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+    expected: str,
+) -> None:
+    """The failure this rule exists for: an export the browser cannot draw.
+
+    The declared name and the written name of a point payload are two
+    expressions of one compression setting, and until the root was reconciled
+    a generation whose points disagreed published successfully and then failed
+    at read time with no coordinates.
+    """
+    out_dir = tmp_path / "points"
+
+    def patched_write_binary(
+        path: Path,
+        data: np.ndarray,
+        compression: int | None = None,
+    ) -> Path:
+        if path.name.startswith("points_"):
+            if mutation == "uncompressed":
+                return _write_binary(path, data, None)
+            if mutation == "unwritten":
+                return Path(f"{path}.gz")
+        written = _write_binary(path, data, compression)
+        if mutation == "stray" and path.name.startswith("points_"):
+            (path.parent / "scratch.tmp").write_bytes(b"")
+        return written
+
+    monkeypatch.setattr(_generation, "_write_binary", patched_write_binary)
+
+    with pytest.raises(RuntimeError, match=expected):
+        _root_reconciliation_export(out_dir)
+    assert not out_dir.exists()
+
+
+@pytest.mark.parametrize("compression", [None, 6])
+def test_a_full_export_root_holds_exactly_the_artifacts_it_declares(
+    tmp_path: Path,
+    compression: int | None,
+) -> None:
+    """Genes, connectivity, vector fields, and two dimension levels, both codecs."""
+    out_dir = tmp_path / f"full-{compression}"
+    _hostile_export(
+        out_dir,
+        X_umap_1d=np.linspace(0.0, 1.0, 6, dtype=np.float32).reshape(6, 1),
+        compression=compression,
+    )
+
+    identity = json.loads((out_dir / "dataset_identity.json").read_text(encoding="utf-8"))
+    suffix = ".gz" if compression is not None else ""
+    assert identity["embeddings"]["files"] == {
+        "1d": f"points_1d.bin{suffix}",
+        "2d": f"points_2d.bin{suffix}",
+    }
+    assert sorted(entry.name for entry in out_dir.iterdir()) == [
+        "connectivity",
+        "connectivity_manifest.json",
+        "dataset_identity.json",
+        "obs",
+        "obs_manifest.json",
+        f"points_1d.bin{suffix}",
+        f"points_2d.bin{suffix}",
+        "var",
+        "var_manifest.json",
+        "vectors",
+    ]
 
 
 def test_quantized_entries_keep_the_index_and_gain_their_bounds(tmp_path: Path) -> None:

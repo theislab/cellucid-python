@@ -1,9 +1,9 @@
 ![Cellucid](https://raw.githubusercontent.com/theislab/cellucid-python/main/cellucid-logo.svg)
 
 [![PyPI version](https://img.shields.io/pypi/v/cellucid.svg)](https://pypi.org/project/cellucid/)
-[![Python versions](https://img.shields.io/pypi/pyversions/cellucid.svg)](https://pypi.org/project/cellucid/)
+[![Python versions](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://cellucid.readthedocs.io/en/latest/user_guide/python_package/installation.html)
 [![Documentation Status](https://readthedocs.org/projects/cellucid/badge/?version=latest)](https://cellucid.readthedocs.io/en/latest/)
-[![License](https://img.shields.io/pypi/l/cellucid.svg)](https://pypi.org/project/cellucid/)
+[![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 
 # Cellucid
 
@@ -25,9 +25,26 @@ Cellucid is a browser-first viewer for exploring large single-cell datasets in r
 
 ## Install
 
+Cellucid requires Python 3.11, 3.12, 3.13, or 3.14. Use the dedicated
+[Installation guide](https://cellucid.readthedocs.io/en/latest/user_guide/python_package/installation.html)
+to choose PyPI or GitHub based on current registry availability. To install the
+active source directly from the official GitHub repository:
+
+```bash
+pip install "cellucid @ git+https://github.com/theislab/cellucid-python"
+```
+
+From PyPI:
+
 ```bash
 pip install cellucid
 ```
+
+The [PyPI package page](https://pypi.org/project/cellucid/) is authoritative for
+registry availability. Until it lists the active version, `pip install cellucid`
+resolves only to the versions PyPI already holds, and those are earlier
+generations whose API differs from the one this README and the documentation
+describe.
 
 ## Quickstart
 

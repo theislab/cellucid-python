@@ -57,7 +57,7 @@ PNG export uses:
 
 If you change PNG behavior:
 - ensure you preserve high-DPI export correctness
-- ensure metadata injection remains valid (PNG `tEXt` chunks)
+- ensure metadata injection remains valid (UTF-8 PNG `iTXt` chunks)
 
 ---
 

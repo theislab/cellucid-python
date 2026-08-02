@@ -117,7 +117,8 @@ Full reloads are the fastest way to introduce jank on large datasets.
 
 Cellucid can render:
 - one live view
-- multiple snapshot views in a grid layout
+- **at most three** snapshot views (`MAX_SNAPSHOTS = 3`; a fourth raises a
+  `RangeError`)
 
 Key idea:
 - A snapshot view is not “a second dataset”; it is a second **view context** with its own camera/dimension/filter/field choices, rendered from the same underlying point identity index space.
@@ -126,6 +127,39 @@ The viewer:
 - tracks per-view dimension levels (`viewer.setViewDimension(...)` is called from state when available)
 - caches per-view positions for snapshot views
 - uses optimized paths for alpha/transparency sharing so it does not re-upload N full buffers per view
+
+### Layout arithmetic, and why it changes the cost
+
+```
+cols = viewCount <= 3 ? viewCount : ceil(sqrt(viewCount))
+rows = ceil(viewCount / cols)
+paneHeight = floor(canvasHeight / rows)
+```
+
+So: 2 views → 1×2, 3 → 1×3, 4 → 2×2.
+
+`paneHeight` is what the point vertex shaders receive as the viewport-height
+uniform, and perspective point size is proportional to it. Point **area** is
+therefore proportional to `1/rows²`, and total fill across all panes is
+proportional to `viewCount / rows²`, i.e. to `cols / rows`.
+
+| Views | cols × rows | Relative total fill |
+|---|---|---|
+| 1 | 1 × 1 | 1 |
+| 2 | 2 × 1 | 2 |
+| 3 | 3 × 1 | 3 |
+| 4 | 2 × 2 | 1 |
+
+This is why a 2×2 grid costs about what a single view costs while submitting
+four times the vertices, and why the row layouts are the expensive ones. It
+holds only while size attenuation is non-zero; at zero attenuation point size
+ignores the viewport and every view is straightforwardly additive.
+
+:::{warning}
+Do not “optimise” the viewport-height uniform to the canvas height for
+consistency across panes. Feeding the full canvas height into a 2×2 grid would
+quadruple fill cost and make four views genuinely four times a single view.
+:::
 
 ---
 
@@ -146,7 +180,113 @@ Developer advice:
 
 ---
 
+## What a frame actually costs
+
+Before changing anything in the draw path, know the current baseline: **a settled
+frame transfers no data to the GPU.**
+
+```
+render()  (self-rescheduling rAF; runs every frame, unconditionally)
+  │
+  ├─ dirty-flag gate ── buffer dirty? LOD dimension dirty? ─── no ──┐
+  │                                    │ yes                        │
+  │                                    └─▶ flushBufferUpdates()     │
+  │                                                                 │
+  ├─ frustum cache ── MVP + dimension + bounds unchanged? ─ yes ─────┤ (no work)
+  │                                    │ no                         │
+  │                                    └─▶ re-extract planes        │
+  │                                                                 │
+  ├─ index publication ── admitted leaf set unchanged? ──── yes ─────┤ (reuse EBO)
+  │                                    │ no                         │
+  │                                    └─▶ upload element buffer    │
+  │                                                                 │
+  └─ useProgram · uniforms · bind alpha texture · drawArrays ◀───────┘
+```
+
+Three independent gates, each cheap to check:
+
+1. **Buffer dirty flags** — set by colour updates, cleared on flush.
+2. **Frustum cache** — an exact element-wise comparison of the model-view-projection
+   matrix, the dimension and the bounds. An idle camera re-extracts nothing.
+3. **Index publication watermark** — a camera move that changes the matrix but
+   not the *ordered set of admitted spatial nodes* reuses the published element
+   buffer. Even the post-upload error check is gated on the allocation
+   watermark, because running it every frame was measured in milliseconds.
+
+Binding the alpha texture is a bind and two uniform writes; it never uploads.
+
+The practical rule: **if you add work to the draw path, it must sit behind a gate
+of its own.** “It is only a few microseconds” is how the idle frame stops being
+free.
+
+### Where the GPU time goes, and which optimisations are already closed
+
+Measured with GPU timer queries on **one Apple M1 Pro through ANGLE Metal**,
+1440×1000 at DPR 1, 10,000,000 synthetic points, LOD and frustum culling off,
+counterbalanced arms with a byte-identical twin in every set. The absolute
+milliseconds belong to that machine; the ratios are the durable part.
+
+| Stage | Measured | Verdict |
+| --- | --- | --- |
+| Vertex | 2.62 ms, flat at every point size — 4.2% of the frame | fetch-bound; hoisting the redundant matrix product and the per-vertex `tan()` measured **no effect** |
+| Fragment | 190× the fragments costs 1.82× the time | only ~5% of rasterised fragments survive the depth test to be shaded |
+| Per-sprite rasterisation | ~5.7 ns/sprite, ~175M sprites/s | **this is the floor** |
+
+Fill only reaches parity with the per-sprite cost at `gl_PointSize` ≈ 15 px.
+Below that the frame is primitive-bound; above it, fill-bound.
+
+**Do not re-open these.** Each was measured and rejected, and the numbers are in
+the maintenance ledger rather than being folklore:
+
+- **Fragment-shader simplification of any kind.** Fog, lighting, the alpha
+  `texelFetch`, the round `discard`, the mere presence of `discard`, and the
+  whole `full` → `light` → `ultralight` ladder (43 → 9 → 2 statements in the
+  translated Metal) each stayed inside its own twin band at every point size.
+- **A different primitive.** `GL_POINTS` beat instanced quads and both triangle
+  arrangements by 1.41–2.12× at one sample and by up to 1.90× under the shipped
+  4× MSAA, with the quad arms' rasterised and shaded fragment counts matched to
+  five decimal places. Halving the primitive count with one triangle per point
+  was the *worst* arm.
+- **Order-independent transparency, a depth prepass, storage reordering, and the
+  vertex-ALU hoist.** All measured; none won.
+
+What did move: **antialiasing**, now a user setting (`#hp-antialias`), worth
+about a fifth of the frame at the default point size and a third at large sizes.
+
+**Shader quality selects shading, never geometry.** All three point vertex
+shaders — and the copy `HP_VS_HIGHLIGHT` keeps of the formula — clamp
+`gl_PointSize` to the same `[0.5, 128.0]`. A higher ceiling in the lighter
+shaders once made them draw *larger* sprites than `full`, so the "faster"
+quality was up to 1.93× slower at close range. `tests/point-size-clamp-contract.test.mjs`
+pins the three bounds together; keep them identical in any fork.
+
+---
+
 ## Performance footguns (common mistakes)
+
+### 0) Rejecting invisible points
+
+Filtered-out points are not skipped by shrinking them. Setting `gl_PointSize` to
+zero does **not** remove a point: the driver’s minimum aliased point size is one
+pixel, so the point is still assembled, rasterised and shaded, and only then
+discarded in the fragment stage — and the ultralight fragment shader has no
+`discard` at all, so hidden points were also writing depth and occluding visible
+ones.
+
+The point vertex shaders now push hidden vertices outside the clip volume as
+well as zeroing the size, which removes them before rasterisation. This is what
+makes a heavily filtered view cheaper than an unfiltered one.
+
+**Every** vertex shader that draws per-cell geometry does this now, including
+the highlight-dot and centroid shaders, which previously only zeroed the point
+size. The centroid case was not theoretical: a category with no visible members
+has its alpha set to zero by the field summary, and centroids are drawn with
+depth writes enabled, so those invisible sprites were occluding real points.
+
+If you add or fork a point vertex shader, it must do the same. This is enforced
+rather than documented: `tests/high-perf-hidden-point-rejection-contract.test.mjs`
+sweeps every module in the tree that carries shader source, so a new shader
+cannot be added without the rejection.
 
 ### 1) Accidental hot-path allocations
 
@@ -170,6 +310,34 @@ textures bound the other transient memory.
 
 Filtering often only needs alpha changes.
 Do not rebuild/re-upload positions or full color buffers for filtering.
+
+Alpha itself is not re-uploaded wholesale either. Visibility lives in a texture
+whose width is the device’s maximum texture size, and `updateAlphas` compares
+the incoming array against the uploaded bytes row by row, coalesces the dirty
+rows into maximal runs, and issues one sub-image upload per run. Above a bounded
+number of disjoint runs it collapses to a single bounding range, so the cost is
+never worse than the whole-texture upload it replaced. A republication where
+nothing moved uploads zero bytes and returns a signal saying so.
+
+Two invariants to preserve:
+
+- The comparison must stay row-major over the same layout the texture uses;
+  changing the packing without changing the comparison silently disables it.
+- The “did anything move?” return value is load-bearing. It is what stops a
+  no-op filter edit from repacking highlight geometry, which costs 16 bytes per
+  selected cell per view — megabytes on a large selection.
+
+### 2b) Cell-index inputs
+
+Visibility APIs that accept a list of cell indices must handle typed arrays
+directly and must not build a `Set` of them. A `Set` caps out at 2²⁴ entries, so
+a selection above ~16.7 million cells was not slow — it *threw*. Presence is now
+tracked in a `Uint8Array` bitmask sized to `pointCount`, which is O(1) per index,
+allocation-free per call, and has no ceiling below the dataset size.
+
+(There is a second, unrelated 16.7 million threshold in the shaders: float32
+cannot address texel coordinates exactly above 2²⁴, which is why the index
+textures are integer-typed. Do not conflate the two.)
 
 ### 3) Doing DOM work in render-critical flows
 

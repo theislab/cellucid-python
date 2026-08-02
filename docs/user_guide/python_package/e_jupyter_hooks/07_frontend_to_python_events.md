@@ -1,6 +1,6 @@
 # Frontend → Python events
 
-The embedded viewer sends one of seven closed event records to Python. The
+The embedded viewer sends one of eight closed event records to Python. The
 browser posts JSON to `POST /_cellucid/events`; the server authenticates
 `viewerId` and `viewerToken`, removes the token, and dispatches the record to
 the matching viewer.
@@ -25,6 +25,10 @@ def handle_click(event):
 @viewer.on_ready
 def handle_ready(event):
     print(event["n_cells"], event["dimensions"])
+
+@viewer.on_command_error
+def handle_command_error(event):
+    print(event["command"], event["reason"])
 ```
 
 `@viewer.on_message` receives every accepted event in a common envelope:
@@ -160,8 +164,92 @@ stored, authenticated, and consumed one pending bundle request:
 }
 ```
 
-There is no error-shaped event. An invalid upload is rejected by the HTTP
-endpoint and does not dispatch a hook.
+An invalid upload is rejected by the HTTP endpoint and does not dispatch a
+hook.
+
+### `command_error`
+
+A command this notebook sent — `set_color_by`, `highlight_cells`,
+`set_visibility` and the rest — was rejected by the viewer instead of applied.
+
+```{note}
+This event arrives only from the web build that emits `command_error`. Older
+builds — including the one currently published — apply or refuse a command
+silently, so on those the surfaces below stay empty and a refused command is
+still invisible. Python accepts the event first on purpose: the validator
+rejects an unknown type outright, so a viewer that emitted one ahead of a
+notebook that understands it would produce a worse failure than the silence.
+```
+
+Posted record:
+
+```json
+{
+  "type": "command_error",
+  "viewerId": "<viewer-id>",
+  "viewerToken": "<viewer-token>",
+  "command": "setColorBy",
+  "reason": "Jupyter set-color-by field must be exact non-empty text"
+}
+```
+
+Hook payload:
+
+```python
+{
+    "command": "setColorBy",
+    "reason": "Jupyter set-color-by field must be exact non-empty text",
+}
+```
+
+`command` must be one of the nine command types in
+{doc}`06_python_to_frontend_commands`; a record naming anything else is
+rejected, so no browser-supplied text reaches your notebook as a command name.
+`reason` is one line of at most 500 characters.
+
+Commands are one-way and carry no request id, so this event names the command
+*type* that failed, not the individual call. If two `set_color_by` calls are in
+flight, the event does not say which one failed.
+
+**If no `command_error` hook is registered, Cellucid prints the failure to
+`sys.stderr`:**
+
+```text
+[cellucid] viewer.set_color_by(...) did not take effect in the viewer: Jupyter set-color-by field must be exact non-empty text
+[cellucid] The viewer is unchanged. Handle this in code with @viewer.on_command_error.
+```
+
+Registering a hook takes the report over and silences that notice, so the
+failure is reported once, where you chose:
+
+```python
+rejected = []
+
+@viewer.on_command_error
+def record(event):
+    rejected.append(event)
+```
+
+Do not raise from this hook. Like every hook it runs on the server request
+thread, so raising answers the viewer with HTTP 500 and drops the event
+instead of failing your cell (see {doc}`08_writing_robust_callbacks`). Raise
+from your own code instead, at a point you choose:
+
+```python
+viewer.set_color_by("cell_type")
+...
+if rejected:
+    raise RuntimeError(rejected[-1]["reason"])
+```
+
+There is no acknowledgement for a command that *did* apply, so an empty list
+is not proof of success — only a non-empty one is proof of failure. Prefer
+collecting over `viewer.wait_for_event("command_error", ...)`: the waiter
+returns the next event after the call, so a rejection that arrives between the
+command and the wait is missed.
+
+`viewer.debug_connection()["recent_events"]["command_errors"]` lists the most
+recent rejections after the fact.
 
 ## Delivery and failure semantics
 

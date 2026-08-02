@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from cellucid.prepare_data import (
+from cellucid.prepare_data._arrays import (
     _normalize_finite_float32_embedding,
     _require_finite_embedding_source,
 )
@@ -65,6 +65,15 @@ def test_normalized_coordinates_keep_the_input_precision() -> None:
     ("embedding", "message"),
     [
         (np.array([[1e300, 0.0], [1e301, 1.0]]), "outside the finite float32 range"),
+        # Underflow is the other end of the same range, and it is the quiet
+        # one: every nonzero value becomes 0.0, which is finite, so an
+        # overflow-only check publishes a column that has lost its content.
+        # The R writer refuses this; Python must agree, or one export format
+        # has two meanings.
+        (
+            np.array([[1e-320, 0.0], [2e-320, 1.0]]),
+            "outside the finite float32 range",
+        ),
         (np.array([[np.nan, 0.0], [1.0, 1.0]]), "must contain only finite values"),
         (np.array([[np.inf, 0.0], [1.0, 1.0]]), "must contain only finite values"),
     ],
@@ -89,3 +98,38 @@ def test_a_float32_input_is_unchanged_by_the_wider_validation() -> None:
         label="X_umap_2d",
     )
     assert normalized.tolist() == direct.tolist()
+
+
+@pytest.mark.parametrize(
+    ("values", "published"),
+    [
+        # Eight distinct inputs; float32 writes one distinct value. Every
+        # nonzero value is replaced by zero, and zero is finite, so an
+        # overflow-only check let this through.
+        (np.array([1e-320 * (index + 1) for index in range(8)]), False),
+        # A genuine float32 subnormal survives the conversion and must still be
+        # accepted - the rule is about values that are lost, not small ones.
+        (np.array([0.0] + [1e-40] * 7), True),
+        # No nonzero value, so nothing is lost.
+        (np.zeros(8), True),
+        (np.arange(1.0, 9.0), True),
+    ],
+)
+def test_continuous_obs_agrees_with_the_r_writer_on_float32_underflow(
+    values: np.ndarray,
+    published: bool,
+) -> None:
+    """The two writers must accept and refuse the same obs columns.
+
+    `binary-payloads.R` refuses any nonzero value below 2^-149. Python checked
+    only the overflow end, so one export format had two meanings.
+    """
+    from cellucid.prepare_data._arrays import _require_continuous_obs_values
+
+    if published:
+        result = _require_continuous_obs_values(values, key="tiny", n_cells=8)
+        assert result.shape == (8,)
+        return
+
+    with pytest.raises(ValueError, match="outside the finite float32 range"):
+        _require_continuous_obs_values(values, key="tiny", n_cells=8)

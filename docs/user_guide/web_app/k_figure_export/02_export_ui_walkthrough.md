@@ -53,6 +53,15 @@ This is the “no excuses” workflow that works for most people.
 
 Figure export is controlled from the **Figure Export** panel in the left sidebar.
 
+```{figure} ../../../_static/screenshots/figure_export/panel-overview.png
+:alt: The Figure Export panel with its four collapsed groups — Framing, Labels and Annotations, Style, Download — above the Export button, with the pointer on Export.
+:width: 516px
+
+The panel opens with all four groups collapsed. They are mutually exclusive:
+opening one closes the others, so work through them in order rather than
+expecting to see them side by side.
+```
+
 **Which view gets exported?**
 
 - By default, Cellucid exports the **active view**:
@@ -106,11 +115,38 @@ Cellucid exposes **Plot size** controls as width × height in pixels. In the UI 
   - **1920 × 1080**
 - Editable numeric inputs for **W** and **H**.
 
+```{figure} ../../../_static/screenshots/figure_export/framing.png
+:alt: The Figure Export Framing group open, showing the plot size preset with its width and height boxes, the preview toggle with a colourblind-simulation selector and Refresh, and the frame-export crop controls with the aspect readout.
+:width: 472px
+
+The **Framing** group. The preset writes into the same two boxes you can type
+into; **Screen (half)** fills them from the current window on open, which is why
+they may not read `1600 × 1200` when you first look.
+```
+
 ### Plot size vs exported file size
 
 The numbers you enter represent the desired **plot content size**, not the entire exported figure.
 
 - If you include axes/legend/title, the final file will be **larger** because those elements are laid out *around* the plot (the plot is not shrunk to make room).
+
+Each accepts a whole number between **100 and 20000**. Anything outside that
+range is refused by the field itself before the export starts, with
+`Width must be between 100 and 20000.` or the matching height message.
+
+### How big the file actually comes out
+
+Worked example, single view, title on, axes on, legend on the right:
+
+| Stage | Width | Height |
+|---|---:|---:|
+| What you typed (plot content) | 400 | 300 |
+| Plus axis space, title, legend and outer padding | 768 | 446 |
+| PNG at 300 DPI (`× 300/96` = `× 3.125`) | 2400 | 1394 |
+
+The padding is fixed, not proportional, so it matters most at small plot sizes:
+the same 368 px of chrome is 92% of a 400 px plot and 23% of a 1600 px one. SVG
+skips the DPI stage entirely — it is written in the unscaled units of row two.
 
 ### PNG DPI scaling (the part that surprises people)
 
@@ -238,6 +274,16 @@ Emphasize selection does nothing if there are no highlighted/selected cells.
 ---
 
 ## Download options and large dataset strategies
+
+```{figure} ../../../_static/screenshots/figure_export/download.png
+:alt: The Figure Export Download group open, showing the download format selector, the PNG DPI selector, the SVG point-strategy selector and the export-all-views checkbox, with the pointer on that checkbox.
+:width: 472px
+
+The **Download** group. The strategy selector opens on the placeholder
+`Choose SVG strategy…`, which is not a valid choice: Cellucid never picks one
+for you, and pressing **Export** without choosing says
+`Choose an SVG point strategy.`
+```
 
 ### Download format options
 

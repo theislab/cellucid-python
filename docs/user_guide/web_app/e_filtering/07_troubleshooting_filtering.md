@@ -6,7 +6,15 @@ This page is a **symptom → diagnosis → fix** guide for filtering issues.
 
 ## Quick triage checklist (do this first)
 
-1) Look at **Active filters**:
+```{figure} ../../../_static/screenshots/filtering/active-filters-three-rows.png
+:alt: A block headed ACTIVE FILTERS (SELECTED VIEW ONLY) reading Showing 709 of 3,696 points above three rows each with a ticked checkbox and a circled cross; the rows read S_score with a numeric range and a cell count, clusters colon hiding two categories cut off with an ellipsis, and clusters colon outlier less than or equal to 95 percent.
+:width: 480px
+
+This is the block every answer on this page starts from. Scroll to the bottom
+of **Coloring & Filtering** to find it.
+```
+
+1) Look at **Active filters (selected view only)**:
    - What does it say: `Showing X of Y points`?
    - Which filters are listed?
 2) Confirm you’re in the **right view**:
@@ -29,6 +37,14 @@ This page is a **symptom → diagnosis → fix** guide for filtering issues.
 
 - The canvas looks empty.
 - Active filters shows: `Showing 0 of N points`.
+
+```{figure} ../../../_static/screenshots/filtering/window-zero-visible-cells.png
+:alt: The whole application window showing a blank light grid with no points at all, every legend row unchecked and greyed reading 0 of its own total, and the sidebar reading Showing 0 of 3,696 points above a single clusters hiding row.
+:width: 1440px
+
+What this failure actually looks like. The `of 3,696` half of the count line is
+the reassurance: the data loaded, and one filter row is hiding all of it.
+```
 
 ### Likely causes (ordered)
 
@@ -114,10 +130,23 @@ Use the fastest safe resets:
 
 ### How to confirm
 
-1) Confirm the outlier slider is visible (it only appears when supported by the active field).
+1) Confirm the outlier slider is visible at all — it only appears when the
+   active field carries outlier statistics, and never for a continuous field or
+   a gene.
+
+```{figure} ../../../_static/screenshots/filtering/window-outlier-100-off.png
+:alt: The whole application window coloured by clusters with the Outlier filter (latent space) slider parked at its right end reading 100 percent, loose points scattered around the coloured groups, and the sidebar reading Showing all 3,696 points above No filters active.
+:width: 1440px
+
+The commonest cause: the slider is present and correct, but still at `100%`,
+which means no filtering. Note there is no row in the filter list — a row only
+appears once the threshold drops below `99.99%`.
+```
+
 2) Set it to something obviously aggressive like `50%` as a diagnostic.
 3) Look for an Active filters entry like: `Field: outlier ≤ 50%`.
-4) If it exists, confirm it is not marked `(disabled)`.
+4) If it exists, confirm the row is not greyed and struck through (that means
+   you disabled it).
 
 ### Fix
 
@@ -146,7 +175,9 @@ Use the fastest safe resets:
 
 ### How to confirm
 
-- In the continuous legend, check the `Live filtering` toggle state.
+- In the continuous legend, check the `Live filtering` toggle state, or read
+  the one-line hint under it: `Changes apply as you drag` means on,
+  `Drag sliders, then click Filter` means off.
 
 ### Fix
 
@@ -155,6 +186,33 @@ Use the fastest safe resets:
 ### Prevention
 
 - For very large datasets, keep Live filtering `Off` and apply changes with `FILTER` to stay responsive.
+
+---
+
+## “The FILTER button is greyed out and won’t click”
+
+### Symptom
+
+- `FILTER` is pale and nothing happens when you click it.
+
+### Likely causes (ordered)
+
+1) `Live filtering` is `On`. That is the only cause.
+
+```{figure} ../../../_static/screenshots/filtering/filter-button-disabled-live-on.png
+:alt: The continuous legend Filtering block with the Live filtering toggle reading On, the hint Changes apply as you drag, and a pale grey FILTER button under the mouse pointer next to a black RESET button.
+:width: 428px
+
+`FILTER` is deliberately disabled while `Live filtering` is on, because the
+range is already applied on every slider step. Its tooltip says so:
+`Turn off Live filtering to use Filter`.
+```
+
+### Fix
+
+- Nothing is broken. Either keep `Live filtering` on and just drag, or turn it
+  off if you want the apply-once workflow — the button becomes clickable the
+  moment you do.
 
 ---
 
@@ -171,6 +229,14 @@ Use the fastest safe resets:
 3) You are in a heavy render mode (e.g., smoke) while changing filters.
 4) Many snapshots/views exist and the app is updating multiple view overlays/badges.
 5) Your machine/browser GPU is resource-constrained (especially on laptops).
+
+:::{note}
+**“The more I hide, the slower it gets” is no longer a symptom.** Hidden points
+are rejected before rasterisation, so a heavily filtered view draws faster than
+an unfiltered one. If filtering feels slow, the cost is in recomputing the mask
+while you drag, not in drawing the result — which is exactly why the
+apply-once workflow below helps.
+:::
 
 ### How to confirm
 

@@ -11,6 +11,7 @@ def test_jupyter_viewer_port_sync(monkeypatch, tmp_path: Path) -> None:
     If the bound server reports a different port, the viewer must use that exact port.
     """
     import cellucid.jupyter as jupyter
+    import cellucid.jupyter._exported as jupyter_exported
 
     class DummyServer:
         def __init__(
@@ -41,7 +42,9 @@ def test_jupyter_viewer_port_sync(monkeypatch, tmp_path: Path) -> None:
         def stop(self) -> None:
             return None
 
-    monkeypatch.setattr(jupyter, "CellucidServer", DummyServer)
+    # ``CellucidViewer._start_server`` resolves ``CellucidServer`` in the module
+    # that defines the viewer, so the patch has to name that module.
+    monkeypatch.setattr(jupyter_exported, "CellucidServer", DummyServer)
 
     viewer = jupyter.CellucidViewer(data_dir=tmp_path, port=8765, auto_open=False)
     try:
@@ -61,6 +64,7 @@ def test_jupyter_uses_only_the_explicit_browser_server_url(
     tmp_path: Path,
 ) -> None:
     import cellucid.jupyter as jupyter
+    import cellucid.jupyter._exported as jupyter_exported
 
     class DummyServer:
         def __init__(self, **kwargs):
@@ -80,7 +84,9 @@ def test_jupyter_uses_only_the_explicit_browser_server_url(
         def stop(self) -> None:
             return None
 
-    monkeypatch.setattr(jupyter, "CellucidServer", DummyServer)
+    # ``CellucidViewer._start_server`` resolves ``CellucidServer`` in the module
+    # that defines the viewer, so the patch has to name that module.
+    monkeypatch.setattr(jupyter_exported, "CellucidServer", DummyServer)
     monkeypatch.setenv("CELLUCID_CLIENT_SERVER_URL", "https://ignored.example")
 
     explicit = "https://notebook.example/user/alice/gateway/8765"

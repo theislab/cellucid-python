@@ -45,7 +45,15 @@ When you change something in the web app, make sure you explicitly check:
 
 - **State correctness**: do events fire exactly once? do caches invalidate? do counts match?
 - **Persistence**: does save/load preserve the relevant settings? if not, is it intentionally excluded?
-- **Performance**: did you add per-frame work or per-point allocations outside the renderer?
+- **Performance**: did you add per-frame work or per-point allocations outside
+  the renderer? The baseline to protect is that **an idle frame uploads nothing**
+  — see {doc}`07_rendering_pipeline_webgl_and_performance_notes`.
+- **Privacy**: did you add network egress or anything that outlives a reload? If
+  so, {doc}`../o_accessibility_privacy_security/02_privacy_model` changes in the
+  same commit.
+- **Failure messages**: does each distinct cause produce a distinct message and
+  error code? Collapsing a cancellation, a size refusal and a parse failure into
+  one message is a defect, not a simplification.
 - **Cross-feature interactions**: filters ↔ highlights ↔ multiview snapshots ↔ analysis ↔ exports ↔ sessions.
 
 If you’re adding a new feature, start by reading:

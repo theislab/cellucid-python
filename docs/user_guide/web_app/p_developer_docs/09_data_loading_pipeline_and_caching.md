@@ -41,6 +41,31 @@ The base URL is the critical bridge:
 - UI code should never hardcode demo-exports paths; it should always flow through an exports **base URL**.
 - Loader code should never assume “GitHub raw URL…”.
 
+```
+  local-demo   local-user   remote   github-repo   jupyter
+      │            │          │           │           │
+      └────────────┴──────┬───┴───────────┴───────────┘
+                          ▼
+              DataSourceManager                       ← source selection
+              data/data-source-manager.js
+                          │
+                          │ { sourceType, datasetId, baseUrl, metadata }
+                          ▼
+              data-loaders.js                          ← file loading
+                          │
+   ┌──────────────────────┼──────────────────────┐
+   ▼                      ▼                      ▼
+dataset_identity.json  obs_manifest.json    embeddings / points
+                       var_manifest.json    connectivity (optional)
+                          │
+                          ▼
+                     DataState                        ← typed arrays + LRU caches
+```
+
+Everything below `DataSourceManager` sees only a base URL and relative paths.
+That is the whole point of the split: `local-user` resolves reads against the
+picked directory rather than a real HTTP origin, and no loader has to know.
+
 Code pointers:
 - Source selection: `cellucid/assets/js/data/data-source-manager.js`
 - Loaders: `cellucid/assets/js/data/data-loaders.js`
@@ -135,9 +160,32 @@ Behavior:
 
 Common failure modes:
 - denied or policy-blocked local-file permissions
-- H5AD larger than the 512 MiB browser limit
+- a payload past one of the browser ceilings (see below)
 - malformed current AnnData identity or non-finite scientific payloads
 - invalid/multi-root Zarr ZIPs or archive/chunk memory limits
+
+#### Browser memory ceilings (deliberate refusals)
+
+These are refusals, not crashes: the loader rejects work it cannot finish rather
+than exhausting the tab. Each has a fixed constant in the data layer.
+
+| Ceiling | Applies to |
+|---|---|
+| 512 MiB | a direct-in-browser `.h5ad` file; any single materialised array; a declared binary payload; a Zarr array; the connectivity validation working set |
+| 64 MiB | one metadata JSON document; one decoded Zarr chunk |
+| 4 MiB | Zarr metadata |
+| 64 GiB | a Zarr ZIP archive, and its total uncompressed size |
+
+The user-facing advice for every one of them is the same: use the Cellucid
+server or a prepared export. If you add a new bounded reader, follow the same
+pattern — refuse before allocating, and name the ceiling in the message.
+
+:::{note}
+Several of these messages currently print the ceiling as a raw byte integer
+(`67108864`, `536870912`, `68719476736`) rather than a human unit. Two of them
+spell out “512 MiB”. That inconsistency is worth fixing the next time these
+messages are touched.
+:::
 
 ### `remote` (cellucid-python server)
 
@@ -241,9 +289,27 @@ These caches are designed to prevent “scroll through genes for 10 minutes → 
 Community annotation stores:
 - raw downloaded JSON file content (IndexedDB)
 - a small path→sha index (localStorage) for “which files changed?”
+- the working annotation session itself (localStorage), which holds votes,
+  comments, suggestions and profile — dataset-derived content, not preferences
 
 Code:
 - `cellucid/assets/js/app/community-annotations/file-cache.js`
+
+### 5) Marker cache (IndexedDB)
+
+Marker-discovery results, including computed statistic arrays, are cached in
+their own IndexedDB database. If IndexedDB is unavailable the cache degrades
+**silently** — no notification is raised, analyses simply recompute.
+
+Code:
+- `cellucid/assets/js/app/analysis/genes-panel/marker-cache.js`
+
+:::{important}
+Layers 4 and 5 persist data derived from the user’s dataset, so they belong in
+the privacy model, not just the performance story. Anything you add here that
+outlives a reload must be documented in
+{doc}`../o_accessibility_privacy_security/02_privacy_model`.
+:::
 
 ---
 
@@ -306,6 +372,23 @@ Likely cause:
 
 Fix:
 - Fetch the URL in a new tab; confirm it’s real JSON and returns `404` when missing.
+
+### Symptom: a load reported “invalid format” but the file is fine
+
+Read the message again — this class of failure is now split four ways, and
+“invalid format” means only the last one:
+
+| Message contains | Cause |
+|---|---|
+| “was cancelled” | An abort — a newer selection superseded this load. Re-thrown untouched so it is never relabelled. |
+| “is larger than the metadata size ceiling” | A bounded reader refused the payload |
+| “response body transfer failed” | The connection dropped mid-body |
+| “must contain valid JSON” | Genuinely malformed content |
+
+If you add a new bounded or cancellable read, preserve this: check for an abort
+first and re-throw it unchanged, distinguish the range failure from the parse
+failure, and give each its own error code. Collapsing them back into one message
+is what made these failures undiagnosable before.
 
 ### Symptom: “Gzip decompression not supported”
 

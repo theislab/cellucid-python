@@ -48,10 +48,15 @@ Recommendations:
 
 ---
 
-## Step 3 — Implement the export writer (`prepare_data.py`)
+## Step 3 — Implement the export writer (`prepare_data/`)
 
-Implementation file:
-- `cellucid-python/src/cellucid/prepare_data.py`
+Implementation files:
+- `cellucid-python/src/cellucid/prepare_data/_export.py` (`def prepare(...)`, the
+  public entry point and its argument contracts)
+- `cellucid-python/src/cellucid/prepare_data/_generation.py` (the writer that
+  builds one generation in a staging directory)
+- `cellucid-python/src/cellucid/prepare_data/_manifest.py` (the compact_v1 manifest
+  format and the payload paths it declares)
 
 Checklist:
 

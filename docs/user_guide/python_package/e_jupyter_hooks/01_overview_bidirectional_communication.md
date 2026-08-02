@@ -42,7 +42,9 @@ Once you have a `viewer` (from `show_anndata(...)` or `show(...)`), you can:
   - `@viewer.on_selection`: user selects cells
   - `@viewer.on_hover`: user hovers cells (debounced)
   - `@viewer.on_click`: user clicks a cell
-  - `@viewer.on_message`: one envelope stream for all seven current event types
+  - `@viewer.on_command_error`: a command you sent was rejected by the viewer
+    (only the web build that emits `command_error` sends it)
+  - `@viewer.on_message`: one envelope stream for all eight current event types
 
 - **Pull durable state (session bundles)**
   - `bundle = viewer.get_session_bundle()` (no browser download required)
@@ -94,7 +96,7 @@ The Python server routes that JSON event to the right `viewer` instance using `v
 
 If you want to trace the implementation:
 
-- Python: `cellucid-python/src/cellucid/jupyter.py` (viewer classes + hook registry)
+- Python: `cellucid-python/src/cellucid/jupyter/` (viewer classes + hook registry)
 - Python: `cellucid-python/src/cellucid/_server_base.py` (`/_cellucid/events`,
   session bundle upload, verified web-generation delivery)
 - Web app: `cellucid/assets/js/data/jupyter-source.js` (JupyterBridgeDataSource; message handling + event POST)

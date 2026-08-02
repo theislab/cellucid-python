@@ -932,11 +932,11 @@ def test_prepared_server_reports_exact_viewer_generation_establishment(
     cache_calls: list[dict[str, object]] = []
 
     monkeypatch.setattr(
-        "cellucid.server.print_detail",
+        "cellucid.server._server.print_detail",
         lambda label, value: detail_calls.append((label, value)),
     )
     monkeypatch.setattr(
-        "cellucid.server.print_success",
+        "cellucid.server._server.print_success",
         lambda message: success_calls.append(message),
     )
     monkeypatch.setattr(

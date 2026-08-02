@@ -69,6 +69,36 @@ Workarounds:
 
 ## Scale edge cases (big dataset, huge legends)
 
+### An export that is simply too large
+
+There are two ceilings, and they fail at different moments.
+
+**The field's own limit.** `W` and `H` accept a whole number between **100** and
+**20000**. A value outside that never starts an export; the input rejects it in
+place with `Width must be between 100 and 20000.` (or the height equivalent),
+or `Width must be a whole number.` for a non-integer.
+
+**The GPU's limit.** The point layer is re-rendered through WebGL at export
+resolution, so the *scaled* plot rectangle has to fit in a drawing buffer the
+graphics driver will allocate. This is the one that catches people, because the
+number that must fit is not the number you typed — it is the plot width times
+`DPI / 96`. A 6000 px plot at 600 DPI asks for 37,500 px, and a typical limit is
+16,384. When it does not fit you get a toast reading:
+
+> Export failed: Figure export 37500×… exceeds this GPU's exact 16384×16384 raster limit.
+
+and, in the rarer case where the buffer is accepted but comes back short:
+
+> Export failed: Figure export could not allocate the exact …×… WebGL2 drawing buffer.
+
+The limit is the machine's, not Cellucid's, so the same settings can succeed on
+one computer and fail on another.
+
+**What to do.** Lower DPI before lowering plot size: 300 DPI is the usual journal
+requirement and 600 DPI doubles every dimension for no gain in a raster figure
+that is already oversampled. Or export **SVG**, which has no DPI stage and no
+raster ceiling for the vector strategies.
+
 ### Millions of points (SVG size explosion)
 
 If you have hundreds of thousands to millions of visible points:
@@ -116,6 +146,36 @@ Strategies:
 ---
 
 ## Rendering edge cases (smoke/fog/overlays)
+
+### Export blocked: the view contains something the figure cannot
+
+Some things the viewer draws have no representation in an exported figure. When
+one of them is on, **Export** does not produce a degraded figure and does not
+warn afterwards — it stops before rendering anything and says what is in the
+way.
+
+```{figure} ../../../_static/screenshots/figure_export/read-export-blocked-dialog.png
+:alt: The Export blocked dialog over the app, headed "Export blocked", explaining that Cellucid will not create an export that differs from the active view, listing "Velocity overlay not exported" with its reason, and offering a single Back button.
+:width: 1440px
+
+Pressing **Export** with the velocity overlay running. One heading, one reason
+per blocker, one **Back** button — there is no “export anyway”.
+```
+
+The blockers, and what each one wants you to do:
+
+| Blocker | What to do |
+|---|---|
+| **Velocity overlay not exported** | The figure would show the point layer without the flow the screen shows. Turn `Show overlay` off, export, turn it back on. |
+| **Connectivity overlay not exported** | Same reasoning for the neighbour-graph edges. Turn `Show connectivity edges` off. |
+| **_<Mode>_ render mode not exported** | The active render mode has no figure renderer. Switch back to `Points`. |
+| **Velocity overlay state unavailable** / **Active render mode unavailable** / **Active viewer background unavailable** | The exporter could not read the state it needs in order to reproduce the view faithfully, so it refuses rather than guessing. Reload before exporting. |
+
+This is a different mechanism from the **Never exported** line in the Labels &
+Annotations group. That line names four interaction aids — orbit compass, lasso
+and selection radius indicators, multiview panel title chips, projectile sandbox
+— which are dropped silently by design because they are aids, not measurements.
+A blocker is something that would change what the figure appears to *say*.
 
 ### Reference grid
 

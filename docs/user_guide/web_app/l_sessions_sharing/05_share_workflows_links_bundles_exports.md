@@ -79,7 +79,7 @@ This is the default 1:1 collaboration workflow.
 ### Sender steps
 
 1) Confirm the dataset is loaded and looks correct.
-2) Save a session: **User data → Session state → Save State**.
+2) Save a session: **Session → Session state → Save State**.
 3) Package the dataset export folder:
    - If it’s already hosted somewhere your colleague can access, share the link.
    - Otherwise, zip the export folder and send it (or place it in a shared drive).

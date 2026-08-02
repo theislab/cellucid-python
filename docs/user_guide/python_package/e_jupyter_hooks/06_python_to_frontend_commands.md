@@ -55,8 +55,57 @@ Most commands require the viewer to be **displayed** and (for best results) **re
 viewer.wait_for_ready(timeout=60)
 ```
 
-If you call commands before the iframe exists, the Python side will warn and do nothing.
+If you call a command before the viewer is displayed, `send_message` raises
+`RuntimeError` and nothing is sent.
 ```
+
+## Knowing whether a command applied
+
+Commands are **one-way**. `viewer.set_color_by("CD8A")` returns `None` as soon
+as the message has been handed to the notebook output; it does not wait for the
+viewer, and its return value says nothing about whether the viewer applied it.
+
+When the viewer rejects a command — an unknown field, an out-of-range index, a
+malformed color — it reports the failure back over the event channel as a
+`command_error` event.
+
+```{note}
+Only the web build that emits `command_error` reports these. Older builds —
+including the one currently published — refuse a command silently, so on those
+the checks below find nothing and a refused command still looks like a
+successful one. See {doc}`07_frontend_to_python_events` for why Python accepts
+the event before the viewer sends it.
+```
+
+Cellucid prints it:
+
+```text
+[cellucid] viewer.set_color_by(...) did not take effect in the viewer: Jupyter set-color-by field must be exact non-empty text
+[cellucid] The viewer is unchanged. Handle this in code with @viewer.on_command_error.
+```
+
+To act on it in code, register a hook, which also silences that notice:
+
+```python
+rejected = []
+
+@viewer.on_command_error
+def record(event):
+    rejected.append(event)
+```
+
+Record rather than raise: hooks run on the server request thread, so raising
+there answers the viewer with HTTP 500 and drops the event instead of failing
+your cell.
+
+Two limits are worth knowing:
+
+- The report is **asynchronous**. It arrives after the cell that sent the
+  command has finished, so the failing call itself still returns `None`.
+- It names the **command type**, not the individual call, because commands
+  carry no request id.
+
+See {doc}`07_frontend_to_python_events` for the exact record.
 
 ## Command catalog (public Python API)
 
@@ -180,13 +229,18 @@ If “nothing happens” when sending commands:
    viewer.debug_connection()
    ```
    - If ping/pong fails, you have a connectivity/proxy problem.
-3. If ping/pong succeeds but a specific command is ignored:
+3. Check whether the viewer rejected the command rather than ignoring it:
+   ```python
+   viewer.debug_connection()["recent_events"]["command_errors"]
+   ```
+4. If ping/pong succeeds and no command was rejected, but a specific command
+   is ignored:
    - Re-establish the exact configured source generation:
      ```python
      viewer.clear_web_cache()
      ```
    - Re-run the cell to create a fresh viewer.
-4. Use the full guide: {doc}`14_troubleshooting_hooks`
+5. Use the full guide: {doc}`14_troubleshooting_hooks`
 
 ## Next steps
 

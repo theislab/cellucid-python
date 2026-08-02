@@ -9,8 +9,10 @@ prepared dataset directories.
 The small
 [cellucid-demo-custom-datasets](https://github.com/theislab/cellucid-demo-custom-datasets)
 repository is the reference implementation. It contains three deterministic
-synthetic datasets, a wet-lab-friendly README, and one root-level
-`generate_datasets.py` file that reproducibly renews those exports.
+synthetic datasets, a wet-lab-friendly README, one root-level
+`generate_datasets.py` file that reproducibly renews those exports, and the
+policy files any public repository needs (`LICENSE`, `CONTRIBUTING.md`,
+`SECURITY.md`, `SUPPORT.md`, `CODE_OF_CONDUCT.md`).
 Deliberately, that is all: there are no tests, validation harness, package
 scaffolding, workflows, `.github/` directory, or site assets to copy. The
 README walks from one ordinary Python `prepare(...)` call through the GitHub
@@ -36,12 +38,25 @@ content from your network.
    theislab/cellucid-demo-custom-datasets/exports
    ```
 
-4. Click **Load**.
+4. Click **Connect**.
 5. Wait for the connection message, then choose one of the three entries under
    **Sample datasets:**.
 
+```{figure} ../../../_static/screenshots/data_loading/connect-github-catalog.png
+:alt: Close-up of the GitHub data control with the value theislab/cellucid-demo-custom-datasets/exports typed into the text field and a mouse pointer resting on the Connect button beside it.
+:width: 496px
+
+The **GitHub data:** control with the reference path entered. Type the exports
+root — not a single dataset directory — and press **Connect**.
+```
+
 The shorthand above resolves deterministically to the `main` branch. Cellucid
 does not probe `master`, `gh-pages`, or any other branch.
+
+On success the connection reports how many datasets it validated, and those
+entries appear under **Sample datasets:**. A **Disconnect** button appears
+beneath the field, and **Connect** becomes **Reconnect** — that pair is how you
+tell a live connection from a path you merely typed.
 
 ### Three tiny datasets, three useful checks
 
@@ -346,9 +361,24 @@ generic private-repository authentication mechanism.
 
 ## Fast diagnosis
 
+The most common mistake is pointing Cellucid at the repository instead of the
+exports root inside it. That produces two notifications: the plain-language
+sentence, and — more useful — the exact raw URL that returned 404, which you can
+paste straight into a browser tab.
+
+```{figure} ../../../_static/screenshots/data_loading/fail-github-catalog-not-found.png
+:alt: Two stacked Cellucid notifications. The upper one reads Resource not found followed by a raw.githubusercontent.com URL ending in datasets.json. The lower one reads The GitHub repository could not be reached: nothing is published at that address (the server answered "not found"). Check the address for a typo, then try again.
+:width: 776px
+
+Connecting to `theislab/cellucid-demo-custom-datasets` with the `/exports`
+suffix left off. Cellucid names both the plain cause and the exact URL it asked
+for; opening that URL yourself confirms whether the problem is your path, your
+branch, or your network.
+```
+
 | Symptom | Check first |
 |---|---|
-| `datasets.json not found` | The value must point at the exports root, not one dataset directory; open the raw catalog URL. |
+| `datasets.json not found` | The value must point at the exports root, not one dataset directory; open the raw catalog URL from the notification. |
 | `Invalid datasets.json` | Remove unsupported keys, require `default`, end each `path` in `/`, and make IDs and paths unique. |
 | A dataset is reported invalid | Open its `dataset_identity.json`; confirm the catalog's optional name, description, and counts match it exactly. |
 | The catalog connects but no dataset opens from a link | Add `dataset=<exact-dataset-id>` for a catalog with multiple entries. |

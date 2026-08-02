@@ -13,6 +13,21 @@ These pages explain how to *drive the viewer* confidently: navigation, camera, r
 4) {doc}`03_render_modes_points_vs_volumetric_smoke`
 5) {doc}`02_camera_controls_advanced` (when you want to tune)
 6) {doc}`06_troubleshooting_core_interactions` (when something feels “stuck”)
+7) {doc}`07_screenshots` (every control on this page, photographed)
+
+## Where these controls live
+
+Everything in this section is in two sidebar accordions, **Visualization** and
+**Compare Views**. Inside **Compare Views**, the **Navigation** block is the one
+you will use most, and it changes shape with the mode you pick:
+
+```{figure} ../../../_static/screenshots/web_app/navigation-controls-orbit.png
+:alt: A panel headed NAVIGATION with a small circled i button, a MODE dropdown reading Orbit with the mouse pointer pressing it, and a bordered box below holding a KEYBOARD SPEED slider reading 0.40x, a ticked GOOGLE EARTH-STYLE DRAG checkbox and a ticked SHOW ORBIT ANCHOR checkbox.
+:width: 472px
+
+The **Navigation** block in Orbit mode, the default for a 3D embedding. The
+`Mode` dropdown is the control this whole section revolves around.
+```
 
 ::::{grid} 1 2 2 2
 :gutter: 3
@@ -57,6 +72,14 @@ How 1D/2D/3D switching works (per view), what changes, and what doesn’t.
 :link-type: doc
 
 Symptom → diagnosis → fix for “can’t rotate”, “controls disappear”, “smoke blank”, “context lost”, and more.
+:::
+
+:::{grid-item-card} {octicon}`image;1.5em;sd-mr-1` Verified captures
+:link: 07_screenshots
+:link-type: doc
+
+The navigation, render-mode, dimension, multiview and camera-path controls as
+they appear in the running app.
 :::
 
 ::::

@@ -24,10 +24,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import cellucid
 import cellucid.prepare_data as prepare_data
 from cellucid.jupyter import CellucidViewer
 from cellucid.prepare_data import generate_datasets_manifest, prepare
-from cellucid.server import CellucidServer, _list_exported_datasets
+from cellucid.server import CellucidServer
+from cellucid.server._datasets import _list_exported_datasets
 
 N_CELLS = 3
 
@@ -245,17 +247,29 @@ def test_anndata_server_expands_the_home_directory(
 
 def test_every_user_supplied_path_entry_point_expands_the_home_directory() -> None:
     """Guard the whole class: the sites fixed here must keep calling expanduser."""
-    package_root = Path(prepare_data.__file__).resolve().parent
+    package_root = Path(cellucid.__file__).resolve().parent
     expected = {
-        "prepare_data.py": ["Path(out_dir).expanduser()", "Path(exports_dir).expanduser()"],
-        "server.py": [
+        # ``out_dir`` is expanded inside ``_require_export_output_directory``,
+        # which resolves it and refuses every protected directory before any
+        # path is created, locked, written, or removed.
+        "_contracts.py": [
+            "expanded = Path(value).expanduser()",
+        ],
+        "prepare_data/_catalog.py": [
+            "Path(exports_dir).expanduser()",
+        ],
+        "server/_datasets.py": [
             "Path(data_dir).expanduser()",
+        ],
+        "server/_server.py": [
             "Path(data_dir).expanduser().resolve()",
             "Path(web_cache_dir).expanduser().resolve()",
         ],
-        "jupyter.py": [
-            "Path(data_dir).expanduser().resolve()",
+        "jupyter/_base.py": [
             "Path(web_cache_dir).expanduser().resolve()",
+        ],
+        "jupyter/_exported.py": [
+            "Path(data_dir).expanduser().resolve()",
         ],
         "anndata_server.py": [
             "Path(data).expanduser()",

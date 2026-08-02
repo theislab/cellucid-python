@@ -79,7 +79,7 @@ def _live_export_lock(target: Path) -> Iterator[None]:
             (
                 "import sys\n"
                 "from pathlib import Path\n"
-                "from cellucid.prepare_data import _exclusive_export_generation\n"
+                "from cellucid.prepare_data._locking import _exclusive_export_generation\n"
                 "with _exclusive_export_generation(Path(sys.argv[1])):\n"
                 "    print('READY', flush=True)\n"
                 "    sys.stdin.read(1)\n"
@@ -171,7 +171,7 @@ def _attempt_lock_in_subprocess(target: Path) -> subprocess.CompletedProcess[str
             (
                 "import sys\n"
                 "from pathlib import Path\n"
-                "from cellucid.prepare_data import _exclusive_export_generation\n"
+                "from cellucid.prepare_data._locking import _exclusive_export_generation\n"
                 "try:\n"
                 "    with _exclusive_export_generation(Path(sys.argv[1])):\n"
                 "        raise SystemExit(3)\n"
@@ -198,7 +198,7 @@ def _leave_dead_export_lock(target: Path) -> None:
             (
                 "import os, sys\n"
                 "from pathlib import Path\n"
-                "from cellucid.prepare_data import _exclusive_export_generation\n"
+                "from cellucid.prepare_data._locking import _exclusive_export_generation\n"
                 "owner = _exclusive_export_generation(Path(sys.argv[1]))\n"
                 "owner.__enter__()\n"
                 "os._exit(73)\n"
@@ -226,9 +226,10 @@ def _crash_export_at_rename(target: Path, phase: str) -> None:
                 "import numpy as np\n"
                 "import pandas as pd\n"
                 "module = importlib.import_module('cellucid.prepare_data')\n"
+                "transaction = importlib.import_module('cellucid.prepare_data._transaction')\n"
                 "target = Path(sys.argv[1])\n"
                 "phase = sys.argv[2]\n"
-                "real_rename = module._rename_export_path\n"
+                "real_rename = transaction._rename_export_path\n"
                 "def crashing_rename(source, destination):\n"
                 "    source = Path(source)\n"
                 "    destination = Path(destination)\n"
@@ -250,7 +251,7 @@ def _crash_export_at_rename(target: Path, phase: str) -> None:
                 "        os._exit(73)\n"
                 "    if phase == 'stage-published' and is_stage_publish:\n"
                 "        os._exit(73)\n"
-                "module._rename_export_path = crashing_rename\n"
+                "transaction._rename_export_path = crashing_rename\n"
                 "embedding = np.array(\n"
                 "    [[-3.0, 1.0], [0.5, 5.0], [8.0, -2.0]],\n"
                 "    dtype=np.float32,\n"
@@ -345,7 +346,7 @@ def test_failed_force_generation_preserves_the_prior_generation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import cellucid.prepare_data as prepare_module
+    from cellucid.prepare_data import _generation as prepare_module
 
     output = tmp_path / "generation"
     prepare(**_prepare_kwargs(output, dimensions=3))
@@ -374,7 +375,7 @@ def test_failed_initial_generation_leaves_no_partial_target(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import cellucid.prepare_data as prepare_module
+    from cellucid.prepare_data import _generation as prepare_module
 
     output = tmp_path / "generation"
 
@@ -440,7 +441,7 @@ def test_legacy_pid_lock_file_does_not_claim_live_ownership(
 def test_same_process_lock_is_not_reentrant_and_distinct_targets_are_independent(
     tmp_path: Path,
 ) -> None:
-    from cellucid.prepare_data import _exclusive_export_generation
+    from cellucid.prepare_data._locking import _exclusive_export_generation
 
     first = tmp_path / "first"
     second = tmp_path / "second"
@@ -460,7 +461,7 @@ def test_same_process_lock_is_not_reentrant_and_distinct_targets_are_independent
 def test_case_alias_cannot_release_a_same_process_lock(
     tmp_path: Path,
 ) -> None:
-    from cellucid.prepare_data import _exclusive_export_generation
+    from cellucid.prepare_data._locking import _exclusive_export_generation
 
     canonical_target = tmp_path / "CaseSensitiveTarget"
     alias_target = tmp_path / "casesensitivetarget"
@@ -484,7 +485,7 @@ def test_case_alias_cannot_release_a_same_process_lock(
 def test_unsafe_lock_nodes_are_retained_and_do_not_mutate_their_targets(
     tmp_path: Path,
 ) -> None:
-    from cellucid.prepare_data import _exclusive_export_generation
+    from cellucid.prepare_data._locking import _exclusive_export_generation
 
     directory_target = tmp_path / "directory-target"
     directory_lock = tmp_path / ".directory-target.cellucid.lock"
@@ -542,7 +543,7 @@ def test_existing_lock_replaced_during_open_is_not_adopted(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import cellucid.prepare_data as prepare_module
+    from cellucid.prepare_data import _locking as prepare_module
 
     target = tmp_path / "generation"
     lock_path = tmp_path / ".generation.cellucid.lock"
@@ -600,7 +601,7 @@ def test_same_inode_lock_mutation_during_open_is_not_adopted(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import cellucid.prepare_data as prepare_module
+    from cellucid.prepare_data import _locking as prepare_module
 
     target = tmp_path / "generation"
     lock_path = tmp_path / ".generation.cellucid.lock"
@@ -657,7 +658,7 @@ def test_lock_replaced_after_os_acquisition_is_rejected_before_entry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import cellucid.prepare_data as prepare_module
+    from cellucid.prepare_data import _locking as prepare_module
 
     target = tmp_path / "generation"
     lock_path = tmp_path / ".generation.cellucid.lock"
@@ -697,7 +698,7 @@ def test_lock_cleanup_preserves_cancellation_and_body_errors(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import cellucid.prepare_data as prepare_module
+    from cellucid.prepare_data import _locking as prepare_module
 
     cancellation_target = tmp_path / "cancellation-target"
 
@@ -755,7 +756,7 @@ def test_forked_child_closes_inherited_descriptors_and_owns_its_new_lock(
             (
                 "import errno, os, sys\n"
                 "from pathlib import Path\n"
-                "import cellucid.prepare_data as prepare_module\n"
+                "from cellucid.prepare_data import _locking as prepare_module\n"
                 "target = Path(sys.argv[1])\n"
                 "trigger_read, trigger_write = os.pipe()\n"
                 "result_read, result_write = os.pipe()\n"
@@ -878,7 +879,7 @@ def test_export_transaction_recovers_every_unambiguous_state(
     backup_exists: bool,
     expected_owner: str | None,
 ) -> None:
-    import cellucid.prepare_data as prepare_module
+    from cellucid.prepare_data import _transaction as prepare_module
 
     target = tmp_path / "generation"
     transaction_id = "0123456789abcdef0123456789abcdef"
@@ -933,7 +934,7 @@ def test_export_transaction_fails_closed_for_ambiguous_states(
     had_target: bool,
     state: tuple[bool, bool, bool],
 ) -> None:
-    import cellucid.prepare_data as prepare_module
+    from cellucid.prepare_data import _transaction as prepare_module
 
     target = tmp_path / "generation"
     transaction_id = "abcdef0123456789abcdef0123456789"
@@ -977,14 +978,15 @@ def test_export_transaction_revalidates_journal_before_publication_mutation(
     tmp_path: Path,
     mutation: str,
 ) -> None:
-    import cellucid.prepare_data as prepare_module
+    from cellucid.prepare_data import _locking as lock_module
+    from cellucid.prepare_data import _transaction as prepare_module
 
     target = tmp_path / "generation"
     target.mkdir()
     (target / "owner").write_text("prior", encoding="utf-8")
     prior_snapshot = _snapshot(target)
 
-    with prepare_module._exclusive_export_generation(target):
+    with lock_module._exclusive_export_generation(target):
         transaction_id, had_target, stage, backup = prepare_module._begin_export_transaction(target)
         assert had_target is True
         (stage / "owner").write_text("candidate", encoding="utf-8")
@@ -1063,7 +1065,7 @@ def test_killed_export_recovers_at_every_rename_boundary(
 def test_transaction_journal_rejects_noncanonical_bytes_without_mutation(
     tmp_path: Path,
 ) -> None:
-    import cellucid.prepare_data as prepare_module
+    from cellucid.prepare_data import _transaction as prepare_module
 
     target = tmp_path / "generation"
     target.mkdir()
@@ -1087,7 +1089,7 @@ def test_transaction_journal_rejects_noncanonical_bytes_without_mutation(
 def test_partial_transaction_journal_write_is_recovered_before_target_policy(
     tmp_path: Path,
 ) -> None:
-    import cellucid.prepare_data as prepare_module
+    from cellucid.prepare_data import _transaction as prepare_module
 
     target = tmp_path / "generation"
     target.mkdir()
@@ -1107,7 +1109,7 @@ def test_partial_transaction_journal_write_is_recovered_before_target_policy(
 def test_transaction_journal_hard_link_fails_closed(
     tmp_path: Path,
 ) -> None:
-    import cellucid.prepare_data as prepare_module
+    from cellucid.prepare_data import _transaction as prepare_module
 
     target = tmp_path / "generation"
     target.mkdir()
@@ -1136,7 +1138,7 @@ def test_transaction_journal_hard_link_fails_closed(
 def test_transaction_stage_symlink_fails_closed(
     tmp_path: Path,
 ) -> None:
-    import cellucid.prepare_data as prepare_module
+    from cellucid.prepare_data import _transaction as prepare_module
 
     target = tmp_path / "generation"
     target.mkdir()

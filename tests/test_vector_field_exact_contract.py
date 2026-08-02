@@ -154,7 +154,7 @@ def test_prepare_single_vector_field_is_unambiguous_and_metadata_is_exact(
     }
     exported = np.fromfile(
         tmp_path / "vectors" / "0_2d.bin",
-        dtype=np.float32,
+        dtype="<f4",
     ).reshape(3, 2)
     np.testing.assert_allclose(exported, vectors * 2.0)
 
@@ -228,14 +228,14 @@ def test_sparse_vector_values_follow_the_same_exact_contract(
     )
     prepared = np.fromfile(
         tmp_path / "export" / "vectors" / "0_2d.bin",
-        dtype=np.float32,
+        dtype="<f4",
     ).reshape(3, 2)
     np.testing.assert_allclose(prepared, vectors * 2.0)
 
     adapter = _adapter({"velocity_umap_2d": sparse_vectors})
     direct = np.frombuffer(
         adapter.get_vector_field_binary("velocity_umap", 2),
-        dtype=np.float32,
+        dtype="<f4",
     ).reshape(3, 2)
     np.testing.assert_allclose(direct, vectors * 2.0)
 
@@ -440,7 +440,7 @@ def test_anndata_single_vector_field_metadata_and_binary_are_exact() -> None:
     }
     exported = np.frombuffer(
         adapter.get_vector_field_binary("velocity_umap", 2),
-        dtype=np.float32,
+        dtype="<f4",
     ).reshape(3, 2)
     np.testing.assert_allclose(exported, vectors * 2.0)
 

@@ -22,10 +22,10 @@ is pushed. The workflow requires:
 The repository has no production dispatch event, token secret, or local upload
 command.
 
-For release 0.9.1, validate the candidate with:
+For release 0.9.1, validate the candidate with: <!-- CELLUCID_VERSION -->
 
 ```bash
-python scripts/validate_release.py --tag v0.9.1
+python scripts/validate_release.py --tag v0.9.1  # CELLUCID_VERSION
 python -m ruff check src tests scripts/validate_release.py scripts/normalize_sdist.py
 python -m mypy src/cellucid
 python -m pytest
@@ -33,7 +33,7 @@ python -m sphinx -W --keep-going -b html docs docs/_build/html
 python -m pip install "build==1.5.0" "twine==6.2.0"
 SOURCE_DATE_EPOCH=315532800 python -m build
 python scripts/normalize_sdist.py dist
-python scripts/validate_release.py --tag v0.9.1 --sdist dist
+python scripts/validate_release.py --tag v0.9.1 --sdist dist  # CELLUCID_VERSION
 python -m twine check --strict dist/*
 ```
 

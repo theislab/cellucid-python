@@ -60,6 +60,21 @@ Example pattern (illustrative):
 </details>
 ```
 
+### Readiness decision (also early)
+
+Ask when your control’s listener is attached.
+
+If it is wired anywhere **after an `await` in `main.js`’s bootstrap** — which is
+true of anything that needs a loaded dataset, the data-source manager or the
+renderer — the control must be authored `disabled` in `index.html` and
+registered with `cellucid/assets/js/app/ui/core/deferred-control-readiness.js`,
+which enables it once the listener exists.
+
+This is not cosmetic. A control that is clickable before anything listens
+swallows the click silently, and the user cannot distinguish that from a broken
+feature. Add `aria-describedby="data-source-status"` too, so a screen reader
+hears why it is inert.
+
 ### Session persistence decision (early)
 
 Decide whether your UI controls should be persisted by sessions:
@@ -67,6 +82,17 @@ Decide whether your UI controls should be persisted by sessions:
 - If you want generic inputs persisted, **do nothing special** (the serializer can capture many `input/select` values by DOM id).
 - If your section contains transient state (previews, auth tokens, network state), exclude it:
   - add `data-state-serializer-skip="true"` on the section or a subtree
+
+### Accessibility decision (also early, and cheap here)
+
+The browser suite asserts that **every control in the analysis panels has an
+accessible name** and that icon-only buttons resolve to exactly one name. Give
+your controls real labels now; retrofitting them means fighting a test that is
+already green elsewhere.
+
+If you add a persistent store or a network call, see the “Definition of done”
+list in {doc}`00_how_to_use_this_section` — both have documentation obligations
+outside this section.
 
 Reference:
 - `cellucid/assets/js/app/state-serializer/README.md`

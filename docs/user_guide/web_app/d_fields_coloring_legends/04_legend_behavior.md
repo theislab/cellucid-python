@@ -39,11 +39,13 @@ Each category row contains:
 - a **cell count** (how many cells are visible/available)
 - optional tools: **rename** (pencil) and **delete** (trash)
 
-```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
-:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
-:width: 246px
+```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
+:alt: A legend with the hint Click a swatch to pick a color at the top, Show All and Hide All buttons below it, and eight rows; each row has a blue ticked checkbox, then a coloured square swatch, then a category name such as Alpha or Ngn3 high EP, then a right-aligned cell count such as 481 cells, then a small pencil icon and a small bin icon.
+:width: 428px
 
-Selecting a categorical observation field colors the embedding and exposes its complete category legend.
+One row, read left to right: **checkbox · swatch · label · count · rename ·
+delete**. The pencil renames the category; the bin merges it into
+`unassigned` and does **not** delete any cells.
 ```
 
 ### Show All / Hide All
@@ -65,7 +67,19 @@ Interpretation:
 - **available** ≈ cells remaining after *other* filters (but before hiding this category)
 - **visible** ≈ cells currently shown after applying category visibility
 
-If a category has `0 available` cells, its checkbox and color picker are disabled and the row is greyed out.
+If a category has `0 available` cells, its checkbox and color picker are
+disabled, the row is greyed out, and hovering it shows
+`No cells available in this category after other filters`.
+
+```{figure} ../../../_static/screenshots/filtering/legend-category-unavailable.png
+:alt: The same legend under an additional filter, where Beta, Delta, Epsilon and Pre-endocrine are drawn in grey with unticked disabled checkboxes and read 0 cells, while Alpha, Ductal, Ngn3 high EP and Ngn3 low EP remain black and ticked with counts of 1, 122, 10 and 16 cells.
+:width: 428px
+
+All three count states at once: `0 cells` on four disabled rows, and small
+plain counts on the four rows that still have cells. A row only prints
+`visible / available` when the two numbers differ *and* available is above
+zero.
+```
 
 ### Change a category color (swatch)
 
@@ -156,13 +170,22 @@ At the top, you’ll see:
 
 Click the gradient bar to open the **colormap menu**, then click a palette to apply it.
 
+```{figure} ../../../_static/screenshots/web_app/legend-colormap-menu-open.png
+:alt: A legend headed COLOR SCALE (VIRIDIS) with its gradient bar expanded into a grid of small named gradient swatches — Viridis highlighted as active, then Plasma, Inferno, Magma, Cividis, Turbo, Twilight, Coolwarm and many more — above the numeric range and the Log color scale and Rescale colorbar toggles.
+:width: 428px
+
+The colormap menu, open. The active palette is marked, and the heading above
+the bar always names it — `Color scale (Viridis)` — so you can read the current
+palette without opening the menu.
+```
+
 Practical guidance:
 - Prefer **Viridis** / **Cividis** for scientific readability (especially colorblind-friendly workflows).
 - Use diverging palettes (e.g., **RdBu**) only when your values have a meaningful “center” (like 0).
 
 ### Log scale toggle
 
-**Use log scale** changes the color mapping to log10 for positive values.
+**Log color scale** changes the color mapping to log10 for positive values.
 
 Notes:
 - Zeros, negatives, and missing values render as neutral “None” gray.
@@ -213,8 +236,22 @@ When the active field is categorical, you’ll also see:
 
 These controls toggle additional overlays that summarize categories in the embedding.
 
+```{figure} ../../../_static/screenshots/web_app/window-centroids-and-labels.png
+:alt: The whole application window with the Pancreas embedding coloured by clusters, both Show centroids and Show labels ticked in the sidebar, and small markers with the category names Alpha, Beta, Delta, Ductal, Epsilon, Ngn3 high EP, Ngn3 low EP and Pre-endocrine drawn on the canvas at the centre of each coloured group.
+:width: 1440px
+
+**Show centroids** puts a marker at each category's centre; **Show labels**
+prints its name there. Together they turn a colour legend you have to
+cross-reference into a picture you can read directly — which is usually what
+you want in a figure.
+```
+
 Notes for multiview users:
 - centroid visibility is tracked per view, so different snapshots can show/hide centroids independently.
+
+Notes on counts:
+- a centroid disappears when its category has no visible cells left, so
+  centroids follow your filters rather than the raw data.
 
 ---
 

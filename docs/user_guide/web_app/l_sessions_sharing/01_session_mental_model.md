@@ -69,7 +69,7 @@ Practical implication:
 
 1) Load your dataset.
 2) Explore until you have what you want (color-by, filters, highlights, snapshots).
-3) Open **User data** → **Session state**.
+3) Open **Session** → **Session state**.
 4) Click **Save State**.
 5) Find the downloaded file (usually in your Downloads folder).
 6) Send the file to your collaborator **together with the dataset export folder** (or tell them where the dataset is hosted).
@@ -214,7 +214,7 @@ If you want to preserve your current work, save a session *first*, then load the
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
 :alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
-:width: 246px
+:width: 524px
 
 The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
 ```

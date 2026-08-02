@@ -48,20 +48,40 @@ cellucid/
 ├── index.html                     # Single-page app shell (sidebar + canvas + scripts)
 └── assets/
     ├── css/                       # Design system + themes
-    ├── js/
-    │   ├── app/                   # App layer (state + UI wiring + sessions + analysis)
-    │   │   ├── main.js            # App entry point (bootstrap + dataset load orchestration)
-    │   │   ├── state/             # DataState + managers (fields/filters/colors/highlights/views)
-    │   │   ├── ui/                # UI coordinator + sidebar modules
-    │   │   ├── session/           # Session bundle save/load (.cellucid-session)
-    │   │   ├── state-serializer/  # Feature-scoped snapshot/restore helpers (used by session)
-    │   │   ├── analysis/          # Analysis module (compute backends + plugins + UI)
-    │   │   └── community-annotations/ # GitHub-backed annotation voting (auth + sync + cache)
-    │   ├── data/                  # Data sources + binary loaders + h5ad/zarr adapters
-    │   ├── rendering/             # WebGL viewer + shaders + overlays (smoke, highlight, etc.)
-    │   └── utils/                 # Shared utilities (debug, theme, style manager, etc.)
-    └── exports/                   # (Optional) demo datasets, session snapshots, etc.
+    ├── external/                  # Vendored third-party libraries, served from
+    │                              #   this origin (plotly, gl-matrix, h5wasm).
+    │                              #   Nothing is loaded from a CDN; the page CSP
+    │                              #   would block it.
+    ├── fonts/  img/               # Static assets
+    └── js/
+        ├── analytics/             # Google Analytics helpers. Inert unless the
+        │                          #   page is served from a production hostname
+        │                          #   (see ui/core/ga-init.js).
+        ├── app/                   # App layer (state + UI wiring + sessions + analysis)
+        │   ├── main.js            # App entry point (bootstrap + dataset load orchestration)
+        │   ├── state/             # DataState (state/core) + managers
+        │   │                      #   (fields/filters/colors/highlights/views)
+        │   ├── ui/                # UI coordinator (ui/core) + sidebar modules (ui/modules)
+        │   ├── session/           # Session bundle save/load (.cellucid-session)
+        │   ├── state-serializer/  # Feature-scoped snapshot/restore helpers (used by session)
+        │   ├── analysis/          # Analysis module (compute backends + plugins + UI)
+        │   ├── community-annotations/ # GitHub-backed annotation voting (auth + sync + cache)
+        │   ├── dockable-accordions/   # Sidebar panel docking/undocking
+        │   ├── notification-center/   # The toast/notification surface
+        │   └── registries/            # Shared registration points
+        ├── data/                  # Data sources + binary loaders + h5ad/zarr adapters
+        ├── dev/                   # benchmark.js — the measurement harness behind
+        │                          #   the Performance Benchmark panel. Lazily
+        │                          #   imported; never on the product render path.
+        ├── rendering/             # WebGL viewer + shaders + overlays (smoke, highlight, etc.)
+        └── utils/                 # Shared utilities (debug, theme, style manager, exact records)
 ```
+
+:::{note}
+There is no `assets/exports/` directory. Demo datasets are **not** in this
+repository — they live in `cellucid-datasets` and are reached through an exports
+base URL. See {doc}`09_data_loading_pipeline_and_caching`.
+:::
 
 :::{tip}
 If you only read one file to understand “what runs when”, start with:
@@ -76,9 +96,17 @@ It is the bootstrap orchestrator and intentionally contains *no* per-frame logic
 ### 1) `cellucid/index.html` (app shell)
 
 `cellucid/index.html` contains:
+- A restrictive content security policy. `default-src 'self'`; the only external
+  script origin allowed is Google’s tag manager. Adding a CDN dependency means
+  editing this policy, which is the intended friction.
 - The `<canvas id="glcanvas">` used by the WebGL renderer.
-- The sidebar markup (accordion sections, inputs, buttons).
-- Early “must not throw” bootstraps (theme init, analytics init).
+- The sidebar markup (accordion sections, inputs, buttons). Data-source,
+  renderer and benchmark controls are authored **disabled** and are enabled
+  later by `ui/core/deferred-control-readiness.js`, so a control can never be
+  clicked before something is listening for it.
+- Early “must not throw” bootstraps: `ui/core/theme-init.js` and
+  `ui/core/ga-init.js` (classic scripts, not modules, so they run before the
+  module graph).
 - The module entry point:
   - `<script type="module" src="assets/js/app/main.js"></script>`
 

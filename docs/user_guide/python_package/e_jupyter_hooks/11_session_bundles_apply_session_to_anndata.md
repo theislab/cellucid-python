@@ -47,7 +47,7 @@ Nothing in Python can verify that for you — see
 
 ## What gets applied (current behavior)
 
-As implemented in `cellucid-python/src/cellucid/anndata_session.py`, applying a session can add:
+As implemented in `cellucid-python/src/cellucid/anndata_session/`, applying a session can add:
 
 ### 1) Highlight groups → boolean `adata.obs` columns
 

@@ -22,6 +22,9 @@ cellucid::cellucid_prepare(
   latent_space = latent,  # (n_cells, n_latent_dims)
   obs = obs,              # data.frame with n_cells rows
   X_umap_2d = umap2,      # (n_cells, 2)
+  obs_categorical_dtype = "uint16",
+  dataset_name = "My dataset",
+  dataset_id = "my_dataset",
   out_dir = "exports/my_dataset",
   force = TRUE
 )
@@ -34,6 +37,13 @@ cellucid::cellucid_prepare(
 - `latent_space` (matrix-like, `(n_cells, n_dims)`)
 - `obs` (data.frame with `n_cells` rows)
 - at least one embedding (`X_umap_1d` or `X_umap_2d` or `X_umap_3d`)
+- `obs_categorical_dtype` (`"uint8"` or `"uint16"`)
+- `dataset_name` and `dataset_id`
+
+`obs_categorical_dtype`, `dataset_name`, and `dataset_id` carry no default at
+all, so leaving one out stops the call with
+`cellucid_prepare() is missing 1 required argument:` and what a valid value
+would be. See {doc}`../g_api_reference_coverage/02_error_messages_and_exceptions_document_patterns`.
 
 ### Optional (common)
 

@@ -88,25 +88,28 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
+from ._byte_order import little_endian_payload_bytes
 from ._compression import deterministic_gzip_compress
+from ._contracts import (
+    _require_dataset_id,
+    _require_dataset_name,
+    _require_field_identities,
+    _require_native_boolean,
+    _require_nonempty_string,
+    _require_positive_native_integer,
+)
 from .connectivity_contract import (
     ConnectivityEdgePairs,
     build_connectivity_manifest,
     validate_connectivity_edges,
 )
-from .prepare_data import (
-    _json_category_values,
+from .prepare_data._arrays import (
     _normalize_finite_float32_embedding,
     _require_continuous_obs_values,
-    _require_dataset_id,
-    _require_dataset_name,
-    _require_field_identities,
     _require_finite_embedding_source,
     _require_finite_float32_array,
-    _require_native_boolean,
-    _require_nonempty_string,
-    _require_positive_native_integer,
 )
+from .prepare_data._categories import _json_category_values
 from .vector_fields import (
     SUPPORTED_EMBEDDING_KEYS,
     _finite_float32_matrix,
@@ -901,7 +904,7 @@ class AnnDataAdapter:
         """Get embedding as binary data (for HTTP response)."""
         compress = _require_native_boolean(compress, label="compress")
         embedding = self.get_embedding(dim)
-        data = embedding.astype(np.float32).tobytes()
+        data = little_endian_payload_bytes(embedding.astype(np.float32))
 
         if compress:
             return deterministic_gzip_compress(data, compresslevel=6)
@@ -963,7 +966,7 @@ class AnnDataAdapter:
                 label=f"Vector field {obsm_key!r}",
             )
 
-        data = self._vector_field_cache[cache_key].tobytes()
+        data = little_endian_payload_bytes(self._vector_field_cache[cache_key])
         if compress:
             return deterministic_gzip_compress(data, compresslevel=6)
         return data
@@ -1057,7 +1060,7 @@ class AnnDataAdapter:
             n_cells=self.n_cells,
         )
 
-        data = cast(bytes, values.tobytes())
+        data = little_endian_payload_bytes(values)
 
         if compress:
             return deterministic_gzip_compress(data, compresslevel=6)
@@ -1109,7 +1112,7 @@ class AnnDataAdapter:
         if n_missing > 0:
             logger.debug(f"obs field '{key}': {n_missing} missing values out of {self.n_cells}")
 
-        data = codes_typed.tobytes()
+        data = little_endian_payload_bytes(codes_typed)
         if compress:
             data = deterministic_gzip_compress(data, compresslevel=6)
 
@@ -1230,7 +1233,7 @@ class AnnDataAdapter:
         self._check_closed()
         compress = _require_native_boolean(compress, label="compress")
         quantiles = self._compute_outlier_quantiles(key)
-        data = quantiles.tobytes()
+        data = little_endian_payload_bytes(quantiles)
 
         if compress:
             return deterministic_gzip_compress(data, compresslevel=6)
@@ -1415,7 +1418,7 @@ class AnnDataAdapter:
         self._check_closed()
         compress = _require_native_boolean(compress, label="compress")
         values = self._get_validated_gene_values(gene_id)
-        data = values.tobytes()
+        data = little_endian_payload_bytes(values)
         if compress:
             return deterministic_gzip_compress(data, compresslevel=6)
         return data
@@ -1493,9 +1496,9 @@ class AnnDataAdapter:
         compress = _require_native_boolean(compress, label="compress")
         edges = self._compute_connectivity_edges()
 
-        sources_data = edges.sources.tobytes()
-        destinations_data = edges.destinations.tobytes()
-        weights_data = edges.weights.tobytes()
+        sources_data = little_endian_payload_bytes(edges.sources)
+        destinations_data = little_endian_payload_bytes(edges.destinations)
+        weights_data = little_endian_payload_bytes(edges.weights)
 
         if compress:
             sources_data = deterministic_gzip_compress(
@@ -1570,18 +1573,13 @@ class AnnDataAdapter:
             },
             "embeddings": embeddings_meta,
             "obs_fields": obs_fields,
-            "export_settings": {
-                # No file compression (data is served dynamically)
-                # Network compression (gzip) is applied transparently by the server
-                "compression": None,
-                # No quantization - full float32 precision for all values
-                # This ensures no data loss but increases network transfer size
-                "var_quantization": None,
-                "obs_continuous_quantization": None,
-                # Each categorical field declares its exact uint8/uint16 storage
-                # in obs_manifest.json according to its category count.
-                "obs_categorical_dtype": "auto",
-            },
+            # No export_settings. That key records the choices a writer made
+            # while producing an export; a dataset served straight from an
+            # AnnData object is not an export and made none. It is optional in
+            # the format, nothing reads it back, and stating it forced a
+            # placeholder dtype that no export can contain. Each categorical
+            # field declares its exact uint8/uint16 storage in obs_manifest.json
+            # according to its category count.
             "source": {
                 "name": {
                     "h5ad": "H5AD file",

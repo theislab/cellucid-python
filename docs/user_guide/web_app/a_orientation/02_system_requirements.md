@@ -198,7 +198,7 @@ Cellucid shows an overlay and requires a reload when the GPU context is lost.
 2) After reload, reduce GPU load:
    - avoid smoke mode or lower grid/quality,
    - keep fewer views,
-   - reduce point size / shader quality (if relevant),
+   - reduce point size,
    - close other GPU-heavy tabs.
 3) If the problem repeats, reduce the dataset/rendering load or use a machine
    with sufficient GPU memory.
@@ -215,14 +215,23 @@ Cellucid shows an overlay and requires a reload when the GPU context is lost.
 **Likely causes:**
 
 - Dataset is near your GPU’s limit.
-- Shader quality is too high for your machine.
+- Points are large enough to cover a lot of the screen.
 - You are in grid mode with many views.
 
 **Fix**
 
-- Reduce the number of views (clear snapshots).
-- Lower “Shader quality” (points mode) and avoid very large point sizes.
+- Reduce the number of views (clear snapshots) — note that a two- or three-view
+  row costs more than the 2×2 four-view grid.
+- Lower `Point size (log):` and avoid very large point sizes.
+- Turn off `Antialiasing (smooth point edges)` under **Image quality** and
+  reload — measured at roughly a fifth of the frame time at the default point
+  size on one Apple M1 Pro, at the cost of visibly harder point edges.
 - If using smoke: reduce grid density, ray quality, and render resolution.
+
+Lowering `Shader quality:` is a reasonable-sounding move that does **not** help:
+the three qualities measured the same at every point size tested. It changes how
+points look, not how fast they draw. See
+{doc}`../n_benchmarking_performance/02_performance_considerations_what_gets_slow_and_why`.
 
 ---
 
