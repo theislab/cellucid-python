@@ -288,24 +288,28 @@ def _open_export_lock_descriptor(
     return descriptor, generation
 
 
-def _acquire_export_lock_descriptor(descriptor: int) -> None:
-    """Acquire the R-interoperable byte range without waiting."""
-    if sys.platform == "win32":
+if sys.platform == "win32":
+
+    def _acquire_export_lock_descriptor(descriptor: int) -> None:
+        """Acquire the R-interoperable Windows byte range without waiting."""
         os.lseek(descriptor, 0, os.SEEK_SET)
         msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
-        return
 
-    fcntl.lockf(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB, 0, 0, os.SEEK_SET)
-
-
-def _release_export_lock_descriptor(descriptor: int) -> None:
-    """Release the exact byte range acquired by `_acquire_export_lock_descriptor`."""
-    if sys.platform == "win32":
+    def _release_export_lock_descriptor(descriptor: int) -> None:
+        """Release the exact Windows byte range acquired above."""
         os.lseek(descriptor, 0, os.SEEK_SET)
         msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
-        return
 
-    fcntl.lockf(descriptor, fcntl.LOCK_UN, 0, 0, os.SEEK_SET)
+else:
+
+    def _acquire_export_lock_descriptor(descriptor: int) -> None:
+        """Acquire the R-interoperable POSIX byte range without waiting."""
+        fcntl.lockf(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB, 0, 0, os.SEEK_SET)
+
+
+    def _release_export_lock_descriptor(descriptor: int) -> None:
+        """Release the exact POSIX byte range acquired above."""
+        fcntl.lockf(descriptor, fcntl.LOCK_UN, 0, 0, os.SEEK_SET)
 
 
 def _is_export_lock_contention(error: OSError) -> bool:
