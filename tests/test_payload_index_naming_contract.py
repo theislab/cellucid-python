@@ -265,9 +265,13 @@ def test_a_manifest_that_does_not_describe_its_own_files_is_rejected(
     # An axis directory declares files and nothing else, so a directory inside
     # one is refused by kind rather than compared against a declared name.
     (directory / "nested").mkdir()
+    nested_directory = directory / "nested"
     with pytest.raises(
         RuntimeError,
-        match=r"Gene payload directory holds a non-file entry: .*/var/nested$",
+        match=(
+            r"Gene payload directory holds a non-file entry: "
+            rf"{re.escape(str(nested_directory))}$"
+        ),
     ):
         _require_declared_payloads_on_disk(
             tmp_path,
@@ -321,9 +325,13 @@ def test_the_export_root_must_hold_exactly_what_the_export_declares(
     # A directory the export does not declare is refused by kind, so it can
     # never be mistaken for a declared payload of the same name.
     (root / "vectors").mkdir()
+    vectors_directory = root / "vectors"
     with pytest.raises(
         RuntimeError,
-        match=r"Export payload directory holds a non-file entry: .*/vectors$",
+        match=(
+            r"Export payload directory holds a non-file entry: "
+            rf"{re.escape(str(vectors_directory))}$"
+        ),
     ):
         reconcile()
     (root / "vectors").rmdir()

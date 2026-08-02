@@ -10,6 +10,7 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -647,6 +648,51 @@ def test_same_inode_lock_mutation_during_open_is_not_adopted(
     lock_path.write_bytes(b"")
     with prepare_module._exclusive_export_generation(target):
         pass
+    _assert_only_persistent_lock(tmp_path, target.name)
+
+
+def test_descriptor_metadata_differences_do_not_impersonate_path_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Descriptor timestamps are not a portable path-generation identity."""
+    from cellucid.prepare_data import _locking as prepare_module
+
+    target = tmp_path / "generation"
+    lock_path = tmp_path / ".generation.cellucid.lock"
+    lock_path.write_bytes(b"")
+    real_fstat = prepare_module.os.fstat
+
+    def fstat_with_distinct_metadata(descriptor: int) -> SimpleNamespace:
+        descriptor_stat = real_fstat(descriptor)
+        return SimpleNamespace(
+            st_dev=descriptor_stat.st_dev,
+            st_ino=descriptor_stat.st_ino,
+            st_mode=descriptor_stat.st_mode,
+            st_nlink=descriptor_stat.st_nlink,
+            st_uid=getattr(descriptor_stat, "st_uid", 0),
+            st_gid=getattr(descriptor_stat, "st_gid", 0),
+            st_size=descriptor_stat.st_size + 1,
+            st_mtime_ns=descriptor_stat.st_mtime_ns + 1,
+            st_ctime_ns=descriptor_stat.st_ctime_ns + 1,
+            st_birthtime_ns=(
+                getattr(descriptor_stat, "st_birthtime_ns", 0) + 1
+            ),
+            st_gen=getattr(descriptor_stat, "st_gen", 0),
+            st_flags=getattr(descriptor_stat, "st_flags", 0),
+            st_file_attributes=getattr(descriptor_stat, "st_file_attributes", 0),
+            st_reparse_tag=getattr(descriptor_stat, "st_reparse_tag", 0),
+        )
+
+    with monkeypatch.context() as descriptor_stat_patch:
+        descriptor_stat_patch.setattr(
+            prepare_module.os,
+            "fstat",
+            fstat_with_distinct_metadata,
+        )
+        with prepare_module._exclusive_export_generation(target):
+            pass
+
     _assert_only_persistent_lock(tmp_path, target.name)
 
 

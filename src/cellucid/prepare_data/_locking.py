@@ -119,6 +119,27 @@ def _export_lock_generation(path_stat: os.stat_result) -> _ExportLockGeneration:
     )
 
 
+def _same_export_lock_identity(
+    descriptor_stat: os.stat_result,
+    path_stat: os.stat_result,
+) -> bool:
+    """Compare the stable filesystem identity exposed by both stat APIs.
+
+    Windows does not guarantee that every metadata field returned for an open
+    descriptor is synchronized with a fresh path lookup.  In particular,
+    timestamp fields have changed semantics across supported Python releases.
+    Device and file ID are the cross-interface identity; generation metadata
+    is compared only between path lookups made through the same API.
+    """
+    return (
+        int(descriptor_stat.st_dev),
+        int(descriptor_stat.st_ino),
+    ) == (
+        int(path_stat.st_dev),
+        int(path_stat.st_ino),
+    )
+
+
 def _canonical_export_lock_key(lock_path: Path) -> str:
     """Return one process-local identity for path aliases to a lock inode."""
     return os.path.normcase(os.path.realpath(os.fspath(lock_path)))
@@ -212,11 +233,10 @@ def _validate_export_lock_descriptor(
             f"Export lock path changed while establishing ownership: {lock_path}"
         ) from error
     is_windows_reparse_point = _is_windows_reparse_point(path_stat)
-    descriptor_generation = _export_lock_generation(descriptor_stat)
     path_generation = _export_lock_generation(path_stat)
     if (
-        (expected_generation is not None and descriptor_generation != expected_generation)
-        or descriptor_generation != path_generation
+        (expected_generation is not None and path_generation != expected_generation)
+        or not _same_export_lock_identity(descriptor_stat, path_stat)
     ):
         raise RuntimeError(f"Export lock path changed while establishing ownership: {lock_path}")
     if (
@@ -229,7 +249,7 @@ def _validate_export_lock_descriptor(
         raise RuntimeError(
             f"Export lock path must identify one non-linked regular non-symbolic file: {lock_path}"
         )
-    return descriptor_generation
+    return path_generation
 
 
 def _open_export_lock_descriptor(
