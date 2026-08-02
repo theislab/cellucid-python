@@ -119,7 +119,7 @@ def _viewer_dequantize(codes, minimum, maximum, bits):
 
 
 def _read_var_field(out_dir, gene_id):
-    manifest = json.loads((out_dir / "var_manifest.json").read_text())
+    manifest = json.loads((out_dir / "var_manifest.json").read_text(encoding="utf-8"))
     schema = manifest["_varSchema"]
     for entry in manifest["fields"]:
         if entry[1] == gene_id:
@@ -128,7 +128,7 @@ def _read_var_field(out_dir, gene_id):
 
 
 def _read_obs_continuous_field(out_dir, key):
-    manifest = json.loads((out_dir / "obs_manifest.json").read_text())
+    manifest = json.loads((out_dir / "obs_manifest.json").read_text(encoding="utf-8"))
     schema = manifest["_obsSchemas"]["continuous"]
     for entry in manifest["_continuousFields"]:
         if entry[1] == key:
@@ -377,7 +377,7 @@ def test_constant_generated_outlier_quantiles_are_published(tmp_path):
         latent=np.zeros((LINEAGE_CELLS, 8), dtype=np.float32),
     )
 
-    manifest = json.loads((out_dir / "obs_manifest.json").read_text())
+    manifest = json.loads((out_dir / "obs_manifest.json").read_text(encoding="utf-8"))
     schema = manifest["_obsSchemas"]["categorical"]
     entry = manifest["_categoricalFields"][0]
     assert entry[1] == "cell_type"

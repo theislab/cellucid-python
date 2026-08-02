@@ -13,7 +13,6 @@ import threading
 import webbrowser
 from collections.abc import Sequence
 from functools import partial
-from http.server import HTTPServer
 from pathlib import Path
 
 from .._console import console_print
@@ -28,6 +27,9 @@ from .._server_base import (
     print_success,
     require_allowed_hosts,
     require_server_port,
+)
+from .._server_base import (
+    CellucidHTTPServer as HTTPServer,
 )
 from ._artifacts import _build_prepared_artifact_inventory, _read_json_object
 from ._datasets import _list_exported_datasets

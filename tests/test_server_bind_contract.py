@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import socket
 import urllib.request
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from unittest import mock
 
@@ -85,6 +86,32 @@ def _anndata() -> AnnData:
             )
         },
     )
+
+
+def test_http_server_uses_the_platforms_nonsharing_port_policy() -> None:
+    from cellucid._server_base import CellucidHTTPServer
+
+    exclusive_address_use = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
+    server = CellucidHTTPServer(
+        ("127.0.0.1", 0),
+        BaseHTTPRequestHandler,
+    )
+    try:
+        if exclusive_address_use is None:
+            assert CellucidHTTPServer.allow_reuse_address is True
+            assert server.socket.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR) != 0
+        else:
+            assert CellucidHTTPServer.allow_reuse_address is False
+            assert (
+                server.socket.getsockopt(socket.SOL_SOCKET, exclusive_address_use) == 1
+            )
+            assert server.socket.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR) == 0
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as contender:
+            contender.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            with pytest.raises(OSError):
+                contender.bind(server.server_address)
+    finally:
+        server.server_close()
 
 
 def test_exported_server_publishes_the_exact_os_assigned_port(
@@ -238,6 +265,29 @@ def test_explicit_occupied_port_is_rejected_without_port_scanning(
         port = occupied.getsockname()[1]
         server = CellucidServer(
             _prepared_dataset(tmp_path / "dataset"),
+            host="127.0.0.1",
+            port=port,
+            quiet=True,
+            serve_web_ui=False,
+        )
+        with pytest.raises(OSError):
+            server.start_background()
+        assert server._server is None
+        assert server.port == port
+        assert server.is_running() is False
+
+
+def test_anndata_explicit_occupied_port_is_rejected_without_port_scanning() -> None:
+    from cellucid.anndata_server import AnnDataServer
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
+        occupied.bind(("127.0.0.1", 0))
+        occupied.listen(1)
+        port = occupied.getsockname()[1]
+        server = AnnDataServer(
+            _anndata(),
+            dataset_name="Bind contract",
+            dataset_id="bind-contract",
             host="127.0.0.1",
             port=port,
             quiet=True,

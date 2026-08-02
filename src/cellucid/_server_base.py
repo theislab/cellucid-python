@@ -16,6 +16,7 @@ import json
 import logging
 import math
 import shutil
+import socket
 import stat
 import tempfile
 import threading
@@ -24,6 +25,7 @@ import zlib
 from collections.abc import Callable, Sequence
 from html.parser import HTMLParser
 from http import HTTPStatus
+from http.server import HTTPServer as _StandardHTTPServer
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, NoReturn, cast
 
@@ -39,6 +41,33 @@ DEFAULT_PORT = 8765
 DEFAULT_HOST = "127.0.0.1"
 CELLUCID_WEB_URL = "https://www.cellucid.com"
 WEB_ASSET_INVENTORY_FILENAME = "cellucid-web-assets.json"
+
+_EXCLUSIVE_ADDRESS_USE: int | None = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
+
+
+class CellucidHTTPServer(_StandardHTTPServer):
+    """Own a listening port deterministically on every supported platform.
+
+    The standard-library ``HTTPServer`` enables ``SO_REUSEADDR``. On Unix that
+    permits a prompt restart without allowing two live TCP listeners to share
+    an address. Winsock gives the option different semantics: another process
+    can bind the same live address, after which connection routing is
+    indeterminate. Windows instead provides ``SO_EXCLUSIVEADDRUSE`` for server
+    sockets that must reject an occupied port and prevent later port hijacking.
+    """
+
+    allow_reuse_address = _EXCLUSIVE_ADDRESS_USE is None
+    allow_reuse_port = False
+
+    def server_bind(self) -> None:
+        if _EXCLUSIVE_ADDRESS_USE is not None:
+            self.socket.setsockopt(
+                socket.SOL_SOCKET,
+                _EXCLUSIVE_ADDRESS_USE,
+                1,
+            )
+        super().server_bind()
+
 
 # Session bundle upload protocol (used for Jupyter "no download" capture).
 SESSION_BUNDLE_MAGIC = b"CELLUCID_SESSION\n"

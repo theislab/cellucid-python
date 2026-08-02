@@ -32,12 +32,15 @@ def test_console_output_escapes_only_unencodable_cp1252_text() -> None:
     assert completed.returncode == 0, completed.stderr.decode("cp1252")
     stdout = completed.stdout.decode("cp1252")
     stderr = completed.stderr.decode("cp1252")
-    assert stdout.startswith(
-        "ASCII | \\u2192 | \\u2713 | \\u7ec6\\u80de | \\U0001f9ec | ×\n"
+    assert stdout == os.linesep.join(
+        (
+            "ASCII | \\u2192 | \\u2713 | \\u7ec6\\u80de | \\U0001f9ec | ×",
+            "      \\u6807\\u7b7e: \\u503c\\U0001f9ec",
+            "      \\u2713 \\u5b8c\\u6210\\U0001f9ec",
+            "",
+        )
     )
-    assert "      \\u6807\\u7b7e: \\u503c\\U0001f9ec\n" in stdout
-    assert "      \\u2713 \\u5b8c\\u6210\\U0001f9ec\n" in stdout
-    assert stderr == "\\u9519\\u8bef\n"
+    assert stderr == f"\\u9519\\u8bef{os.linesep}"
 
 
 def test_prepare_accepts_unicode_values_with_strict_cp1252_console(

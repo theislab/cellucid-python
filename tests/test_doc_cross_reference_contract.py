@@ -84,7 +84,10 @@ def _bare_page_references() -> list[str]:
         relative = path.relative_to(DOCS_ROOT).as_posix()
         if relative == CONVENTION_PAGE:
             continue
-        for number, line in enumerate(_without_code_blocks(path.read_text()), 1):
+        for number, line in enumerate(
+            _without_code_blocks(path.read_text(encoding="utf-8")),
+            1,
+        ):
             for match in INLINE_LITERAL.finditer(line):
                 if ROLE_PREFIX.search(line[: match.start()]):
                     continue

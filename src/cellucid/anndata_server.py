@@ -44,7 +44,7 @@ import webbrowser
 from collections.abc import Sequence
 from functools import partial
 from http import HTTPStatus
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlparse
@@ -64,6 +64,9 @@ from ._server_base import (
     print_success,
     require_allowed_hosts,
     require_server_port,
+)
+from ._server_base import (
+    CellucidHTTPServer as HTTPServer,
 )
 from .anndata_adapter import AnnDataAdapter, _classify_anndata_path
 from .connectivity_contract import build_connectivity_manifest
