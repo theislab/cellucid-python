@@ -34,7 +34,7 @@ Records sum to 21. Each record is counted once under its **primary** verdict.
 Four pages are hybrids: ``b/02_local_demo_tutorial`` and ``b/04_server_tutorial``
 are counted under REPLACE but also need a SEQUENCE; ``a/03_quick_tour_60_seconds``
 is counted under SEQUENCE but also needs one REPLACE.
-`b_data_loading/09_screenshots.md` is counted under REPLACE because its contents
+{doc}`/user_guide/web_app/b_data_loading/09_screenshots` is counted under REPLACE because its contents
 should be redistributed and the page deleted, not extended.
 
 ### Cross-cutting findings (apply to every page below)
@@ -60,9 +60,9 @@ should be redistributed and the page deleted, not extended.
 3. **Three captions hard-code a build string that is already wrong.** The
    current web build is `2026-07-27.24`
    (`cellucid/index.html:17`, `<meta name="cellucid-web-build-id" content="2026-07-27.24" />`).
-   The docs claim `Build 2026-07-27.1` in `03_quick_tour_60_seconds.md` (line 31
-   alt, line 36 caption), `04_ui_glossary_terminology.md` (line 48 alt, line 53
-   caption), and `10_standard_pancreas_dataset.md` (line 51 caption). A reader
+   The docs claim `Build 2026-07-27.1` in {doc}`/user_guide/web_app/a_orientation/03_quick_tour_60_seconds` (line 31
+   alt, line 36 caption), {doc}`/user_guide/web_app/a_orientation/04_ui_glossary_terminology` (line 48 alt, line 53
+   caption), and {doc}`/user_guide/web_app/b_data_loading/10_standard_pancreas_dataset` (line 51 caption). A reader
    who follows the instruction to compare the footer will find a mismatch.
    Recommendation: drop the exact build number from alt text and captions and
    say "the footer prints the build identity" instead. Naming the build in prose
@@ -76,17 +76,17 @@ should be redistributed and the page deleted, not extended.
 5. **The gallery-page pattern is used in 10 web-app sections**
    (`b/09_screenshots.md`, `c/07`, `d/06`, `e/08`, `f/07`, `h/11`, `i/08`,
    `k/08`, `l/11`, `n/08`). See the analysis under
-   `b_data_loading/09_screenshots.md` — the pattern should be retired.
+   {doc}`/user_guide/web_app/b_data_loading/09_screenshots` — the pattern should be retired.
 6. **Two `_static/screenshots/` topic directories are empty**:
    `_static/screenshots/jupyter_hooks/` and `_static/screenshots/sessions_sharing/`.
-   `l_sessions_sharing/11_screenshots.md` is therefore a gallery page holding
+   {doc}`/user_guide/web_app/l_sessions_sharing/11_screenshots` is therefore a gallery page holding
    zero images of its own — it reuses `data_loading/data-loading-session-panel.png`.
    Outside my sections, but it is the same defect and worth reporting.
 7. **The style guide's own rule is being violated.**
-   `user_guide/python_package/h_developer_docs/15_docs_development_and_style_guide.md`
+   {doc}`/user_guide/python_package/h_developer_docs/15_docs_development_and_style_guide`
    (screenshot section, ~line 105) says: "confirm that the caption describes only
    what is visibly present." The `app-overview-cell-type.png` caption claims a
-   legend that is not in the frame (see `03_quick_tour_60_seconds.md` below).
+   legend that is not in the frame (see {doc}`/user_guide/web_app/a_orientation/03_quick_tour_60_seconds` below).
 
 ### DOM selectors verified in `cellucid/index.html` (for scripting captures)
 
@@ -128,7 +128,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
 
 ## user_guide/web_app/a_orientation/index.md
 
-- **path** — `user_guide/web_app/a_orientation/index.md`
+- **path** — {doc}`/user_guide/web_app/a_orientation/index`
 - **explains** — Landing card grid and recommended reading order for the four
   orientation pages, with a globbed `toctree`.
 - **has** — none.
@@ -163,7 +163,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
      View, and **Artifacts** (`.cellucid-session`, exported figure) leaving the
      View. Annotate each edge with scope — "per view" on field/filter/highlight,
      "global" on dataset/embedding — because the page's own "Scope note"
-     paragraphs in `04_ui_glossary_terminology.md` depend on that distinction.
+     paragraphs in {doc}`/user_guide/web_app/a_orientation/04_ui_glossary_terminology` depend on that distinction.
      A screenshot cannot express this; no arrangement of the UI shows the object
      graph. Must be authored as an SVG (or a MyST `mermaid` block if the theme
      is configured for it — it currently is not; no mermaid usage exists
@@ -236,10 +236,10 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
   - line 45 `web_app/app-overview-cell-type.png`, `:width: 1440px` — native
     1440x900. **Reused on 8 pages docs-wide**:
     `a_orientation/03`, `a_orientation/04:22`, `b_data_loading/02:196`,
-    `b_data_loading/03:81`, `d_fields_coloring_legends/06_screenshots.md`,
-    `python_package/a_landing_pages/01_what_is_cellucid_python.md`,
-    `python_package/f_notebooks_tutorials/21_prepare_exports_with_quantization_and_compression.md`,
-    `python_package/g_api_reference_coverage/api/export.md`.
+    `b_data_loading/03:81`, {doc}`/user_guide/web_app/d_fields_coloring_legends/06_screenshots`,
+    {doc}`/user_guide/python_package/a_landing_pages/01_what_is_cellucid_python`,
+    {doc}`/user_guide/python_package/f_notebooks_tutorials/21_prepare_exports_with_quantization_and_compression`,
+    {doc}`/user_guide/python_package/g_api_reference_coverage/api/export`.
 - **verdict** — SEQUENCE (plus one REPLACE)
 - **needs**
   1. **REPLACE `app-overview-cell-type.png` at line 45.** I opened the image.
@@ -315,7 +315,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
 - **verdict** — REPLACE
 - **needs**
   1. **Swap line 22 to the annotated `ui-map-annotated.png` produced for
-     `03_quick_tour_60_seconds.md`.** Two pages call the same image "the UI map"
+     {doc}`/user_guide/web_app/a_orientation/03_quick_tour_60_seconds`.** Two pages call the same image "the UI map"
      and "one screenshot you'll reuse everywhere"; the callout-annotated version
      is the one that earns that description. No new capture — reuse is correct
      *here*, because a glossary genuinely wants the same reference frame as the
@@ -356,7 +356,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
 - **has** — none. **A second suspicious gap**: lines 15 and 16 are empty between
   the last bullet of "The short answer" (line 13) and the `---` at line 17,
   matching the shape of the confirmed missing-diagram hole in
-  `01_what_is_cellucid.md`. Whether or not something was removed there, the
+  {doc}`/user_guide/web_app/a_orientation/01_what_is_cellucid`. Whether or not something was removed there, the
   section is the natural home for the visual form of the decision tree.
 - **verdict** — DIAGRAM
 - **needs**
@@ -405,9 +405,9 @@ terminal and Jupyter captures:
   `01_loading_options_overview.md:254`, `03_browser_file_picker_tutorial.md:49`,
   `09_screenshots.md:13`, `l_sessions_sharing/{index,01_session_mental_model,
   03_save_restore_ux,11_screenshots}.md`,
-  `python_package/b_concepts_mental_models/03_state_persistence_and_scope.md`,
-  `python_package/c_data_preparation_api/01_prepare_export_overview.md`,
-  `python_package/g_api_reference_coverage/api/sessions.md`.
+  {doc}`/user_guide/python_package/b_concepts_mental_models/03_state_persistence_and_scope`,
+  {doc}`/user_guide/python_package/c_data_preparation_api/01_prepare_export_overview`,
+  {doc}`/user_guide/python_package/g_api_reference_coverage/api/sessions`.
 - **verdict** — OK
 - **needs** — Recapture at 2x only (cross-cutting note 1). The image is the right
   image for this page: an index that lists five loader paths should show the one
@@ -538,7 +538,7 @@ terminal and Jupyter captures:
      loaded result cropped to `#session-section` showing SOURCE `H5AD file`.
      `_static/screenshots/data_loading/picker-h5ad-loaded.png`. Note the existing
      `data_loading/h5ad-current-loaded.png` already shows this state but is
-     stranded on the gallery page `09_screenshots.md` — **move it here** rather
+     stranded on the gallery page {doc}`/user_guide/web_app/b_data_loading/09_screenshots` — **move it here** rather
      than capturing a duplicate (see that page's entry).
   3. **Zarr ZIP (Option #5, line 138).** Same treatment with
      `#user-data-zarr-archive-btn` and
@@ -578,7 +578,7 @@ terminal and Jupyter captures:
      help, and `strings` cannot audit rendered pixels. Two such images shipped
      with a home directory and a pyenv path in them, and two more with a scratch
      path; all four were removed and transcribed. See "Never photograph a
-     terminal. Transcribe it." in `00_capture_tooling_and_conventions.md`.
+     terminal. Transcribe it." in {doc}`00_capture_tooling_and_conventions`.
   2. ~~Move the prepared-catalog capture to Option #6.~~ **DONE as text.** The
      transcript now sits under "Fast Path (CLI)" with `?source=remote`, and the
      direct-AnnData transcript under Option #7/#8 with `?anndata=true`, so the
@@ -713,7 +713,7 @@ terminal and Jupyter captures:
   small annotated JSON-to-filename mapping diagram would serve better than a
   screenshot, and it is low priority. Everything on this page cross-checks
   against the spec at
-  `user_guide/python_package/c_data_preparation_api/09_output_format_specification_exports_directory.md`
+  {doc}`/user_guide/python_package/c_data_preparation_api/09_output_format_specification_exports_directory`
   by reference rather than restatement, which is the right structure.
 
 ## user_guide/web_app/b_data_loading/08_troubleshooting_data_loading.md
@@ -773,7 +773,7 @@ terminal and Jupyter captures:
   `i/08`, `k/08`, `l/11`, `n/08`). Reasons, specific to this page:
   - **It strands evidence away from the instruction.** Five images that would
     each answer a "what does success look like?" question on
-    `03_browser_file_picker_tutorial.md` sit on a page nobody reaches while
+    {doc}`/user_guide/web_app/b_data_loading/03_browser_file_picker_tutorial` sit on a page nobody reaches while
     troubleshooting. Meanwhile `03_...` illustrates its H5AD and Zarr options
     with a reused Suo overview that shows neither.
   - **The dataset is a 120-cell, 6-gene synthetic fixture.** I opened
@@ -787,7 +787,7 @@ terminal and Jupyter captures:
     fixture in the same state; the last two differ only by browser engine, which
     is invisible in the crop. Three of the four earn nothing for a reader.
   - Redistribution plan: move `h5ad-current-loaded.png` to
-    `03_browser_file_picker_tutorial.md` Option #4; move `zarr-zip-loaded.png`
+    {doc}`/user_guide/web_app/b_data_loading/03_browser_file_picker_tutorial` Option #4; move `zarr-zip-loaded.png`
     to Option #5; **delete** `h5ad-current-visualization.png`,
     `h5ad-firefox.png`, `h5ad-webkit.png` from the docs (the browser matrix is a
     CI claim, and CI already asserts it — a reader cannot verify engine parity
@@ -812,7 +812,7 @@ terminal and Jupyter captures:
   build contract.
 - **has** — line 47 `vector_field_velocity/pancreas-velocity-3d.png`
   `:width: 1440px` (native 1440x1000). **Also used on**
-  `i_vector_field_velocity/08_screenshots.md`.
+  {doc}`/user_guide/web_app/i_vector_field_velocity/08_screenshots`.
 - **verdict** — ADD
 - **needs**
   1. **The load step has no picture** (lines 10–20), and it is four numbered
@@ -960,14 +960,14 @@ terminal and Jupyter captures:
   `01_what_cross_highlighting_is_user_story.md`, `02_data_requirements.md`,
   `03_ux_design.md`, `04_performance_correctness_notes.md`,
   `05_troubleshooting_cross_highlighting.md`,
-  `06_reference_implementation_notes.md`, and `index.md` — plus, in the same
+  `06_reference_implementation_notes.md`, and section index — plus, in the same
   commit, both files of `r_screenshot_checklist/`. The same commit also removed
   the `toctree` entries and the `{grid-item-card}` for cross-highlighting from
-  `user_guide/web_app/index.md`. This was a deliberate, complete de-registration,
+  {doc}`/user_guide/web_app/index`. This was a deliberate, complete de-registration,
   not an accident.
 
   **Why it was deleted: it documented a feature that was never built.** The
-  deleted `index.md` was titled "Cross-highlighting (analysis ↔ embedding;
+  deleted section index was titled "Cross-highlighting (analysis ↔ embedding;
   planned)" and opened with a `:::{warning}` saying the feature is "**planned**
   and **under development**" and that "some or all of the described UI may be
   missing or non-functional". The deleted `01_...user_story.md` defined it as:
@@ -992,7 +992,7 @@ terminal and Jupyter captures:
     (`#highlighted-cells-section`) are separate and unwired; there is no
     plot→embedding interaction to photograph.
 
-  **It is not a Sphinx build hazard.** `user_guide/web_app/index.md` lines
+  **It is not a Sphinx build hazard.** {doc}`/user_guide/web_app/index` lines
   151–170 use an **explicit** `toctree` list, not `:glob:`, and it runs
   ``f_highlighting_selection/index`` → ``h_analysis/index`` with no `g` entry (it
   also skips `m` and `r`). Sibling `:glob:` patterns are `[0-9]*` resolved
@@ -1011,17 +1011,17 @@ terminal and Jupyter captures:
   "which can be compared across highlight pages (groups)". A workspace-wide grep
   for `g_cross_highlighting|r_screenshot_checklist` returns zero hits. I
   separately confirmed that no `{doc}` or `{ref}` target on
-  `q_troubleshooting_index/index.md` points into this directory.
+  {doc}`/user_guide/web_app/q_troubleshooting_index/index` points into this directory.
 
   **The adjacent topic people will assume is missing is, in fact, covered.**
   "Do highlights propagate across views/panels?" is a different question from
   cross-highlighting, and it is documented well in
-  `user_guide/web_app/f_highlighting_selection/04_selection_synchronization.md`
+  {doc}`/user_guide/web_app/f_highlighting_selection/04_selection_synchronization`
   ("Selection synchronization (views, pages, filters, Python)"), whose
   "Sync between views and snapshots" section states that confirmed groups are
   **global** — highlighted across all panels — but still subject to each panel's
   own filter visibility, while an in-progress lasso gesture is tied to the panel
-  it starts in. `f_highlighting_selection/01_highlight_mental_model.md` covers
+  it starts in. {doc}`/user_guide/web_app/f_highlighting_selection/01_highlight_mental_model` covers
   highlight groups, pages, and the "what you see is per view" rule.
   **That page is in section F, not mine** — but it is the page that would carry
   any screenshot a reader might come to `g_` looking for, and it is worth telling

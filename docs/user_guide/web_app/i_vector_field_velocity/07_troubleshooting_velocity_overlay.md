@@ -26,7 +26,7 @@ If you’re stuck, do this first:
 
 ### Likely causes (ordered)
 
-1) You are in `Render mode: Volumetric smoke cloud` (overlay controls are currently in the Points-only controls area).  
+1) You are in `Render mode: Volumetric smoke cloud (alpha)` (overlay controls are currently in the Points-only controls area).  
 2) The dataset has **no vector fields**, so the overlay block is hidden.  
 3) You are not looking under **Visualization** in the sidebar (UI location confusion).  
 

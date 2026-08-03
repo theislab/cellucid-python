@@ -9,7 +9,8 @@ prepare first.
 Key features:
 - Works with in-memory AnnData, backed h5ad files, and eagerly loaded zarr stores
 - Handles sparse matrices (CSR/CSC) transparently with automatic format conversion
-- Reads UMAP dimensions only from explicit obsm keys (X_umap_1d, X_umap_2d, X_umap_3d)
+- Reads UMAP dimensions from X_umap_1d/X_umap_2d/X_umap_3d, or from a bare X_umap
+  at the dimension its own column count states
 - Computes centroids and outlier quantiles on-demand with caching
 - Lazy loading: gene expression and obs data are loaded on-demand
 - No quantization (full float32 precision, gzip compression for network transfer)
@@ -78,6 +79,7 @@ import json
 import logging
 import math
 import re
+import sys
 from collections import OrderedDict
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -98,10 +100,15 @@ from ._contracts import (
     _require_nonempty_string,
     _require_positive_native_integer,
 )
+from ._server_base import print_detail
 from .connectivity_contract import (
     ConnectivityEdgePairs,
     build_connectivity_manifest,
     validate_connectivity_edges,
+)
+from .continuous_payload_diagnosis import (
+    NonFinitePayloadError,
+    diagnose_continuous_payload,
 )
 from .prepare_data._arrays import (
     _normalize_finite_float32_embedding,
@@ -112,9 +119,11 @@ from .prepare_data._arrays import (
 from .prepare_data._categories import _json_category_values
 from .vector_fields import (
     SUPPORTED_EMBEDDING_KEYS,
+    UNSUFFIXED_EMBEDDING_KEY,
     _finite_float32_matrix,
-    embedding_declaration_hints,
     is_vector_field_declaration_key,
+    missing_embedding_message,
+    resolve_embedding_keys,
     scale_vector_field,
     validate_vector_fields,
 )
@@ -252,9 +261,20 @@ def _categorical_storage(
     return np.uint16, "uint16", 65_535
 
 
+#: How much resident memory the served gene columns may occupy, in bytes.
+#:
+#: Counting entries instead of bytes is what made this dangerous: a gene column
+#: is one float32 per cell, so a hundred of them is 29 MB on a 72,000-cell object
+#: and **7.3 GB** on an 18,142,044-cell one — and the second is exactly the size
+#: of object the cache exists for. A byte budget is the same policy expressed in
+#: the unit that actually runs out, and it holds 32 columns of a 2 M-cell object
+#: or 3 of an 18 M-cell one.
+GENE_EXPRESSION_CACHE_BYTES = 256 * 1024 * 1024
+
+
 class LRUCache:
     """
-    Simple LRU cache with O(1) operations using OrderedDict.
+    LRU cache over a byte budget, with O(1) operations using OrderedDict.
 
     WARNING: This class is NOT thread-safe. The AnnDataAdapter is designed
     for single-threaded use within an HTTP server (each request is handled
@@ -264,29 +284,58 @@ class LRUCache:
     The HTTP server uses a single adapter instance per server, and Python's
     GIL provides some level of safety for simple operations, but concurrent
     access from multiple threads may cause race conditions.
+
+    A single value larger than the whole budget is not an error and is not
+    cached: refusing to serve an 18 M-cell gene because it will not fit in a
+    cache would be the cache deciding what the server may publish.
     """
 
-    def __init__(self, max_size: int = 100):
-        if max_size < 1:
-            raise ValueError("max_size must be at least 1")
+    def __init__(self, max_bytes: int = GENE_EXPRESSION_CACHE_BYTES):
+        if max_bytes < 1:
+            raise ValueError("max_bytes must be at least 1")
         self._cache: OrderedDict[str, Any] = OrderedDict()
-        self._max_size = max_size
+        self._sizes: OrderedDict[str, int] = OrderedDict()
+        self._max_bytes = max_bytes
+        self._resident_bytes = 0
+
+    @staticmethod
+    def _value_bytes(value: Any) -> int:
+        """How much memory one cached value holds."""
+        nbytes = getattr(value, "nbytes", None)
+        if isinstance(nbytes, int) and nbytes >= 0:
+            return nbytes
+        return sys.getsizeof(value)
+
+    @property
+    def resident_bytes(self) -> int:
+        """How much memory the cache is currently holding."""
+        return self._resident_bytes
 
     def get(self, key: str) -> Any | None:
         """Get item and move to end (most recently used)."""
         if key in self._cache:
             self._cache.move_to_end(key)
+            self._sizes.move_to_end(key)
             return self._cache[key]
         return None
 
     def put(self, key: str, value: Any) -> None:
-        """Add item, evicting oldest if at capacity."""
-        if key in self._cache:
-            self._cache.move_to_end(key)
-        else:
-            if len(self._cache) >= self._max_size:
-                self._cache.popitem(last=False)  # Remove oldest
+        """Add item, evicting least-recently-used entries to stay in budget."""
+        self._discard(key)
+        size = self._value_bytes(value)
+        if size > self._max_bytes:
+            return
+        while self._cache and self._resident_bytes + size > self._max_bytes:
+            oldest, _ = self._cache.popitem(last=False)
+            self._resident_bytes -= self._sizes.pop(oldest)
         self._cache[key] = value
+        self._sizes[key] = size
+        self._resident_bytes += size
+
+    def _discard(self, key: str) -> None:
+        if key in self._cache:
+            del self._cache[key]
+            self._resident_bytes -= self._sizes.pop(key)
 
     def __contains__(self, key: str) -> bool:
         return key in self._cache
@@ -294,6 +343,8 @@ class LRUCache:
     def clear(self) -> None:
         """Clear all cached items and release memory."""
         self._cache.clear()
+        self._sizes.clear()
+        self._resident_bytes = 0
 
     def __len__(self) -> int:
         return len(self._cache)
@@ -343,6 +394,9 @@ class AnnDataAdapter:
         dataset_id: str,
         obs_keys: Sequence[str] | None = None,
         vector_field_default: str | None = None,
+        serve_connectivity: bool = False,
+        serve_vector_fields: bool = False,
+        quiet: bool = True,
     ) -> None:
         """
         Initialize the adapter.
@@ -377,6 +431,26 @@ class AnnDataAdapter:
             served without editing ``adata``.
         vector_field_default : str, optional
             Exact field id to select when multiple UMAP vector fields exist.
+        serve_connectivity : bool
+            Whether to read, validate, and serve ``adata.obsp['connectivities']``.
+            False by default: an edge list costs time and memory proportional to
+            the number of stored neighbors, which on a large object is the single
+            longest part of startup, and most sessions never draw the graph.
+            Passing True reads and validates the whole graph before the server
+            binds, because the edge count and the neighbor maximum are part of
+            the manifest the viewer fetches first.
+        serve_vector_fields : bool
+            Whether to read, validate, and serve the ``<field>_umap_<n>d`` vector
+            arrays in ``obsm``. False by default, for the same reason as
+            ``serve_connectivity``: every declared field is read and checked in
+            full before the server binds, and a session that never turns the
+            overlay on pays nothing for it now.
+        quiet : bool
+            Whether to build without reporting progress. True by default, so
+            using this class as a library prints nothing. A server passes its
+            own ``quiet`` through, because opening a large object spends minutes
+            inside this constructor, and a terminal that says nothing for that
+            long is indistinguishable from one that has stopped.
         """
         dataset_name = _require_dataset_name(
             dataset_name,
@@ -414,6 +488,15 @@ class AnnDataAdapter:
             normalize_embeddings,
             label="normalize_embeddings",
         )
+        self.serve_connectivity = _require_native_boolean(
+            serve_connectivity,
+            label="serve_connectivity",
+        )
+        self.serve_vector_fields = _require_native_boolean(
+            serve_vector_fields,
+            label="serve_vector_fields",
+        )
+        self.quiet = _require_native_boolean(quiet, label="quiet")
 
         if (
             type(centroid_outlier_quantile) is not float
@@ -487,7 +570,7 @@ class AnnDataAdapter:
         self._X_csc_cache: sparse.csc_matrix | None = None
 
         # LRU cache for gene expression values using O(1) OrderedDict
-        self._gene_expression_cache: LRUCache = LRUCache(max_size=100)
+        self._gene_expression_cache: LRUCache = LRUCache()
 
         # UMAP embedding key resolution (dimension -> obsm key)
         self._umap_embedding_key_by_dim: dict[int, str] = {}
@@ -507,27 +590,74 @@ class AnnDataAdapter:
         }
         # Every served column is classified now, so an unservable dtype fails
         # here with its exact escape hatch instead of inside a later request.
+        self._report("Obs columns", f"classifying {len(selected_obs_keys):,}")
         for key in selected_obs_keys:
             series = self.adata.obs[key]
             if _obs_field_kind(series, key=key) == "continuous":
-                _require_continuous_obs_values(
-                    series.to_numpy(),
-                    key=key,
-                    n_cells=int(self.adata.n_obs),
-                )
+                column = series.to_numpy()
+                try:
+                    _require_continuous_obs_values(
+                        column,
+                        key=key,
+                        n_cells=int(self.adata.n_obs),
+                    )
+                except ValueError as exc:
+                    # This one refuses to start the server at all, so it is the
+                    # message with the least room to be vague: it has to name the
+                    # column and say how much of it is unusable, or the only way
+                    # to find out is to bisect the object by hand.
+                    diagnosis = diagnose_continuous_payload(
+                        column, kind="field", name=key
+                    )
+                    if diagnosis is None:
+                        raise
+                    raise NonFinitePayloadError(diagnosis) from exc
 
         # Auto-detect available dimensions
+        self._report("Embeddings", "resolving obsm keys")
         self._available_dimensions: list[int] = self._detect_dimensions()
         self._default_dimension: int = self._select_default_dimension()
-
-        # Detect optional per-cell vector fields aligned to UMAP.
-        self._vector_fields_metadata = self._detect_vector_fields(
-            vector_field_default=vector_field_default,
+        self._report(
+            "Embeddings",
+            ", ".join(
+                f"{dimension}D from obsm[{self._umap_embedding_key_by_dim[dimension]!r}]"
+                for dimension in self._available_dimensions
+            ),
         )
 
-        # Connectivity is an advertised scientific capability, so validate and
-        # materialize its exact edge contract before this adapter can be used.
+        # Per-cell vector fields are an asked-for capability, like connectivity.
+        if self.serve_vector_fields:
+            self._report("Vector fields", "scanning obsm")
+            self._vector_fields_metadata = self._detect_vector_fields(
+                vector_field_default=vector_field_default,
+            )
+            served_field_count = (
+                len(self._vector_fields_metadata["fields"]) if self._vector_fields_metadata else 0
+            )
+            self._report("Vector fields", f"{served_field_count} served")
+        else:
+            if vector_field_default is not None:
+                raise ValueError(
+                    "vector_field_default names the field to select among served "
+                    "vector fields, and vector fields are not being served. Pass "
+                    "serve_vector_fields=True, or --vector-fields, to serve them, "
+                    "or drop vector_field_default."
+                )
+            # Not scanning obsm is the point: every declared field is otherwise
+            # read and checked in full before the server can bind.
+            self._vector_fields_metadata = None
+
+        # Connectivity is an asked-for scientific capability. When it is asked
+        # for, its exact edge contract is validated and materialized before this
+        # adapter can be used, because the manifest the viewer reads first
+        # declares the edge count and the neighbor maximum.
         self._initialize_connectivity()
+        if self._connectivity_manifest is not None:
+            self._report(
+                "Connectivity",
+                f"{self._connectivity_manifest['n_edges']:,} edges, "
+                f"{self._connectivity_manifest['max_neighbors']:,} neighbors at most",
+            )
 
         logger.info(
             f"AnnDataAdapter initialized: {self.n_cells:,} cells, "
@@ -548,6 +678,9 @@ class AnnDataAdapter:
         dataset_id: str,
         obs_keys: Sequence[str] | None = None,
         vector_field_default: str | None = None,
+        serve_connectivity: bool = False,
+        serve_vector_fields: bool = False,
+        quiet: bool = True,
     ) -> AnnDataAdapter:
         """
         Create an adapter from an h5ad file or a materialized zarr store.
@@ -585,6 +718,15 @@ class AnnDataAdapter:
             column is served.
         vector_field_default : str, optional
             Exact field id required when multiple UMAP vector fields exist.
+        serve_connectivity : bool
+            Whether to read, validate, and serve ``adata.obsp['connectivities']``.
+            False by default, because building the edge list is the longest part
+            of opening a large object.
+        serve_vector_fields : bool
+            Whether to read, validate, and serve the ``<field>_umap_<n>d`` vector
+            arrays in ``obsm``. False by default.
+        quiet : bool
+            Whether to build without reporting progress. True by default.
         Returns
         -------
         AnnDataAdapter
@@ -644,6 +786,9 @@ class AnnDataAdapter:
                 dataset_id=dataset_id,
                 obs_keys=obs_keys,
                 vector_field_default=vector_field_default,
+                serve_connectivity=serve_connectivity,
+                serve_vector_fields=serve_vector_fields,
+                quiet=quiet,
             )
         except BaseException:
             if getattr(adata, "isbacked", False):
@@ -684,9 +829,20 @@ class AnnDataAdapter:
     # DIMENSION DETECTION
     # =========================================================================
 
+    def _report(self, label: str, value: str) -> None:
+        """Report one phase of a build that can run for minutes."""
+        if self.quiet:
+            return
+        print_detail(label, value)
+
     def _detect_dimensions(self) -> list[int]:
         """
-        Validate and resolve the exact supported UMAP keys in ``obsm``.
+        Validate and resolve the UMAP embeddings ``obsm`` offers.
+
+        ``X_umap_1d``, ``X_umap_2d``, and ``X_umap_3d`` each name their own
+        dimension. An object that declares none of them but carries Scanpy's
+        own ``X_umap`` is read at the dimension its column count states, so no
+        rename is needed to serve it.
 
         Returns
         -------
@@ -701,10 +857,7 @@ class AnnDataAdapter:
         self._umap_embedding_key_by_dim = {}
         available: list[int] = []
 
-        for dim in [1, 2, 3]:
-            key = f"X_umap_{dim}d"
-            if key not in self.adata.obsm:
-                continue
+        for dim, key in sorted(resolve_embedding_keys(self.adata.obsm).items()):
             embedding = _require_finite_embedding_source(
                 self.adata.obsm[key],
                 label=f"Embedding {key!r}",
@@ -731,24 +884,13 @@ class AnnDataAdapter:
             self._umap_embedding_key_by_dim[dim] = key
 
         if not available:
-            message = (
-                "No supported UMAP embedding was declared in adata.obsm. Cellucid "
-                "reads the exact keys 'X_umap_1d', 'X_umap_2d', and 'X_umap_3d', so "
-                "every embedding declares its dimensionality instead of Cellucid "
-                "guessing it. "
-                f"Available obsm keys: {list(self.adata.obsm.keys())}."
-            )
-            hints = embedding_declaration_hints(
-                self.adata.obsm,
-                n_cells=self.n_cells,
-            )
-            if hints:
-                joined = "\n".join(f"    {hint}" for hint in hints)
-                message += (
-                    "\n  Fix: declare an existing array under the key for its "
-                    f"column count, then re-run (re-save the file if you serve a path):\n{joined}"
+            raise ValueError(
+                missing_embedding_message(
+                    self.adata.obsm,
+                    n_cells=self.n_cells,
+                    headline="No UMAP embedding Cellucid can read was found in adata.obsm.",
                 )
-            raise ValueError(message)
+            )
 
         return sorted(available)
 
@@ -761,14 +903,15 @@ class AnnDataAdapter:
         *,
         vector_field_default: object,
     ) -> dict[str, Any] | None:
-        """Validate UMAP vectors; each field defaults to its highest dimension."""
+        """Validate every declared UMAP vector; each defaults to its highest dimension."""
         candidates: dict[object, object] = {}
         for key in self.adata.obsm:
             if not isinstance(key, str):
                 raise TypeError("AnnData obsm keys must be native strings.")
             if not key:
                 raise ValueError("AnnData obsm keys must be non-empty strings.")
-            if key == "X_umap" or key in SUPPORTED_EMBEDDING_KEYS:
+            # An embedding is never also a vector field, whichever key resolved it.
+            if key == UNSUFFIXED_EMBEDDING_KEY or key in SUPPORTED_EMBEDDING_KEYS:
                 continue
             if is_vector_field_declaration_key(key):
                 candidates[key] = self.adata.obsm[key]
@@ -781,6 +924,12 @@ class AnnDataAdapter:
         )
         self._vector_field_obsm_keys = validated.source_keys
         if not validated.fields:
+            # Asking for vector fields asks for whatever ``obsm`` declares, and
+            # declaring none is an ordinary result: a key outside the
+            # ``<field>_umap_<n>d`` grammar is not a malformed vector field, it
+            # is not a vector field. This is where it differs from connectivity,
+            # which names one exact matrix and so cannot be absent once asked
+            # for. A malformed declaration still fails, in validation above.
             return None
 
         fields: dict[str, dict[str, Any]] = {}
@@ -1054,11 +1203,20 @@ class AnnDataAdapter:
         self._check_closed()
         compress = _require_native_boolean(compress, label="compress")
 
-        values = _require_continuous_obs_values(
-            self._obs_series(key).to_numpy(),
-            key=key,
-            n_cells=self.n_cells,
-        )
+        column = self._obs_series(key).to_numpy()
+        try:
+            values = _require_continuous_obs_values(
+                column,
+                key=key,
+                n_cells=self.n_cells,
+            )
+        except ValueError as exc:
+            diagnosis = diagnose_continuous_payload(
+                column, kind="field", name=key
+            )
+            if diagnosis is None:
+                raise
+            raise NonFinitePayloadError(diagnosis) from exc
 
         data = little_endian_payload_bytes(values)
 
@@ -1401,10 +1559,20 @@ class AnnDataAdapter:
         if values is None:
             gene_idx = self._get_gene_idx(gene_id)
             col = self._get_gene_column(gene_idx)
-            values = _require_finite_float32_array(
-                col,
-                label=f"Gene {gene_id!r} expression",
-            )
+            try:
+                values = _require_finite_float32_array(
+                    col,
+                    label=f"Gene {gene_id!r} expression",
+                )
+            except ValueError as exc:
+                # Counting is only worth a pass over the column once the cheap
+                # all-finite check has already said the column is unusable.
+                diagnosis = diagnose_continuous_payload(
+                    col, kind="gene", name=gene_id
+                )
+                if diagnosis is None:
+                    raise
+                raise NonFinitePayloadError(diagnosis) from exc
             if values.ndim != 1 or values.shape[0] != self.n_cells:
                 raise ValueError(
                     f"Gene {gene_id!r} expression must have shape ({self.n_cells},), "
@@ -1433,16 +1601,29 @@ class AnnDataAdapter:
     # =========================================================================
 
     def _initialize_connectivity(self) -> None:
-        """Validate the complete optional connectivity capability atomically."""
+        """Validate the complete asked-for connectivity capability atomically."""
+        if not self.serve_connectivity:
+            # Not reading obsp at all is the point: on a large object the edge
+            # list is the most expensive thing startup could do, and a session
+            # that never draws the graph should never pay for it.
+            self._has_connectivity = False
+            self._connectivity_manifest = None
+            return
+
         try:
             self._has_connectivity = "connectivities" in self.adata.obsp
         except Exception as exc:
             raise ValueError("Could not inspect adata.obsp for 'connectivities'") from exc
 
         if not self._has_connectivity:
-            self._connectivity_manifest = None
-            return
+            raise ValueError(
+                "Connectivity was asked for, and adata.obsp has no 'connectivities' "
+                "matrix to serve. Compute the neighbor graph with "
+                "sc.pp.neighbors(adata) before serving, or serve without asking "
+                "for connectivity."
+            )
 
+        self._report("Connectivity", "reading obsp['connectivities']")
         try:
             edges = self._compute_connectivity_edges()
         except Exception as exc:
@@ -1461,7 +1642,13 @@ class AnnDataAdapter:
         )
 
     def has_connectivity(self) -> bool:
-        """Check if connectivity data is available."""
+        """Report whether this adapter serves a connectivity graph.
+
+        This answers what the dataset publishes, not what ``adata.obsp`` holds:
+        an object whose graph was not asked for reports False, exactly as an
+        object with no graph does, because the identity, the manifest, and the
+        edge routes all follow this one answer.
+        """
         self._check_closed()
         return self._has_connectivity
 

@@ -18,6 +18,7 @@ import math
 import shutil
 import socket
 import stat
+import sys
 import tempfile
 import threading
 import time
@@ -27,7 +28,7 @@ from html.parser import HTMLParser
 from http import HTTPStatus
 from http.server import HTTPServer as _StandardHTTPServer
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, NoReturn, cast
+from typing import TYPE_CHECKING, Any, BinaryIO, NoReturn, cast
 
 from ._console import console_print
 
@@ -67,6 +68,21 @@ class CellucidHTTPServer(_StandardHTTPServer):
                 1,
             )
         super().server_bind()
+
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        """Report a request failure, except a client that simply went away.
+
+        A browser that closes a tab, reloads, or navigates away mid-download
+        aborts the connection, and the write in progress raises. That is the
+        client's decision, not a server fault, and the larger the payload the
+        more often it happens -- a points file for millions of cells is many
+        megabytes, and any reload during it lands here. Reporting it as an
+        unexpected error printed a traceback that reads like a crash.
+        """
+        if isinstance(sys.exc_info()[1], ConnectionError):
+            logger.debug("Client closed the connection from %s", client_address)
+            return
+        super().handle_error(request, client_address)
 
 
 # Session bundle upload protocol (used for Jupyter "no download" capture).
@@ -291,14 +307,30 @@ def print_success(message: str = "Done"):
     console_print(f"      ✓ {message}")
 
 
-def print_server_banner(url: str, viewer_url: str):
-    """Print the final server ready banner."""
+def print_server_banner(
+    url: str,
+    viewer_url: str,
+    *,
+    network_urls: Sequence[tuple[str, str]] = (),
+):
+    """Print the final server ready banner.
+
+    ``network_urls`` names the addresses a *different* machine can reach, which
+    a server bound to every interface has and a loopback server does not. The
+    bind wildcard itself is never printed as a URL: ``0.0.0.0`` is a statement
+    about which interfaces accept connections, and no browser can open it.
+    """
     console_print(f"\n{'═' * 60}")
     console_print("  CELLUCID SERVER RUNNING")
     console_print(f"{'═' * 60}")
     console_print()
     console_print(f"  Local URL:    {url}")
     console_print(f"  Viewer URL:   {viewer_url}")
+    if network_urls:
+        console_print()
+        console_print("  Bound to every network interface. From another machine:")
+        for label, value in network_urls:
+            console_print(f"  {label}{value}")
     console_print()
     console_print("  Press Ctrl+C to stop")
     console_print()
@@ -742,6 +774,63 @@ def _requires_loopback_host_header(bound_host: object) -> bool:
     return address.is_loopback
 
 
+def bind_host_is_wildcard(bound_host: object) -> bool:
+    """Report whether one bind address names every interface rather than one.
+
+    ``0.0.0.0``, ``::``, and the empty string all tell the operating system to
+    accept connections on every interface. None of them is an address a client
+    can connect *to*, so none of them may ever be rendered inside a URL.
+    """
+    if not isinstance(bound_host, str):
+        return False
+    if not bound_host:
+        return True
+    try:
+        return ipaddress.ip_address(bound_host).is_unspecified
+    except ValueError:
+        return False
+
+
+def format_http_origin(host: str, port: int) -> str:
+    """Return one http origin, bracketing an IPv6 literal as a URL requires."""
+    try:
+        is_ipv6 = ipaddress.ip_address(host).version == 6
+    except ValueError:
+        is_ipv6 = False
+    return f"http://[{host}]:{port}" if is_ipv6 else f"http://{host}:{port}"
+
+
+def loopback_origin_for_bind(bound_host: str, port: int) -> str:
+    """Return the origin a browser on the serving machine itself can open.
+
+    A wildcard bind accepts loopback too, so the machine running the server --
+    and anything tunnelling into it, which is how a remote session reaches it --
+    always has the loopback origin available.
+    """
+    try:
+        is_ipv6 = ipaddress.ip_address(bound_host).version == 6
+    except ValueError:
+        is_ipv6 = False
+    return format_http_origin("::1" if is_ipv6 else "127.0.0.1", port)
+
+
+def machine_origin(port: int) -> str | None:
+    """Return this machine's own named origin, or None when it has no usable one.
+
+    This is the address another machine on the same network uses. A hostname
+    that resolves to loopback names nothing outside this machine, and is
+    reported as no origin at all rather than as a URL that cannot travel.
+    """
+    try:
+        host_name = socket.gethostname()
+    except OSError:
+        return None
+    normalized = _normalize_host_name(host_name)
+    if normalized is None or _host_authority_is_loopback(normalized):
+        return None
+    return format_http_origin(normalized, port)
+
+
 class CORSMixin:
     """
     Mixin class providing CORS headers for HTTP handlers.
@@ -958,6 +1047,24 @@ class CORSMixin:
         self.end_headers()
         if not head_only:
             self._response_writer().write(data)
+
+    def send_json_error(self, code: int, payload: dict):
+        """Send a refusal that describes itself, as JSON.
+
+        A plain-text status line is enough for "not found". It is not enough for
+        a payload the server examined and refused: the reason names a gene or a
+        column and counts what is wrong with it, and a reader that has to parse
+        that back out of prose cannot present it. The browser reads this body
+        and shows the message it carries.
+        """
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", len(body))
+        # Note: CORS headers are added by end_headers() override in subclasses
+        self.end_headers()
+        if getattr(self, "command", "") != "HEAD":
+            self._response_writer().write(body)
 
     def send_error_response(self, code: int, message: str):
         """Send an error response with CORS headers."""

@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import errno
 import logging
+import platform
 import socket
 import sys
 import traceback
@@ -76,7 +77,14 @@ def _create_common_server_parser() -> argparse.ArgumentParser:
         "-H",
         type=str,
         default=DEFAULT_HOST,
-        help=f"Host to bind to (default: {DEFAULT_HOST}). Use 0.0.0.0 for remote access.",
+        help=(
+            f"Host to bind to (default: {DEFAULT_HOST}, which no other machine "
+            "can reach). Use 0.0.0.0 to accept connections on every interface, "
+            "which is what a compute node needs when a tunnel terminates on a "
+            "different machine such as a cluster login node. A non-loopback bind "
+            "has no authentication: every user who can reach the port reads the "
+            "dataset"
+        ),
     )
     parser.add_argument(
         "--allowed-host",
@@ -207,10 +215,21 @@ Examples:
     # Behind jupyter-server-proxy, name the proxy's host explicitly
     cellucid serve /path/to/data --allowed-host hub.example.org
 
-    # For SSH tunnel access from remote server:
+    # Serve the neighbor graph and the velocity overlay, both off by default
+    # because each is read and checked in full before the server binds
+    cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \\
+        --connectivity --vector-fields
+
+    # For SSH tunnel access from a remote server:
     # On the server: cellucid serve /path/to/data
-    # On local machine: ssh -L 8765:localhost:8765 user@server
+    # On local machine: ssh -N -L 8765:127.0.0.1:8765 you@server
     # Then open the exact Viewer URL printed by Cellucid.
+
+    # On an HPC compute node, where a tunnel can only terminate on the login node:
+    # On the compute node: cellucid serve /path/to/data --host 0.0.0.0 --no-browser
+    # On local machine:    ssh -N -L 8765:compute-node:8765 you@login-node
+    # The login node opens the second connection, so the server has to accept it
+    # on every interface. Then open the exact Viewer URL printed by Cellucid.
 """,
     )
 
@@ -262,6 +281,30 @@ Examples:
         help="Exact default field id when AnnData contains multiple UMAP vector fields",
     )
 
+    serve_parser.add_argument(
+        "--vector-fields",
+        action="store_true",
+        default=None,
+        dest="vector_fields",
+        help=(
+            "Serve the obsm '<field>_umap_<n>d' vector arrays as an animated "
+            "overlay. Off by default: every declared field is read and checked "
+            "before the server binds"
+        ),
+    )
+
+    serve_parser.add_argument(
+        "--connectivity",
+        action="store_true",
+        default=None,
+        help=(
+            "Serve the obsp['connectivities'] neighbor graph. Off by default: "
+            "reading it costs time and memory proportional to the stored "
+            "neighbor count, which on a large dataset is the longest part of "
+            "startup"
+        ),
+    )
+
     serve_parser.set_defaults(func=_run_serve)
 
 
@@ -299,6 +342,8 @@ def _run_serve(args: argparse.Namespace) -> None:
                     "--vector-field-default",
                     args.vector_field_default is not None,
                 ),
+                ("--connectivity", args.connectivity is not None),
+                ("--vector-fields", args.vector_fields is not None),
             )
             if supplied
         ]
@@ -343,6 +388,12 @@ def _run_serve(args: argparse.Namespace) -> None:
                 "their own, so name the dataset on the command line, for example: "
                 '--dataset-name "My study" --dataset-id my-study-v1'
             )
+        if args.vector_field_default is not None and not args.vector_fields:
+            raise ValueError(
+                "--vector-field-default selects among served vector fields, and "
+                "vector fields are not being served. Add --vector-fields to serve "
+                "them, or drop --vector-field-default."
+            )
         if not args.quiet:
             console_print(
                 "\nImporting dependencies (anndata, numpy, scipy)...",
@@ -361,6 +412,8 @@ def _run_serve(args: argparse.Namespace) -> None:
             "dataset_id": args.dataset_id,
             "obs_keys": args.obs_key,
             "vector_field_default": args.vector_field_default,
+            "serve_connectivity": bool(args.connectivity),
+            "serve_vector_fields": bool(args.vector_fields),
         }
         serve_anndata(
             data=str(data_path),
@@ -428,21 +481,88 @@ def _operating_system_message(error: OSError, args: argparse.Namespace) -> str:
     return str(error)
 
 
-def _operator_error_message(error: Exception, args: argparse.Namespace) -> str:
-    """Return one exact line naming a condition the operator can correct."""
-    if isinstance(error, ImportError):
-        if error.name:
-            return (
-                f"Cellucid needs the {error.name!r} package to read this input and it "
-                "is not installed in this environment. Install it and run the command "
-                f"again: pip install {error.name}"
-            )
+#: Every declared dependency whose import name differs from the name that
+#: installs it. Advising the import name would name a package that does not
+#: exist on PyPI, which is worse than no advice at all.
+_DISTRIBUTION_NAME_BY_IMPORT_NAME: Final = {
+    "jupyter_server_proxy": "jupyter-server-proxy",
+}
+
+
+def _required_python_range() -> str:
+    """Return the Python range this installation declares, as it declares it.
+
+    The range is read from the installed metadata rather than written here, so
+    one declaration in pyproject.toml governs both the install and this message.
+    """
+    from importlib import metadata as _metadata
+
+    try:
+        declared = _metadata.metadata("cellucid")["Requires-Python"]
+    except (_metadata.PackageNotFoundError, KeyError):
+        declared = None
+    return f"Python {declared}" if declared else "a supported Python"
+
+
+def _import_error_message(error: ImportError) -> str:
+    """Name the exact import condition, and only advise pip when pip can fix it.
+
+    An ``ImportError`` is not one condition. A module that is absent from the
+    environment is an install away. A module that is present but too old to hold
+    the name asked of it is a version conflict, and installing it again changes
+    nothing. A module the standard library owns is neither: it belongs to the
+    running interpreter, and no distribution supplies it.
+    """
+    name = error.name or ""
+    top_level = name.partition(".")[0]
+
+    if not name:
         return (
-            f"Cellucid could not import a package it needs for this input: {error}. "
+            f"Cellucid could not import a module it needs for this input: {error}. "
             "Install it into the same environment as cellucid and run the command "
             "again."
         )
-    if isinstance(error, OSError):
+
+    if top_level in sys.stdlib_module_names or top_level in sys.builtin_module_names:
+        return (
+            f"Cellucid needs the standard-library module {name!r}, and this Python "
+            f"build cannot import it. Python {platform.python_version()} at "
+            f"{sys.executable} is running Cellucid, which requires "
+            f"{_required_python_range()}. Run Cellucid on a Python in that range. "
+            "No package installs this module: the interpreter itself provides it."
+        )
+
+    if type(error) is not ModuleNotFoundError:
+        # The module imported; a name inside it did not. That is a version this
+        # Cellucid cannot use, and installing the same version again repeats it.
+        location = f" at {error.path}" if error.path else ""
+        return (
+            f"Cellucid could not read a name it needs from the installed {name!r}"
+            f"{location}: {error.msg}. The installed version of that package is not "
+            "one this Cellucid can use. Upgrade it in this environment and run the "
+            f"command again: pip install --upgrade {_DISTRIBUTION_NAME_BY_IMPORT_NAME.get(top_level, top_level)}"
+        )
+
+    if name != top_level:
+        return (
+            f"Cellucid needs {name!r}, and the installed {top_level!r} does not "
+            f"provide it. Upgrade it in this environment and run the command again: "
+            f"pip install --upgrade {_DISTRIBUTION_NAME_BY_IMPORT_NAME.get(top_level, top_level)}"
+        )
+
+    distribution = _DISTRIBUTION_NAME_BY_IMPORT_NAME.get(name, name)
+    return (
+        f"Cellucid needs the {name!r} package to read this input and it is not "
+        "installed in this environment. Install it and run the command again: "
+        f"pip install {distribution}"
+    )
+
+
+def _operator_error_message(error: Exception, args: argparse.Namespace) -> str:
+    """Return one exact line naming a condition the operator can correct."""
+    if isinstance(error, ImportError):
+        message = _import_error_message(error)
+    elif isinstance(error, OSError):
         message = _operating_system_message(error, args)
     elif type(error) is KeyError and len(error.args) == 1 and type(error.args[0]) is str:
         # ``str(KeyError("no such column"))`` is ``"'no such column'"``. The

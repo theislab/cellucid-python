@@ -73,6 +73,22 @@ keyboard and screen-reader behavior.
 
 ---
 
+## Maturity tags
+
+- **Maturity tag**: a small pill beside a control's label naming how finished
+  the currently selected option is. It describes the option you chose, not the
+  control it sits next to.
+- **`Alpha`**: the only maturity tag in the app. It sits beside `Render mode:`
+  and appears only while `Volumetric smoke cloud (alpha)` is the selected mode;
+  `Points` never wears it, and nothing else in Cellucid is tagged.
+- Its hover text reads
+  `Volumetric smoke cloud is in alpha: it is still changing, it is slower than points, and figure export cannot reproduce it.`
+
+See {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` for
+what alpha means in practice for that mode.
+
+---
+
 ## Data model terms
 
 - **Dataset**: the loaded data bundle (points + metadata + optional gene expression + optional connectivities/vector fields).
@@ -186,8 +202,13 @@ Scope note:
 - **Global**: one value shared across the entire app/dataset (not specific to a view).
 - **Per view**: stored separately for each view/snapshot.
 - **Session bundle**: a saved `.cellucid-session` file (explicit user action).
-- **Local storage**: persistent browser storage used for small preferences (e.g., theme/background).
+- **Local storage**: persistent browser storage used for small preferences (e.g., theme/background, and the antialiasing preference under the key `cellucid_antialias`).
 - **Session storage**: storage that is cleared when the tab closes (used for sensitive tokens like GitHub OAuth in community annotation).
+- **Device preference**: a setting that describes the machine you are viewing on rather than the picture you made. A session bundle captures it, and loading a session never applies it. `Antialiasing (smooth point edges)` is the only one.
+- **Automatic (`auto`)**: a stored preference that is a deferral rather than a value. The antialiasing preference has three states — `auto`, `on`, and `off` — and `auto` is the default, and what an absent key means. Cellucid resolves it from the open dataset's cell count (on below five million cells, off at or above) and decides again every time a dataset is opened. Ticking or unticking the checkbox replaces `auto` with your choice, permanently and in both directions. This is also the second reason a session never replays the setting: a checkbox cannot express `auto`, so restoring a captured tick would turn "let the dataset decide" into a choice you never made.
+
+See {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored` for what a
+session bundle carries.
 
 ---
 

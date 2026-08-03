@@ -152,6 +152,7 @@ def test_the_served_payloads_carry_the_prepared_bytes(tmp_path: Path) -> None:
         centroid_min_points=4,
         dataset_name="Single rounding",
         dataset_id="single-rounding",
+        serve_vector_fields=True,
     )
     try:
         assert adapter.get_points_binary(2) == (tmp_path / "points_2d.bin").read_bytes()

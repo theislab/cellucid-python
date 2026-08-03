@@ -72,7 +72,76 @@ serve("./my_export")  # blocks until Ctrl+C
   ```bash
   cellucid serve /path/to/data --host 0.0.0.0
   ```
-- Do this only if you understand your network/security posture.
+- This is also what a compute node needs when the tunnel has to terminate on a
+  different machine, such as a cluster login node — see
+  {doc}`../../d_viewing_apis/17_hpc_slurm_and_compute_node_serving`.
+- A non-loopback bind has **no authentication**: every user who can reach the
+  port reads the dataset. Do this only if you understand your network/security
+  posture.
+
+### 3) Connectivity is asked for, not assumed (AnnData mode)
+
+Serving an AnnData object directly leaves the `obsp['connectivities']` neighbor
+graph **off by default**. Ask for it explicitly:
+
+```bash
+cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset \
+    --connectivity
+```
+
+```python
+from cellucid import serve_anndata
+
+server = serve_anndata(
+    "data.h5ad",
+    dataset_name="My dataset",
+    dataset_id="my-dataset",
+    serve_connectivity=True,
+)
+```
+
+**Off (the default).** `adata.obsp['connectivities']` is never read. The dataset
+identity reports `has_connectivity: false` with `n_edges: null`, and
+`connectivity_manifest.json` and the three `connectivity/edges.*` routes —
+`edges.src.bin`, `edges.dst.bin`, and `edges.weights.f64.bin` (Float64 weights)
+— answer 404.
+
+**On.** The whole graph is read and validated *before the server binds*, because
+the manifest the viewer fetches first declares the edge count and the neighbor
+maximum. Asking for connectivity on an object whose `obsp` holds no
+`connectivities` matrix is an error at startup, not silence.
+
+**Why off is the default.** On a large object, building the edge list is the
+single longest part of startup — a 50-neighbor graph over millions of cells is
+hundreds of millions of stored neighbors — and most sessions never draw the
+graph.
+
+`--connectivity` and `serve_connectivity=` apply to direct AnnData input only.
+Passing `--connectivity` with a prepared export directory is rejected, like
+every other AnnData-only flag: an export already holds the connectivity
+artifacts or it does not, and {func}`~cellucid.serve` publishes exactly what is
+there.
+
+### 4) Which URL the banner prints
+
+A server bound to a wildcard address — `--host 0.0.0.0`, `--host ::`, or an
+empty host — accepts connections on every interface, but the wildcard is not an
+address any browser can open. So the banner prints the loopback origin as
+`Local URL` and `Viewer URL` (that is what a browser on the serving machine
+uses, and what an SSH tunnel terminates on), and names the addresses other
+machines use separately:
+
+A wildcard bind prints the loopback origin plus the machine's own name; see {doc}`../../d_viewing_apis/12_remote_servers_ssh_tunneling_and_cloud`.
+
+- The `From another machine` block appears only when this machine has a usable
+  name of its own. A hostname that resolves back to loopback names nothing
+  outside the machine, so it is reported as no origin at all rather than as a
+  URL that cannot travel.
+- A prepared-export server prints the same shape with its own viewer query,
+  `/?source=remote`.
+- An IPv6 literal bind is bracketed as a URL requires: `http://[::1]:8765`.
+- Open the exact Viewer URL the banner printed. `0.0.0.0` is never printed as a
+  URL because nothing can connect to it.
 
 ---
 
@@ -103,6 +172,29 @@ generation from the same server origin. This avoids:
 If the runtime cannot fetch and verify the exact source generation, startup
 raises before binding the server. Use `--web-cache-dir PATH` or the
 `web_cache_dir=` argument to select its publication directory.
+
+### Startup progress (direct AnnData: five steps)
+
+Opening a large object spends minutes before the socket is bound, so each phase
+reports as it happens:
+
+Startup prints five numbered steps; the transcript is in {doc}`../../../web_app/b_data_loading/04_server_tutorial`.
+
+- Step 2 reports the adapter build itself: the obs columns being classified, the
+  `obsm` key resolution and the exact key resolved for each dimension, the
+  vector-field scan, and — only when you asked for it — the connectivity read.
+- Step 4 is the manifest and centroid phase. It has its own step because it is
+  real work on a large object, not a formality after the load succeeds.
+- `Connectivity` in step 3 has three states, not two:
+  - `yes (N edges)` — the graph was asked for, read, and validated;
+  - `not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)` — a graph exists and was not asked for;
+  - `no` — the object has no graph. Checking `obsp` membership is a key lookup,
+    not a read of the matrix, so naming the middle state costs nothing that
+    opting out was meant to save.
+
+A **prepared export** runs three steps instead, unchanged:
+`[1/3] Validating dataset`, `[2/3] Loading dataset info`, `[3/3] Starting
+server`.
 
 ---
 
@@ -142,7 +234,23 @@ raises before binding the server. Use `--web-cache-dir PATH` or the
 
 ### “I bound to 0.0.0.0 and now anyone can access it”
 - Binding `--host 0.0.0.0` exposes the server to your network.
+- There is no authentication on a non-loopback bind: every user who can reach
+  the port reads the dataset. `--host`'s own help text states this.
+- The banner still prints the loopback origin as `Local URL` / `Viewer URL`,
+  plus a `Bound to every network interface. From another machine:` block when
+  this machine has a routable name. `0.0.0.0` itself is never rendered inside a
+  URL.
 - Cellucid servers are designed for local/private use (not hardened for public internet exposure).
+
+### “The graph is there, but the viewer will not draw edges”
+- In AnnData mode the neighbor graph is opt-in. Without `--connectivity` (or
+  `serve_connectivity=True`) the server never reads `obsp['connectivities']`,
+  and the connectivity manifest and edge routes answer 404.
+- Step 3 of startup says so explicitly: `Connectivity: not served
+  (obsp['connectivities'] is present; pass serve_connectivity=True, or
+  --connectivity, to draw it)`.
+- A prepared export is different: it serves the connectivity artifacts it
+  contains, so re-export with `connectivities=` if they are missing.
 
 ### “The dataset directory contains multiple datasets”
 - {class}`~cellucid.CellucidServer` supports serving a directory that contains multiple exported datasets as subfolders.
@@ -229,6 +337,25 @@ Fix:
 - Export with {func}`~cellucid.prepare` (quantization + compression) and serve the exported directory.
 - Use read-only-backed `.h5ad` input when staying in AnnData mode; Zarr input
   is loaded eagerly.
+
+---
+
+### Symptom: `cellucid serve` stops on a module it could not import
+What’s happening:
+- An import failure is not one condition, and the message names which of three
+  it is:
+  - **The distribution is not installed.** The message names the package and the
+    exact `pip install <name>` that supplies it.
+  - **It is installed, but too old to hold the name Cellucid asked of it.**
+    Installing the same version again repeats the failure, so the message names
+    the file it imported and asks for `pip install --upgrade <name>`.
+  - **It is a standard-library module this interpreter cannot provide.** No
+    package installs it. The message names the running Python version, that
+    interpreter’s own path, and the version range Cellucid supports.
+
+Fix:
+- Follow the exact remedy in the message; for the third case, run Cellucid on a
+  Python inside the supported range instead of installing anything.
 
 ---
 

@@ -49,6 +49,13 @@ Viewer IDs, callbacks, event validation, and session-bundle requests.
 Separate export time, I/O, browser rendering, and analysis costs.
 :::
 
+:::{grid-item-card} HPC and remote access
+:link: 07_hpc_and_remote_access_issues
+:link-type: doc
+
+Refused compute nodes, tunnels that reach nothing, and cluster-specific binds.
+:::
+
 ::::
 
 ```{toctree}

@@ -35,6 +35,10 @@ from ..connectivity_contract import (
     build_connectivity_manifest,
     validate_connectivity_edges,
 )
+from ..continuous_payload_diagnosis import (
+    NonFinitePayloadError,
+    diagnose_continuous_payload,
+)
 from ..vector_fields import scale_vector_field, validate_vector_fields
 from ._arrays import (
     _normalize_finite_float32_embedding,
@@ -86,10 +90,20 @@ def _gene_expression_column(
     else:
         column = cast(np.ndarray, matrix)[:, gene_index]
 
-    values = _require_finite_float32_array(
-        column,
-        label=f"Gene {gene_id!r} expression",
-    )
+    try:
+        values = _require_finite_float32_array(
+            column,
+            label=f"Gene {gene_id!r} expression",
+        )
+    except ValueError as exc:
+        # The export refuses the same values the server refuses, and now says
+        # the same thing about them: which gene, how many values, of what kind,
+        # and where. One export scans every gene, so "some gene somewhere is not
+        # finite" was the least useful place for a message to stop.
+        diagnosis = diagnose_continuous_payload(column, kind="gene", name=gene_id)
+        if diagnosis is None:
+            raise
+        raise NonFinitePayloadError(diagnosis) from exc
     if values.ndim != 1 or values.shape[0] != n_cells:
         raise ValueError(
             f"Gene {gene_id!r} expression must have shape ({n_cells},), got {values.shape}."
@@ -553,11 +567,20 @@ def _prepare_generation(
             raise TypeError(f"obs field {key!r} has unsupported dtype {series.dtype!r}.")
 
         if kind == "continuous":
-            validated_continuous_obs[key] = _require_continuous_obs_values(
-                series.to_numpy(),
-                key=key,
-                n_cells=n_cells,
-            )
+            column = series.to_numpy()
+            try:
+                validated_continuous_obs[key] = _require_continuous_obs_values(
+                    column,
+                    key=key,
+                    n_cells=n_cells,
+                )
+            except ValueError as exc:
+                diagnosis = diagnose_continuous_payload(
+                    column, kind="field", name=key
+                )
+                if diagnosis is None:
+                    raise
+                raise NonFinitePayloadError(diagnosis) from exc
             if obs_continuous_quantization is None:
                 dtype_str = "float32"
             elif obs_continuous_quantization == 8:
@@ -1301,6 +1324,11 @@ def _prepare_generation(
             declared=declared_vector_paths,
             axis="Vector field",
         )
+    else:
+        # Every optional capability reports itself the same way, so a reader of
+        # the transcript can tell "nothing was asked for" from "something was
+        # asked for and came out empty" without opening the export.
+        console_print("INFO: Vector fields were not requested; no vector artifact was emitted.")
 
     # =========================================================================
     # Generate dataset_identity.json (metadata for multi-dataset support)

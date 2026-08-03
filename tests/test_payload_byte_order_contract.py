@@ -288,6 +288,8 @@ def _served_adapter() -> AnnDataAdapter:
         centroid_min_points=4,
         dataset_name="Byte order contract",
         dataset_id="byte-order-contract",
+        serve_connectivity=True,
+        serve_vector_fields=True,
     )
 
 

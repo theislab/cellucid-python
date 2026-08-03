@@ -42,7 +42,7 @@ Read-only pass; the only file written is this one.
    HGNC symbols and `pancreas` publishes MGI symbols (verified against
    `cellucid-datasets/exports/*/var_manifest.json`; ENSG count = 0 in all five).
    Both shots predate the gene-symbol switch.
-3. **`06_analysis_mode_differential_expression_de.md` has no figure at all** — confirmed,
+3. **{doc}`/user_guide/web_app/h_analysis/06_analysis_mode_differential_expression_de` has no figure at all** — confirmed,
    the file contains zero `{figure}` directives. DE is the flagship statistical feature,
    it is the only explicit-run mode with a two-phase progress tracker, a volcano plot,
    a live threshold panel and an FDR-denominator summary table, and none of that is shown.
@@ -61,7 +61,7 @@ Read-only pass; the only file written is this one.
 
 # Per-page records
 
-## `user_guide/web_app/f_highlighting_selection/index.md`
+## {doc}`/user_guide/web_app/f_highlighting_selection/index`
 
 **explains** — Routes the reader through the section and states the section's
 governing distinction: selection is the temporary candidate set, highlighting is the
@@ -77,14 +77,14 @@ locate. Load the **pancreas** sample (`?dataset=pancreas`), colour by `cell_type
 open the **Highlighting** accordion, confirm one small lasso so the group list is
 non-empty, and crop to `#highlighted-cells-section .accordion-content` at DPR 2. No
 cursor — this is a map, not an action. Three call-out labels overlaid (1 mode box,
-2 page tabs, 3 group list) matching the numbered list in `03_highlight_ui.md`.
+2 page tabs, 3 group list) matching the numbered list in {doc}`/user_guide/web_app/f_highlighting_selection/03_highlight_ui`.
 `_static/screenshots/highlighting_selection/panel-anatomy.png`, `:width: 246px`.
 
 **notes** — The fast-path list is accurate against the source. No broken references.
 
 ---
 
-## `user_guide/web_app/f_highlighting_selection/01_highlight_mental_model.md`
+## {doc}`/user_guide/web_app/f_highlighting_selection/01_highlight_mental_model`
 
 **explains** — Establishes that filters control visibility while highlights control
 membership, and that LOD/downsampling narrows what is *drawn* but never what a gesture
@@ -122,7 +122,7 @@ the app before capturing.
 
 ---
 
-## `user_guide/web_app/f_highlighting_selection/02_selection_tools_document_each_tool.md`
+## {doc}`/user_guide/web_app/f_highlighting_selection/02_selection_tools_document_each_tool`
 
 **explains** — Documents all four selection tools (annotation, lasso, proximity, KNN),
 the `Alt` / `Shift+Alt` / `Ctrl+Alt` set-operation contract, and the 2D-vs-3D and
@@ -154,7 +154,7 @@ is exactly what a screenshot should capture (Lifecycle A step 9).
 
 ---
 
-## `user_guide/web_app/f_highlighting_selection/03_highlight_ui.md`
+## {doc}`/user_guide/web_app/f_highlighting_selection/03_highlight_ui`
 
 **explains** — The UI map: what each button in the Highlighting accordion does, how
 pages are created/renamed/recoloured/deleted/combined, how groups are
@@ -203,7 +203,7 @@ contains no picture of any control.
 
 ---
 
-## `user_guide/web_app/f_highlighting_selection/04_selection_synchronization.md`
+## {doc}`/user_guide/web_app/f_highlighting_selection/04_selection_synchronization`
 
 **explains** — The scope table: what is global (pages, groups, candidate set) vs
 per-view (visibility), what switching pages does and does not do, and the Python/Jupyter
@@ -236,7 +236,7 @@ event direction (selection fires on **confirm**, not on drag).
 
 ---
 
-## `user_guide/web_app/f_highlighting_selection/05_edge_cases_highlighting.md`
+## {doc}`/user_guide/web_app/f_highlighting_selection/05_edge_cases_highlighting`
 
 **explains** — The "weird but expected" checklist: zero visible cells, field changes,
 cells in multiple groups, page switching mid-selection, million-cell groups, low-contrast
@@ -272,7 +272,7 @@ available"* string. Capture the real toast text first, then write the caption fr
 
 ---
 
-## `user_guide/web_app/f_highlighting_selection/06_troubleshooting_highlighting.md`
+## {doc}`/user_guide/web_app/f_highlighting_selection/06_troubleshooting_highlighting`
 
 **explains** — Symptom → cause → confirm → fix → prevention, and — uniquely — a table
 of the five literal sentences the app writes under the Highlight mode buttons.
@@ -306,7 +306,7 @@ specs — either write specs there or drop the promise.
 
 ---
 
-## `user_guide/web_app/f_highlighting_selection/07_screenshots.md`
+## {doc}`/user_guide/web_app/f_highlighting_selection/07_screenshots`
 
 **explains** — Nine lines. One figure of a confirmed highlight page, captioned as the
 group that later analysis and session workflows consume.
@@ -329,14 +329,14 @@ Any replacement must be checked against those two captions as well.
   highlighting capture" (singular) and the troubleshooting page points bug reporters
   here for "capture specs" that do not exist.
 
-**notes** — The current image already disproves `03_highlight_ui.md`'s "some builds
+**notes** — The current image already disproves {doc}`/user_guide/web_app/f_highlighting_selection/03_highlight_ui`'s "some builds
 include a Category builder": **Create Categorical** is visible at the bottom of it.
 The group label in it reads `Annotation (55,096 cells) (5…` — the doubled count
 described under `01`.
 
 ---
 
-## `user_guide/web_app/h_analysis/index.md`
+## {doc}`/user_guide/web_app/h_analysis/index`
 
 **explains** — Section router: a "what are you trying to answer" table mapping six
 questions onto the six analysis modes, plus the recommended reading order.
@@ -364,7 +364,7 @@ Detailed, Correlation, Differential Expression, Gene Signature, Marker Genes). T
 
 ---
 
-## `user_guide/web_app/h_analysis/01_analysis_mental_model.md`
+## {doc}`/user_guide/web_app/h_analysis/01_analysis_mental_model`
 
 **explains** — The three nouns (dataset / page / variable), membership vs visibility,
 `Rest of <page>` complements, the caching layers, and the statistical scope limits.
@@ -392,7 +392,7 @@ exact/asymptotic switch, tie-corrected Kruskal–Wallis). No broken references.
 
 ---
 
-## `user_guide/web_app/h_analysis/02_analysis_ui_overview.md`
+## {doc}`/user_guide/web_app/h_analysis/02_analysis_ui_overview`
 
 **explains** — Where Analysis lives, accordion behaviour (one mode open at a time),
 auto-run vs explicit-run modes, the Compare pages selector, preview vs expanded modal,
@@ -427,7 +427,7 @@ behaviours the page describes and nothing shows).
 
 ---
 
-## `user_guide/web_app/h_analysis/03_analysis_mode_quick_insights.md`
+## {doc}`/user_guide/web_app/h_analysis/03_analysis_mode_quick_insights`
 
 **explains** — Quick mode: Dynamic (follow active page) vs Manual page selection, the
 Composition section (top-5 categories as a stacked bar) and the Statistics section
@@ -459,7 +459,7 @@ Quick's **Page Selection** collapsible at the bottom and check the mode indicato
 
 ---
 
-## `user_guide/web_app/h_analysis/04_analysis_mode_detailed_analysis.md`
+## {doc}`/user_guide/web_app/h_analysis/04_analysis_mode_detailed_analysis`
 
 **explains** — Detailed mode: one variable across many pages, plot-type choice per
 variable kind, the summary table, and the statistical annotations (chi-squared/Fisher;
@@ -489,12 +489,12 @@ expanded view; `cellucid c177e77ce` made that a clean drop instead of a smear.
 
 **notes** — The test descriptions match `statistical-tests.js`. "Export … per-cell
 values … `detailed-analysis-data.csv` … columns `page`, `cell_index`, `<variable>`"
-matches `09_exporting_analysis_results.md`; both should be re-verified after any
+matches {doc}`/user_guide/web_app/h_analysis/09_exporting_analysis_results`; both should be re-verified after any
 recapture that shows the export row.
 
 ---
 
-## `user_guide/web_app/h_analysis/05_analysis_mode_correlation_analysis.md`
+## {doc}`/user_guide/web_app/h_analysis/05_analysis_mode_correlation_analysis`
 
 **explains** — Correlation mode: per-page Pearson/Spearman on paired finite values,
 what is reported (`r`, `r²`, `p`, `n`, slope, intercept), and that plotting downsamples
@@ -532,7 +532,7 @@ on `n-2` df) matches the implementation.
 
 ---
 
-## `user_guide/web_app/h_analysis/06_analysis_mode_differential_expression_de.md`
+## {doc}`/user_guide/web_app/h_analysis/06_analysis_mode_differential_expression_de`
 
 **explains** — DE between two highlight pages: Wilcoxon (default) or Welch, the
 `log2FC = log2((meanA + 0.01)/(meanB + 0.01))` formula, Benjamini–Hochberg over
@@ -604,7 +604,7 @@ pages: `Beta` (annotation-selected on `cell_type = Beta`) and `Alpha`.
 
 ---
 
-## `user_guide/web_app/h_analysis/07_analysis_mode_gene_signature.md`
+## {doc}`/user_guide/web_app/h_analysis/07_analysis_mode_gene_signature`
 
 **explains** — Gene signature scoring: comma-separated gene input, mean/sum/median
 scoring, z-score and min-max normalisation computed across all selected pages combined,
@@ -642,7 +642,7 @@ resolve this and should be checked in the same pass.
 
 ---
 
-## `user_guide/web_app/h_analysis/08_analysis_mode_genes_panel.md`
+## {doc}`/user_guide/web_app/h_analysis/08_analysis_mode_genes_panel`
 
 **explains** — Marker Genes: one-vs-rest discovery across every category of a
 categorical obs field, the three modes (Ranked Genes / Clustered / Custom Genes),
@@ -698,14 +698,14 @@ and neither is a capture problem:
   **Still ADD:** `analysis/marker-genes-expanded.png` predates the fix and shows
   `category-code:0` in the picker beside `Ductal` on the heatmap row — it must be
   re-shot from the `analysis-marker-genes-expanded` scenario. It is embedded on
-  `09_exporting_analysis_results.md`, which is the only page still using it.
+  {doc}`/user_guide/web_app/h_analysis/09_exporting_analysis_results`, which is the only page still using it.
 - The horizontal colour bar under the sidebar heatmap draws its tick labels on top of
   one another. `tests/browser/analysis-plot-label-collisions.spec.mjs:144` measures
   `.xaxislayer-above .xtick text` only, so colour-bar ticks are outside its acceptance.
 
 ---
 
-## `user_guide/web_app/h_analysis/09_exporting_analysis_results.md`
+## {doc}`/user_guide/web_app/h_analysis/09_exporting_analysis_results`
 
 **explains** — What each mode exports, the exact CSV schemas and filenames, that
 exports live in the expanded modal only, and that most CSVs carry no provenance.
@@ -716,7 +716,7 @@ exports live in the expanded modal only, and that most CSVs carry no provenance.
 `11_screenshots.md` no longer embeds it.
 
 **verdict** — **RE-SHOOT.** The image now predates the group-picker fix recorded under
-`08_analysis_mode_genes_panel.md` above: it shows `category-code:0` in the picker where
+{doc}`/user_guide/web_app/h_analysis/08_analysis_mode_genes_panel` above: it shows `category-code:0` in the picker where
 the app draws the category name. Everything else on the page is settled.
 
 **needs** —
@@ -746,7 +746,7 @@ since been re-verified against `_buildModalCSVExport`, which dispatches on
 
 ---
 
-## `user_guide/web_app/h_analysis/10_troubleshooting_analysis.md`
+## {doc}`/user_guide/web_app/h_analysis/10_troubleshooting_analysis`
 
 **explains** — Symptom → cause → confirm → fix for the eight most common analysis
 failures (empty analysis, slow DE, wrong volcano, NaN correlation, windows not
@@ -779,7 +779,7 @@ does not. Safe to use as a screenshot caption.
 
 ---
 
-## `user_guide/web_app/h_analysis/11_screenshots.md`
+## {doc}`/user_guide/web_app/h_analysis/11_screenshots`
 
 **explains** — A gallery of "verified analysis captures", one per mode.
 
@@ -805,7 +805,7 @@ Ranked-vs-Clustered mismatch from `08`.
 
 ---
 
-## `user_guide/web_app/o_accessibility_privacy_security/index.md`
+## {doc}`/user_guide/web_app/o_accessibility_privacy_security/index`
 
 **explains** — Two-page router with a fast-path table (sensitive data / sharing
 sessions / colourblind figures) and two grid cards.
@@ -823,7 +823,7 @@ the two `{octicon}` glyphs — is theme-rendered and needs no capture.
 
 ---
 
-## `user_guide/web_app/o_accessibility_privacy_security/01_accessibility.md`
+## {doc}`/user_guide/web_app/o_accessibility_privacy_security/01_accessibility`
 
 **explains** — Colour/contrast defaults for a WebGL point cloud, the colourblind
 simulation in Figure Export, the `i` help-dialog keyboard contract, the global
@@ -907,7 +907,7 @@ the current image ships the corrected panel and its five groups.
 
 ---
 
-## `user_guide/web_app/o_accessibility_privacy_security/02_privacy_model.md`
+## {doc}`/user_guide/web_app/o_accessibility_privacy_security/02_privacy_model`
 
 **explains** — What leaves the machine per loading workflow, the three storage
 lifetimes (memory / HTTP cache / `localStorage` + `sessionStorage` + IndexedDB), how to
@@ -952,7 +952,7 @@ The `--allowed-host` / `allowed_hosts=[...]` guidance and the
 
 # LIFECYCLE A: Selection — from nothing selected to a named page used elsewhere
 
-**Anchor pages:** `f_highlighting_selection/02_selection_tools_document_each_tool.md`
+**Anchor pages:** {doc}`/user_guide/web_app/f_highlighting_selection/02_selection_tools_document_each_tool`
 (steps 2–13) and `07_screenshots.md` (the sequence as a whole).
 
 **Real tools** (`STEP_CONTROL_TOOLS`, and toolbelt order in `index.html:1546-1549`):
@@ -1012,7 +1012,7 @@ implies an action that is not happening.
 
 # LIFECYCLE B: Analysis — from a selection to a configured analysis to a result to an export
 
-**Anchor page:** `h_analysis/11_screenshots.md` (rebuilt), with individual steps
+**Anchor page:** {doc}`/user_guide/web_app/h_analysis/11_screenshots` (rebuilt), with individual steps
 cross-referenced from `03`–`09`.
 
 **Real modes** (`comparison-module.js:200-253` — these are the DOM `data-mode` values,
@@ -1101,7 +1101,7 @@ eight in the expanded view.
      `h/11:66`),
    - `Some builds include a "Category builder" UI` — it is unconditional and named
      **Create Categorical** (`f/03:197-204`).
-3. **Retire `h_analysis/11_screenshots.md` as a duplicate gallery.** All seven of its
+3. **Retire {doc}`/user_guide/web_app/h_analysis/11_screenshots` as a duplicate gallery.** All seven of its
    figures are copies of images already on the mode pages, so every caption defect is
    duplicated there. Rebuild it as the Lifecycle B sequence.
 4. **Pick pancreas as the standard docs dataset for procedural captures.** It is the

@@ -49,14 +49,28 @@ Bloom involves multiple blur passes. Even with the default “subtle bloom”, i
 
 If you need speed, set `Bloom strength:` to `0.00` first.
 
-### 4) `Sync with LOD` only helps if LOD is enabled
+### 4) `Sync with LOD` only helps below full detail
 
-`Sync with LOD` reduces particle work when zoomed out, but it relies on the renderer’s Level-of-Detail system.
+`Sync with LOD` reduces particle work, but only while the renderer is actually
+drawing a reduced set of cells. The LOD ladder runs from level `0` (coarsest) to
+the last level (full detail), and the overlay multiplies its particle count by a
+step measured from full detail: `1.0` at full detail, `0.5` one or two levels
+below, `0.25` three to five levels below, and `0` — the overlay is disposed —
+at six or more.
+
+Adaptive selection is bounded by a 2,000,000-point budget: `Auto` never picks a
+level holding fewer than `min(total cells, 2,000,000)` points, so the most it
+can reduce by is `total / 2,000,000`. On a 300K-cell dataset `Auto` stays at
+full detail no matter how far you zoom out, and this checkbox saves nothing.
+Under `Auto`, the `0.5` step first becomes reachable at roughly 2.5M cells.
 
 To benefit:
 
 1) Enable **Visualization → Renderer settings → Level-of-Detail (LOD)**, and keep
-2) **Vector Field Overlay → Sync with LOD** enabled.
+2) **Vector Field Overlay → Sync with LOD** enabled, and
+3) on any dataset that is not well over 2,000,000 cells, lower `Force LOD level:`
+   by a few steps — the forced slider is not bounded by the budget, so it is the
+   only way to reach a coarse level on a small or mid-sized dataset.
 
 ---
 
@@ -110,7 +124,7 @@ When the overlay is slow, do this in order (each step is a large win):
 3) Expand **Advanced Visual Settings → HDR & Bloom** and set `Bloom strength:` to **0.00**.
 4) If you have many snapshot views: switch to fewer views (or clear snapshots) and retry.
 5) Shrink the browser window (fewer pixels = faster) and retry.
-6) Enable renderer LOD (**Visualization → Renderer settings → Level-of-Detail (LOD)**) and keep `Sync with LOD` enabled.
+6) Enable renderer LOD (**Visualization → Renderer settings → Level-of-Detail (LOD)**), keep `Sync with LOD` enabled, and — unless the dataset is well over 2,000,000 cells — lower `Force LOD level:` by a few steps, because `Auto` holds full detail under that budget and the overlay keeps every particle.
 7) If you previously changed many filters quickly: disable and re-enable the overlay (it rebuilds internal spawn tables).
 
 ---

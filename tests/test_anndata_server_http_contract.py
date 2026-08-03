@@ -40,6 +40,9 @@ def _minimal_adata(*, connectivity: bool = True) -> ad.AnnData:
 @contextmanager
 def _running_server(
     adata: ad.AnnData,
+    *,
+    serve_connectivity: bool = True,
+    serve_vector_fields: bool = True,
 ) -> Iterator[tuple[AnnDataServer, str, int]]:
     server = AnnDataServer(
         adata,
@@ -49,6 +52,8 @@ def _running_server(
         serve_web_ui=False,
         dataset_name="HTTP contract",
         dataset_id="http-contract",
+        serve_connectivity=serve_connectivity,
+        serve_vector_fields=serve_vector_fields,
     )
     server.start_background()
     assert server._server is not None
@@ -137,7 +142,7 @@ def test_direct_server_preserves_biological_names_and_routes_by_payload_index() 
         dtype=np.float32,
     )
 
-    with _running_server(adata) as (_server, host, port):
+    with _running_server(adata, serve_connectivity=False) as (_server, host, port):
         status, _headers, body = _request(
             host,
             port,
@@ -216,6 +221,7 @@ def test_corrupt_connectivity_aborts_adapter_initialization(
             adata,
             dataset_name="Corrupt connectivity",
             dataset_id="corrupt-connectivity",
+            serve_connectivity=True,
         )
 
     assert error.value.__cause__ is not None
@@ -227,6 +233,7 @@ def test_identity_and_manifest_are_one_validated_connectivity_capability() -> No
         _minimal_adata(),
         dataset_name="Connected",
         dataset_id="connected",
+        serve_connectivity=True,
     )
     identity = connected.get_dataset_identity()
     manifest = connected.get_connectivity_manifest()
@@ -247,6 +254,7 @@ def test_identity_and_manifest_are_one_validated_connectivity_capability() -> No
         dataset_name="Disconnected",
         dataset_id="disconnected",
     )
+    assert disconnected.serve_connectivity is False
     identity = disconnected.get_dataset_identity()
     assert identity["stats"]["has_connectivity"] is False
     assert identity["stats"]["n_edges"] is None
@@ -297,6 +305,7 @@ def test_server_initialization_rejects_an_advertised_missing_manifest() -> None:
             port=0,
             quiet=True,
             serve_web_ui=False,
+            serve_connectivity=True,
             dataset_name="Missing manifest",
             dataset_id="missing-manifest",
         )
@@ -478,6 +487,7 @@ def test_file_backed_weighted_h5ad_serves_all_aligned_graph_payloads(
         serve_web_ui=False,
         dataset_name="Weighted file-backed H5AD",
         dataset_id="weighted-file-backed-h5ad",
+        serve_connectivity=True,
     )
     assert server.adapter.is_backed is True
     server.start_background()
@@ -538,6 +548,7 @@ def test_real_weighted_zarr_serves_the_same_float64_payload(
         serve_web_ui=False,
         dataset_name="Weighted Zarr",
         dataset_id="weighted-zarr",
+        serve_connectivity=True,
     )
     assert server.adapter.is_backed is False
     server.start_background()

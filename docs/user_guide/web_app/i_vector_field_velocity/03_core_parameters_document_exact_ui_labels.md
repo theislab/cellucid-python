@@ -26,22 +26,29 @@ readout beside each slider is the *transformed* value, not the slider position.
 | `Particle size:` | 0.5–30, 0.5 steps | 1.0 | Screen-space particle size. Large particles increase pixel fill and can hide cells. |
 | `Opacity:` | 0%–100%, 1% steps | 60% | Composite opacity. `0%` is fully invisible. |
 | `Color scheme:` | `Viridis`, `Plasma`, `Turbo`, `Cividis`, `Magma`, `Coolwarm` | `Viridis` | Maps normalized vector magnitude to particle color; it does not encode direction. |
-| `Sync with LOD` | off/on | on | At coarser LODs, reduces particle count and uses the LOD-visible cells as spawn candidates. |
+| `Sync with LOD` | off/on | on | While the renderer is below full detail (LOD level `0` is coarsest, the last level is full detail), cuts particle count in fixed steps and uses only the LOD-visible cells as spawn candidates. |
 
 The controls update the renderer while the overlay is active. They do not
 rewrite `adata.obsm`, prepared vector binaries, or the dataset identity.
 
 :::{warning}
-`Sync with LOD` is a fidelity control, not only a performance one. It scales
-particle count down in steps as the level of detail coarsens, and past a
-threshold it **disposes the overlay entirely** — the flow vanishes with the
-camera zoomed out and no message. If the animation disappears while you are
-zooming out, that is this control, not a missing field. Turn it off, or zoom
-back in.
+`Sync with LOD` is a fidelity control, not only a performance one. The LOD
+ladder runs from level `0` (coarsest) to the last level (full detail), and this
+checkbox multiplies particle count by a fixed step measured from full detail:
+`1.0` at full detail, `0.5` one or two levels below it, `0.25` three to five
+levels below, and `0` at six or more levels below — where it **disposes the
+overlay entirely** and the flow vanishes with no message. If the animation
+disappears while you are zooming out, that is this control, not a missing field.
+Turn it off, or zoom back in.
 
-It only has an effect when **Visualization → Renderer settings →
-Level-of-Detail (LOD)** is itself enabled; with LOD off, this checkbox does
-nothing.
+It needs **Visualization → Renderer settings → Level-of-Detail (LOD)** enabled
+*and* a level actually below full detail. Left on `Force LOD level:` `Auto`, the
+renderer never coarsens past a 2,000,000-point budget, so a dataset of 2,000,000
+cells or fewer stays at full detail however far you zoom out and this checkbox
+changes nothing. Under `Auto`, the `0.5` step first becomes reachable at roughly
+2.5M cells and the disposal step at roughly 7.6M. On anything smaller — the
+Pancreas sample used throughout these pages is 3,696 cells — move `Force LOD
+level:` yourself; the forced slider is deliberately not bounded by the budget.
 :::
 
 :::{note}

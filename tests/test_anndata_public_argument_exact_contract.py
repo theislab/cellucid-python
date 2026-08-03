@@ -54,6 +54,7 @@ def _adapter() -> AnnDataAdapter:
         dataset_name="Exact public arguments",
         dataset_id="exact-public-arguments",
         centroid_min_points=1,
+        serve_vector_fields=True,
     )
 
 

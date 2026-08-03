@@ -58,6 +58,10 @@ from ._server_base import (
     WEB_ASSET_INVENTORY_FILENAME,
     CORSMixin,
     _web_cache_dir,
+    bind_host_is_wildcard,
+    format_http_origin,
+    loopback_origin_for_bind,
+    machine_origin,
     print_detail,
     print_server_banner,
     print_step,
@@ -70,11 +74,17 @@ from ._server_base import (
 )
 from .anndata_adapter import AnnDataAdapter, _classify_anndata_path
 from .connectivity_contract import build_connectivity_manifest
+from .continuous_payload_diagnosis import NonFinitePayloadError
+from .vector_fields import is_vector_field_declaration_key
 
 if TYPE_CHECKING:
     import anndata
 
 logger = logging.getLogger("cellucid.anndata_server")
+
+#: The one query a direct-AnnData viewer URL carries, in every place such a
+#: URL is built, so the loopback form and the network form cannot drift.
+VIEWER_QUERY = "/?anndata=true"
 
 
 def _protocol_capability_document() -> dict[str, list[str]]:
@@ -268,6 +278,12 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
             else:
                 self.send_error_response(404, f"Not found: {path}")
 
+        except ConnectionError:
+            # The client went away mid-response: a closed tab, or a reload
+            # during a payload big enough to still be streaming. There is no
+            # socket left to answer on, so answering would fault again.
+            self.close_connection = True
+            logger.debug("Client disconnected while receiving %s", path)
         except Exception:
             logger.exception("Error handling %s", path)
             self.send_error_response(500, "Internal server error")
@@ -408,6 +424,11 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
                 self.send_error_response(
                     404, f"Unknown obs data type: {data_type} (expected values, codes, or outliers)"
                 )
+        except NonFinitePayloadError as exc:
+            # The same refusal a gene gets, for the same reason: a continuous
+            # obs column that is not entirely finite has no colour scale either.
+            logger.warning("Refused obs request %s: %s", path, exc)
+            self.send_json_error(422, exc.diagnosis.as_payload())
         except Exception:
             logger.exception("Error handling obs request: %s", path)
             self.send_error_response(500, "Internal server error")
@@ -450,6 +471,13 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
             )
         except KeyError:
             self.send_error_response(404, "Gene not found")
+        except NonFinitePayloadError as exc:
+            # 422, not 500. The request was well formed and the server is
+            # working; the gene it names cannot be drawn. Answering "internal
+            # server error" sent every reader looking in the wrong place, and
+            # threw away a message that already named the gene and the reason.
+            logger.warning("Refused var request %s: %s", path, exc)
+            self.send_json_error(422, exc.diagnosis.as_payload())
         except Exception:
             logger.exception("Error handling var request: %s", path)
             self.send_error_response(500, "Internal server error")
@@ -558,6 +586,8 @@ class AnnDataServer:
         dataset_id: str,
         obs_keys: Sequence[str] | None = None,
         vector_field_default: str | None = None,
+        serve_connectivity: bool = False,
+        serve_vector_fields: bool = False,
         serve_web_ui: bool = True,
         web_source_url: str = CELLUCID_WEB_URL,
         web_cache_dir: str | Path | None = None,
@@ -603,6 +633,18 @@ class AnnDataServer:
             cannot serve, such as a ``datetime64`` collection date.
         vector_field_default : str, optional
             Exact field id required when multiple UMAP vector fields exist.
+        serve_connectivity : bool
+            Whether to read, validate, and serve ``adata.obsp['connectivities']``.
+            False by default: an edge list costs time and memory proportional to
+            the number of stored neighbors, which on a large object is the single
+            longest part of startup, and most sessions never draw the graph.
+            Asking for a graph the object does not carry is an error, so a
+            missing ``obsp['connectivities']`` is reported rather than ignored.
+        serve_vector_fields : bool
+            Whether to read, validate, and serve the ``<field>_umap_<n>d`` vector
+            arrays in ``obsm``. False by default: every declared field is read and
+            checked in full before the server binds, and a session that never
+            turns the overlay on pays nothing for it.
         serve_web_ui : bool
             Establish and serve the exact current web build.
         web_source_url : str
@@ -660,7 +702,7 @@ class AnnDataServer:
             self.data_format = format_name
 
             if not quiet:
-                print_step(1, 4, "Detecting format")
+                print_step(1, 5, "Detecting format")
                 print_detail("Path", str(data))
                 print_detail("Format", format_name)
                 print_success("Format detected")
@@ -669,13 +711,13 @@ class AnnDataServer:
             self.data_source = "in-memory AnnData"
             self.data_format = "in-memory"
             if not quiet:
-                print_step(1, 4, "Detecting format")
+                print_step(1, 5, "Detecting format")
                 print_detail("Source", "in-memory AnnData")
                 print_success("Format detected")
 
         # Step 2: Load file
         if not quiet:
-            print_step(2, 4, "Loading AnnData")
+            print_step(2, 5, "Loading AnnData")
             mode = "read-only backed h5ad" if self.data_format == "h5ad" else "in-memory"
             print_detail("Mode", mode)
 
@@ -691,6 +733,9 @@ class AnnDataServer:
                 dataset_id=dataset_id,
                 obs_keys=obs_keys,
                 vector_field_default=vector_field_default,
+                serve_connectivity=serve_connectivity,
+                serve_vector_fields=serve_vector_fields,
+                quiet=quiet,
             )
         else:
             self.adapter = AnnDataAdapter(
@@ -704,6 +749,9 @@ class AnnDataServer:
                 dataset_id=dataset_id,
                 obs_keys=obs_keys,
                 vector_field_default=vector_field_default,
+                serve_connectivity=serve_connectivity,
+                serve_vector_fields=serve_vector_fields,
+                quiet=quiet,
             )
 
         try:
@@ -712,7 +760,7 @@ class AnnDataServer:
 
             # Step 3: Analyze dataset
             if not quiet:
-                print_step(3, 4, "Analyzing dataset")
+                print_step(3, 5, "Analyzing dataset")
                 self._print_dataset_info()
                 print_success("Analysis complete")
 
@@ -728,11 +776,16 @@ class AnnDataServer:
                 "n_genes": self.adapter.n_genes,
                 "is_backed": self.adapter.is_backed,
             }
+            if not quiet:
+                print_step(4, 5, "Building manifests")
+                print_detail("Centroids", "one per categorical field and dimension")
             (
                 self._identity,
                 self._metadata_bodies,
                 self._payload_lengths,
             ) = self._build_http_contract()
+            if not quiet:
+                print_success("Manifests built")
         except BaseException:
             self._closed = True
             try:
@@ -898,28 +951,97 @@ class AnnDataServer:
         )
         print_detail("Obs fields", f"{n_categorical} categorical, {n_continuous} continuous")
 
-        # Check connectivity
-        has_conn = self.adapter.has_connectivity()
-        if has_conn:
+        # Vector fields and connectivity each have three states, not two: served,
+        # held by this object but not asked for, or absent. Printing 'no' for the
+        # middle one would read as missing data.
+        identity = self.adapter.get_dataset_identity()
+        served_fields = identity.get("vector_fields")
+        if served_fields:
+            names = ", ".join(sorted(served_fields["fields"]))
+            vectors_str = f"yes ({names})"
+        elif self._holds_unserved_vector_fields():
+            vectors_str = (
+                "not served (obsm declares vector fields; pass "
+                "serve_vector_fields=True, or --vector-fields, to draw them)"
+            )
+        else:
+            vectors_str = "no"
+        print_detail("Vector fields", vectors_str)
+        # Connectivity has three states, not two: a graph that is served, a
+        # graph this object holds but was not asked to serve, and no graph at
+        # all. Printing 'no' for the middle one would read as missing data.
+        if self.adapter.has_connectivity():
             manifest = self.adapter.get_connectivity_manifest()
             if manifest is None:
                 raise RuntimeError("Validated connectivity is missing its manifest")
             conn_str = f"yes ({manifest['n_edges']:,} edges)"
+        elif self._holds_unserved_connectivity():
+            conn_str = (
+                "not served (obsp['connectivities'] is present; pass "
+                "serve_connectivity=True, or --connectivity, to draw it)"
+            )
         else:
             conn_str = "no"
         print_detail("Connectivity", conn_str)
 
+    def _holds_unserved_vector_fields(self) -> bool:
+        """Report whether obsm declares vector fields this server was not asked for.
+
+        Matching a key name is a scan of the key list, not a read of any array,
+        so naming this state costs nothing that opting out was meant to save.
+        """
+        if self.adapter.serve_vector_fields:
+            return False
+        try:
+            return any(
+                is_vector_field_declaration_key(key) for key in self.adapter.adata.obsm
+            )
+        except Exception:
+            return False
+
+    def _holds_unserved_connectivity(self) -> bool:
+        """Report whether a graph exists that this server was not asked to serve.
+
+        Membership in ``obsp`` is a key lookup, not a read of the matrix, so
+        naming this state costs nothing that opting out was meant to save.
+        """
+        if self.adapter.serve_connectivity:
+            return False
+        try:
+            return "connectivities" in self.adapter.adata.obsp
+        except Exception:
+            return False
+
     @property
     def url(self) -> str:
-        """Get the URL of the currently running server."""
+        """Get the URL of the currently running server.
+
+        A bind to every interface reports the loopback origin, because the
+        wildcard is not an address anything can open. The addresses other
+        machines use are reported separately by ``network_urls``.
+        """
         if not self._running or self._server is None:
             raise RuntimeError("AnnDataServer URL is unavailable because the server is not running")
-        return f"http://{self.host}:{self.port}"
+        if bind_host_is_wildcard(self.host):
+            return loopback_origin_for_bind(self.host, self.port)
+        return format_http_origin(self.host, self.port)
 
     @property
     def viewer_url(self) -> str:
         """Get the full URL to open the viewer."""
-        return f"{self.url}/?anndata=true"
+        return f"{self.url}{VIEWER_QUERY}"
+
+    @property
+    def network_urls(self) -> list[tuple[str, str]]:
+        """Return the origins another machine can open, when any exist."""
+        if not self._running or self._server is None:
+            return []
+        if not bind_host_is_wildcard(self.host):
+            return []
+        origin = machine_origin(self.port)
+        if origin is None:
+            return []
+        return [("Machine URL:  ", origin), ("Viewer URL:   ", f"{origin}{VIEWER_QUERY}")]
 
     def start(self, blocking: bool = True):
         """Start this single-use server."""
@@ -936,7 +1058,7 @@ class AnnDataServer:
         try:
             # Step 4: Start server
             if not self.quiet:
-                print_step(4, 4, "Starting server")
+                print_step(5, 5, "Starting server")
 
             if self.serve_web_ui:
                 from .web_cache import ensure_web_ui_cached
@@ -973,7 +1095,11 @@ class AnnDataServer:
 
             if not self.quiet:
                 print_success("Server ready")
-                print_server_banner(self.url, self.viewer_url)
+                print_server_banner(
+                    self.url,
+                    self.viewer_url,
+                    network_urls=self.network_urls,
+                )
 
             if blocking:
                 if self.open_browser and webbrowser.open(self.viewer_url) is not True:
@@ -1151,6 +1277,8 @@ def serve_anndata(
     dataset_id: str,
     obs_keys: Sequence[str] | None = None,
     vector_field_default: str | None = None,
+    serve_connectivity: bool = False,
+    serve_vector_fields: bool = False,
     serve_web_ui: bool = True,
     web_source_url: str = CELLUCID_WEB_URL,
     web_cache_dir: str | Path | None = None,
@@ -1199,6 +1327,18 @@ def serve_anndata(
         such as a ``datetime64`` collection date.
     vector_field_default : str, optional
         Exact field id required when multiple UMAP vector fields exist.
+    serve_connectivity : bool
+        Whether to read, validate, and serve ``adata.obsp['connectivities']``.
+        False by default: an edge list costs time and memory proportional to the
+        number of stored neighbors, which on a large object is the single longest
+        part of startup, and most sessions never draw the graph. Asking for a
+        graph the object does not carry is an error, so a missing
+        ``obsp['connectivities']`` is reported rather than ignored.
+    serve_vector_fields : bool
+        Whether to read, validate, and serve the ``<field>_umap_<n>d`` vector arrays
+        in ``obsm``. False by default: every declared field is read and checked in
+        full before the server binds, and a session that never turns the overlay on
+        pays nothing for it.
     serve_web_ui : bool
         Establish and serve the exact current web build.
     web_source_url : str
@@ -1249,6 +1389,8 @@ def serve_anndata(
         dataset_id=dataset_id,
         obs_keys=obs_keys,
         vector_field_default=vector_field_default,
+        serve_connectivity=serve_connectivity,
+        serve_vector_fields=serve_vector_fields,
         serve_web_ui=serve_web_ui,
         web_source_url=web_source_url,
         web_cache_dir=web_cache_dir,

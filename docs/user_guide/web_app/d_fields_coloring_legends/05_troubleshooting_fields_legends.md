@@ -45,15 +45,22 @@ Most “bugs” are one of these.
   - Gene Expression input (is a gene selected?)
 - If you are in multiview:
   - click a view panel, then re-check the sidebar (legend follows active view)
-- Open DevTools → Console and look for messages like:
-  - `Failed to load field: ...`
-  - `Failed to load gene: ...`
+- Read the notification centre before the console. A selection that failed says
+  so there, and says why:
+  - a gene raises a multi-line notification titled `Gene cannot be shown`,
+    naming the gene, counting the offending values and giving the first affected
+    cell indices;
+  - a field raises the same text after the prefix `Failed to load field:`.
+- The console carries the thrown error object for the same failure, which is
+  what to copy into a bug report — not a different sentence to search for.
 
 ### Fix
 
 1) Select a field (categorical/continuous) or a gene.
-2) If selection fails, reload the dataset and try again.
-3) If the error persists, jump to:
+2) If the notification names non-finite values, this is not a transport problem:
+   see {ref}`undrawable-continuous-payload` below.
+3) If selection fails with nothing else to go on, reload the dataset and try again.
+4) If the error persists, jump to:
    - {doc}`../b_data_loading/08_troubleshooting_data_loading`
 
 ### Prevention
@@ -69,19 +76,28 @@ Most “bugs” are one of these.
 1) No active field selected (Cellucid renders the “no-field” state as neutral gray).
 2) **Log color scale** enabled on a sparse field, where most cells are zero and
    therefore drop to the “None” grey.
-3) The field did not load correctly.
+3) The gene or column you picked **cannot be drawn** — it contains an infinity,
+   or it has no value at all — so it was refused and the active field never
+   changed. What you are looking at is still the previous (or no-field) grey.
+4) The field did not load correctly (transport failure).
 
 ### How to confirm
 
 - If all selectors show **None** → it’s (1).
 - If **Log color scale** is on and you’re coloring by a sparse gene → it’s often (2).
-- If you see a load failure notification → it’s (3).
+- If a notification titled `Gene cannot be shown` (or one beginning
+  `Failed to load field:`) counts `+Infinity` / `-Infinity` / `NaN` values and
+  lists the first affected cells → it’s (3). Note that the selector snaps back:
+  the field was never activated.
+- If you see a load failure that names a status code or a URL instead → it’s (4).
 
 ### Fix
 
 - For (1): pick a categorical/continuous field or gene.
 - For (2): turn off **Log color scale**, or choose a gene/field with positive values.
-- For (3): reload the dataset; if it persists, inspect export integrity.
+- For (3): repair the values at the source — reloading cannot change the
+  outcome. See {ref}`undrawable-continuous-payload`.
+- For (4): reload the dataset; if it persists, inspect export integrity.
 
 :::{note}
 “The field has **no** positive values at all” is not a possible cause here:
@@ -95,6 +111,82 @@ picture this way.
 
 - Treat “gray” as a meaning-bearing state:
   - gray can mean “no field selected” or “value is missing / log-incompatible”.
+
+---
+
+(undrawable-continuous-payload)=
+## Symptom: “Gene cannot be shown” / a field that will not colour
+
+### Likely causes (ordered)
+
+1) The gene or continuous column contains `+Infinity` or `-Infinity`. An
+   infinity has no position on a colour scale, so the payload is refused.
+2) Every value in the payload is `NaN`. There is no range to scale, so it is
+   refused too — usually a column that was never computed, or an empty
+   expression layer served instead of the normalized one.
+3) The values are outside what `float32` can carry (an overflow or an
+   underflow). Only the writers and the AnnData server report this kind; it is
+   refused for the same reason.
+
+### How to confirm
+
+Read the notification. It answers each question in turn:
+
+- **A gene** raises a multi-line notification titled `Gene cannot be shown`.
+- **A continuous obs field** raises the same body after the prefix
+  `Failed to load field:`.
+
+For an infinity the body reads like:
+
+> Gene "GATA3" contains 3 infinite values, so it has no colour scale.  
+> Of 18,142,044 cells: 3 +Infinity, 12 NaN.  
+> First affected cells: 4,118,237, 9,002,551, 17,441,908.  
+> NaN is drawn as missing; an infinity is not a value on any scale.  
+> Repair the expression matrix before serving or exporting it — …
+
+For a payload with nothing in it:
+
+> Field "leiden_score" has no value in any of 18,142,044 cells, so it has no colour scale.  
+> Every value is NaN, which Cellucid reads as "not measured here".
+
+If the values live on an AnnData server rather than in an export, the server
+refuses the request before it sends a byte, and the message shows that instead:
+
+> Gene "GATA3" could not be loaded: the server answered 422.  
+> The server said: `{"error": "non_finite_continuous_payload", …}`  
+> The server examined this payload and will not publish it.  
+> Repair the values at the source and reload. Nothing in the viewer can work around a value that has no position on a colour scale.
+
+The JSON body carries `kind`, `name`, `counts` (`total`, `offending`, `nan`,
+`positive_infinity`, `negative_infinity`, `float32_overflow`,
+`float32_underflow`), `examples` and a `message`, so DevTools → Network names
+the gene and the reason without any further digging.
+
+### Fix
+
+Repair the values at the source. Reloading, re-picking the gene or clearing the
+cache cannot change the outcome — nothing in the viewer can place an infinity on
+a colour scale.
+
+1) For an expression matrix:
+   - sparse: `adata.X.data[~np.isfinite(adata.X.data)] = 0`
+   - dense: `np.nan_to_num(adata.X, copy=False)`
+2) For a continuous obs column:
+   - `adata.obs["<key>"] = adata.obs["<key>"].replace([np.inf, -np.inf], np.nan)`
+3) Then re-run `prepare()` (or restart `serve_anndata` / `show_anndata`) and
+   reload the dataset.
+
+If you meant the infinities as “missing”, replace them with `NaN` rather than
+with `0`: Cellucid draws `NaN` as the neutral grey meaning “not measured here”,
+whereas `0` is a real measurement and will be coloured as one.
+
+### Prevention
+
+- Check a column before you publish it: `np.isfinite(values).all()`.
+- Prepared exports cannot carry this problem — both the Python and the R writer
+  refuse a non-finite continuous obs field or gene at preparation time, with the
+  same counts and the same first-affected indices. If you hit this at all, you
+  are reading a raw `.h5ad`/Zarr in the browser or serving one live.
 
 ---
 
@@ -298,7 +390,9 @@ counts, and what to do instead are in
 
 1) The field has mostly zeros (common for sparse gene expression).
 2) The field has negative values (some normalized/scaled outputs).
-3) The field has no positive values at all.
+3) Only a handful of cells are positive, so almost everything else is grey. A
+   field with *no* positive value cannot produce this: the toggle refuses to
+   turn on (`Log color scale requires at least one positive field value.`).
 
 ### How to confirm
 
@@ -428,8 +522,18 @@ refused.
 
 ### How to confirm
 
-- DevTools → Network: gene value requests are slow or failing.
+- DevTools → Network: gene value requests are slow.
 - DevTools → Performance/Memory: memory grows as you load many genes.
+
+:::{note}
+A gene request that *fails* against the Python AnnData server is not a
+performance problem and no longer looks like one. The server validates the
+column before it sends a byte, and a column that is not entirely finite is
+answered **HTTP 422** with a JSON body naming the gene and counting the offending
+values — so the Network tab tells you the cause directly. See
+{ref}`undrawable-continuous-payload`. Slowness is the separate problem this
+section is about.
+:::
 
 ### Fix
 

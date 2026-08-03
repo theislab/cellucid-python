@@ -132,8 +132,13 @@ You must have at least one embedding in `obsm`:
 - `obsm["X_umap_2d"]` with shape `(n_cells, 2)`
 - `obsm["X_umap_3d"]` with shape `(n_cells, 3)`
 
-The suffix and column count must agree exactly. Cellucid does not infer a
-dimension from an unsuffixed `X_umap` key.
+A suffixed key and its column count must agree exactly, and a key that names its
+dimension always decides that dimension. When a file declares none of the three
+and carries the plain `X_umap` that `sc.tl.umap()` writes, that array is read at
+the dimension its own column count states — 1, 2, or 3 columns — so an ordinary
+Scanpy object loads as written. Any other width is refused. This holds for every
+AnnData mode: the browser file picker, `cellucid serve`, and the notebook
+viewers.
 
 ### Optional (but commonly expected)
 

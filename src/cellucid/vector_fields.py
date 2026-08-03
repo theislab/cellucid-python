@@ -20,10 +20,70 @@ _VECTOR_KEY_PATTERN = re.compile(r"^(?P<field>.+_umap)_(?P<dimension>[123])d$")
 
 SUPPORTED_EMBEDDING_KEYS: tuple[str, ...] = ("X_umap_1d", "X_umap_2d", "X_umap_3d")
 
+#: ``sc.tl.umap()`` writes this key, without a dimension in its name.
+UNSUFFIXED_EMBEDDING_KEY: str = "X_umap"
+
 
 def is_vector_field_declaration_key(value: object) -> bool:
     """Return whether an AnnData ``obsm`` key exactly declares a vector field."""
     return isinstance(value, str) and _VECTOR_KEY_PATTERN.fullmatch(value) is not None
+
+
+def _servable_column_count(array: object) -> int | None:
+    """Return an array's column count when Cellucid can serve that width."""
+    shape = getattr(array, "shape", None)
+    if not isinstance(shape, tuple):
+        return None
+    # AnnData stores a plain ``(n_cells,)`` vector as the single column it is.
+    if len(shape) == 1:
+        return 1
+    if len(shape) != 2:
+        return None
+    columns = int(shape[1])
+    return columns if columns in (1, 2, 3) else None
+
+
+def resolve_embedding_keys(obsm: Any) -> dict[int, str]:
+    """Return every servable ``{dimension: obsm key}`` this object declares.
+
+    A key that names its own dimension -- ``X_umap_1d``, ``X_umap_2d``,
+    ``X_umap_3d`` -- always decides that dimension. When an object declares
+    none of them, ``sc.tl.umap()``'s own ``X_umap`` resolves to the dimension
+    its column count states, so the ordinary Scanpy object is servable as
+    written. A dimensional key anywhere in ``obsm`` means the writer declared
+    dimensions deliberately, and ``X_umap`` is then left to the vector-field
+    and hint paths rather than silently joining a declared set.
+    """
+    declared = {
+        dimension: key
+        for dimension, key in ((dimension, f"X_umap_{dimension}d") for dimension in (1, 2, 3))
+        if key in obsm
+    }
+    if declared:
+        return declared
+    if UNSUFFIXED_EMBEDDING_KEY not in obsm:
+        return {}
+    columns = _servable_column_count(obsm[UNSUFFIXED_EMBEDDING_KEY])
+    if columns is None:
+        return {}
+    return {columns: UNSUFFIXED_EMBEDDING_KEY}
+
+
+def unservable_unsuffixed_embedding_shape(obsm: Any) -> tuple[int, ...] | None:
+    """Return ``X_umap``'s shape when its width is the reason nothing resolved.
+
+    A ten-column ``X_umap`` is a latent space someone named after a plot. It
+    produces no rename hint, because no rename makes ten columns servable, so
+    the error message has to name the shape itself.
+    """
+    if UNSUFFIXED_EMBEDDING_KEY not in obsm:
+        return None
+    if _servable_column_count(obsm[UNSUFFIXED_EMBEDDING_KEY]) is not None:
+        return None
+    shape = getattr(obsm[UNSUFFIXED_EMBEDDING_KEY], "shape", None)
+    if not isinstance(shape, tuple):
+        return None
+    return tuple(int(extent) for extent in shape)
 
 
 def embedding_declaration_hints(obsm: Any, *, n_cells: int) -> list[str]:
@@ -52,6 +112,32 @@ def embedding_declaration_hints(obsm: Any, *, n_cells: int) -> list[str]:
     # Scanpy's own key is the one a first-time user almost always means.
     hints.sort(key=lambda hint: (0 if "'X_umap'" in hint else 1, hint))
     return hints
+
+
+def missing_embedding_message(obsm: Any, *, n_cells: int, headline: str) -> str:
+    """Return one message naming the rule, the object, and the exact remedy."""
+    message = (
+        f"{headline} Cellucid reads the exact keys 'X_umap_1d', 'X_umap_2d', and "
+        "'X_umap_3d', and reads a bare 'X_umap' as the dimension its own column "
+        "count states. "
+        f"Available obsm keys: {list(obsm.keys())}."
+    )
+    unservable_shape = unservable_unsuffixed_embedding_shape(obsm)
+    if unservable_shape is not None:
+        message += (
+            f"\n  adata.obsm['X_umap'] has shape {unservable_shape}, and Cellucid "
+            "draws 1, 2, or 3 dimensions, so that array names a dimension no "
+            "viewer renders. Assign the columns you mean to draw under the key "
+            "for their own count."
+        )
+    hints = embedding_declaration_hints(obsm, n_cells=n_cells)
+    if hints:
+        joined = "\n".join(f"    {hint}" for hint in hints)
+        message += (
+            "\n  Fix: declare an existing array under the key for its column "
+            f"count, then re-run (re-save the file if you serve a path):\n{joined}"
+        )
+    return message
 
 
 @dataclass(frozen=True)
@@ -327,10 +413,7 @@ def _umap_embeddings(
 ) -> dict[int, tuple[str, np.ndarray]]:
     embeddings: dict[int, tuple[str, np.ndarray]] = {}
     n_cells = int(adata.n_obs)
-    for dimension in (1, 2, 3):
-        key = f"X_umap_{dimension}d"
-        if key not in adata.obsm:
-            continue
+    for dimension, key in sorted(resolve_embedding_keys(adata.obsm).items()):
         array, _resolved_dimension = _finite_float32_matrix(
             adata.obsm[key],
             label=f"Embedding {key!r}",
@@ -340,19 +423,13 @@ def _umap_embeddings(
         embeddings[dimension] = (key, array)
 
     if not embeddings:
-        message = (
-            "AnnData must contain one or more exact UMAP embedding keys: "
-            "'X_umap_1d', 'X_umap_2d', or 'X_umap_3d'. "
-            f"Available obsm keys: {list(adata.obsm.keys())}."
-        )
-        hints = embedding_declaration_hints(adata.obsm, n_cells=n_cells)
-        if hints:
-            joined = "\n".join(f"    {hint}" for hint in hints)
-            message += (
-                "\n  Fix: declare an existing array under the key for its "
-                f"column count:\n{joined}"
+        raise ValueError(
+            missing_embedding_message(
+                adata.obsm,
+                n_cells=n_cells,
+                headline="AnnData must contain one UMAP embedding Cellucid can read.",
             )
-        raise ValueError(message)
+        )
     return embeddings
 
 

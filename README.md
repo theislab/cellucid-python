@@ -65,6 +65,8 @@ show_anndata(
 )
 ```
 
+An `adata` straight out of Scanpy works as written.
+
 ## Documentation and ecosystem
 
 - [Python package guide](https://cellucid.readthedocs.io/en/latest/user_guide/python_package/index.html)

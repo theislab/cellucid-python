@@ -50,6 +50,14 @@ ended. Use the classes below with `start_background()` when you need a running
 server object or programmatic lifecycle control.
 ```
 
+## What a direct-AnnData start prints
+
+Five numbered steps, then the banner with the Viewer URL. Step 2,
+`Loading AnnData`, is the long one on a large object and names each phase of the
+build as it runs. A prepared export runs three steps instead.
+
+Full transcript: {doc}`../../web_app/b_data_loading/04_server_tutorial`.
+
 ## Controlling host/port and browser opening
 
 Both functions accept:
@@ -74,6 +82,21 @@ serve_anndata(
     dataset_id="my-study-v1",
 )
 ```
+
+### Binding to every interface (`host="0.0.0.0"`)
+
+Use it when the client cannot reach this machine directly — typically an HPC
+compute node whose tunnel terminates on a login node. Two things to know:
+
+- `url` and `viewer_url` report the **loopback** origin, because the wildcard is
+  not an address anything can open. `network_urls` carries the machine's own name
+  for clients elsewhere on the network, and the banner prints both.
+- Through a tunnel you still open `http://127.0.0.1:<port>/…`: the near end of
+  the tunnel is your own machine.
+
+A non-loopback bind has no authentication of any kind. See
+{doc}`13_security_privacy_cors_and_networking` and
+{doc}`17_hpc_slurm_and_compute_node_serving`.
 
 ## Non-blocking servers (recommended for scripts/tools)
 
@@ -144,9 +167,37 @@ These are forwarded to the `AnnDataAdapter` and affect how your AnnData is inter
   as a `datetime64` collection date
 - `vector_field_default`: exact default field ID; required when direct AnnData
   declares more than one vector field
+- `serve_connectivity`: read, validate, and serve
+  `adata.obsp['connectivities']` (default `False`); see below
 
 All omitted optional values retain the signature defaults; identity is never
 derived, and a multi-field vector declaration has no implicit default.
+
+### Which `obsm` key becomes the embedding
+
+`X_umap_1d` / `X_umap_2d` / `X_umap_3d` each decide their own dimension. With
+none of them present, a plain `X_umap` of 1, 2, or 3 columns is read at the
+dimension its column count states, so a Scanpy object serves as written.
+
+### Two capabilities are opt-in: `serve_connectivity=` and `serve_vector_fields=`
+
+```python
+server = cellucid.serve_anndata(
+    "data.h5ad",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    serve_connectivity=True,
+)
+```
+
+`serve_vector_fields=True` does the same for the `<field>_umap_<n>d` overlay
+arrays. Both are off by default: each is read and validated in full before the
+server binds, and most sessions turn neither overlay on. Asking for a graph the
+object does not carry is an error; asking for vector fields it declares none of
+simply serves none.
+
+Both rules in full:
+{doc}`08_anndata_mode_show_anndata_and_serve_anndata`.
 
 ## Edge cases (high-signal)
 

@@ -81,6 +81,7 @@ The cause phrase tells you which class of failure it was:
 | “nothing is published at that address” | 404 — the path is wrong | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
 | “the server refused access” | 401 or 403 — it exists but you cannot read it | Check that the data is shared publicly, or that you are signed in |
 | “the server rejected the request” | Some other 4xx | Check the address |
+| **422**, with a body beginning `{"error": "non_finite_continuous_payload"` | The address was right. The server examined a gene or continuous column, found values it cannot publish, and refused to send them | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
 | “the server reported a problem of its own” | 5xx — not your fault | Wait and retry |
 | “not in a format Cellucid can read” | The bytes arrived but do not match the export format | Re-export with `cellucid prepare`; {doc}`../b_data_loading/07_folder_file_format_expectations_high_level_link_to_spec` |
 | “nothing readable came back” | Offline, DNS failure, **CORS**, or an address that simply is not a Cellucid export | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
@@ -91,6 +92,18 @@ the page whether a request was blocked by CORS or simply answered with something
 unreadable. That is what “nothing readable came back” covers. If you host your
 own exports and the address is definitely right, check the CORS headers first —
 open DevTools → Network and look for a request with no response body.
+:::
+
+:::{note}
+**422 is the one 4xx that is not about the address.** When a gene or continuous
+obs column is requested from the Python AnnData server, the server validates it
+before sending anything, and refuses a column containing `NaN`, an infinity, or
+a value outside the `float32` range. The refusal is HTTP 422 with a JSON body —
+`error`, `kind`, `name`, `counts`, `examples` and a `message` — and the viewer
+quotes that body verbatim above its own explanation. Repair the values at the
+source; nothing in the viewer can place an infinity on a colour scale.
+{doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` walks
+through it.
 :::
 
 (size-limits)=
@@ -155,7 +168,10 @@ is fixed. Zoom in instead.
 | **“No gene matches”**, followed by your query and a count of how many gene names the dataset publishes | The gene is not in *this export*. The count is the point: an export often carries a chosen subset of the source data, so a real gene can be legitimately absent | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
 | “This dataset publishes no gene expression fields, so no gene panel can be built.” | There is no expression data at all here, so no marker or gene analysis is possible | {doc}`../h_analysis/08_analysis_mode_genes_panel` |
 | `Gene "<name>" not found in dataset. Check spelling or try another gene.` | That specific gene is absent | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
-| “Failed to load gene: …” / “Failed to load field: …” | The field exists but its data could not be fetched | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
+| **“Gene cannot be shown”**, a multi-line notification naming the gene, counting its `+Infinity` / `-Infinity` / `NaN` values and listing the first affected cells | The values arrived (or the server refused to send them) and cannot be placed on a colour scale. The active field never changed. This is a values problem, not a transport one — repair the data at the source | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
+| `Field "X" has no value in any of N cells, so it has no colour scale.` | Every value in that column is `NaN`, so there is nothing to scale — usually a column that was never computed | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
+| “Failed to load field: …” | A field could not be loaded. Read the rest of the line: if it counts non-finite values it is the case above, otherwise the data could not be fetched | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends`, then {doc}`../b_data_loading/08_troubleshooting_data_loading` |
+| “Failed to load gene: …” / “Failed to load field: …” on the progress toast | The load never finished — a dropped connection, a stopped server, a refused payload. It is the terminal state of the `Loading …` toast; the reason arrives as a separate notification beside it | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
 | “No neighbor graph available for this dataset” | kNN selection needs connectivity, which this export does not include | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
 
 :::{note}

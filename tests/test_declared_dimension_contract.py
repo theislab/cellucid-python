@@ -131,6 +131,7 @@ def test_the_anndata_path_and_prepare_agree_on_a_plain_1d_declaration() -> None:
         dataset_name="Declared dimensions",
         dataset_id="declared-dimensions",
         centroid_min_points=1,
+        serve_vector_fields=True,
     )
     try:
         assert adapter.get_embedding(1).shape == (N_CELLS, 1)
@@ -155,6 +156,7 @@ def test_an_unsuffixed_obsm_vector_key_is_never_discovered_as_a_vector_field() -
         dataset_name="Declared dimensions",
         dataset_id="declared-dimensions",
         centroid_min_points=1,
+        serve_vector_fields=True,
     )
     try:
         assert "vector_fields" not in adapter.get_dataset_identity()

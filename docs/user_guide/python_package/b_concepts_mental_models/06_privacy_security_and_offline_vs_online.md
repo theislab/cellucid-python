@@ -4,6 +4,7 @@
 **Time:** 15–25 minutes  
 **What you’ll learn:**
 - When your data stays local vs when it can be exposed
+- What a non-loopback bind publishes on a shared machine, and how to bound it
 - What the Python server is doing with `cellucid.com` (hosted UI assets)
 - What source access the viewer requires in firewalled environments
 
@@ -58,13 +59,71 @@ If you run a server on:
 then **anyone who can reach that host/port can fetch your dataset files**.
 
 Practical implications:
-- this is not an authenticated server by default,
+- Cellucid has no authentication at all — no password, no token, no login, and
+  no option that adds one,
+- unlike a notebook server, there is **no token in the URL**: the address is the
+  whole thing a client needs, and it is not a secret,
 - treat it like “public to whoever can reach it”.
 
 Safe sharing patterns:
 - SSH port forwarding (keeps the server bound to localhost on the remote machine)
 - VPN + firewall rules
 - hosting behind an authenticated reverse proxy (advanced)
+
+### On a shared cluster node, that means every other user
+
+The sentence above is easy to read as “people on my lab network”. On a
+multi-user HPC compute node it means something sharper: `--host 0.0.0.0`
+publishes the embeddings, the obs columns, and the expression values to every
+user who can route to that port. Anyone with a shell on that node — and usually
+anyone with a shell on any node of the cluster — can read the whole dataset with
+one `curl`, needing only the port number, no browser and no account on your
+project. Schedulers place other users’ jobs beside yours as a matter of course,
+so this is the ordinary case, not a rare one.
+
+Reads are unauthenticated on a loopback bind too. The difference is only who is
+able to perform them: on `127.0.0.1`, your own machine; on `0.0.0.0`, everyone
+who can route to the port.
+
+### When a wildcard bind is still the right trade
+
+It is the right trade when the tunnel has to terminate on a *different* machine.
+On most clusters only the login node accepts your SSH connection, so the forward
+is `ssh -N -L 8765:compute-node:8765 you@login-node`: the login node opens an
+ordinary TCP connection to the compute node, that connection arrives from
+another machine, and a socket bound to `127.0.0.1` refuses it. There is no
+loopback-only arrangement that works in that shape — the alternative is not a
+safer bind, it is no viewer.
+
+Keep the exposure bounded instead of avoiding it:
+
+- **Serve only while you are looking.** The exposure lasts exactly as long as
+  the process; stop it when you stop looking rather than leaving it up for the
+  length of a job.
+- **Pick an unusual port.** `8765` is the documented default and the first
+  number anyone tries. A port such as `47231` is not a secret, but it keeps the
+  server out of the way of casual scans and of a colleague opening the default
+  port on a node you share.
+- **Prefer a loopback bind plus a direct tunnel whenever your client can reach
+  the machine directly** — a lab server, a cloud VM, or a cluster that lets you
+  `ssh` through to the compute node. That publishes nothing to anyone.
+- **Serve less**: name the obs columns you actually need with `obs_keys=` (or
+  `--obs-key`), so an exposed server cannot hand out columns it never read.
+
+Both hops of the decision are worked through in
+{doc}`../d_viewing_apis/12_remote_servers_ssh_tunneling_and_cloud` and
+{doc}`../d_viewing_apis/13_security_privacy_cors_and_networking`.
+
+### What the banner tells you about the exposure
+
+`0.0.0.0` is a statement about which interfaces accept connections, not an
+address anything can connect to, so Cellucid never prints it inside a URL. A
+wildcard bind reports the loopback origin — what a browser on the serving
+machine and the far end of a tunnel both use — and then names **the machine
+itself** under `Bound to every network interface. From another machine:`. Those
+machine URLs are the audit line: they are the addresses your neighbours on the
+cluster can open. If the machine has no name that resolves beyond itself, that
+block is absent, because there is no travelling address to print.
 
 ---
 
@@ -90,9 +149,12 @@ So the bind address is not the last line of defence. The `Host` header is:
   echoes the attacker’s value. The refused header is written to your server log
   only.
 - The rule is applied whenever the bound address is loopback. A deliberate
-  non-loopback bind (`--host 0.0.0.0`) is an explicit request for network
-  exposure whose legitimate names Cellucid cannot know, so it is not enforced
-  there by default.
+  non-loopback bind (`--host 0.0.0.0`, `--host ::`) is an explicit request for
+  network exposure whose legitimate names Cellucid cannot know, so it is not
+  enforced there by default. State that plainly to yourself before you use it:
+  **a wildcard bind turns the `Host` check off**, and every authority is routed.
+  Declaring the names you do expect — the next section — turns the check back
+  on for that bind as well.
 
 ### Reverse proxies must be declared
 
@@ -281,10 +343,19 @@ Likely causes:
 - you bound the server to `0.0.0.0` or a public interface,
 - your machine firewall allows inbound traffic to the port.
 
+Confirm:
+- the startup banner printed a
+  `Bound to every network interface. From another machine:` block. The URLs in
+  that block are exactly what other machines can open, and the host name in them
+  is your machine’s own.
+
 Fix:
 - bind to `127.0.0.1`,
 - use SSH tunneling for remote access,
-- add firewall rules.
+- add firewall rules,
+- and where a wildcard bind is unavoidable, apply the bounds in the
+  non-localhost section above: serve only while you are looking, use an unusual
+  port, and declare `allowed_hosts` so the `Host` check runs there too.
 
 ---
 

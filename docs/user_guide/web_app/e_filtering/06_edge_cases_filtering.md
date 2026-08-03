@@ -64,9 +64,9 @@ invisible whenever the filter is active.
 
 :::{important}
 **This cannot happen with a prepared export.** Both writers refuse to prepare a
-continuous obs field or a gene that contains a non-finite value —
-`Continuous obs field '<key>' must contain only finite values.` — so the export
-never carries one. You can only reach this state by opening a raw `.h5ad` or
+continuous obs field or a gene that contains a non-finite value, and the refusal
+counts them — how many are `NaN` or infinite, and the first affected cells — so
+the export never carries one. You can only reach this state by opening a raw `.h5ad` or
 Zarr archive directly in the browser, which reads the values as they are.
 :::
 

@@ -42,7 +42,9 @@ verified local generation.
 - Each viewer/server startup establishes the complete source generation declared
   by `cellucid-web-assets.json`, including `index.html`, root browser metadata,
   and `/assets/*`.
-- In notebooks, Cellucid shows progress while establishing that generation.
+- In notebooks that step is silent, like the rest of the build: a progress bar
+  appears only when you establish the generation yourself with
+  `viewer.ensure_web_ui_cached()`.
 - Generation identity and every asset byte are verified against the inventory.
 - Notebook embeds load the UI from the exact `client_server_url=` supplied by
   the caller, or from direct loopback when it is omitted.
@@ -276,6 +278,8 @@ followed by these exact keyword-only parameters:
 - `normalize_embeddings`: normalize coordinates to `[-1, 1]` (default: True)
 - `centroid_outlier_quantile`: quantile used for categorical centroids
 - `centroid_min_points`: minimum category size used for categorical centroids
+- `serve_connectivity`: read, validate, and serve `adata.obsp['connectivities']`
+  (default: `False`). The neighbor graph is never touched unless you ask for it
 - `dataset_name`: required non-empty, unpadded label without control
   characters; human-readable Unicode is preserved
 - `dataset_id`: required portable 1–180 character ASCII identity (letter or
@@ -331,6 +335,82 @@ from cellucid import show_anndata
 # )
 ```
 
+### Which `obsm` key becomes the embedding
+
+`X_umap_1d` / `X_umap_2d` / `X_umap_3d` each decide their own dimension. An
+object declaring none of them is served from a bare `X_umap` at the dimension its
+column count states, so a Scanpy object needs no rename. Full rules, including
+what an unreadable width reports:
+{doc}`../../python_package/d_viewing_apis/08_anndata_mode_show_anndata_and_serve_anndata`.
+
+### Connectivity (KNN graph) is opt-in
+
+`show_anndata()` and `AnnDataViewer` do not read `adata.obsp['connectivities']`
+unless you ask. The parameter is keyword-only and `False` by default:
+
+```python
+viewer = show_anndata(
+    "data.h5ad",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    serve_connectivity=True,
+)
+```
+
+With it off, the matrix is never read, `dataset_identity.json` reports
+`stats.has_connectivity` as `false` and `stats.n_edges` as `null`, and
+`connectivity_manifest.json`, `connectivity/edges.src.bin`,
+`connectivity/edges.dst.bin`, and `connectivity/edges.weights.f64.bin` all
+answer `404`. The viewer offers no edge drawing; everything else — points, obs
+fields, gene expression, centroids, vector fields — is unaffected.
+
+With it on, the whole graph is read and validated before the server binds,
+because the manifest the viewer fetches first declares the edge count and the
+neighbor maximum. That is the most expensive thing a direct-AnnData startup can
+do: a 50-neighbor graph over millions of cells is hundreds of millions of stored
+neighbors. Off is the default because most sessions never draw the graph.
+
+```{important}
+Asking for connectivity on an object whose `obsp` holds no `connectivities`
+matrix raises instead of producing a graph-less viewer. Run
+`sc.pp.neighbors(adata)` first, or leave the parameter alone.
+```
+
+`prepare()` is unaffected: its `connectivities=` argument was always opt-in, and
+an export pays the validation once rather than once per session.
+
+### The viewer builds quietly
+
+A notebook viewer suppresses server output, so the numbered startup report a
+terminal prints — `[1/5] Detecting format` through `[5/5] Starting server` —
+never appears in a cell. On a large object the cell therefore runs for minutes
+with nothing printed, and the constructor is where that time goes, in this
+order:
+
+1. **Obs columns** — every served column is classified, so an unservable dtype
+   fails here rather than inside a later request.
+2. **Embeddings** — `obsm` keys are resolved, then each embedding is validated
+   and normalized.
+3. **Vector fields** — `obsm` is scanned for `<field>_umap_<dim>d` declarations.
+4. **Connectivity** — the edge list, *only* when `serve_connectivity=True`.
+5. **Manifests and centroids** — one centroid per categorical field per
+   available dimension, then a cross-check of every served route.
+6. **Viewer generation and bind** — the configured web generation is
+   established and the port is bound.
+
+To watch the same work happen with labels, run the object through a terminal
+server once with `cellucid serve` (its five-step report is described in
+{doc}`04_server_tutorial`), or enable logging in the kernel before constructing
+the viewer — the `cellucid.connectivity` logger warns, naming the stored
+neighbor count and the cell count, before validating a graph of 50,000,000 or
+more stored neighbors:
+
+```python
+import logging
+
+logging.basicConfig(level=logging.INFO)
+```
+
 (vector-fields)=
 ## Vector Fields in Notebooks (Velocity/Drift Overlay)
 
@@ -344,8 +424,8 @@ This matters for data loading because:
 
 To make a vector field appear when using `show_anndata(...)`, you need:
 
-1) An exact UMAP embedding in `adata.obsm` (`X_umap_1d`, `X_umap_2d`, or
-   `X_umap_3d`)
+1) A UMAP embedding in `adata.obsm`: `X_umap_1d`, `X_umap_2d`, or `X_umap_3d`,
+   or a bare `X_umap` read at the dimension its own column count states
 2) A vector field in `adata.obsm` with a **Cellucid-compatible key**
 3) The vector array shape must be `(n_cells, dim)` where `dim` matches the embedding (2 or 3)
 4) If more than one field ID is present, pass the exact choice as
@@ -674,6 +754,46 @@ That makes remote tunneling awkward because you need to update your SSH forwardi
 - **VSCode Remote / Remote-SSH**: use VSCode port forwarding for the Cellucid port as well (the viewer still needs it on `localhost`).
 - **JupyterHub**: you typically still need a localhost-reachable port; prefer using a fixed port and ask your admin if extra forwarding is needed.
 
+### Kernel on an HPC compute node (two-hop forward)
+
+The tunnel above assumes your `ssh` reaches the machine running the kernel. On
+many clusters it does not: only the login node accepts SSH, and your kernel runs
+on a compute node inside a job. A kernel there has exactly the same two-hop
+problem as `cellucid serve`, and the same shape of solution — the forward is
+opened *by the login node*, which then connects onward to the compute node:
+
+```bash
+ssh -N -L 8765:compute-node:8765 you@login-node
+```
+
+The forward target `compute-node:8765` is resolved by the login node, so the
+second connection arrives at the compute node from another machine. A server
+bound to `127.0.0.1` refuses it: loopback accepts its own machine only. That is
+what the wildcard bind is for, and `AnnDataViewer` does not offer one — it
+always binds loopback, for safety in notebooks. So on a compute node, start a
+server from the kernel instead of an embedded viewer, and open it in its own
+browser tab:
+
+```python
+from cellucid import serve_anndata
+
+serve_anndata(
+    "data.h5ad",
+    port=8765,
+    host="0.0.0.0",
+    open_browser=False,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+)
+```
+
+The address you open stays `http://127.0.0.1:8765/?anndata=true`: the tunnel's
+near end is on your own machine, whatever the server bound to.
+
+The full recipe, including `ProxyJump` for clusters that *do* admit SSH to the
+compute node, is in
+{doc}`../../python_package/d_viewing_apis/12_remote_servers_ssh_tunneling_and_cloud`.
+
 ## Common Edge Cases
 
 - **No source access at startup**: viewer/server startup establishes the current
@@ -748,13 +868,63 @@ This section is intentionally redundant and explicit: it is designed for “I ne
 ### Symptom: “`show_anndata` says no UMAP embeddings”
 
 **Likely causes**
-- Your AnnData lacks `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` in `obsm`.
+- Your AnnData declares none of `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` in
+  `obsm` **and** carries no bare `X_umap` either.
+- Or it carries a bare `X_umap` that is not 1, 2, or 3 columns wide — a latent
+  space named after a plot, which names a dimension no viewer renders.
 
 **How to confirm**
 - `print(adata.obsm.keys())`
+- Read the error itself: it lists the keys the object has, names the shape of
+  `X_umap` when its width is the reason nothing resolved, and prints an exact
+  assignment to run for every other array that could be an embedding.
 
 **Fix**
-- Compute UMAP and store it under one of the supported keys.
+- Compute UMAP (`sc.tl.umap(adata)` writes a two-column `X_umap`, which is read
+  as 2D as written), or
+- assign the columns you mean to draw under the key for their own count:
+
+  ```python
+  adata.obsm["X_umap_2d"] = umap_coordinates_2d
+  ```
+
+- If you serve a `.h5ad` or `.zarr` path rather than an in-memory object,
+  re-save the file after the assignment.
+
+### Symptom: “The KNN graph is there, but there is no edge overlay”
+
+**Likely causes**
+- The neighbor graph is opt-in, and this viewer did not ask for it.
+
+**How to confirm**
+
+```python
+import json, urllib.request
+
+with urllib.request.urlopen(viewer.server_url + "/dataset_identity.json") as f:
+    identity = json.load(f)
+
+print(identity["stats"]["has_connectivity"], identity["stats"]["n_edges"])
+```
+
+`False None` means the graph was not served.
+
+**Fix**
+- Recreate the viewer with `serve_connectivity=True`.
+
+### Symptom: “The cell has printed nothing for minutes”
+
+**Likely causes**
+- You are inside the constructor on a large object. A notebook viewer builds
+  quietly, so no step report appears.
+- You passed `serve_connectivity=True`, and the edge list is being built.
+
+**Fix**
+- Wait, but first drop `serve_connectivity=True` if this session will not draw
+  edges.
+- Narrow `obs_keys=` to the columns you actually color by.
+- Export once with `cellucid.prepare(...)` and use `show()` for repeated
+  viewing.
 
 ### Symptom: “Vector field overlay is missing (no toggle / no fields)”
 

@@ -4,7 +4,9 @@
 **Time:** 10 minutes
 
 Cellucid starts in **Points**. Choose **Volumetric smoke cloud** only when a
-density-shaped overview is more useful than individual-cell inspection.
+density-shaped overview is more useful than individual-cell inspection. The
+dropdown labels it `(alpha)` and the sidebar tags it `Alpha`: it is still
+changing, it is slower than points, and figure export cannot reproduce it.
 
 ## Choose the representation before tuning it
 
@@ -26,10 +28,18 @@ or turn an embedding into a physical tissue volume.
 Use **Visualization → Render mode:**:
 
 - `Points` is the default.
-- `Volumetric smoke cloud` reveals **Volumetric smoke:** and hides the
+- `Volumetric smoke cloud (alpha)` reveals **Volumetric smoke:** and hides the
   points-only depth, renderer, connectivity, and vector-field controls.
-  **Image quality** stays, in both modes, because antialiasing applies to the
-  whole drawing buffer rather than to the point sprites.
+  **Image quality** stays, in both modes, because both renderers draw into the
+  same application-owned multisampled scene target rather than into a buffer of
+  their own.
+
+A pill reading `Alpha` sits beside the `Render mode:` label and is shown only
+while smoke is the selected mode. It names the maturity of the selected option,
+not of the control, so `Points` never wears it, and its hover text reads
+`Volumetric smoke cloud is in alpha: it is still changing, it is slower than points, and figure export cannot reproduce it.`
+Smoke is the only thing in Cellucid carrying a maturity tag; see
+{doc}`../a_orientation/04_ui_glossary_terminology`.
 
 The small `i` button beside **Volumetric smoke:** explains the mode without
 keeping extra prose open in the sidebar.
@@ -60,12 +70,27 @@ Its relevant controls are:
   changes far more pixels when antialiasing is off.
 - **Renderer settings:** `Level-of-Detail (LOD)`, `Force LOD level:`, and
   `Frustum culling`
-- **Image quality:** `Antialiasing (smooth point edges)` — on by default, and
-  the one control that applies on the next page load rather than immediately.
-  It sits outside the **Renderer settings** block because it governs the whole
-  drawing buffer and stays available in smoke mode too. See
+- **Image quality:** `Antialiasing (smooth point edges)` — a live setting, like
+  every other: a change reaches the next frame. It sits outside the **Renderer
+  settings** block because it governs the whole scene target, which both
+  renderers share, and so it stays available in smoke mode too. See
   {doc}`../n_benchmarking_performance/02_performance_considerations_what_gets_slow_and_why`
   for what it costs and what it buys.
+
+Until you tick that checkbox yourself, antialiasing follows the dataset: on
+below five million cells, off at or above, decided again every time a dataset is
+opened. The status line under the checkbox says so, naming the count it used —
+`Chosen automatically: 3,696 cells.` on the Pancreas sample — or reading
+`Chosen automatically from the size of the dataset.` before a dataset is open.
+Clicking the checkbox ends automatic selection permanently, in both directions —
+ticking it is as final as unticking it — and the status line goes empty. On a
+device that cannot multisample at all it reads
+`This browser is not providing antialiasing for this view.` instead, and the
+checkbox cannot turn smoothing on.
+
+Because that choice describes your machine rather than your figure, a
+`.cellucid-session` records the checkbox but never applies it on restore; see
+{doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
 
 For large datasets, begin here and use
 {doc}`../n_benchmarking_performance/03_large_dataset_best_practices`.
@@ -156,7 +181,7 @@ See {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
 1. Return to `Points`.
 2. Confirm that points are visible and **Showing … points** is not zero.
 3. Relax categorical, continuous, and outlier filters.
-4. Select `Volumetric smoke cloud` again.
+4. Select `Volumetric smoke cloud (alpha)` again.
 5. Increase `Cloud density:` only after visible cells are confirmed.
 
 ### Interaction is slow or the WebGL context is lost

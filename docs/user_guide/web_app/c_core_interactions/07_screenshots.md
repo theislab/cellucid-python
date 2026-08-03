@@ -34,9 +34,12 @@ Pancreas sample at twice the device pixel ratio.
 :width: 480px
 
 `Render mode` sits at the top of **Visualization** and has exactly two options,
-`Points` and `Volumetric smoke cloud`. Everything below it — starting with the
-**Depth perception** box shown here — belongs to the points renderer and is
-hidden in smoke mode. Scenario `core-render-mode-select`.
+`Points` and `Volumetric smoke cloud (alpha)`. Almost everything below it —
+starting with the **Depth perception** box shown here — belongs to the points
+renderer and is hidden in smoke mode; **Image quality** is the exception and
+stays in both modes. Choosing smoke also shows an `Alpha` pill beside the
+`Render mode:` label, which is why no pill is visible here. Scenario
+`core-render-mode-select`.
 ```
 
 ## Dimension switching

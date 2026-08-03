@@ -26,10 +26,33 @@ assert X_umap_2d.ndim == 2 and X_umap_2d.shape[1] == 2
 assert np.isfinite(X_umap_2d).all()  # no NaN/Inf
 ```
 
-AnnData input must declare the dimension in its key. Store each embedding as
-`X_umap_1d`, `X_umap_2d`, or `X_umap_3d`; Cellucid does not infer a dimension
-from a generic key. Scanpy writes `sc.tl.umap()` output to `adata.obsm["X_umap"]`,
-so declare it once with `adata.obsm["X_umap_2d"] = adata.obsm["X_umap"]`.
+`prepare()` takes arrays, not `obsm` keys: pass each set of coordinates to the
+argument named for its dimension. Scanpy writes `sc.tl.umap()` output to
+`adata.obsm["X_umap"]`, so an export call reads
+`X_umap_2d=adata.obsm["X_umap"]` — your object is never renamed or mutated to
+make that work.
+
+```{note}
+**`prepare()` and serving AnnData directly are two different paths, with two
+different rules. Do not carry one over to the other.**
+
+`prepare()` is unchanged. It takes explicit `X_umap_1d=`, `X_umap_2d=`, and
+`X_umap_3d=` **array** arguments, and reads no `obsm` keys at all. Which
+dimension an array is exported as is decided by the argument you pass it to.
+
+Serving an AnnData object directly ({func}`~cellucid.serve_anndata`,
+{func}`~cellucid.show_anndata`, `cellucid serve …`) reads `obsm` keys instead.
+There, `X_umap_1d`, `X_umap_2d`, and `X_umap_3d` each name their own dimension
+and always decide it, and an object that declares none of them but carries a
+bare `X_umap` has it read at the dimension its own column count states — 1, 2,
+or 3 columns, resolved by its own width, with no rename and no change to your
+object. A bare `X_umap` of any other width is refused with a message naming its
+shape, and an explicit dimensional key anywhere in `obsm` means the bare key
+never joins the resolved set.
+
+The full serve-path rule is in
+{doc}`../d_viewing_apis/08_anndata_mode_show_anndata_and_serve_anndata`.
+```
 
 ---
 
@@ -152,6 +175,17 @@ Likely causes:
 
 Fix:
 - Pass the array to the matching argument name (`X_umap_3d` for `(n_cells, 3)`).
+
+### Symptom: the object rendered when served directly, but `prepare()` reports no embedding
+
+Meaning:
+- The serve path read the object's own bare `X_umap` at the dimension its column
+  count states. `prepare()` reads no `obsm` keys, so an array you never passed
+  never reaches it.
+
+Fix:
+- Pass the array to the argument for its dimension, for example
+  `X_umap_2d=adata.obsm["X_umap"]` for a two-column array.
 
 ### Symptom: viewer loads but points are missing / everything is blank
 

@@ -9,6 +9,29 @@
 In AnnData, this is typically:
 - `adata.obsp["connectivities"]` (often from Scanpy’s neighbor graph).
 
+```{note}
+**`prepare()` and serving AnnData directly are two different paths. Both ask for
+the graph explicitly, but they ask in different places.**
+
+`prepare()` is unchanged: the graph is exported only when you pass
+`connectivities=` yourself, and omitting it exports everything else.
+
+Serving an AnnData object directly is opt-in in the same way, and off by
+default. {func}`~cellucid.serve_anndata`, {func}`~cellucid.show_anndata`,
+{class}`~cellucid.AnnDataViewer`, {class}`~cellucid.AnnDataServer`, and
+{class}`~cellucid.AnnDataAdapter` take `serve_connectivity=True`, and
+`cellucid serve` takes `--connectivity` (direct AnnData input only — like every
+other AnnData-only flag, it is rejected for a prepared export directory). Until
+you ask, `adata.obsp["connectivities"]` is never read at all: the served dataset
+reports no connectivity, and its manifest and edge routes are absent. Asking for
+it on an object whose `obsp` holds no `connectivities` matrix is an error, not
+silence. The serve-path details are in
+{doc}`../d_viewing_apis/08_anndata_mode_show_anndata_and_serve_anndata`.
+
+Serving a **prepared export** is unaffected: that directory either holds the
+connectivity artifacts or it does not.
+```
+
 ---
 
 ## Fast path (when to skip)
@@ -109,6 +132,25 @@ Practical tips:
 - Prefer a sparse matrix input.
 - Keep K reasonably sized (typical KNN graphs have 10–50 neighbors).
 - For huge datasets, consider skipping connectivities in static exports and relying on other workflows.
+
+### What the size of the graph costs
+
+The stored-neighbor count, not the cell count, is what this work scales with. A
+50-neighbor graph over a few million cells is hundreds of millions of stored
+neighbors, and symmetry checking, deduplication into edges, and ordering them
+each touch every one.
+
+`prepare(connectivities=...)` and the direct-AnnData server run the same
+validator, so both pay the same cost:
+
+- Before validating a sparse graph of **50,000,000 or more stored neighbors**,
+  Cellucid logs a warning naming that count and the cell count, so the wait is
+  announced instead of discovered. The count comes from the matrix's own `nnz`,
+  which is constant time to read.
+- Per-cell degrees, which decide the manifest's `max_neighbors`, are counted
+  with `np.bincount`, measured roughly 20x faster on that step than the
+  unbuffered scatter-add it replaced. A KNN graph over millions of cells brings
+  hundreds of millions of endpoints to that one line.
 
 ---
 

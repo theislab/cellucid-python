@@ -72,18 +72,50 @@ Continuous fields (continuous obs and gene expression) map numbers → colors us
 ### Neutral “None” gray (missing values)
 
 Continuous values use the neutral gray “None” color when:
-- the value is `NaN`, or
+- the value is `NaN` *and* the field also holds at least one finite value, or
 - log scale is enabled and the value is ≤ 0 (log is undefined there).
 
-This makes missing/invalid values obvious without forcing you to filter them out.
+`NaN` is a drawable value. Cellucid reads it as “not measured here” and gives it
+the neutral grey, which makes missing measurements obvious without forcing you
+to filter them out.
+
+An **infinity is not drawable, and it is not greyed**: it has no position on a
+colour scale, and it would stretch the field’s range so far that every other
+cell collapses onto one colour. A field or gene containing one is refused
+instead — the active field does not change, the picture stays as it was, and you
+get a counted message naming what is wrong.
+
+:::{important}
+**Two continuous payloads are refused rather than coloured.**
+
+- **Any `+Infinity` or `-Infinity`.** The message reads
+  `Field "X" contains 12 infinite values, so it has no colour scale.`, then the
+  count of each kind out of the total cells, then the first few affected cell
+  indices, then the one line of Python that repairs the values.
+- **Every value `NaN`.** There is no range to scale, so the field is refused
+  too, with `Field "X" has no value in any of 18,142,044 cells, so it has no
+  colour scale.` This is usually a column that was never computed, or an empty
+  expression layer.
+
+For a gene these arrive as a multi-line notification titled
+`Gene cannot be shown`. For a continuous obs field the same text arrives after
+the prefix `Failed to load field:`. Both are walked through in
+{doc}`05_troubleshooting_fields_legends`.
+:::
 
 :::{note}
-In practice the second case is the one you will meet. A **prepared export
-cannot contain `NaN`** in a continuous obs field or a gene — both the Python and
-the R writer refuse it with
-`Continuous obs field '<key>' must contain only finite values.` — so a `NaN`
-grey only appears when you open a raw `.h5ad` or Zarr archive directly in the
-browser.
+In practice the log-scale case is the one you will meet. A **prepared export
+cannot contain `NaN` or an infinity** in a continuous obs field or a gene: both
+the Python and the R writer refuse to publish one, and both refuse with counts
+rather than a bare complaint — *“Continuous obs field 'qc_score' cannot be
+published: of 18,142,044 cells, 12 NaN, 3 +Inf. First affected cells: …”*.
+
+So a `NaN` grey only appears when you open a raw `.h5ad` or Zarr archive
+directly in the browser, or serve one with `serve_anndata` / `show_anndata`,
+where the values are read as they are. In server mode a gene or continuous
+column that is not entirely finite is refused at the request: the server answers
+HTTP 422 and puts the same counted reason in the body, which the viewer quotes
+back to you.
 :::
 
 ### Filtering vs coloring (two separate concepts)
@@ -244,6 +276,10 @@ Before assuming something is broken:
    - Did you narrow a continuous range earlier?
 4) Look for the neutral “None” gray:
    - It usually means missing values, invalid codes, or log-scale-incompatible values.
+5) Look at the notification centre:
+   - If the colours did not change **at all** after you picked a gene or field,
+     the payload was refused rather than drawn. Read the message: it names the
+     field, counts the offending values and gives the first affected cells.
 
 For a full symptom catalog, see {doc}`05_troubleshooting_fields_legends`.
 

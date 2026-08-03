@@ -379,6 +379,7 @@ def test_direct_anndata_producer_uses_the_same_canonical_sequence() -> None:
         adata,
         dataset_name="Direct exact connectivity",
         dataset_id="direct-exact-connectivity",
+        serve_connectivity=True,
     )
     (
         source_bytes,

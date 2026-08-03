@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from numbers import Integral
 from typing import Any
@@ -16,6 +17,13 @@ CONNECTIVITY_BINARY_DIRNAME = "connectivity"
 CONNECTIVITY_SOURCES_PATH = "connectivity/edges.src.bin"
 CONNECTIVITY_DESTINATIONS_PATH = "connectivity/edges.dst.bin"
 CONNECTIVITY_WEIGHTS_PATH = "connectivity/edges.weights.f64.bin"
+
+logger = logging.getLogger("cellucid.connectivity")
+
+#: Above this many stored neighbors, validation is long enough that a caller
+#: watching a silent terminal needs to be told why. Measured against the shape
+#: of an ordinary KNN graph: 50 neighbors over one million cells.
+_LARGE_GRAPH_STORED_NEIGHBORS = 50_000_000
 
 
 @dataclass(frozen=True)
@@ -140,16 +148,15 @@ def _validated_float64_weights(
     return weights
 
 
-def _validate_unique_sparse_coordinates(connectivities: sparse.spmatrix) -> None:
-    coordinates = connectivities.tocoo(copy=False)
+def _validate_unique_sparse_coordinates(coordinates: Any, *, column_count: int) -> None:
     rows = np.asarray(coordinates.row)
     columns = np.asarray(coordinates.col)
     if rows.size < 2:
         return
 
-    column_count = np.uint64(connectivities.shape[1])
+    stride = np.uint64(column_count)
     coordinate_keys = rows.astype(np.uint64, copy=True)
-    coordinate_keys *= column_count
+    coordinate_keys *= stride
     coordinate_keys += columns.astype(np.uint64, copy=False)
     coordinate_keys.sort()
     duplicate_offsets = np.flatnonzero(coordinate_keys[1:] == coordinate_keys[:-1])
@@ -158,16 +165,41 @@ def _validate_unique_sparse_coordinates(connectivities: sparse.spmatrix) -> None
         duplicate_key = coordinate_keys[duplicate_offset]
         raise ValueError(
             "Connectivity contains duplicate sparse coordinates at "
-            f"({int(duplicate_key // column_count)}, "
-            f"{int(duplicate_key % column_count)})."
+            f"({int(duplicate_key // stride)}, "
+            f"{int(duplicate_key % stride)})."
         )
+
+
+def _symmetry_comparison_matrix(
+    connectivities: sparse.spmatrix,
+    coordinates: Any,
+) -> sparse.spmatrix:
+    """Return one matrix the symmetry check can transpose, without copying twice.
+
+    A caller that already holds compressed rows or columns hands us a graph we
+    can compare directly. Only an input in some other layout is rebuilt, and
+    then exactly once. Rebuilding unconditionally would hold a second whole
+    graph beside the first for the length of the check, which at the scale of a
+    KNN graph over millions of cells is gigabytes of avoidable peak memory.
+    """
+    if isinstance(connectivities, sparse.csr_matrix | sparse.csc_matrix):
+        return connectivities
+    return sparse.coo_matrix(
+        (coordinates.data, (coordinates.row, coordinates.col)),
+        shape=connectivities.shape,
+    ).tocsr()
 
 
 def _sparse_upper_pairs(
     connectivities: sparse.spmatrix,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    _validate_unique_sparse_coordinates(connectivities)
+    # One expansion feeds the duplicate check, the diagonal check, and the
+    # returned pairs; ``tocoo`` on a compressed input is already a view-like
+    # conversion, so asking for it twice doubled the largest allocation here.
     coordinates = connectivities.tocoo(copy=False)
+    column_count = int(connectivities.shape[1])
+    _validate_unique_sparse_coordinates(coordinates, column_count=column_count)
+
     rows = np.asarray(coordinates.row, dtype=np.int64)
     columns = np.asarray(coordinates.col, dtype=np.int64)
     weights = _validated_float64_weights(
@@ -178,13 +210,10 @@ def _sparse_upper_pairs(
     if np.any(rows == columns):
         raise ValueError("Connectivity diagonal values must all be exactly zero.")
 
-    matrix = sparse.coo_matrix(
-        (weights, (rows, columns)),
-        shape=connectivities.shape,
-    ).tocsr()
-    matrix.sort_indices()
+    matrix = _symmetry_comparison_matrix(connectivities, coordinates)
     if (matrix != matrix.transpose()).nnz != 0:
         raise ValueError("Connectivity matrix must be exactly symmetric in topology and weight.")
+    del matrix
 
     upper_mask = rows < columns
     return (
@@ -218,6 +247,28 @@ def _dense_upper_pairs(
     )
 
 
+def _report_graph_size(connectivities: Any, *, n_cells: int) -> None:
+    """Name the size of one graph before the work its size implies begins.
+
+    Reading ``.nnz`` on a sparse matrix is constant time. A dense matrix is
+    never counted: it is an ``n_cells``-squared object whose size is already
+    known from its shape, and counting it would itself be the slow step.
+    """
+    if not sparse.issparse(connectivities):
+        return
+    stored_neighbors = int(connectivities.nnz)
+    if stored_neighbors < _LARGE_GRAPH_STORED_NEIGHBORS:
+        return
+    logger.warning(
+        "Reading a neighbor graph of %s stored neighbors over %s cells. "
+        "Validating it is symmetric, deduplicating it into edges, and ordering "
+        "them takes minutes and several times the graph's own memory at this "
+        "size. Serve without connectivity to skip this work entirely.",
+        f"{stored_neighbors:,}",
+        f"{n_cells:,}",
+    )
+
+
 def validate_connectivity_edges(
     connectivities: Any,
     *,
@@ -232,6 +283,8 @@ def validate_connectivity_edges(
             "Connectivity matrix shape must exactly match the cell axis: "
             f"expected {(n_cells, n_cells)}, got {shape}."
         )
+
+    _report_graph_size(connectivities, n_cells=n_cells)
 
     if sparse.issparse(connectivities):
         sources, destinations, weights = _sparse_upper_pairs(connectivities)
@@ -251,11 +304,15 @@ def validate_connectivity_edges(
     ):
         raise RuntimeError("Validated connectivity edge payloads are not aligned.")
 
-    degrees: np.ndarray = np.zeros(n_cells, dtype=np.uint64)
-    if sources.size:
-        np.add.at(degrees, sources, 1)
-        np.add.at(degrees, destinations, 1)
-    max_neighbors = int(degrees.max()) if degrees.size else 0
+    # Counted with bincount, not np.add.at: the unbuffered scatter-add is an
+    # order of magnitude slower per element, and a KNN graph over millions of
+    # cells brings hundreds of millions of elements to this line. minlength
+    # keeps one slot per cell, so a cell whose index exceeds every endpoint --
+    # an isolated last cell -- still has its own zero degree.
+    degrees: np.ndarray = np.bincount(sources, minlength=n_cells)
+    degrees += np.bincount(destinations, minlength=n_cells)
+    # A native int, because build_connectivity_manifest requires exactly one.
+    max_neighbors = int(degrees.max())
 
     little_endian_index_dtype = little_endian_payload_dtype(dtype)
     stored_sources: np.ndarray = sources.astype(

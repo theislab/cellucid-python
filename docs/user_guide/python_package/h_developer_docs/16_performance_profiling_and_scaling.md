@@ -54,7 +54,7 @@ AnnData mode is designed for convenience and lazy loading, but it has real bottl
 Where to look:
 - `cellucid-python/src/cellucid/anndata_adapter.py`:
   - CSR→CSC conversion cache
-  - gene expression LRU cache (default size 100)
+  - gene expression LRU cache (a 256 MiB budget)
   - centroid/outlier caches
 
 Practical guidance:

@@ -152,7 +152,7 @@ If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/0
 ### How to confirm
 
 - Check **Visualization → Render mode**.
-- If it’s “Volumetric smoke cloud”, snapshots are blocked.
+- If it’s `Volumetric smoke cloud (alpha)`, snapshots are blocked.
 
 ### Fix
 

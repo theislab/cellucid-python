@@ -156,6 +156,8 @@ def _direct_adapter() -> AnnDataAdapter:
         centroid_min_points=1,
         dataset_name="Deterministic direct AnnData",
         dataset_id="deterministic-direct-anndata",
+        serve_connectivity=True,
+        serve_vector_fields=True,
     )
 
 

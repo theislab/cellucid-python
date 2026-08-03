@@ -99,6 +99,14 @@ directory with `web_cache_dir=...`.
   server, notebook-embedding, and programmatic viewer APIs documented in this
   chapter; see {doc}`../../r_package/index` for R workflows.
 
+## Serving from somewhere that is not your laptop
+
+- {doc}`12_remote_servers_ssh_tunneling_and_cloud` -- lab servers, cloud VMs,
+  containers, and the SSH tunnel that covers most of them.
+- {doc}`17_hpc_slurm_and_compute_node_serving` -- an HPC cluster, where the
+  machine holding the data usually refuses your SSH connection and the tunnel
+  has to terminate on a login node instead.
+
 ## Related docs
 
 - Web-app-centric loading docs: {doc}`../../web_app/b_data_loading/01_loading_options_overview`

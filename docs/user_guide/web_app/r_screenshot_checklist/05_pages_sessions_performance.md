@@ -26,7 +26,7 @@ source, not inferred.
 has since been captured.** `_static/screenshots/sessions_sharing/` now holds the
 section's own images, embedded on `02`, `03`, `04`, `10` and `11`. The counts
 above and the per-page **has** / **verdict** entries below therefore predate
-them — read `l_sessions_sharing/11_screenshots.md` for the current gallery, and
+them — read {doc}`/user_guide/web_app/l_sessions_sharing/11_screenshots` for the current gallery, and
 the directory listing for the current file set. Do not refresh the counts here:
 they are derivable from the docs tree and will go stale again the moment a
 capture lands.
@@ -70,7 +70,7 @@ This was the headline deliverable: at audit time every page in section L shared
 one borrowed sidebar crop and nothing in the docs showed a user what a session
 round-trip looks like. **Section L has since been captured** — see the note
 under *Summary* — so read the sequence below as the specification it was written
-as, and `l_sessions_sharing/11_screenshots.md` for what was actually shot. The
+as, and {doc}`/user_guide/web_app/l_sessions_sharing/11_screenshots` for what was actually shot. The
 sequence is a single scripted Playwright run producing 14 captures. Steps 6 and
 13 are the **proof pair**.
 
@@ -78,7 +78,7 @@ sequence is a single scripted Playwright run producing 14 captures. Steps 6 and
 
 | Parameter | Value | Why it is fixed |
 |---|---|---|
-| Viewport | 1440 × 900 CSS px, `deviceScaleFactor: 2` | Floating panels are clamped to the viewport on restore (`09_edge_cases.md`), so a BEFORE/AFTER pair captured at different sizes is not a valid comparison. |
+| Viewport | 1440 × 900 CSS px, `deviceScaleFactor: 2` | Floating panels are clamped to the viewport on restore ({doc}`/user_guide/web_app/l_sessions_sharing/09_edge_cases`), so a BEFORE/AFTER pair captured at different sizes is not a valid comparison. |
 | Dataset | `#dataset-select` → option value `dataset:local-demo:pancreas` | 3,696 cells / 3,753 genes — loads in seconds; publishes 1D + 2D + 3D embeddings with `default_dimension: 3`; recognisable endocrinogenesis trajectory for a wet-lab reader. Verified in `cellucid-datasets/exports/pancreas/dataset_identity.json`. |
 | Dimension | 3D throughout | The session fingerprint records `cellOrder.dimension`; saving in 3D and restoring in 3D is the success path. Deviating provokes the recoverable error captured separately in `07`. |
 | Theme / background | app defaults (light / grid) | Matches the reviewed official starting state, so the reset in step 10 is visually unambiguous. |
@@ -188,7 +188,7 @@ Output directory for every file: `_static/screenshots/sessions_sharing/`.
 - **File:** `session-lifecycle-08-saved-toast.png` · `:width: 400px`
 - **Exact string** (from `ui/modules/session-controls.js`): `Session saved
   successfully`. On failure the toast reads `Failed to save session` while the
-  console logs `Failed to save state:` — `10_troubleshooting_sessions.md`
+  console logs `Failed to save state:` — {doc}`/user_guide/web_app/l_sessions_sharing/10_troubleshooting_sessions`
   currently tells readers to look for the console string in the panel.
 
 ### Step 9 — the artifact the user actually receives
@@ -206,7 +206,7 @@ are browser chrome — Playwright cannot capture them, and both would expose
     `head -c 96 cellucid-session-*.cellucid-session | xxd | head -6`.
   - The hexdump shows the ASCII magic `CELLUCID_SESSION\n`, the 32-bit
     manifest length, and the opening of the JSON manifest — exactly the framing
-    documented in `12_reference.md`.
+    documented in {doc}`/user_guide/web_app/l_sessions_sharing/12_reference`.
 - **Crop:** the terminal window, ~900 px wide, dark theme.
 - **Cursor:** no.
 - **File:** `session-lifecycle-09-artifact-terminal.png` · `:width: 900px`
@@ -294,8 +294,8 @@ does not mistake it for a failure:**
     statement — the download card completes with the same text.
   - `session-controls.js`, the `#load-state-btn` handler — a separate success
     toast: **`Session loaded successfully`**.
-- **Correction this capture forces:** `03_save_restore_ux.md` (line 44) and
-  `10_troubleshooting_sessions.md` (line 36) say the **panel status** reports
+- **Correction this capture forces:** {doc}`/user_guide/web_app/l_sessions_sharing/03_save_restore_ux` (line 44) and
+  {doc}`/user_guide/web_app/l_sessions_sharing/10_troubleshooting_sessions` (line 36) say the **panel status** reports
   `Session loaded successfully`. There is no status element inside
   `#session-state-controls` — the markup contains only a label, an info button,
   and the two buttons. Both strings are NotificationCenter toasts. The prose
@@ -306,13 +306,13 @@ does not mistake it for a failure:**
 Run once more without reloading: switch `#dimension-select` to 2D, then
 `#load-state-btn` → the same file. This yields the recoverable rejection and is
 the single most useful image for a wet-lab reader in the whole section. Details
-under `07_versioning_compatibility_and_dataset_identity.md` below.
+under {doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_and_dataset_identity` below.
 
 ---
 
 # Section L — `user_guide/web_app/l_sessions_sharing/`
 
-## `user_guide/web_app/l_sessions_sharing/index.md`
+## {doc}`/user_guide/web_app/l_sessions_sharing/index`
 
 - **explains** — Hub page: what a session is, a four-row "choose your goal"
   table, and the reading order for the section.
@@ -330,12 +330,12 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
 - **notes** — The `Fast path` table row "Send someone an exact view" says to
   send the export folder + session; correct. No stale prose found.
 
-## `user_guide/web_app/l_sessions_sharing/01_session_mental_model.md`
+## {doc}`/user_guide/web_app/l_sessions_sharing/01_session_mental_model`
 
 - **explains** — What a session is, the three persistence layers, eager/lazy
   ordering, and the dataset-fingerprint rejection rules.
 - **has** — 1 figure, line 215, `data_loading/data-loading-session-panel.png`,
-  `:width: 246px` (line 217). **Borrowed**, identical to `index.md`'s.
+  `:width: 246px` (line 217). **Borrowed**, identical to {doc}`/user_guide/web_app/l_sessions_sharing/index`'s.
 - **verdict** — **REPLACE** (+ **DIAGRAM**, + **STALE-RISK**)
 - **needs** —
   1. Replace the borrowed panel with `session-lifecycle-07-save-state-button.png`
@@ -370,7 +370,7 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
   - Line 111 and elsewhere: the success string is `Session fully restored.`
     with a trailing period.
 
-## `user_guide/web_app/l_sessions_sharing/02_what_gets_saved_and_restored.md`
+## {doc}`/user_guide/web_app/l_sessions_sharing/02_what_gets_saved_and_restored`
 
 - **explains** — The explicit saved-vs-not-saved contract, chunk by chunk, plus
   a five-step "how to verify a restore" checklist.
@@ -395,9 +395,9 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
      rather than decorative.
 - **notes** — The saved/not-saved lists match `session-serializer.js` and
   `state-serializer/README.md`. The chunk inventory on this page agrees with the
-  table in `12_reference.md`. No stale claims found.
+  table in {doc}`/user_guide/web_app/l_sessions_sharing/12_reference`. No stale claims found.
 
-## `user_guide/web_app/l_sessions_sharing/03_save_restore_ux.md`
+## {doc}`/user_guide/web_app/l_sessions_sharing/03_save_restore_ux`
 
 - **explains** — The click-by-click Save State / Load State procedure, what
   happens under the hood, and naming/milestone best practice.
@@ -423,7 +423,7 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
     and no `cinematic/camera` or `analysis/cache-inventory`, which the manual
     profile requires. A Save State writes seven.
 
-## `user_guide/web_app/l_sessions_sharing/04_official_sample_states.md`
+## {doc}`/user_guide/web_app/l_sessions_sharing/04_official_sample_states`
 
 - **explains** — How a built-in sample's SHA-256-pinned starting state is
   fetched, verified, and applied automatically, and why it is not a Load State
@@ -452,7 +452,7 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
      `:width: 246px`. Reuse `session-lifecycle-01-picker.png` if the option list
      can be forced open there instead.
   3. **Do not** capture the rejection of a downloaded `default.cellucid-session`
-     here — that image belongs on `09_edge_cases.md`, which is where the
+     here — that image belongs on {doc}`/user_guide/web_app/l_sessions_sharing/09_edge_cases`, which is where the
      behaviour is catalogued.
 - **notes** — ~~**Stale value.** The page quotes a Suo `state_sha256` literal
   that no longer matches the catalog.~~ **Done** — the page now shows the
@@ -467,7 +467,7 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
   the five-chunk profile, the `{ "states": [...] }` manifest root, the
   `local-demo`-only opt-in, and the no-probe source list all match the source.
 
-## `user_guide/web_app/l_sessions_sharing/05_share_workflows_links_bundles_exports.md`
+## {doc}`/user_guide/web_app/l_sessions_sharing/05_share_workflows_links_bundles_exports`
 
 - **explains** — The three shareable artifacts (link to the dataset, session
   bundle, export folder), the "portable pair" rule, and three sender/recipient
@@ -500,7 +500,7 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
   accordion is **Session**.~~ **Done.** The fingerprint "cannot detect every
   content change" claim is accurate and correctly hedged.
 
-## `user_guide/web_app/l_sessions_sharing/06_collaboration_best_practices.md`
+## {doc}`/user_guide/web_app/l_sessions_sharing/06_collaboration_best_practices`
 
 - **explains** — Eight team conventions: the context triple, directory layout,
   milestones, safe highlight naming, review packets, and clean-tab validation.
@@ -519,7 +519,7 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
 - **notes** — Best practice #7's clean-tab check is the correct procedure and
   matches the strict reader's behaviour. No stale prose found.
 
-## `user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_and_dataset_identity.md`
+## {doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_and_dataset_identity`
 
 - **explains** — The five-field dataset fingerprint, the outcome matrix, why the
   reader rejects rather than partially restores, and cross-machine recipes.
@@ -539,7 +539,7 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
   | 1 | **Different dataset** — names both cell and gene counts | Save a session on `pancreas` (3,696 / 3,753). Reload, load `dataset:local-demo:he` (71,650 / 5,152). Load State the pancreas file. | **Yes — highest value.** The commonest real-world mistake, and the message names four concrete numbers. |
   | 2 | **Different dimension** — the recoverable one | Save on `pancreas` in 3D. Without reloading, set `#dimension-select` to 2D. Load State the same file. | **Yes — second highest.** This is the only failure that is *not* a data problem, and the page says so. Showing it prevents a user from concluding their dataset is corrupt. |
   | 3 | **Coordinates differ** (re-ordered rows *or* re-computed embedding) | Needs a second export with the same id and sizes but permuted rows. Clone `cellucid/tests/browser/fixtures/exports/current-ui-prepared` (120 cells, 6 genes, 2D only, 52 KB) into a scratch fixture, apply the same row permutation to `points_2d.bin` and every `obs/` column, keep `dataset_identity.json` byte-identical. Save a session against the original, load the permuted clone, Load State. | **Yes**, but as the *third* image — it is rarer and its message is long. Note the fixture is 2D-only, so error #2 cannot be provoked on it. |
-  | 4 | **Pre-`cellOrder` file** (`SESSION_WITHOUT_CELL_IDENTITY_MESSAGE` in `session-context.js`) | Cannot be produced by the current app. Hand-write a bundle whose `datasetFingerprint` has exactly the four keys `sourceType`, `datasetId`, `cellCount`, `varCount`. Framing is documented in `12_reference.md` and implemented in `session/bundle/format.js`. | **Optional.** Capture only if a fixture author is willing to maintain a hand-built bundle. The message is self-explanatory in prose. |
+  | 4 | **Pre-`cellOrder` file** (`SESSION_WITHOUT_CELL_IDENTITY_MESSAGE` in `session-context.js`) | Cannot be produced by the current app. Hand-write a bundle whose `datasetFingerprint` has exactly the four keys `sourceType`, `datasetId`, `cellCount`, `varCount`. Framing is documented in {doc}`/user_guide/web_app/l_sessions_sharing/12_reference` and implemented in `session/bundle/format.js`. | **Optional.** Capture only if a fixture author is willing to maintain a hand-built bundle. The message is self-explanatory in prose. |
 
 - **needs** —
   - Crop for all four: `#notification-center`, the single red toast, full text
@@ -564,7 +564,7 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
     `cellOrder` was not verified in this pass — it lives in `cellucid-python`
     and is outside these two sections.
 
-## `user_guide/web_app/l_sessions_sharing/08_security_privacy_and_trust.md`
+## {doc}`/user_guide/web_app/l_sessions_sharing/08_security_privacy_and_trust`
 
 - **explains** — What a session bundle can and cannot contain, the untrusted-input
   trust model, and four safe-sharing rules.
@@ -574,7 +574,7 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
 - **needs** — No screenshot. The page's subject is *what is inside a file* and
   *what not to put in a label* — neither has a visual form, and a screenshot of
   a session bundle's contents would either be a hexdump (already assigned to
-  `12_reference.md`) or a fabricated example of the bad practice the page warns
+  {doc}`/user_guide/web_app/l_sessions_sharing/12_reference`) or a fabricated example of the bad practice the page warns
   against. Adding one would be actively counterproductive.
 - **Leak review of every image proposed in this audit** (this is the deliverable
   for this page):
@@ -608,7 +608,7 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
   (exact manifest keys, chunk profile validation, gzip preflight with
   `maxOutputBytes`, transactional rollback). No stale claims found.
 
-## `user_guide/web_app/l_sessions_sharing/09_edge_cases.md`
+## {doc}`/user_guide/web_app/l_sessions_sharing/09_edge_cases`
 
 - **explains** — Expected-but-surprising outcomes: differing identity on similar
   files, eager/lazy scheduling, empty-state replacement, cancellation, viewport
@@ -650,7 +650,7 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
   paragraph is a survivor of the pre-`cellOrder` text and directly contradicts
   the rest of the section. Highest-priority prose fix in section L.
 
-## `user_guide/web_app/l_sessions_sharing/10_troubleshooting_sessions.md`
+## {doc}`/user_guide/web_app/l_sessions_sharing/10_troubleshooting_sessions`
 
 - **explains** — Symptom → diagnosis → fix for save failures, picker problems,
   identity rejection, format rejection, cancellation, "it looks different", and
@@ -682,7 +682,7 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
   - The "cells are stored in a different order" assertion the shipped message
     avoids is repeated here. Same fix as `01` and `07`.
 
-## `user_guide/web_app/l_sessions_sharing/11_screenshots.md`
+## {doc}`/user_guide/web_app/l_sessions_sharing/11_screenshots`
 
 - **explains** — Nothing; it is a 10-line stub whose entire body is one borrowed
   figure. Titled "Verified session-state capture" (singular).
@@ -690,7 +690,7 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
   `:width: 246px` (line 5). **Borrowed**, fourth and final use.
 - **verdict** — **REPLACE**
 - **needs** — This page must become the section's canonical gallery, exactly as
-  `n_benchmarking_performance/08_screenshots.md` is for section N. Structure it
+  {doc}`/user_guide/web_app/n_benchmarking_performance/08_screenshots` is for section N. Structure it
   as three headed groups and embed every file produced by the LIFECYCLE run:
   - *Save and restore round trip* — steps 1, 7, 8, 9, 11, 12, 13, 14 and the
     proof pair.
@@ -703,7 +703,7 @@ under `07_versioning_compatibility_and_dataset_identity.md` below.
   screenshots page. Title should become plural.
 - **notes** — Nothing on this page is currently verified or session-specific.
 
-## `user_guide/web_app/l_sessions_sharing/12_reference.md`
+## {doc}`/user_guide/web_app/l_sessions_sharing/12_reference`
 
 - **explains** — The exact binary framing, the manifest schema with its nine
   required chunk keys, the singleton and dynamic chunk inventories, the atomic
@@ -745,7 +745,7 @@ five new captures**, not thirty — and one of them (the Live filtering / FILTER
 control) is worth more than the rest combined because five separate pages give
 that instruction and none of them shows it.
 
-## `user_guide/web_app/n_benchmarking_performance/index.md`
+## {doc}`/user_guide/web_app/n_benchmarking_performance/index`
 
 - **explains** — Hub: the three-bottleneck framing, a "if it feels slow right
   now" table, reading order, and a card grid.
@@ -764,7 +764,7 @@ that instruction and none of them shows it.
 - **notes** — The fast-path table's advice matches the controls that exist. No
   stale claims found.
 
-## `user_guide/web_app/n_benchmarking_performance/01_performance_mental_model.md`
+## {doc}`/user_guide/web_app/n_benchmarking_performance/01_performance_mental_model`
 
 - **explains** — GPU vs CPU vs I/O, how each feels, the multipliers, a four-step
   triage workflow, and normal-vs-suspicious.
@@ -784,7 +784,7 @@ that instruction and none of them shows it.
   `FILTER` button, with the hint `Adjust limits; click FILTER or enable Live
   filtering.` Accurate — but see `03` for the missing image.
 
-## `user_guide/web_app/n_benchmarking_performance/02_performance_considerations_what_gets_slow_and_why.md`
+## {doc}`/user_guide/web_app/n_benchmarking_performance/02_performance_considerations_what_gets_slow_and_why`
 
 - **explains** — The per-interaction cost model (loading, points, smoke,
   filtering, highlighting, analysis, export) and a symptom → knob cheat sheet.
@@ -813,7 +813,7 @@ that instruction and none of them shows it.
   `c_core_interactions` and the render-mode source, outside this section's
   scope. Flagging as unverified, not as wrong.
 
-## `user_guide/web_app/n_benchmarking_performance/03_large_dataset_best_practices.md`
+## {doc}`/user_guide/web_app/n_benchmarking_performance/03_large_dataset_best_practices`
 
 - **explains** — An eight-item large-dataset survival checklist, a wet-lab
   workflow, a computational export workflow, three patterns, and a cliff list.
@@ -834,7 +834,7 @@ that instruction and none of them shows it.
   "very rough intuition"; that hedging is appropriate and should not be
   hardened into a screenshot caption.
 
-## `user_guide/web_app/n_benchmarking_performance/04_benchmarking_methodology_and_metrics.md`
+## {doc}`/user_guide/web_app/n_benchmarking_performance/04_benchmarking_methodology_and_metrics`
 
 - **explains** — What to measure (TTFR, TTI, FPS, latency, memory, network), how
   to control confounders, cold vs warm, trial counts, browser tooling, and a
@@ -856,7 +856,7 @@ that instruction and none of them shows it.
   (`Shift+Esc`)". Correct at time of writing but exactly the kind of claim that
   drifts; it is already hedged by naming the alternative paths.
 
-## `user_guide/web_app/n_benchmarking_performance/05_benchmark_tools.md`
+## {doc}`/user_guide/web_app/n_benchmarking_performance/05_benchmark_tools`
 
 - **explains** — Where the in-app synthetic benchmark lives, its quick start,
   the reproducible workflow, the data patterns, how to read the stats, Copy
@@ -892,7 +892,7 @@ that instruction and none of them shows it.
      present.
   5. **Analyze Performance.** Click `#bottleneck-analyze-btn`, wait for
      `#bottleneck-results`, crop as specified for `benchmark-verdict-panel.png`
-     under `index.md` — one file serves both pages. Optionally a second frame
+     under {doc}`/user_guide/web_app/n_benchmarking_performance/index` — one file serves both pages. Optionally a second frame
      with the `Show detailed stats` `<details>` expanded, exposing
      `#bn-lod-overhead`, `#bn-frustum-overhead`, `#bn-point-size-response`,
      `#bn-frame-stability`, `#bn-jank-percent`, `#bn-cpu-health`, since the page
@@ -911,7 +911,7 @@ that instruction and none of them shows it.
   it also reports `Points`, `Visible Points`, min/p95/max frame times, and
   generation time.
 
-## `user_guide/web_app/n_benchmarking_performance/06_edge_cases_performance.md`
+## {doc}`/user_guide/web_app/n_benchmarking_performance/06_edge_cases_performance`
 
 - **explains** — Eleven performance cliffs in what-you-see / why / confirm / fix
   / prevention form.
@@ -930,7 +930,7 @@ that instruction and none of them shows it.
      purpose, so the technique is established. Crop the overlay panel only.
      Cursor on the `Reload` button.
      `perf-webgl-context-lost.png` · `:width: 520px`. Serves this page **and**
-     `07_troubleshooting_performance.md`, where the same symptom has its own
+     {doc}`/user_guide/web_app/n_benchmarking_performance/07_troubleshooting_performance`, where the same symptom has its own
      section. Do **not** provoke context loss by loading 20M points — that
      collides with the rendering-measurement unit's work.
   2. **Category explosion.** Colour by a categorical field with a very large
@@ -946,7 +946,7 @@ that instruction and none of them shows it.
   not verified in this pass; it lives in the render-mode module outside this
   section. Flagging as unverified.
 
-## `user_guide/web_app/n_benchmarking_performance/07_troubleshooting_performance.md`
+## {doc}`/user_guide/web_app/n_benchmarking_performance/07_troubleshooting_performance`
 
 - **explains** — Seven symptom → cause → confirm → fix → prevention entries plus
   a template for adding more.
@@ -969,7 +969,7 @@ that instruction and none of them shows it.
   and on `06`; it is correct and browser-neutral. A DevTools console screenshot
   would be browser chrome — do not capture it.
 
-## `user_guide/web_app/n_benchmarking_performance/08_screenshots.md`
+## {doc}`/user_guide/web_app/n_benchmarking_performance/08_screenshots`
 
 - **explains** — The section's verified-capture gallery: the benchmark panel
   plus a four-row cross-engine acceptance table, and two multiview frames.
@@ -1005,7 +1005,7 @@ that instruction and none of them shows it.
   re-derive every number in the caption and the table in the same change. The
   same caption is duplicated on `02`, so both copies drift together.
 
-## `user_guide/web_app/n_benchmarking_performance/09_reporting_performance_bugs.md`
+## {doc}`/user_guide/web_app/n_benchmarking_performance/09_reporting_performance_bugs`
 
 - **explains** — A pre-filing checklist, three report kinds, a copy/paste
   template, how to gather machine/GPU info, minimal reproductions, and a
@@ -1046,7 +1046,7 @@ that instruction and none of them shows it.
    does not exist; every one of those strings is a NotificationCenter toast.
    **Still open.**
 
-3. **`09_edge_cases.md` still describes the pre-`cellOrder` world.** Its "Same
+3. **{doc}`/user_guide/web_app/l_sessions_sharing/09_edge_cases` still describes the pre-`cellOrder` world.** Its "Same
    lightweight fingerprint, changed content" section says re-ordering cells
    passes the identity guard. Every other page in the section says the opposite,
    and the source agrees with the other pages. This is the most serious prose
@@ -1059,7 +1059,7 @@ that instruction and none of them shows it.
    permutation from a re-computed embedding, and the source carries an explicit
    comment about why claiming otherwise would be an integrity failure of its own.
 
-5. ~~**A stale SHA-256 ships in `04_official_sample_states.md`.**~~ **Done** —
+5. ~~**A stale SHA-256 ships in {doc}`/user_guide/web_app/l_sessions_sharing/04_official_sample_states`.**~~ **Done** —
    the page shows the field's shape and points at `exports/datasets.json`. The
    general rule this settled: **do not copy a regenerated value into prose.**
    Digests, preset byte sizes, and source line numbers all live somewhere that
@@ -1068,7 +1068,7 @@ that instruction and none of them shows it.
    the findings were actioned.
 
 6. **The default synthetic benchmark pattern is undocumented.**
-   `#benchmark-pattern` defaults to `Model Surface` (`glb`); `05_benchmark_tools.md`
+   `#benchmark-pattern` defaults to `Model Surface` (`glb`); {doc}`/user_guide/web_app/n_benchmarking_performance/05_benchmark_tools`
    documents five other patterns and omits the default, plus `Octopus` and
    `3D Spirals`.
 

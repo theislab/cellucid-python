@@ -39,27 +39,27 @@ which is a legitimate single use.
 
 | Page | Blocks | Images |
 | --- | ---: | --- |
-| `index.md` | 1 | `navigation-controls-orbit` |
-| `01_navigation_modes_orbit_planar_free_fly.md` | 3 | `navigation-controls-orbit`, `-planar`, `-freefly` |
-| `02_camera_controls_advanced.md` | 2 | `navigation-controls-freefly`, `camera-path-configured-panel` |
-| `03_render_modes_points_vs_volumetric_smoke.md` | 1 | `render-mode-select` |
-| `04_view_layout_live_snapshots_small_multiples.md` | 1 | `multiview-two-panels` |
-| `05_dimension_switching_1d_2d_3d.md` | 3 | `window-dimension-1d`, `-2d`, `-3d` |
-| `06_troubleshooting_core_interactions.md` | **0** | — |
+| section index | 1 | `navigation-controls-orbit` |
+| {doc}`/user_guide/web_app/c_core_interactions/01_navigation_modes_orbit_planar_free_fly` | 3 | `navigation-controls-orbit`, `-planar`, `-freefly` |
+| {doc}`/user_guide/web_app/c_core_interactions/02_camera_controls_advanced` | 2 | `navigation-controls-freefly`, `camera-path-configured-panel` |
+| {doc}`/user_guide/web_app/c_core_interactions/03_render_modes_points_vs_volumetric_smoke` | 1 | `render-mode-select` |
+| {doc}`/user_guide/web_app/c_core_interactions/04_view_layout_live_snapshots_small_multiples` | 1 | `multiview-two-panels` |
+| {doc}`/user_guide/web_app/c_core_interactions/05_dimension_switching_1d_2d_3d` | 3 | `window-dimension-1d`, `-2d`, `-3d` |
+| {doc}`/user_guide/web_app/c_core_interactions/06_troubleshooting_core_interactions` | **0** | — |
 | `07_screenshots.md` | 15 | the section's gallery |
 
 ### `d_fields_coloring_legends/` — 25 blocks, 11 distinct images
 
 | Page | Blocks | Images |
 | --- | ---: | --- |
-| `index.md` | 3 | `field-selectors-three-routes`, `legend-categorical-clusters`, `legend-continuous-sscore` |
-| `01_field_types_and_sources.md` | 2 | `legend-categorical-clusters`, `legend-continuous-sscore` |
-| `02_field_selector_ux.md` | 3 | `field-selectors-three-routes`, `gene-search-dropdown-open`, `gene-search-no-match` |
-| `03_color_by_behavior.md` | 1 | `legend-categorical-clusters` |
-| `04_legend_behavior.md` | 4 | `legend-categorical-clusters`, `legend-colormap-menu-open`, `window-centroids-and-labels`, `filtering/legend-category-unavailable` |
-| `05_troubleshooting_fields_legends.md` | **0** | — |
-| `06_screenshots.md` | 10 | the section's gallery |
-| `07_genes_in_the_built_in_samples.md` | 2 | `gene-search-dropdown-open`, `gene-search-no-match` |
+| section index | 3 | `field-selectors-three-routes`, `legend-categorical-clusters`, `legend-continuous-sscore` |
+| {doc}`/user_guide/web_app/d_fields_coloring_legends/01_field_types_and_sources` | 2 | `legend-categorical-clusters`, `legend-continuous-sscore` |
+| {doc}`/user_guide/web_app/d_fields_coloring_legends/02_field_selector_ux` | 3 | `field-selectors-three-routes`, `gene-search-dropdown-open`, `gene-search-no-match` |
+| {doc}`/user_guide/web_app/d_fields_coloring_legends/03_color_by_behavior` | 1 | `legend-categorical-clusters` |
+| {doc}`/user_guide/web_app/d_fields_coloring_legends/04_legend_behavior` | 4 | `legend-categorical-clusters`, `legend-colormap-menu-open`, `window-centroids-and-labels`, `filtering/legend-category-unavailable` |
+| {doc}`/user_guide/web_app/d_fields_coloring_legends/05_troubleshooting_fields_legends` | **0** | — |
+| {doc}`/user_guide/web_app/d_fields_coloring_legends/06_screenshots` | 10 | the section's gallery |
+| {doc}`/user_guide/web_app/d_fields_coloring_legends/07_genes_in_the_built_in_samples` | 2 | `gene-search-dropdown-open`, `gene-search-no-match` |
 
 ### `e_filtering/` — 52 blocks, 20 distinct images
 
@@ -72,8 +72,8 @@ it is a purpose-built `filtering/` capture. `08_screenshots.md` is the gallery
 Confirmed against the tree, not inherited from the original audit.
 
 1. **Two pages still have no figure at all.**
-   `c_core_interactions/06_troubleshooting_core_interactions.md` and
-   `d_fields_coloring_legends/05_troubleshooting_fields_legends.md`. Both are
+   {doc}`/user_guide/web_app/c_core_interactions/06_troubleshooting_core_interactions` and
+   {doc}`/user_guide/web_app/d_fields_coloring_legends/05_troubleshooting_fields_legends`. Both are
    troubleshooting pages whose symptoms are visual, and `d_/05` still ends by
    telling the reader to capture a screenshot of a panel it never shows.
 2. **No motion asset was ever produced.** The audit asked for recorded loops, or

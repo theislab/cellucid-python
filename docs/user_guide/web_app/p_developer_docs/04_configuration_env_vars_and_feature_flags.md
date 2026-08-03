@@ -83,6 +83,7 @@ parameter — by design. Check it to find out whether the current origin reports
 | `CELLUCID_DEBUG` | Enables app-wide debug logger | `cellucid/assets/js/utils/debug.js` |
 | `cellucid_theme` | Theme preference (`light`/`dark`) | `cellucid/assets/js/utils/theme-manager.js`, `cellucid/assets/js/app/ui/core/theme-init.js` |
 | `cellucid_viewer_background` | Viewer background mode (`grid`, `grid-dark`, `white`, `black`) | `cellucid/assets/js/app/ui/core/theme-init.js`, viewer/render controls |
+| `cellucid_antialias` | Antialiasing preference — `auto` (also what an absent key means), `on`, or `off`. `auto` resolves from the dataset's cell count on every dataset publication | `cellucid/assets/js/app/ui/core/antialias-preference.js`, `cellucid/assets/js/app/ui/modules/render-controls.js` |
 | `cellucid_last_quote_index` | Welcome modal “quote rotation” state | `cellucid/assets/js/app/ui/onboarding/welcome-modal.js` |
 | `debug` | Analysis-module debug toggle | `cellucid/assets/js/app/analysis/shared/debug-utils.js` |
 

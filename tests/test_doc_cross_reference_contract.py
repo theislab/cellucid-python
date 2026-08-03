@@ -37,10 +37,26 @@ CONVENTION_PAGE = (
     "user_guide/python_package/h_developer_docs/15_docs_development_and_style_guide.md"
 )
 
-# A page on this site is `index` or `NN_slug`, optionally behind a path.
+# The screenshot checklist audits this site page by page, so it names pages as
+# filenames on purpose: as abbreviations in inventory tables (`b/09`, `k/index`),
+# and as records of pages that were deleted and therefore have no target to link
+# to. A link is the wrong shape for both, so the chapter is exempt from this rule
+# while every reader-facing chapter stays under it.
+AUDIT_SECTION = "user_guide/web_app/r_screenshot_checklist/"
+
+
+def _is_exempt(relative: str) -> bool:
+    return relative == CONVENTION_PAGE or relative.startswith(AUDIT_SECTION)
+
+# A page on this site is `index` or `NN_slug`, optionally behind a path, and
+# optionally written with the source extension it has on disk. The extension
+# form is the one that slips past a reader: `10_troubleshooting_sessions.md`
+# looks like a filename rather than a link, so it was never written as a role
+# and Sphinx never resolved it. Both forms are the same defect.
 _SEGMENT = r"(?:[a-z]_[a-z0-9_]+|\.\.|[a-z][a-z0-9_]*)"
 _LEAF = r"(?:index|\d\d_[a-z0-9_]+)"
-DOC_SHAPED = re.compile(rf"^(?:{_SEGMENT}/)*{_LEAF}$")
+_EXTENSION = r"(?:\.(?:md|ipynb))?"
+DOC_SHAPED = re.compile(rf"^(?:{_SEGMENT}/)*{_LEAF}{_EXTENSION}$")
 
 # A single-backtick span that is not part of a ``double`` span and is not the
 # argument of a role such as {doc}`...` or {ref}`...`.
@@ -82,7 +98,7 @@ def _bare_page_references() -> list[str]:
     offenders: list[str] = []
     for path in _markdown_pages():
         relative = path.relative_to(DOCS_ROOT).as_posix()
-        if relative == CONVENTION_PAGE:
+        if _is_exempt(str(relative)):
             continue
         for number, line in enumerate(
             _without_code_blocks(path.read_text(encoding="utf-8")),

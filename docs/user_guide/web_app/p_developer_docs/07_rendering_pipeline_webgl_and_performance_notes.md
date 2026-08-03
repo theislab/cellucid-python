@@ -27,8 +27,11 @@ It is written for contributors who might touch:
 The viewer is created in `cellucid/assets/js/rendering/viewer.js` via:
 - `createViewer({ canvas, labelLayer, viewTitleLayer, onViewFocus })`
 
-Hard constraint:
+Hard constraints:
 - **WebGL2 only**. If `canvas.getContext('webgl2')` fails, the app throws early.
+- The context is created **single-sampled** (`antialias: false`). Antialiasing is
+  not a context attribute any more; the app owns it, so do not add the attribute
+  back. See the multisample resolve target below.
 
 ---
 
@@ -81,6 +84,30 @@ Hard constraint:
 - **Overlays**
   - Overlay framework: `OverlayManager` + overlay context
   - Vector field / velocity overlay: `VelocityOverlay` (`cellucid/assets/js/rendering/overlays/velocity/velocity-overlay.js`)
+
+- **Multisample resolve target (antialiasing)**
+  - Backend: `createSceneMsaaTarget` (`cellucid/assets/js/rendering/scene-msaa-target.js`)
+  - The scene is drawn into an app-owned multisampled renderbuffer and blitted
+    onto the default framebuffer at the end of each frame — the same sample
+    count, coverage arithmetic and resolve the browser performed for a
+    multisampled default drawing buffer, and the application owns the switch.
+  - `SCENE_MSAA_TARGET_SAMPLES = 4`, or the device maximum when that is lower.
+    A device reporting fewer than 2 samples has no target at all and the
+    setting is reported as unavailable.
+  - With antialiasing off, `beginFrame` binds framebuffer zero and
+    `resolveFrame` does nothing: the frame costs exactly what it cost before
+    this module existed, and nothing is allocated until it is switched on.
+
+:::{warning}
+Two caller contracts follow from this and are easy to break:
+
+- Anything drawing into the scene must target `getSceneFramebuffer()` rather
+  than assuming framebuffer zero. The smoke renderer and the velocity overlay
+  both bind a framebuffer of their own mid-frame and must come back to the
+  scene, not to the default.
+- Anything reading pixels back must read **after** `resolveFrame`, from the
+  default framebuffer, or read the resolved copy.
+:::
 
 ---
 
@@ -243,15 +270,21 @@ the maintenance ledger rather than being folklore:
   whole `full` → `light` → `ultralight` ladder (43 → 9 → 2 statements in the
   translated Metal) each stayed inside its own twin band at every point size.
 - **A different primitive.** `GL_POINTS` beat instanced quads and both triangle
-  arrangements by 1.41–2.12× at one sample and by up to 1.90× under the shipped
-  4× MSAA, with the quad arms' rasterised and shaded fragment counts matched to
+  arrangements by 1.41–2.12× at one sample and by up to 1.90× with MSAA enabled
+  at 4 samples, with the quad arms' rasterised and shaded fragment counts matched to
   five decimal places. Halving the primitive count with one triangle per point
   was the *worst* arm.
 - **Order-independent transparency, a depth prepass, storage reordering, and the
   vertex-ALU hoist.** All measured; none won.
 
-What did move: **antialiasing**, now a user setting (`#hp-antialias`), worth
-about a fifth of the frame at the default point size and a third at large sizes.
+What did move: **antialiasing**, worth about a fifth of the frame at point size
+0.75 and a third at large sizes. It is a live user setting (`#hp-antialias`) and
+no longer a context-creation attribute: `scene-msaa-target.js` owns a
+multisampled renderbuffer resolved by a blit each frame, so a change applies to
+the next frame with no reload. The stored preference is three-state — `auto`
+(the default, and what an absent key means), `on`, `off` — and `auto` resolves
+from the dataset's cell count against `AUTOMATIC_ANTIALIAS_CELL_LIMIT = 5_000_000`,
+re-decided on every dataset publication.
 
 **Shader quality selects shading, never geometry.** All three point vertex
 shaders — and the copy `HP_VS_HIGHLIGHT` keeps of the formula — clamp
@@ -259,6 +292,19 @@ shaders — and the copy `HP_VS_HIGHLIGHT` keeps of the formula — clamp
 shaders once made them draw *larger* sprites than `full`, so the "faster"
 quality was up to 1.93× slower at close range. `tests/point-size-clamp-contract.test.mjs`
 pins the three bounds together; keep them identical in any fork.
+
+**The point-size curve lives in one module**,
+`cellucid/assets/js/rendering/point-size-scale.js`: the slider curve (anchored at
+0.25 at position 0 and 200 at position 100, with the domain extended down to
+position -24 so stored sessions and published presets keep their meaning), the
+viewer's bound, and `pointSizeSliderPositionForCellCount`, the size a dataset
+opens at. It used to be a `0.25` in the sidebar module and a second `0.25` in
+`viewer.setPointSize`; do not reintroduce a second copy — lowering the reachable
+minimum in one place and not the other makes the slider throw at its own low end.
+
+The reachable minimum is 0.050, well below the `0.5` clamp floor, and that is not
+a contradiction: sizes under about 0.5 device pixels are only distinguishable
+where perspective size scaling lifts the rendered size back above the clamp.
 
 ---
 

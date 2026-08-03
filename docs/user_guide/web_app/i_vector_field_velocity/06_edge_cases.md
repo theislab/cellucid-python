@@ -102,7 +102,7 @@ Each entry below follows: **what you see → why → how to confirm → what to 
 - **Confirm:** the dropdown list changes between 2D and 3D (fields are filtered by dimension).
 - **What to do:** wait for the reload; if it disables, switch back to a dimension that has a field.
 
-### 3) Render mode = “Volumetric smoke cloud”
+### 3) Render mode = `Volumetric smoke cloud (alpha)`
 
 - **What you see:** you can’t find the overlay controls.
 - **Why:** the overlay controls currently live in the Points rendering controls area.

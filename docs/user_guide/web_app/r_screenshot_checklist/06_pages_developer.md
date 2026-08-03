@@ -1,6 +1,6 @@
 # Figure-coverage audit — `user_guide/web_app/p_developer_docs/`
 
-Section audited: 20 `.md` files (19 numbered pages + `index.md`). Every page read in full.
+Section audited: 20 `.md` files (19 numbered pages + section index). Every page read in full.
 Web app source cross-checked against `cellucid/` (1575 tracked files enumerated).
 
 ## Summary
@@ -16,7 +16,7 @@ Web app source cross-checked against `cellucid/` (1575 tracked files enumerated)
 | Verdict | Count | Pages |
 |---|---|---|
 | DIAGRAM | 9 | 01, 05, 06, 07, 09, 10, 11, 12, 16 |
-| NONE | 5 | `index.md`, 00, 15, 17, 18 |
+| NONE | 5 | section index, 00, 15, 17, 18 |
 | TERMINAL | 2 | 02, 14 |
 | DEVTOOLS | 2 | 03, 13 |
 | SCREENSHOT | 1 | 08 |
@@ -69,7 +69,7 @@ Every other backticked path in all 20 pages resolves. I extracted 255 path-shape
 
 ---
 
-## `index.md`
+## section index
 
 **explains** — Section landing page: a "Fast Path (Pick Your Goal)" routing table mapping seven developer goals to a start page and a follow-up page, plus a scope note and a hidden globbed toctree.
 
@@ -97,7 +97,7 @@ Every other backticked path in all 20 pages resolves. I extracted 255 path-shape
 
 ---
 
-## `01_codebase_map_and_entry_points.md`
+## {doc}`/user_guide/web_app/p_developer_docs/01_codebase_map_and_entry_points`
 
 **explains** — Where the web app code lives (layer breakdown + an ASCII repo tree) and what executes first (`index.html` → `main.js` → `ui-coordinator.js` → `data-state.js`), plus a "where do I look for X" navigation table and key terminology.
 
@@ -121,7 +121,7 @@ Every other backticked path in all 20 pages resolves. I extracted 255 path-shape
 
 ---
 
-## `02_local_development_setup.md`
+## {doc}`/user_guide/web_app/p_developer_docs/02_local_development_setup`
 
 **explains** — How to run the web app locally: the two distinct "local" modes (frontend vs data server), the static-server command, the debug-logging toggle, four dataset-loading options (demo / file picker / Python server / Jupyter), and boot troubleshooting.
 
@@ -152,7 +152,7 @@ Must be visible: the printed viewer URL containing the chosen port (the page tel
 
 ---
 
-## `03_build_run_and_deployment.md`
+## {doc}`/user_guide/web_app/p_developer_docs/03_build_run_and_deployment`
 
 **explains** — That Cellucid is a static ES-module app with no required bundler; how to serve it; a four-item deployment checklist (MIME types, module paths, CSP, no catch-all rewrites); and four dataset-hosting hazards (CORS, `.gz` double-decompression, HTML-for-404, session-bundle proxies).
 
@@ -170,7 +170,7 @@ A second, optional capture: the Network row for a `.bin.gz` asset showing `Conte
 
 ---
 
-## `04_configuration_env_vars_and_feature_flags.md`
+## {doc}`/user_guide/web_app/p_developer_docs/04_configuration_env_vars_and_feature_flags`
 
 **explains** — Every configuration surface the frontend has: URL deep-link parameters (dataset/source/remote/anndata/github/annotations/debug), `localStorage` keys, `sessionStorage` keys, and developer-only `window.__…` global overrides.
 
@@ -190,7 +190,7 @@ One omission: the URL-parameter table (`:27–33`) does not list `?exportsBaseUr
 
 ---
 
-## `05_app_architecture_overview.md`
+## {doc}`/user_guide/web_app/p_developer_docs/05_app_architecture_overview`
 
 **explains** — The big-picture mental model: an ASCII boot→state→UI→rendering map, the seven-step startup sequence, the five data sources, what `DataState` owns and emits, how the UI is wired, the three distinct persistence mechanisms, four "hard" performance invariants, and how to write a fixable bug report.
 
@@ -217,7 +217,7 @@ Derived from: `cellucid/assets/js/app/main.js` (the import list gives band 2 exa
 
 ---
 
-## `06_state_datastate_and_events.md`
+## {doc}`/user_guide/web_app/p_developer_docs/06_state_datastate_and_events`
 
 **explains** — The state model in depth: the core typed arrays and their stable-index invariant, bounded LRU field caches, multi-view contexts, the multi-page highlight system, how the public API is assembled from mixins and manager getters, the six events and their payloads, batch mode, state→viewer synchronization, and four classes of subtle bug.
 
@@ -235,7 +235,7 @@ Derived from: `cellucid/assets/js/app/main.js` (the import list gives band 2 exa
 
 ---
 
-## `07_rendering_pipeline_webgl_and_performance_notes.md`
+## {doc}`/user_guide/web_app/p_developer_docs/07_rendering_pipeline_webgl_and_performance_notes`
 
 **explains** — How the WebGL2 renderer draws millions of points: the viewer entry point and its WebGL2 hard requirement, six render subsystems (scatter, smoke/volumetric density, connectivity edges, highlight tools, centroids, overlays), the viewer's public update API, multiview rendering, vector-field overlay coupling, three performance footguns, and two GL failure modes.
 
@@ -262,7 +262,7 @@ A second, lower-priority diagram: the six render subsystems as boxes under `view
 
 ---
 
-## `08_ui_modules_map.md`
+## {doc}`/user_guide/web_app/p_developer_docs/08_ui_modules_map`
 
 **explains** — The UI layer map: the thin `initUI` coordinator, the centralized DOM cache and its domain buckets, a five-table index of sidebar modules grouped by concern, how modules communicate via state events rather than reaching into each other, which UI state sessions exclude and how, and a module-boundary troubleshooting entry.
 
@@ -289,7 +289,7 @@ Secondary (cheaper, complements it): a **DIAGRAM** of the coordinator's import g
 
 ---
 
-## `09_data_loading_pipeline_and_caching.md`
+## {doc}`/user_guide/web_app/p_developer_docs/09_data_loading_pipeline_and_caching`
 
 **explains** — The data-loading pipeline: the two-layer "source selection → base URL → file loading" model, the boot-time source registration and URL-override order, five data sources with their files and failure modes, the loader layer's artifact inventory, four distinct caching layers, and a six-step loading-failure checklist.
 
@@ -309,7 +309,7 @@ Secondary (cheaper, complements it): a **DIAGRAM** of the coordinator's import g
 
 ---
 
-## `10_sessions_persistence_and_serialization.md`
+## {doc}`/user_guide/web_app/p_developer_docs/10_sessions_persistence_and_serialization`
 
 **explains** — The `.cellucid-session` contract in full: design invariants, the code map, the exact container framing and manifest schema, the closed inventory of static and dynamic chunks, capture ordering, the ten-step restore pipeline with rollback, reversible large-state ownership, the bounded-gzip preflight, the dataset fingerprint and `cellOrder` digest with its four distinguished refusals, the official five-chunk sample profile, cancellation outcomes, and the discipline for changing persistence.
 
@@ -329,7 +329,7 @@ Secondary (cheaper, complements it): a **DIAGRAM** of the coordinator's import g
 
 ---
 
-## `11_analysis_architecture.md`
+## {doc}`/user_guide/web_app/p_developer_docs/11_analysis_architecture`
 
 **explains** — The Page Analysis subsystem: why it is initialized in `main.js` rather than by the UI coordinator, the "analysis runs on pages + highlights" model, the analysis directory code map, five core pieces (`ComparisonModule`, `DataLayer`, GPU/Worker/CPU compute backends, Plotly plot infrastructure, memory monitor + cleanup), session interaction, three correctness edge cases, and two troubleshooting entries.
 
@@ -351,7 +351,7 @@ One cross-page note: `:199` points at "local-user switch self-test wiring in `ui
 
 ---
 
-## `12_figure_export_architecture.md`
+## {doc}`/user_guide/web_app/p_developer_docs/12_figure_export_architecture`
 
 **explains** — The Figure Export subsystem: its code map, three design goals, the three SVG export modes (full-vector / optimized-vector / hybrid) and their fidelity-vs-scalability tradeoff, why PNG export uses WebGL2 plus its `tEXt` provenance metadata, the shared legend/axes/orientation builders, why export UI is excluded from session serialization, and two troubleshooting entries.
 
@@ -371,7 +371,7 @@ Derived from: `cellucid/assets/js/app/ui/modules/figure-export/index.js` (module
 
 ---
 
-## `13_debugging_playbook.md`
+## {doc}`/user_guide/web_app/p_developer_docs/13_debugging_playbook`
 
 **explains** — The procedural "if it's broken, do this" playbook: record the environment, enable debug logging, then a symptom→subsystem router into ten diagnostic sections (boot, data loading, fields/legend, filtering, highlights, dimension, rendering/GPU, sessions, analysis, export, community annotation), each with ordered likely causes, a testable confirmation step, and a fix.
 
@@ -398,7 +398,7 @@ Derived from: `cellucid/assets/js/app/ui/modules/figure-export/index.js` (module
 
 ---
 
-## `14_testing_ci_and_release_process.md`
+## {doc}`/user_guide/web_app/p_developer_docs/14_testing_ci_and_release_process`
 
 **explains** — How to validate web app changes: the validation contract (`npm test`, `npm run test:browser`), running two browser suites concurrently via `CELLUCID_BROWSER_TEST_PORT`, a nine-part manual smoke checklist (A–I), automated checks (protected smoke-density contracts, CSS token validation, a dev-only dataset reload self-test), a docs build sanity check, and a six-item release checklist.
 
@@ -423,7 +423,7 @@ Derived from: `cellucid/assets/js/app/ui/modules/figure-export/index.js` (module
 
 ---
 
-## `15_extension_points_overview.md`
+## {doc}`/user_guide/web_app/p_developer_docs/15_extension_points_overview`
 
 **explains** — The supported extension points: five golden rules (crisp boundaries, no per-frame DOM work, no hot-path allocations, decide persistence on day one, document edge cases), five extension categories each routing to a dedicated page and listing its key files, and a four-branch "should this be state, UI, or viewer?" decision checklist.
 
@@ -437,7 +437,7 @@ Derived from: `cellucid/assets/js/app/ui/modules/figure-export/index.js` (module
 
 ---
 
-## `16_extension_point_add_ui_module.md`
+## {doc}`/user_guide/web_app/p_developer_docs/16_extension_point_add_ui_module`
 
 **explains** — A seven-step mechanical recipe for adding a sidebar UI module: decide state-vs-UI-vs-viewer, add the accordion DOM scaffold in `index.html` (with an early session-persistence decision), register selectors in `dom-cache.js`, create the module file with the established initializer shape, wire it into the UI coordinator, style it with the design system, decide session persistence, and add troubleshooting hooks — plus two common-mistake entries.
 
@@ -459,7 +459,7 @@ This is the lowest-priority DIAGRAM in the section, and the honest alternative v
 
 ---
 
-## `17_extension_point_add_analysis_mode.md`
+## {doc}`/user_guide/web_app/p_developer_docs/17_extension_point_add_analysis_mode`
 
 **explains** — Three distinct analysis extensions and how to pick: Option A adds a UI mode (create a factory under `ui/analysis-types/`, register it in `_registerAnalysisTypes()`, ensure the `data-mode` container exists, route data through `DataLayer`, implement cleanup); Option B adds a plot type; Option C adds a compute operation, transform, or stat test — plus a validation list and two troubleshooting entries.
 
@@ -467,13 +467,13 @@ This is the lowest-priority DIAGRAM in the section, and the honest alternative v
 
 **verdict** — **NONE**
 
-**needs** — Nothing. Every figure this page could want is the analysis subsystem graph, which belongs on — and is specified for — `11_analysis_architecture.md`; page 17 is its procedural counterpart and should link that figure rather than carry a second copy. The three options are numbered file-editing recipes whose content is symbol names (`_registerAnalysisTypes()`, `onPageSelectionChange(pageIds)`, `destroy()`, `purgePlot(...)`, `data-mode="..."`) — text that must be typed exactly, which is the one form of content a figure actively degrades.
+**needs** — Nothing. Every figure this page could want is the analysis subsystem graph, which belongs on — and is specified for — {doc}`/user_guide/web_app/p_developer_docs/11_analysis_architecture`; page 17 is its procedural counterpart and should link that figure rather than carry a second copy. The three options are numbered file-editing recipes whose content is symbol names (`_registerAnalysisTypes()`, `onPageSelectionChange(pageIds)`, `destroy()`, `purgePlot(...)`, `data-mode="..."`) — text that must be typed exactly, which is the one form of content a figure actively degrades.
 
 **notes** — Page verifies clean. All nine code pointers resolve, including `analysis/ui/analysis-types/` (`:25`), `analysis/compute/operation-handlers.js` (`:108`), `analysis/stats/statistical-tests.js` (`:115`), `analysis/data/transform-pipeline.js` (`:118`), and the glob `analysis/plots/types/*.js` (`:87`). The mode ids named at `:45` (`simple`, `detailed`, `correlation`, `differential`) are plausible registration keys and are consistent with page 11 `:97`'s list of registered analysis types. No dead paths.
 
 ---
 
-## `18_extension_point_add_export_renderer.md`
+## {doc}`/user_guide/web_app/p_developer_docs/18_extension_point_add_export_renderer`
 
 **explains** — How to extend Figure Export: decide what you are adding (SVG mode / PNG option / new format) under three design constraints, locate the entry points and renderer/utils directories, implement the renderer (SVG reuse rules; PNG high-DPI and `tEXt` metadata constraints), add UI wiring, confirm WYSIWYG against five view properties, add performance safeguards, plus a testing checklist and two troubleshooting entries.
 
@@ -481,7 +481,7 @@ This is the lowest-priority DIAGRAM in the section, and the honest alternative v
 
 **verdict** — **NONE**
 
-**needs** — Nothing. The one useful figure — the export engine control flow with its SVG/PNG branch and shared builders — is specified for `12_figure_export_architecture.md`, which this page already requires as prerequisite reading at `:5–6`. Duplicating it here would create the same two-maps-of-one-tree drift the section already suffers from between page 01 and `app/README.md`. The remainder is constraints and checklists.
+**needs** — Nothing. The one useful figure — the export engine control flow with its SVG/PNG branch and shared builders — is specified for {doc}`/user_guide/web_app/p_developer_docs/12_figure_export_architecture`, which this page already requires as prerequisite reading at `:5–6`. Duplicating it here would create the same two-maps-of-one-tree drift the section already suffers from between page 01 and `app/README.md`. The remainder is constraints and checklists.
 
 A tempting alternative — a side-by-side comparison image of `full-vector` vs `optimized-vector` vs `hybrid` output at the same zoom — is a genuinely good figure, but it is a *user-facing* one about choosing a mode, not a developer-facing one about adding a renderer. It belongs in the figure-export user chapter (`_static/screenshots/figure_export/` already exists), not here.
 

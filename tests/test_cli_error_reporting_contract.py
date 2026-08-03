@@ -19,7 +19,9 @@ from __future__ import annotations
 import argparse
 import errno
 import json
+import platform
 import socket
+import sys
 from pathlib import Path
 from unittest import mock
 
@@ -274,6 +276,111 @@ def test_a_missing_optional_dependency_names_the_package_to_install(
     assert status == 1
     message = _assert_operator_report(capsys.readouterr().err)
     assert "pip install zarr" in message
+
+
+def test_a_standard_library_module_is_never_reported_as_a_pip_install(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An interpreter too old for a stdlib name is a Python condition, not a pip one.
+
+    ``from datetime import UTC`` on Python 3.10 raises ImportError with
+    ``name='datetime'``. Advising ``pip install datetime`` would name an
+    unrelated distribution on PyPI and would not fix anything.
+    """
+    from cellucid.cli import main
+
+    with mock.patch(
+        "cellucid.anndata_server.serve_anndata",
+        side_effect=ImportError(
+            "cannot import name 'UTC' from 'datetime'",
+            name="datetime",
+            path="/opt/python3.10/lib/python3.10/datetime.py",
+        ),
+    ):
+        status = main(
+            [
+                "serve",
+                str(_zarr_store(tmp_path / "fixture.zarr")),
+                "--quiet",
+                "--dataset-name",
+                "My study",
+                "--dataset-id",
+                "my-study-v1",
+            ]
+        )
+
+    assert status == 1
+    message = _assert_operator_report(capsys.readouterr().err)
+    assert "pip install datetime" not in message
+    assert "pip install" not in message
+    assert "standard-library module 'datetime'" in message
+    assert platform.python_version() in message
+    assert sys.executable in message
+
+
+def test_an_installed_package_missing_a_name_is_told_to_upgrade_not_install(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A package that imported but lacks the name asked of it is a version condition."""
+    from cellucid.cli import main
+
+    with mock.patch(
+        "cellucid.anndata_server.serve_anndata",
+        side_effect=ImportError(
+            "cannot import name 'read_elem' from 'anndata'",
+            name="anndata",
+            path="/env/lib/python3.11/site-packages/anndata/__init__.py",
+        ),
+    ):
+        status = main(
+            [
+                "serve",
+                str(_zarr_store(tmp_path / "fixture.zarr")),
+                "--quiet",
+                "--dataset-name",
+                "My study",
+                "--dataset-id",
+                "my-study-v1",
+            ]
+        )
+
+    assert status == 1
+    message = _assert_operator_report(capsys.readouterr().err)
+    assert "pip install --upgrade anndata" in message
+    assert "read_elem" in message
+
+
+def test_an_import_name_is_reported_as_the_name_that_installs_it(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The one declared dependency whose import name is not its distribution name."""
+    from cellucid.cli import main
+
+    with mock.patch(
+        "cellucid.anndata_server.serve_anndata",
+        side_effect=ModuleNotFoundError(
+            "No module named 'jupyter_server_proxy'",
+            name="jupyter_server_proxy",
+        ),
+    ):
+        status = main(
+            [
+                "serve",
+                str(_zarr_store(tmp_path / "fixture.zarr")),
+                "--quiet",
+                "--dataset-name",
+                "My study",
+                "--dataset-id",
+                "my-study-v1",
+            ]
+        )
+
+    assert status == 1
+    message = _assert_operator_report(capsys.readouterr().err)
+    assert "pip install jupyter-server-proxy" in message
 
 
 def test_a_headless_machine_without_a_browser_is_told_to_use_no_browser(

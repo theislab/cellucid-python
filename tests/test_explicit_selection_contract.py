@@ -40,14 +40,21 @@ def _adata(*, explicit: bool, generic: bool) -> ad.AnnData:
     return adata
 
 
-def test_generic_umap_is_not_an_embedding_declaration() -> None:
-    with pytest.raises(ValueError, match="X_umap_1d.*X_umap_2d.*X_umap_3d"):
-        AnnDataAdapter(
-            _adata(explicit=False, generic=True),
-            dataset_name="Generic UMAP",
-            dataset_id="generic-umap",
-        )
+def test_an_explicit_declaration_decides_over_the_unsuffixed_key() -> None:
+    # The unsuffixed key alone resolves by its own width.
+    generic_only = AnnDataAdapter(
+        _adata(explicit=False, generic=True),
+        dataset_name="Generic UMAP",
+        dataset_id="generic-umap",
+    )
+    try:
+        generic_identity = generic_only.get_dataset_identity()
+        assert generic_identity["embeddings"]["available_dimensions"] == [2]
+        assert "umap_resolution" not in generic_identity["embeddings"]
+    finally:
+        generic_only.close()
 
+    # Beside a declared key it never joins the set, whatever its width.
     adapter = AnnDataAdapter(
         _adata(explicit=True, generic=True),
         dataset_name="Explicit UMAP",
@@ -58,10 +65,18 @@ def test_generic_umap_is_not_an_embedding_declaration() -> None:
     assert "umap_resolution" not in identity["embeddings"]
 
 
-def test_transition_helper_requires_an_explicit_umap_key() -> None:
+def test_transition_helper_resolves_the_same_key_the_adapter_resolves() -> None:
+    # One rule governs both, so an object cannot be servable and undriftable.
+    written = add_transition_drift_to_obsm(
+        _adata(explicit=False, generic=True),
+        np.eye(3, dtype=np.float32),
+        normalize_rows=False,
+    )
+    assert written == "T_fwd_umap_2d"
+
     with pytest.raises(ValueError, match="X_umap_1d.*X_umap_2d.*X_umap_3d"):
         add_transition_drift_to_obsm(
-            _adata(explicit=False, generic=True),
+            _adata(explicit=False, generic=False),
             np.eye(3, dtype=np.float32),
             normalize_rows=False,
         )

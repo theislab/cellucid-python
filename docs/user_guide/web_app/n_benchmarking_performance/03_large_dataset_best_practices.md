@@ -59,6 +59,15 @@ If you only do one thing from this page, do this list in order.
 - Prefer **Points** render mode while exploring (smoke is cinematic and heavy).
 - Keep the browser window modest (pixels matter; retina is expensive).
 - Close other GPU-heavy tabs (video calls + WebGL + Cellucid = sadness).
+- Two of the biggest levers have already been pulled for you, and are worth
+  checking rather than assuming: at or above five million cells `Antialiasing
+  (smooth point edges)` starts off, and the point size starts small, both chosen
+  from the cell count. Turning antialiasing back on costs 19-34% of the frame at
+  this scale; it applies to the next frame either way.
+- `Level-of-Detail (LOD)` is off by default and worth turning on above two
+  million cells, where `Auto` draws about two million of them. At or below that
+  it will not reduce anything — the cloud already draws in one frame — so reach
+  for `Force LOD level:` if you want fewer points than that on weak hardware.
 
 ### 3) Tune in one view, then choose a layout deliberately
 

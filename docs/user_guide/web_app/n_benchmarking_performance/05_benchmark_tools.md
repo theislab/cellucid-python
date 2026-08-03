@@ -185,7 +185,9 @@ GPU specifically, that is the tool — not the headline FPS.
 - LOD exists to reduce the number of rendered points when zoomed out.
 - If LOD reduces **Visible Points** and FPS improves, the renderer is adapting
   successfully.
-- If **Visible Points** stays high and FPS stays low, try LOD in Visualization,
+- If **Visible Points** stays high and FPS stays low, try LOD in Visualization —
+  and above two million points lower `Force LOD level:` too, since `Auto` stops at
+  about two million,
   a smaller window, a smaller point size, or turning antialiasing off. Lowering
   `Shader quality:` is *not* on that list — it did not change frame time on the
   hardware this was measured on, and the reason is in

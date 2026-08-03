@@ -137,6 +137,7 @@ def test_cli_passes_exact_identity_without_backed_state_to_zarr(
             "total_counts",
             "--vector-field-default",
             "drift_umap",
+            "--vector-fields",
         ]
     )
 
@@ -158,6 +159,8 @@ def test_cli_passes_exact_identity_without_backed_state_to_zarr(
         dataset_id="cli-fixture",
         obs_keys=["cell_type", "total_counts"],
         vector_field_default="drift_umap",
+        serve_connectivity=False,
+        serve_vector_fields=True,
     )
 
 

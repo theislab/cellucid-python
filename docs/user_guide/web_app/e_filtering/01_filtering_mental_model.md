@@ -135,8 +135,8 @@ These are easy-to-miss gotchas:
   “outside range” and becomes invisible whenever that filter is active.
   :::{note}
   A **prepared export cannot contain `NaN` in a continuous obs field or a
-  gene** — both writers refuse it (`Continuous obs field '<key>' must contain
-  only finite values.`). You can only meet this case by opening a raw `.h5ad`
+  gene** — both writers refuse it, counting the offending values and naming the
+  first affected cells. You can only meet this case by opening a raw `.h5ad`
   or Zarr archive in the browser, where the values are read as they are.
   :::
 - **Categorical visibility filters**: a cell whose category code is the

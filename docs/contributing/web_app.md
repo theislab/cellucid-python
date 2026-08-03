@@ -43,9 +43,9 @@ The documentation site is built from `cellucid-python/docs/`, so a web-app
 documentation change is a pull request against `cellucid-python`, not against
 `cellucid`. The web-app pages are:
 
-- end-user documentation: {doc}`../user_guide/web_app/index`
+- end-user documentation: {doc}`/user_guide/web_app/index`
   (`cellucid-python/docs/user_guide/web_app/`)
-- developer documentation: {doc}`../user_guide/web_app/p_developer_docs/index`
+- developer documentation: {doc}`/user_guide/web_app/p_developer_docs/index`
   (`cellucid-python/docs/user_guide/web_app/p_developer_docs/`)
 
 If you change UI or behaviour in the `cellucid` repository, update the matching
@@ -57,7 +57,7 @@ reference as a `{doc}` role, never in bare backticks — a backtick is inline
 literal text that Sphinx will not resolve, so a wrong target renders as plain
 text and survives the `-W` build. The rule, the relative-path form, and where
 backticks are still correct are in
-{doc}`../user_guide/python_package/h_developer_docs/15_docs_development_and_style_guide`.
+{doc}`/user_guide/python_package/h_developer_docs/15_docs_development_and_style_guide`.
 
 The reverse also holds: `cellucid/CONTRIBUTING.md` is read on GitHub, where a
 `{doc}` role is meaningless, so references from that file are written as
@@ -72,7 +72,7 @@ sphinx-build -W --keep-going -b html docs docs/_build/html
 ```
 
 The web-app testing, CI, and release checklist is
-{doc}`../user_guide/web_app/p_developer_docs/14_testing_ci_and_release_process`.
+{doc}`/user_guide/web_app/p_developer_docs/14_testing_ci_and_release_process`.
 
 ---
 

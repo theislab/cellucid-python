@@ -53,6 +53,68 @@ In AnnData mode, the adapter serves these as **virtual endpoints** computed from
 - `.zarr` paths are loaded eagerly with `anndata.read_zarr`.
 - In-memory AnnData uses whatever you already loaded into RAM.
 
+### Which `obsm` keys become embeddings
+
+`X_umap_1d`, `X_umap_2d`, and `X_umap_3d` each name their own dimension and
+always decide it.
+
+An object that declares none of those three but carries the bare `X_umap` that
+`sc.tl.umap()` writes is read at the dimension its own column count states: a
+one-, two-, or three-column array is resolved by its own width and served as
+1D, 2D, or 3D. The adapter renames nothing and mutates nothing on your object.
+
+- A bare `X_umap` of any other width — a ten-column latent space named after a
+  plot, say — is refused, and the message names its shape.
+- One explicit dimensional key anywhere in `obsm` means the writer declared
+  dimensions deliberately, so the bare key never joins the resolved set.
+
+The same resolution is used by {func}`~cellucid.serve_anndata`,
+{func}`~cellucid.show_anndata`, {class}`~cellucid.AnnDataViewer`, and
+`cellucid serve`, because all of them build this adapter.
+
+### Connectivity is asked for, not assumed
+
+`serve_connectivity` is keyword-only and `False` by default, on
+{class}`~cellucid.AnnDataAdapter` and on `AnnDataAdapter.from_file` alike.
+
+| `serve_connectivity` | What the adapter does |
+|---|---|
+| `False` (default) | `adata.obsp['connectivities']` is never read. `has_connectivity()` returns `False`, the dataset identity reports `has_connectivity: false` and `n_edges: null`, and there is no connectivity manifest to serve. |
+| `True` | The complete graph is read and validated during construction, before the adapter can be used, and its manifest declares the edge count and the neighbor maximum. |
+
+Off is the default because building the edge list is the single longest part of
+startup on a large object — a 50-neighbor graph over millions of cells is
+hundreds of millions of stored neighbors — and most sessions never draw the
+graph. Validation is not deferred when you do ask for it: the manifest the
+viewer fetches first has to state the edge count, so the whole graph is read up
+front rather than on the first edge request.
+
+Asking for connectivity on an object whose `obsp` holds no `connectivities`
+matrix raises during construction. It is an explicit request, so an unmeetable
+one is an error rather than a quietly graph-less dataset.
+
+```python
+from cellucid import AnnDataAdapter
+
+adapter = AnnDataAdapter(
+    adata,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    serve_connectivity=True,
+)
+print(adapter.has_connectivity())
+adapter.close()
+```
+
+### Build progress
+
+The adapter is silent by default (`quiet=True`), so using it as a library
+prints nothing. A server passes its own `quiet` through, because opening a
+large object spends minutes inside the constructor: with reporting on, the
+build names `Obs columns`, `Embeddings` (first `resolving obsm keys`, then the
+exact key resolved per dimension), `Vector fields`, and `Connectivity` as each
+happens. See {doc}`server` for the full startup report.
+
 ---
 
 ## API reference
@@ -84,8 +146,17 @@ Fix:
 
 ### Symptom: “No embeddings detected”
 Fix:
-- Ensure you have an explicitly dimensioned embedding in `adata.obsm`
-  (`X_umap_1d`, `X_umap_2d`, or `X_umap_3d`).
+- Ensure `adata.obsm` holds either an explicitly dimensioned embedding
+  (`X_umap_1d`, `X_umap_2d`, or `X_umap_3d`) or a bare `X_umap` of 1, 2, or 3
+  columns, which is read at the dimension its column count states.
+- The error lists the `obsm` keys the object actually has, and when a bare
+  `X_umap` is present but too wide it names that array's shape as well.
+
+### Symptom: “Connectivity was asked for, and adata.obsp has no 'connectivities' matrix to serve”
+Fix:
+- Compute the neighbor graph first (`sc.pp.neighbors(adata)`), or
+- build the adapter without `serve_connectivity=True`, which is the default and
+  never touches `obsp` at all.
 
 ---
 

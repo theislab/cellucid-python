@@ -126,7 +126,7 @@ The overlay is animated, so ask per parameter *"does a frozen frame carry the in
 
 ---
 
-## `user_guide/web_app/i_vector_field_velocity/index.md`
+## {doc}`/user_guide/web_app/i_vector_field_velocity/index`
 
 **explains** — Section landing page: what the GPU particle overlay is, the Pancreas starting question, and a card grid linking the eight sub-pages.
 
@@ -145,7 +145,7 @@ The overlay is animated, so ask per parameter *"does a frozen frame carry the in
 
 ---
 
-## `user_guide/web_app/i_vector_field_velocity/01_what_vector_fields_are_user_facing.md`
+## {doc}`/user_guide/web_app/i_vector_field_velocity/01_what_vector_fields_are_user_facing`
 
 **explains** — The mental model: one displacement vector per cell in the same coordinate space as the embedding, dimension-specific, rendered as particles seeded from visible cells.
 
@@ -161,7 +161,7 @@ The overlay is animated, so ask per parameter *"does a frozen frame carry the in
 
 ---
 
-## `user_guide/web_app/i_vector_field_velocity/02_enabling_overlay_and_selecting_field.md`
+## {doc}`/user_guide/web_app/i_vector_field_velocity/02_enabling_overlay_and_selecting_field`
 
 **explains** — Where the toggle lives, the three deliberate availability states, what dimension switching does, and dataset/session reset behaviour.
 
@@ -182,7 +182,7 @@ Plus one small extra: the **info popover**. The page says "A small `i` button be
 
 ---
 
-## `user_guide/web_app/i_vector_field_velocity/03_core_parameters_document_exact_ui_labels.md`
+## {doc}`/user_guide/web_app/i_vector_field_velocity/03_core_parameters_document_exact_ui_labels`
 
 **explains** — The 8 core controls with exact labels, ranges and initial values, plus a "scientific reading" and a "performance-first" preset.
 
@@ -212,7 +212,7 @@ Plus one small extra: the **info popover**. The page says "A small `i` button be
 
 ---
 
-## `user_guide/web_app/i_vector_field_velocity/04_advanced_parameters_document_every_setting.md`
+## {doc}`/user_guide/web_app/i_vector_field_velocity/04_advanced_parameters_document_every_setting`
 
 **explains** — All 18 advanced settings across five groups, with ranges, defaults, performance impact and a "don't mislead" warning.
 
@@ -244,7 +244,7 @@ Plus one small extra: the **info popover**. The page says "A small `i` button be
 
 ---
 
-## `user_guide/web_app/i_vector_field_velocity/05_performance_and_quality.md`
+## {doc}`/user_guide/web_app/i_vector_field_velocity/05_performance_and_quality`
 
 **explains** — What actually scales (particles vs full-screen trail/bloom passes), three named presets, a triage workflow, and "it looks wrong but is working" pitfalls.
 
@@ -261,7 +261,7 @@ Plus one small extra: the **info popover**. The page says "A small `i` button be
 
 ---
 
-## `user_guide/web_app/i_vector_field_velocity/06_edge_cases.md`
+## {doc}`/user_guide/web_app/i_vector_field_velocity/06_edge_cases`
 
 **explains** — 13 named edge cases across data / scale / UI-state / environment, each as *what you see → why → confirm → do*.
 
@@ -270,7 +270,7 @@ Plus one small extra: the **info popover**. The page says "A small `i` button be
 **verdict** — **ADD**, but **selective**. Most entries are correctly text-only; three are visual and currently unillustrated.
 
 **needs**
-1. *Edge case UI/state 3 — "Render mode = Volumetric smoke cloud"*: "**What you see:** you can't find the overlay controls." Capture `Visualization` with `Render mode:` = `Volumetric smoke cloud`, showing that `#velocity-overlay-controls` is genuinely absent, next to the `Points` state where it is present. Cursor on the `Render mode:` select in the smoke capture. → `vector_field_velocity/render-mode-{smoke,points}.png`, `:width: 224px` each.
+1. *Edge case UI/state 3 — "Render mode = Volumetric smoke cloud"*: "**What you see:** you can't find the overlay controls." Capture `Visualization` with `Render mode:` = `Volumetric smoke cloud (alpha)`, showing that `#velocity-overlay-controls` is genuinely absent, next to the `Points` state where it is present. Cursor on the `Render mode:` select in the smoke capture. → `vector_field_velocity/render-mode-{smoke,points}.png`, `:width: 224px` each.
 2. *Edge case UI/state 4 — "All cells filtered out"*: reachable exactly as `velocity-multiview-lifecycle.spec.mjs` does it — `#legend` → `Hide All` button, assert `#filter-count` = `Showing 0 of N points`. Capture the empty canvas plus the `Showing 0 of 3,696 points` counter in one crop. → `vector_field_velocity/all-cells-filtered.png`, `:width: 900px`.
 3. *Data edge case 4 — "All-zero or extremely small vectors"*: route-inject a zero-filled vector binary (the spec's `createVelocityBytes` pattern with `vx = vy = 0`) and capture the near-static overlay. This is the one data edge case with a distinct visual signature. → `vector_field_velocity/zero-magnitude-field.png`.
 
@@ -280,7 +280,7 @@ Plus one small extra: the **info popover**. The page says "A small `i` button be
 
 ---
 
-## `user_guide/web_app/i_vector_field_velocity/07_troubleshooting_velocity_overlay.md`
+## {doc}`/user_guide/web_app/i_vector_field_velocity/07_troubleshooting_velocity_overlay`
 
 **explains** — Symptom → cause → confirm → fix → prevention for nine overlay failures, plus how to add vector fields in Python and a table of three literal error strings.
 
@@ -300,7 +300,7 @@ Plus one small extra: the **info popover**. The page says "A small `i` button be
 
 ---
 
-## `user_guide/web_app/i_vector_field_velocity/08_screenshots.md`
+## {doc}`/user_guide/web_app/i_vector_field_velocity/08_screenshots`
 
 **explains** — The section's "verified captures" page: three full-app images (2D core controls, 2D advanced expanded, 3D orbit).
 
@@ -335,7 +335,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 
 # Section J — `user_guide/web_app/j_community_annotation/`
 
-## `user_guide/web_app/j_community_annotation/index.md`
+## {doc}`/user_guide/web_app/j_community_annotation/index`
 
 **explains** — Feature overview: offline-first, scope-based (dataset + repo + branch + user), role split, consensus maths, local vs GitHub storage, and the annotator/author quickstart tabs.
 
@@ -349,7 +349,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 
 ---
 
-## `user_guide/web_app/j_community_annotation/01_annotator_guide.md`
+## {doc}`/user_guide/web_app/j_community_annotation/01_annotator_guide`
 
 **explains** — The annotator's whole round: connect, Pull, find the 🗳️ column, open the voting modal, read the consensus line, vote, comment, propose a suggestion, Publish, wrap up; then a large troubleshooting catalogue.
 
@@ -363,7 +363,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 
 ---
 
-## `user_guide/web_app/j_community_annotation/02_author_guide.md`
+## {doc}`/user_guide/web_app/j_community_annotation/02_author_guide`
 
 **explains** — The author's setup and operations: dataset-id stability, repo layout, `annotations/config.json` schema, GitHub App install, self-hosted Worker contract, enabling columns, tuning thresholds, merging duplicates, derived columns, consensus export, and a large troubleshooting catalogue. 38 kB — the largest page in all three sections.
 
@@ -381,7 +381,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 
 ---
 
-## `user_guide/web_app/j_community_annotation/03_ui_reference.md`
+## {doc}`/user_guide/web_app/j_community_annotation/03_ui_reference`
 
 **explains** — Explicitly a "**button-by-button** reference" for every Community Annotation surface: the sidebar accordion, the 4-step GitHub sync wizard, the identity modal, MANAGE ANNOTATION, DERIVED CONSENSUS COLUMN, CONSENSUS SNAPSHOT + LOCAL CACHE, and the voting modal — plus a troubleshooting catalogue.
 
@@ -404,7 +404,7 @@ The image itself is not *wrong*: 246×123, correct content — `COMMUNITY ANNOTA
 
 It is **wrong to use it four times**. The consequence is that the docs depict this feature *exclusively in its empty state*: there is no published image anywhere in the Cellucid documentation of a connected repository, a signed-in user, a suggestion, a vote, a consensus line, a merge, or a consensus snapshot. A reader who has never used the feature cannot tell from the docs what it looks like when it is working — which is precisely the "wet lab person should understand and use the app" bar in the objective.
 
-Keep the file. Use it **once**, on `03_ui_reference.md` §"Entry button states", where it is the literal subject. Replace its three other uses with the state each page is actually about (``index`` → connected status panel; `01` → the wizard; `02` → MANAGE ANNOTATION). Also re-shoot at 2× and give it ~8 px of breathing room — 123 px tall is a sliver.
+Keep the file. Use it **once**, on {doc}`/user_guide/web_app/j_community_annotation/03_ui_reference` §"Entry button states", where it is the literal subject. Replace its three other uses with the state each page is actually about (``index`` → connected status panel; `01` → the wizard; `02` → MANAGE ANNOTATION). Also re-shoot at 2× and give it ~8 px of breathing room — 123 px tall is a sliver.
 
 ---
 
@@ -623,7 +623,7 @@ Dataset for every step: `pancreas`, annotatable field `clusters`, target categor
 - **Cursor:** on the `Copy share link` icon.
 - **File:** `community_annotation/lifecycle-06-connected-status.png`, `:width: 246px`.
 - **Mock-reachable:** **YES** — levers (A)+(C) only.
-- **This is the image `02_author_guide.md` line 214 is missing** and the natural replacement for the disconnected panel on `index.md`.
+- **This is the image {doc}`/user_guide/web_app/j_community_annotation/02_author_guide` line 214 is missing** and the natural replacement for the disconnected panel on {doc}`/user_guide/web_app/j_community_annotation/index`.
 
 ### 7. Author controls — MANAGE ANNOTATION
 - **Before:** connected as author.
@@ -747,7 +747,7 @@ Both exclusions are narrow: the *feature* is fully documentable in pictures, and
 
 # Section K — `user_guide/web_app/k_figure_export/`
 
-## `user_guide/web_app/k_figure_export/index.md`
+## {doc}`/user_guide/web_app/k_figure_export/index`
 
 **explains** — What figure export captures and does not, plot size vs DPI arithmetic, filenames and privacy, and the reading order.
 
@@ -763,7 +763,7 @@ I checked it at full size: it shows the `FIGURE EXPORT` header, the intro senten
 
 ---
 
-## `user_guide/web_app/k_figure_export/01_figure_export_goals_wysiwyg_and_reproducibility.md`
+## {doc}`/user_guide/web_app/k_figure_export/01_figure_export_goals_wysiwyg_and_reproducibility`
 
 **explains** — WYSIWYG vs reproducible, the three levels of reproducibility, the capture checklist, what is not reproduced, and a packaging recipe.
 
@@ -779,7 +779,7 @@ I checked it at full size: it shows the `FIGURE EXPORT` header, the intro senten
 
 ---
 
-## `user_guide/web_app/k_figure_export/02_export_ui_walkthrough.md`
+## {doc}`/user_guide/web_app/k_figure_export/02_export_ui_walkthrough`
 
 **explains** — The click-by-click export: where the panel is, preview vs export, size/DPI, titles/legends/axes/reference grid, selection emphasis, download options, the Frame-export crop workflow, and multi-panel legend rules.
 
@@ -808,7 +808,7 @@ I checked it at full size: it shows the `FIGURE EXPORT` header, the intro senten
 
 ---
 
-## `user_guide/web_app/k_figure_export/03_export_formats_and_renderers.md`
+## {doc}`/user_guide/web_app/k_figure_export/03_export_formats_and_renderers`
 
 **explains** — SVG vs PNG, the three SVG strategies, why SVGs get huge, browser contract, and Illustrator/Inkscape notes.
 
@@ -827,7 +827,7 @@ The image shows the hint ending at "…Hybrid embeds the shader-rendered point p
 
 ---
 
-## `user_guide/web_app/k_figure_export/04_quality_knobs_and_best_practices.md`
+## {doc}`/user_guide/web_app/k_figure_export/04_quality_knobs_and_best_practices`
 
 **explains** — Vector vs raster decision, sizing recipes, large point clouds without misleading downsampling, colour/contrast/accessibility, and safe vs dangerous post-processing.
 
@@ -846,7 +846,7 @@ The image is a clean crop of the expanded `STYLE` section: `BACKGROUND` = `Match
 
 ---
 
-## `user_guide/web_app/k_figure_export/05_metadata_and_provenance.md`
+## {doc}`/user_guide/web_app/k_figure_export/05_metadata_and_provenance`
 
 **explains** — What provenance means, the per-panel metadata model, PNG `iTXt` fields, the `Description` string format, the structured `Comment` JSON, SVG RDF/Dublin Core, filename rules, and a methods-text template.
 
@@ -868,7 +868,7 @@ The image also has a second, softer problem shared with the whole section: the `
 
 ---
 
-## `user_guide/web_app/k_figure_export/06_edge_cases.md`
+## {doc}`/user_guide/web_app/k_figure_export/06_edge_cases`
 
 **explains** — 0 visible points, tiny groups, NaN/Inf, missing fields, SVG size explosion, legend overflow, many panels, reference grid, 3D shader points, atmospheric fog vs 3D lighting, depth ordering, 3D axes, smoke/connectivity/velocity blockers, viewer chrome, dark backgrounds, WebGL2, fonts, downloads, privacy.
 
@@ -877,7 +877,7 @@ The image also has a second, softer problem shared with the whole section: the `
 **verdict** — **ADD** (4 images), selectively.
 
 **needs**
-1. **The three blockers.** §"Volumetric smoke cloud render mode not exported", §"Connectivity overlay not exported", §"Velocity vector field not exported" each quote an exact blocker string. Capture the `.fidelity-warning-dialog` once per blocker (velocity is the cheapest — see `k/01`; smoke via `Render mode:` = `Volumetric smoke cloud`; connectivity via the KNN connectivity overlay). → `figure_export/blocked-{velocity,smoke,connectivity}.png`, `:width: 560px` each. Reuse the velocity one from `01`.
+1. **The three blockers.** §"Volumetric smoke cloud render mode not exported", §"Connectivity overlay not exported", §"Velocity vector field not exported" each quote an exact blocker string. Capture the `.fidelity-warning-dialog` once per blocker (velocity is the cheapest — see `k/01`; smoke via `Render mode:` = `Volumetric smoke cloud (alpha)`; connectivity via the KNN connectivity overlay). → `figure_export/blocked-{velocity,smoke,connectivity}.png`, `:width: 560px` each. Reuse the velocity one from `01`.
 2. **Reference grid on vs off.** §"Reference grid" explains that the viewer's `Background` control decides both the clear colour and whether the grid box is drawn, and that the checkbox is disabled for `White`/`Black`. Two exported figures — `Grid (light)` with `Reference grid` on, and the same view with it off — plus, ideally, a third crop showing the checkbox **disabled** under `Background: White`. → `figure_export/reference-grid-{on,off,disabled}.png`, `:width: 300px` each.
 3. **Dark-background ink.** §"Dark-background figures" claims titles/ticks/axis labels/frame/badge take their colour from the figure background. Export the same view under `Background: Match viewer` from `Grid (dark)` and from `Grid (light)`, side by side. → `figure_export/dark-vs-light-ink.png`, `:width: 700px`.
 4. **Category explosion.** §"Category explosion (legend overflow)" is about an unreadable figure; showing one is legitimate and instructive. Export a `clusters`-style field with many categories at `Legend: Right` vs `Legend: Bottom`. → `figure_export/legend-overflow-{right,bottom}.png`, `:width: 400px` each.
@@ -888,7 +888,7 @@ The image also has a second, softer problem shared with the whole section: the `
 
 ---
 
-## `user_guide/web_app/k_figure_export/07_troubleshooting_figure_export.md`
+## {doc}`/user_guide/web_app/k_figure_export/07_troubleshooting_figure_export`
 
 **explains** — Quick triage, the `Export blocked` catalogue, and eleven symptom → cause → confirm → fix entries.
 
@@ -905,14 +905,14 @@ The image also has a second, softer problem shared with the whole section: the `
 
 ---
 
-## `user_guide/web_app/k_figure_export/08_screenshots.md`
+## {doc}`/user_guide/web_app/k_figure_export/08_screenshots`
 
 **explains** — The section's "verified captures" page: six figures covering panel structure, preview/framing, and labels/style/download.
 
 **has** — 6 figures, **all reused from other pages**, none unique to this page:
 | Line | File | `:width:` | Also on |
 |---:|---|---|---|
-| 5 | `figure_export/panel-overview.png` | `246px` | `index.md` L109 |
+| 5 | `figure_export/panel-overview.png` | `246px` | {doc}`/user_guide/web_app/k_figure_export/index` L109 |
 | 15 | `figure_export/preview.png` | `1440px` | `02` L395 |
 | 22 | `figure_export/framing.png` | `224px` | **nowhere else — unique to this page** |
 | 32 | `figure_export/labels-annotations.png` | `224px` | `05` L262 |
@@ -932,7 +932,7 @@ Specifically: it carries both confirmed-stale images (`labels-annotations.png`, 
 
 ---
 
-## `user_guide/web_app/k_figure_export/09_reference_implementation_notes.md`
+## {doc}`/user_guide/web_app/k_figure_export/09_reference_implementation_notes`
 
 **explains** — Developer reference: the three-layer architecture, module paths, the payload/metadata builder, known limitations with their exact constants, and the minimum bug-repro package.
 

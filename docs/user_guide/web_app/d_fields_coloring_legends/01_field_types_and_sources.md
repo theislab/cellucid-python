@@ -149,7 +149,9 @@ This matters because derived fields are still “real fields”:
 
 ### All-constant or all-missing fields
 
-- If a continuous field has no finite values, Cellucid still renders a safe default range (so the UI doesn’t break).
+- A continuous field with no finite value in any cell has no colour scale, and
+  Cellucid says so rather than inventing a range: `Field "<key>" has no value
+  in any of <n> cells, so it has no colour scale.`
 - If all values are identical, the UI will still show a non-zero range so the colormap can render.
 - Constant fields and constant genes are published, not dropped: the export
   format encodes them as `minValue == maxValue` with every code `0`, and the

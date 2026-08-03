@@ -21,6 +21,10 @@ from .._server_base import (
     DEFAULT_HOST,
     DEFAULT_PORT,
     _web_cache_dir,
+    bind_host_is_wildcard,
+    format_http_origin,
+    loopback_origin_for_bind,
+    machine_origin,
     print_detail,
     print_server_banner,
     print_step,
@@ -34,6 +38,11 @@ from .._server_base import (
 from ._artifacts import _build_prepared_artifact_inventory, _read_json_object
 from ._datasets import _list_exported_datasets
 from ._handler import CORSRequestHandler, logger
+
+#: The one query a prepared-data catalog URL carries, in every place a
+#: catalog URL is built, so the loopback form and the network form of the
+#: same server can never state different things.
+VIEWER_QUERY = "/?source=remote"
 
 
 class CellucidServer:
@@ -179,12 +188,19 @@ class CellucidServer:
 
     @property
     def url(self) -> str:
-        """Get the URL of the currently running server."""
+        """Get the URL of the currently running server.
+
+        A bind to every interface reports the loopback origin, because the
+        wildcard is not an address anything can open. The addresses other
+        machines use are reported separately by ``network_urls``.
+        """
         if not self._running or self._server is None:
             raise RuntimeError(
                 "CellucidServer URL is unavailable because the server is not running"
             )
-        return f"http://{self.host}:{self.port}"
+        if bind_host_is_wildcard(self.host):
+            return loopback_origin_for_bind(self.host, self.port)
+        return format_http_origin(self.host, self.port)
 
     @property
     def viewer_url(self) -> str:
@@ -194,7 +210,19 @@ class CellucidServer:
         unique. A multi-dataset catalog requires an exact dataset selection;
         this URL never embeds or guesses an arbitrary catalog entry.
         """
-        return f"{self.url}/?source=remote"
+        return f"{self.url}{VIEWER_QUERY}"
+
+    @property
+    def network_urls(self) -> list[tuple[str, str]]:
+        """Return the origins another machine can open, when any exist."""
+        if not self._running or self._server is None:
+            return []
+        if not bind_host_is_wildcard(self.host):
+            return []
+        origin = machine_origin(self.port)
+        if origin is None:
+            return []
+        return [("Machine URL:  ", origin), ("Viewer URL:   ", f"{origin}{VIEWER_QUERY}")]
 
     def start(self, blocking: bool = True):
         """Start this single-use server."""
@@ -248,7 +276,11 @@ class CellucidServer:
 
             if not self.quiet:
                 print_success("Server ready")
-                print_server_banner(self.url, self.viewer_url)
+                print_server_banner(
+                    self.url,
+                    self.viewer_url,
+                    network_urls=self.network_urls,
+                )
 
             if blocking:
                 if self.open_browser and webbrowser.open(self.viewer_url) is not True:

@@ -70,6 +70,8 @@ class AnnDataViewer(BaseViewer):
         dataset_id: str,
         obs_keys: Sequence[str] | None = None,
         vector_field_default: str | None = None,
+        serve_connectivity: bool = False,
+        serve_vector_fields: bool = False,
         client_server_url: str | None = None,
         web_source_url: str = CELLUCID_WEB_URL,
         web_cache_dir: str | Path | None = None,
@@ -101,6 +103,13 @@ class AnnDataViewer(BaseViewer):
                 Cellucid cannot serve, such as a ``datetime64`` collection date.
             vector_field_default: Exact field id required when multiple UMAP
                 vector fields exist.
+            serve_connectivity: Whether to read, validate, and serve
+                ``adata.obsp['connectivities']``. False by default, because
+                building the edge list is the longest part of opening a large
+                object and most sessions never draw the graph.
+            serve_vector_fields: Whether to read, validate, and serve the
+                ``<field>_umap_<n>d`` vector arrays in ``obsm``. False by default,
+                for the same reason as ``serve_connectivity``.
             client_server_url: Exact browser-reachable data server base URL.
             web_source_url: Origin publishing the web asset inventory.
             web_cache_dir: Directory holding the active verified web build.
@@ -138,6 +147,8 @@ class AnnDataViewer(BaseViewer):
                 dataset_id=dataset_id,
                 obs_keys=obs_keys,
                 vector_field_default=vector_field_default,
+                serve_connectivity=serve_connectivity,
+                serve_vector_fields=serve_vector_fields,
             )
             self._activate()
 
@@ -159,6 +170,8 @@ class AnnDataViewer(BaseViewer):
         dataset_id: str,
         obs_keys: Sequence[str] | None,
         vector_field_default: str | None,
+        serve_connectivity: bool,
+        serve_vector_fields: bool,
     ) -> None:
         """Start the AnnData server."""
         from ..anndata_server import AnnDataServer
@@ -182,6 +195,8 @@ class AnnDataViewer(BaseViewer):
             dataset_id=dataset_id,
             obs_keys=obs_keys,
             vector_field_default=vector_field_default,
+            serve_connectivity=serve_connectivity,
+            serve_vector_fields=serve_vector_fields,
         )
         self._server.start_background()
         self.port = self._server.port
@@ -232,6 +247,8 @@ def show_anndata(
     dataset_id: str,
     obs_keys: Sequence[str] | None = None,
     vector_field_default: str | None = None,
+    serve_connectivity: bool = False,
+    serve_vector_fields: bool = False,
     client_server_url: str | None = None,
     web_source_url: str = CELLUCID_WEB_URL,
     web_cache_dir: str | Path | None = None,
@@ -264,6 +281,13 @@ def show_anndata(
             cannot serve, such as a ``datetime64`` collection date.
         vector_field_default: Exact field id required when multiple UMAP
             vector fields exist.
+        serve_connectivity: Whether to read, validate, and serve
+            ``adata.obsp['connectivities']``. False by default, because building
+            the edge list is the longest part of opening a large object and most
+            sessions never draw the graph.
+        serve_vector_fields: Whether to read, validate, and serve the
+            ``<field>_umap_<n>d`` vector arrays in ``obsm``. False by default, for
+            the same reason as ``serve_connectivity``.
         client_server_url: Exact browser-reachable data server base URL.
         web_source_url: Origin publishing the web asset inventory.
         web_cache_dir: Directory holding the active verified web build.
@@ -318,6 +342,8 @@ def show_anndata(
         dataset_id=dataset_id,
         obs_keys=obs_keys,
         vector_field_default=vector_field_default,
+        serve_connectivity=serve_connectivity,
+        serve_vector_fields=serve_vector_fields,
         client_server_url=client_server_url,
         web_source_url=web_source_url,
         web_cache_dir=web_cache_dir,

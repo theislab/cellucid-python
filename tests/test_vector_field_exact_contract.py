@@ -88,6 +88,7 @@ def _adapter(
         dataset_name="Exact vector fields",
         dataset_id="exact-vector-fields",
         vector_field_default=vector_field_default,
+        serve_vector_fields=True,
     )
 
 
@@ -182,6 +183,7 @@ def test_vector_field_default_dimension_is_highest_available_dimension(
         adata,
         dataset_name="Exact vector dimensions",
         dataset_id="exact-vector-dimensions",
+        serve_vector_fields=True,
     )
     direct_field = adapter.get_dataset_identity()["vector_fields"]["fields"]["velocity_umap"]
     assert direct_field["available_dimensions"] == [2, 3]
@@ -209,6 +211,7 @@ def test_dataset_default_dimension_is_highest_declared_dimension(
         adata,
         dataset_name="Exact dataset dimensions",
         dataset_id="exact-dataset-dimensions",
+        serve_vector_fields=True,
     )
     direct_embeddings = adapter.get_dataset_identity()["embeddings"]
     assert direct_embeddings["available_dimensions"] == [1, 2, 3]
@@ -525,6 +528,7 @@ def test_anndata_revalidates_vector_values_after_initialization() -> None:
         adata,
         dataset_name="Mutable vector field",
         dataset_id="mutable-vector-field",
+        serve_vector_fields=True,
     )
     adata.obsm["velocity_umap_2d"] = np.full(
         (3, 2),

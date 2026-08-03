@@ -159,9 +159,92 @@ def test_real_pancreas_server_and_jupyter_evidence_is_wired_into_the_guides() ->
 
     # The direct-AnnData startup prints a different URL from the prepared one, and
     # both are transcribed, so neither can quietly become the other.
-    assert "$ cellucid serve lung_atlas.h5ad \\" in server_guide
-    assert "[1/4] Detecting format..." in server_guide
+    assert "$ cellucid serve pbmc_demo.h5ad \\" in server_guide
     assert "Mode: read-only backed h5ad" in server_guide
+
+    # The prepared-export server runs three steps; the direct-AnnData server runs
+    # five. The step counts are the part of a transcript that goes stale first,
+    # because a new reported phase renumbers every line after it, so every
+    # numbered header of both transcripts is pinned here.
+    for prepared_step in (
+        "[1/3] Validating dataset...",
+        "[2/3] Loading dataset info...",
+        "[3/3] Starting server...",
+    ):
+        assert prepared_step in server_guide
+    for anndata_step in (
+        "[1/5] Detecting format...",
+        "[2/5] Loading AnnData...",
+        "[3/5] Analyzing dataset...",
+        "[4/5] Building manifests...",
+        "[5/5] Starting server...",
+    ):
+        assert anndata_step in server_guide
+    assert "runs five numbered steps instead of three" in server_guide
+    assert "[1/4]" not in server_guide
+    assert "[4/4]" not in server_guide
+
+    # Step 2 reports the adapter build as it happens. A silent minute in a
+    # startup that takes minutes is the complaint these lines answer, so the
+    # page has to quote the labels a reader will actually be staring at. A
+    # capability that was not asked for reports nothing here, because nothing
+    # was read: its state is named once, in step 3.
+    for step_two_line in (
+        "      Obs columns: classifying 3",
+        "      Embeddings: resolving obsm keys",
+        "      Embeddings: 2D from obsm['X_umap']",
+        "      Connectivity: reading obsp['connectivities']",
+    ):
+        assert step_two_line in server_guide
+    assert "      Centroids: one per categorical field and dimension" in server_guide
+
+    # Both optional capabilities report their own state in step 3, so a reader
+    # can tell a graph they own from a graph they lack, and likewise an overlay.
+    assert "      Vector fields: no" in server_guide
+    assert "      Connectivity: not served (obsp['connectivities'] is present" in server_guide
+
+    # A bare ``X_umap`` is read at the dimension its own column count states.
+    # Describing that as anything other than a rule about width invites the
+    # reader to rename a key that does not need renaming.
+    normalized_server_guide = " ".join(server_guide.split())
+    assert "read at the dimension its own column count states" in normalized_server_guide
+    assert "`X_umap_1d`, `X_umap_2d`, and `X_umap_3d` each name their own dimension" in (
+        normalized_server_guide
+    )
+    assert "A bare `X_umap` of any other width is refused" in normalized_server_guide
+    assert "has shape (4096, 10)" in server_guide
+
+    # Connectivity on the direct-AnnData path is opt-in, and its report has
+    # three states rather than two. ``not served`` is the one that goes missing
+    # first, because it is the state that only exists now.
+    assert "Connectivity: yes (35,167 edges)" in server_guide
+    assert (
+        "Connectivity: not served (obsp['connectivities'] is present; pass "
+        "serve_connectivity=True, or --connectivity, to draw it)"
+    ) in server_guide
+    assert "Connectivity: no`" in server_guide
+    assert "--connectivity" in server_guide
+    assert "serve_connectivity=True" in server_guide
+    assert "Off by default" in server_guide
+    # Any page naming the source-index payload must name the weights too.
+    assert "connectivity/edges.src.bin" in server_guide
+    assert "edges.weights.f64.bin" in server_guide
+    assert "Float64 weight" in server_guide
+
+    # A wildcard bind prints an origin a browser can open, never the wildcard.
+    assert "Bound to every network interface. From another machine:" in server_guide
+    assert "Local URL:    http://0.0.0.0" not in server_guide
+    assert "Viewer URL:   http://0.0.0.0" not in server_guide
+    assert "Machine URL:  http://compute-node-42:8765" in server_guide
+    assert "ssh -N -L 8765:compute-node-42:8765 you@login-node" in server_guide
+    assert (
+        "{doc}`../../python_package/d_viewing_apis/"
+        "12_remote_servers_ssh_tunneling_and_cloud`"
+    ) in server_guide
+
+    # ``cellucid serve`` no longer answers every ImportError with pip install.
+    assert "no package installs a standard-library module" in normalized_server_guide
+    assert "pip install --upgrade <name>" in server_guide
 
     jupyter_guide = _read(JUPYTER_GUIDE)
     assert "Pancreas Jupyter walkthrough" in jupyter_guide

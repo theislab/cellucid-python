@@ -155,14 +155,22 @@ http://127.0.0.1:8765/?anndata=true
 
 ### `.h5ad` minimum requirements
 
-Your `.h5ad` must include at least one embedding:
+Your `.h5ad` must include at least one embedding. A key that names its own
+dimension always decides that dimension:
 
 - `obsm['X_umap_1d']` with shape `(n_cells, 1)`
 - `obsm['X_umap_2d']` with shape `(n_cells, 2)`
 - `obsm['X_umap_3d']` with shape `(n_cells, 3)`
 
-The key is part of the data contract: Cellucid does not infer the dimension
-from an unsuffixed key or from the array shape.
+If your file declares none of those three and carries the plain `X_umap` that
+`sc.tl.umap()` writes, that array is read at the dimension its own column count
+states — 1, 2, or 3 columns. So an `.h5ad` straight out of Scanpy loads here as
+written, with nothing renamed. An array of any other width names a dimension no
+viewer draws and is refused, with its shape reported.
+
+A dimensional key takes precedence: if one is present anywhere in `obsm`, the
+plain key never joins the set. This is the same rule the Python package applies,
+so one file opens the same way in this picker and through `cellucid serve`.
 
 Optional (but highly recommended):
 - `obs` columns for coloring and filtering
@@ -217,7 +225,11 @@ name, so renaming a file never makes it loadable.
 :width: 760px
 
 The message lists the `obsm` keys your file *does* have — here only `X_pca` —
-so you can see at a glance what to rename or recompute.
+so you can see at a glance what to rename or recompute. `X_pca` is refused
+whatever its width: only a key that names a UMAP dimension, or the plain
+`X_umap`, is read as an embedding. The current wording is “No UMAP embedding
+this viewer can read was found in obsm”, and it names the plain `X_umap` among
+the keys it accepts.
 ```
 
 ### The file is bigger than the browser ceiling
@@ -313,7 +325,10 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 
 **Likely causes**
 - None of the exact supported keys—`obsm['X_umap_1d']`,
-  `obsm['X_umap_2d']`, or `obsm['X_umap_3d']`—is present.
+  `obsm['X_umap_2d']`, or `obsm['X_umap_3d']`—is present, **and** there is no
+  plain `X_umap` of 1, 2, or 3 columns either.
+- Or there is a plain `X_umap`, but it is wider than 3 columns — a latent space
+  named after a plot. The message reports its shape.
 
 **How to confirm**
 - Read the message itself: it ends with `Available obsm keys: …`, which lists
@@ -325,9 +340,11 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
   ```
 
 **Fix**
-- Store each embedding under the key matching its exact column count. For
-  example, a two-column UMAP belongs at `obsm['X_umap_2d']`.
-- Compute UMAP and store it under one of the supported keys.
+- Compute a UMAP. `sc.tl.umap(adata)` writes the plain `X_umap`, which this
+  picker reads as written.
+- To serve more than one dimension from the same file, store each embedding under
+  the key matching its exact column count: a two-column UMAP at
+  `obsm['X_umap_2d']`, a three-column one at `obsm['X_umap_3d']`.
 
 ---
 

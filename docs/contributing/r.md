@@ -49,7 +49,7 @@ is where that workflow is specified; do not infer it from anywhere else.
 
 The documentation site is built from `cellucid-python/docs/`, so an R
 documentation change on this site is a pull request against `cellucid-python`,
-not against `cellucid-r`. The R pages are {doc}`../user_guide/r_package/index`
+not against `cellucid-r`. The R pages are {doc}`/user_guide/r_package/index`
 (`cellucid-python/docs/user_guide/r_package/`).
 
 The R package's own documentation — `man/`, `vignettes/`, and
@@ -62,7 +62,7 @@ reference as a `{doc}` role, never in bare backticks — a backtick is inline
 literal text that Sphinx will not resolve, so a wrong target renders as plain
 text and survives the `-W` build. The rule, the relative-path form, and where
 backticks are still correct are in
-{doc}`../user_guide/python_package/h_developer_docs/15_docs_development_and_style_guide`.
+{doc}`/user_guide/python_package/h_developer_docs/15_docs_development_and_style_guide`.
 
 The reverse also holds: `cellucid-r/CONTRIBUTING.md` is read on GitHub, where a
 `{doc}` role is meaningless, so references from that file are written as

@@ -55,6 +55,16 @@ Rule of thumb:
 - If you can smoothly play modern 3D web content, you can usually run Cellucid demo datasets.
 - For “millions of points + lots of interaction”, a discrete GPU is strongly recommended.
 
+**Multisampling is optional, not required.** Antialiasing is drawn by the app
+rather than requested from the browser, so a device that cannot multisample still
+runs Cellucid — it just draws harder point edges. When that is the case, the line
+under `Antialiasing (smooth point edges)` reads (exact):
+
+- `This browser is not providing antialiasing for this view.`
+
+There is nothing to fix in the app if you see it; the setting has no effect on
+that device.
+
 ### Input devices (what is expected)
 
 - Mouse or trackpad recommended.
@@ -223,9 +233,13 @@ Cellucid shows an overlay and requires a reload when the GPU context is lost.
 - Reduce the number of views (clear snapshots) — note that a two- or three-view
   row costs more than the 2×2 four-view grid.
 - Lower `Point size (log):` and avoid very large point sizes.
-- Turn off `Antialiasing (smooth point edges)` under **Image quality** and
-  reload — measured at roughly a fifth of the frame time at the default point
-  size on one Apple M1 Pro, at the cost of visibly harder point edges.
+- Turn off `Antialiasing (smooth point edges)` under **Image quality** — it
+  applies to the next frame, and was measured at roughly a fifth of the frame
+  time at point size 0.75 on one Apple M1 Pro, at the cost of visibly harder
+  point edges. Look at the box before you reach for it: until you click it, the
+  choice is automatic from the cell count — on below 5,000,000 cells, off at or
+  above — so on a large dataset it is already clear and there is nothing left to
+  turn off.
 - If using smoke: reduce grid density, ray quality, and render resolution.
 
 Lowering `Shader quality:` is a reasonable-sounding move that does **not** help:

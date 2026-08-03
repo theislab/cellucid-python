@@ -46,6 +46,28 @@ This is the recommended path for:
 - quick exploration,
 - iterating on preprocessing before committing to an export.
 
+The important word is **every**. Nothing in that list is written down between
+sessions, which is the whole argument for exporting once.
+
+Two of those costs are worth carrying as a mental model, because they are the
+ones that scale:
+
+- **Building the adapter** — classifying obs columns, resolving the embedding,
+  computing one centroid per category per dimension. Proportional to the object,
+  redone on every direct-AnnData startup, and absent from the prepared-export
+  path entirely.
+- **Reading the neighbor graph** — proportional to stored neighbors, not to
+  cells, so it grows fastest of all. It is therefore asked for rather than
+  assumed: off unless you pass `serve_connectivity=True`, or `--connectivity`.
+
+Startup reports five numbered steps so a long pause has a label above it rather
+than looking like a hang; the second is the adapter build and the fourth is the
+centroid and manifest pass. A prepared export runs three steps, because the
+artifacts already exist.
+
+For the step-by-step cost breakdown, the graph arithmetic, and the transcript,
+see {doc}`../d_viewing_apis/14_performance_scaling_and_lazy_loading`.
+
 ---
 
 ## The bottleneck map (what can be slow)
@@ -116,6 +138,11 @@ These are guidelines, not hard limits. Hardware, browser, and field complexity m
 - Prefer export-first for reliable UX.
 - Avoid browser file picker for huge folders unless you’ve tested the browser/OS combination.
 - Consider server mode + SSH tunneling for remote workflows.
+- Leave connectivity off unless the session will draw the graph.
+
+Direct AnnData is the right tool while preprocessing is still moving. Once the
+object stops changing, export it: an export pays the adapter build and the
+centroids once instead of once per session.
 
 ---
 
@@ -145,7 +172,8 @@ Tradeoffs:
 
 AnnData mode optimizes for interactive convenience, but there are real costs:
 - the adapter may build extra structures for fast gene access (e.g., CSC caches),
-- gene expression results are cached in an LRU (helps repeated gene queries),
+- gene expression results are cached in an LRU bounded by a 256 MiB budget (helps
+  repeated gene queries without growing without limit),
 - `.h5ad` paths are opened read-only-backed; `.zarr` paths are loaded eagerly.
 
 If you hit memory ceilings, export-first is usually the right move.
@@ -212,6 +240,25 @@ Fix:
 - diagnose source download or generation-directory throughput,
 - export-first with compression/quantization,
 - move data to faster storage.
+
+### Symptom: “Startup sat there for minutes with nothing happening”
+
+Likely causes:
+- connectivity was asked for on a very large object, and the graph is being
+  validated,
+- centroids are being computed for many categorical fields across several
+  dimensions,
+- the viewer generation is being fetched on a cold cache.
+
+How to confirm:
+- read the last line printed. Each of the five steps names the phase it is in,
+  and step 2 names each part of the adapter build as it starts.
+
+Fix:
+- drop `serve_connectivity=True` / `--connectivity` if the session will not draw
+  the graph,
+- narrow the served obs columns with `obs_keys=` / `--obs-key`,
+- export once and serve the export for every session after.
 
 ### Symptom: “Interactions lag when I scrub sliders”
 

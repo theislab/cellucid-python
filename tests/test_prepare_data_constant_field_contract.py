@@ -19,6 +19,8 @@ import json
 import numpy as np
 import pandas as pd
 import pytest
+
+from cellucid.continuous_payload_diagnosis import NonFinitePayloadError
 from scipy import sparse
 
 from cellucid import prepare
@@ -439,7 +441,10 @@ def test_nonfinite_gene_values_are_rejected_before_any_file_is_written(tmp_path,
 
     monkeypatch.setattr(prepare_generation, "_write_binary", _forbidden_write)
 
-    with pytest.raises(ValueError, match="Gene 'GENE11' expression must contain only finite values"):
+    # The refusal counts rather than merely names: one NaN in eighteen million
+    # cells and every cell NaN were the same message before, and they want
+    # opposite responses.
+    with pytest.raises(NonFinitePayloadError) as refusal:
         prepare(
             latent_space=latent,
             obs=obs,
@@ -457,3 +462,15 @@ def test_nonfinite_gene_values_are_rejected_before_any_file_is_written(tmp_path,
             compression=6,
             force=True,
         )
+
+    diagnosis = refusal.value.diagnosis
+    assert diagnosis.kind == "gene"
+    assert diagnosis.name == "GENE11"
+    assert diagnosis.nan == 1
+    assert diagnosis.positive_infinity == 0
+    assert diagnosis.negative_infinity == 0
+    assert diagnosis.examples == (3,)
+    assert diagnosis.total == expression.shape[0]
+    assert "1 NaN" in str(refusal.value)
+    assert "First affected cell: 3" in str(refusal.value)
+    assert "np.nan_to_num" in str(refusal.value)

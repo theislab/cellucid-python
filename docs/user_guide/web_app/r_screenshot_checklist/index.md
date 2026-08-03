@@ -3,7 +3,7 @@
 Working material, not published. ``docs/conf.py`` excludes this directory from
 the Sphinx build.
 
-**Start with ``00_capture_tooling_and_conventions.md``.** It has the tool, the
+**Start with `{doc}`00_capture_tooling_and_conventions``.** It has the tool, the
 size rule, the contract the Python suite enforces, and every trap found while
 building it. Nothing here is useful until you have read that.
 
@@ -11,13 +11,13 @@ building it. Nothing here is useful until you have read that.
 
 | File | Sections | Pages | Form |
 | --- | --- | ---: | --- |
-| ``00_capture_tooling_and_conventions.md`` | how to capture, size rules, traps, validation | — | current |
-| ``01_pages_orientation_data_loading.md`` | A orientation · B data loading · G · Q troubleshooting | 20 | **assignment** |
-| ``02_pages_interactions_fields_filtering.md`` | C core interactions · D fields/colouring/legends · E filtering | 25 | status record |
-| ``03_pages_selection_analysis_accessibility.md`` | F highlighting/selection · H analysis · O accessibility/privacy | 23 | **assignment** |
-| ``04_pages_velocity_annotation_export.md`` | I velocity · J community annotation · K figure export | 23 | **assignment** |
-| ``05_pages_sessions_performance.md`` | L sessions/sharing · N benchmarking/performance | 23 | **assignment** |
-| ``06_pages_developer.md`` | P developer docs | 20 | **assignment** |
+| `{doc}`00_capture_tooling_and_conventions`` | how to capture, size rules, traps, validation | — | current |
+| `{doc}`01_pages_orientation_data_loading`` | A orientation · B data loading · G · Q troubleshooting | 20 | **assignment** |
+| `{doc}`02_pages_interactions_fields_filtering`` | C core interactions · D fields/colouring/legends · E filtering | 25 | status record |
+| `{doc}`03_pages_selection_analysis_accessibility`` | F highlighting/selection · H analysis · O accessibility/privacy | 23 | **assignment** |
+| `{doc}`04_pages_velocity_annotation_export`` | I velocity · J community annotation · K figure export | 23 | **assignment** |
+| `{doc}`05_pages_sessions_performance`` | L sessions/sharing · N benchmarking/performance | 23 | **assignment** |
+| `{doc}`06_pages_developer`` | P developer docs | 20 | **assignment** |
 
 Each per-page record in an **assignment** file carries: the page path, what it
 explains, what figure it had *when the audit was written*, a verdict, and — for
@@ -72,10 +72,10 @@ after, crop target, cursor position, filename.
 
 | Lifecycle | File | Steps | Notes |
 | --- | --- | ---: | --- |
-| Selection | ``03_pages_selection_analysis_accessibility.md`` | 17 | idle → lasso drag → combine → undo → KNN → proximity → annotation → a named page reused downstream |
-| Analysis | ``03_pages_selection_analysis_accessibility.md`` | 19 | two named pages → six modes → configure → run → result → expanded modal → export |
-| Community annotation | ``04_pages_velocity_annotation_export.md`` | 18 | disconnected → connect → authenticated → browse → propose → vote → consensus → publish |
-| Session save and restore | ``05_pages_sessions_performance.md`` | 14 (+1 failure) | configure a non-trivial state → save → the artifact → reset → restore → a comparable pair |
+| Selection | `{doc}`03_pages_selection_analysis_accessibility`` | 17 | idle → lasso drag → combine → undo → KNN → proximity → annotation → a named page reused downstream |
+| Analysis | `{doc}`03_pages_selection_analysis_accessibility`` | 19 | two named pages → six modes → configure → run → result → expanded modal → export |
+| Community annotation | `{doc}`04_pages_velocity_annotation_export`` | 18 | disconnected → connect → authenticated → browse → propose → vote → consensus → publish |
+| Session save and restore | `{doc}`05_pages_sessions_performance`` | 14 (+1 failure) | configure a non-trivial state → save → the artifact → reset → restore → a comparable pair |
 
 Three things to carry from them:
 

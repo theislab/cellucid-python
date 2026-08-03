@@ -204,10 +204,11 @@ them — the panel and the renderer agree.
 
 :::{important}
 That last sentence is the point of the check, and it is worth doing once
-yourself. These four controls previously restored into the panel without ever
-reaching the renderer, so a restored session could show `Light` in the dropdown
-while the viewer kept drawing at `Full`. The controls now belong to the module
-that owns them, which is built early enough in startup to hear the restore.
+yourself. A control counts as restored only when the thing it drives has
+followed it: a panel showing `Light` in the dropdown while the viewer keeps
+drawing at `Full` is a failed restore, not a cosmetic mismatch. Each of these
+four controls belongs to the module that owns it, and that module is built
+early enough in startup to hear the restore and act on it.
 
 If you ever see a restored control whose effect has not followed it, that is a
 defect worth reporting, not something to work around — the restore is supposed

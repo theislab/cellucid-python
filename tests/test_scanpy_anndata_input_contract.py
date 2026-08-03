@@ -1,8 +1,10 @@
 """The AnnData entry points must be usable on what Scanpy actually produces.
 
-``sc.tl.umap()`` writes ``adata.obsm['X_umap']`` and cohort metadata routinely
-carries a ``datetime64`` column. Neither can be served as-is, so each has to
-fail where the user can act on it and name the exact action.
+``sc.tl.umap()`` writes ``adata.obsm['X_umap']``, which names no dimension. That
+object is served as written: the key resolves to the dimension its own column
+count states. Cohort metadata routinely carries a ``datetime64`` column, which
+cannot be served at all, so that one has to fail where the user can act on it
+and name the exact action.
 """
 
 from __future__ import annotations
@@ -52,33 +54,59 @@ def _adapter(adata: AnnData, **kwargs: object) -> AnnDataAdapter:
     )
 
 
-def test_unsuffixed_scanpy_umap_names_the_key_the_shape_and_the_one_line_fix() -> None:
-    adata = _scanpy_shaped_adata()
+@pytest.mark.parametrize("dimension", [1, 2, 3])
+def test_unsuffixed_scanpy_umap_is_served_at_its_own_column_count(dimension: int) -> None:
+    adata = _scanpy_shaped_adata(dimension=dimension)
+    before = set(adata.obsm)
+
+    adapter = _adapter(adata)
+    try:
+        assert adapter.get_dataset_identity()["embeddings"]["available_dimensions"] == [dimension]
+        assert adapter.get_embedding(dimension).shape == (N_CELLS, dimension)
+        # The object the caller passed is the object the caller keeps: nothing
+        # is written back into obsm to make this work.
+        assert set(adata.obsm) == before
+        assert "X_umap_2d" not in adata.obsm
+    finally:
+        adapter.close()
+
+
+def test_an_explicit_dimensional_key_decides_over_the_unsuffixed_one() -> None:
+    adata = _scanpy_shaped_adata(dimension=3)
+    adata.obsm["X_umap_2d"] = np.linspace(
+        -1.0,
+        1.0,
+        N_CELLS * 2,
+        dtype=np.float32,
+    ).reshape(N_CELLS, 2)
+
+    adapter = _adapter(adata)
+    try:
+        # The declared key wins outright: a writer that named dimensions meant
+        # to, and the 3-column X_umap does not silently join the set.
+        identity = adapter.get_dataset_identity()
+        assert identity["embeddings"]["available_dimensions"] == [2]
+    finally:
+        adapter.close()
+
+
+def test_an_unsuffixed_umap_of_an_unreadable_width_names_its_own_shape() -> None:
+    adata = _scanpy_shaped_adata(dimension=2)
+    adata.obsm["X_umap"] = np.zeros((N_CELLS, 10), dtype=np.float32)
 
     with pytest.raises(ValueError) as error:
         _adapter(adata)
 
     message = str(error.value)
-    # The key it found, the shape it found, and the exact key it wants.
     assert "'X_umap'" in message
-    assert f"({N_CELLS}, 2)" in message
+    assert f"({N_CELLS}, 10)" in message
     assert "X_umap_2d" in message
-    # The fix is a complete statement, not a description of one.
-    fix = 'adata.obsm["X_umap_2d"] = adata.obsm[\'X_umap\']'
-    assert fix in message
-
-    # Executing exactly the suggested statement makes the same object work.
-    exec(fix, {"adata": adata})  # noqa: S102
-    adapter = _adapter(adata)
-    try:
-        assert adapter.get_embedding(2).shape == (N_CELLS, 2)
-    finally:
-        adapter.close()
 
 
 def test_every_unsuffixed_embedding_candidate_is_offered_with_its_own_dimension() -> None:
-    adata = _scanpy_shaped_adata(obsm_key="X_umap", dimension=3)
-    adata.obsm["X_tsne"] = np.zeros((N_CELLS, 2), dtype=np.float32)
+    # No X_umap at all, so nothing resolves and every candidate is offered.
+    adata = _scanpy_shaped_adata(obsm_key="X_tsne", dimension=2)
+    adata.obsm["X_phate"] = np.zeros((N_CELLS, 3), dtype=np.float32)
     # Too wide to be an embedding, so it must not be offered as one.
     adata.obsm["X_scvi"] = np.zeros((N_CELLS, 10), dtype=np.float32)
 
@@ -86,11 +114,17 @@ def test_every_unsuffixed_embedding_candidate_is_offered_with_its_own_dimension(
         _adapter(adata)
 
     message = str(error.value)
-    assert 'adata.obsm["X_umap_3d"] = adata.obsm[\'X_umap\']' in message
     assert 'adata.obsm["X_umap_2d"] = adata.obsm[\'X_tsne\']' in message
+    assert 'adata.obsm["X_umap_3d"] = adata.obsm[\'X_phate\']' in message
     assert "X_scvi" not in message.split("Fix:")[1]
-    # Scanpy's own key is the one a first-time user almost always means.
-    assert message.index("'X_umap'") < message.index("'X_tsne'")
+
+    # Executing exactly the suggested statement makes the same object work.
+    exec('adata.obsm["X_umap_2d"] = adata.obsm[\'X_tsne\']', {"adata": adata})  # noqa: S102
+    adapter = _adapter(adata)
+    try:
+        assert adapter.get_embedding(2).shape == (N_CELLS, 2)
+    finally:
+        adapter.close()
 
 
 def test_declared_vector_field_keys_are_never_offered_as_embedding_renames() -> None:
@@ -103,10 +137,25 @@ def test_declared_vector_field_keys_are_never_offered_as_embedding_renames() -> 
     assert "velocity_umap_2d" not in message.split("Available obsm keys:")[0]
 
 
-def test_transition_drift_helper_gives_the_same_declaration_hint() -> None:
+def test_transition_drift_helper_reads_the_same_unsuffixed_key() -> None:
     from cellucid.vector_fields import add_transition_drift_to_obsm
 
     adata = _scanpy_shaped_adata()
+
+    # The helper resolves X_umap exactly as the adapter does, so one object
+    # cannot be servable and undriftable at the same time.
+    written = add_transition_drift_to_obsm(
+        adata,
+        np.eye(N_CELLS, dtype=np.float32),
+        normalize_rows=False,
+    )
+    assert written == "T_fwd_umap_2d"
+
+
+def test_transition_drift_helper_gives_the_same_declaration_hint() -> None:
+    from cellucid.vector_fields import add_transition_drift_to_obsm
+
+    adata = _scanpy_shaped_adata(obsm_key="X_tsne", dimension=2)
 
     with pytest.raises(ValueError) as error:
         add_transition_drift_to_obsm(
@@ -115,7 +164,7 @@ def test_transition_drift_helper_gives_the_same_declaration_hint() -> None:
             normalize_rows=False,
         )
 
-    assert 'adata.obsm["X_umap_2d"] = adata.obsm[\'X_umap\']' in str(error.value)
+    assert 'adata.obsm["X_umap_2d"] = adata.obsm[\'X_tsne\']' in str(error.value)
 
 
 def test_unservable_obs_dtype_fails_at_construction_and_names_the_escape_hatch() -> None:

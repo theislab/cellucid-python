@@ -44,8 +44,8 @@ All notebook/tutorial docs in this section live here:
 
 This folder contains:
 - narrative tutorial pages (`.md`)
-- `prepare_pancreas.ipynb`, which builds and validates a compact prepared export
-- `jupyter_pancreas.ipynb`, which exercises embedding, hooks, and sessions
+- {doc}`prepare_pancreas`, which builds and validates a compact prepared export
+- {doc}`jupyter_pancreas`, which exercises embedding, hooks, and sessions
 - a checked-in real Pancreas H5AD in `datasets/`
 
 ## The one mental model that explains 90% of issues

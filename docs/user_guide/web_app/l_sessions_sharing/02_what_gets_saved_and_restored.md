@@ -107,16 +107,33 @@ panel showing something the viewer never accepted.
 :::
 
 :::{note}
-**`Antialiasing (smooth point edges)` is the one exception, and it says so on
-screen.** It is recorded in a session, but loading one **never changes it**.
-Antialiasing is a property of the machine drawing the picture: the browser fixes
-it when it creates the drawing buffer, so it cannot change while the page is
-open, and your choice is stored in this browser rather than in the file.
+**`Antialiasing (smooth point edges)` is the one exception.** It is recorded in
+a session, but loading one **never changes it**, for two reasons.
 
-That means a session you open — including the starting view every built-in
-sample publishes — keeps *your* setting rather than the one whoever saved it was
-using. It also means the setting stays where you put it: turn it off, reload,
-and it is still off. Nothing else in a session behaves this way.
+It describes the machine you are sitting at rather than the analysis you are
+doing, and your choice is stored in this browser rather than in the file.
+
+And it has three states while a checkbox has two. The stored preference is
+`auto` — the default, and what no stored preference means — or `on`, or `off`.
+Under `auto`, Cellucid decides from the size of the dataset you have open: on
+below 5,000,000 cells, off at or above. It re-decides on every dataset
+publication, because datasets are switched in place. Clicking the box ends
+automatic selection permanently, in both directions. A captured tick could only
+ever replay as `on` or `off`, which would turn “let the dataset decide” into a
+choice you never made.
+
+So a session you open — including the starting view every built-in sample
+publishes — keeps your choice, or the dataset's choice when you have not made
+one, rather than the setting whoever saved the file was using. The status line
+under the control tells you which you are on: it reads `Chosen automatically:
+<n> cells.` while the dataset is deciding, and nothing at all once you have
+clicked the box. (It reads `This browser is not providing antialiasing for this
+view.` when the device cannot multisample.)
+
+The control itself is live — a change applies to the next frame, and no reload
+is involved anywhere — and your click persists across reloads because the
+preference is stored in this browser. Nothing else in a session behaves this
+way.
 :::
 
 The four renderer settings are the easiest instance of this to check yourself,

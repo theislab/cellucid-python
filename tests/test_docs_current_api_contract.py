@@ -596,12 +596,22 @@ def test_documented_multi_field_vector_defaults_use_exact_runtime_field_ids() ->
 
 
 def test_documented_embedding_requirements_use_exact_current_keys() -> None:
-    requirement_pages = [
+    """Two paths read embeddings, and each page must state its own rule.
+
+    ``prepare()`` takes arrays through its ``X_umap_<n>d=`` arguments and reads no
+    ``obsm`` key at all, so a preparation page that shows ``obsm['X_umap']`` as a
+    supported input is describing a contract that does not exist. The readers --
+    the Python serve path and the browser's own file picker -- do read that key,
+    at the dimension its column count states, so their pages must say so.
+    """
+    reader_pages = [
         DOCS_ROOT
         / "user_guide"
         / "web_app"
         / "b_data_loading"
         / "03_browser_file_picker_tutorial.md",
+    ]
+    preparation_pages = [
         DOCS_ROOT
         / "user_guide"
         / "python_package"
@@ -614,6 +624,7 @@ def test_documented_embedding_requirements_use_exact_current_keys() -> None:
         / "02_input_requirements_global.md",
         DOCS_ROOT / "user_guide" / "python_package" / "c_data_preparation_api" / "index.md",
     ]
+    requirement_pages = [*reader_pages, *preparation_pages]
     exact_keys = ("X_umap_1d", "X_umap_2d", "X_umap_3d")
 
     failures: list[str] = []
@@ -623,11 +634,24 @@ def test_documented_embedding_requirements_use_exact_current_keys() -> None:
         for key in exact_keys:
             if key not in text:
                 failures.append(f"{relative}: omits current embedding key {key!r}")
+
+    for path in preparation_pages:
+        text = path.read_text(encoding="utf-8")
+        relative = path.relative_to(REPOSITORY_ROOT)
         for unsupported_access in ("obsm['X_umap']", 'obsm["X_umap"]'):
             if unsupported_access in text:
                 failures.append(
                     f"{relative}: presents unsupported embedding access {unsupported_access!r}"
                 )
+
+    for path in reader_pages:
+        text = path.read_text(encoding="utf-8")
+        relative = path.relative_to(REPOSITORY_ROOT)
+        if "X_umap" not in text or "column count" not in text:
+            failures.append(
+                f"{relative}: must state that a plain X_umap is read at the "
+                "dimension its column count states"
+            )
 
     overview = requirement_pages[1].read_text(encoding="utf-8")
     for required_minimum_artifact in (

@@ -56,9 +56,23 @@ def test_add_transition_drift_to_obsm_infers_dim_from_explicit_key():
     assert np.allclose(adata.obsm[key], 0)
 
 
-def test_add_transition_drift_to_obsm_rejects_generic_umap_key():
+def test_add_transition_drift_to_obsm_reads_the_generic_umap_key_by_width():
     adata = ad.AnnData(X=np.zeros((3, 0), dtype=np.float32))
     adata.obsm["X_umap"] = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+    T = np.eye(3, dtype=np.float32)
+    key = add_transition_drift_to_obsm(
+        adata,
+        T,
+        basis="umap",
+        field_prefix="T_fwd",
+        normalize_rows=False,
+    )
+    assert key == "T_fwd_umap_2d"
+
+
+def test_add_transition_drift_to_obsm_rejects_an_unreadable_generic_width():
+    adata = ad.AnnData(X=np.zeros((3, 0), dtype=np.float32))
+    adata.obsm["X_umap"] = np.zeros((3, 10), dtype=np.float32)
     T = np.eye(3, dtype=np.float32)
     with pytest.raises(ValueError, match="X_umap_1d.*X_umap_2d.*X_umap_3d"):
         add_transition_drift_to_obsm(

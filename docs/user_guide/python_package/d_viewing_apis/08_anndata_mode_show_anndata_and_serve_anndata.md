@@ -60,27 +60,36 @@ serve_anndata(
 
 ### 1) UMAP embedding in `adata.obsm`
 
-Cellucid reads exactly these keys:
+Each of these keys names its own dimension, and always decides it:
 
 - `X_umap_1d` (shape `(n_cells, 1)`)
 - `X_umap_2d` (shape `(n_cells, 2)`)
 - `X_umap_3d` (shape `(n_cells, 3)`)
 
-**Scanpy writes `X_umap`, without the suffix.** After `sc.tl.umap(adata)` the
-coordinates sit in `adata.obsm["X_umap"]`, which Cellucid does not read: the
-key is what declares the dimensionality. Declare it once:
+**An object that declares none of them is still served when it carries a bare
+`X_umap`** — the key `sc.tl.umap()` writes. That array is read at the dimension
+its own column count states: two columns are a 2D embedding, three columns are
+a 3D embedding, one column is a 1D embedding. The ordinary Scanpy object is
+therefore served exactly as Scanpy left it, with no rename and no edit to your
+object.
+
+Declare the dimensional keys when you want more than one dimension available at
+once, or when the coordinates you want drawn are not the ones `X_umap` holds:
 
 ```python
 adata.obsm["X_umap_2d"] = adata.obsm["X_umap"]
 ```
 
-Use `X_umap_3d` if you ran `sc.tl.umap(adata, n_components=3)`. When you serve
-a `.h5ad` or `.zarr` path rather than an in-memory object, re-save the file
-after the assignment.
+Use `X_umap_3d` if you ran `sc.tl.umap(adata, n_components=3)` and want those
+coordinates under a key of their own. When you serve a `.h5ad` or `.zarr` path
+rather than an in-memory object, re-save the file after the assignment.
 
-If nothing is declared, construction fails with
-“No supported UMAP embedding was declared in adata.obsm …”, and the message
-names every `obsm` array that could be one, with the exact statement to run.
+If nothing resolves, construction fails with
+“No UMAP embedding Cellucid can read was found in adata.obsm.”. The message
+lists the `obsm` keys the object does have; names the shape of `X_umap` when
+its width is the reason nothing resolved; and prints an exact statement to run
+for every other array that could be an embedding. The complete rules are in the
+section on which `obsm` keys are read, below.
 
 ### 2) (Optional but common) Gene expression in `adata.X`
 
@@ -111,23 +120,95 @@ show_anndata(
 `cellucid serve … --obs-key`. It also fixes the order fields appear in, and a
 column left out is not served at all.
 
-## UMAP key resolution rules (detailed, for debugging)
+## Which `obsm` keys are read (detailed, for debugging)
 
-Cellucid reads only the explicitly dimensioned keys
-`X_umap_1d`, `X_umap_2d`, and `X_umap_3d`.
+### The keys that name their own dimension
 
-### Common edge cases
+| `obsm` key | Required shape | Dimension served |
+| --- | --- | --- |
+| `X_umap_1d` | `(n_cells, 1)` | 1D |
+| `X_umap_2d` | `(n_cells, 2)` | 2D |
+| `X_umap_3d` | `(n_cells, 3)` | 3D |
 
-- `X_umap_3d` exists but has shape `(n_cells, 2)` → construction fails.
+Any combination of the three may be present, and each is served at the
+dimension its key names. The highest dimension present is the one the viewer
+opens in. A key whose array does not carry exactly the column count its name
+declares is an error, not a reinterpretation: `X_umap_3d` holding
+`(n_cells, 2)` fails construction instead of being served as 2D.
 
-- `X_umap` exists (Scanpy’s own key) → construction fails; declare it as above.
+### The bare `X_umap`, resolved by its own width
 
-### Fix pattern (recommended)
+When none of `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` is present and `obsm`
+carries `X_umap`, that one array is read at the dimension its column count
+states:
 
-Store the result under the exact key that declares its dimension:
+| `adata.obsm["X_umap"].shape` | Read as | Result |
+| --- | --- | --- |
+| `(n_cells, 1)` | 1D | served as the 1D embedding |
+| `(n_cells, 2)` | 2D | served as the 2D embedding |
+| `(n_cells, 3)` | 3D | served as the 3D embedding |
+| any other width | — | construction fails, naming the shape |
+
+`sc.tl.umap(adata)` writes two columns and `sc.tl.umap(adata, n_components=3)`
+writes three, so both are readable as written. Only one dimension comes out of
+this path, because there is only one array: to offer 2D *and* 3D in the same
+session, declare `X_umap_2d` and `X_umap_3d`.
+
+### An explicit key wins, and the bare key then stays out
+
+If any of `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` exists anywhere in `obsm`,
+the set of embeddings is exactly the dimensional keys present, and `X_umap`
+never joins it. An object holding both `X_umap_3d` and `X_umap` serves 3D only.
+That is deliberate: a writer who named a dimension named it for the whole
+object, and a second array of unknown provenance is not promoted alongside it.
+
+### Nothing in your object is renamed or written
+
+Resolution is a read. Cellucid does not assign `X_umap_1d`, `X_umap_2d`, or
+`X_umap_3d` into `adata.obsm`, does not rename `X_umap`, and does not write to
+the `.h5ad` or `.zarr` you served — an `.h5ad` is opened read-only-backed, so it
+could not. The key that resolved is reported during startup, for example
+`Embeddings: 2D from obsm['X_umap']`, so the transcript always names the array
+being drawn.
+
+### When no width is readable
+
+An `X_umap` of some other width is a latent space someone named after a plot,
+and no rename makes it drawable, so the message names its shape:
+
+```text
+No UMAP embedding Cellucid can read was found in adata.obsm. Cellucid reads the exact keys 'X_umap_1d', 'X_umap_2d', and 'X_umap_3d', and reads a bare 'X_umap' as the dimension its own column count states. Available obsm keys: ['X_pca', 'X_umap'].
+  adata.obsm['X_umap'] has shape (3696, 10), and Cellucid draws 1, 2, or 3 dimensions, so that array names a dimension no viewer renders. Assign the columns you mean to draw under the key for their own count.
+```
+
+Assign the columns you actually want drawn under the key for their own count:
 
 ```python
 adata.obsm["X_umap_2d"] = umap_coordinates_2d
+```
+
+When some *other* `obsm` array has `n_cells` rows and 1, 2, or 3 columns, the
+message adds a `Fix:` block containing one copy-pasteable statement per
+candidate, each naming that array's shape.
+
+### Where the same rule applies
+
+This resolution is the direct-AnnData rule. It is used by
+{func}`~cellucid.show_anndata`, {func}`~cellucid.serve_anndata`,
+{class}`~cellucid.AnnDataViewer`, {class}`~cellucid.AnnDataAdapter` (including
+`AnnDataAdapter.from_file`), `cellucid serve` on a path it detects as direct
+AnnData input,
+and {func}`~cellucid.add_transition_drift_to_obsm`, which picks the embedding
+its drift is computed in. The web app's own `.h5ad` and `.zarr` readers apply
+the same rule, so an object that serves also opens in the browser.
+
+```{important}
+`prepare()` is a different path and shares none of this. It never looks at
+`obsm` keys: the coordinates arrive as arrays, in the `X_umap_1d=`,
+`X_umap_2d=`, and `X_umap_3d=` arguments, and each argument names the dimension
+of the array you hand it. Passing `adata.obsm["X_umap"]` as `X_umap_2d=` is the
+whole of “resolution” on the export path. See
+{doc}`../c_data_preparation_api/03_embeddings_and_coordinates`.
 ```
 
 ## Loading and memory behavior (critical for large datasets)
@@ -178,9 +259,37 @@ routes are integer indices, so `HLA-DRB1/2` and `Gene A` are served fine, and
 or the selected `gene_id_column`.
 ```
 
+## Two optional capabilities, both asked for
+
+The neighbor graph and the vector-field overlay are read only when you ask for
+them. Everything else — points, obs fields, gene expression, centroids — is
+always served.
+
+| Capability | Reads | Python | Terminal |
+|---|---|---|---|
+| Neighbor graph | `adata.obsp['connectivities']` | `serve_connectivity=True` | `--connectivity` |
+| Vector fields | `adata.obsm['<field>_umap_<n>d']` | `serve_vector_fields=True` | `--vector-fields` |
+
+Both are off for the same reason: each is read and validated **in full** before
+the server binds its socket, because the manifests the viewer fetches first
+declare what they contain. On a large object that is the difference between a
+server that opens in a second and one that takes minutes, and most sessions never
+turn either overlay on. Neither choice affects anything else the viewer can do.
+
+The startup report names which state you are in, for each of them separately —
+served, present in the object but not asked for, or absent. See
+{doc}`/user_guide/web_app/b_data_loading/04_server_tutorial` for a full
+transcript.
+
+`prepare()` is unchanged by any of this: it takes `connectivities=` and
+`vector_fields=` arguments, so passing the data has always been the ask. See
+{doc}`../c_data_preparation_api/07_connectivities_knn_graph` and
+{doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement`.
+
 ## Vector fields (velocity/drift overlays)
 
-Cellucid can render per-cell displacement vectors as an animated overlay.
+Cellucid can render per-cell displacement vectors as an animated overlay, when
+you ask for it with `serve_vector_fields=True` or `--vector-fields`.
 
 ### Naming convention (UMAP basis)
 
@@ -199,6 +308,11 @@ Rules:
   `vector_field_default` to `show_anndata(...)`, `serve_anndata(...)`, or
   `AnnDataViewer(...)`; construction raises `ValueError` if it is omitted or
   does not name an available field
+- `vector_field_default` selects among *served* fields, so naming one without
+  asking for vector fields is refused rather than ignored
+- an object that declares no field in this grammar simply serves none: asking for
+  vector fields asks for whatever `obsm` declares, and declaring nothing is an
+  ordinary result rather than an error. A *malformed* declaration still fails
 
 For example, an object containing both `velocity_umap_2d` and
 `T_fwd_umap_2d` needs:
@@ -223,9 +337,84 @@ opacity, palette, and LOD controls are visible.
 
 ## Connectivity (KNN graph)
 
-If `adata.obsp["connectivities"]` exists, Cellucid can expose connectivity edges.
+On the direct-AnnData path the neighbor graph is **opt-in, and off by default**.
+A `.h5ad` straight out of `sc.pp.neighbors()` serves without a graph unless you
+ask for one.
 
-Notes:
+```python
+viewer = show_anndata(
+    "data.h5ad",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    serve_connectivity=True,
+)
+```
+
+```bash
+cellucid serve /path/to/data.h5ad \
+  --dataset-name "My study" \
+  --dataset-id my-study-v1 \
+  --connectivity
+```
+
+`serve_connectivity` is accepted by {func}`~cellucid.show_anndata`,
+{func}`~cellucid.serve_anndata`, {class}`~cellucid.AnnDataViewer`,
+{class}`~cellucid.AnnDataServer`, {class}`~cellucid.AnnDataAdapter`, and
+`AnnDataAdapter.from_file`. From the terminal it is `--connectivity`, and like
+every other AnnData-only flag it is rejected when the path is a prepared
+export, which already declares whatever artifacts it holds.
+
+### What “off” means
+
+- `adata.obsp["connectivities"]` is never read. Whether the key exists is
+  checked, because the startup report says so, but that is a key lookup and
+  never touches the matrix.
+- `dataset_identity.json` reports `stats.has_connectivity` as `false` and
+  `stats.n_edges` as `null`.
+- `connectivity_manifest.json` answers `404 No connectivity data`.
+- `connectivity/edges.src.bin`, `connectivity/edges.dst.bin`, and
+  `connectivity/edges.weights.f64.bin` answer `404`.
+- The viewer reads a dataset that has no graph, exactly as it reads one whose
+  object never had a graph, and offers no edge drawing. Points, obs fields,
+  gene expression, centroids, and vector fields are unaffected.
+
+### Why off is the default
+
+Building the edge list is the single longest part of starting a server on a
+large object. A 50-neighbor graph over millions of cells is hundreds of
+millions of stored neighbors, and validating symmetry, deduplicating the stored
+neighbors into edges, and ordering them costs minutes and several times the
+graph's own memory. Most sessions never draw the graph, and until this was
+opt-in every one of them paid for it.
+
+### What “on” costs, and when you pay it
+
+Passing `serve_connectivity=True` reads and validates the **whole** graph
+before the server binds its socket. This is not deferrable: the first document
+the viewer fetches is the manifest, and the manifest declares the exact edge
+count and the neighbor maximum, both of which are properties of the finished
+edge list. So the cost lands during startup — between `Loading AnnData` and the
+printed URL — rather than the first time someone switches edges on.
+
+For a sparse matrix of 50,000,000 or more stored neighbors, Cellucid logs a
+warning naming that count and the cell count before the validation starts, so a
+long wait is announced rather than merely observed.
+
+### Asking for a graph that is not there is an error
+
+`serve_connectivity=True` (or `--connectivity`) on an object whose `obsp` has no
+`connectivities` fails at construction rather than serving a dataset silently
+missing the thing you asked for:
+
+```text
+Connectivity was asked for, and adata.obsp has no 'connectivities' matrix to serve. Compute the neighbor graph with sc.pp.neighbors(adata) before serving, or serve without asking for connectivity.
+```
+
+An invalid graph fails the same way, before the socket exists, with the exact
+contract violation quoted.
+
+### What the matrix must satisfy
+
 - the matrix must already be square, finite, non-negative, exactly symmetric
   in topology and weight, and zero on the diagonal;
 - sparse inputs must not store explicit zeros or duplicate coordinates;
@@ -235,14 +424,88 @@ Notes:
 - a valid zero-edge matrix is still an explicitly present graph,
 - large graphs can be expensive to render in the browser.
 
+```{note}
+Only the direct-AnnData path changed. `prepare()` was already opt-in through its
+`connectivities=` argument, and the prepared-export server is unchanged: an
+export either contains the connectivity artifacts or it does not, and there is
+nothing to ask for at serve time.
+```
+
+## What startup prints
+
+The direct-AnnData server runs five numbered steps, from `cellucid serve` and
+from {func}`~cellucid.serve_anndata` alike. On a large object nearly all of the
+time is spent inside step 2, which reports the adapter build as it happens
+instead of going quiet:
+
+Startup prints five numbered steps; the transcript is in {doc}`../../web_app/b_data_loading/04_server_tutorial`.
+
+Reading the transcript:
+
+- `Embeddings: 2D from obsm['X_umap']` in step 2 names the exact array each
+  dimension resolved to, so the key that decided the embedding is never a
+  guess. A declared object prints, for example,
+  `Embeddings: 2D from obsm['X_umap_2d'], 3D from obsm['X_umap_3d']`.
+- Building the manifests and the categorical centroids is step 4. It used to
+  run silently after step 3 reported success, which made a long pause look like
+  a stall; it is now its own reported step.
+- The prepared-export server still runs three steps. Five steps means direct
+  AnnData input, and so does the `/?anndata=true` viewer query.
+
+### The three connectivity states
+
+The `Connectivity` line in step 3 distinguishes a graph that is served from one
+this object holds but was not asked to serve:
+
+| Printed | Meaning |
+| --- | --- |
+| `yes (762,984 edges)` | the graph was asked for, validated, and is served |
+| `not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)` | the object has a graph and this server was not asked for it |
+| `no` | `adata.obsp` has no `connectivities` at all |
+
+With `--connectivity`, step 2 gains the two lines that account for the wait,
+and step 3 reports the edge count:
+
+```text
+[2/5] Loading AnnData...
+      Mode: read-only backed h5ad
+      Obs columns: classifying 16
+      Embeddings: resolving obsm keys
+      Embeddings: 2D from obsm['X_umap']
+      Vector fields: scanning obsm
+      Vector fields: 0 declared
+      Connectivity: reading obsp['connectivities']
+      Connectivity: 762,984 edges, 30 neighbors at most
+      ✓ File opened
+```
+
+### The URLs in the banner
+
+`Local URL` and `Viewer URL` are the origin a browser on the serving machine
+opens. When the server is bound to every interface — `--host 0.0.0.0`, `::`, or
+an empty host — those two lines still show the loopback origin, because a
+wildcard is a statement about which interfaces accept connections and not an
+address anything can open. The addresses another machine can use are printed
+separately:
+
+A wildcard bind prints the loopback origin plus the machine's own name; see {doc}`12_remote_servers_ssh_tunneling_and_cloud`.
+
+The second block appears only when this machine has a name that resolves to
+something other than loopback. A non-loopback bind has no authentication, so
+reach it through a tunnel rather than exposing the port:
+{doc}`12_remote_servers_ssh_tunneling_and_cloud`, and, for the compute-node
+case where the tunnel has to terminate on a login node,
+{doc}`17_hpc_slurm_and_compute_node_serving`.
+
 ## Troubleshooting (AnnData mode)
 
-### “No supported UMAP embedding was declared in adata.obsm”
+### “No UMAP embedding Cellucid can read was found in adata.obsm”
 
 **Likely causes**
-- you ran `sc.tl.umap(adata)`, which writes the unsuffixed `X_umap`
 - you didn’t compute UMAP yet
-- keys are present but have wrong shape
+- `obsm` carries `X_umap`, but with a width no viewer draws (a 10-column latent
+  space named after a plot, not 1, 2, or 3 coordinates)
+- keys are present but have wrong shape — `X_umap_3d` holding two columns
 - `n_cells` mismatch between `adata.obsm[...]` and `adata.n_obs`
 
 **How to confirm**
@@ -251,7 +514,29 @@ Notes:
 **Fix**
 - run the statement the error prints, e.g.
   `adata.obsm["X_umap_2d"] = adata.obsm["X_umap"]`
+- when the message names a shape, assign the columns you actually want drawn
+  under the key for their own count
 - or compute UMAP (Scanpy) and store explicit keys (`X_umap_2d` / `X_umap_3d`)
+
+### “Connectivity was asked for, and adata.obsp has no ‘connectivities’ matrix to serve”
+
+**Likely causes**
+- `serve_connectivity=True` or `--connectivity` was passed for an object whose
+  neighbor graph was never computed, or was computed on a different object
+
+**Fix**
+- run `sc.pp.neighbors(adata)` before serving (and re-save the file if you serve
+  a path), or serve without asking for connectivity
+
+### The viewer offers no edges, and the object has a graph
+
+**Likely cause**
+- connectivity is off by default on the direct-AnnData path. Step 3 of startup
+  says so: `Connectivity: not served (obsp['connectivities'] is present; …)`
+
+**Fix**
+- pass `serve_connectivity=True`, or `--connectivity` from the terminal, and
+  expect the whole graph to be validated before the URL is printed
 
 ### “obs field ‘…’ has unsupported dtype”
 

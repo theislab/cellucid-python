@@ -129,6 +129,14 @@ viewer.highlight_cells([0, 2], color="#00cc66")
 - **HTTPS notebooks / remote kernels**: see {doc}`03_compatibility_matrix_must_be_explicit`.
 - **Viewer source unavailable**: viewer-serving startup stops; see
   {doc}`../installation`.
+- **A gene that will not colour**: `show_anndata(...)` starts fine on an object
+  whose `adata.X` holds NaN or infinities, because nothing reads a gene column
+  until you select one. Selecting it answers HTTP 422 for that one request and
+  the viewer shows a notification titled `Gene cannot be shown`; the response
+  body names the gene, counts the offending values, and lists the first
+  offending cells. Everything else in the session keeps working. Repair the
+  matrix and reload — see
+  {doc}`../d_viewing_apis/15_troubleshooting_viewing`.
 
 ---
 
@@ -358,7 +366,20 @@ cleanup_all()
 
 - **Huge datasets**: start with exports + quantization; AnnData-direct mode will be slower.
 - **Missing embeddings**: no embedding → no viewer; compute one first.
-- **NaN/Inf values**: embeddings, latent space, expression, or obs fields containing NaN/Inf can cause surprising rendering or export errors.
+- **NaN/Inf values**: neither Python path ever publishes them, so there is no
+  surprising rendering to meet — there is a refusal instead, and which refusal
+  depends on the input. `prepare(...)` stops the whole export: an embedding or
+  `latent_space` fails with a `ValueError` naming the array, while gene
+  expression and continuous `obs` columns fail with a counted
+  `NonFinitePayloadError` that reports how many values are NaN, `+Inf`, `-Inf`,
+  beyond the float32 range, or below the smallest float32, the first five
+  offending cell indices, and a one-line repair. Direct-AnnData serving refuses
+  one request at a time instead: the gene or column you selected answers HTTP
+  `422 non_finite_continuous_payload` with that same diagnosis as JSON, and the
+  rest of the session keeps working. In the viewer `NaN` and infinity are not
+  alike — `NaN` is drawable and renders as the neutral grey meaning "not
+  measured here", an infinity has no position on a colour scale — but neither
+  reaches a prepared export or a Python-served payload.
 - **Category explosions**: categorical fields with very high cardinality can become unusable in the UI; consider grouping or filtering.
 - **Remote kernels**: forward the port and pass its browser-reachable base as
   `client_server_url=` (see

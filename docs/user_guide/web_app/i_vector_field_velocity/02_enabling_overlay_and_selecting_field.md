@@ -107,7 +107,7 @@ GPU work. See
 {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`.
 
 The overlay controls are points-only. Selecting
-`Volumetric smoke cloud` hides them and uses the smoke renderer instead.
+`Volumetric smoke cloud (alpha)` hides them and uses the smoke renderer instead.
 
 ## Dataset and session behavior
 
