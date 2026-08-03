@@ -180,6 +180,9 @@ Optional (but highly recommended):
 Optional (if you want the vector field / velocity overlay):
 - Per-cell vectors in `obsm` using the naming convention `<field>_umap_<dim>d` (e.g. `velocity_umap_2d`, `velocity_umap_3d`).
 - The overlay dropdown shows fields available for the current dimension only.
+- This picker finds them on its own — there is nothing to switch on. (The
+  Python paths are the opposite: `cellucid serve` and `show_anndata()` leave
+  the vectors unread unless asked. See {doc}`04_server_tutorial`.)
 
 ## Option #5 — Load a Zarr ZIP Archive Directly
 
@@ -220,16 +223,24 @@ name, so renaming a file never makes it loadable.
 
 ### The file is an H5AD, but it has no UMAP
 
+The current message reads:
+
+```text
+No UMAP embedding this viewer can read was found in obsm. Expected one or more
+of X_umap_1d, X_umap_2d, or X_umap_3d, or a plain X_umap of 1, 2, or 3 columns.
+Available obsm keys: X_pca.
+```
+
 ```{figure} ../../../_static/screenshots/data_loading/fail-missing-umap-embedding.png
-:alt: A Cellucid notification reading "No exact UMAP embedding found in obsm. Expected one or more of X_umap_1d, X_umap_2d, or X_umap_3d. Available obsm keys: X_pca.", with a dismiss button at its right.
+:alt: A Cellucid notification about a missing UMAP embedding, listing X_umap_1d, X_umap_2d and X_umap_3d as the expected obsm keys and then naming X_pca as the only key the selected file contained, with a dismiss button at its right.
 :width: 760px
 
-The message lists the `obsm` keys your file *does* have — here only `X_pca` —
-so you can see at a glance what to rename or recompute. `X_pca` is refused
-whatever its width: only a key that names a UMAP dimension, or the plain
-`X_umap`, is read as an embedding. The current wording is “No UMAP embedding
-this viewer can read was found in obsm”, and it names the plain `X_umap` among
-the keys it accepts.
+The trailing list is the useful half: it names the `obsm` keys your file *does*
+have — here only `X_pca` — so you can see at a glance what to rename or
+recompute. `X_pca` is refused whatever its width: only a key that names a UMAP
+dimension, or the plain `X_umap`, is read as an embedding. The capture predates
+the current wording quoted above, which also names the plain `X_umap`; the key
+list at the end is unchanged.
 ```
 
 ### The file is bigger than the browser ceiling
@@ -402,6 +413,17 @@ For overlay UI behavior and deeper debugging, see:
 - {doc}`../i_vector_field_velocity/07_troubleshooting_velocity_overlay`
 
 ## Next Steps
+
+Your dataset is open. The next thing most people want is to see something in it:
+
+- **Colour the cells by a gene or a metadata column** →
+  {doc}`../d_fields_coloring_legends/index`, or the three-minute version in
+  {doc}`../a_orientation/03_quick_tour_60_seconds`
+- **Hide the cells you are not looking at** → {doc}`../e_filtering/index`
+- **Select a population and read out what is in it** →
+  {doc}`../f_highlighting_selection/index` and {doc}`../h_analysis/index`
+
+If loading itself is what you still need:
 
 - Format expectations (exports vs `.h5ad` vs `.zarr`): {doc}`07_folder_file_format_expectations_high_level_link_to_spec`
 - Full troubleshooting matrix: {doc}`08_troubleshooting_data_loading`

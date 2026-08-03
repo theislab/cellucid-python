@@ -61,35 +61,40 @@ coloring, filtering, highlighting, connectivity, vector fields, and multiview.
 Its relevant controls are:
 
 - **Depth perception:** `Point size (log):`, `3D lighting:`,
-  `Atmospheric fog:`, and `Perspective size scaling:`
+  `Atmospheric fog:`, and `Perspective size scaling:`. `Point size (log):` is a
+  logarithmic slider, not a percentage, and a dataset opens at the size its cell
+  count implies rather than at a fixed default — which is why the same slider
+  position looks different on a 3,696-cell trajectory and on an atlas.
 - **Shader quality:** `Full (lighting + fog)`, `Light (circular, no lighting)`,
   or `Ultra-light (square points)` — a **look** choice, not a speed one. The
-  three measured the same frame time at every point size tested; see
-  {doc}`../n_benchmarking_performance/02_performance_considerations_what_gets_slow_and_why`.
-  Note that `Ultra-light` draws squares rather than round dots, so it also
-  changes far more pixels when antialiasing is off.
-- **Renderer settings:** `Level-of-Detail (LOD)`, `Force LOD level:`, and
-  `Frustum culling`
+  three measured the same frame time at every point size tested. Note that
+  `Ultra-light` draws squares rather than round dots, so it also changes far
+  more pixels when antialiasing is off.
+- **Renderer settings:** `Level-of-Detail (LOD)` draws a coarser subset of the
+  cells when you are zoomed out; `Frustum culling` skips cells the camera is not
+  pointing at. Both are checkboxes and **both start off**. Ticking
+  `Level-of-Detail (LOD)` reveals a `Force LOD level:` slider directly beneath
+  it — that row is hidden entirely while the checkbox is clear, which is the
+  usual reason people cannot find it. The slider sits at its lowest position,
+  reading `Auto`, until you move it. `Auto` follows the camera at every dataset
+  size, down to a floor of `min(2,000,000, cells ÷ 8)` points; an explicitly
+  forced level is not held to that floor and can go coarser.
 - **Image quality:** `Antialiasing (smooth point edges)` — a live setting, like
   every other: a change reaches the next frame. It sits outside the **Renderer
   settings** block because it governs the whole scene target, which both
-  renderers share, and so it stays available in smoke mode too. See
-  {doc}`../n_benchmarking_performance/02_performance_considerations_what_gets_slow_and_why`
-  for what it costs and what it buys.
+  renderers share, and so it stays available in smoke mode too. Until you click
+  the checkbox yourself it follows the dataset, and the status line beneath it
+  says so — `Chosen automatically: 3,696 cells.` on the Pancreas sample, or
+  `Chosen automatically from the size of the dataset.` before a dataset is
+  open. Clicking it ends automatic selection.
 
-Until you tick that checkbox yourself, antialiasing follows the dataset: on
-below five million cells, off at or above, decided again every time a dataset is
-opened. The status line under the checkbox says so, naming the count it used —
-`Chosen automatically: 3,696 cells.` on the Pancreas sample — or reading
-`Chosen automatically from the size of the dataset.` before a dataset is open.
-Clicking the checkbox ends automatic selection permanently, in both directions —
-ticking it is as final as unticking it — and the status line goes empty. On a
-device that cannot multisample at all it reads
-`This browser is not providing antialiasing for this view.` instead, and the
-checkbox cannot turn smoothing on.
-
-Because that choice describes your machine rather than your figure, a
-`.cellucid-session` records the checkbox but never applies it on restore; see
+Every measured number behind those four bullets — the point-size curve and its
+reachable range, why shader quality is not a speed lever, the two-million-point
+LOD budget, and the dataset size at which antialiasing switches itself off —
+lives in one place:
+{doc}`../n_benchmarking_performance/02_performance_considerations_what_gets_slow_and_why`.
+For why a `.cellucid-session` records the antialiasing checkbox but never
+applies it on restore, see
 {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
 
 For large datasets, begin here and use

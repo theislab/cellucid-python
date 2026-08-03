@@ -666,3 +666,45 @@ def test_points_route_rejects_every_non_exact_suffix(path: str) -> None:
             assert status == 404
         finally:
             server.stop()
+
+
+def test_every_header_a_cross_origin_reader_acts_on_is_exposed() -> None:
+    """A header that is sent but not exposed reads as absent to a browser.
+
+    The defect: the server compressed a payload, sent ``Content-Encoding: gzip``,
+    and exposed only ``Content-Length, Content-Range``. ``Content-Encoding`` is
+    not CORS-safelisted, so a page on another origin -- which is the whole point
+    of this server, since the app is served from somewhere else -- was handed
+    ``null`` for it. The browser then believed the compressed ``Content-Length``
+    was the decoded size, and every gzipped payload aborted the moment decoded
+    bytes passed compressed ones: ``Download loadedBytes 59240 exceeds totalBytes
+    55003``, and a dataset that never opened.
+
+    The rule this pins is not "expose these three names": it is that the exposed
+    set has to contain every response header the browser is expected to read.
+    """
+    adata = _minimal_adata()
+    with _running_server(adata) as (_server, host, port):
+        status, headers, _body = _request(
+            host,
+            port,
+            "GET",
+            "/points_2d.bin",
+            headers={
+                "Accept-Encoding": "gzip",
+                "Origin": f"http://{host}:{port + 1}",
+            },
+        )
+        assert status == 200
+        exposed = {
+            name.strip().lower()
+            for name in headers["Access-Control-Expose-Headers"].split(",")
+        }
+        # Exactly the headers the browser reader consults:
+        # `Content-Encoding` and `Content-Length` in `data-loaders.js`, and
+        # `Content-Range` on every ranged read.
+        assert exposed == {"content-encoding", "content-length", "content-range"}
+        # And the one that was missing is genuinely being sent on this response,
+        # so the pairing is checked rather than assumed.
+        assert headers["Content-Encoding"] == "gzip"
+        assert "content-encoding" in exposed

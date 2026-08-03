@@ -152,8 +152,11 @@ This happens when the recipient loads the dataset via a different identity than 
 Common causes:
 - the sender loaded from GitHub, the recipient loaded from a local folder (different source type),
 - the dataset was re-exported and the dataset id changed,
-- the dataset contents changed but kept the same id (dangerous because the
-  lightweight fingerprint cannot detect every content change).
+- the dataset contents changed but kept the same id. A re-ordering or a
+  re-computed embedding *is* caught — the fingerprint digests the displayed
+  coordinates — but changed field values, categories or gene identities under
+  unchanged counts are not. See
+  {doc}`07_versioning_compatibility_and_dataset_identity`.
 
 How to resolve:
 - align on the same dataset access method (same source type + dataset id), or

@@ -1,5 +1,11 @@
 # Troubleshooting (performance)
 
+**Audience:** everyone with something that is already slow  
+**Time:** 10–30 minutes  
+**What you’ll get:**
+- Symptom → likely causes → confirm → fix, for each common slowdown
+- The order to try fixes in, cheapest and safest first
+
 This page is organized by **symptom → diagnosis → fix**.
 
 If you want the conceptual model first, read {doc}`01_performance_mental_model`.
@@ -49,13 +55,17 @@ What to do earlier to avoid this next time.
 ### Fix
 1) Reduce **pixels**: keep the window smaller while exploring, and lower
    `Point size (log):` if points already overlap on screen.
-2) Fix the **layout**: go back to one view. If you need the comparison, note
+2) Turn off `Antialiasing (smooth point edges)` under **Visualization → Image
+   quality**. It applies to the next frame, and it is worth most at large point
+   sizes. Check the box first: at 5,000,000 cells or more it is already clear
+   unless you ticked it yourself.
+3) Fix the **layout**: go back to one view. If you need the comparison, note
    that a four-view 2×2 grid is usually cheaper than a two- or three-view row
    — see {doc}`06_edge_cases_performance`.
-3) Use **Points** mode (avoid smoke except intentionally).
-4) If using vector overlays: reduce density and disable bloom first.  
+4) Use **Points** mode (avoid smoke except intentionally).
+5) If using vector overlays: reduce density and disable bloom first.  
    See {doc}`../i_vector_field_velocity/05_performance_and_quality`.
-5) If you still see low FPS on moderate datasets, update the browser,
+6) If you still see low FPS on moderate datasets, update the browser,
    operating system, and GPU driver when applicable.
 
 ### Prevention

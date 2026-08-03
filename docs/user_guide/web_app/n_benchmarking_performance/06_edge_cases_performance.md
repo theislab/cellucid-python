@@ -1,5 +1,11 @@
 # Edge cases (performance)
 
+**Audience:** everyone (support-oriented; useful before filing a bug)  
+**Time:** 15–30 minutes  
+**What you’ll get:**
+- The specific configurations where Cellucid goes from smooth to unusable
+- A confirm-then-fix recipe for each, in the same shape every time
+
 This page catalogs **high-impact performance edge cases**—the “performance cliffs” where Cellucid can go from smooth to unusable with a small change.
 
 It is written in a “support-playbook” style:
@@ -88,6 +94,49 @@ This hurts:
 
 ### Prevention
 - For workshops: recommend an external monitor or “don’t full-screen” guidance for older GPUs.
+
+---
+
+## Edge case: two settings changed themselves when you opened another dataset
+
+### What you see
+- The same machine, the same window, the same layout — and a dataset that draws
+  visibly differently, or measures differently, from the one you had open before.
+- Points look chunkier or finer than you expected, or edges look harder.
+- A benchmark comparison between two datasets does not reproduce.
+
+### Why it happens
+Two rendering settings are derived from the cell count each time a dataset is
+published, and datasets are switched **in place**:
+
+- **Point size** is chosen so the total drawn area stays roughly constant, so
+  the dot diameter falls with the square root of the cell count.
+- **`Antialiasing (smooth point edges)`** is chosen automatically — on below
+  5,000,000 cells, off at or above.
+
+Neither is a bug and neither is a reset: they are the right opening answers for
+two datasets that are not the same size. But nothing announces the point-size
+change, so it reads as the app behaving differently for no reason.
+
+### How to confirm
+1) Read the line under the antialiasing checkbox. While the choice is still
+   automatic it names the count, as in `Chosen automatically: 18,142,044 cells.`
+   Once you have clicked the checkbox yourself the line goes quiet and the box
+   holds your answer on every dataset from then on.
+2) Compare `Point size (log):` against what you remember. The opening size is
+   applied on every dataset publication — but *before* a saved session or a
+   published preset is replayed, so a size you stored still wins.
+
+### Fix
+- Set both explicitly before comparing anything: they are live settings and
+  antialiasing applies to the next frame.
+
+### Prevention
+- Record both in any benchmark or bug report — see
+  {doc}`04_benchmarking_methodology_and_metrics`.
+
+Related docs:
+- {doc}`02_performance_considerations_what_gets_slow_and_why` (what each one costs, measured)
 
 ---
 

@@ -35,7 +35,8 @@ If you are new, start here. If you already know what you want, jump to the tutor
 Cellucid understands your data in three high-level ways:
 
 1) **Pre-exported folder (recommended)**
-   - Produced by `cellucid.prepare(...)` in Python.
+   - Produced by `cellucid.prepare(...)` in Python, or by `cellucid_prepare()`
+     in R ({doc}`../../r_package/index`). The viewer reads either identically.
    - Output is a directory containing binary files + `dataset_identity.json` + compact manifests.
    - **Fastest** in the browser and the most stable.
    - Can optionally include **vector fields** (e.g. RNA velocity) for the overlay.
@@ -98,8 +99,27 @@ Where vector fields come from depends on your loading format:
   - `velocity_umap_2d`, `velocity_umap_3d`
   - `T_fwd_umap_2d`
 
+:::{important}
+**Where the vectors come from depends on which of three things reads them.**
+
+- The browser's **H5AD** and **Zarr ZIP** pickers scan `obsm` themselves and
+  adopt whatever `<field>_umap_<dim>d` arrays they find. Nothing to switch on.
+- A **prepared export** — whether opened by the browser's **Prepared** picker or
+  served by `cellucid serve <export_dir>` / `show(export_dir)` — carries whatever
+  `prepare(vector_fields=...)` wrote. There is no `obsm` left to read, so there
+  is nothing to switch on there either.
+- **Reading an AnnData object directly** — `cellucid serve` on an AnnData input,
+  `serve_anndata()`, `show_anndata()` — never touches the arrays unless you pass
+  `--vector-fields` (CLI) or `serve_vector_fields=True` (Python), because every
+  declared field is read and checked in full before the server binds. Without it
+  the overlay is simply absent, and nothing in the browser says why — the
+  terminal does, in step 3 of startup. Passing `vector_field_default` without
+  the opt-in is an error, not a hint.
+:::
+
 If you expect vector fields but don’t see the overlay toggle or dropdown:
-- first check your data format/naming: {doc}`07_folder_file_format_expectations_high_level_link_to_spec`
+- if you started a Python server or notebook viewer, check you passed the opt-in above
+- then check your data format/naming: {doc}`07_folder_file_format_expectations_high_level_link_to_spec`
 - then check the overlay section: {doc}`../i_vector_field_velocity/index`
 
 Naming conventions:
@@ -111,10 +131,11 @@ Pick the first row that matches you.
 
 | Your situation | Recommended workflow | Why |
 |---|---|---|
-| “I just want to look at my data quickly, no Python.” | Browser File Picker | Zero setup; good for quick preview |
+| “I just want to look at my data quickly, no Python.” | Browser File Picker | Zero setup; good for quick preview. An `.h5ad` must be under 512 MiB |
 | “My dataset is big (hundreds of thousands to millions of cells).” | Server Mode or pre-export + Server Mode | True lazy loading; avoids browser memory limits |
 | “I’m already working in a notebook.” | Jupyter (`show_anndata`, `show`) | Tight analysis loop; programmatic control |
 | “I want to share a dataset publicly without running a server.” | GitHub-hosted exports | Exact dataset-specific URL; no running server |
+| “I already have a static host, CDN, or intranet server.” | Self-hosted exports root (`?exportsBaseUrl=`) | Your catalog fills the app's own `Sample datasets:` dropdown; no GitHub, no running server |
 | “I need the fastest possible web experience.” | Pre-exported folder | Best performance and stability |
 
 If you’re unsure, start with **Server Mode** for `.h5ad`/`.zarr`, or **File Picker** for exported folders.
@@ -124,26 +145,28 @@ If you’re unsure, start with **Server Mode** for `.h5ad`/`.zarr`, or **File Pi
 This is the canonical list used throughout the documentation.
 
 **Legend**
-- **Exported** = folder created by `cellucid.prepare()`
+- **Exported** = folder created by `cellucid.prepare()` in Python or
+  `cellucid_prepare()` in R
 - **Lazy genes**: whether gene expression is fetched on demand (best) vs effectively “load all” (worst)
-- **Vector fields**: supported in all loading options; the overlay appears only if your dataset includes vectors for the current dimension.
+- **‡** marks the rows where the velocity/drift overlay is **opt-in**: pass
+  `--vector-fields` or `serve_vector_fields=True`, or the vectors are never read
 
 | # | Where you run things | How you point Cellucid to the data | Data format | Lazy genes | Best for |
 |---:|---|---|---|---|---|
-| 1 | Cellucid web app (demo mode) | Choose a built-in demo dataset | Exported | ✅ | Learning the UI with known-good data |
+| 1 | Cellucid web app | Pick from `Sample datasets:`, which lists whatever exports root the page is configured with — Cellucid's own catalog on www.cellucid.com, or yours via `?exportsBaseUrl=https://host/exports/` | Exported | ✅ | Learning the UI with known-good data; publishing a catalog on a static host or CDN |
 | 2 | Cellucid web app (public GitHub) | Connect to a public exports root (or use `?github=...&dataset=...`) | Exported | ✅ | Sharing a dataset publicly, no running server |
 | 3 | Cellucid web app | Browser **Prepared** picker | Exported | ✅ | Fast local viewing of prepared exports |
 | 4 | Cellucid web app | Browser **.h5ad** picker | `.h5ad` | ❌* | Quick preview of small `.h5ad` |
 | 5 | Cellucid web app | Browser **Zarr ZIP** picker | `.zarr.zip` / `.zip` containing one Zarr v2 store | ✅† | Portable Zarr viewing without Python |
 | 6 | Terminal CLI | `cellucid serve <export_dir>` | Exported | ✅ | Reliable viewing of large exports |
-| 7 | Terminal CLI | `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset` | `.h5ad` | ✅ | Large `.h5ad` with read-only backed access |
-| 8 | Terminal CLI | `cellucid serve data.zarr --dataset-name "My dataset" --dataset-id my-dataset` | `.zarr` | ✅ | Eager Python load with on-demand browser gene requests |
+| 7‡ | Terminal CLI | `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset` | `.h5ad` | ✅ | Large `.h5ad` with read-only backed access |
+| 8‡ | Terminal CLI | `cellucid serve data.zarr --dataset-name "My dataset" --dataset-id my-dataset` | `.zarr` | ✅ | Eager Python load with on-demand browser gene requests |
 | 9 | Python | `cellucid.serve(<export_dir>)` | Exported | ✅ | Scripting server startup |
-| 10 | Python | `cellucid.serve_anndata(<data.h5ad>, dataset_name="My dataset", dataset_id="my-dataset")` | `.h5ad` | ✅ | Scripting server startup |
-| 11 | Python | `cellucid.serve_anndata(<data.zarr>, dataset_name="My dataset", dataset_id="my-dataset")` | `.zarr` | ✅ | Scripting server startup |
+| 10‡ | Python | `cellucid.serve_anndata(<data.h5ad>, dataset_name="My dataset", dataset_id="my-dataset")` | `.h5ad` | ✅ | Scripting server startup |
+| 11‡ | Python | `cellucid.serve_anndata(<data.zarr>, dataset_name="My dataset", dataset_id="my-dataset")` | `.zarr` | ✅ | Scripting server startup |
 | 12 | Jupyter | `cellucid.show(<export_dir>)` | Exported | ✅ | Notebook-based exploration of exports |
-| 13 | Jupyter | `cellucid.show_anndata(<data.h5ad>, dataset_name="My dataset", dataset_id="my-dataset")` | `.h5ad` | ✅ | Notebook-based exploration of `.h5ad` |
-| 14 | Jupyter | `cellucid.show_anndata(<data.zarr or AnnData>, dataset_name="My dataset", dataset_id="my-dataset")` | `.zarr` / in-memory | ✅ | Notebook-based exploration of `.zarr` or in-memory |
+| 13‡ | Jupyter | `cellucid.show_anndata(<data.h5ad>, dataset_name="My dataset", dataset_id="my-dataset")` | `.h5ad` | ✅ | Notebook-based exploration of `.h5ad` |
+| 14‡ | Jupyter | `cellucid.show_anndata(<data.zarr or AnnData>, dataset_name="My dataset", dataset_id="my-dataset")` | `.zarr` / in-memory | ✅ | Notebook-based exploration of `.zarr` or in-memory |
 
 \* Browser `.h5ad` loading is **not truly lazy**: the whole file is loaded into
 browser memory before use, and a file larger than **512 MiB** is refused outright
@@ -152,6 +175,24 @@ before any byte is read. Options 7, 10, and 13 have no such ceiling.
 † Browser Zarr ZIP loading indexes and validates archive metadata before
 adoption, then reads gene-expression chunks on demand. Archive extraction and
 decoded chunk memory remain subject to the documented browser limits.
+
+‡ These are the direct-AnnData paths, and on all six the neighbor graph **and**
+the vector fields are off unless asked for — `--connectivity` /
+`--vector-fields` on the CLI, `serve_connectivity=True` /
+`serve_vector_fields=True` in Python. The other eight rows either read a
+prepared export or scan `obsm` in the browser, so there is nothing to switch on.
+
+:::{note}
+Row 1 covers two situations that look different and are the same mechanism. The
+`Sample datasets:` dropdown always reads one **exports root** — a directory
+holding `datasets.json` and one folder per dataset. www.cellucid.com is
+configured with Cellucid's own; `?exportsBaseUrl=` replaces it for one launch,
+so any static host, CDN, or intranet server you control can drive that dropdown
+with your catalog. The value must be an absolute `http(s)` directory URL ending
+in `/`, with no query, fragment, or credentials — anything else is refused as a
+configuration error. Worked example:
+{doc}`11_custom_dataset_repository`.
+:::
 
 ## Minimal Commands (Copy/Paste)
 

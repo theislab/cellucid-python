@@ -127,6 +127,23 @@ holds the server's address, and a **Disconnect** button has appeared beneath it.
 The dataset summary above comes from the server, not from the sample catalog.
 ```
 
+:::{important}
+**The banner prints two URLs, and they are not interchangeable.**
+
+- **Viewer URL** (`http://127.0.0.1:8765/?source=remote`, or `…/?anndata=true`
+  for direct AnnData) goes in the **browser address bar**. Opening it is the
+  whole workflow; the field below fills itself in.
+- `Remote server:` — the text field in the Session panel — takes the bare
+  origin the banner prints as **Local URL**: `http://127.0.0.1:8765`. No
+  trailing slash, no `?…` query, no credentials, no `#fragment`. The field's
+  own placeholder, `http://localhost:8765`, is the exact shape. Pasting the
+  Viewer URL there is refused, because of the query string.
+
+You only need the field when you are pointing an already-open Cellucid tab at a
+server, for example after a tunnel comes up. Otherwise open the Viewer URL and
+skip it.
+:::
+
 ## Option #6 — Serve a Pre-exported Folder (Best Performance)
 
 Use this if you already ran `prepare()`.
@@ -239,10 +256,11 @@ be whatever is current.
 
 Step 2's sub-lines are the ones that matter on a big object, because that is
 where the minutes go. `Obs columns` names how many columns are being classified,
-`Embeddings` names the obsm keys as they resolve, `Vector fields` names how many
-velocity/drift fields were declared, and `Connectivity` appears only when you
-asked for the neighbor graph. A startup that looks stalled is stalled inside
-whichever of those printed last.
+and `Embeddings` names the obsm keys as they resolve. The two optional
+capabilities print here only when you asked for them: `Vector fields: scanning
+obsm` then `Vector fields: N served`, and `Connectivity: reading
+obsp['connectivities']` then its edge and neighbor counts. A startup that looks
+stalled is stalled inside whichever of those printed last.
 
 Step 3 is the sanity check: if the embeddings, obs-field counts, or connectivity
 line disagree with what you expect, fix the file rather than the viewer.
@@ -335,20 +353,51 @@ argument, and a prepared export either holds the connectivity artifacts or does
 not — serving one never rebuilds a graph, so there is nothing to opt into.
 ```
 
-### Vector fields (velocity/drift) in server mode
+### Vector fields are opt-in on this path too
 
-Server mode supports the vector field / velocity overlay (if your dataset includes vectors).
+The velocity/drift overlay takes exactly the same decision as connectivity, for
+the same reason: every declared `<field>_umap_<n>d` array in `obsm` is read and
+checked before the socket opens. `--vector-fields` (CLI) and
+`serve_vector_fields=True` (Python) turn it on:
 
-Where vectors come from depends on your data:
-- **Pre-exported folders**: vectors live in `vectors/`, and `dataset_identity.json` contains a `vector_fields` block.
-- **AnnData (`.h5ad` / `.zarr`)**: vectors are discovered from `obsm` keys like `velocity_umap_2d`, `velocity_umap_3d`, `T_fwd_umap_2d`, etc.
+```bash
+cellucid serve /path/to/data.h5ad \
+  --dataset-name "My dataset" --dataset-id my-dataset \
+  --vector-fields
+```
+
+With the flag, step 2 reports the scan (`Vector fields: scanning obsm`, then
+`Vector fields: 1 served`) and step 3 names the fields it will serve.
+
+The `Vector fields` line in step 3 has the same three states:
+
+| Line | Meaning |
+| --- | --- |
+| `Vector fields: yes (velocity_umap)` | The overlay was asked for, read, and validated; the served field IDs are listed |
+| `Vector fields: not served (obsm declares vector fields; pass serve_vector_fields=True, or --vector-fields, to draw them)` | The object carries vectors and this run did not ask for them |
+| `Vector fields: no` | `obsm` declares no `<field>_umap_<n>d` key at all |
+
+What the flag changes on the wire:
+
+| | `--vector-fields` omitted | `--vector-fields` passed |
+| --- | --- | --- |
+| `obsm` vector arrays | never read | read and validated before the bind |
+| `vector_fields` block in `dataset_identity.json` | absent | present, listing every served field |
+| `vectors/<index>_<dim>d.bin` | 404 | served |
+
+`--vector-field-default` chooses among *served* fields, so passing it on its own
+raises rather than doing nothing. And as with connectivity, this default applies
+to the direct-AnnData path only: a prepared export written by
+`prepare(vector_fields=...)` already holds the vectors under `vectors/` and
+declares them in `dataset_identity.json`, so there is nothing to opt into.
 
 Quick verification (high signal):
-- Open `http://127.0.0.1:8765/dataset_identity.json` and search for `vector_fields`.
+- Open `http://127.0.0.1:8765/dataset_identity.json` and search for
+  `vector_fields`. Absent means either “not asked for” or “not present” — step 3
+  of the startup output distinguishes the two.
 
-If the overlay toggle is disabled or the dropdown is empty, it’s usually:
-- naming mismatch, or
-- dimension mismatch (e.g. you only have 2D vectors but you’re viewing 3D).
+If the block is there but the overlay dropdown is empty, it is a dimension
+mismatch: you have 2D vectors and are viewing 3D, or the reverse.
 
 See:
 - {doc}`../i_vector_field_velocity/index`
@@ -365,7 +414,8 @@ usage: cellucid serve [-h] [--port PORT] [--host HOST] [--allowed-host HOST]
                       [--web-source-url URL] [--web-cache-dir PATH]
                       [--latent-key KEY] [--dataset-name NAME]
                       [--dataset-id ID] [--obs-key KEY]
-                      [--vector-field-default FIELD_ID] [--connectivity]
+                      [--vector-field-default FIELD_ID] [--vector-fields]
+                      [--connectivity]
                       data_path
 
 Serve data for visualization. Automatically detects format.
@@ -407,6 +457,9 @@ options:
   --vector-field-default FIELD_ID
                         Exact default field id when AnnData contains multiple
                         UMAP vector fields
+  --vector-fields       Serve the obsm '<field>_umap_<n>d' vector arrays as an
+                        animated overlay. Off by default: every declared field
+                        is read and checked before the server binds
   --connectivity        Serve the obsp['connectivities'] neighbor graph. Off
                         by default: reading it costs time and memory
                         proportional to the stored neighbor count, which on a
@@ -437,9 +490,10 @@ Examples:
     # Behind jupyter-server-proxy, name the proxy's host explicitly
     cellucid serve /path/to/data --allowed-host hub.example.org
 
-    # Serve the neighbor graph too, which is off because it costs time to build
+    # Serve the neighbor graph and the velocity overlay, both off by default
+    # because each is read and checked in full before the server binds
     cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \
-        --connectivity
+        --connectivity --vector-fields
 
     # For SSH tunnel access from a remote server:
     # On the server: cellucid serve /path/to/data
@@ -500,9 +554,18 @@ Key flags:
   - Name the columns when one of them is a type Cellucid cannot serve — a
     datetime column is the usual case — so the rest still load.
 
+- `--vector-fields`:
+  - Also serve the `obsm` `<field>_umap_<n>d` arrays as the animated velocity
+    overlay. **Off by default**, because every declared field is read and
+    checked before the server binds.
+  - Direct AnnData input only, exactly like `--connectivity`. Without it the
+    overlay is simply absent, and step 3 of startup says so.
+
 - `--vector-field-default`:
   - Required only when direct AnnData exposes multiple vector-field IDs and
     you need to choose the exact default.
+  - It selects among *served* fields, so passing it without `--vector-fields`
+    is an error rather than a no-op: there is nothing to choose between.
 
 - `--connectivity`:
   - Also serve the `obsp['connectivities']` neighbor graph. **Off by default**,
@@ -562,10 +625,10 @@ serve_anndata(
 Both convenience calls block until you interrupt them. Use the class APIs when
 another part of your program must keep control of the process.
 
-The Python path takes the same connectivity decision as the CLI, through the
-keyword-only `serve_connectivity` parameter. It defaults to `False` on
-`serve_anndata()`, `show_anndata()`, `AnnDataViewer`, `AnnDataAdapter`,
-`AnnDataAdapter.from_file()`, and `AnnDataServer`:
+The Python path takes the same two opt-in decisions as the CLI, through the
+keyword-only `serve_connectivity` and `serve_vector_fields` parameters. Both
+default to `False` on `serve_anndata()`, `show_anndata()`, `AnnDataViewer`,
+`AnnDataAdapter`, `AnnDataAdapter.from_file()`, and `AnnDataServer`:
 
 ```python
 from cellucid import serve_anndata
@@ -578,11 +641,12 @@ serve_anndata(
     dataset_name="My dataset",
     dataset_id="my-dataset",
     serve_connectivity=True,
+    serve_vector_fields=True,
 )
 ```
 
-`serve()` has no such parameter: a prepared export either holds the
-connectivity artifacts or does not.
+`serve()` has neither parameter: a prepared export either holds the
+connectivity and vector artifacts or does not.
 
 ### Stopping the server from Python
 
@@ -872,7 +936,9 @@ copy the traceback into the report.
   - Can cause high RAM use.
 
 - **Mixed content**:
-  - Opening `https://www.cellucid.com?remote=http://127.0.0.1:<port>` is blocked by browsers (HTTPS page fetching HTTP).
+  - Pointing an HTTPS Cellucid page at an `http://` server is refused by
+    Cellucid itself, before the browser gets a chance to block the fetch:
+    `An HTTPS Cellucid page requires an explicit HTTPS remote server URL`.
   - Always open the exact local Viewer URL printed by the server
     (`/?source=remote` for prepared data or `/?anndata=true` for direct
     AnnData), which serves the verified UI generation.
@@ -912,8 +978,12 @@ copy the traceback into the report.
 
 **Likely causes**
 1) You typed the wrong URL (port mismatch).
-2) The server is bound to `127.0.0.1` but you are trying to access it from another machine.
-3) Your browser blocked mixed-content requests.
+2) You pasted the **Viewer URL** into the `Remote server:` field. That field
+   takes the bare origin (`http://127.0.0.1:8765`) and refuses a trailing
+   slash, a query string, or a fragment.
+3) The server is bound to `127.0.0.1` but you are trying to access it from another machine.
+4) The Cellucid page is on HTTPS and the server address is `http://`, which
+   Cellucid refuses outright.
 
 **How to confirm**
 - Open the server URL directly in your browser:
@@ -950,15 +1020,22 @@ copy the traceback into the report.
 ### Symptom: “Vector field overlay toggle is disabled / no fields appear”
 
 **Likely causes (ordered)**
-1) The dataset contains no vectors (common).
-2) Vector fields exist, but are not named using the expected convention (`*_umap_2d`, `*_umap_3d`).
-3) Dimension mismatch: vectors exist for 2D but you’re viewing 3D (or vice versa).
+1) The server was started without `--vector-fields` / `serve_vector_fields=True`,
+   which is the default on the direct-AnnData path.
+2) The dataset contains no vectors (common).
+3) Vector fields exist, but are not named using the expected convention (`*_umap_2d`, `*_umap_3d`).
+4) Dimension mismatch: vectors exist for 2D but you’re viewing 3D (or vice versa).
 
 **How to confirm**
+- Read step 3 of the startup output. `not served (…)` is cause 1 and `no` is
+  cause 2 or 3; the wording is quoted in full under **Vector fields are opt-in
+  on this path too** above.
 - Open `http://127.0.0.1:8765/dataset_identity.json` and check for a `vector_fields` block.
 - If using AnnData, list `obsm` keys and look for `velocity_umap_2d`-style entries.
 
 **Fix**
+- Cause 1: restart with `--vector-fields`, or `serve_vector_fields=True` from
+  Python.
 - Rename or regenerate vector fields using the exact keys documented in
   {doc}`../i_vector_field_velocity/01_what_vector_fields_are_user_facing`.
 - Switch the viewer to the dimension that has vectors.
@@ -1021,3 +1098,11 @@ For overlay UI behavior and deeper debugging, see:
 - Want browser-only loading without any server? → {doc}`03_browser_file_picker_tutorial`
 - Want to publish a static public catalog instead? →
   {doc}`11_custom_dataset_repository`
+
+Will it be usable at your scale? These two answer that, and are worth reading
+before you hand the URL to a lab:
+
+- What the server keeps in memory, what it reads lazily, and what backed mode
+  costs → {doc}`../../python_package/d_viewing_apis/14_performance_scaling_and_lazy_loading`
+- What to turn on and off in the viewer at tens of millions of cells →
+  {doc}`../n_benchmarking_performance/03_large_dataset_best_practices`

@@ -58,18 +58,20 @@ that is what people actually get lost looking for.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/navigation-controls-planar.png
-:alt: The same NAVIGATION panel with the MODE dropdown reading Planar and a bordered box below containing a PAN SPEED slider with a numeric readout, a ZOOM TO CURSOR (PINCH-STYLE) checkbox and an INVERT AXES checkbox.
+:alt: The same NAVIGATION panel with the MODE dropdown reading Planar and a bordered box below containing a KEYBOARD SPEED slider reading 0.0075x, a ZOOM TO CURSOR (PINCH-STYLE) checkbox and an INVERT AXES checkbox.
 :width: 472px
 
-**Planar** — a pan speed slider and two different checkboxes.
+**Planar** — a keyboard speed slider and two different checkboxes. Orbit and
+Planar both label their slider `Keyboard speed:`; the value beside it is on a
+different scale in each, because one scales rotation and the other pan.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/navigation-controls-freefly.png
-:alt: The same NAVIGATION panel with the MODE dropdown reading Free-fly and a taller bordered box below containing a LOOK SENSITIVITY slider, a MOVE SPEED slider, both with numeric readouts, an INVERT LOOK AXES checkbox, a PROJECTILE SHOOTING checkbox and a CAPTURE POINTER button.
+:alt: The same NAVIGATION panel with the MODE dropdown reading Free-fly and a taller bordered box below containing a LOOK SENSITIVITY slider reading 0.05x, a MOVE SPEED slider reading 1.00 u/s, an INVERT LOOK AXES checkbox, a PROJECTILE SHOOTING checkbox and a CAPTURE POINTER checkbox with a small circled i beside it.
 :width: 472px
 
-**Free-fly** — two sliders, two checkboxes, and the pointer-lock button that
-does not exist in the other two modes.
+**Free-fly** — two sliders, three checkboxes, and the pointer-lock checkbox
+that does not exist in the other two modes.
 ```
 
 :::{note}
@@ -187,7 +189,9 @@ In **Compare Views → Navigation → Free-fly**:
 - **Move speed**: movement speed in “scene units per second”
 - **Invert look axes**: flips mouse look direction
 - **Projectile shooting** (optional demo feature): enables click/hold-to-charge projectiles
-- **Capture pointer**: enables pointer lock (press `Esc` to release)
+- **Capture pointer**: a checkbox, not a button. Ticking it asks the browser for
+  pointer lock straight away; if the browser wants a gesture on the canvas
+  first, clicking the canvas asks again. Press `Esc` to release.
 
 
 

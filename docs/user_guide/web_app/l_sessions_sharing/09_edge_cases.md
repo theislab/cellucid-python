@@ -21,12 +21,19 @@ sender, or create a fresh session after loading through the intended route.
 
 See {doc}`07_versioning_compatibility_and_dataset_identity`.
 
-## Same lightweight fingerprint, changed content
+## Same fingerprint, changed content
 
-The fingerprint checks source type, dataset id, cell count, and variable count;
-it is not a hash of every cell, gene, field, or coordinate. Reordering cells or
-recomputing an embedding under the same identity and sizes can therefore pass
-the identity guard while changing scientific meaning.
+The fingerprint checks source type, dataset id, cell count, variable count, and
+a `cellOrder` record — a digest of the coordinates of the embedding that was on
+screen, plus the dimension it was taken in. It is not a hash of expression
+values, obs/var fields, category inventories, cell identifiers, or the
+embeddings that were not displayed.
+
+So the residual gap is *values*, not order: republishing changed field values,
+renamed or re-ordered categories, or a different gene table under the same
+identity and the same sizes, while leaving the displayed coordinates untouched,
+still passes the guard. Re-ordering cells or recomputing the embedding no longer
+does — both change the digest and are refused with their own message.
 
 Never reuse an identity for changed content. Publish a new prepared generation
 under a new immutable id and save a new session.

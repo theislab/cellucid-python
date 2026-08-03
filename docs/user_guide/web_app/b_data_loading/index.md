@@ -14,8 +14,17 @@ If you are not sure which method to use, start with {doc}`01_loading_options_ove
 :::
 
 :::{note}
-Vector fields (velocity/drift overlays): if your dataset includes per-cell vectors, Cellucid can visualize them as an animated overlay after loading.
-You don’t need a special loading method—just make sure the vector field data is present and named correctly.
+Vector fields (velocity/drift overlays): if your dataset includes per-cell
+vectors, Cellucid can draw them as an animated overlay after loading. Two
+things decide whether the overlay appears, and only the first is about naming:
+
+- **A prepared export** carries whatever `prepare(vector_fields=...)` wrote, and
+  the **three browser pickers** discover `<field>_umap_<dim>d` keys in `obsm` by
+  themselves. Nothing to switch on.
+- **Every Python path** — `cellucid serve`, `serve_anndata()`, `show_anndata()` —
+  leaves the vectors unread unless you ask, exactly like the neighbor graph.
+  Pass `--vector-fields` or `serve_vector_fields=True`.
+
 See {doc}`../i_vector_field_velocity/index` and {doc}`07_folder_file_format_expectations_high_level_link_to_spec`.
 :::
 
@@ -29,10 +38,12 @@ Use this as a decision tree. You can always switch later.
 |---|---|---|---|
 | A pre-exported folder from `prepare()` | Browser Prepared picker | Fastest, most reliable, no server | {doc}`03_browser_file_picker_tutorial` |
 | A portable `.zarr.zip` or `.zip` | Browser Zarr ZIP picker | One validated file selection in every supported browser | {doc}`03_browser_file_picker_tutorial` |
-| A `.h5ad` file | Server mode (recommended) or Jupyter | Python opens the file read-only-backed, reducing matrix memory pressure | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
+| A `.h5ad` **under 512 MiB**, and no Python | Browser H5AD picker | One file selection, nothing installed, nothing uploaded | {doc}`03_browser_file_picker_tutorial` |
+| A `.h5ad` **over 512 MiB**, or one that stalls the tab | Server mode (recommended) or Jupyter | Python opens the file read-only-backed, reducing matrix memory pressure | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
 | A `.zarr` directory | Server mode or Jupyter | Direct Python loading is supported and eager | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
 | An in-memory `AnnData` in a notebook | Jupyter | Fastest way to iterate while analyzing | {doc}`05_jupyter_tutorial` |
 | A dataset collection you want to share publicly | GitHub-hosted exports | Exact shareable URLs, no running server | {doc}`11_custom_dataset_repository` |
+| A static host, CDN, or intranet server you control | Self-hosted exports root | `?exportsBaseUrl=https://host/exports/` fills the app's own `Sample datasets:` dropdown from your catalog | {doc}`11_custom_dataset_repository` |
 
 ---
 
@@ -188,6 +199,7 @@ If your dataset includes vector fields (e.g. RNA velocity), enable the overlay a
 | Public sample | Learning with known-good data | No |
 | Browser file picker | Local viewing without Python | No |
 | GitHub catalog | Public, dataset-specific share links | No |
+| Self-hosted exports root | A catalog on your own static host or CDN | No — any HTTP server will do |
 | Server mode | Large data and on-demand browser gene requests | Yes — `cellucid serve` |
 | Jupyter | Interactive analysis workflows | No — the viewer manages a localhost server |
 

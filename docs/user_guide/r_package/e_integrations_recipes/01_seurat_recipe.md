@@ -118,6 +118,15 @@ obs$seurat_clusters <- factor(obs$seurat_clusters)
 
 ## Step 6 — (Optional) Export gene expression + `var`
 
+Declare the optional inputs up front so Step 8 can pass them unconditionally. If
+you skip this whole step, they stay `NULL` and no gene expression is exported:
+
+```r
+gene_var <- NULL
+expr_cxg <- NULL
+gene_panel <- NULL
+```
+
 ### 6.1 Choose which assay/slot to export
 
 Common Seurat choices:
@@ -144,9 +153,16 @@ The simplest `var` is a data.frame with rownames set to the gene IDs you want us
 
 ```r
 gene_ids <- rownames(expr_gxc)
-var <- data.frame(symbol = gene_ids, stringsAsFactors = FALSE)
-rownames(var) <- var$symbol
+gene_var <- data.frame(symbol = gene_ids, stringsAsFactors = FALSE)
+rownames(gene_var) <- gene_var$symbol
 ```
+
+:::{note}
+The variable is called `gene_var`, not `var`, because `var()` is a base R
+function: a script that only *sometimes* defines `var` will silently pass the
+function along when it does not. Name the argument explicitly at the call site
+(`var = gene_var`).
+:::
 
 ### 6.4 Optional: export a gene panel instead of all genes
 
@@ -154,7 +170,7 @@ Exporting every gene can be huge. A panel often gives a better experience.
 
 ```r
 gene_panel <- c("MS4A1", "CD3D", "NKG7")
-gene_panel <- intersect(gene_panel, rownames(var))
+gene_panel <- intersect(gene_panel, rownames(gene_var))
 ```
 
 ## Step 7 — (Optional) Export connectivities (Seurat graphs)
@@ -207,10 +223,10 @@ cellucid_prepare(
   force = TRUE,
   compression = 6,
   obs_continuous_quantization = 8,
-  var = if (exists("var")) var else NULL,
-  gene_expression = if (exists("expr_cxg")) expr_cxg else NULL,
-  gene_identifiers = if (exists("gene_panel")) gene_panel else NULL,
-  var_quantization = if (exists("expr_cxg")) 8 else NULL,
+  var = gene_var,
+  gene_expression = expr_cxg,
+  gene_identifiers = gene_panel,
+  var_quantization = if (is.null(expr_cxg)) NULL else 8,
   connectivities = conn
 )
 ```
@@ -242,7 +258,12 @@ Follow: {doc}`../d_viewing_loading/01_open_exports_in_cellucid_web_app`
 
 ### “My metadata columns turned into categories”
 
-If a column is not numeric, it becomes categorical. Explicitly coerce numeric columns.
+A plain `numeric` column is continuous; a `factor`, `character`, or `logical`
+column is a category. Coerce the columns you care about with `as.numeric()` or
+`factor()`. Any other type — a `Date`, a list column, a classed numeric — is not
+reclassified but **rejected**, with
+`Observation field '<key>' must be a native numeric, logical, character, or
+factor vector.`
 See: {doc}`../c_data_preparation_api/04_obs_cell_metadata`
 
 ### “I exported and got a gigantic folder”

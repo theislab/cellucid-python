@@ -65,11 +65,8 @@ If you’re trying to reason about edge cases, start from the UI glossary ({doc}
 
 ## The Cellucid mental model (learn this once)
 
-This diagram is the quickest way to understand “what is a thing” in Cellucid and what changes when you click.
-
-
-
-Key terms (you’ll see these throughout the docs):
+Five nouns, in the order they nest. Learning them here is the quickest way to
+predict what changes when you click.
 
 - **Dataset**: the loaded data bundle (points + metadata + optional gene expression).
 - **Embedding / dimension (1D/2D/3D)**: where points live in space (UMAP/tSNE/etc).
@@ -77,6 +74,11 @@ Key terms (you’ll see these throughout the docs):
 - **View**: a panel showing the dataset with a specific dimension, camera, fields, filters, and highlights.
 - **Live view vs snapshot view**: live is your “working” view; snapshots are “kept” panels for comparison.
 - **Artifacts**: exports (figures) and saved sessions (`.cellucid-session`) for sharing/reproducibility.
+
+One dataset carries several embeddings; a view picks one embedding and one
+field; artifacts are what you take out of a view. Every term above, plus the
+loading vocabulary, is defined against the app's own labels in
+{doc}`04_ui_glossary_terminology`.
 
 ---
 
@@ -101,6 +103,10 @@ Most non-demo workflows look like this:
 4) **Save / export**:
    - figures for papers,
    - a `.cellucid-session` bundle for reproducibility and sharing.
+
+Step 1 is not Python-only: `cellucid_prepare()` in the R package writes the same
+export folder from R matrices and data frames, and the browser cannot tell which
+language wrote it. See {doc}`../../r_package/index`.
 
 If you’re choosing a workflow, use the decision tree: {doc}`05_which_workflow_is_for_me_decision_tree`.
 

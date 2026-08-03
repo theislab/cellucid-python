@@ -356,11 +356,22 @@ For each exported dimensionality:
 - filename: `points_1d.bin`, `points_2d.bin`, `points_3d.bin` (optionally with `.gz`)
 - dtype: `float32`
 - shape: `(n_cells, dim)`
-- coordinate system: normalized independently per dimension to fit approximately `[-1, 1]`
+- coordinate system: centred per axis, then scaled by **one factor shared by every
+  axis** — `center = (axis_mins + axis_maxs) / 2` and `scale_factor = 2 / max(axis
+  ranges)`. Only the widest axis fills `[-1, 1]`; the narrower ones deliberately do
+  not, because a per-axis scale would stretch the embedding to the box and destroy
+  its aspect ratio. Both writers do exactly this, so a reimplementation must too
 - rounding: the extents and the normalization are computed at the input's own
   precision, and the normalized coordinate is rounded to `float32` exactly
   once, at the write. Both writers do this, so one embedding produces one
   `points_<dim>d.bin` whichever writer produced it
+- accepted input: every source coordinate must be finite *and* representable as
+  a nonzero finite `float32` — no larger than `(2 - 2^-23) x 2^127` and, if
+  nonzero, no smaller than `2^-149` in magnitude. This is checked before
+  normalization, not at the write: normalization pulls every coordinate into
+  roughly `[-1, 1]`, so a source coordinate outside the range would arrive at
+  the writer already inside it and be published as a number the caller never
+  supplied. `latent_space` is checked the same way, for the same reason
 
 ---
 
@@ -708,6 +719,11 @@ Vector fields are stored as:
   once, at the write. Rounding the input first and the product second rounds
   twice, which moves a component one ULP away from the correctly rounded value;
   neither writer does that
+- accepted input: as for the coordinates above, every component must be finite
+  and representable as a nonzero finite `float32`. The small end matters as much
+  as the large one — a nonzero component below `2^-149` converts to exactly
+  `0.0`, which is finite, so a check that asked only about finiteness would
+  publish a vector whose component had silently become zero
 
 `<index>` is the field's position in the sorted field list, `0 … N-1`, exactly
 as on the other axes; the field id itself never appears in a path. Vector

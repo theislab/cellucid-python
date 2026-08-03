@@ -67,7 +67,9 @@ The full serve-path rule is in
 | `X_umap_3d` | `(n_cells, 3)` | `points_3d.bin(.gz)` |
 
 All embeddings you provide must:
-- be 2D arrays (`ndim == 2`),
+- be 2D arrays (`ndim == 2`) — except `X_umap_1d`, which also accepts a plain
+  `(n_cells,)` vector and reshapes it to the single column it declares, exactly
+  as AnnData does when such an array is put in `obsm`,
 - have the correct number of columns for their dimensionality,
 - and have the same number of rows (`n_cells`) across all provided dimensions.
 
@@ -159,7 +161,9 @@ If you recompute UMAP (stochastic), you will get a different export even if ever
 ## Edge cases and common footguns
 
 - **NaN/Inf coordinates**: must be removed before export.
-- **Wrong shape**: `(n_cells,)` is not accepted; use `(n_cells, 1)`.
+- **Right array, wrong argument**: the dimension is decided by the argument name,
+  not by the array, so a `(n_cells, 3)` array passed to `X_umap_2d` is rejected
+  rather than truncated.
 - **Mismatched rows**: embeddings computed on a subset but `obs`/`X` not subset identically.
 - **All-identical embedding**: rejected before export; recompute or supply an
   embedding with a nonzero finite range on at least one axis.

@@ -1,5 +1,9 @@
 # Codebase Architecture
 
+**Audience:** contributors and maintainers  
+**Time:** 15 minutes  
+**What you'll get:** what each file under `R/` owns, and the order the export runs in
+
 `cellucid-r` exposes one public function, `cellucid_prepare()`, and splits the
 writer behind it across `R/` by responsibility: one module per axis, per encoding
 concern, and per publication step.

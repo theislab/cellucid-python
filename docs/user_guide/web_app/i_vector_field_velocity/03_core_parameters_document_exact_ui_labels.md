@@ -43,12 +43,19 @@ Turn it off, or zoom back in.
 
 It needs **Visualization → Renderer settings → Level-of-Detail (LOD)** enabled
 *and* a level actually below full detail. Left on `Force LOD level:` `Auto`, the
-renderer never coarsens past a 2,000,000-point budget, so a dataset of 2,000,000
-cells or fewer stays at full detail however far you zoom out and this checkbox
-changes nothing. Under `Auto`, the `0.5` step first becomes reachable at roughly
-2.5M cells and the disposal step at roughly 7.6M. On anything smaller — the
-Pancreas sample used throughout these pages is 3,696 cells — move `Force LOD
-level:` yourself; the forced slider is deliberately not bounded by the budget.
+renderer coarsens as you pull back at any dataset size, down to a floor of
+`min(2,000,000, cells ÷ 8)` points — so every step of the particle scale is
+reachable under `Auto`.
+
+The step is counted in *levels*, not in points: it is `1.0` at full detail,
+`0.5` one or two levels below, `0.25` three to five below, and `0` — the overlay
+disposed — at six or more. On a cloud too small to sample that matters more, not
+less. No level ever holds fewer than 1,000 points, so on the 3,696-cell Pancreas
+sample used throughout these pages the coarse rungs all hold the same 1,000
+points, but they are still seventeen rungs below full detail — so pulling right
+back disposes the overlay while the picture behind it barely changes. Zoom back
+in, or set `Force LOD level:` to a rung you choose; the forced slider is
+deliberately not held to the floor.
 :::
 
 :::{note}

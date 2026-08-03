@@ -85,6 +85,14 @@ You typically care about:
 - whether memory stabilizes after a while (good),
 - or grows unbounded during normal use (suspicious).
 
+**GPU memory, roughly.** Before the renderer has published a measured figure,
+Cellucid's own reports estimate GPU memory at **28 bytes per point** — about
+27 MiB at one million points and 267 MiB at ten million. Read it as an order of
+magnitude for whether a dataset will fit, not as a measurement: the report marks
+it `GPU Memory (estimate)` while it is one, and switches to `GPU Memory` once
+the renderer reports the real value. Highlights, snapshot views and overlays all
+add on top of it.
+
 ---
 
 ### 4) Network / I/O metrics (remote workflows)
@@ -108,7 +116,18 @@ At minimum record:
 - browser + version,
 - machine + GPU (even “M1 MacBook Air” is better than nothing),
 - window size + whether retina/high-DPI (pixels matter),
-- the exact Cellucid settings that affect the scenario (views, render mode, overlays).
+- the exact Cellucid settings that affect the scenario (views, render mode, overlays),
+- `Point size (log):`, whether `Antialiasing (smooth point edges)` is ticked, and
+  whether `Level-of-Detail (LOD)` is on and forced to a level.
+
+:::{important}
+Record those last three even though you did not set them. The point size and the
+antialiasing state are both chosen from the dataset's cell count when it opens,
+so **two runs on two datasets can differ in them without anyone touching a
+control** — and they are the two rendering settings measured to move frame time
+in {doc}`02_performance_considerations_what_gets_slow_and_why`. A comparison that
+does not pin them is not a comparison of the thing you changed.
+:::
 
 If you are reporting a performance bug, use the copy/paste template in {doc}`09_reporting_performance_bugs`.
 
@@ -126,7 +145,9 @@ Before you measure:
 4) Keep the filter state fixed. Hidden cells are rejected before rasterisation,
    so a run on a filtered view and a run on the full dataset measure different
    scenes.
-5) Avoid changing multiple quality knobs between runs.
+5) Avoid changing multiple quality knobs between runs — and set `Point size
+   (log):` and `Antialiasing (smooth point edges)` explicitly rather than
+   inheriting whatever each dataset opened with.
 
 Thermals matter:
 - On laptops, performance can degrade after a few minutes due to throttling.
@@ -243,6 +264,9 @@ Use this table format in a GitHub issue, lab notebook, or internal doc.
 - Machine/GPU: `<e.g., M2 Pro / RTX 3070 / Intel Iris>`
 - Window: `<width × height>`, `<devicePixelRatio>`
 - Render mode: `<Points/Smoke>`
+- Point size: `<slider position>` → `<rendered size>`
+- Antialiasing: `<on / off>`
+- LOD: `<off / Auto / forced level N>`
 - Overlays: `<none / vector field overlay settings>`
 - Filters: `<none / N enabled>`, visible cells: `<count>`
 

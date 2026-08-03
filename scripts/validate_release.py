@@ -131,8 +131,18 @@ def _sdist_excluded_members(archive: tarfile.TarFile, version: str) -> tuple[str
     )
 
 
-def validate_sdist(path: Path, version: str, expected_digest: str) -> Path:
-    """Require one normalized source distribution to match the recipe digest."""
+def validate_sdist(path: Path, version: str, expected_digest: str | None) -> Path:
+    """Require one normalized source distribution, optionally matching the recipe.
+
+    ``expected_digest`` is ``None`` on the push path. The conda recipe records the
+    SHA-256 of the *published* sdist, so it can only be correct once the artifact
+    it names exists; asserting it on every push made a hand-maintained constant a
+    function of every byte of packaged source, and every source edit broke the
+    build gate on all ten matrix jobs until someone remembered to recompute it.
+    That is a tripwire on unrelated work, not a gate. The structural checks below
+    run on every push, where they catch real packaging mistakes; the digest is
+    checked at release, where it means something.
+    """
     if path.is_dir():
         candidates = sorted(path.glob("cellucid-*.tar.gz"))
         _require(
@@ -145,11 +155,15 @@ def validate_sdist(path: Path, version: str, expected_digest: str) -> Path:
         path.name == f"cellucid-{version}.tar.gz",
         f"source distribution must be named cellucid-{version}.tar.gz",
     )
-    actual_digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    _require(
-        actual_digest == expected_digest,
-        (f"source-distribution SHA-256 {actual_digest} does not match meta.yaml {expected_digest}"),
-    )
+    if expected_digest is not None:
+        actual_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        _require(
+            actual_digest == expected_digest,
+            (
+                f"source-distribution SHA-256 {actual_digest} does not match "
+                f"meta.yaml {expected_digest}"
+            ),
+        )
     with tarfile.open(path, mode="r:gz") as archive:
         excluded = _sdist_excluded_members(archive, version)
     _require(
@@ -306,19 +320,35 @@ def main() -> int:
         type=Path,
         help="Normalized source distribution, or directory containing exactly one.",
     )
+    parser.add_argument(
+        "--match-recipe-digest",
+        action="store_true",
+        help=(
+            "Also require the source distribution to match the SHA-256 recorded "
+            "in the conda recipe. Meaningful only for the artifact being "
+            "published; see validate_sdist()."
+        ),
+    )
     arguments = parser.parse_args()
     version = validate_release(
         arguments.tag,
         verify_local_tags=arguments.verify_local_tags,
     )
     if arguments.sdist is not None:
+        # `validate_recipe` still runs on every push: the recipe's name, version,
+        # entry point and dependency pins are facts about the source and must
+        # stay true. Only the digest, which is a fact about a published file,
+        # waits for the release.
         expected_digest = validate_recipe(version)
         validated_sdist = validate_sdist(
             arguments.sdist,
             version,
-            expected_digest,
+            expected_digest if arguments.match_recipe_digest else None,
         )
-        print(f"Source distribution matches the recipe: {validated_sdist}")
+        if arguments.match_recipe_digest:
+            print(f"Source distribution matches the recipe: {validated_sdist}")
+        else:
+            print(f"Source distribution is well formed: {validated_sdist}")
     print(f"Cellucid Python release contract is valid for v{version}.")
     return 0
 

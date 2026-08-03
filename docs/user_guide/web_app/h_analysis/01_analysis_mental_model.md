@@ -84,7 +84,8 @@ When analysis extracts values:
 - and different variables can end up using different effective `n` (especially in correlation).
 
 This is why you may see:
-- “Insufficient paired values” in correlation,
+- a correlation run stop with `requires at least 3 paired values` for a page that
+  looked large enough ({doc}`05_analysis_mode_correlation_analysis`),
 - or apparent “shrinking” group sizes for certain fields.
 
 ---

@@ -320,21 +320,27 @@ Workarounds:
 
 ---
 
-## Symptom: “The export contains sensitive metadata (dataset path/URL)”
+## Symptom: “The export contains sensitive metadata (dataset name/URL)”
 
 ### What’s happening
 
 Exports embed provenance metadata to support reproducibility. This can include:
 - dataset names/ids in filenames,
-- source URLs,
-- local dataset paths (depending on how data was loaded).
+- source URLs — for a GitHub dataset, that URL names the account, repository and
+  branch,
+- local dataset folder or file names (depending on how data was loaded).
+
+It never includes a filesystem path: a browser does not expose one, so nothing
+above the folder or file name you chose can appear. The exact inventory of what
+is and is not written is {ref}`figure-export-source-file-privacy`.
 
 ### Fix / mitigation
 
 See {doc}`05_metadata_and_provenance` for:
 - how to inspect metadata,
 - how to strip metadata from PNG/SVG if needed,
-- and how to share “data + session + figures” without leaking local paths.
+- and how to share “data + session + figures” without leaking a private URL or a
+  folder name you did not mean to publish.
 ---
 
 ## Next steps

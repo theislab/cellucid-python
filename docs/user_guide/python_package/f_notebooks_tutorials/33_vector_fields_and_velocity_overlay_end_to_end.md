@@ -82,11 +82,13 @@ Examples:
 - `velocity_umap_2d`
 - `T_fwd_umap_2d` (forward drift)
 
-If the AnnData object contains more than one field ID, the direct-viewing APIs
-require `vector_field_default` to name the initial field exactly. For example,
-an object containing both example keys above needs
-`vector_field_default="velocity_umap"`. Omitting it, or naming an unavailable
+If more than one field ID is *served*, the direct-viewing APIs require
+`vector_field_default` to name the initial field exactly. For example, an object
+whose served fields are both example keys above needs
+`vector_field_default="velocity_umap"`. Omitting it, or naming an unserved
 field, raises `ValueError`.
+
+Serving them at all is opt-in — see the next section.
 
 ---
 
@@ -144,6 +146,28 @@ print("Wrote vector field:", key)
 
 ## Step 3 — View the vector field in Cellucid
 
+### Vector fields are off by default on the direct-AnnData path
+
+Putting the keys in `obsm` is not enough to see them. `show_anndata()`,
+`serve_anndata()`, and `cellucid serve` read vector fields only when you ask:
+
+- Python: `serve_vector_fields=True`
+- terminal: `--vector-fields`
+
+The reason is startup cost: every declared field is read and validated **in
+full** before the server binds its socket, because the metadata the viewer
+fetches first declares what is there. Most sessions never turn the overlay on,
+so the scan is not paid unless you want it. The full rule, alongside the same
+opt-in for the neighbor graph, is in
+{doc}`../d_viewing_apis/08_anndata_mode_show_anndata_and_serve_anndata`.
+
+Passing `vector_field_default=` without `serve_vector_fields=True` is refused
+rather than silently ignored: `vector_field_default` selects among *served*
+fields, so with nothing served there is nothing for it to select.
+
+`prepare()` is unaffected — Option B below passes the arrays through
+`vector_fields=`, which has always been the ask.
+
 ### Option A: view directly from AnnData (notebook)
 
 ```python
@@ -158,6 +182,7 @@ viewer = show_anndata(
     height=650,
     dataset_name="My study",
     dataset_id="my-study-v1",
+    serve_vector_fields=True,
     vector_field_default=default_vector_field,
 )
 viewer
@@ -282,11 +307,14 @@ Fix:
 ### Symptom: “No vector fields are available in the UI”
 
 Likely causes:
+- AnnData mode: the keys are there but were never asked for
+  (`serve_vector_fields=True` / `--vector-fields`) — check the startup report
 - vector field keys don’t match the naming convention
 - vectors are stored in the wrong place (not in `obsm` for AnnData mode)
 - export didn’t include vector fields
 
 Fix:
+- pass `serve_vector_fields=True` (or `--vector-fields`) on the direct-AnnData path
 - rename to an explicit key like `T_fwd_umap_2d`
 - verify `dataset_identity.json` advertises `vector_fields` (exported mode)
 - in AnnData mode, ensure `adata.obsm` contains the key before calling `show_anndata`

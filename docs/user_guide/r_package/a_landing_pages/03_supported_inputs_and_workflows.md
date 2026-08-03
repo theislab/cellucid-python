@@ -53,17 +53,19 @@ Why `latent_space` is required: it is used to compute **per-cell outlier quantil
 
 ## Accepted types (what “matrix-like” means)
 
-Embeddings and latent space:
-- base R `matrix`
-- `data.frame` (converted via `as.matrix`)
+| Input | Accepted |
+|---|---|
+| embeddings, latent space, vector fields | base R `matrix`, a `data.frame` whose every column is a plain numeric vector, or a `Matrix::Matrix` |
+| `gene_expression` | base R `matrix`, numeric `data.frame`, or a real `Matrix` sparse matrix (`dgCMatrix` is read column by column without densifying the whole thing) |
+| `connectivities` | base R numeric or logical `matrix`, or a real, logical, or pattern `Matrix` sparse matrix (recommended) |
+| `obs` | `data.frame`, whose exported columns are plain `numeric`, `factor`, `character`, or `logical` — nothing else |
 
-Gene expression:
-- base R `matrix`
-- `Matrix` sparse matrices (e.g. `dgCMatrix`)
-
-Connectivities:
-- base R `matrix`
-- `Matrix` sparse matrices (recommended)
+```{warning}
+A `data.frame` column carrying a class of its own — `bit64::integer64`, a
+`units` measurement, a `Date` — is **refused**, not silently converted, because
+`as.matrix()` would drop the attribute that says what the numbers mean. Convert
+deliberately before the call.
+```
 
 ## Shapes and orientation (the #1 source of bugs)
 

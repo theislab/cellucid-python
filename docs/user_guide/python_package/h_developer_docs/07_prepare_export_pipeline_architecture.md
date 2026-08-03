@@ -200,11 +200,20 @@ Outlier quantiles:
 
 `obs_manifest.json` uses a compact schema for size and fast parsing:
 
-- `_continuousFields`: list of `[key]` or `[key, minValue, maxValue]`
-- `_categoricalFields`: list containing categories, dtype, missing marker, centroids, and optional outlier min/max
+- `_continuousFields`: list of `[index, key]` or
+  `[index, key, minValue, maxValue]`
+- `_categoricalFields`: list of
+  `[index, key, categories, codesDtype, codesMissingValue, centroidsByDim]`,
+  plus `outlierMinValue, outlierMaxValue` when outlier quantization is on
 - `_obsSchemas`: path patterns that tell the viewer how to derive filenames
 
-Full spec lives in: {doc}`08_export_format_spec_and_invariants`.
+The leading member of every entry is the payload index the `pathPattern` is
+expanded with, and both writer and reader accept only the exact member counts
+above (2 or 4; 6 or 8). `obs` shares one index space across both lists, because
+both write into `obs/`.
+
+Full specification:
+{doc}`../c_data_preparation_api/09_output_format_specification_exports_directory`.
 
 ---
 

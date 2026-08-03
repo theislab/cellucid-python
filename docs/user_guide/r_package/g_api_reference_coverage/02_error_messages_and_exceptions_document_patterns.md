@@ -1,5 +1,9 @@
 # Error Messages and Exceptions (Documentation Patterns)
 
+**Audience:** everyone reading an error, plus maintainers  
+**Time:** 10–15 minutes  
+**What you'll get:** how `cellucid_prepare()` reports problems, and which page fixes each family
+
 This page is for users and maintainers who want to interpret `cellucid_prepare()` failures quickly.
 
 ## How `cellucid_prepare()` reports problems
@@ -358,6 +362,25 @@ Docs:
 Meaning:
 - a value would become zero or infinity once written as float32
 
+Both ends of the range matter, and the small end is the quiet one: a nonzero
+value below `2^-149` converts to exactly `0.0`, which *is* finite, so a check
+that asks only whether the result is finite would publish a field whose value
+had silently become zero.
+
+The same rule reaches you in two other wordings, from the two places a value can
+enter without passing the writer:
+
+- `X_umap_2d contains values outside the finite float32 range: …` — embedding
+  and `latent_space` coordinates are centred and scaled into roughly `[-1, 1]`
+  before anything is written, so the writer would see an in-range value and
+  publish a number you never supplied. These are checked at the source instead.
+- `Cannot quantize field 'score': values must remain finite in the viewer's
+  float32 domain.` — from `obs_continuous_quantization`, where the value becomes
+  an integer code rather than float32 bytes.
+
+`cellucid-python` refuses exactly the same values, so a dataset that one writer
+accepts the other accepts too.
+
 A field whose native-double variation is finer than float32 resolution is not
 an error: it is one float32 value, so it publishes as a constant field
 (`minValue == maxValue`, every code `0`).
@@ -365,3 +388,4 @@ an error: it is one float32 value, so it publishes as a constant field
 Docs:
 - {doc}`../c_data_preparation_api/06_gene_expression_matrix`
 - {doc}`../c_data_preparation_api/10_performance_tuning_prepare_export`
+- {doc}`../../python_package/c_data_preparation_api/04_obs_cell_metadata`

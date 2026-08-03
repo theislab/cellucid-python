@@ -1,5 +1,12 @@
 # Reporting performance bugs
 
+**Audience:** everyone filing a performance issue  
+**Time:** 10–20 minutes  
+**What you’ll get:**
+- A 2-minute checklist that rules out the common non-bugs
+- A copy/paste issue template with the context that avoids back-and-forth
+- How to build a minimal reproduction when the data is private
+
 This page is a **copy/paste playbook** for reporting performance problems in a way that is actionable.
 
 Goal: minimize back-and-forth by including the context that matters:
@@ -32,7 +39,11 @@ If none of these change the behavior, it is likely worth reporting.
 
 Include:
 - the synthetic benchmark result, and/or
-- your measured FPS and view/window settings.
+- your measured FPS and view/window settings,
+- and the three render settings a reader cannot guess: `Point size (log):`,
+  whether `Antialiasing (smooth point edges)` is ticked, and whether
+  `Level-of-Detail (LOD)` is on. The first two are chosen from the dataset's
+  cell count when it opens, so they differ between datasets on their own.
 
 See {doc}`05_benchmark_tools` and {doc}`04_benchmarking_methodology_and_metrics`.
 
@@ -107,6 +118,13 @@ If the dataset is private:
 - GPU: `<e.g., M2 / RTX 3060 / Intel Iris>` (approx is fine)
 - WebGL2 hardware acceleration: `<yes/no/unknown>`
 - Window size: `<width × height>`, device pixel ratio if known
+
+### Render settings
+
+- Point size: `<slider position>` → `<rendered size>`
+- Antialiasing: `<on / off>`
+- LOD: `<off / Auto / forced level N>`
+- Render mode: `<Points / Smoke>`
 
 ### Steps to reproduce (numbered)
 

@@ -1,5 +1,9 @@
 # Installation and Dependency Issues
 
+**Audience:** everyone  
+**Time:** 5–10 minutes  
+**What you'll get:** a working `library(cellucid)`
+
 Use this page when you can’t install or load `cellucid` in R.
 
 ## Symptom: `library(cellucid)` fails (“there is no package called 'cellucid'”)

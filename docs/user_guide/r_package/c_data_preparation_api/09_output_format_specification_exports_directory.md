@@ -7,9 +7,13 @@
 This page is a practical specification of what `cellucid-r` writes to `out_dir`.
 
 ```{note}
-This describes the export format as produced by `cellucid-r` today.
-The format is shared across languages (R/Python), but details can evolve.
-Treat JSON manifests as the source of truth.
+This describes the export format as produced by `cellucid-r` today, in the terms
+an R caller works in. The format itself is one contract shared by both writers
+and the viewer, and its normative specification —
+{doc}`../../python_package/c_data_preparation_api/09_output_format_specification_exports_directory`
+— is where a reimplementation, or a question this page does not answer, should
+go. Nothing here is R-specific except the examples: an export written by
+`cellucid_prepare()` and one written by `cellucid.prepare()` are byte-comparable.
 ```
 
 ## Top-level layout
@@ -61,6 +65,12 @@ Shape:
 
 Notes:
 - values are normalized (center + scale); see {doc}`03_embeddings_and_coordinates`
+- every source coordinate must be finite *and* representable as a nonzero finite
+  `float32`. That is checked before normalization, not at the write:
+  normalization pulls every coordinate into roughly `[-1, 1]`, so a coordinate
+  outside the `float32` range would arrive at the writer already inside it and
+  be published as a number you never supplied. `latent_space` is checked the
+  same way. The `cellucid` Python package accepts exactly the same inputs
 
 ## Obs manifest: `obs_manifest.json`
 
@@ -85,10 +95,10 @@ Important keys (high level):
 
 Every field entry begins with its own **payload index**, an integer:
 
-- continuous: `[index, key]`, or `[index, key, min_val, max_val]` when quantized
+- continuous: `[index, key]`, or `[index, key, minValue, maxValue]` when quantized
 - categorical: `[index, key, categories, codes_dtype, codes_missing_value,
   centroids_by_dim]`, or the same six followed by
-  `outlier_min_value, outlier_max_value` when outliers are quantized
+  `outlierMinValue, outlierMaxValue` when outliers are quantized
 
 Both arrays write into `obs/`, so their indices are **one shared space**: across
 `_continuousFields` and `_categoricalFields` together the indices are exactly
@@ -126,7 +136,7 @@ For each continuous field with payload index `i`, one file is written:
 - `obs/<i>.values.u8` / `.u16` (quantized)
 
 If quantized:
-- the manifest entry includes `min_val` and `max_val`
+- the manifest entry includes `minValue` and `maxValue`
 - all input values are finite; non-finite values reject publication
 
 ### Categorical codes
@@ -171,7 +181,7 @@ Important keys (high level):
 
 Each `fields` entry is:
 - `[index, gene_id]` for float32 exports, or
-- `[index, gene_id, min_val, max_val]` for quantized exports
+- `[index, gene_id, minValue, maxValue]` for quantized exports
 
 The first element is the gene's payload index. Within `var/` the indices are exactly
 `0 … N-1`, each used once, and `cellucid_prepare()` proves that before
@@ -245,11 +255,11 @@ Important keys (high level):
 - `obs_fields`: summary list of exported obs fields
 - `export_settings`: compression/quantization settings
 - optional `source` (name/url/citation)
+- optional `vector_fields` metadata
 
 `name`, `description`, and every `source` string are shown to the reader
 verbatim, so they obey the same display-text rule as a string category
 label. `description` may be `""`; the others may not be empty.
-- optional `vector_fields` metadata
 
 ## Vector fields: `vectors/` (optional)
 
@@ -264,6 +274,12 @@ each used once.
 
 The web app discovers them via `dataset_identity.json` (`vector_fields` section),
 which is what maps each field id to its files.
+
+Every component must be finite and representable as a nonzero finite `float32`.
+The small end matters as much as the large one: a nonzero component below
+`2^-149` converts to exactly `0.0`, which *is* finite, so a check that asked
+only about finiteness would publish a vector whose component had silently become
+zero.
 
 ## The writer proves the layout before publishing
 

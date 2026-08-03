@@ -31,28 +31,54 @@ Each entry below follows: **what you see → why → how to confirm → what to 
 - **Confirm:** check your AnnData `obsm` keys (or export metadata) for `*_umap*` field ids.
 - **What to do:** store/export vectors using Cellucid’s naming convention for the basis currently supported by your workflow (UMAP).
 
-### 4) All-zero or extremely small vectors
+### 4) All-zero vectors (nothing draws at all)
 
-- **What you see:** overlay appears enabled, but the flow looks static (or almost static).
-- **Why:** magnitudes are ~0 (either biologically, or due to a preprocessing mistake such as scaling down too aggressively).
-- **Confirm:** in Python, inspect `np.linalg.norm(vectors, axis=1)`; in the UI, try increasing `Flow speed:` and `Particle size:`—if nothing changes, data may be near-zero.
-- **What to do:** verify how the vector field was computed and whether it matches the embedding; ensure you’re not accidentally using an all-zero layer.
+- **What you see:** the field loads, the notification reads `Velocity overlay ready`, and the canvas is unchanged. Not a faint flow — no flow.
+- **Why:** a particle whose spawn cell has a magnitude below a floor of `0.00001`
+  is discarded in the vertex shader: its point size is forced to zero and its
+  position is pushed off-clip. With every magnitude at exactly zero, every
+  particle is discarded on every frame.
+- **Confirm:** in Python, `np.linalg.norm(vectors, axis=1).max()` is 0 (or below `1e-5`).
+- **What to do:** fix the data. Raising `Flow speed:`, `Particle size:` or
+  `Opacity:` cannot bring back a particle whose point size was set to zero, so
+  none of the visual controls will help. This is the extreme case of the
+  under-representation of slow cells described in
+  {doc}`01_what_vector_fields_are_user_facing`.
 
-### 5) NaN/Inf in vectors
+### 5) Extremely small but non-zero vectors
 
-- **What you see:** flow has “dead zones”, discontinuities, or looks weaker than expected.
-- **Why:** non-finite values are sanitized to 0 for stability.
-- **Confirm:** check for `np.isfinite(vectors).all()` in Python.
-- **What to do:** clean the vector field (replace invalid values) or recompute upstream.
+- **What you see:** the flow is visible but sluggish, and low-magnitude regions look sparse as well as dim.
+- **Why:** magnitudes are tiny (either biologically, or because of a
+  preprocessing mistake such as scaling down too aggressively). The per-frame
+  step is proportional to the raw magnitude, and the slowest cells fall under
+  the discard floor.
+- **Confirm:** inspect the distribution of `np.linalg.norm(vectors, axis=1)`; raising `Flow speed:` should visibly change the motion.
+- **What to do:** raise `Flow speed:` — it is a display gain and this is exactly
+  what it is for. If you also need the sparse regions populated, the vectors
+  themselves have to be rescaled upstream.
 
-### 6) Magnitudes are huge (units/normalization mismatch)
+### 6) NaN/Inf in vectors
+
+- **What you see:** the overlay never enables. `Show overlay` turns itself back
+  off and the status line under the overlay settings reads `Failed to load vector field.`
+- **Why:** nothing sanitizes a non-finite value. Both writers and the reader
+  reject the field outright — `cellucid.prepare(...)` refuses it at export, and
+  in the browser the loader throws on the first offending component rather than
+  substituting a number. A silently zeroed cell would be an invisible wrong
+  answer in a figure.
+- **Confirm:** `np.isfinite(vectors).all()` in Python. In the browser, read the
+  error notification: it names the offending cell index and vector component.
+- **What to do:** clean or recompute the field upstream and re-export. The exact
+  error strings are listed in {doc}`07_troubleshooting_velocity_overlay`.
+
+### 7) Magnitudes are huge (units/normalization mismatch)
 
 - **What you see:** particles shoot off rapidly; trails look like streaks unrelated to local structure.
 - **Why:** the vector field was computed in a coordinate system that doesn’t match the embedding scale (or magnitudes were not normalized).
 - **Confirm:** reduce `Flow speed:` to ~0.5×. If it still looks explosive, the raw vectors are likely too large.
 - **What to do:** verify that vectors are computed in the same embedding coordinate system as the points (and that row order matches).
 
-### 7) Row order mismatch (the “hardest” failure mode)
+### 8) Row order mismatch (the “hardest” failure mode)
 
 - **What you see:** overlay renders, but directionality looks nonsensical or contradicts known biology.
 - **Why:** the vector field rows do not correspond to the same cells as the embedding rows.
@@ -111,10 +137,17 @@ Each entry below follows: **what you see → why → how to confirm → what to 
 
 ### 4) “All cells filtered out”
 
-- **What you see:** overlay is enabled but nothing draws (and you may see a “Velocity overlay unavailable” toast).
+- **What you see:** the overlay is enabled but nothing draws, and the notification reads `Velocity overlay ready (no visible cells)`.
 - **Why:** particles spawn from visible cells only; if no cells are visible, there is nothing to spawn from.
 - **Confirm:** your filtered/visible cell count is 0 (or the plot is empty).
-- **What to do:** relax filters (or disable overlay until cells are visible again).
+- **What to do:** relax filters (or disable the overlay until cells are visible again).
+
+:::{note}
+That notification says **ready**, not failed, on purpose: the overlay built its
+spawn table correctly and the table came back empty. The different message
+`Velocity overlay unavailable` means the spawn-table build itself threw, which
+is a real failure — see {doc}`07_troubleshooting_velocity_overlay`.
+:::
 
 ---
 

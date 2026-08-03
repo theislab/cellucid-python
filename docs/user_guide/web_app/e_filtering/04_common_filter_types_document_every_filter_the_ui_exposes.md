@@ -150,6 +150,14 @@ The one-line hint under the toggle changes with it — `Changes apply as you
 drag` when on, `Drag sliders, then click Filter` when off — so the toggle
 state is readable without hunting for the button.
 
+:::{warning}
+**The toggle does not stay off.** It is rebuilt with the legend, so it returns
+to `On` whenever the legend re-renders: a different active field, a different
+colormap, a different kept view, or a loaded session. It is also not stored in
+a `.cellucid-session`. Check it again after any of those before you drag on a
+large dataset — see {doc}`05_performance_considerations`.
+:::
+
 ### RESET
 
 `RESET` returns the filter to the full range (equivalent to “no filter”). It

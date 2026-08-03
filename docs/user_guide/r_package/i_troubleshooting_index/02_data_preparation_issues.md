@@ -1,5 +1,9 @@
 # Data Preparation Issues
 
+**Audience:** everyone exporting  
+**Time:** 5 minutes  
+**What you'll get:** the four root causes behind most export failures, in priority order
+
 Use this page when `cellucid_prepare()` fails or produces exports that look wrong.
 
 ```{important}

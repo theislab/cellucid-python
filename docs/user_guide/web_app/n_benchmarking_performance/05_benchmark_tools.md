@@ -186,8 +186,8 @@ GPU specifically, that is the tool — not the headline FPS.
 - If LOD reduces **Visible Points** and FPS improves, the renderer is adapting
   successfully.
 - If **Visible Points** stays high and FPS stays low, try LOD in Visualization —
-  and above two million points lower `Force LOD level:` too, since `Auto` stops at
-  about two million,
+  and lower `Force LOD level:` too when you need to go past `Auto`'s floor of
+  `min(2,000,000, cells ÷ 8)` points,
   a smaller window, a smaller point size, or turning antialiasing off. Lowering
   `Shader quality:` is *not* on that list — it did not change frame time on the
   hardware this was measured on, and the reason is in

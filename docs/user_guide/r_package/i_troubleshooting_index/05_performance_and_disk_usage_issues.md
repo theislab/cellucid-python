@@ -1,5 +1,9 @@
 # Performance and Disk Usage Issues
 
+**Audience:** anyone exporting medium or large datasets  
+**Time:** 5–10 minutes  
+**What you'll get:** why an export is slow, huge, or unshareable, and the levers that fix it
+
 Use this page when exports are too slow, too large, or too hard to share.
 
 ## Symptom: export takes “forever”

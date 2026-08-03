@@ -1004,7 +1004,15 @@ class CORSMixin:
             self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Range")
-        self.send_header("Access-Control-Expose-Headers", "Content-Length, Content-Range")
+        # Every header a cross-origin reader is expected to act on has to be
+        # listed here, because a header that is sent but not exposed reads as
+        # absent. `Content-Encoding` was sent and not exposed, so the browser
+        # could not tell a gzipped body from a plain one and sized its progress
+        # from the compressed length.
+        self.send_header(
+            "Access-Control-Expose-Headers",
+            "Content-Encoding, Content-Length, Content-Range",
+        )
         if self.allow_caching:
             self.send_header("Cache-Control", "public, max-age=3600")
         else:

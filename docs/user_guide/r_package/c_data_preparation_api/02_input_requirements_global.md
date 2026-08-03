@@ -67,20 +67,19 @@ Recommendation:
 - remove cells with missing embedding coordinates or recompute the embedding
   from reviewed input.
 
-## Rule 4: careful with non-numeric `obs` columns
+## Rule 4: `obs` columns must be one of four types
 
-`obs` is a data.frame. `cellucid-r` classifies columns as:
-
-- **continuous**: `is.numeric(x)` is `TRUE`
-- **categorical**: factors, logicals, and all other types (including character)
-
-This means:
-- a character column like `"sample_id"` becomes categorical (good),
-- but a `Date` column becomes categorical (probably not what you want),
-- and a numeric-looking character column becomes categorical unless you convert it.
+`obs` is a data.frame, and every exported column must be a plain `numeric`
+(exported as continuous) or a plain `factor`, `character`, or `logical`
+(exported as a category). Nothing else is accepted, and nothing is coerced for
+you — a `Date` column, a list column, or a classed numeric such as
+`bit64::integer64` stops the export with
+`Observation field '<key>' must be a native numeric, logical, character, or
+factor vector.`
 
 Recommendation:
-- explicitly coerce `obs` columns you care about (`as.numeric`, `factor`, etc.)
+- convert the columns you care about before the call (`as.numeric()`,
+  `factor()`, `as.character()`), and drop the rest with `obs_keys`.
 
 Details: {doc}`04_obs_cell_metadata`
 

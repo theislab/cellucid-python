@@ -29,24 +29,41 @@ cellucid_prepare(..., obs_keys = c("cluster", "sample", "score"))
 
 ## How `cellucid-r` decides “continuous” vs “categorical”
 
-For each `obs[[key]]`, the exporter uses this rule:
+Exactly four column types can be exported, and each one has exactly one kind:
 
-- **categorical** if the column is:
-  - `factor`
-  - `logical`
-  - anything else (including `character`, `Date`, `POSIXct`, lists, etc.)
-- **continuous** if the column is:
-  - `numeric`
+| Column type | Exported as |
+|---|---|
+| plain `numeric` (double or integer) | **continuous** |
+| `factor` | **categorical** |
+| plain `character` | **categorical** |
+| plain `logical` | **categorical** |
+
+Anything else stops the export. Nothing is quietly coerced into a catch-all
+“categorical” bucket:
+
+```text
+Observation field 'collected_on' must be a native numeric, logical, character,
+or factor vector.
+```
+
+That message covers `Date` and `POSIXct` columns, list columns, and any column
+carrying a class of its own — a `bit64::integer64` count, a `units` measurement,
+a `haven` labelled column. Those are refused rather than coerced, because
+coercing one would publish numbers whose meaning the attribute carried.
 
 ### Recommendation (avoid surprises)
 
-Before export, explicitly coerce:
-- categories to `factor(...)`
-- continuous values to numeric (`as.numeric(...)`)
+Before export, convert the columns you care about into one of the four types:
 
-This is especially important for columns like:
-- `"1"`, `"2"`, `"3"` stored as characters (become categorical)
-- `Date` columns (become categorical)
+```r
+obs$cluster      <- factor(obs$cluster)          # a code column stored as "1","2","3"
+obs$collected_on <- as.character(obs$collected_on)  # a Date you want as a category
+obs$n_counts     <- as.numeric(obs$n_counts)     # an integer64 or units column
+```
+
+A character column of `"1"`, `"2"`, `"3"` is a legal export — it just becomes
+three categories rather than a continuous scale, so convert it if that is not
+what you meant.
 
 ## Output files (what gets written)
 
@@ -173,12 +190,17 @@ For each categorical field:
 
 Behavior:
 - categories with fewer than `centroid_min_points` cells are skipped
-- optional “inlier-only” centroids using `centroid_outlier_quantile`:
+- “inlier-only” centroids using `centroid_outlier_quantile` (default `0.95`):
   - compute distances to the centroid
   - keep points up to the distance quantile
-  - recompute centroid using inliers (if enough points)
+  - recompute centroid using inliers (if enough points remain)
 
 These centroids are stored in the categorical entry in `obs_manifest.json`.
+
+Setting `centroid_outlier_quantile = NULL` skips centroid computation entirely
+and publishes an empty centroid list for every category. It does **not** switch
+off the per-cell outlier quantiles below — those are always written, and
+`centroid_min_points` is what gates them.
 
 ### B) Outlier quantiles (latent space)
 

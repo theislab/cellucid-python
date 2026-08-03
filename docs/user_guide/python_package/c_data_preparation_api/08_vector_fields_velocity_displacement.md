@@ -101,8 +101,11 @@ must be:
 
 `cellucid-r` applies the identical rule, and the web app accepts exactly these
 keys, so an id one accepts is an id all three accept. Spaces, slashes, and
-punctuation are ordinary characters here: `Velocity (UMAP)` and
-`chr1:1000000-1000500` are valid ids.
+punctuation are ordinary characters here — an id is not a filename. What the id
+*must* keep is the `_umap` tail the key pattern captures, so
+`RNA velocity (steady state)_umap` and `chr1:1000000-1000500_umap` are valid
+ids, declared by the keys `RNA velocity (steady state)_umap_2d` and
+`chr1:1000000-1000500_umap_2d`.
 
 ### Dimension matching
 

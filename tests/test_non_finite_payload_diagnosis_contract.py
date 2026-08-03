@@ -42,6 +42,7 @@ from cellucid.anndata_server import AnnDataServer
 from cellucid.continuous_payload_diagnosis import (
     NON_FINITE_EXAMPLE_LIMIT,
     NonFinitePayloadError,
+    describe_non_finite,
     diagnose_continuous_payload,
 )
 
@@ -262,9 +263,8 @@ def test_a_non_finite_obs_column_refuses_to_start_the_server() -> None:
     # unusable one stops the server rather than one request. The message is the
     # whole diagnosis, because it is the only thing the operator will see.
     adata = _adata(obs_values=np.array([0.25, 0.5, -np.inf, 1.0]))
-    with pytest.raises(NonFinitePayloadError) as refusal:
-        with _running_server(adata):
-            pass
+    with pytest.raises(NonFinitePayloadError) as refusal, _running_server(adata):
+        pass
     diagnosis = refusal.value.diagnosis
     assert diagnosis.kind == "field"
     assert diagnosis.name == "score"
@@ -347,7 +347,7 @@ def test_the_gene_cache_is_bounded_by_bytes_not_by_entries() -> None:
     assert cache.resident_bytes == 0
 
     # One 18.1M-cell gene column is 72.6 MB and still fits.
-    assert 18_142_044 * 4 <= GENE_EXPRESSION_CACHE_BYTES
+    assert GENE_EXPRESSION_CACHE_BYTES >= 18_142_044 * 4
 
 
 def test_a_served_gene_round_trips_through_the_cache() -> None:
@@ -367,3 +367,101 @@ def test_a_sparse_matrix_is_diagnosed_like_a_dense_one() -> None:
         adapter.get_gene_expression("Gene_A")
     assert refusal.value.diagnosis.positive_infinity == 1
     assert refusal.value.diagnosis.examples == (1,)
+
+
+# ---------------------------------------------------------------------------
+# The exporter half. cellucid-r's `.describe_non_finite()` counts the offending
+# values and names the first few positions when it refuses an export; the
+# Python exporter said only "must contain only finite values" for the same
+# input, so the same dataset was refused with different amounts of information
+# depending on which writer the user ran. These pin the shared half.
+# ---------------------------------------------------------------------------
+
+
+def test_an_exported_column_is_refused_with_the_same_counts() -> None:
+    values = np.array([1.0, np.nan, np.inf, -np.inf, 5.0])
+    described = describe_non_finite(values, "Continuous obs field 'score'")
+    assert "of 5 values" in described
+    assert "1 NaN, 1 +Inf, 1 -Inf" in described
+    assert "First affected positions: 1, 2, 3." in described
+
+
+def test_an_exported_matrix_names_positions_as_the_caller_indexes_them() -> None:
+    values = np.array([[1.0, np.nan], [np.inf, 2.0]])
+    described = describe_non_finite(values, "X_umap_2d")
+    # Row-major and zero-based, because that is how a NumPy caller indexes.
+    # cellucid-r prints the same two entries one-based and column-major.
+    assert "First affected positions: [0, 1], [1, 0]." in described
+
+
+def test_one_offender_is_reported_in_the_singular() -> None:
+    described = describe_non_finite(np.array([1.0, np.nan, 3.0]), "Field 'x'")
+    assert "First affected position: 1." in described
+    assert "positions" not in described
+
+
+def test_more_offenders_than_examples_are_marked_as_truncated() -> None:
+    values = np.full(12, np.nan)
+    described = describe_non_finite(values, "Field 'x'")
+    assert "12 NaN" in described
+    assert described.count("[") == 0
+    assert "0, 1, 2, 3, 4, ..." in described
+
+
+def test_float32_overflow_and_underflow_are_counted_separately() -> None:
+    values = np.array([1.0, 1e300, 1e-320, 0.0])
+    described = describe_non_finite(values, "Field 'x'")
+    assert "1 beyond the float32 range" in described
+    assert "1 below the smallest float32" in described
+
+
+def test_a_publishable_array_is_described_as_nothing() -> None:
+    assert describe_non_finite(np.array([1.0, 0.0, -2.5]), "Field 'x'") == ""
+
+
+def test_stored_non_zero_scope_omits_meaningless_sparse_positions() -> None:
+    described = describe_non_finite(
+        np.array([1.0, np.nan]), "transition_matrix", positions=False
+    )
+    assert "of 2 stored non-zero values" in described
+    assert "First affected" not in described
+
+
+def test_the_exporter_refusal_carries_the_count() -> None:
+    from cellucid.prepare_data._arrays import _require_finite_float32_array
+
+    with pytest.raises(ValueError) as refusal:
+        _require_finite_float32_array(
+            np.array([1.0, np.nan, np.inf]), label="latent_space"
+        )
+    message = str(refusal.value)
+    assert message.startswith("latent_space must contain only finite values.")
+    assert "of 3 values, 1 NaN, 1 +Inf" in message
+    assert "First affected positions: 1, 2." in message
+
+
+def test_the_exporter_float32_range_refusal_carries_the_count() -> None:
+    from cellucid.prepare_data._arrays import _require_finite_float32_array
+
+    with pytest.raises(ValueError) as refusal:
+        _require_finite_float32_array(np.array([1.0, 1e-320]), label="latent_space")
+    message = str(refusal.value)
+    assert message.startswith(
+        "latent_space contains values outside the finite float32 range."
+    )
+    assert "1 below the smallest float32" in message
+
+
+def test_a_vector_field_underflow_is_refused_like_the_r_writer_refuses_it() -> None:
+    from cellucid.vector_fields import validate_vector_fields
+
+    vectors = np.zeros((3, 2))
+    vectors[1, 1] = 1e-320
+    with pytest.raises(ValueError) as refusal:
+        validate_vector_fields(
+            {"v_umap_2d": vectors}, n_cells=3, available_dimensions=(2,)
+        )
+    message = str(refusal.value)
+    assert "outside the finite float32 range" in message
+    assert "1 below the smallest float32" in message
+    assert "First affected position: [1, 1]." in message

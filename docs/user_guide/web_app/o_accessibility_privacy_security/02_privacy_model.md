@@ -348,7 +348,9 @@ Cellucid exports embed provenance metadata by default so you can reproduce figur
 Depending on your loading workflow, that metadata can include:
 - dataset id/name
 - source type
-- and sometimes local paths or source URLs
+- and a source: the URL for a remote dataset, or, for a local one, just the
+  **name** of the folder or file you chose. It is never an absolute path — a
+  browser does not hand a page one
 
 Before sharing figures publicly, skim:
 - {doc}`../k_figure_export/05_metadata_and_provenance` (what is embedded)
@@ -504,10 +506,13 @@ Related: {doc}`../j_community_annotation/03_ui_reference` (storage and failure m
 
 ---
 
-### Symptom: “An exported PNG/SVG reveals a local path or private URL”
+### Symptom: “An exported PNG/SVG names my dataset or a private URL”
 
 **Cause**
-- Exported figures embed provenance metadata that can include `datasetUserPath` (local path) or remote source URLs.
+- Exported figures embed provenance metadata. For a local dataset that is
+  `datasetUserPath`, which holds only the **name** of the folder or file you
+  picked — never a path to it. For a remote one it is the source URL, which can
+  be private.
 
 **Fix**
 1) Inspect metadata before sharing (see {doc}`../k_figure_export/05_metadata_and_provenance`).

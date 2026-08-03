@@ -322,7 +322,9 @@ Use deterministic diagnostics:
 
 Exports can include:
 - dataset names/ids in filenames,
-- embedded metadata that may include source URLs or local dataset paths.
+- embedded metadata that may include source URLs or the name of the local folder
+  or file you loaded. Never a filesystem path — see
+  {ref}`figure-export-source-file-privacy` for the exact inventory.
 
 If you plan to share figures publicly, review {doc}`05_metadata_and_provenance` for inspection/stripping workflows.
 

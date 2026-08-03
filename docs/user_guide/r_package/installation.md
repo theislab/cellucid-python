@@ -1,7 +1,7 @@
 # Installation
 
 **Audience:** everyone  
-**Time:** 5–15 minutes (depending on your setup)
+**Time:** 5–15 minutes (depending on your setup)  
 **Goal:** install Cellucid for R, verify version 0.9.1, and choose the correct <!-- CELLUCID_VERSION -->
 source for current registry availability
 

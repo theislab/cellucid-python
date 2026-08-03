@@ -91,14 +91,26 @@ Example, for the field at payload index `0`:
 Metadata is written into `dataset_identity.json` under `vector_fields`, and that
 is what maps each field id to its files.
 
-The exporter records one exact `default_field`:
-- with one vector field, that field is the default;
-- with more than one vector field, pass `vector_field_default` explicitly.
+Each field entry records `label`, `basis`, `available_dimensions`,
+`default_dimension`, and `files`. Two of those are derived by the writer, not
+chosen by you:
 
-Every field id ends with `_umap` by construction, so the identity metadata
-always records:
-- `basis = "umap"`
-and the UI label becomes `"<Title> (UMAP)"`.
+- `label` is the field id **character for character** (`velocity_umap`), and
+- `basis` is always the string `"umap"`, because every field id ends in `_umap`
+  by construction.
+
+The web app compares both and refuses to load the dataset if either differs, so
+there is no display-name field in this format: the string in the overlay's field
+selector is the field id exactly as you named it. If you want a prettier name in
+the UI, rename the list entry — `RNA velocity_umap_2d` is a legal key.
+
+`available_dimensions` lists the dimensions you supplied for that field, and
+`default_dimension` is the largest of them.
+
+The exporter also records one exact `default_field`:
+- with one vector field, that field is the default;
+- with more than one, `vector_field_default` is required, and passing it without
+  `vector_fields` is an error rather than a no-op.
 
 ## Minimal example
 
@@ -166,4 +178,11 @@ export: they no longer share a payload path, so case alone is not a collision.
   a plain vector counts as one component.
 - `Vector field '…' requires a matching 3D embedding.` → export `X_umap_3d`, or
   drop that vector dimension.
+- `vector_field_default is required when more than one vector field is
+  supplied.` → name the field you want selected on load, without a dimensional
+  suffix (`vector_field_default = "velocity_umap"`).
+- `vector_field_default '…' is not present in vector_fields.` → the value must
+  be a field id, not a list name; drop the `_2d`/`_3d`.
+- `vector_field_default requires vector_fields.` → you named a default but
+  passed no vectors.
 - “Vectors look too long/short” → remember vectors are scaled by embedding normalization.

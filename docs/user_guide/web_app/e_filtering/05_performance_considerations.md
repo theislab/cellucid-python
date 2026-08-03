@@ -125,6 +125,16 @@ For continuous fields:
 
 This avoids recomputing on every slider step.
 
+:::{warning}
+**`Live filtering` does not stay off.** The toggle is rebuilt with the legend
+and returns to `On` whenever the legend re-renders — changing the active field,
+changing the colormap, switching between kept views, and loading a session all
+do that. It is not saved in a `.cellucid-session` either. On an
+eighteen-million-cell dataset, switching palette from Viridis to Cividis is
+enough to put you back on live recomputation with no other signal, so glance at
+the toggle before every drag.
+:::
+
 ```{figure} ../../../_static/screenshots/filtering/type-numeric-range.png
 :alt: The continuous legend Filtering block with the Live filtering toggle reading Off, the hint below it reading Drag sliders then click Filter, Min and Max sliders with numeric readouts, and a black clickable FILTER button beside RESET with the mouse pointer on FILTER.
 :width: 428px

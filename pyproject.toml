@@ -59,8 +59,13 @@ classifiers = [
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
-    "ruff>=0.1.0",
-    "mypy>=1.0",
+    # Linters are pinned to an exact version, and the docs extra already pins
+    # Sphinx the same way. A floor lets CI install whatever shipped that morning,
+    # and every ruff release adds rules: the gate then turns red on a commit that
+    # changed nothing, which teaches maintainers that red means "ignore me".
+    # Bumping these is a deliberate commit that fixes what the new version finds.
+    "ruff==0.16.1",
+    "mypy==2.3.0",
     "pre-commit>=3.0",
 ]
 docs = [

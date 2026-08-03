@@ -172,14 +172,14 @@ This affects:
 
 ## Export (CSV)
 
-Detailed mode can export plot data as CSV.
+Detailed always exports **one row per cell**, as `detailed-analysis-data.csv`,
+whatever plot is on screen. The plot type changes the picture, never the file:
+columns are `page`, `cell_index` and the variable you selected.
 
-Important: **exports are plot-type-specific**. For example:
-- distribution plots often export **summary statistics per page** (not per-cell values),
-- categorical plots export **category counts/percentages**,
-- some plots export binned counts (histograms).
-
-If you need a “raw table of all values per cell”, you may need to export via a different workflow (e.g., in Python) depending on your use case.
+This *is* the raw per-cell table — you do not need a second workflow to get one.
+Because it is per-cell, a large comparison produces a large file; the size
+warning and the full column meanings live in {doc}`09_exporting_analysis_results`,
+which is the single authority for every analysis CSV schema.
 
 ---
 

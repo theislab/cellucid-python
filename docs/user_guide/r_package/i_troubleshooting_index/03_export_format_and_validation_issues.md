@@ -1,5 +1,9 @@
 # Export Format and Validation Issues
 
+**Audience:** everyone sharing an export  
+**Time:** 10 minutes  
+**What you'll get:** why a finished export folder still looks wrong, and what to check
+
 Use this page when:
 - `cellucid_prepare()` ran, but the export folder looks incomplete, or
 - the web app fails with “file not found”, “invalid manifest”, or similar.
@@ -80,7 +84,8 @@ exports/
 
 Fix:
 - generate and commit `datasets.json` (see {doc}`../d_viewing_loading/02_host_exports_for_sharing`)
-- see the full GitHub loader tutorial: {doc}`../../web_app/b_data_loading/02_local_demo_tutorial`
+- work through the reference repository end to end:
+  {doc}`../../web_app/b_data_loading/11_custom_dataset_repository`
 
 ## Validation tools and deep debugging
 

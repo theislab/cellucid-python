@@ -14,7 +14,7 @@
 |---|---|---|
 | File picker never opens | browser policy, embedded-context restriction, or handler error | use the ordinary browser tab, check Console, and retry from a direct click |
 | No dataset is loaded | sessions contain state, not the dataset | load the intended dataset first |
-| Dataset identity error | one of source type, dataset id, cell count, or variable count differs | load the exact published generation through the same route |
+| Dataset identity error | one of source type, dataset id, cell count, variable count, or cell order differs — four different causes with four different messages | read the exact message first: a dimension mismatch is fixed by switching dimension, the others by loading the exact published generation through the same route |
 | Manifest/chunk/profile error | file is not a complete current user bundle | obtain a fresh unchanged **Save State** file |
 | Gzip, byte-length, truncation, or trailing-data error | corrupt or dishonest container | transfer/download the original again; do not edit it |
 | Progress disappears after Cancel or a newer load | intentional abort | no action; the older restore neither succeeded nor failed |
@@ -107,9 +107,11 @@ Read the message before changing anything — each cause has its own:
 - **"saved while the *N*D view was shown"**: only the cell-order dimension
   differs. Nothing is wrong with the data or the file. Switch back to the
   dimension the message names and load again.
-- **"same name and the same number of cells and genes, but its cells are stored
-  in a different order"**: the dataset was republished re-sorted under an
-  unchanged identity. Load the version the session was saved on, or re-create
+- **"the same name and the same number of cells and genes, but the cell
+  coordinates differ"**: the digest no longer matches. A one-way digest cannot
+  say *why*, so the message offers both causes it could be — the cells are
+  stored in a different order, or the same cells were exported again from a
+  re-computed embedding. Load the version the session was saved on, or re-create
   the selections on this one.
 - **"saved before Cellucid started recording which cells a selection
   contains"**: the file predates the cell-order record, so its selections can

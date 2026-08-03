@@ -102,9 +102,13 @@ So “performance” is usually about:
 3) Disable GPU-heavy modes (smoke mode, vector overlay). If it immediately gets smoother, you were GPU-bound.
 
 **Typical fixes:**
+- keep the window smaller while exploring,
+- reduce `Point size (log):` once dots overlap on screen, and check whether
+  `Antialiasing (smooth point edges)` is on — those are the two rendering
+  settings measured to move frame time
+  ({doc}`02_performance_considerations_what_gets_slow_and_why`),
 - go back to one view, or go up to four (again, see the note),
-- reduce visual quality knobs (see {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` and {doc}`../i_vector_field_velocity/05_performance_and_quality`),
-- keep the window smaller while exploring.
+- reduce visual quality knobs (see {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` and {doc}`../i_vector_field_velocity/05_performance_and_quality`).
 
 :::{note}
 **More views is not automatically slower.** Cellucid allows at most four views —
@@ -184,11 +188,21 @@ Most costs in Cellucid are not “mysterious”—they scale with a small set of
 | Multiplier | Why it matters | Typical symptoms |
 |---|---|---|
 | `n_cells` | Many operations are per-cell (visibility recomputation, colors, selections) | filter applies take longer; memory pressure grows |
+| Point size | A dot's area grows with the square of its size, so point size sets how many pixels the renderer has to cover | frame time rises steeply once points start overlapping on screen |
 | Layout shape (1, 2, 3 or 4 views) | Each view submits its own draw, but point size follows pane height — so the *row* layouts (2, 3) cost most and the 2×2 grid costs about as much as one view | a two-view comparison stutters where a four-view grid does not |
 | Window pixel count (`width × height × dpr²`) | Overlays and post-processing scale with pixels | smoother when window is smaller |
 | `n_enabled_filters` | Each filter change re-derives visibility for every cell, testing each enabled filter | slider scrubbing becomes the main lag source |
 | Category count | Legends/counts and color mapping can degrade with huge category explosions | legends slow; UI becomes cluttered/unusable |
 | “First-time” loads | cold cache → extra I/O | first gene switch slow; second is faster |
+
+:::{important}
+**Two of these were already set for you, from the cell count, when the dataset
+opened.** The point size, and whether `Antialiasing (smooth point edges)` is on
+— on below 5,000,000 cells, off at or above. Both are live settings you can
+change at any time, and both are the settings measured in
+{doc}`02_performance_considerations_what_gets_slow_and_why`. Check what they are
+before assuming they sit at some fixed default.
+:::
 
 :::{tip}
 If you’re doing performance work, treat **pixels** as the first-class multiplier
@@ -275,7 +289,7 @@ If any of these match, start with {doc}`../a_orientation/02_system_requirements`
 
 ## If you remember only five rules
 
-1) **Pixels matter most.** Smaller windows (or lower-DPI monitors) can dramatically improve GPU-bound workflows.  
+1) **Pixels matter most.** Smaller windows (or lower-DPI monitors) can dramatically improve GPU-bound workflows — and so does a smaller point size, for the same reason.  
 2) **Avoid recompute loops.** Turn Live filtering off and apply once on large data.  
 3) **Measure the layout, don’t assume it.** One view and a 2×2 grid cost about the same; two- and three-view rows are the expensive ones.  
 4) **Use the right loading mode.** Big `.h5ad` in the browser is a trap; server mode is your friend.  

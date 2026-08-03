@@ -289,8 +289,14 @@ Cellucid publishes continuous values as finite float32, because a colour scale
 has no position for an infinity: one `+Inf` makes a field's range infinite and
 collapses every other cell onto one colour. The direct-AnnData server checks each
 continuous column before it sends a byte and answers **HTTP 422** with a JSON
-diagnosis instead of serving it. `NaN` is a different case and is drawable —
-Cellucid renders it as the neutral grey meaning "not measured here".
+diagnosis instead of serving it.
+
+On this path neither an infinity nor a `NaN` is published, and both produce this
+same 422. `NaN` is drawable only when the browser reads your `.h5ad` or `.zarr`
+itself, where Cellucid renders it as the neutral grey meaning "not measured
+here"; the Python server publishes finite float32 and nothing else. If the body
+below counts `nan` and nothing else, check that column first — an all-`NaN`
+column usually means it was never computed rather than that it broke.
 
 ### How to confirm
 

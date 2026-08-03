@@ -10,6 +10,8 @@ cellucid-r produces from the same input.
 
 import numpy as np
 
+from ..continuous_payload_diagnosis import describe_non_finite
+
 _QUANTIZATION_ARITHMETIC_CHUNK_SIZE = 1_048_576
 
 def _is_constant_continuous_range(min_val: float, max_val: float) -> bool:
@@ -68,7 +70,10 @@ def _quantize_continuous(
             f"Continuous field {field_name!r} cannot be quantized because it has no finite values."
         )
     if not np.isfinite(values).all():
-        raise ValueError(f"Continuous field {field_name!r} must contain only finite values.")
+        raise ValueError(
+            f"Continuous field {field_name!r} must contain only finite values. "
+            + describe_non_finite(values, f"Continuous field {field_name!r}")
+        )
 
     min_val = float(np.min(values))
     max_val = float(np.max(values))

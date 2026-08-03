@@ -33,6 +33,17 @@ If `var_gene_id_column = NULL`:
 Recommendation:
 - always set `rownames(var)` to the gene ID you want users to search in the viewer
 
+```{warning}
+A `data.frame` you never gave row names to is not row-name-less: R reports the
+automatic sequence `"1"` … `"n_genes"`, which would publish an export whose genes
+are named after their own row numbers. `cellucid_prepare()` refuses that rather
+than let a reader search `CD8A` and find nothing:
+
+    var has only automatic row names, so rownames(var) would name the genes '1'
+    to '2000'. Set rownames(var) to the gene identifiers, or pass
+    var_gene_id_column.
+```
+
 Common choices:
 - gene symbols (`MS4A1`, `CD3D`, …)
 - accessions (`ENSG00000156738`, …)

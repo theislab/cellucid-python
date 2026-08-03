@@ -25,6 +25,7 @@ This page is the “UI map” for highlighting:
 - How to create/rename/recolor/delete pages
 - How to enable/disable/remove groups (and what “Clear” clears)
 - How to interpret the highlighted cell count (“visible” vs “total”)
+- How to turn your pages into a real categorical obs column with `Create Categorical`
 
 ---
 
@@ -32,10 +33,11 @@ This page is the “UI map” for highlighting:
 
 In the left sidebar, open the accordion section labeled **Highlighting**.
 
-Inside this section you will typically see three sub-areas:
+Inside this section you will see four sub-areas, top to bottom:
 1) **Highlight mode** (toolbelt for selection)
 2) **Highlight pages** (tabs)
 3) **Highlighted groups** (the list + count + Clear)
+4) `Create Categorical` (a collapsed accordion that turns pages into an obs column)
 
 ---
 
@@ -189,6 +191,61 @@ Common reasons “visible < total”:
 
 ---
 
+## 4) Create Categorical (turn pages into a real obs column)
+
+At the bottom of the **Highlighting** section there is a collapsed accordion
+headed `Create Categorical`, described as *Build a new categorical obs column
+from highlight pages*. It turns the pages you have built into an ordinary
+categorical observation field — one you can then colour by, filter on, and use
+as the field for annotation-based selection.
+
+It is always present. It is greyed out only until a dataset is loaded.
+
+### The short version
+
+1) Expand `Create Categorical`.
+2) Drag page tabs into the `Drop pages here` box (or pick one in
+   `Add a highlight page:` and press **Add**). Each page becomes one category,
+   named after the page.
+3) Type a name in `Column name:`.
+4) Press **Create**.
+
+A notification confirms it: `Created "<your name>" (<N> categories)`, and the
+new field appears alongside the dataset's own obs fields.
+
+### The two questions it asks you
+
+The builder only shows these when they actually apply, so a set of
+non-overlapping pages that covers every cell will show neither.
+
+- **Cells in more than one page.** A section appears headed
+  `Assign overlapping cells to:` with four choices: **First page** (the default),
+  **Last page**, **New label** — one shared category, `Overlap` unless you rename
+  it — and **Each intersection**, which makes a separate category per overlap
+  combination and asks you to name each one. Only enabled groups count towards a
+  page's membership here, exactly as for page combine.
+- **Cells in no page at all.** A section reports `<n> cells not in any page` and
+  offers `Label for uncovered cells:`, `Unassigned` by default. Clear that box if
+  you would rather those cells carry no label.
+
+:::{note}
+**Limits and refusals** (the **Create** button stays disabled and prints the reason):
+
+- at least one page must be added — `Add at least one highlight page`
+- the column name must be non-empty, untrimmed-whitespace-free, at most 256
+  characters, and must not contain `:`
+- the name must not collide with a visible obs field —
+  `A visible observation field named "<name>" already exists`
+- **Each intersection** supports at most 12 pages, because it enumerates every
+  combination of them
+- a dataset carries at most 20 user-created fields in total
+
+Fields made this way are saved in a `.cellucid-session` and restored with it, so
+a collaborator opening your session on the same dataset gets the same column.
+:::
+
+---
+
 ## What you cannot (yet) do in the highlight UI
 
 Depending on what you’ve used in other tools, you might look for these features:
@@ -202,17 +259,6 @@ In the current UI, group membership is edited by:
 
 For exporting, the most robust current path is:
 - save a session bundle ({doc}`../l_sessions_sharing/index`) and treat it as the persisted artifact of your highlights.
-
----
-
-## Create a categorical field from pages
-
-Some builds include a “Category builder” UI under Highlighting that lets you:
-- drag highlight pages into a builder,
-- choose an overlap resolution strategy,
-- create a new categorical field from page membership.
-
-If you don’t see it, it may be disabled or hidden in your build.
 
 ---
 

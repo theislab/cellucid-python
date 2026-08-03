@@ -280,6 +280,9 @@ followed by these exact keyword-only parameters:
 - `centroid_min_points`: minimum category size used for categorical centroids
 - `serve_connectivity`: read, validate, and serve `adata.obsp['connectivities']`
   (default: `False`). The neighbor graph is never touched unless you ask for it
+- `serve_vector_fields`: read, validate, and serve the `<field>_umap_<n>d`
+  arrays in `obsm` as the velocity/drift overlay (default: `False`), for the
+  same reason — every declared field is read in full before the viewer appears
 - `dataset_name`: required non-empty, unpadded label without control
   characters; human-readable Unicode is preserved
 - `dataset_id`: required portable 1–180 character ASCII identity (letter or
@@ -287,7 +290,8 @@ followed by these exact keyword-only parameters:
   reserved Windows device name), important for sessions; see
   {doc}`06_dataset_identity_why_it_matters`
 - `vector_field_default`: exact field ID; required when the AnnData declares
-  more than one vector field
+  more than one *served* vector field. It selects among served fields, so
+  passing it without `serve_vector_fields=True` raises
 
 The convenience function does not accept `port`. Use
 `AnnDataViewer(..., port=<fixed port>)` when a tunnel or proxy requires a fixed
@@ -391,7 +395,8 @@ order:
    fails here rather than inside a later request.
 2. **Embeddings** — `obsm` keys are resolved, then each embedding is validated
    and normalized.
-3. **Vector fields** — `obsm` is scanned for `<field>_umap_<dim>d` declarations.
+3. **Vector fields** — `obsm` is scanned and every declared
+   `<field>_umap_<dim>d` array read, *only* when `serve_vector_fields=True`.
 4. **Connectivity** — the edge list, *only* when `serve_connectivity=True`.
 5. **Manifests and centroids** — one centroid per categorical field per
    available dimension, then a cross-check of every served route.
@@ -420,6 +425,35 @@ This matters for data loading because:
 - the overlay is only available if the server advertises `vector_fields` in `dataset_identity.json`
 - vector fields must be aligned to the **same cells** and **same embedding basis/dimension**
 
+### The overlay is opt-in, exactly like connectivity
+
+`show_anndata()` and `AnnDataViewer` do **not** read the vector arrays unless
+you ask. The parameter is keyword-only and `False` by default:
+
+```python
+viewer = show_anndata(
+    adata,
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    serve_vector_fields=True,
+)
+```
+
+Correctly named vectors with the flag left off produce a viewer with no overlay
+and no explanation: `dataset_identity.json` carries no `vector_fields` block,
+and `vectors/…` answers `404`. Everything else — points, obs fields, gene
+expression, centroids — is unaffected. The default is `False` because every
+declared field is read and validated before the viewer appears, which is time
+most sessions do not spend.
+
+```{important}
+`vector_field_default` selects among *served* fields, so passing it without
+`serve_vector_fields=True` raises rather than being ignored.
+```
+
+`prepare()` is unaffected: an export written with `vector_fields=...` carries
+the vectors already, and `show()` on that export needs no flag.
+
 ### Quick checklist (AnnData)
 
 To make a vector field appear when using `show_anndata(...)`, you need:
@@ -428,7 +462,9 @@ To make a vector field appear when using `show_anndata(...)`, you need:
    or a bare `X_umap` read at the dimension its own column count states
 2) A vector field in `adata.obsm` with a **Cellucid-compatible key**
 3) The vector array shape must be `(n_cells, dim)` where `dim` matches the embedding (2 or 3)
-4) If more than one field ID is present, pass the exact choice as
+4) `serve_vector_fields=True` in the call — without it, steps 1–3 are correct
+   and the overlay still does not appear
+5) If more than one field ID is served, pass the exact choice as
    `vector_field_default="velocity_umap"` (or, for the forward-drift example,
    `vector_field_default="T_fwd_umap"`)
 
@@ -459,6 +495,7 @@ viewer = show_anndata(
     adata,
     dataset_name="My study",
     dataset_id="my-study-v1",
+    serve_vector_fields=True,
 )
 ```
 
@@ -483,6 +520,7 @@ viewer = show_anndata(
     adata,
     dataset_name="My study",
     dataset_id="my-study-v1",
+    serve_vector_fields=True,
 )
 ```
 
@@ -500,7 +538,9 @@ print("Has vector_fields?", "vector_fields" in ident)
 ```
 
 If the overlay is missing in the UI and `vector_fields` is absent:
-- double-check your `adata.obsm` keys and shapes
+- first confirm you passed `serve_vector_fields=True`; without it this check
+  always prints `Has vector_fields? False`, however correct your keys are
+- then double-check your `adata.obsm` keys and shapes
 - confirm you have a matching embedding dimension (2D vs 3D)
 - see {doc}`08_troubleshooting_data_loading` and {doc}`../i_vector_field_velocity/07_troubleshooting_velocity_overlay`
 

@@ -16,9 +16,11 @@ In the Cellucid ecosystem, this is typically a KNN/SNN graph derived from:
 - shape must be `(n_cells, n_cells)`
 - rows/cols must correspond to the same cell ordering as embeddings/obs
 - input can be:
-  - a base R `matrix`, or
-  - a `Matrix::Matrix` sparse matrix (recommended)
-- values must be real numeric or logical, finite, and non-negative
+  - a base R `matrix` of numeric or logical values, or
+  - a real (`dMatrix`), logical (`lMatrix`), or pattern (`nMatrix`)
+    `Matrix::Matrix` (recommended). A pattern matrix carries no weights, so
+    every stored coordinate becomes the exact weight `1.0`.
+- values must be finite and non-negative
 - topology and weights must be exactly symmetric
 - every diagonal value must be exactly `0`
 - the `Matrix` package must be installed when the input is sparse
@@ -128,6 +130,15 @@ A dense `(n_cells, n_cells)` matrix becomes huge quickly. Prefer sparse matrices
 
 ## Troubleshooting pointers
 
-- “Matrix package is required to export connectivity matrices” → install `Matrix`.
-- “Connectivity matrix shape ... does not match number of cells” → you have an ordering or subset mismatch.
+- `Matrix package is required to validate sparse connectivity matrices.` →
+  install `Matrix`, or pass a dense base R matrix.
+- `Connectivity matrix shape must exactly match the cell axis: expected (…), got
+  (…).` → you have an ordering or subset mismatch.
+- `Sparse connectivity storage must omit zero-weight coordinates.` → drop
+  explicit zeros with `Matrix::drop0(conn)`.
+- `Connectivity values must be real numeric or logical values.` → the sparse
+  matrix is not a real (`dMatrix`), logical (`lMatrix`), or pattern (`nMatrix`)
+  `Matrix`; convert it first.
+- `Connectivity contains duplicate sparse coordinates at (i, j).` → the sparse
+  storage lists one coordinate twice; rebuild the matrix rather than editing it.
 - Viewer is slow/crashes after adding connectivities → your graph is too dense (too many edges).

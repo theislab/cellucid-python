@@ -1,5 +1,9 @@
 # Release Process
 
+**Audience:** maintainers  
+**Time:** 10 minutes  
+**What you'll get:** the version sites that move together, and how a release is built and published
+
 This page summarizes the intended release/publishing flow for `cellucid-r`.
 
 The full step-by-step checklist lives in:
@@ -15,13 +19,22 @@ The full step-by-step checklist lives in:
 3) Record user-visible changes in `NEWS.md`.
 4) Ensure tests pass (`devtools::test()` / `R CMD check`).
 5) Merge to main.
-6) Create a GitHub Release tag (e.g. `v0.99.1`).
-7) Use CI to build a source tarball (`cellucid_<version>.tar.gz`).
-8) Publish targets (depending on maturity):
-   - GitHub (source of truth)
-   - r-universe (easy binaries)
-   - CRAN (manual submission)
-   - Bioconductor (manual submission via contributions tracker)
+6) Create a GitHub Release tag. It must be exactly `v` followed by the
+   `DESCRIPTION` version — `release.yaml` reads `DESCRIPTION`, computes
+   `EXPECTED_TAG="v${VERSION}"`, and fails the build when the tag or the
+   branch provenance does not match.
+7) `release.yaml` then builds the source tarball, runs `R CMD check` twice
+   (default and `--as-cran`), and uploads it as the `r-source-tarball`
+   artifact.
+8) Publish targets, in the order `cellucid-r/publishing.md` documents:
+   - GitHub release (source of truth)
+   - CRAN (manual upload of the tarball to the submission form)
+   - r-universe (auto-builds from GitHub once the GitHub App is installed)
+   - conda-forge (`r-cellucid`, built from the CRAN tarball)
+
+`pkgdown.yaml` separately builds and deploys the package website at
+<https://theislab.github.io/cellucid-r/>. That site is the R help pages; this
+guide is the narrative documentation, and the two are maintained separately.
 
 ## Keeping this guide's version in step with the package
 

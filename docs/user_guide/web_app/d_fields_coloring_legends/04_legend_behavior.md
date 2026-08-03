@@ -209,13 +209,22 @@ Under **Filtering → Visible range** you’ll see:
 - **FILTER** and **RESET** buttons
 
 Behavior summary:
-- With Live filtering on, visibility updates as you drag sliders.
+- With Live filtering on, visibility updates as you drag sliders — and **FILTER
+  is greyed out and unclickable**, with the tooltip
+  `Turn off Live filtering to use Filter`. There is nothing for it to do.
 - With Live filtering off, you drag first, then click FILTER to apply.
-- RESET restores the full numeric range for that field.
+- RESET works in both states and restores the full numeric range for that field.
 
 Filtering notes:
+- `Live filtering` starts `On`, and it goes back to `On` every time the legend
+  is rebuilt — a different active field, a different colormap, a different kept
+  view, or a loaded session. It is not saved in a `.cellucid-session`.
 - Missing (`NaN`) values are excluded when a numeric filter is active.
 - These filters appear in the **Active filters** box and (for obs fields) stack with other obs filters.
+
+The complete filter inventory, with a screenshot of the disabled `FILTER`
+button, is in
+{doc}`../e_filtering/04_common_filter_types_document_every_filter_the_ui_exposes`.
 
 ---
 

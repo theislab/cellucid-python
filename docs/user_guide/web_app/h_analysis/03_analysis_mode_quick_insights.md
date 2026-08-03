@@ -22,8 +22,8 @@ Quick mode is the “sanity check / first glance” analysis:
 - **Statistics**: “What are typical QC/score values here?” (continuous obs)
 
 Quick mode is intentionally:
-- **fast** (minimal configuration, no “Run” button),
-- **robust** (uses approximate statistics for very large pages),
+- **fast** (no configuration and no “Run” button — it recomputes as you switch pages),
+- **cheap** (it reads only obs columns already in memory, so it never waits on gene expression),
 - **obs-focused** (cell metadata), not gene-level hypothesis testing.
 
 Quick mode is **not** for:
@@ -80,11 +80,32 @@ Interpretation notes:
 ### 2) Statistics (continuous obs)
 
 For each selected statistics field, Quick reports:
-- **Mean**
-- **Median**
-- **Std**
+- **Mean** — the average value
+- **Median** — the middle value, half above and half below
+- **Std** — how spread out the values are around the mean
 
-For very large selections, median/quantiles may be approximate (sampling-based), but the goal is to stay fast and stable.
+These numbers are exact at any page size. Nothing here is sampled or estimated.
+
+:::{note}
+**How the three numbers are computed, and one thing to watch.**
+
+Quick makes a single streaming pass over every cell in every selected page,
+accumulating the mean and the sum of squared deviations, then allocates a
+`Float32Array` holding *all* the finite values, sorts it, and reads the median
+out of the middle (averaging the two middle values for an even count). Cost is
+therefore O(n log n) in the number of selected cells, dominated by the sort — and
+the result is the exact median, not an approximation, no matter how large the
+selection is.
+
+**Std is the population standard deviation** — it divides by *n*, not by *n − 1*.
+That matters if you are checking the number against pandas, whose
+`Series.std()` defaults to the *sample* standard deviation and divides by
+*n − 1*. On a page of a few thousand cells the difference is invisible; on a page
+of 20 cells Quick's value reads about 2.5% lower. `numpy.std(values)` reproduces
+it exactly, because numpy defaults the other way. Detailed mode's **Std Dev**
+column uses the same denominator as Quick, so the two panels agree with each
+other.
+:::
 
 ---
 
@@ -129,9 +150,13 @@ use {doc}`04_analysis_mode_detailed_analysis`.
 ### “Effective n” can differ by field
 
 - Composition counts exclude missing values.
-- Statistics exclude non-finite values (NaN/Inf).
+- Statistics treat `NaN` as missing and drop it from the count.
 
-So a page with 50,000 cells may effectively contribute fewer values for a field with missingness.
+So a page with 50,000 cells may effectively contribute fewer values for a field
+with missingness. An `Inf` is a different matter: it is not a missing value and
+Quick refuses to summarise a column containing one, because a mean or a spread
+that silently swallowed an infinity would be meaningless. Fix the column
+upstream rather than looking for a setting.
 
 ---
 

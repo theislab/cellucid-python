@@ -556,6 +556,23 @@ case where the tunnel has to terminate on a login node,
 **Fix**
 - set `gene_id_column=...` to match your gene IDs
 
+### `Gene cannot be shown` — the gene was found and refused (HTTP 422)
+
+**Likely cause**
+- the column is not entirely finite float32. This server publishes finite
+  float32 only, because a colour scale has no position for an infinity, so a
+  gene or continuous `obs` column holding `NaN`, `±Inf`, or a magnitude float32
+  cannot hold is answered **422** with a counted JSON diagnosis rather than
+  served. It is refused one column at a time, as you select it.
+
+**Fix**
+- repair the values in the object and reload, or run `prepare()` once — the
+  export scans every gene and names all the affected ones in a single failure.
+
+The status, the exact body, and the repair one-liners are in
+{doc}`15_troubleshooting_viewing`; the export-side counterpart is in
+{doc}`../c_data_preparation_api/11_troubleshooting_prepare_export`.
+
 For all other issues: {doc}`15_troubleshooting_viewing`.
 
 ## Next steps

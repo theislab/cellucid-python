@@ -62,12 +62,17 @@ If you only do one thing from this page, do this list in order.
 - Two of the biggest levers have already been pulled for you, and are worth
   checking rather than assuming: at or above five million cells `Antialiasing
   (smooth point edges)` starts off, and the point size starts small, both chosen
-  from the cell count. Turning antialiasing back on costs 19-34% of the frame at
-  this scale; it applies to the next frame either way.
-- `Level-of-Detail (LOD)` is off by default and worth turning on above two
-  million cells, where `Auto` draws about two million of them. At or below that
-  it will not reduce anything — the cloud already draws in one frame — so reach
-  for `Force LOD level:` if you want fewer points than that on weak hardware.
+  from the cell count. Turning antialiasing off saved 19–34% of the frame in the
+  measurements on
+  {doc}`02_performance_considerations_what_gets_slow_and_why`; it applies to the
+  next frame either way.
+- `Level-of-Detail (LOD)` starts off. Turn it on whenever the frame is slow while
+  zoomed out — it works at every dataset size. `Auto` draws fewer points the
+  further back you pull, down to a floor of `min(2,000,000, cells ÷ 8)` points:
+  never more than an 8× reduction, and never below two million on a large atlas.
+  If you want fewer than that on weak hardware, set `Force LOD level:` yourself:
+  the forced level is deliberately not held to that floor. The exact rule, and why the reduction lands where it does, is in
+  {doc}`02_performance_considerations_what_gets_slow_and_why`.
 
 ### 3) Tune in one view, then choose a layout deliberately
 

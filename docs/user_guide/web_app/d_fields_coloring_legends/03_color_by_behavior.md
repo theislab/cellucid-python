@@ -34,6 +34,18 @@ For a categorical obs field, each cell has a category code:
 
 Category colors come from a fixed categorical palette by default, and can be overridden per category.
 
+A missing code is not a quiet variant of a category — it is outside the
+category system entirely, and that has two visible consequences:
+
+- Those cells are drawn in the neutral grey at **full opacity**, they get no
+  legend row, and they are counted in no per-category count. They still count
+  toward `Showing X of Y points`.
+- **No categorical filter can hide them.** Unchecking every row, or clicking
+  `Hide All`, leaves them on screen. This is the usual explanation for “I hid
+  every category and grey points are still there”. See
+  {doc}`../e_filtering/01_filtering_mental_model` for how that fits the rest of
+  the filter stack.
+
 ### What does “hiding a category” do?
 
 Unchecking a category in the legend is not a “dim”:
@@ -181,7 +193,10 @@ Practical example:
 Continuous legends support two ways to apply the numeric filter:
 
 - **Live filtering: On** (default)  
-  Moving sliders immediately updates visibility.
+  Moving sliders immediately updates visibility — and `FILTER` is greyed out
+  and unclickable while it is on, with the tooltip
+  `Turn off Live filtering to use Filter`. That is the intended state, not a
+  fault.
 - **Live filtering: Off**  
   Move sliders freely, then click **FILTER** to apply once.
 
@@ -189,7 +204,20 @@ When you might turn Live filtering off:
 - very large datasets where recomputing visibility on every slider tick feels slow,
 - remote desktop / low-power machines where UI responsiveness matters.
 
-The **RESET** button restores the full numeric range for that field.
+The **RESET** button is clickable in both states and restores the full numeric
+range for that field, snapping both sliders back to `0` and `100`.
+
+:::{warning}
+**`Live filtering` is not sticky.** It returns to `On` every time the legend is
+rebuilt — which includes changing the active field, changing the colormap,
+switching between kept views, and loading a session — and it is not stored in a
+`.cellucid-session`. On a large dataset, check the toggle again after any of
+those before you start dragging.
+:::
+
+The screenshot of the disabled `FILTER` button, and the rest of the filter
+inventory, are in
+{doc}`../e_filtering/04_common_filter_types_document_every_filter_the_ui_exposes`.
 
 ---
 
@@ -202,7 +230,18 @@ The Min/Max sliders are normalized to **0–100%** of the field’s numeric rang
 
 The UI shows the corresponding numeric value next to each slider so you don’t have to reason in percent.
 
-If you drag Min above Max (or Max below Min), Cellucid clamps them so the range stays valid.
+The two sliders cannot cross. Dragging `Min` past `Max` pushes `Max` along with
+it (and vice versa), so pushing one all the way collapses the range to a single
+value rather than being refused.
+
+:::{note}
+**The sliders move in whole percent steps.** The finest bound you can reach
+from the UI is therefore one hundredth of the field's full data range, and
+there is no box to type an exact number into. Read the printed numeric readout
+beside each slider to see what you actually selected, and do finer gating
+upstream — in Python or R, before export. Export-time quantization compounds
+with this; see {doc}`../e_filtering/06_edge_cases_filtering`.
+:::
 
 ---
 

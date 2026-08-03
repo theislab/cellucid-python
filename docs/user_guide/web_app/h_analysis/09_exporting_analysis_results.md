@@ -101,8 +101,14 @@ This section is deliberately explicit so you can build downstream tooling.
     - `<variable>`: the exported numeric value
 
 :::{note}
-This CSV can be large: it is one row per cell (per selected page).
-For very large pages, consider exporting summary results instead of per-cell values.
+This is always the schema. The plot type on screen changes the picture, never
+the file — a bar plot, a violin and a histogram of the same variable export the
+same per-cell rows.
+
+It follows that the CSV can be large: one row per cell, per selected page. There
+is no summary-only variant, so if the file would be unmanageable, narrow the
+comparison (fewer or smaller pages) before exporting rather than looking for a
+different button.
 :::
 
 ### Correlation

@@ -78,13 +78,18 @@ Free-fly is first-person movement.
 - **Look sensitivity**: how fast mouse motion rotates the view.
 - **Move speed**: movement speed through the scene.
 - **Invert look axes**: flips the mouse look direction (both X and Y).
-- **Capture pointer**: enables pointer lock (FPS-style mouse look without dragging).
+- **Capture pointer**: a checkbox that enables pointer lock (FPS-style mouse
+  look without dragging).
+  - Ticking it requests pointer lock immediately. If the browser wants a
+    gesture on the canvas first, click the canvas once and it is requested
+    again.
   - Exit pointer lock with `Esc`.
+  - It can only be enabled in Free-fly; the other two modes do not offer it.
   - Pointer lock can be blocked in iframes and some managed browser setups.
 - **Projectile shooting** (optional): enables a “click/hold-to-charge” demo interaction.
 
 ```{figure} ../../../_static/screenshots/web_app/navigation-controls-freefly.png
-:alt: A panel headed NAVIGATION with a MODE dropdown reading Free-fly and a bordered box below holding a LOOK SENSITIVITY slider with a numeric readout, a MOVE SPEED slider with its own readout, an INVERT LOOK AXES checkbox, a PROJECTILE SHOOTING checkbox and a CAPTURE POINTER button.
+:alt: A panel headed NAVIGATION with a MODE dropdown reading Free-fly and a bordered box below holding a LOOK SENSITIVITY slider reading 0.05x, a MOVE SPEED slider reading 1.00 u/s, an INVERT LOOK AXES checkbox, a PROJECTILE SHOOTING checkbox and a CAPTURE POINTER checkbox with a small circled i beside it.
 :width: 472px
 
 The complete Free-fly control set, with the printed readouts beside each

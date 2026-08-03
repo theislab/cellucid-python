@@ -57,6 +57,20 @@ trailing whitespace.
 
 Store the exact R code used to produce the export folder alongside the export (or in a repo).
 
+Pass `created_at` while you are there. By default `dataset_identity.json`
+records the moment the export ran, so two runs of the same script differ in one
+byte range for no scientific reason. Supplying an exact UTC-seconds timestamp
+makes the identity file reproducible:
+
+```r
+cellucid_prepare(..., created_at = "2026-03-01T09:00:00Z")
+```
+
+Record provenance in the same call rather than in a README beside it —
+`source_name`, and optionally `source_url` and `source_citation`, travel with
+the export and are shown to whoever opens it. `source_name` is required as soon
+as either of the other two is supplied.
+
 ### 2) Freeze the inputs
 
 If your source object (Seurat/SCE) is mutable, make sure you know:

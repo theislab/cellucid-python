@@ -121,6 +121,152 @@ prepare(
 
 ---
 
+## Symptom: `prepare()` refuses a gene or a continuous `obs` column as non-finite
+
+### Likely causes
+
+1) The expression matrix carries `NaN` or `±Inf` — usually from a division, a
+   log of zero, or a merge that left cells unmeasured.
+2) A continuous `obs` column carries `NaN` where a score was never computed.
+3) A value is finite in your object but not once narrowed to `float32`: either
+   too large (it becomes an infinity) or nonzero but smaller than the smallest
+   `float32` (it becomes exactly zero).
+
+Cellucid publishes continuous values as finite `float32` only, because a colour
+scale has no position for an infinity: one `+Inf` makes the whole field's range
+infinite and collapses every other cell onto a single colour.
+
+### How to confirm
+
+Read the exception. `NonFinitePayloadError` (a `ValueError`, so existing
+`except ValueError` handlers still catch it) carries a **counted** diagnosis
+rather than a bare "must be finite":
+
+```text
+Gene 'A2ML1' cannot be published: of 18,142,044 cells, 12 +Inf. First affected
+cells: 4,127, 88,301, 250,994, 1,004,112, 7,730,015, ... Cellucid publishes
+finite float32 only, because a colour scale has no position for an infinity.
+Repair the matrix before serving or exporting it -- ...
+```
+
+The counts are the point. Twelve cells out of eighteen million and every cell in
+the column are the same sentence in a message that only says "not finite", and
+they want opposite responses: the first is a cell to look at, the second is the
+wrong matrix. The message counts `NaN`, `+Inf`, `-Inf`, values beyond the
+`float32` range, and values below the smallest `float32` separately, then names
+the first five offending cell indices. A continuous `obs` column reports the
+same shape under `Continuous obs field '<key>'`.
+
+Every other numeric input `prepare()` takes — `X_umap_*d`, `latent_space`, a
+vector field, `transition_matrix` — is refused with the same counts. Those have
+axes rather than one value per cell, so their positions read as `[row, column]`,
+zero-based and row-major, the way you would index the array you passed. A sparse
+input is counted over its stored non-zero values, which have no position the
+caller would recognise, so those messages give the counts and no positions.
+`cellucid-r` prints the same list one-based and column-major, the way its caller
+indexes; see
+{doc}`../../r_package/g_api_reference_coverage/02_error_messages_and_exceptions_document_patterns`.
+
+### Fix
+
+Repair the values, then export again:
+
+```python
+import numpy as np
+
+adata.X.data[~np.isfinite(adata.X.data)] = 0          # sparse expression
+np.nan_to_num(adata.X, copy=False)                    # dense expression
+adata.obs["score"] = adata.obs["score"].replace([np.inf, -np.inf], np.nan).fillna(0)
+```
+
+Deciding what the repair should be is yours: `0` is a value with a position on
+the colour scale, and it is not the same claim as "not measured".
+
+### Prevention
+
+Export is the cheapest way to find *every* affected gene, because it scans them
+all in one pass. The direct-AnnData server checks the same values but only for
+the column being requested, so it refuses one gene per selection with an HTTP
+422 — see {doc}`../d_viewing_apis/15_troubleshooting_viewing`. If you plan to
+serve a large object repeatedly, run `prepare()` once first and treat the export
+as the finiteness audit.
+
+---
+
+## Symptom: `prepare()` refuses a categorical field's outlier quantiles
+
+### Likely causes
+
+- `centroid_min_points` (default `10`) is higher than the size of every category
+  in that field, so no category qualifies for a centroid and **every** generated
+  quantile is missing. A set with no quantile at all has no bound to publish and
+  nothing for the viewer to decode, so it cannot be encoded into the quantized
+  payload.
+
+Small, many-category fields (per-sample IDs, plate wells, fine-grained
+sub-clusters) are the usual origin.
+
+### How to confirm
+
+The check runs per field but reports once, so the call names every affected
+field at the same time, before anything is written:
+
+```text
+ValueError: 1 generated categorical outlier quantile set(s) cannot be encoded:
+a set with no quantile at all has no value to publish.
+  1 set(s) with obs_continuous_quantization=8:
+    'sample_id': no category holds at least centroid_min_points=50 cells, so every generated quantile is missing
+  Fix: ...
+```
+
+Check the named field with `adata.obs["sample_id"].value_counts()`.
+
+### Fix
+
+The message ends with the three options, and any one of them works:
+
+1) lower `centroid_min_points` so a category qualifies,
+2) drop the field from `obs_keys=`, or
+3) pass `obs_continuous_quantization=None` to export the generated quantiles as
+   full-precision `float32` (this is already the default; the failure only
+   arises when you asked for 8- or 16-bit quantization).
+
+### Prevention
+
+Match `centroid_min_points` to the smallest category you actually want an
+outlier filter for.
+
+---
+
+## Symptom: “Field 'x' has N categories, but uint8 supports at most 255.”
+
+### Likely causes
+
+- `obs_categorical_dtype="uint8"` with a field that has more than 255
+  categories. `uint8` spends code 255 on the missing marker, so it carries 255
+  categories (codes `0…254`); `uint16` spends 65535 the same way and carries
+  65,535.
+
+### How to confirm
+
+```python
+print(obs["batch"].astype("category").cat.categories.size)
+```
+
+### Fix
+
+- Pass `obs_categorical_dtype="uint16"`, or
+- drop the field from `obs_keys=` if it is a per-cell identifier rather than a
+  grouping.
+
+### Prevention
+
+A field with thousands of categories is legal but not usable in a legend. Keep
+cell IDs out of the export and map selection indices back in Python instead —
+see {doc}`04_obs_cell_metadata`.
+
+---
+
 ## Symptom: a non-empty target is rejected
 
 ### Likely causes
@@ -260,7 +406,11 @@ See:
 
 1) Many genes exported (file count dominates).
 2) High gzip compression level on a slow CPU.
-3) Exporting connectivities on a huge graph (edge extraction loops).
+3) Exporting connectivities on a huge graph. The extraction is fully vectorised,
+   but the symmetry proof materializes the transpose and compares it against the
+   original, and the deduplicated edges are then sorted by source and
+   destination — several times the graph's own memory, and minutes at hundreds
+   of millions of stored neighbors.
 4) Writing to a slow filesystem (network mount, HDD).
 
 ### How to confirm
@@ -370,8 +520,12 @@ See:
 
 1) You didn’t export `vector_fields` at all.
 2) You declared vectors for 3D but didn’t provide `X_umap_3d` (validation fails).
-3) Vector field ids contain unsafe characters (export would error).
-4) Vector arrays have wrong shape (not `(n_cells, dim)`).
+3) A declaration key does not match `<field>_umap_<1|2|3>d` exactly — the
+   `_umap` tail and the dimension suffix are both required.
+4) A vector field id is empty, duplicated, or carries characters the viewer
+   cannot draw (control, zero-width, or leading/trailing whitespace). Punctuation
+   and spaces are fine: an id is a name, not a filename.
+5) Vector arrays have wrong shape (not `(n_cells, dim)`).
 
 ### How to confirm
 
@@ -408,6 +562,38 @@ See: {doc}`08_vector_fields_velocity_displacement`
 - Export connectivities and re-export with `force=True`.
 
 See: {doc}`07_connectivities_knn_graph`
+
+---
+
+## Symptom: “manifest does not describe the payloads that were written”
+
+### What it means
+
+Before publishing, `prepare()` re-expands every payload path the emitted
+manifest points a reader at and compares that set against the directory it
+actually wrote. A mismatch either way aborts the candidate, so the previous
+generation stays untouched:
+
+```text
+RuntimeError: Observation manifest does not describe the payloads that were
+written. Declared but absent: ['obs/7.values.u8.gz']. Written but undeclared: [].
+```
+
+A payload the manifest does not declare is invisible to the viewer; a payload it
+declares but that was never written fails the dataset in the browser, long after
+the export "succeeded". Both are caught here instead.
+
+### Likely causes
+
+- The export directory was written to by something else while `prepare()` ran.
+- A filesystem that dropped or renamed a file (network mounts under pressure).
+- A defect in Cellucid — this check exists to make it loud rather than silent.
+
+### Fix
+
+Re-export to a fresh `out_dir` on a local disk with nothing else writing to it.
+If it reproduces, the message lists both sides of the mismatch exactly; include
+it verbatim in a bug report along with the `prepare()` call.
 
 ---
 

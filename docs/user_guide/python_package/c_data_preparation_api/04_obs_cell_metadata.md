@@ -311,8 +311,10 @@ If you export a column where every cell has a unique string ID:
 - it becomes categorical,
 - category count becomes `n_cells`,
 - and you hit practical/technical limits quickly:
-  - `uint8` max categories: 254
-  - `uint16` max categories: 65534
+  - `uint8` stores at most 255 categories (codes `0…254`, with code 255 reserved
+    for missing)
+  - `uint16` stores at most 65,535 categories (codes `0…65534`, with code 65535
+    reserved for missing)
   - large category lists bloat `obs_manifest.json`
 
 Preferred pattern:

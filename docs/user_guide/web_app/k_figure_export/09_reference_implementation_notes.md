@@ -62,7 +62,7 @@ Key utilities/components:
 ## Payload + metadata (what gets embedded)
 
 The engine constructs a payload containing:
-- dataset identity (name/id/source type/URLs/user path),
+- dataset identity (name/id/source type/URLs/local folder or file name),
 - `meta.views`: **one provenance record per exported panel** — view id/label,
   that panel's field key/kind, and that panel's filter summary — each read from
   the panel's own atomic snapshot,
@@ -89,7 +89,12 @@ fixed ZIP timestamps, and downloads that one `application/zip` Blob. A render
 or archive failure occurs before the sole download call.
 
 :::{important}
-The metadata can include a local dataset path (`datasetUserPath`) when using local file/server workflows. Treat this as a privacy concern when sharing figures publicly.
+The metadata can include the name you gave a local folder or file
+(`datasetUserPath`), and a dataset URL for remote sources. It is never a
+filesystem path: `datasetUserPath` is set only from `file.name` or from the
+first path segment of a chosen directory, because a browser never hands the page
+an absolute location. Treat the *name* as a privacy concern when sharing figures
+publicly — see {ref}`figure-export-source-file-privacy`.
 :::
 
 ---

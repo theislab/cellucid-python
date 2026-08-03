@@ -99,7 +99,11 @@ Example: a 1200×900 plot at 300 DPI will produce an image roughly `1200×(300/9
     grid's panels do not all use the same field.
 
 :::{important}
-Exports can embed provenance metadata that may include **dataset names/ids and source paths/URLs**. If you are sharing figures publicly, skim {doc}`05_metadata_and_provenance` for how to inspect or strip metadata.
+Exports can embed provenance metadata that may include **dataset names/ids, the
+name of the local folder or file you loaded, and source URLs** — but never a
+filesystem path. If you are sharing figures publicly, skim
+{doc}`05_metadata_and_provenance` for the exact inventory and for how to inspect
+or strip metadata.
 :::
 
 ---

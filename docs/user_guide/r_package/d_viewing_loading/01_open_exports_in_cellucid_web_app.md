@@ -39,11 +39,20 @@ have separate single-file controls.
 
 ### 2) Find the “load dataset” controls
 
-In the left sidebar, look for the data loading panel (often called something like “Dataset Connections”).
+Open the `Session` section in the left sidebar. It holds the dataset summary
+(`Dataset`, `Cells`, `Genes`, `Obs fields`) and, below it, four ways to connect
+data: `Sample datasets:`, `Local data:`, `Remote server:`, and `GitHub data:`.
 
 ### 3) Choose **Prepared**
 
-Select the **Prepared** button in Local data.
+Under `Local data:` there are three buttons — `H5AD`, `Zarr ZIP`, and
+`Prepared`. An export folder written by `cellucid_prepare()` is a *prepared*
+dataset, so click `Prepared`.
+
+```{note}
+The buttons stay disabled until the app has finished starting; the line above
+them says so while you wait.
+```
 
 ### 4) Select your export folder (`out_dir`)
 
@@ -64,6 +73,8 @@ For large exports (especially with many genes), initial directory scanning may t
 After loading, you should be able to:
 
 - see points in the canvas
+- read your own `dataset_name` next to `Dataset`, and your cell count next to
+  `Cells`, in the same `Session` section
 - color by an `obs` field
 - (if you exported expression) search for a gene from your exported gene set and color by it
 

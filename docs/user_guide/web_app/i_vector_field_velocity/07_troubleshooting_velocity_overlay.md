@@ -1,6 +1,11 @@
 # Troubleshooting (velocity overlay)
 
+**Audience:** everyone using the overlay  
+**Time:** find your symptom in 1–2 minutes; fixes take 5–15  
+**What you’ll get:** the overlay working, or a precise statement of why it cannot.
+
 This page is a troubleshooting-first companion to the vector field overlay docs.
+For behaviour that looks wrong but is correct, go to {doc}`06_edge_cases` instead.
 
 Each entry follows the same structure:
 **Symptom → Likely causes (ordered) → How to confirm → Fix → Prevention**.
@@ -137,8 +142,10 @@ If you’re stuck, do this first:
 
 1) `Opacity:` is 0% or very low, or `Particle size:` is too small.  
 2) All cells are filtered out / invisible, so there is nothing to spawn particles from.  
-3) Vectors are all-zero (or extremely small), so motion is imperceptible.  
-4) You are GPU-saturated and frames are not updating smoothly.  
+3) Vectors are all-zero. Every particle is then discarded before it is drawn, so
+   nothing appears at any setting — see {doc}`06_edge_cases`.  
+4) Vectors are extremely small but non-zero, so motion is imperceptible.  
+5) You are GPU-saturated and frames are not updating smoothly.  
 
 ### How to confirm
 
@@ -152,7 +159,9 @@ If you’re stuck, do this first:
 1) Adjust `Opacity:` and `Particle size:`.
 2) Ensure you have visible cells (undo filters that hide everything).
 3) Increase `Flow speed:` slightly (2×–4×) to see motion.
-4) If the data might be all-zero, recompute vectors or verify you’re exporting the intended array.
+4) If steps 1–3 change nothing at all, stop tuning: an all-zero field cannot be
+   revealed by any control. Recompute the vectors or verify you are exporting
+   the intended array.
 
 ### Prevention
 
@@ -206,7 +215,9 @@ If you’re stuck, do this first:
 1) Particle count is too high for your GPU (`Particle density:`).  
 2) Trails and bloom are dominating (large window + high DPI + bloom).  
 3) You have many snapshot views open (each view has its own trail buffers).  
-4) LOD is disabled, so `Sync with LOD` can’t reduce workload.  
+4) LOD is disabled, or it is enabled and the camera is close enough that `Auto`
+   is drawing full detail — in which case `Sync with LOD` has nothing to reduce
+   until you pull back.  
 
 ### How to confirm
 
@@ -218,39 +229,117 @@ If you’re stuck, do this first:
 
 1) Set `Particle density:` to 5K–10K.
 2) Set `Trail length:` to 2–5s.
-3) Set `Bloom strength:` to 0.00 (Advanced → HDR & Bloom).
+3) Set `Bloom strength:` to 0.00 (Advanced → HDR & Bloom). This is not only a
+   visual change: it also frees the bloom render targets and skips two
+   full-screen passes.
 4) Reduce number of visible views.
-5) Enable renderer LOD (**Visualization → Renderer settings → Level-of-Detail (LOD)**) and keep `Sync with LOD` enabled.
+5) Enable renderer LOD (**Visualization → Renderer settings → Level-of-Detail
+   (LOD)**), keep `Sync with LOD` enabled, and pull the camera back — `Auto`
+   coarsens at any dataset size. Lower `Force LOD level:` by a few steps when you
+   need to go past `Auto`'s floor of `min(2,000,000, cells ÷ 8)` points.
 
 ### Prevention
 
 - For large datasets, document a “default performance-safe preset” and encourage users to start there.
+- See {doc}`05_performance_and_quality` for what the LOD floor is and when the
+  forced slider is the lever to reach past it.
 
 ---
 
-## Symptom: “Velocity overlay unavailable” / “Preparing velocity overlay…” takes a long time
+## Symptom: “The flow vanishes when I zoom out”
+
+### Likely causes (ordered)
+
+1) `Sync with LOD` is enabled and the renderer has dropped six or more levels
+   below full detail. At that point the overlay's particle multiplier is `0` and
+   the overlay is disposed until you come back up.  
+2) You are only seeing the intermediate steps of the same ladder — the flow
+   thins rather than disappearing (`0.5` at one or two levels below full detail,
+   `0.25` at three to five).  
+
+### How to confirm
+
+- Zoom back in. If the flow returns without you touching any control, this is
+  the ladder, not a failure.
+- Uncheck `Sync with LOD` and repeat the zoom. If the flow now survives, the
+  ladder was the cause.
+
+### Fix
+
+- Uncheck `Sync with LOD` if you need the flow at every zoom level, and accept
+  the frame cost, or
+- raise `Force LOD level:` so the renderer stays nearer full detail.
+
+### Prevention
+
+- Treat `Sync with LOD` as a performance setting, not a display setting, and
+  read {doc}`05_performance_and_quality` before using it in a figure workflow.
+
+---
+
+## Symptom: `Preparing velocity overlay...` takes a long time
 
 ### Likely causes (ordered)
 
 1) Your dataset is huge and Cellucid is building internal spawn tables (especially after filter changes).  
-2) All cells are invisible (spawn table has no candidates).  
-3) The browser is too busy to schedule the background work promptly.  
+2) You are changing filters faster than the build completes, so it restarts.  
+3) The browser is too busy to schedule the background work promptly — the build
+   runs on idle time, not on the render loop.  
 
 ### How to confirm
 
-- If you have 0 visible points, the overlay cannot spawn particles.
-- If you are changing filters rapidly, the overlay may rebuild repeatedly.
+- Stop touching the filters for a few seconds and watch whether the notification settles.
+- Check whether the main thread is busy with another long task (a large export, a DE run).
 
 ### Fix
 
-1) Ensure some cells are visible.
-2) Stop rapidly changing filters; wait a moment for the overlay to finish preparing.
-3) Reduce GPU load (lower density, shorter trails, bloom=0).
-4) If needed, toggle the overlay off and on once after you settle on filters.
+1) Stop rapidly changing filters; wait a moment for the overlay to finish preparing.
+2) Reduce GPU load (lower density, shorter trails, bloom=0).
+3) If needed, toggle the overlay off and on once after you settle on filters.
 
 ### Prevention
 
-- On very large datasets, prefer LOD + `Sync with LOD`, and keep density modest.
+- On very large datasets, keep density modest and settle your filters before
+  enabling the overlay.
+
+:::{note}
+`Velocity overlay ready (no visible cells)` is **not** this symptom, and not a
+failure. It is the ordinary outcome when every cell is filtered out: the spawn
+table built correctly and came back empty. Relax the filters and the flow
+returns without touching the overlay. See {doc}`06_edge_cases`.
+:::
+
+---
+
+## Symptom: the notification reads `Velocity overlay unavailable`
+
+### Likely causes (ordered)
+
+1) The spawn-table build threw. This is the terminal failure state of that
+   build, and it is the *only* thing this message means. The overlay also
+   disables itself.  
+2) The build allocates two GPU textures (one visibility, one spawn table) at the
+   end; under memory pressure that allocation is where it fails.  
+
+### How to confirm
+
+- Look for the second notification, `Velocity overlay preparation failed: <message>`.
+  That one carries the actual error text.
+- Open the browser console; the thrown error is logged there too.
+- Check whether the same view had just been enlarged, duplicated into more
+  snapshots, or pushed to a high `Particle density:`.
+
+### Fix
+
+1) Reduce GPU load: lower `Particle density:`, set `Bloom strength:` to `0.00`,
+   close extra snapshot views, shrink the window.
+2) Toggle `Show overlay` off and on to retry the build.
+3) If the console reports WebGL context loss, reload the page.
+
+### Prevention
+
+- Keep the overlay's settings modest while you also have many views open; the
+  trail buffers are per view.
 
 ---
 
@@ -306,87 +395,47 @@ If you’re stuck, do this first:
 
 ---
 
-## How do I add vector fields to my dataset? (common fixes)
+## How do I add vector fields to my dataset?
 
-This is the most common “root cause” when the overlay is missing.
+This is the most common root cause when the overlay is missing entirely, and it
+is a data-preparation question rather than a UI one. The full recipe — both the
+`AnnData.obsm` route and the `cellucid.prepare(..., vector_fields=...)` route,
+with the exact shape and dtype requirements — is
+{doc}`../../python_package/c_data_preparation_api/08_vector_fields_velocity_displacement`.
 
-### Option A: Add vectors to `AnnData.obsm` (UMAP-based naming)
+Two rules from it decide whether the field is detected at all, so they are worth
+repeating here:
 
-Cellucid detects UMAP vector fields using keys like:
+- **The key carries the dimension.** Cellucid looks for `obsm` keys of the form
+  `<something>_umap_<dim>d` — `velocity_umap_2d`, `T_fwd_umap_3d`. A key without
+  the suffix is not a vector field, and a key whose array width disagrees with
+  its suffix is rejected at load time with an error naming both numbers.
+- **The matching embedding must exist.** A 2D field needs `X_umap_2d`, a 3D field
+  needs `X_umap_3d`. Export every dimension you expect people to switch to.
 
-- `velocity_umap_2d` or `velocity_umap_3d`
-- `T_fwd_umap_2d` / `T_bwd_umap_2d` (CellRank drift-style)
-
-Example (2D):
-
-```python
-# adata.obsm["X_umap_2d"] should be (n_cells, 2)
-# velocity_umap_2d must also be (n_cells, 2) in the same row order.
-adata.obsm["velocity_umap_2d"] = velocity_umap_2d.astype("float32")
-```
-
-CellRank transition matrices → drift vectors helper:
-
-```python
-import cellucid
-
-cellucid.add_transition_drift_to_obsm(
-    adata,
-    T_fwd,          # (n_cells, n_cells)
-    basis="umap",
-    field_prefix="T_fwd",
-    dim=2,
-    normalize_rows=False,
-)
-```
-
-Then load the dataset via Jupyter/server/browser and enable the overlay.
-
-### Option B: Export vectors with `cellucid.prepare(..., vector_fields=...)`
-
-If you are generating a pre-exported folder:
-
-```python
-from cellucid import prepare
-
-prepare(
-    latent_space=latent,
-    obs=obs,
-    var=var,
-    gene_expression=X,
-    X_umap_2d=X_umap_2d,
-    vector_fields={
-        "velocity_umap_2d": velocity_umap_2d,
-        # Add more fields if you like:
-        # "T_fwd_umap_2d": drift_umap_2d,
-    },
-    out_dir="exports/my_dataset",
-    dataset_name="My study",
-    dataset_id="my-study-v1",
-    obs_categorical_dtype="uint16",
-    compression=6,
-)
-```
-
-The resulting export folder will contain:
-
-- `dataset_identity.json` with a `vector_fields` block
-- `vectors/*.bin` (or `*.bin.gz`) files
+A finished export folder carries the evidence: `dataset_identity.json` gains a
+`vector_fields` block, and a `vectors/` directory appears holding one `.bin`
+(or `.bin.gz`) per field and dimension.
 
 ---
 
-## Common error messages (what they usually mean)
+## Common error messages (exact strings)
 
-If you get a toast/notification error, these strings are helpful:
+These are the messages the app actually emits, verbatim. Match on the wording,
+not on a paraphrase — each one has exactly one cause.
 
-- `No 2D/3D vector field found for "…" in obsm`  
-  The key exists in metadata, but no matching `obsm` array is found (or the wrong dimension).
+| Message | Raised by | The one condition |
+|---|---|---|
+| `Dataset metadata does not advertise an exact 2D vector field key for "<id>"` (or `3D`) | AnnData adapter | The overlay asked for a dimension this field never registered a key for. |
+| `Metadata advertises '<obsmKey>' for 2D vector field "<id>", but it is missing from obsm` | AnnData adapter | The key was registered at load time but is no longer present in `obsm`. |
+| `Vector field '<obsmKey>' has N dimensions, expected D` | AnnData adapter | A 2D array is stored under a 3D key, or the reverse. Note the **single** quotes around the `obsm` key. |
+| `Vector field '<obsmKey>' has N columns, but its Dd suffix requires exactly D` | AnnData adapter, at dataset load | The same shape mismatch, caught during discovery — so the field never appears in `Vector field:` at all. |
+| `VectorFieldManager.loadField: vectors length X does not equal expected length Y.` | Vector field manager | The payload length is not `n_cells × components`: usually a stale or mismatched `vectors/*.bin` in an export folder. |
+| `VectorFieldManager.loadField: field "<id>" contains a non-finite value at cell N, component C.` | Vector field manager | A `NaN` or `Inf` in the field. The message names the exact cell and component; see {doc}`06_edge_cases`. |
+| `VectorFieldManager.loadField: scaling field "<id>" overflowed at cell N, component C.` | Vector field manager | The values are finite but so large that scaling them leaves `float32` range. |
 
-- `Vector field "…" has N dimensions, expected D`  
-  You provided a 2D array under a 3D key (or vice versa).
-
-- `vectors length X !== expected Y`  
-  The loaded binary vector file has the wrong length for `n_cells * components` (export mismatch / wrong file).
+Whichever one fires, the visible consequence is the same: `Show overlay` turns
+itself back off and the info line reads `Failed to load vector field.`
 
 ---
 

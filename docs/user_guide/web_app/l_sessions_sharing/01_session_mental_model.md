@@ -139,7 +139,7 @@ You will see one of four messages, each naming what actually happened:
 |---|---|---|
 | The session was saved on a different dataset (with both cell and gene counts named) | it is not this dataset | open the dataset the session was saved on |
 | The session was saved while a different dimension was shown | the check reads the coordinates on screen, and 2D and 3D coordinates differ | switch back to the dimension named in the message, then load again |
-| The dataset has the same name and counts but stores its cells in a different order | this is a re-ordered republication of the dataset | load the version the session was saved on, or re-create the selections here |
+| The dataset has the same name and counts but its cell coordinates differ | either the cells are stored in a different order, or the same cells were exported again from a re-computed embedding — a one-way digest cannot say which | load the version the session was saved on, or re-create the selections here |
 | The file was saved before Cellucid started recording which cells a selection contains | it is a session file older than this check | re-create the selections and save a new session file |
 
 The dimension message is the recoverable one. It is not a report of damaged

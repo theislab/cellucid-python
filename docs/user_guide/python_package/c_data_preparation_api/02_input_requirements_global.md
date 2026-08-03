@@ -69,13 +69,16 @@ If you construct arrays separately (common in pipelines), you must enforce align
 
 | Argument | Required shape | Notes |
 |---|---:|---|
-| `X_umap_1d` | `(n_cells, 1)` | Optional |
+| `X_umap_1d` | `(n_cells, 1)` or `(n_cells,)` | Optional |
 | `X_umap_2d` | `(n_cells, 2)` | Common |
 | `X_umap_3d` | `(n_cells, 3)` | Recommended if you want true 3D navigation |
 
-```{warning}
-`prepare()` rejects 1D embeddings shaped `(n_cells,)` and will raise a shape error.
-Always pass a 2D array with an explicit second dimension.
+```{note}
+`X_umap_1d` declares one coordinate per cell, so a plain `(n_cells,)` vector
+already *is* the single column it declares: `prepare()` reshapes it to
+`(n_cells, 1)`, exactly as AnnData does when you put such an array in `obsm`.
+`X_umap_2d` and `X_umap_3d` have no such shortcut — each must be a 2D array with
+exactly the column count its name declares.
 ```
 
 ### Required non-embedding inputs

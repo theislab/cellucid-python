@@ -1,12 +1,19 @@
 # Export format spec and invariants
 
-This page is the **specification of the Cellucid export folder format** written by `cellucid.prepare(...)`.
+The export folder format written by `cellucid.prepare(...)` is a contract
+between five repositories: two writers (`cellucid-python`, `cellucid-r`), one
+reader (the Cellucid web app), and two dataset repositories that ship artifacts
+in it.
 
-It is the contract between:
-- `cellucid-python` (writer/server), and
-- the Cellucid web app (reader).
-
-If you change this format, you must coordinate with the web app and document compatibility clearly.
+:::{important}
+**The specification is
+{doc}`../c_data_preparation_api/09_output_format_specification_exports_directory`.**
+It is the single normative description of every file, key, dtype, and byte
+order, and it is the page a sixth writer should be implemented against. This
+page is the *developer* view of the same format: what the layout looks like at a
+glance, what a reader may rely on, and what changing it costs. Where the two
+disagree, page 09 is right and this page is a bug.
+:::
 
 Related pages:
 - Export pipeline internals: {doc}`07_prepare_export_pipeline_architecture`
@@ -14,25 +21,23 @@ Related pages:
 
 ---
 
-## What counts as a “valid export folder”
+## What counts as a valid export folder
 
-In practice, there are two “levels”:
+There is one level, not two. `_list_exported_datasets` admits a directory only
+when **all** of the following hold, and rejects the whole served root otherwise:
 
-### Level 1: Minimal viewer-loadable dataset
+- `dataset_identity.json` is present, readable UTF-8 JSON, an object, and
+  carries `"version": 2`;
+- its `id` and `name` pass the same contracts the writer applied;
+- `obs_manifest.json` is present, readable UTF-8 JSON, and an object;
+- at least one `points_<dim>d.bin` or `points_<dim>d.bin.gz` is present and
+  non-empty;
+- no dimension has *both* a compressed and an uncompressed points file.
 
-- `obs_manifest.json` exists
-- at least one `points_<dim>d.bin` (or `.bin.gz`) exists
-
-This is what the static server uses to detect datasets.
-
-### Level 2: “Produced by `prepare`” (recommended)
-
-Everything above, plus:
-
-- `dataset_identity.json` exists (used by CLI auto-detection and dataset display)
-- optional: `var_manifest.json`, `connectivity_manifest.json`, `vectors/`
-
-Unless you are deliberately building custom exports, treat `dataset_identity.json` as required.
+`var_manifest.json`, `connectivity_manifest.json`, and `vectors/` are genuinely
+optional; `dataset_identity.json` is not. A hand-assembled export that omits it,
+or that carries a different `version`, is refused before the server binds — not
+loaded with reduced functionality.
 
 ---
 
@@ -217,75 +222,37 @@ Three aligned arrays of equal length:
 
 ## JSON files
 
-### `dataset_identity.json`
+The exact key set of each manifest — `dataset_identity.json`,
+`obs_manifest.json`, `var_manifest.json`, and `connectivity_manifest.json` — is
+specified once, in
+{doc}`../c_data_preparation_api/09_output_format_specification_exports_directory`.
+Every one of them is validated on both sides: the writer reconciles the manifest
+it just built against the directory it just wrote, and the reader refuses a
+manifest whose key set is not exactly the current one. Copying the key lists
+here is how they drifted before, so this page states only the shape a reader has
+to parse, and links for the rest.
 
-This is the main metadata file written by `prepare`.
+**Compact entries are length-typed.** Each manifest entry is a positional array
+whose *length* selects the variant, so an entry with an unexpected member count
+is rejected rather than read partially:
 
-Key fields (current):
+| Manifest array | Members | Shape |
+| --- | ---: | --- |
+| `_continuousFields` | 2 | `[index, key]` — float32, unquantized |
+| `_continuousFields` | 4 | `[index, key, minValue, maxValue]` — quantized |
+| `_categoricalFields` | 6 | `[index, key, categories, codesDtype, codesMissingValue, centroidsByDim]` — outliers float32 |
+| `_categoricalFields` | 8 | the six above plus `outlierMinValue, outlierMaxValue` — outliers quantized |
+| `fields` (var) | 2 | `[index, name]` — float32, unquantized |
+| `fields` (var) | 4 | `[index, name, minValue, maxValue]` — quantized |
 
-- `version`: integer (currently `2`)
-- `id`, `name`, `description`, `created_at`
-- `cellucid_data_version`: version string of the Python package writing the export
-- `stats`: counts + connectivity presence
-- `embeddings`: available dimensions and file paths
-- `obs_fields`: simplified obs field summary for UI display
-- `export_settings`: compression + quantization knobs used
-- optional `source`: name/url/citation
-- optional `vector_fields`: field metadata + per-dimension file paths
+The leading member of every entry is the field's payload index, and it is what
+the schema `pathPattern` is expanded with. It is not the position of the entry
+in the array: `obs` shares one index space across `_continuousFields` and
+`_categoricalFields` because both write into `obs/`, so neither list is dense on
+its own.
 
-### `obs_manifest.json` (format: `compact_v1`)
-
-Fields:
-
-- `_format`: `"compact_v1"`
-- `n_points`: number of cells
-- `centroid_outlier_quantile`: float or null
-- `latent_key`: currently `"latent_space"` (conceptual key)
-- `compression`: gzip level or null
-- `_obsSchemas`: schema object that defines path patterns and dtypes
-- `_continuousFields`: compact list of continuous fields
-- `_categoricalFields`: compact list of categorical fields
-
-Compact lists:
-
-- continuous:
-  - `[key]` (float32, unquantized)
-  - `[key, minValue, maxValue]` (quantized)
-- categorical:
-  - `[key, categories, codesDtype, codesMissingValue, centroidsByDim]` (outliers float32)
-  - `[key, categories, codesDtype, codesMissingValue, centroidsByDim, outlierMinValue, outlierMaxValue]` (outliers quantized)
-
-Centroids:
-- `centroidsByDim` is a dict keyed by dimension (as strings), each value is a list of objects:
-  - `{category: <str>, position: <list[float]>, n_points: <int>}`
-
-### `var_manifest.json` (format: `compact_v1`)
-
-Fields:
-
-- `_format`: `"compact_v1"`
-- `n_points`: number of cells
-- `var_gene_id_column`: `null` for `var.index`, otherwise an exact column name
-- `compression`: gzip level or null
-- `quantization`: `8`, `16`, or null
-- `_varSchema`: schema object with path patterns
-- `fields`: list of compact per-gene entries:
-  - `[gene_id]` (float32)
-  - `[gene_id, minValue, maxValue]` (quantized)
-
-### `connectivity_manifest.json` (format: `edge_pairs`)
-
-Fields:
-
-- `format`: `"edge_pairs"`
-- `n_cells`, `n_edges`, `max_neighbors`
-- `index_dtype` (`uint16`/`uint32`) and `index_bytes`
-- `sourcesPath`, `destinationsPath`
-- `compression`: gzip level or null
-
-An explicitly supplied, validated zero-edge graph has `n_edges: 0`,
-`max_neighbors: 0`, and two zero-length edge arrays. It is distinct from absent
-connectivity.
+`centroidsByDim` is an object keyed by dimension as a string, whose values are
+lists of `{category, position, n_points}` objects.
 
 ---
 
@@ -339,8 +306,14 @@ codes = np.frombuffer(raw, dtype=np.uint8 if codes_ext == "u8" else np.uint16)
 3) Categorical codes and generated nullable categorical outlier quantiles must
    respect their declared missing markers. Gene and continuous-observation
    values are finite-only.
-4) If you change any schema/filenames, coordinate with the web app.
-5) `.gz` means “raw gzip bytes”, not HTTP `Content-Encoding`.
+4) `.gz` means “raw gzip bytes”, not HTTP `Content-Encoding`.
+5) A schema, key set, filename, dtype, or byte order changed on one side has to
+   change on every side in the same pass: both writers (`cellucid-python`,
+   `cellucid-r`), the web app's reader, the prepared demo datasets, and this
+   documentation. The specification page is
+   {doc}`../c_data_preparation_api/09_output_format_specification_exports_directory`
+   — update it first, because it is the page the other implementations are read
+   against.
 
 ---
 

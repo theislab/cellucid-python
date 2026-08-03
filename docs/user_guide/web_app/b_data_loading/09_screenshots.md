@@ -41,7 +41,10 @@ and **Zarr ZIP** open single-file choosers.
 :width: 496px
 
 The **Remote server** control, holding the address a running `cellucid serve`
-printed.
+printed as its **Local URL** — the bare origin, `http://127.0.0.1:8765`. This
+field is not where the **Viewer URL** goes: it refuses a trailing slash, a
+`?…` query, and a fragment. The Viewer URL belongs in the browser address bar.
+See {doc}`04_server_tutorial`.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/connect-github-catalog.png
@@ -121,7 +124,9 @@ A CSV renamed to `.h5ad`. The leading bytes are checked, not the extension.
 :width: 760px
 
 A valid `.h5ad` with no supported embedding. The message ends by listing the
-`obsm` keys the file does contain.
+`obsm` keys the file does contain. This capture predates the current wording,
+which also names a plain `X_umap` among the keys it accepts; the exact text is
+quoted in {doc}`03_browser_file_picker_tutorial`.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/fail-remote-server-unreachable.png

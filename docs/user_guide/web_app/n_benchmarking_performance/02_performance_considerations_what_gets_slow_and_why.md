@@ -73,14 +73,16 @@ High-leverage knobs:
 - **Make the window smaller** while exploring (fewer pixels) — *usually the biggest immediate win*.
 - **Filter down to what you are actually looking at** — hidden points stop costing anything to draw.
 - **Enable Level-of-Detail (LOD)** (points mode) — reduces draw cost when zoomed
-  out, but only above two million points. `Auto` is bounded by a point budget: the
-  coarsest level it may choose is the first one holding at least
-  `min(total points, 2,000,000)` points, so a dataset at or under two million
-  points is never reduced by `Auto` and enabling LOD changes nothing there. Above
-  the budget the reduction `Auto` can reach is `total points / 2,000,000` — an
-  18,142,044-cell dataset stops at 2,418,940 points. The forced level slider is
-  deliberately *not* bounded by the budget, so asking for a coarser level
-  explicitly is still honoured.
+  out, at every dataset size. `Auto` has a floor, and the floor is the coarsest
+  level still holding at least `min(2,000,000, total points ÷ 8)` points: it may
+  never reduce a cloud by more than 8×, and it may never take a large one below
+  two million points. The ladder is discrete, so the floor lands on a rung —
+  an 18,142,044-cell dataset stops at 2,418,940 points, a 7.5× reduction. Below
+  the absolute budget the 8× cap is what binds, so a 200,000-cell dataset still
+  gets nine levels for the camera to move through. That rung is only a *floor*:
+  `Auto` falls to it when you pull back and draws more as you move in. The forced
+  level slider is deliberately *not* bounded by either limit, so asking for a
+  coarser level explicitly is still honoured.
 - **Reduce `Point size (log):`** once points are big enough to overlap — the one
   rendering setting that measurably moves frame time, and it is measured below.
 - **Turn off `Antialiasing (smooth point edges)`** under **Visualization →
@@ -93,146 +95,10 @@ High-leverage knobs:
   row is the expensive arrangement; one view and the 2×2 four-view grid shade
   about the same number of pixels. See {doc}`01_performance_mental_model`.
 
-#### Where the frame time actually goes, and why shader quality is not a lever
-
-All the figures in this section and the next were measured on **one machine** —
-an Apple M1 Pro driving WebGL2 through ANGLE Metal, 1440×1000 at device pixel
-ratio 1, 10,000,000 synthetic points, LOD and frustum culling off, camera held
-fixed. Treat the absolute milliseconds as belonging to that machine. What
-carries across hardware is the *shape*: which term scales with what.
-
-Split by GPU timer query, at point size 0.75:
-
-| Stage | Cost | Share of the frame |
-|---|---|---|
-| Vertex processing | 2.62 ms, and **flat** — identical at every point size | 4.2% |
-| Fragment shading | rises 1.82× for **190×** the fragments | small, and mostly hidden |
-| Per-sprite rasterisation | the remainder | the bulk of the frame |
-
-Two consequences follow, and both contradict advice that used to appear on this
-page:
-
-- **Simplifying the fragment shader buys nothing.** Depth writes are on and
-  submission order is uncorrelated with depth, so at point size 0.75 only
-  about **5%** of rasterised fragments survive to be shaded at all. Removing fog,
-  removing lighting, removing the alpha texture fetch, removing the round
-  discard, and stepping the whole quality ladder down — 43 shader statements to 9
-  to 2 in the compiled Metal — each stayed inside its own measurement noise band,
-  at every point size tested. The fragment shader runs on a rounding error's
-  worth of the fill, so making it cheaper changes nothing you can see.
-- **The floor is the per-sprite rasterisation footprint**, not shading and not
-  vertex work: binning, rasteriser setup and raster operations, measured at about
-  **5.7 ns per sprite (~175 million sprites/s)** and reproduced three times by
-  three independent instruments. `GL_POINTS` is the cheapest way to reach it —
-  instanced quads and every triangle arrangement tried came out **1.41× to 2.12×
-  slower**, and the quad arms were shading a fragment count matched to the point
-  arm to five decimal places, so the gap is the primitive and not extra work.
-  Halving the primitive count with one triangle per point made it *worse*, so
-  there is no arrangement left to try. At 10 million points that floor alone
-  accounts for most of a ~50 ms frame, which is the ~19 FPS in the antialiasing
-  table below.
-
-:::{note}
-The **Analyze Performance** tool used to report a "Shader overhead" figure and
-suggest switching to `Ultra-light`. Both are gone, and the sidebar's
-`Shader quality:` tooltip no longer claims a speed benefit either — it describes
-what the setting changes about how points *look*. The tool reports point-size
-response in that row now. Reach for point size, window size, filtering or
-antialiasing.
-:::
-
-#### Point size: the control that does respond
-
-Point size is the one rendering setting with a measurable effect on frame time,
-and the reason is geometric rather than arithmetic: a sprite's area grows with
-the square of its size, so it changes how much the rasteriser has to cover
-rather than how much arithmetic runs per pixel.
-
-A dataset already opens at a size chosen from its cell count, so most of this
-work is done before you touch anything. The opening size holds the total drawn
-area roughly constant, which means the diameter falls with the square root of
-the count: 100,000 cells open at 1.5, 3,696 cells at 4.0, and 18,142,044 cells
-at about 0.112. It is applied on every dataset publication, but *before* a saved
-session or a published preset is replayed, so an explicit choice you stored
-still wins.
-
-`Point size (log):` runs from position -24 to position 100 in steps of 0.5. The
-positions are exponents of a curve anchored at 0.25 (position 0) and 200
-(position 100), so the reachable sizes run from 0.050 to 200.
-
-It does not respond everywhere on its range. Below roughly **`gl_PointSize` 15**
-— `Point size (log):` at position 50, a point size of about 7, or a point size
-of 0.75 after zooming in about sixfold — the frame is bound by the per-sprite
-cost, and shrinking points further buys very little. Above it the frame becomes
-fill-bound and point size becomes the dominant term. In practice:
-
-- If points already overlap heavily on screen, **reduce point size first**.
-- If points are tiny specks and the frame is still slow, point size is not your
-  problem — you are paying per sprite, so **draw fewer sprites**. Filter; `Auto`
-  LOD only reduces above two million points, so below that budget an explicit
-  forced level is the only LOD lever that does anything.
-
-Both thresholds are hardware rates, so the crossover position moves with the
-GPU; the ordering does not.
-
-:::{note}
-The bottom of the slider buys less than it looks like it does. A point is
-clamped to a rendered floor of 0.5 device pixels, so sizes under about 0.5 all
-draw the same sprite — and cost the same — except where perspective size scaling
-lifts the rendered size back above that floor. Below the floor you are paying
-per sprite and nothing else.
-:::
-
-#### Antialiasing: what it costs and what it buys
-
-Antialiasing lives under **Visualization → Image quality** and follows your
-dataset until you tell it otherwise. It is not a cosmetic setting, so both
-halves of the trade are stated here.
-
-Until you click the checkbox, the choice is automatic and made from the cell
-count: **on below 5,000,000 cells, off at or above**. It is re-decided every time
-a dataset is published, because datasets are switched in place — so opening an
-atlas after a small dataset clears the box on its own. While the choice is
-automatic the line under the control says so, naming the count
-(`Chosen automatically: 18,142,044 cells.`). Clicking the checkbox ends automatic
-selection permanently, in both directions: from then on the box holds your answer
-on every dataset, and the status line goes quiet. This is why the 10,000,000-point
-workload measured below is *not* the default configuration — at that size the
-automatic answer is already off.
-
-The setting applies **to the next frame**. Nothing about it needs a reload.
-
-Measured on the same machine as above — 10,000,000 synthetic points, one Apple
-M1 Pro through ANGLE Metal, 1440×1000 at device pixel ratio 1, camera held
-fixed, four independent browser windows per configuration — and on the frames
-actually presented to the screen, not in an offscreen buffer:
-
-| Point size | Frame time, antialiasing on | off | Change |
-|---|---|---|---|
-| 0.75 | 52.7 ms (19.0 FPS) | 42.5 ms (23.6 FPS) | **19% faster** |
-| 2.0 | 69.7 ms | 48.9 ms | **30% faster** |
-| 4.0 | 93.1 ms | 61.6 ms | **34% faster** |
-
-A GPU timer query over the same runs agreed within three points at every size
-(22%, 32%, 36%), so read the saving as **about a fifth at point size 0.75
-and about a third at large ones**. Note that the saving *grows* with point size:
-antialiasing costs per pixel covered, so it is worth least in exactly the
-millions-of-tiny-dots case that most needs the frames.
-
-What you give up, on the same frames: **18% of pixels change at point size
-0.75** and 32% with `Ultra-light (square points)`. Small dots are almost
-entirely edge, so this is the setting that changes what a dense cloud looks
-like, not merely how fast it is drawn. Larger points are affected far less,
-which is the opposite of the speed table — at point size 4 the picture barely
-changes while the saving is largest.
-
-One device-level caveat: a GPU that cannot multisample at all gets no
-antialiasing whatever the setting says, and the line under the control reads
-`This browser is not providing antialiasing for this view.`
-
-Related docs:
-- {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke`
-- {doc}`../a_orientation/02_system_requirements` (WebGL context lost = GPU memory pressure)
+Where a frame's time actually goes, what the point-size curve is, and what
+antialiasing measurably costs are all below, under
+**Rendering points, measured** — this list is the comparison, that section is
+the evidence behind it.
 
 ---
 
@@ -346,6 +212,164 @@ Related docs:
 
 ---
 
+## Rendering points, measured
+
+The cost model above ranks the knobs. This section is where the numbers behind
+that ranking live: where a frame's time actually goes, why point size is the
+one rendering setting that moves it, and what antialiasing costs. It is here
+rather than inside the cost model because it is evidence for one item in that
+list, and reading it is optional.
+
+### Where the frame time actually goes, and why shader quality is not a lever
+
+All the figures in this section and the next were measured on **one machine** —
+an Apple M1 Pro driving WebGL2 through ANGLE Metal, 1440×1000 at device pixel
+ratio 1, 10,000,000 synthetic points, LOD and frustum culling off, camera held
+fixed. Treat the absolute milliseconds as belonging to that machine. What
+carries across hardware is the *shape*: which term scales with what.
+
+Split by GPU timer query, at point size 0.75. The shares are read against the
+presented frame time for that same configuration, which the antialiasing table
+below measures at 52.7 ms with antialiasing on and 42.5 ms with it off:
+
+| Stage | Cost | Share of the frame |
+|---|---|---|
+| Vertex processing | 2.62 ms, and **flat** — identical at every point size | a few percent of a frame that runs 42–53 ms at this point size |
+| Fragment shading | rises 1.82× for **190×** the fragments | small, and mostly hidden |
+| Per-sprite rasterisation | the remainder | the bulk of the frame |
+
+Two consequences follow, and both contradict advice that used to appear on this
+page:
+
+- **Simplifying the fragment shader buys nothing.** Depth writes are on and
+  submission order is uncorrelated with depth, so at point size 0.75 only
+  about **5%** of rasterised fragments survive to be shaded at all. Removing fog,
+  removing lighting, removing the alpha texture fetch, removing the round
+  discard, and stepping the whole quality ladder down — 43 shader statements to 9
+  to 2 in the compiled Metal — each stayed inside its own measurement noise band,
+  at every point size tested. The fragment shader runs on a rounding error's
+  worth of the fill, so making it cheaper changes nothing you can see.
+- **The floor is the per-sprite rasterisation footprint**, not shading and not
+  vertex work: binning, rasteriser setup and raster operations, measured at about
+  **5.7 ns per sprite (~175 million sprites/s)** and reproduced three times by
+  three independent instruments. `GL_POINTS` is the cheapest way to reach it —
+  instanced quads and every triangle arrangement tried came out **1.41× to 2.12×
+  slower**, and the quad arms were shading a fragment count matched to the point
+  arm to five decimal places, so the gap is the primitive and not extra work.
+  Halving the primitive count with one triangle per point made it *worse*, so
+  there is no arrangement left to try. At 10 million points that floor alone
+  accounts for most of a ~50 ms frame, which is the ~19 FPS in the antialiasing
+  table below.
+
+:::{note}
+The **Analyze Performance** tool used to report a "Shader overhead" figure and
+suggest switching to `Ultra-light`. Both are gone, and the sidebar's
+`Shader quality:` tooltip no longer claims a speed benefit either — it describes
+what the setting changes about how points *look*. The tool reports point-size
+response in that row now. Reach for point size, window size, filtering or
+antialiasing.
+:::
+
+### Point size: the control that does respond
+
+Point size is the one rendering setting with a measurable effect on frame time,
+and the reason is geometric rather than arithmetic: a sprite's area grows with
+the square of its size, so it changes how much the rasteriser has to cover
+rather than how much arithmetic runs per pixel.
+
+A dataset already opens at a size chosen from its cell count, so most of this
+work is done before you touch anything. The opening size holds the total drawn
+area roughly constant, which means the diameter falls with the square root of
+the count: 100,000 cells open at about 1.5, 3,696 cells at 7.8, and 18,142,044
+cells at about 0.112. It is applied on every dataset publication, but *before* a
+saved session or a published preset is replayed, so an explicit choice you
+stored still wins.
+
+Two things happen after the square-root law, and both are load-bearing if you
+are reproducing the number: the curve is capped at 8
+(`MAXIMUM_AUTOMATIC_POINT_SIZE`), so a few-hundred-cell dataset does not open as
+a field of overlapping discs, and the chosen position is snapped to the slider's
+own 0.5 step — which is why 100,000 cells land on 1.52 rather than exactly 1.5.
+
+`Point size (log):` runs from position -24 to position 100 in steps of 0.5. The
+positions are exponents of a curve anchored at 0.25 (position 0) and 200
+(position 100), so the reachable sizes run from 0.050 to 200.
+
+It does not respond everywhere on its range. Below roughly **`gl_PointSize` 15**
+— `Point size (log):` at position 50, a point size of about 7, or a point size
+of 0.75 after zooming in about sixfold — the frame is bound by the per-sprite
+cost, and shrinking points further buys very little. Above it the frame becomes
+fill-bound and point size becomes the dominant term. In practice:
+
+- If points already overlap heavily on screen, **reduce point size first**.
+- If points are tiny specks and the frame is still slow, point size is not your
+  problem — you are paying per sprite, so **draw fewer sprites**. Filter, and let
+  `Auto` LOD reduce as you pull back; a forced level goes coarser than `Auto`'s
+  8× floor when you need it to.
+
+Both thresholds are hardware rates, so the crossover position moves with the
+GPU; the ordering does not.
+
+:::{note}
+The bottom of the slider buys less than it looks like it does. A point is
+clamped to a rendered floor of 0.5 device pixels, so sizes under about 0.5 all
+draw the same sprite — and cost the same — except where perspective size scaling
+lifts the rendered size back above that floor. Below the floor you are paying
+per sprite and nothing else.
+:::
+
+### Antialiasing: what it costs and what it buys
+
+Antialiasing lives under **Visualization → Image quality** and follows your
+dataset until you tell it otherwise. It is not a cosmetic setting, so both
+halves of the trade are stated here.
+
+Until you click the checkbox, the choice is automatic and made from the cell
+count: **on below 5,000,000 cells, off at or above**. It is re-decided every time
+a dataset is published, because datasets are switched in place — so opening an
+atlas after a small dataset clears the box on its own. While the choice is
+automatic the line under the control says so, naming the count
+(`Chosen automatically: 18,142,044 cells.`). Clicking the checkbox ends automatic
+selection permanently, in both directions: from then on the box holds your answer
+on every dataset, and the status line goes quiet. This is why the 10,000,000-point
+workload measured below is *not* the default configuration — at that size the
+automatic answer is already off.
+
+The setting applies **to the next frame**. Nothing about it needs a reload.
+
+Measured on the same machine as above — 10,000,000 synthetic points, one Apple
+M1 Pro through ANGLE Metal, 1440×1000 at device pixel ratio 1, camera held
+fixed, four independent browser windows per configuration — and on the frames
+actually presented to the screen, not in an offscreen buffer:
+
+| Point size | Frame time, antialiasing on | off | Change |
+|---|---|---|---|
+| 0.75 | 52.7 ms (19.0 FPS) | 42.5 ms (23.6 FPS) | **19% faster** |
+| 2.0 | 69.7 ms | 48.9 ms | **30% faster** |
+| 4.0 | 93.1 ms | 61.6 ms | **34% faster** |
+
+A GPU timer query over the same runs agreed within three points at every size
+(22%, 32%, 36%), so read the saving as **about a fifth at point size 0.75
+and about a third at large ones**. Note that the saving *grows* with point size:
+antialiasing costs per pixel covered, so it is worth least in exactly the
+millions-of-tiny-dots case that most needs the frames.
+
+What you give up, on the same frames: **18% of pixels change at point size
+0.75** and 32% with `Ultra-light (square points)`. Small dots are almost
+entirely edge, so this is the setting that changes what a dense cloud looks
+like, not merely how fast it is drawn. Larger points are affected far less,
+which is the opposite of the speed table — at point size 4 the picture barely
+changes while the saving is largest.
+
+One device-level caveat: a GPU that cannot multisample at all gets no
+antialiasing whatever the setting says, and the line under the control reads
+`This browser is not providing antialiasing for this view.`
+
+Related docs:
+- {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke`
+- {doc}`../a_orientation/02_system_requirements` (WebGL context lost = GPU memory pressure)
+
+---
 ## Symptom → likely cause → best knob (cheat sheet)
 
 Use this when you just need the “one thing that helps”.

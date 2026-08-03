@@ -1,5 +1,9 @@
 # Troubleshooting: Prepare/Export
 
+**Audience:** everyone whose export just stopped  
+**Time:** find your symptom in under a minute  
+**What you'll get:** the cause behind each `cellucid_prepare()` error, and the fix
+
 This page is the deep troubleshooting guide for `cellucid_prepare()`.
 
 If you want a shorter index by topic, see {doc}`../i_troubleshooting_index/index`.
@@ -109,10 +113,10 @@ Practical choices:
 
 ---
 
-## Symptom: “obs data.frame is required”
+## Symptom: “obs must be a data.frame.”
 
 **Likely cause**
-- You passed `obs = NULL`.
+- You passed `obs = NULL`, or a matrix / list where a `data.frame` was expected.
 
 **Fix**
 - Provide a cell metadata `data.frame` with `n_cells` rows.
@@ -198,10 +202,11 @@ install.packages("Matrix")
 
 ---
 
-## Symptom: “Matrix package is required to export connectivity matrices”
+## Symptom: “Matrix package is required to validate sparse connectivity matrices.”
 
 **Likely cause**
-- You provided `connectivities=...` without `Matrix` installed.
+- You provided a sparse `connectivities=...` without `Matrix` installed. A dense
+  base R matrix needs no `Matrix` at all.
 
 **Fix**
 ```r
@@ -210,7 +215,7 @@ install.packages("Matrix")
 
 ---
 
-## Symptom: “Connectivity matrix shape (...) does not match number of cells”
+## Symptom: “Connectivity matrix shape must exactly match the cell axis: expected (…), got (…).”
 
 **Likely causes**
 - Connectivity matrix corresponds to a different subset of cells.
@@ -228,13 +233,21 @@ install.packages("Matrix")
 
 ---
 
-## Symptom: “Field 'X' has N categories, but uint8 can only hold 254”
+## Symptom: “Field 'X' has N categories, but uint8 supports at most 255.”
 
 **Likely cause**
-- You chose `obs_categorical_dtype = "uint8"` and have more than 255 categories.
+- You chose `obs_categorical_dtype = "uint8"` and one field has more than 255
+  categories. The top code of each width is reserved for “missing”, so `uint8`
+  addresses 255 categories and `uint16` addresses 65,535.
+
+**How to confirm**
+```r
+sort(vapply(obs, function(x) length(unique(x)), integer(1)), decreasing = TRUE)[1:5]
+```
 
 **Fix**
-- Use `obs_categorical_dtype = "uint16"`.
+- Use `obs_categorical_dtype = "uint16"`, or collapse rare categories. The width
+  applies to *every* categorical field in the export, not one field at a time.
 
 ---
 
@@ -337,14 +350,17 @@ The same rule covers `dataset_name`, `dataset_description`, `source_name`,
 
 ---
 
-## Symptom: gene identifier selection fails
+## Symptom: “var has only automatic row names …”
 
 **Likely cause**
-- `var_gene_id_column = NULL` was selected but `var` has no row names, or the
-  selected explicit column is absent or invalid.
+- `var_gene_id_column` is `NULL` (the default) and you never set
+  `rownames(var)`. R then reports the automatic sequence `"1"` … `"n_genes"`,
+  which would name every gene after its own row number, so the export stops
+  instead.
 
 **Fix**
-- Set `rownames(var)` explicitly, or set `var_gene_id_column` to the right column.
+- Set `rownames(var)` to the gene identifiers, or pass `var_gene_id_column` to
+  name the column that holds them.
 
 ---
 

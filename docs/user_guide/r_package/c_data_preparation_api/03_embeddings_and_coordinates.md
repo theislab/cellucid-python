@@ -26,12 +26,22 @@ You can export tSNE, PCA, diffusion maps, etc., as long as the shape is correct.
 ## Embedding validation rules
 
 `cellucid-r` enforces:
-- each embedding must be a 2D matrix-like object,
+- each embedding must be a 2D matrix-like object — a base R `matrix`, a
+  `data.frame` whose every column is a plain numeric vector, or a
+  `Matrix::Matrix`,
 - number of columns must match the dimension (`2D` → exactly 2 columns),
-- all provided embeddings must have the same number of rows (`n_cells`).
+- all provided embeddings must have the same number of rows (`n_cells`),
+- `n_cells` must be between 1 and 2,147,483,647.
 
 It rejects `NA`, `NaN`, infinities, nonnumeric matrices, and embeddings without
 a positive finite coordinate range before publication.
+
+:::{note}
+A `data.frame` column that carries a class — a `units` column, a `bit64::integer64`
+column, or any S3 class of your own — is refused rather than silently unclassed,
+because `as.matrix()` would drop the attribute that says what the numbers mean.
+Convert deliberately before the call.
+:::
 
 ## Embedding normalization (important!)
 
@@ -48,7 +58,16 @@ In code terms (matches `cellucid-r` implementation):
 - `scale_factor = 2 / max(axis_maxs - axis_mins)`
 - `coords_normalized = (coords - center) * scale_factor`
 
-If the embedding is (nearly) constant (`max_range < 1e-8`), the exporter uses `max_range = 1` to avoid divide-by-zero.
+A zero range has no substitute. If every point shares one coordinate on every
+axis, `max(axis_maxs - axis_mins)` is `0`, and rather than invent a scale nobody
+chose, `cellucid_prepare()` stops before writing anything:
+
+```text
+Embedding coordinates must span a positive finite coordinate range.
+```
+
+A range that is merely *small* is still positive, so it is accepted and scaled
+up like any other.
 
 ### Why normalize?
 
@@ -86,10 +105,14 @@ If you exported with compression, the file is `points_2d.bin.gz` and you should 
 
 ### Constant embeddings (all points identical)
 
-If all points are the same (or nearly the same), normalization will produce near-zero coordinates.
-In the viewer, this looks like “everything is on top of itself”.
+An embedding in which every point sits at the same coordinate is **rejected**,
+not exported: `Embedding coordinates must span a positive finite coordinate
+range.` It usually means the extraction returned the wrong object, or the
+reduction was never computed.
 
-This is not a Cellucid bug; the embedding contains no separation.
+A *nearly* constant embedding is a different case. Any positive range is scaled
+up to span ~2 units, so it exports normally, and what you see in the viewer —
+one tight clump — is the separation your embedding actually has.
 
 ### Mixed 2D + 3D embeddings
 

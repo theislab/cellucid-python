@@ -1,5 +1,9 @@
 # Troubleshooting (analysis)
 
+**Audience:** everyone using the Analysis panel  
+**Time:** find your symptom in 1–2 minutes; fixes take 5–15  
+**What you’ll get:** a result where there was none, or a clear reason there cannot be one.
+
 This page is organized by **symptom → diagnosis → fix**.
 
 If you need help understanding what analysis should operate on in the first place, read {doc}`01_analysis_mental_model` first.
@@ -24,27 +28,6 @@ Most “analysis is broken” reports reduce to one of these.
    - Marker Genes (Genes Panel) groups by a categorical obs field across the dataset, not by highlight pages.
 
 If any of these fail, fix them first; most downstream symptoms disappear.
-
----
-
-## Troubleshooting template (use this structure)
-
-When adding a new troubleshooting entry, use:
-
-### Symptom
-What the user sees (include on-screen text if possible).
-
-### Likely causes (ordered)
-3–7 plausible causes, each testable.
-
-### How to confirm
-Concrete checks in the UI (what panel to open, what count to look at).
-
-### Fix
-Step-by-step actions (safe fixes first).
-
-### Prevention
-What to do earlier to avoid the issue next time.
 
 ---
 
@@ -225,14 +208,21 @@ of these, and neither is a bug:
 
 ---
 
-## Symptom: “Correlation is NaN”
+## Symptom: “Correlation reports r = 0, or refuses to run”
+
+Correlation has exactly two disappointing outcomes, and they mean different
+things. It does not produce `NaN` from the UI.
 
 ### Likely causes (ordered)
 
-1) **One variable is constant (no variance)**
-   - Pearson/Spearman are undefined or uninformative when X or Y has no variance.
-2) **Too few paired finite values**
-   - Correlation is computed only on cells where both X and Y are finite.
+1) **The run failed with `requires at least 3 paired values`**
+   - Correlation counts only cells where both X and Y are finite. A page that
+     drops below 3 such cells stops the whole run, and the error names the page
+     and the count it found.
+2) **A clean `r = 0` with `p = 1`**
+   - One variable is constant inside that page (an all-zero gene is the usual
+     case). The correlation denominator is zero, so `r` is defined as exactly
+     `0` and the p-value follows as `1`. This is an answer, not a failure.
 3) **Severe missingness / sparse expression**
    - For genes, many values can be 0 or NaN depending on how expression is encoded/loaded.
 4) **You expected filtering to change the analyzed set**
@@ -240,15 +230,16 @@ of these, and neither is a bug:
 
 ### How to confirm
 
+- Read the error text, or read `n` in the correlation results table. `n` is the
+  paired finite count, not the page size, and the gap between them is the
+  diagnosis.
 - Swap to two continuous QC obs fields with known variance (e.g., `n_counts` vs `pct_mito`).
-  - If that works, the issue is your chosen variables (gene missing, constant field, etc.).
-- Check the reported `n` (paired sample size) in the correlation results table.
-  - If `n` is tiny (or missing), you don’t have enough paired data.
+  If that works, the issue is your chosen variables (gene missing, constant field, etc.).
 
 ### Fix
 
-1) Pick variables with variance and enough finite values
-2) Use larger pages (more cells)
+1) Pick variables that have variance **inside the page you selected**, not just across the dataset
+2) Use larger pages (more cells), or deselect the page named in the error
 3) If expression is sparse, consider:
    - Spearman (rank-based),
    - splitting by cell type (separate pages),
@@ -257,6 +248,8 @@ of these, and neither is a bug:
 ### Prevention
 
 - Validate that the gene exists and has non-zero expression in the relevant subset before interpreting correlation.
+- See {doc}`05_analysis_mode_correlation_analysis` for the exact pairing rule and
+  the caveat on Spearman's p-value.
 
 ---
 

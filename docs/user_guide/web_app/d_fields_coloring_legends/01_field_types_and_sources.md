@@ -152,7 +152,11 @@ This matters because derived fields are still “real fields”:
 - A continuous field with no finite value in any cell has no colour scale, and
   Cellucid says so rather than inventing a range: `Field "<key>" has no value
   in any of <n> cells, so it has no colour scale.`
-- If all values are identical, the UI will still show a non-zero range so the colormap can render.
+- If every cell holds the same value there is no range at all, and none is
+  invented. Both ends of the colour bar print that one number, every cell is
+  drawn in the single colour from the middle of the colormap, and the Min/Max
+  sliders have nothing to divide — see
+  {doc}`../e_filtering/06_edge_cases_filtering`.
 - Constant fields and constant genes are published, not dropped: the export
   format encodes them as `minValue == maxValue` with every code `0`, and the
   viewer decodes that back to the exact constant. A gene detected in no cell of

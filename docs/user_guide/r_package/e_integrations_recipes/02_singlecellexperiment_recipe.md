@@ -105,6 +105,15 @@ if ("cluster" %in% colnames(obs)) {
 
 ## Step 6 — (Optional) Export gene expression + `var`
 
+Declare the optional inputs up front so Step 8 can pass them unconditionally. If
+you skip this whole step, they stay `NULL` and no gene expression is exported:
+
+```r
+gene_var <- NULL
+expr_cxg <- NULL
+gene_panel <- NULL
+```
+
 ### 6.1 Choose which assay to export
 
 List available assays:
@@ -155,16 +164,23 @@ Gene metadata is in `rowData(sce)`; gene IDs are usually `rownames(sce)`.
 
 ```r
 gene_ids <- rownames(sce)
-var <- as.data.frame(rowData(sce))
-var$symbol <- gene_ids
-rownames(var) <- var$symbol
+gene_var <- as.data.frame(rowData(sce))
+gene_var$symbol <- gene_ids
+rownames(gene_var) <- gene_var$symbol
 ```
+
+:::{note}
+The variable is called `gene_var`, not `var`, because `var()` is a base R
+function: a script that only *sometimes* defines `var` will silently pass the
+function along when it does not. Name the argument explicitly at the call site
+(`var = gene_var`).
+:::
 
 ### 6.5 Optional: export a gene panel
 
 ```r
 gene_panel <- c("MS4A1", "CD3D", "NKG7")
-gene_panel <- intersect(gene_panel, rownames(var))
+gene_panel <- intersect(gene_panel, rownames(gene_var))
 ```
 
 ## Step 7 — (Optional) Connectivities
@@ -207,10 +223,10 @@ cellucid_prepare(
   force = TRUE,
   compression = 6,
   obs_continuous_quantization = 8,
-  var = if (exists("var")) var else NULL,
-  gene_expression = if (exists("expr_cxg")) expr_cxg else NULL,
-  gene_identifiers = if (exists("gene_panel")) gene_panel else NULL,
-  var_quantization = if (exists("expr_cxg")) 8 else NULL,
+  var = gene_var,
+  gene_expression = expr_cxg,
+  gene_identifiers = gene_panel,
+  var_quantization = if (is.null(expr_cxg)) NULL else 8,
   connectivities = conn
 )
 ```

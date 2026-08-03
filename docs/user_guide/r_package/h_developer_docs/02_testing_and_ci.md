@@ -1,5 +1,9 @@
 # Testing and CI
 
+**Audience:** contributors  
+**Time:** 10 minutes  
+**What you'll get:** how to run the suite locally and what CI checks
+
 This page is for contributors who want to validate changes to `cellucid-r`.
 
 ## Running tests locally

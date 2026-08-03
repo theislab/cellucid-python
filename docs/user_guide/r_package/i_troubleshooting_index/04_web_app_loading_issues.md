@@ -1,5 +1,9 @@
 # Web App Loading Issues
 
+**Audience:** everyone  
+**Time:** 10 minutes  
+**What you'll get:** why the browser will not open a folder that exists
+
 Use this page when your export folder exists but Cellucid won’t load it (or loads it incorrectly).
 
 ```{note}

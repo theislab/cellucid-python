@@ -19,7 +19,9 @@ Before deep-diving, answer:
      `/?source=remote` for prepared data or `/?anndata=true` for direct
      AnnData),
    - a **remote server** (`?remote=...`, only when the viewer origin can fetch that scheme),
-   - or a **GitHub exports root** (`?github=...`)?
+   - a **GitHub exports root** (`?github=...`),
+   - or a **self-hosted exports root** on a static host or CDN
+     (`?exportsBaseUrl=...`, which drives the `Sample datasets:` dropdown)?
 2) Is it **browser-only** (no Python running) or **server-backed** (Python process running)?
 
 If you’re unsure, start with {doc}`01_loading_options_overview`.
@@ -66,8 +68,16 @@ and the middle clause is the one that identifies the layer:
 | the server refused access | Reached, but not public | Repository visibility |
 | the server rejected the request | Reached, but the request was malformed | Your address |
 | the server reported a problem of its own | Reached; the far side failed | Wait, then retry |
+| what is published there is larger than Cellucid opens in a browser | Reached, readable, valid — and over a browser ceiling | The export size. Serve it instead ({doc}`04_server_tutorial`), or publish a smaller export. The ceilings are tabulated in {doc}`../q_troubleshooting_index/index` |
 | what is published there is not in a format Cellucid can read | Reached and readable, but not a Cellucid export | Re-export with `prepare()` |
 | nothing readable came back — the connection may have failed, or that address may not hold Cellucid data | Ambiguous: no usable response arrived | Your network *and* your address |
+
+:::{warning}
+Read the size row and the format row as opposites. *Larger than Cellucid opens
+in a browser* means the export is perfectly valid and merely too big, so
+re-exporting it produces the same bytes and meets the same wall. That row's fix
+is a different loading path, not a different file.
+:::
 
 There is one message that does **not** carry a cause clause, and its punctuation
 is the tell — a full stop where the others have a colon:
@@ -86,7 +96,7 @@ evidence anyone has. Quote it if you report the problem.
 
 Local file failures use neither shape. They quote the specific defect instead —
 for example `The selected file is not a valid HDF5/H5AD file…` or
-`No exact UMAP embedding found in obsm…`.
+`No UMAP embedding this viewer can read was found in obsm…`.
 
 ---
 
@@ -163,14 +173,29 @@ once decompressed — or one of the network causes below.
 
 ### Symptom: “No embedding / it says no UMAP”
 
-The exact wording for an AnnData input is:
+The two browser readers word this differently, and only one of them tells you
+what your file actually contains.
+
+A **browser-selected `.h5ad`** reports:
 
 ```text
-No exact UMAP embedding found in obsm. Expected one or more of X_umap_1d,
-X_umap_2d, or X_umap_3d. Available obsm keys: <what your file has>.
+No UMAP embedding this viewer can read was found in obsm. Expected one or more
+of X_umap_1d, X_umap_2d, or X_umap_3d, or a plain X_umap of 1, 2, or 3 columns.
+Available obsm keys: <what your file has>.
 ```
 
 A file with an empty `obsm` reads `Available obsm keys: (none).`
+
+A **browser-selected Zarr ZIP** reports the same requirement without the key
+list:
+
+```text
+AnnData Zarr requires a UMAP embedding in obsm: X_umap_1d, X_umap_2d, or
+X_umap_3d, or a plain X_umap of 1, 2, or 3 columns
+```
+
+So for a Zarr ZIP, list the keys yourself in Python (`print(adata.obsm.keys())`)
+rather than looking for them in the message.
 
 ```{figure} ../../../_static/screenshots/data_loading/fail-missing-umap-embedding.png
 :alt: A Cellucid notification listing the expected X_umap_1d, X_umap_2d and X_umap_3d keys and then the single obsm key the selected file actually contained, X_pca.
@@ -178,7 +203,9 @@ A file with an empty `obsm` reads `Available obsm keys: (none).`
 
 The trailing list is the useful half: it names the `obsm` keys your file does
 have, so you can see immediately whether the embedding is missing or merely
-named differently.
+named differently. This capture predates the current wording, which also names
+the plain `X_umap` among the keys it accepts; the key list at the end is
+unchanged.
 ```
 
 **Likely causes**
@@ -262,12 +289,19 @@ named differently.
 ### Symptom: “Vector field overlay toggle is disabled / no fields appear”
 
 **Likely causes (ordered)**
-1) The dataset truly has no vector fields (common).
-2) Vector fields exist, but they weren’t exported / served (missing `vectors/` or wrong server path).
-3) Naming mismatch: vectors are present but not discoverable (e.g., not `*_umap_2d` / `*_umap_3d`).
-4) Dimension mismatch: you only have 2D vectors but you’re looking at 3D (or vice versa).
+1) You are on a Python path (`cellucid serve`, `serve_anndata()`,
+   `show_anndata()`) and did not pass `--vector-fields` /
+   `serve_vector_fields=True`. The overlay is **off by default** there; the
+   three browser pickers need no such flag.
+2) The dataset truly has no vector fields (common).
+3) Vector fields exist, but they weren’t exported / served (missing `vectors/` or wrong server path).
+4) Naming mismatch: vectors are present but not discoverable (e.g., not `*_umap_2d` / `*_umap_3d`).
+5) Dimension mismatch: you only have 2D vectors but you’re looking at 3D (or vice versa).
 
 **How to confirm**
+- **Python server or notebook**: read step 3 of the terminal startup report, or
+  check `dataset_identity.json` for a `vector_fields` block. See
+  {doc}`04_server_tutorial` and {doc}`05_jupyter_tutorial`.
 - **Exports**:
   - Open `<export_dir>/dataset_identity.json` and search for `vector_fields`.
   - Confirm `<export_dir>/vectors/` exists and contains `*_2d.bin(.gz)` / `*_3d.bin(.gz)` files.
@@ -275,6 +309,7 @@ named differently.
   - Print `adata.obsm.keys()` and look for `velocity_umap_2d`-style entries.
 
 **Fix**
+- Restart the server or viewer with `--vector-fields` / `serve_vector_fields=True`.
 - Provide/export vector fields using the supported conventions and re-load the dataset.
 - Switch to the dimension that actually has vectors (2D vs 3D).
 
@@ -337,8 +372,14 @@ indistinguishable from the browser's side.
 **Likely causes**
 - Wrong URL (host/port mismatch) — this and a dead server produce the same
   message.
+- You pasted the **Viewer URL** into the `Remote server:` field. That field
+  wants the bare origin the banner prints as **Local URL**
+  (`http://127.0.0.1:8765`) and refuses a trailing slash, a `?…` query, or a
+  fragment.
 - Server is bound to `127.0.0.1` on a remote machine, but you’re trying to access it directly.
-- Browser blocks non-localhost HTTP in some cases (mixed content).
+- The Cellucid page is HTTPS and the address is `http://`, which Cellucid
+  refuses before the browser does:
+  `An HTTPS Cellucid page requires an explicit HTTPS remote server URL`.
 
 **How to confirm**
 - Check server banner output and copy the exact viewer URL printed by the server.

@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 from scipy import sparse
 
+from .continuous_payload_diagnosis import describe_non_finite
+
 if TYPE_CHECKING:
     import anndata
 
@@ -206,10 +208,28 @@ def _finite_float32_matrix(
                 f"{label} must have exactly {dimension} columns, got {array.shape[1]}."
             )
     if not np.isfinite(array).all():
-        raise ValueError(f"{label} must contain only finite values.")
+        raise ValueError(
+            f"{label} must contain only finite values. "
+            + describe_non_finite(array, label)
+        )
     with np.errstate(over="ignore", invalid="ignore"):
-        if not np.isfinite(array.astype(np.float32, copy=False)).all():
-            raise ValueError(f"{label} contains values outside the finite float32 range.")
+        narrowed = array.astype(np.float32, copy=False)
+        if not np.isfinite(narrowed).all():
+            raise ValueError(
+                f"{label} contains values outside the finite float32 range. "
+                + describe_non_finite(array, label)
+            )
+    # Underflow is the other end of the same range, and this path was missing it
+    # while every other float32 payload checked both ends: a nonzero component
+    # below the smallest float32 subnormal becomes 0.0, which is finite, so an
+    # overflow-only check published a vector whose component had silently become
+    # zero. cellucid-r refuses exactly this in `.write_float32_matrix_row_major`,
+    # and one export format cannot mean two things.
+    if np.any((array != 0) & (narrowed == 0)):
+        raise ValueError(
+            f"{label} contains values outside the finite float32 range. "
+            + describe_non_finite(array, label)
+        )
     return array.astype(np.float64, copy=False), dimension
 
 
@@ -325,11 +345,17 @@ def scale_vector_field(
         raise ValueError(f"{label} requires a finite positive scale factor.")
     scaled = vectors.astype(np.float64) * numeric_scale
     if not np.isfinite(scaled).all():
-        raise ValueError(f"{label} scaling produced non-finite values.")
+        raise ValueError(
+            f"{label} scaling produced non-finite values. "
+            + describe_non_finite(scaled, f"{label} scaled by {numeric_scale:g}")
+        )
     with np.errstate(over="ignore", invalid="ignore"):
         float32_scaled = scaled.astype(np.float32)
     if not np.isfinite(float32_scaled).all():
-        raise ValueError(f"{label} scaling produced values outside the finite float32 range.")
+        raise ValueError(
+            f"{label} scaling produced values outside the finite float32 range. "
+            + describe_non_finite(scaled, f"{label} scaled by {numeric_scale:g}")
+        )
     return float32_scaled
 
 
@@ -347,7 +373,12 @@ def _transition_matrix(
                 f"transition_matrix must have shape ({n_cells}, {n_cells}), got {matrix.shape}."
             )
         if not np.isfinite(matrix.data).all():
-            raise ValueError("transition_matrix must contain only finite values.")
+            raise ValueError(
+                "transition_matrix must contain only finite values. "
+                + describe_non_finite(
+                    matrix.data, "transition_matrix", positions=False
+                )
+            )
         if np.any(matrix.data < 0):
             raise ValueError("transition_matrix values must be non-negative.")
         return matrix.astype(np.float64)
@@ -360,7 +391,10 @@ def _transition_matrix(
             f"transition_matrix must have shape ({n_cells}, {n_cells}), got {matrix.shape}."
         )
     if not np.isfinite(matrix).all():
-        raise ValueError("transition_matrix must contain only finite values.")
+        raise ValueError(
+            "transition_matrix must contain only finite values. "
+            + describe_non_finite(matrix, "transition_matrix")
+        )
     if np.any(matrix < 0):
         raise ValueError("transition_matrix values must be non-negative.")
     return matrix.astype(np.float64, copy=False)

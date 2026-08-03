@@ -13,6 +13,8 @@ from typing import cast
 import numpy as np
 from scipy import sparse
 
+from ..continuous_payload_diagnosis import describe_non_finite
+
 
 def _require_finite_float32_array(
     values: object,
@@ -25,11 +27,17 @@ def _require_finite_float32_array(
     if array.dtype.kind not in {"i", "u", "f"}:
         raise TypeError(f"{label} must contain real numeric values.")
     if not np.isfinite(array).all():
-        raise ValueError(f"{label} must contain only finite values.")
+        raise ValueError(
+            f"{label} must contain only finite values. "
+            + describe_non_finite(array, label)
+        )
     with np.errstate(over="ignore", invalid="ignore"):
         float32_array = array.astype(np.float32, copy=False)
     if not np.isfinite(float32_array).all():
-        raise ValueError(f"{label} contains values outside the finite float32 range.")
+        raise ValueError(
+            f"{label} contains values outside the finite float32 range. "
+            + describe_non_finite(array, label)
+        )
     # Underflow is the other end of the same range, and it is the quiet one: a
     # nonzero value below the smallest float32 subnormal becomes 0.0, which is
     # finite, so an overflow-only check publishes a field whose every value has
@@ -37,7 +45,10 @@ def _require_finite_float32_array(
     # distinct value written. The R writer refuses exactly this, and one export
     # format cannot mean two things.
     if np.any((array != 0) & (float32_array == 0)):
-        raise ValueError(f"{label} contains values outside the finite float32 range.")
+        raise ValueError(
+            f"{label} contains values outside the finite float32 range. "
+            + describe_non_finite(array, label)
+        )
     return float32_array
 
 
@@ -63,18 +74,27 @@ def _require_finite_embedding_source(
     if array.dtype.kind not in {"i", "u", "f"}:
         raise TypeError(f"{label} must contain real numeric values.")
     if not np.isfinite(array).all():
-        raise ValueError(f"{label} must contain only finite values.")
+        raise ValueError(
+            f"{label} must contain only finite values. "
+            + describe_non_finite(array, label)
+        )
     with np.errstate(over="ignore", invalid="ignore"):
         as_float32 = array.astype(np.float32, copy=False)
         if not np.isfinite(as_float32).all():
-            raise ValueError(f"{label} contains values outside the finite float32 range.")
+            raise ValueError(
+                f"{label} contains values outside the finite float32 range. "
+                + describe_non_finite(array, label)
+            )
         # Underflow is the other end of the same range, and it is the quiet one:
         # a nonzero value below the smallest float32 subnormal becomes 0.0,
         # which is finite, so an overflow-only check publishes a column whose
         # every value has been replaced by zero. The R writer refuses exactly
         # this, and one export format cannot mean two things.
         if np.any((array != 0) & (as_float32 == 0)):
-            raise ValueError(f"{label} contains values outside the finite float32 range.")
+            raise ValueError(
+                f"{label} contains values outside the finite float32 range. "
+                + describe_non_finite(array, label)
+            )
     return array.astype(np.float64, copy=False)
 
 

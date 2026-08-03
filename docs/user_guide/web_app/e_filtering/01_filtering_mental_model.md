@@ -92,7 +92,21 @@ There is also a scope rule that catches everyone once:
   field.**
 
 If you ever feel “the plot is lying to me”, the debugging rule is:
-**trust the Active filters panel** (it lists what currently affects visibility in the active view).
+**trust the Active filters panel** (it lists every filter you can create in the
+UI that currently affects visibility in the active view).
+
+:::{note}
+**One more visibility source exists, and it is not a UI control.** From a
+notebook, `viewer.set_visibility(cell_indices, visible)` sets a per-cell mask
+directly. That mask is tested *before* every filter on this page, no filter can
+make a cell it hides visible again, and it deliberately produces **no Active
+filters row** — there is no UI configuration for a row to reset.
+
+So a notebook session can legitimately read `Showing 1,200 of 3,696 points`
+above the words `No filters active`. If you see that, the mask is the
+explanation; call `viewer.set_visibility(None, visible=True)` to clear it. See
+{doc}`../b_data_loading/05_jupyter_tutorial`.
+:::
 
 ---
 

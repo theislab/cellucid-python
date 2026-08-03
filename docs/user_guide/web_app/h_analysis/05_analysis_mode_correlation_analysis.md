@@ -68,7 +68,10 @@ Correlation is computed on the set of cells that have:
 Cells missing either value are excluded from that page’s calculation.
 
 Minimum size:
-- if there are fewer than 3 paired values, Cellucid reports “Insufficient paired values”.
+- a page with fewer than 3 paired finite values **fails the run**. The whole
+  correlation stops with an error naming the page and the count it found —
+  `Correlation page "<pageId>" requires at least 3 paired values; received N` —
+  rather than printing a coefficient for the other pages and a blank for that one.
 
 ### Pearson vs Spearman
 
@@ -83,6 +86,24 @@ Cellucid computes (per page):
 - `p-value` (two-sided Student t distribution using `n-2` degrees of freedom)
 - `n` (number of paired values used)
 - `slope` and `intercept` for the trend line (linear regression)
+
+:::{note}
+**Spearman's p-value is an approximation, and its ties are not corrected for.**
+
+The coefficient itself is exact: values are converted to ranks with tied values
+sharing their average rank, and Pearson's formula is applied to those ranks.
+The p-value, however, comes from the *same* Student-t transform used for
+Pearson — `t = r √((n−2)/(1−r²))` on `n−2` degrees of freedom — with no
+tie correction and no exact permutation branch. `slope` and `intercept` are
+always the least-squares fit to the **raw** values, so the trend line drawn on
+the scatter plot does not change when you switch to Spearman.
+
+That transform is a good approximation for a moderate `n` with few ties. It gets
+optimistic in exactly the case single-cell data produces most often: a sparse
+gene where thousands of cells share the value 0, so the ranks are dominated by
+one enormous tie group. Read `r` in that situation and treat the p-value as
+ordering information, not as a calibrated error rate.
+:::
 
 :::{important}
 The p-value is per page and is not multiple-testing corrected.
@@ -157,31 +178,38 @@ If you enable log axes in the plot options:
 
 ## Troubleshooting (Correlation mode)
 
-### Symptom: “Insufficient paired values”
+### Symptom: the run fails with `requires at least 3 paired values; received N`
+
+The message names the page that failed and the `N` it actually found.
 
 Likely causes:
-- one or both variables are missing for most cells in the selected page(s),
-- you picked a gene that is all zeros or not present,
-- pages are tiny.
+- one or both variables are missing for most cells in that page,
+- you picked a gene that is not present in this dataset,
+- the page is tiny.
 
 How to confirm:
+- read `N` off the error — it is the paired finite count, not the page size,
 - try a different variable pair (e.g., two QC metrics),
 - check page cell counts in Compare pages.
 
 Fix:
-- use larger pages,
-- pick variables that exist and have variance,
+- deselect the offending page, or use a larger one,
+- pick variables that exist and are populated for those cells,
 - ensure gene expression is available for gene variables.
 
-### Symptom: “Correlation is NaN or r = 0 unexpectedly”
+### Symptom: `r = 0` with `p = 1`, unexpectedly
+
+This is not a failure or a missing value — it is the defined answer when one
+variable has no variance inside that page. With a constant X or Y the
+correlation denominator is zero, so `r` is set to exactly `0`, and `t` and the
+p-value follow as `0` and `1`.
 
 Likely causes:
-- one variable is effectively constant within the page,
-- heavy missingness leaves a tiny effective `n`,
-- Spearman ties (many identical values) reduce informativeness.
+- one variable is constant within the page (an all-zero gene is the usual one),
+- after rank conversion, Spearman sees a single tie group and the same thing happens.
 
 Fix:
-- choose a more variable gene/field,
+- choose a gene or field with variance in *this* page, not in the dataset overall,
 - split pages by a categorical field and re-run.
 
 ---

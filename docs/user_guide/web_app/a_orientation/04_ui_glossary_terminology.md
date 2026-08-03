@@ -73,8 +73,12 @@ keyboard and screen-reader behavior.
 
 ---
 
-## Maturity tags
+## Render mode and maturity tags
 
+- **`Render mode:`**: the dropdown that decides how points are drawn. It has
+  exactly two options: `Points`, the default, which draws one point per cell;
+  and `Volumetric smoke cloud (alpha)`, which draws a continuous density cloud
+  instead. **“Smoke mode”** in these pages always means the second one.
 - **Maturity tag**: a small pill beside a control's label naming how finished
   the currently selected option is. It describes the option you chose, not the
   control it sits next to.
@@ -98,6 +102,58 @@ what alpha means in practice for that mode.
 - **Dimension (1D / 2D / 3D)**: which embedding dimensionality you are currently viewing for a given view.
 - **Connectivity**: a neighbor graph (edges). When enabled, edges are drawn between visible points only.
 - **Vector field / velocity overlay**: an optional overlay that visualizes per-cell vectors (dimension-specific).
+
+---
+
+## Data and loading terms
+
+Every word here appears on a button, a label, or a page in
+{doc}`../b_data_loading/index`. Read the short definition; the linked page owns
+the detail.
+
+**What the Session panel calls things**
+
+- **`Sample datasets:`**: the dropdown listing the catalog Cellucid was
+  configured to read. On www.cellucid.com that is the five built-in samples
+  ({doc}`../b_data_loading/12_sample_dataset_provenance`); on a copy you host
+  yourself it is whatever catalog you pointed it at.
+- **`Local data:`**: the group of three buttons that read a file or folder off
+  your own computer — **`Prepared`** (a folder), **`H5AD`** (one file), and
+  **`Zarr ZIP`** (one archive). Nothing is uploaded.
+- **`Remote server:`**: a text field for the base address of a running
+  `cellucid serve`, for example `http://localhost:8765` — the origin, with no
+  trailing slash and no `?…` query.
+- **`GitHub data:`**: a text field for the `owner/repo/path` shorthand of a
+  public exports root on GitHub.
+
+**What the data itself is called**
+
+- **Prepared export / export folder**: the directory `prepare()` (Python) or
+  `cellucid_prepare()` (R) writes — `dataset_identity.json`, compact manifests,
+  and binary payloads. This is the format the viewer reads fastest.
+  See {doc}`../b_data_loading/07_folder_file_format_expectations_high_level_link_to_spec`.
+- **Exports root**: a directory holding a `datasets.json` catalog plus one
+  export folder per dataset. A single export folder is not an exports root.
+- **`datasets.json`**: the catalog file at an exports root, listing the
+  datasets a picker offers.
+- **Dataset id**: the stable identifier that decides whether two loads are “the
+  same dataset” for sessions and annotation.
+  See {doc}`../b_data_loading/06_dataset_identity_why_it_matters`.
+- **AnnData**: the single-cell object Scanpy works with. Its parts that matter
+  to Cellucid are `obs` (one row per cell — the metadata you colour by), `var`
+  (one row per gene), `obsm` (per-cell coordinate arrays, where embeddings and
+  vector fields live), and `obsp` (per-cell-pair matrices, where the neighbor
+  graph lives).
+- **H5AD**: one AnnData saved as a single HDF5 file (`.h5ad`).
+- **Zarr v2 store**: one AnnData saved as a directory of chunked arrays. The
+  browser reads it only as a packaged **Zarr ZIP**; the Python server and
+  Jupyter read the directory itself.
+- **Read-only backed**: how `cellucid serve` and `show_anndata()` open an
+  `.h5ad` — values are read from disk as requested, so the expression matrix is
+  never held in memory whole.
+- **Lazy loading**: gene expression is fetched only when you ask for a gene,
+  rather than up front. Which paths are truly lazy is tabulated in
+  {doc}`../b_data_loading/01_loading_options_overview`.
 
 ---
 

@@ -19,11 +19,10 @@ import json
 import numpy as np
 import pandas as pd
 import pytest
-
-from cellucid.continuous_payload_diagnosis import NonFinitePayloadError
 from scipy import sparse
 
 from cellucid import prepare
+from cellucid.continuous_payload_diagnosis import NonFinitePayloadError
 from cellucid.prepare_data import _generation as prepare_generation
 from cellucid.prepare_data import _quantization as prepare_quantization
 

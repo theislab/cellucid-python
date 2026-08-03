@@ -58,19 +58,20 @@ step measured from full detail: `1.0` at full detail, `0.5` one or two levels
 below, `0.25` three to five levels below, and `0` — the overlay is disposed —
 at six or more.
 
-Adaptive selection is bounded by a 2,000,000-point budget: `Auto` never picks a
-level holding fewer than `min(total cells, 2,000,000)` points, so the most it
-can reduce by is `total / 2,000,000`. On a 300K-cell dataset `Auto` stays at
-full detail no matter how far you zoom out, and this checkbox saves nothing.
-Under `Auto`, the `0.5` step first becomes reachable at roughly 2.5M cells.
+Adaptive selection has a floor: `Auto` never picks a level holding fewer than
+`min(2,000,000, total cells ÷ 8)` points, so it reduces by at most 8× and never
+takes a large atlas below two million points. That floor is around nine levels
+below full detail at any size, so every step of this scale — `0.5`, `0.25`, and
+disposal — is reachable under `Auto` on a 300K-cell dataset as well as on an
+18M-cell one.
 
 To benefit:
 
 1) Enable **Visualization → Renderer settings → Level-of-Detail (LOD)**, and keep
 2) **Vector Field Overlay → Sync with LOD** enabled, and
-3) on any dataset that is not well over 2,000,000 cells, lower `Force LOD level:`
-   by a few steps — the forced slider is not bounded by the budget, so it is the
-   only way to reach a coarse level on a small or mid-sized dataset.
+3) pull the camera back — `Auto` coarsens at any dataset size. Lower
+   `Force LOD level:` by a few steps only when you need to go past `Auto`'s
+   floor, which the forced slider is deliberately not bounded by.
 
 ---
 
@@ -124,7 +125,7 @@ When the overlay is slow, do this in order (each step is a large win):
 3) Expand **Advanced Visual Settings → HDR & Bloom** and set `Bloom strength:` to **0.00**.
 4) If you have many snapshot views: switch to fewer views (or clear snapshots) and retry.
 5) Shrink the browser window (fewer pixels = faster) and retry.
-6) Enable renderer LOD (**Visualization → Renderer settings → Level-of-Detail (LOD)**), keep `Sync with LOD` enabled, and — unless the dataset is well over 2,000,000 cells — lower `Force LOD level:` by a few steps, because `Auto` holds full detail under that budget and the overlay keeps every particle.
+6) Enable renderer LOD (**Visualization → Renderer settings → Level-of-Detail (LOD)**), keep `Sync with LOD` enabled, and pull the camera back — `Auto` coarsens at any dataset size. Lower `Force LOD level:` by a few steps when you need a coarser level than `Auto`'s floor.
 7) If you previously changed many filters quickly: disable and re-enable the overlay (it rebuilds internal spawn tables).
 
 ---

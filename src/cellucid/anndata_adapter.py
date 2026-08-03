@@ -349,11 +349,6 @@ class LRUCache:
     def __len__(self) -> int:
         return len(self._cache)
 
-    @property
-    def max_size(self) -> int:
-        """Maximum cache size."""
-        return self._max_size
-
 
 def _to_dense_1d(arr: np.ndarray | sparse.spmatrix) -> np.ndarray:
     """Convert sparse vector to dense numpy array."""

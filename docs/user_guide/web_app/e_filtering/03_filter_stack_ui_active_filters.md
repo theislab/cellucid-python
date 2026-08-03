@@ -27,7 +27,13 @@
 
 ## Practical path: what each control means (exact semantics)
 
-The Active filters UI is the **source of truth** for current visibility.
+The Active filters UI is the **source of truth** for current visibility — for
+every filter you can create in the UI. The one thing it cannot show is a
+per-cell visibility mask set from a notebook with `viewer.set_visibility()`,
+which is applied before all of these and has no row here; that is the only way
+`Showing X of N points` and `No filters active` can disagree. See
+{doc}`01_filtering_mental_model` and
+{doc}`../b_data_loading/05_jupyter_tutorial`.
 
 :::{important}
 Its label in the app is **`Active filters (selected view only):`**, not just
@@ -51,8 +57,9 @@ If no filters are active, the list shows `No filters active`:
 :alt: A block headed ACTIVE FILTERS (SELECTED VIEW ONLY) with a small circled i button beside the heading, the line Showing all 3,696 points, and a bordered area containing the words No filters active.
 :width: 480px
 
-The resting state. `Showing all N points` and `No filters active` always agree —
-if they ever disagree, you are looking at a different view.
+The resting state. In the browser, `Showing all N points` and `No filters
+active` always agree — if they ever disagree, you are either looking at a
+different view or a notebook has set a visibility mask (see above).
 ```
 
 Click the small `i` next to the heading to see why the label says

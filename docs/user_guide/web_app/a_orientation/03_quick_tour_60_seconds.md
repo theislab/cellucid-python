@@ -59,9 +59,12 @@ picture are always describing the same thing.
 :alt: The Cellucid web app with the sidebar scrolled to a SESSION panel listing a dataset summary of 562K cells and 8K genes above sample and local-data controls, and a large multicoloured single-cell embedding filling the canvas on a light grid.
 :width: 1440px
 
-A much larger dataset — the **Suo** sample, 562,000 cells — with the sidebar
+A much larger dataset — the **Suo** sample, 561,947 cells — with the sidebar
 scrolled up to the **Session** panel instead. Same two-part layout, and the
-same performance.
+same performance. This capture predates the current Suo generation: the gene
+count you will actually see is 5,103, not the count in the image. The published
+counts for every built-in sample are listed in
+{doc}`../b_data_loading/12_sample_dataset_provenance`.
 ```
 
 ---

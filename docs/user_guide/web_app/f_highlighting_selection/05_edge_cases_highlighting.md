@@ -84,7 +84,10 @@ graph-based and do not read the coloured field at all.
 - Disabling a group only removes its contribution; if a cell is also in another enabled group, it stays highlighted.
 
 **How to reason about it**
-- If you care about mutually exclusive labels, use pages (separate workspaces) or build a categorical field from pages (if that UI is enabled).
+- If you care about mutually exclusive labels, use pages (separate workspaces),
+  then turn them into a real categorical column with `Create Categorical`, which
+  makes you decide explicitly what happens to a cell that is in two of them —
+  see {doc}`03_highlight_ui`.
 
 ---
 

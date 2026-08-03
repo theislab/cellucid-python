@@ -163,12 +163,13 @@ SVG exports include a `<metadata>` block with:
   and a `dc:description` that is the same text as the PNG `Description`
 - `cellucid:colorField` — present under the same rule as PNG `Color Field`:
   only when every panel shares one field
-- `cellucid:sourceFile` — the source URL or local path
+- `cellucid:sourceFile` — the same value as the PNG `Source File`: a URL for a
+  remote dataset, or the folder/file name for a local one, never a path
 - `cellucid:json` — the same structured blob as the PNG `Comment`, differing
   only in `export.format` (`"svg"`) and `export.dpi` (`null`)
 
-Because both formats are built from one source, the SVG and the PNG of a single
-export cannot disagree about what they show.
+Because both formats are built from one source — including the source line —
+the SVG and the PNG of a single export cannot disagree about what they show.
 
 ### Filenames (also part of provenance)
 
@@ -251,7 +252,10 @@ To make a figure reproducible for a collaborator, share:
 4) (optional but recommended) a short README describing export settings and any post-processing.
 
 :::{important}
-If you need to share figures publicly, inspect embedded metadata first. It may contain local file paths or private URLs depending on your loading workflow.
+If you need to share figures publicly, inspect embedded metadata first. It can
+contain the name you gave a local folder or file, and the URL a remote dataset
+was fetched from — which for a GitHub source names the account, repository and
+branch. See {ref}`figure-export-source-file-privacy` below.
 :::
 
 ---

@@ -14,14 +14,14 @@ Pancreas sample at twice the device pixel ratio.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/navigation-controls-planar.png
-:alt: The same panel with the MODE dropdown reading Planar and a bordered box holding a PAN SPEED slider with a numeric readout, a ZOOM TO CURSOR (PINCH-STYLE) checkbox and an INVERT AXES checkbox.
+:alt: The same panel with the MODE dropdown reading Planar and a bordered box holding a KEYBOARD SPEED slider reading 0.0075x, a ZOOM TO CURSOR (PINCH-STYLE) checkbox and an INVERT AXES checkbox.
 :width: 472px
 
 **Planar.** Scenario `core-navigation-planar`.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/navigation-controls-freefly.png
-:alt: The same panel with the MODE dropdown reading Free-fly and a taller bordered box holding LOOK SENSITIVITY and MOVE SPEED sliders with numeric readouts, INVERT LOOK AXES and PROJECTILE SHOOTING checkboxes, and a CAPTURE POINTER button.
+:alt: The same panel with the MODE dropdown reading Free-fly and a taller bordered box holding LOOK SENSITIVITY and MOVE SPEED sliders reading 0.05x and 1.00 u/s, INVERT LOOK AXES and PROJECTILE SHOOTING checkboxes, and a CAPTURE POINTER checkbox with a small circled i beside it.
 :width: 472px
 
 **Free-fly.** Scenario `core-navigation-freefly`.

@@ -67,13 +67,35 @@ See the full matrix: {doc}`02_the_14_loading_options_breakdown`.
 
 ## Exact `.h5ad` loading mode
 
-When you run:
+A `.h5ad` path is always opened with `anndata.read_h5ad(path, backed="r")` —
+read-only, HDF5-backed, no option and no flag. The file is never read into
+memory as a whole, so startup time and resident memory are set by the metadata
+(`obs`, `var`, `obsm`), not by the size of the expression matrix.
 
 ```bash
 cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
-Startup prints five numbered steps; the transcript is in {doc}`../../web_app/b_data_loading/04_server_tutorial`.
+```
 
-The same switch on the command line is `--connectivity`:
+Startup prints five numbered steps; the transcript is in
+{doc}`../../web_app/b_data_loading/04_server_tutorial`.
+
+What backed mode costs is per-gene speed. For an in-memory CSR matrix the
+adapter builds a CSC copy on the first gene request, which doubles the matrix's
+memory but makes every later column read cheap. For a backed `.h5ad` it
+deliberately does **not**: building that cache would pull the whole matrix into
+memory and defeat the reason for backed mode. Backed columns are sliced straight
+out of the file instead — slower per gene, flat in memory, which is the right
+trade at multi-million-cell scale.
+
+```{note}
+`.zarr` is the other direction: `anndata.read_zarr()` loads the store eagerly at
+startup, and only the browser's gene requests stay on demand.
+```
+
+## The neighbor graph is the expensive optional part
+
+Connectivity is off unless you ask for it, in Python with
+`serve_connectivity=True` and on the command line with `--connectivity`:
 
 ```bash
 cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset \

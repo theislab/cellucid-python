@@ -29,15 +29,11 @@ Version 0.9.1 is the PyPI submission release.
 - Release-contract validation for package, citation, documentation, and downstream recipe
   metadata; installed wheel and sdist gates on Linux, macOS, and Windows before
   publication; reproducible sdist normalization.
-- Antialiasing follows the dataset. It is a live setting now rather than a
-  context-creation attribute, so it applies to the next frame; until the viewer's
-  checkbox is touched it is chosen from the cell count, on below five million and
-  off at or above, and re-chosen whenever a dataset is opened.
-- A dataset opens at a point size derived from its cell count, holding drawn area
-  roughly constant, and the size slider now reaches 0.050. Every stored session and
-  published preset keeps the size it recorded.
-- The volumetric smoke render mode is marked `alpha` in the viewer, next to the
-  mode that carries it.
+- Antialiasing is a live setting, applied on the next frame instead of at context
+  creation, and defaults from the cell count until the checkbox is touched.
+- A dataset opens at a point size derived from its cell count; the slider now
+  reaches 0.050 and every stored session keeps the size it recorded.
+- The volumetric smoke render mode is marked `alpha` in the viewer.
 
 ### Changed
 
@@ -91,8 +87,10 @@ Version 0.9.1 is the PyPI submission release.
   range, because no package supplies it.
 - `cellucid serve` answers an operator mistake with one actionable line instead of a
   traceback, and keeps the traceback for genuine defects.
-- Both writers accept exactly the same numeric columns: float32 underflow, where a
-  nonzero value below `2^-149` converts to `0.0`, is refused like overflow already was.
+- Both writers refuse the same numeric input everywhere it can enter. Float32
+  underflow (a nonzero value below `2^-149` becoming `0.0`) is now refused for vector
+  fields here, and for quantized fields, embeddings, and `latent_space` in the R
+  writer, where normalization hid the caller's magnitude from the write-time check.
 - A label the browser cannot draw, including an unpaired surrogate, is refused by name.
 - `prepare()` reconciles the export root, so it cannot publish coordinates the viewer is
   never told to fetch, and every manifest is checked as written bytes rather than only as
@@ -104,20 +102,23 @@ Version 0.9.1 is the PyPI submission release.
   flattened -- has an encoding instead of failing the export.
 - `debug_connection()` reports the dataset probes for a published sample state.
 - `prepare()` no longer rejects an export because of a gene it was never asked to export.
-- A gene or continuous column that is not entirely finite is refused with its
-  counts -- how many NaN, infinite, or outside float32, and the first cells --
-  instead of a bare `500 Internal server error` that named nothing. The server
-  answers `422` with that diagnosis as JSON, the exporter and the R writer raise
-  the same report, and the viewer shows it.
-- Level of detail no longer draws square patches. Levels were built by sorting on a
-  bit-reversed Morton code, which makes a level a set of whole grid cells on an
-  axis-aligned lattice; sorting on the plain code and taking ranks in bit-reversed
-  order takes the same fraction of points from every neighbourhood. Measured at a
-  44x reduction: local density error 138% to 5%, and populated regions rendering
-  nothing 42% to none.
-- The velocity overlay's `Sync with LOD` read the level scale backwards, so it ran
-  at full particle count on the coarsest level and disposed itself at full detail --
-  the reverse of what it documents.
+- A payload that is not entirely finite is refused with counts -- how many NaN,
+  infinite, or outside float32, and the first positions -- instead of a bare `500`.
+  The server answers `422` with that diagnosis as JSON; the exporter and the R writer
+  raise the same report, and the viewer shows it.
+- An official sample's published view applies over plain HTTP. Its integrity check used
+  `crypto.subtle`, which is secure-context only, so a LAN bind opened the dataset
+  uncoloured; the digest is computed the same way with or without WebCrypto.
+- `Auto` level of detail follows the camera at every dataset size. Its floor was an
+  absolute point budget, unsatisfiable below two million points, so on most datasets
+  `Auto` answered full detail at every distance and did nothing; the floor is now the
+  smaller of that budget and an 8x reduction cap.
+- Level of detail no longer draws square patches. Sorting on a bit-reversed Morton
+  code made each level a set of whole lattice cells; sorting on the plain code and
+  bit-reversing the rank takes the same fraction from every neighbourhood. At 44x
+  reduction: density error 138% to 5%, empty populated regions 42% to none.
+- The velocity overlay's `Sync with LOD` read the level scale backwards, running at
+  full particle count on the coarsest level and disposing itself at full detail.
 
 ### Security
 

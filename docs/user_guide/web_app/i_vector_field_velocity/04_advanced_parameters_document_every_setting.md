@@ -69,9 +69,19 @@ These controls add film-like glow and tone mapping. They can dramatically change
 | Setting (UI label) | Range (UI) | Default | What it does | Performance impact | Guidance |
 |---|---:|---:|---|---|---|
 | `Exposure:` | 0.10–2.00 | 0.50 | Global brightness of the overlay’s HDR composite. | Medium | If everything is too dark, raise exposure slightly before raising opacity. |
-| `Bloom strength:` | 0.00–0.50 | 0.08 | How strong the glow spill is around bright particles/trails. | High | For scientific use, keep low (0–0.10) or set to 0 to remove the visible bloom contribution. A zero value does not remove the post-processing passes. |
+| `Bloom strength:` | 0.00–0.50 | 0.08 | How strong the glow spill is around bright particles/trails. | High | For scientific use, keep low (0–0.10). |
 | `Bloom threshold:` | 0.10–1.00 | 0.75 | How bright something must be before bloom applies. | Medium | Increase threshold to keep bloom only on the brightest pixels. |
-| `Anamorphic ratio:` | 1.0–3.0 | 1.2 | Makes bloom stretched horizontally (“cinematic streaks”). | High | Keep close to 1.0 for scientific figures. |
+| `Anamorphic ratio:` | 1.0–3.0 | 1.2 | Makes bloom stretched horizontally (“cinematic streaks”). | Medium | Keep at exactly `1.0` for scientific figures — that also skips two half-resolution passes. Free when bloom is off. |
+
+:::{note}
+**`Bloom strength:` of `0.00` is a real performance lever, not only a visual one.**
+At zero the overlay reallocates its render targets without any bloom textures and
+skips the threshold and blur passes entirely, so the glow stage costs nothing at
+all — this is why {doc}`05_performance_and_quality` puts it third in the triage
+list. Everything else in this group (`Bloom threshold:`, `Anamorphic ratio:`)
+becomes inert at the same time, because there is no bloom pass left for them to
+configure.
+:::
 
 ---
 

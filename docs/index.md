@@ -4,9 +4,11 @@
 
 Cellucid is a GPU-accelerated, browser-first workspace for exploring
 single-cell data interactively. Move through 1D, 2D, and 3D embeddings; color
-by genes or cell metadata; filter and compare populations; inspect
-connectivity and vector fields; and carry the result into a figure, notebook,
-saved session, or collaborative annotation round.
+by genes or cell metadata; filter and compare populations; inspect the neighbor
+graph and velocity overlays; and carry the result into a figure, notebook,
+saved session, or collaborative annotation round. Every term the app uses is
+defined in the {doc}`UI glossary
+<user_guide/web_app/a_orientation/04_ui_glossary_terminology>`.
 
 ::::{grid} 1 2 2 2
 :gutter: 2
@@ -51,11 +53,13 @@ the route that matches today’s question.
 :gutter: 3
 
 :::{grid-item-card} Where are my populations?
-:link: user_guide/web_app/e_filtering/index
+:link: user_guide/web_app/d_fields_coloring_legends/index
 :link-type: doc
 
-Color by a categorical `obs` field, search for marker genes, filter noise, and
-highlight a population without losing the surrounding context.
+Colour by a categorical `obs` field or a marker gene, then
+{doc}`filter the noise away <user_guide/web_app/e_filtering/index>` and
+{doc}`highlight a population <user_guide/web_app/f_highlighting_selection/index>`
+without losing the surrounding context.
 :::
 
 :::{grid-item-card} Where are cells going?
@@ -89,10 +93,11 @@ state with Python, and stop the local viewer cleanly.
 | What you have | Best first path | Why |
 |---|---|---|
 | A prepared Cellucid folder | {doc}`Browser Prepared picker <user_guide/web_app/b_data_loading/03_browser_file_picker_tutorial>` | Fast local exploration with no separate server |
-| A small H5AD or portable Zarr ZIP | {doc}`Browser file picker <user_guide/web_app/b_data_loading/03_browser_file_picker_tutorial>` | One direct local selection |
+| An H5AD under 512 MiB, or a portable Zarr ZIP | {doc}`Browser file picker <user_guide/web_app/b_data_loading/03_browser_file_picker_tutorial>` | One direct local selection, no Python installed |
 | A large H5AD, Zarr directory, or prepared catalog | {doc}`Python server <user_guide/web_app/b_data_loading/04_server_tutorial>` | Exact server-side validation and on-demand browser gene requests |
 | An in-memory `AnnData` object | {doc}`Jupyter integration <user_guide/web_app/b_data_loading/05_jupyter_tutorial>` | A tight analysis-to-visualization loop |
 | A public collection of prepared datasets | {doc}`Custom repository guide <user_guide/web_app/b_data_loading/11_custom_dataset_repository>` | No running server; exact catalog and share links |
+| A static host or CDN you already control | {doc}`Self-hosted exports root <user_guide/web_app/b_data_loading/11_custom_dataset_repository>` | `?exportsBaseUrl=` fills the app's own `Sample datasets:` dropdown from your catalog |
 
 The {doc}`complete data-loading map
 <user_guide/web_app/b_data_loading/01_loading_options_overview>` explains the
