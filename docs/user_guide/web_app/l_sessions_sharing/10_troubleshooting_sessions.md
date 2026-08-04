@@ -102,8 +102,14 @@ skip filters/highlights.
 
 Read the message before changing anything — each cause has its own:
 
-- **"saved on a different dataset"**, naming both cell and gene counts: one of
-  the four scalars differs. Open the intended dataset.
+- **"saved on a different dataset"**, naming both cell and gene counts: the
+  sizes themselves differ. Open the intended dataset.
+- **"saved on a different copy of this dataset"**, naming both identities: the
+  sizes agree exactly and the publication identity does not. This is one
+  dataset reached two ways — most often a state captured against a locally
+  served copy of an export the catalog also publishes. The counts are no help
+  here, which is why this message names the two identities instead of repeating
+  the same two numbers. Open the dataset the state was captured on.
 - **"saved while the *N*D view was shown"**: only the cell-order dimension
   differs. Nothing is wrong with the data or the file. Switch back to the
   dimension the message names and load again.
@@ -122,7 +128,7 @@ Read the message before changing anything — each cause has its own:
 :alt: Two notifications carrying the same message, that the session was saved on a different dataset than the one open now, naming 120 cells and 6 genes when it was saved against 3,696 cells and 3,753 genes now, and advising to open the dataset the session was saved on.
 :width: 760px
 
-The first of the four messages, as it appears. It names **both** sizes — what
+The first of the messages, as it appears. It names **both** sizes — what
 the file was saved against and what is open now — so you can tell at a glance
 which of the two is the one you meant to open. The message appears twice because
 the loading indicator carries it as well as the final result.

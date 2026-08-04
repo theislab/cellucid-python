@@ -133,11 +133,12 @@ If any part of the fingerprint does not match the currently loaded dataset:
 - no layout-only subset is accepted; and
 - the existing app state remains intact or is recovered by rollback.
 
-You will see one of four messages, each naming what actually happened:
+You will see one of five messages, each naming what actually happened:
 
 | What you see | What it means | What to do |
 |---|---|---|
 | The session was saved on a different dataset (with both cell and gene counts named) | it is not this dataset | open the dataset the session was saved on |
+| The session was saved on a different copy of this dataset (with both identities named) | the sizes agree exactly and the publication identity does not — one dataset reached two ways, such as a locally served copy of a published export | open the dataset the session was saved on |
 | The session was saved while a different dimension was shown | the check reads the coordinates on screen, and 2D and 3D coordinates differ | switch back to the dimension named in the message, then load again |
 | The dataset has the same name and counts but its cell coordinates differ | either the cells are stored in a different order, or the same cells were exported again from a re-computed embedding — a one-way digest cannot say which | load the version the session was saved on, or re-create the selections here |
 | The file was saved before Cellucid started recording which cells a selection contains | it is a session file older than this check | re-create the selections and save a new session file |

@@ -29,15 +29,31 @@ unsupported and the strict generic reader rejects it. To create a portable
 manual state, choose the sample, wait for this verified view, and then use
 **Save State**.
 
-That is also why a **Save State** file cannot simply be renamed and published: a
-save writes the whole static chunk registry, and a published preset carries only
-five of them. The difference is not cosmetic — the reader refuses a bundle that
-carries the extra chunks, and one of them, a recorded Camera Path, is refused by
-name. The publishing step in `cellucid-datasets`
-(`scripts/publish_session_preset.mjs`) performs the trim, importing the rule
-from the viewer rather than restating it, and refuses to drop any chunk that
-still holds content instead of discarding it silently. If you maintain your own
-catalog, use that script rather than editing a save by hand.
+That is also why a **Save State** file cannot simply be renamed and published. A
+save differs from a published preset in two ways, and the reader refuses both
+while the file itself stays perfectly well-formed:
+
+- **Chunks.** A save writes the whole static chunk registry; a published preset
+  carries five of them. The reader refuses a bundle carrying the extra chunks,
+  and one of them, a recorded Camera Path, is refused by name.
+- **Identity.** A preset is authored by serving the prepared generation locally,
+  so the save records that source (`local-user`, and an id the local source
+  invented), while the catalog serves the same bytes as `local-demo` under the
+  generation's own id. Every session bundle records the dataset it was captured
+  against, and the reader compares that record before applying anything — so a
+  save published as-is is refused on every open, and the sample shows none of
+  its intended view.
+
+The publishing step in `cellucid-datasets`
+(`scripts/publish_session_preset.mjs`) performs both, importing the rules from
+the viewer rather than restating them. It refuses to drop a chunk that still
+holds content instead of discarding it silently, and it restates the identity
+only after re-deriving the generation's cell and gene counts and recomputing its
+cell-order digest from the coordinates it publishes — so a capture taken against
+different data is refused rather than relabelled. It also repoints the catalog's
+`state_sha256` at the file it just wrote, because a preset replaced without that
+is refused for its digest instead. If you maintain your own catalog, use that
+script rather than editing a save by hand.
 
 ## The exact publication contract
 

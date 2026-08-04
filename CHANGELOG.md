@@ -101,6 +101,15 @@ Version 0.9.1 is the PyPI submission release.
 - A constant continuous field -- a gene at one level in every cell, or a column a subset
   flattened -- has an encoding instead of failing the export.
 - `debug_connection()` reports the dataset probes for a published sample state.
+- Publishing a sample's starting view restates its identity. A view is captured
+  against a locally served copy of the generation, and the catalog serves the
+  same bytes under its own id, so a capture published as-is was refused on every
+  open and the sample showed none of its view. The publish step now renames the
+  capture -- only after re-deriving the generation's counts and cell-order digest
+  from what it ships -- and repoints the catalog digest itself, so the artifact
+  and its advertisement cannot part company.
+- A refusal that names two identical cell and gene counts as proof of a
+  different dataset now names the two dataset identities instead.
 - `prepare()` no longer rejects an export because of a gene it was never asked to export.
 - A payload that is not entirely finite is refused with counts -- how many NaN,
   infinite, or outside float32, and the first positions -- instead of a bare `500`.
