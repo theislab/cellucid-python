@@ -732,7 +732,8 @@ As an author, you can merge duplicates so votes are combined:
 
 1) Open a category’s voting modal.
 2) Drag one suggestion card onto another.
-3) Confirm the merge and optionally write a merge note.
+3) Confirm the merge and optionally write a merge note. Like comment edits, a
+   merge-note edit in progress survives the modal refreshing around it.
 4) **Publish** (authors publish to `annotations/moderation/merges.json`).
 
 Merge behavior (what annotators experience):

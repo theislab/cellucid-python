@@ -256,6 +256,8 @@ Under each suggestion card:
 - use **Shift+Enter** to insert a newline without submitting
 
 You can edit or delete your own comments (other people’s comments are read-only).
+An edit in progress survives the modal refreshing around it; if the comment you
+are editing disappears, the editor closes and tells you the edit was not saved.
 
 Good comments include:
 

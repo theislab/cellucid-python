@@ -444,6 +444,13 @@ Comments:
 - comment box accepts up to 500 characters
 - **Enter** submits a comment
 - **Shift+Enter** inserts a newline without submitting
+- unsent comments and suggestions, and open edits of your own comments,
+  suggestions, and merge notes, keep their text, cursor, and focus when the
+  modal refreshes (a Pull, a change from another tab, your own vote)
+- if the item you were editing is deleted, merged away, or no longer on the
+  page you are viewing, or voting closes, the editor closes and warns
+  `Edit not saved: the … you were editing is no longer shown here (deleted,
+  merged, closed, or on another page).`
 
 
 

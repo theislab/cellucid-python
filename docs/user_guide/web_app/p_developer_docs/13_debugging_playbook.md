@@ -125,9 +125,10 @@ Likely causes (ordered):
 How to confirm:
 - Read `document.documentElement.dataset.startupPhase`. Startup publishes the
   step it is in — `sign-in`, `health`, `catalog`, `identity`, `positions`, `ui`,
-  then `ready` — so a page that never finishes says where it stopped.
-- The request/response steps (`sign-in` through `identity`) each have a
-  60-second deadline. A server that never answers ends startup on the
+  `session`, then `ready` — so a page that never finishes says where it stopped.
+- The request/response steps (`sign-in` through `identity`, and `session`,
+  which reads a sample's published default session) each have a 60-second
+  deadline. A server that never answers ends startup on the
   startup-failure page, naming the step and the URL it was waiting on.
   `positions` and `ui` have no deadline, because their time grows with the
   dataset; a slow but progressing load is not a stall.

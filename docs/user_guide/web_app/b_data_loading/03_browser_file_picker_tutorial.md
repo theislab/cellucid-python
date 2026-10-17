@@ -193,7 +193,9 @@ Optional (if you want the vector field / velocity overlay):
 ### Practical expectations
 - Cellucid validates the ZIP directory and Zarr metadata before adopting the
   dataset.
-- Gene expression is read by Zarr chunk on demand.
+- Gene expression is read by Zarr chunk on demand. Decoded chunks of a dense
+  `X` are kept in a cache of up to 256 MiB, so genes that share a chunk
+  column strip decode those chunks once instead of once per gene.
 - Archive entries, decoded chunks, and the active embedding still consume
   browser memory and are bounded by the documented reader limits.
 
