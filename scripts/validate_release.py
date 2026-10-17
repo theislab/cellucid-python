@@ -44,6 +44,7 @@ CURRENT_CONDA_RUNTIME_REQUIREMENTS = (
     "jupyter-server-proxy >=4.1",
 )
 HISTORICAL_RELEASE_TAGS = {
+    "0.9.1": "v0.9.1",
     "0.0.9": "v0.9.0",
     "0.0.1a0": "v0.0.1a0",
 }

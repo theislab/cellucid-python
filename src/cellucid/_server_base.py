@@ -88,6 +88,8 @@ class CellucidHTTPServer(_StandardHTTPServer):
 # Session bundle upload protocol (used for Jupyter "no download" capture).
 SESSION_BUNDLE_MAGIC = b"CELLUCID_SESSION\n"
 MAX_SESSION_BUNDLE_BYTES = 512 * 1024 * 1024  # 512MB hard cap (zip-bomb + memory guard)
+# Longest a refused request's unread body is drained before the socket closes.
+_UNREAD_BODY_DISCARD_SECONDS = 5.0
 
 _WEB_BUILD_META_NAME = "cellucid-web-build-id"
 _WEB_BUILD_ID_MAX_LEN = 200
@@ -537,8 +539,8 @@ def _require_content_length(
     return value
 
 
-def _read_exact_request_body(reader: BinaryIO, content_length: int) -> bytes:
-    body = reader.read(content_length)
+def _read_exact_request_body(read: Callable[[int], bytes], content_length: int) -> bytes:
+    body = read(content_length)
     if len(body) != content_length:
         raise _RequestContractError(
             HTTPStatus.BAD_REQUEST,
@@ -841,6 +843,9 @@ class CORSMixin:
     # Override in subclass: whether to allow caching
     allow_caching: bool = True
 
+    # Body bytes the current request's handler has consumed.
+    _request_body_bytes_read: int = 0
+
     if TYPE_CHECKING:
         allowed_hosts: frozenset[str]
         close_connection: bool
@@ -874,6 +879,7 @@ class CORSMixin:
         base = cast("BaseHTTPRequestHandler", super())
         if not base.parse_request():
             return False
+        self._request_body_bytes_read = 0
         if self._host_header_is_authorized():
             return True
         # Requests are otherwise logged at DEBUG, so a refusal would be silent.
@@ -883,12 +889,11 @@ class CORSMixin:
             "Refused a request whose Host header does not name this server: %r",
             self._request_headers().get_all("Host", []),
         )
-        # The body was never read, so this connection can no longer be framed.
-        self.close_connection = True
         self.send_error_response(
             HTTPStatus.MISDIRECTED_REQUEST,
             "Host header does not name this server",
         )
+        self._discard_unread_request_body()
         return False
 
     def _host_header_is_authorized(self) -> bool:
@@ -956,6 +961,51 @@ class CORSMixin:
             BinaryIO,
             object.__getattribute__(self, "wfile"),
         )
+
+    def _read_request_body(self, size: int) -> bytes:
+        """Read up to ``size`` request-body bytes, counting what is consumed."""
+        chunk = self._request_reader().read(size)
+        self._request_body_bytes_read += len(chunk)
+        return chunk
+
+    def _discard_unread_request_body(self) -> None:
+        """Drain the body a refused request declared, so its socket closes cleanly.
+
+        A socket closed with received bytes still unread is reset rather than
+        shut down, and a client that has not yet read the response loses it:
+        Windows reports WinError 10053, POSIX a reset or a broken pipe while the
+        client is still sending. Every early POST refusal -- an expired session
+        request, bad credentials, a wrong Content-Type, an oversized body, an
+        unknown path, a foreign ``Host`` -- answers before reading the body, so
+        without this the client saw a dropped connection instead of the status
+        it was sent. Only a body framed by one valid ``Content-Length`` within
+        the largest accepted upload is drained, and for a bounded time.
+        """
+        self.close_connection = True
+        try:
+            declared = _require_content_length(
+                self._request_headers(),
+                maximum=MAX_SESSION_BUNDLE_BYTES,
+            )
+        except _RequestContractError:
+            return
+        remaining = declared - self._request_body_bytes_read
+        deadline = time.monotonic() + _UNREAD_BODY_DISCARD_SECONDS
+        connection = cast(socket.socket, object.__getattribute__(self, "connection"))
+        try:
+            while remaining > 0:
+                time_left = deadline - time.monotonic()
+                if time_left <= 0:
+                    return
+                connection.settimeout(time_left)
+                chunk = self._read_request_body(min(64 * 1024, remaining))
+                if not chunk:
+                    return
+                remaining -= len(chunk)
+        except OSError:
+            # The client went away or stalled; the close that follows is all
+            # that is left to do.
+            return
 
     def _get_allowed_origin(self) -> str | None:
         # `BaseHTTPRequestHandler` only populates `.headers` after successfully
@@ -1103,6 +1153,17 @@ class CORSMixin:
             return False
         return True
 
+    def do_POST(self) -> None:
+        """Route a POST to its endpoint, then drain whatever body it left unread."""
+        try:
+            if not (self.handle_event_post() or self.handle_session_bundle_post()):
+                self.send_error_response(
+                    HTTPStatus.NOT_FOUND,
+                    f"POST not supported for path: {self.path}",
+                )
+        finally:
+            self._discard_unread_request_body()
+
     def handle_event_post(self) -> bool:
         """
         Handle POST request to /_cellucid/events endpoint.
@@ -1123,7 +1184,7 @@ class CORSMixin:
                 maximum=1024 * 1024,
             )
             body = _read_exact_request_body(
-                self._request_reader(),
+                self._read_request_body,
                 content_length,
             )
             try:
@@ -1329,7 +1390,7 @@ class CORSMixin:
                     "Session bundle is truncated before its MAGIC header",
                 )
             magic = _read_exact_request_body(
-                self._request_reader(),
+                self._read_request_body,
                 magic_length,
             )
             if magic != SESSION_BUNDLE_MAGIC:
@@ -1349,7 +1410,7 @@ class CORSMixin:
 
                 remaining = content_length - magic_length
                 while remaining > 0:
-                    chunk = self._request_reader().read(min(64 * 1024, remaining))
+                    chunk = self._read_request_body(min(64 * 1024, remaining))
                     if not chunk:
                         raise _RequestContractError(
                             HTTPStatus.BAD_REQUEST,

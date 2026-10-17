@@ -199,15 +199,6 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         self.add_cors_headers()
         super().end_headers()
 
-    def do_POST(self):
-        """Handle POST requests (events from frontend)."""
-        if self.handle_event_post():
-            return
-        if self.handle_session_bundle_post():
-            return
-        # No other POST endpoints - return 404
-        self.send_error_response(404, f"POST not supported for path: {self.path}")
-
     def do_HEAD(self):
         """Handle HEAD requests (for urlExists checks)."""
         self.do_GET(head_only=True)

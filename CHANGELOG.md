@@ -5,8 +5,25 @@ All notable changes to Cellucid will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.9.1]
+## [0.9.2]
 <!-- CELLUCID_VERSION -->
+
+Version 0.9.2 is a patch release on 0.9.1.
+
+### Fixed
+
+- A refused upload or event now reaches the client as the status the server sent.
+  Every early refusal of a POST -- an expired or unknown session-bundle request, bad
+  viewer credentials, a wrong `Content-Type`, an oversized body, an unknown path, a
+  foreign `Host` -- was answered before the request body was read, and the socket
+  was then closed with that body unread. A socket closed with unread input is reset
+  rather than shut down, so a client still sending or not yet reading lost the
+  response: Windows reported `WinError 10053`, macOS and Linux a reset or a broken
+  pipe. The server now drains a refused request's declared body, within the
+  largest accepted upload and for at most five seconds, before it closes. Both
+  servers share one `do_POST` that does this.
+
+## [0.9.1] - 2026-10-17
 
 Version 0.9.1 is the PyPI submission release.
 
@@ -211,6 +228,7 @@ declared `0.0.9`. Release 0.9.1 restores one exact version across both systems.
   - Jupyter integration (`show()`, `show_anndata()`)
 - Export functionality for web deployment
 
+[0.9.2]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.2
 [0.9.1]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.1
 [0.0.9]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.0
 [0.0.1a0]: https://github.com/theislab/cellucid-python/releases/tag/v0.0.1a0

@@ -1,5 +1,5 @@
 {% set name = "cellucid" %}
-{% set version = "0.9.1" %}
+{% set version = "0.9.2" %}
 # CELLUCID_VERSION
 
 package:
@@ -8,7 +8,7 @@ package:
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/cellucid-{{ version }}.tar.gz
-  sha256: f7fdda22a297bdd74b7db0c3ff4b630951547cc53bdc9dd1c59c98a88d9cf4ea
+  sha256: 05349e03f9db8e530bff161a60a1227bf4285189291da7cfacafa4848bfe17ef
 
 build:
   entry_points:

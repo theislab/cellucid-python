@@ -1103,6 +1103,57 @@ def test_session_callback_absence_or_failure_is_non_success_and_removes_temp_fil
     assert list(tmp_path.iterdir()) == []
 
 
+@pytest.mark.parametrize(
+    ("path", "headers", "expected_status", "expected_body"),
+    [
+        (
+            "/_cellucid/session_bundle?viewerId=absent&requestId=absent",
+            {"Content-Type": "application/octet-stream"},
+            404,
+            b"No pending session bundle request",
+        ),
+        (
+            "/_cellucid/events",
+            {"Content-Type": "text/plain"},
+            415,
+            b"Content-Type must be exactly application/json",
+        ),
+        (
+            "/_cellucid/events",
+            {"Content-Type": "application/json"},
+            413,
+            b"Request body exceeds the 1048576-byte limit",
+        ),
+        (
+            "/_cellucid/nowhere",
+            {"Content-Type": "application/json"},
+            404,
+            b"POST not supported for path: /_cellucid/nowhere",
+        ),
+        (
+            "/_cellucid/events",
+            {"Content-Type": "application/json", "Host": "attacker.example"},
+            421,
+            b"Host header does not name this server",
+        ),
+    ],
+)
+def test_early_post_refusal_reaches_client_despite_unread_body(
+    path: str,
+    headers: dict[str, str],
+    expected_status: int,
+    expected_body: bytes,
+) -> None:
+    # A refusal sent before the body is read used to be followed by a close
+    # with that body unread, which resets the socket; a body far larger than
+    # the socket buffers made the client lose the response every time.
+    body = b"x" * 2_000_000
+    with _running_server() as (host, port):
+        for _ in range(3):
+            status, response = _request(host, port, path, body=body, headers=headers)
+            assert (status, response) == (expected_status, expected_body)
+
+
 def _routing_snapshot() -> tuple[dict[str, object], set[object]]:
     return dict(server_base._event_callbacks), set(jupyter_base._active_viewers)
 
