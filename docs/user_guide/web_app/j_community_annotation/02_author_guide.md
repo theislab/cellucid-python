@@ -556,8 +556,9 @@ on a stale or incompatible Worker.
 
 The Worker requires exactly `ALLOWED_ORIGINS`, `GITHUB_CLIENT_ID`, and
 `GITHUB_CLIENT_SECRET`. It does not use an App id, private key, App JWT, or
-installation access token. Configure Cloudflare Workers Paid with the Standard
-usage model; the checked-in Worker requires its one-second CPU ceiling. Apply a
+installation access token. It deploys on the Cloudflare Workers Free plan,
+whose CPU budget of about 10 ms per request a very large repository document can
+exceed; the Worker setup guide explains when to move to Workers Paid. Apply a
 rate-limiting rule to `/cap/*` for a public deployment.
 
 Configure the GitHub App with user-to-server token expiration disabled,
