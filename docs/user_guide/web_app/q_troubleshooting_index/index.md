@@ -240,6 +240,10 @@ So:
   If it happens, it is a bug worth reporting.
 - **Never becomes ready** — that is a startup failure. Look for the “Cellucid
   could not start” card, or check the console.
+- **The line turns red and reads “Cellucid could not load its code…”** — one of
+  the app's own files failed to download (a dropped connection, a proxy, or a
+  site update that landed while the page was loading), so nothing could start.
+  Check the connection and reload the page.
 
 ---
 

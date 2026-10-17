@@ -237,9 +237,13 @@ The frame gate decides whether a frame is drawn at all. Any mutating viewer or
 renderer call, any viewer input event, and any canvas resize marks the next frame
 for drawing; held navigation keys, inertia, smooth zoom, a grid fade, smoke mode,
 enabled overlays, visible highlights (their glow animates), and live projectiles
-keep frames drawing. After the last such cause the viewer keeps drawing for one
-second, so multi-frame convergences such as LOD hysteresis and camera settlement
-finish, and then stops until something changes. The drawing buffer is preserved,
+keep frames drawing, and so does a camera motion still waiting for its
+`camera-settled` event. After the last such cause the viewer keeps drawing until
+both one second has passed and 12 frames have been drawn
+(`FRAME_SETTLE_MS`, `FRAME_SETTLE_MIN_FRAMES`), so multi-frame convergences
+such as LOD hysteresis finish even where frames arrive more than a second apart,
+and then stops until something changes. A frame that throws marks the next
+frame for drawing, so a partial frame is redrawn. The drawing buffer is preserved,
 so the canvas keeps showing — and reading back — the last drawn frame.
 
 Inside a drawn frame, three independent gates keep the work proportional to what
