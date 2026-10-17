@@ -302,6 +302,19 @@ changed, each cheap to check:
    buffer. Even the post-upload error check is gated on the allocation
    watermark, because running it every frame was measured in milliseconds.
 
+The culled full-detail element buffer lists the visible points in **ascending
+index order**, not leaf by leaf. Every spatial leaf spans the whole point-ID
+range, so leaf order made the GPU fetch both vertex streams scattered across
+memory: at 5,000,000 points with everything in view, a culled static frame took
+30.0 ms against 9.4 ms unculled (Chromium, Apple M1 Pro, ANGLE Metal). In
+ascending order it takes 9.7 ms. Storage order is also the unculled draw order,
+so a culled frame blends translucent points exactly like an unculled one, which
+`tests/browser/frustum-culling-parity.spec.mjs` checks pixel for pixel. A small
+visible set is sorted directly; a large one is marked in a one-byte-per-point
+array and read back with one linear scan (`_writeAscendingVisibleIndices`).
+Reduced LOD levels were already emitted in compact-rank order. Do not go back to
+concatenating leaf index arrays.
+
 Binding the alpha texture is a bind and two uniform writes; it never uploads.
 
 The practical rule: **if you add work to the draw path, it must sit behind a gate
