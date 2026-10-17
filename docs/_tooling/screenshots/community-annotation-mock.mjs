@@ -38,8 +38,7 @@ function capability() {
     contractVersion: 1,
     endpoints: [
       '/auth/login', '/auth/callback', '/auth/user', '/auth/installations',
-      '/auth/installation-repos', '/cap/lookup-cells', '/cap/search-datasets',
-      '/api/repos/*',
+      '/auth/installation-repos', '/cap/lookup-cells', '/api/repos/*',
     ],
   };
 }

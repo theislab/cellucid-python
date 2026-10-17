@@ -220,7 +220,6 @@ def test_community_annotation_docs_publish_current_network_and_repository_contra
         "`/auth/installations`",
         "`/auth/installation-repos`",
         "`/cap/lookup-cells`",
-        "`/cap/search-datasets`",
         "`/api/repos/*`",
         "`ALLOWED_ORIGINS`, `GITHUB_CLIENT_ID`, and `GITHUB_CLIENT_SECRET`",
         '`{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":1,',
@@ -240,6 +239,7 @@ def test_community_annotation_docs_publish_current_network_and_repository_contra
         assert "GitHub bearer token and OAuth cookies are not sent to CAP" in guide_normalized
     assert "`/cap/search-datasets`" not in annotator
     assert "`/cap/search-datasets`" not in ui
+    assert "`/cap/search-datasets`" not in author
     assert "`/cap/lookup-cells` or" not in annotator
     assert "`/cap/lookup-cells` or" not in ui
     assert "related datasets" not in annotator

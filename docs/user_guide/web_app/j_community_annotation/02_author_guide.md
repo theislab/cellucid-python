@@ -543,7 +543,6 @@ The Worker exposes the following ordered routes:
 - `/auth/installations`
 - `/auth/installation-repos`
 - `/cap/lookup-cells`
-- `/cap/search-datasets`
 - `/api/repos/*`
 
 Opening `/` must return the exact compatible service identity and ordered route

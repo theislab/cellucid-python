@@ -464,7 +464,7 @@ Then route `https://worker.example/**`. Exact fixture shapes, all verified from 
 
 | Route | Response |
 |---|---|
-| `GET /` (capability handshake, runs **first**) | `{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":1,"endpoints":["/auth/login","/auth/callback","/auth/user","/auth/installations","/auth/installation-repos","/cap/lookup-cells","/cap/search-datasets","/api/repos/*"]}` — **must match `WORKER_ENDPOINTS` element-by-element in order** or sign-in aborts before redirect |
+| `GET /` (capability handshake, runs **first**) | `{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":1,"endpoints":["/auth/login","/auth/callback","/auth/user","/auth/installations","/auth/installation-repos","/cap/lookup-cells","/api/repos/*"]}` — **must match `WORKER_ENDPOINTS` element-by-element in order** or sign-in aborts before redirect |
 | `GET /auth/user` | `{"id":4242,"login":"tester"}` |
 | `POST /auth/installations` | `{"installations":[{"id":71,"account":{"login":"team"}}]}` |
 | `POST /auth/installation-repos` (body `{installation_id}`) | `{"repositories":[{"id":1,"full_name":"team/labels","private":false}]}` |
