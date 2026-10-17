@@ -210,11 +210,14 @@ Developer advice:
 ## What a frame actually costs
 
 Before changing anything in the draw path, know the current baseline: **a settled
-frame transfers no data to the GPU.**
+scene is not drawn at all, and a drawn frame that changes nothing transfers no data
+to the GPU.**
 
 ```
-render()  (self-rescheduling rAF; runs every frame, unconditionally)
+render()  (self-rescheduling rAF; draws only when something can have changed)
   │
+  ├─ frame gate ── invalidated, animating, or resized? ── no, settled ─▶ (no draw)
+  │                                    │ yes
   ├─ dirty-flag gate ── buffer dirty? LOD dimension dirty? ─── no ──┐
   │                                    │ yes                        │
   │                                    └─▶ flushBufferUpdates()     │
@@ -230,7 +233,17 @@ render()  (self-rescheduling rAF; runs every frame, unconditionally)
   └─ useProgram · uniforms · bind alpha texture · drawArrays ◀───────┘
 ```
 
-Three independent gates, each cheap to check:
+The frame gate decides whether a frame is drawn at all. Any mutating viewer or
+renderer call, any viewer input event, and any canvas resize marks the next frame
+for drawing; held navigation keys, inertia, smooth zoom, a grid fade, smoke mode,
+enabled overlays, visible highlights (their glow animates), and live projectiles
+keep frames drawing. After the last such cause the viewer keeps drawing for one
+second, so multi-frame convergences such as LOD hysteresis and camera settlement
+finish, and then stops until something changes. The drawing buffer is preserved,
+so the canvas keeps showing — and reading back — the last drawn frame.
+
+Inside a drawn frame, three independent gates keep the work proportional to what
+changed, each cheap to check:
 
 1. **Buffer dirty flags** — set by colour updates, cleared on flush.
 2. **Frustum cache** — an exact element-wise comparison of the model-view-projection
