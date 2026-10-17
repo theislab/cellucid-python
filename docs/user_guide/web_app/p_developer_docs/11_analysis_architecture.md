@@ -5,7 +5,7 @@ This page documents the Cellucid **Page Analysis** subsystem: how analysis UIs a
 It is written for contributors adding:
 - a new analysis mode,
 - a new plot type,
-- a new compute operation/transform,
+- a new compute operation,
 - or changes that affect analysis ↔ highlights ↔ sessions interactions.
 
 ## At a glance
@@ -69,18 +69,16 @@ This is why highlight pages are treated as first-class state: they are analysis 
 Analysis lives under:
 - `cellucid/assets/js/app/analysis/`
 
-Key entry points:
-
-- `analysis/index.js`
-  - a “barrel” export that documents and re-exports core analysis building blocks (registries, compute, stats, plots).
+Key entry point:
 
 - `analysis/comparison-module.js`
-  - orchestrates the analysis UI and binds it to `DataState`.
+  - orchestrates the analysis UI and binds it to `DataState`. Modules import
+    each other directly; there is no barrel `index.js` for the analysis tree.
 
 Subdirectories (high-level):
-- `analysis/core/`: plugin contracts, validation, registries
-- `analysis/compute/`: compute operations and explicit GPU, Worker, and CPU backends
-- `analysis/data/`: data layer + query builder + transforms
+- `analysis/core/`: plot plugin contract, validation, the plot registry
+- `analysis/compute/`: compute operations and their Worker and CPU backends
+- `analysis/data/`: data layer and streaming gene loader
 - `analysis/stats/`: statistical tests, corrections, result formatting
 - `analysis/plots/`: plot infrastructure and types
 - `analysis/ui/`: UI manager, analysis-type UIs, floating windows, shared UI components
@@ -113,18 +111,20 @@ The analysis module needs a safe, consistent way to:
 This is handled by:
 - `cellucid/assets/js/app/analysis/data/data-layer.js`
 
-### 3) Compute backends (GPU / Worker / CPU)
+### 3) Compute backends (Worker / CPU)
 
-Compute is structured around “operations” with capability metadata:
-- which operations can run on GPU
-- which can run in a Worker
-- which must run on the main thread
+Compute is structured around “operations” with capability metadata: which
+operations can run in a Worker and which can run on the main thread. The
+operations are correlation (`COMPUTE_CORRELATION`) and differential expression
+(`COMPUTE_DIFFERENTIAL`); marker-gene discovery dispatches its own
+`MARKERS_*` messages to the same worker pool. There is no GPU analysis backend.
 
 Key files:
 - `cellucid/assets/js/app/analysis/compute/operations.js`
+- `cellucid/assets/js/app/analysis/compute/operation-handlers.js`
 - `cellucid/assets/js/app/analysis/compute/compute-manager.js`
-- `cellucid/assets/js/app/analysis/compute/gpu-compute.js`
 - `cellucid/assets/js/app/analysis/compute/worker-pool.js`
+- `cellucid/assets/js/app/analysis/compute/data-worker.js`
 
 Design goal:
 - select one declared, available backend before an operation starts; execution

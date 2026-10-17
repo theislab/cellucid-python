@@ -945,11 +945,11 @@ terminal and Jupyter captures:
      they survived the commit that deleted their contents and were never cleaned
      up locally.
   2. Optionally remove `cellucid/assets/js/app/ui/modules/cross-highlight/`
-     (contains only a zero-byte `.gitkeep`) and the orphan
-     `// Cross-highlighting` comment at
-     `cellucid/assets/js/app/analysis/ui/index.js:143`, which has no code under
-     it. Both are reservations for unbuilt work and are exactly the kind of
-     placeholder the repo's clean-break rule argues against keeping. This
+     (contains only a zero-byte `.gitkeep`). It is a reservation for unbuilt
+     work and exactly the kind of placeholder the repo's clean-break rule
+     argues against keeping. (The orphan `// Cross-highlighting` comment that
+     sat in the unused `analysis/ui/index.js` barrel went away with that
+     barrel.) This
      is a web-app change and is out of scope for a docs objective — flagging it,
      not proposing it here.
 - **notes** —
@@ -978,9 +978,6 @@ terminal and Jupyter captures:
   **The feature does not exist in the source.** Confirmed directly, not inferred:
   - `cellucid/assets/js/app/ui/modules/cross-highlight/` contains exactly one
     file, a **zero-byte `.gitkeep`**. `ls -la` output: `total 0`.
-  - `cellucid/assets/js/app/analysis/ui/index.js:143` is a bare
-    `// Cross-highlighting` comment with **no export or code beneath it** — the
-    next non-blank lines are the `DEFAULT EXPORT` banner comment.
   - Grep across `cellucid/assets/js` for `crossHighlight`, `cross_highlight`,
     `crossFilter`, `linkedSelection`, `propagateHighlight`, `sharedHighlight`
     returns **zero** hits. `syncHighlight` returns three hits, all

@@ -331,7 +331,7 @@ Secondary (cheaper, complements it): a **DIAGRAM** of the coordinator's import g
 
 ## {doc}`/user_guide/web_app/p_developer_docs/11_analysis_architecture`
 
-**explains** — The Page Analysis subsystem: why it is initialized in `main.js` rather than by the UI coordinator, the "analysis runs on pages + highlights" model, the analysis directory code map, five core pieces (`ComparisonModule`, `DataLayer`, GPU/Worker/CPU compute backends, Plotly plot infrastructure, memory monitor + cleanup), session interaction, three correctness edge cases, and two troubleshooting entries.
+**explains** — The Page Analysis subsystem: why it is initialized in `main.js` rather than by the UI coordinator, the "analysis runs on pages + highlights" model, the analysis directory code map, five core pieces (`ComparisonModule`, `DataLayer`, Worker/CPU compute backends, Plotly plot infrastructure, memory monitor + cleanup), session interaction, three correctness edge cases, and two troubleshooting entries.
 
 **has** — `none`. Verified.
 
@@ -339,11 +339,11 @@ Secondary (cheaper, complements it): a **DIAGRAM** of the coordinator's import g
 
 **needs** — One diagram: the analysis subsystem's ownership graph.
 
-Root `app/main.js` → `createComparisonModule({ state, container })` mounting into DOM id `#page-analysis-section`. From `comparison-module.js`, seven child nodes matching the real subdirectories: `analysis/core/` (plugin contracts, validation, registries), `analysis/data/` (`data-layer.js`, query builder, transforms), `analysis/compute/` (expand into four leaves: `operations.js`, `compute-manager.js`, `gpu-compute.js`, `worker-pool.js`), `analysis/stats/`, `analysis/plots/` (leaves `plot-factory.js`, `plotly-loader.js`, `types/`), `analysis/ui/` (leaf `analysis-ui-manager.js`, `analysis-types/`), `analysis/shared/` (leaves `memory-monitor.js`, `resource-cleanup.js`, `plot-theme.js`). Add one cross-edge `DataState --page:changed, highlight:changed--> ComparisonModule` (dashed, matching the event style used in the page 05 and 06 diagrams) and one `sessionSerializer.setAnalysisRefs()` edge.
+Root `app/main.js` → `createComparisonModule({ state, container })` mounting into DOM id `#page-analysis-section`. From `comparison-module.js`, seven child nodes matching the real subdirectories: `analysis/core/` (plot plugin contract, validation, plot registry), `analysis/data/` (`data-layer.js`, `streaming-gene-loader.js`), `analysis/compute/` (expand into four leaves: `operations.js`, `operation-handlers.js`, `compute-manager.js`, `worker-pool.js`), `analysis/stats/`, `analysis/plots/` (leaves `plot-factory.js`, `plotly-loader.js`, `types/`), `analysis/ui/` (leaf `analysis-ui-manager.js`, `analysis-types/`), `analysis/shared/` (leaves `memory-monitor.js`, `resource-cleanup.js`, `plot-theme.js`). Add one cross-edge `DataState --page:changed, highlight:changed--> ComparisonModule` (dashed, matching the event style used in the page 05 and 06 diagrams) and one `sessionSerializer.setAnalysisRefs()` edge.
 
-Critically, annotate the three compute backends as **mutually exclusive selection, not a substitution chain** — the page states at `:130–131` that a backend is chosen before the operation starts and execution errors never switch backends. A naive reader assumes a substitution chain; the diagram should make the single-selection rule visible (single selection arrow, not a chain).
+Critically, annotate the two compute backends (Worker, CPU) as **mutually exclusive selection, not a substitution chain** — the page states at `:130–131` that a backend is chosen before the operation starts and execution errors never switch backends. A naive reader assumes a substitution chain; the diagram should make the single-selection rule visible (single selection arrow, not a chain).
 
-Derived from: `cellucid/assets/js/app/analysis/index.js` (the barrel export, which the page describes at `:74–75` as documenting the core building blocks — it is the natural machine-readable source) plus `comparison-module.js`'s import list.
+Derived from: `comparison-module.js`'s import list plus the `cellucid/assets/js/app/analysis/` directory tree (there is no analysis barrel module).
 
 **notes** — Page verifies clean. All 17 code pointers resolve, including every subdirectory at `:81–87` and both shared utilities. `#page-analysis-section` exists in `cellucid/index.html` (1 occurrence). `window._comparisonModule` is real (`main.js:2359`). `analysis/ui/analysis-types/` exists (referenced from page 17). The `analysis/shared/debug-utils.js` debug toggles at `:228` (`?debug=1` or localStorage `debug=1`) match source (`debug-utils.js:43`, `:56`). No dead paths.
 
@@ -469,7 +469,7 @@ This is the lowest-priority DIAGRAM in the section, and the honest alternative v
 
 **needs** — Nothing. Every figure this page could want is the analysis subsystem graph, which belongs on — and is specified for — {doc}`/user_guide/web_app/p_developer_docs/11_analysis_architecture`; page 17 is its procedural counterpart and should link that figure rather than carry a second copy. The three options are numbered file-editing recipes whose content is symbol names (`_registerAnalysisTypes()`, `onPageSelectionChange(pageIds)`, `destroy()`, `purgePlot(...)`, `data-mode="..."`) — text that must be typed exactly, which is the one form of content a figure actively degrades.
 
-**notes** — Page verifies clean. All nine code pointers resolve, including `analysis/ui/analysis-types/` (`:25`), `analysis/compute/operation-handlers.js` (`:108`), `analysis/stats/statistical-tests.js` (`:115`), `analysis/data/transform-pipeline.js` (`:118`), and the glob `analysis/plots/types/*.js` (`:87`). The mode ids named at `:45` (`simple`, `detailed`, `correlation`, `differential`) are plausible registration keys and are consistent with page 11 `:97`'s list of registered analysis types. No dead paths.
+**notes** — Page verifies clean. Its code pointers resolve, including `analysis/ui/analysis-types/` (`:25`), `analysis/compute/operation-handlers.js` (`:108`), `analysis/stats/statistical-tests.js` (`:115`), and the glob `analysis/plots/types/*.js` (`:87`). The transform registry and pipeline it once pointed at were removed from the web app as unused. The mode ids named at `:45` (`simple`, `detailed`, `correlation`, `differential`) are plausible registration keys and are consistent with page 11 `:97`'s list of registered analysis types. No dead paths.
 
 ---
 
