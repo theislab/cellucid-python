@@ -144,6 +144,12 @@ Navigation:
 - **Back** / **Next** buttons navigate the wizard.
 - A status line at the bottom shows progress, warnings, and error text.
 
+While any sync is running — including a background **Auto pull** — **Pull
+latest** and **Publish** are disabled until it finishes. A Pull or Publish that
+still reaches a running sync does not run and reports `Another GitHub sync is
+still running. Wait for it to finish, then try again.`; one you cancel reports
+`Cancelled.`. Only a completed transaction reports its success text.
+
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-05-sync.png
 :alt: Step 4 of 4, headed "Sync (pull / publish)", with Pull latest and Publish buttons, an Auto pull selector offering 10, 15 and 60 minute intervals, and a status line reading "Pulled latest annotations."
 :width: 1040px

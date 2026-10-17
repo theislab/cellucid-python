@@ -254,7 +254,8 @@ whereas `0` is a real measurement and will be coloured as one.
 1) The gene is published under a different name than the one you typed.
 2) The gene is not in this export at all — preparation published only some of
    the source’s genes.
-3) The search is substring-based; a short query matches many genes and Enter picks the top one.
+3) The search is substring-based; a short query matches many genes, and Enter
+   picks the top match unless you first move the highlight with the arrow keys.
 4) The gene list is present but very large; your query is too broad.
 
 ### How to confirm
@@ -280,7 +281,8 @@ counts, and what to do instead are in
 
 ### Fix
 
-1) Type a more specific query and click the correct gene explicitly (don’t rely on Enter).
+1) Type a more specific query, then click the correct gene, or move to it with
+   ArrowDown/ArrowUp and press Enter.
 2) If the name you expected is not there, it is either published under another
    name or not published at all:
    - check which `var` column the export named its genes from
