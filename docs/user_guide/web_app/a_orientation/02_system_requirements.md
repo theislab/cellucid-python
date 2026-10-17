@@ -70,6 +70,9 @@ that device.
 - Mouse or trackpad recommended.
 - Keyboard shortcuts are available (see the in-app “Keyboard Shortcuts” accordion).
 - Touch devices can work for basic orbit/planar navigation, but are much more likely to run out of GPU memory.
+- On a phone-sized screen (720 px wide or less) the sidebar opens over the whole
+  screen. Tap **✕** in its top-right corner to close it and see the plot; tap
+  **☰** in the top-left corner to bring it back.
 
 ---
 
