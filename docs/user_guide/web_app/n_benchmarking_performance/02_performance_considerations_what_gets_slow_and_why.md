@@ -127,6 +127,30 @@ Practical consequences:
 
 ---
 
+### Recoloring (switching the colored field or gene)
+
+Changing what the points are colored by recomputes one RGBA color per cell on
+the CPU and then uploads only colors: positions and colors are separate GPU
+streams, so a recolor sends 4 bytes per cell and never touches the positions.
+With Level-of-Detail built, the shared reduced copy of each dimension is
+recolored too, 4 bytes per reduced point, when that dimension next draws.
+
+Measured renderer cost of one recolor (upload issued and completed), Chromium on
+an Apple M1 Pro through ANGLE Metal, synthetic data; the color computation
+itself is not included:
+
+| Cells | LOD | Bytes sent | Recolor |
+| --- | --- | --- | --- |
+| 1,000,000 | off | 4 MB | 1.5 ms |
+| 1,000,000 | on | 7.2 MB | 3.8 ms |
+| 5,000,000 | off | 20 MB | 2.3 ms |
+| 5,000,000 | on | 36 MB | 33 ms |
+
+With LOD on, most of that time is gathering the reduced copy's colors in its
+spatial order, not the upload.
+
+---
+
 ### Filtering (visibility recomputation)
 
 Filtering is a classic CPU hot path — and the CPU half is the *whole* cost.

@@ -65,6 +65,10 @@ At a high level:
   moved, so the transfer is proportional to how scattered the change is rather
   than to the dataset size. Deciding *which* cells changed is still a pass over
   every cell on the CPU.
+- A recolor (switching the colored field or gene) uploads 4 bytes per point —
+  only the color stream; positions live in a separate stream and are not
+  re-sent. With LOD built, each dimension's shared reduced copy is recolored
+  the same way, 4 bytes per reduced point.
 - Some modules add full-screen passes or per-view framebuffers, making performance scale with **pixel count**.
 
 So “performance” is usually about:

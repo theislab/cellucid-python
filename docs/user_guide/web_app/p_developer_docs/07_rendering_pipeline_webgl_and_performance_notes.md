@@ -44,6 +44,44 @@ Hard constraints:
   - Receives: positions (float32), colors (RGBA uint8 packed), and alpha/transparency.
   - Notes:
     - Spatial indexing is dimension-aware (binary tree / quadtree / octree), used for picking/LOD.
+    - Positions and colors are **two separate vertex streams** — see
+      “Point vertex streams” below.
+
+### Point vertex streams
+
+Full detail is drawn from two `ARRAY_BUFFER`s bound into one VAO:
+
+| Attribute | Stream | Layout | Bytes per point | Usage |
+| --- | --- | --- | --- | --- |
+| 0 `a_position` | `buffers.positions` | Float32 XYZ, tightly packed | 12 | `STATIC_DRAW` |
+| 1 `a_color` | `buffers.colors` | RGBA8, normalized | 4 | `DYNAMIC_DRAW` |
+
+Alpha is not taken from the color stream while a dataset is loaded: it lives in
+a separate R8 texture (one texel per point), so a visibility change touches
+neither stream.
+
+Each full-detail store is allocated straight from the published typed array
+(`bufferData(positions)`, `bufferData(colors)`), so nothing is repacked and the
+renderer holds no client copy of either. A recolor is one in-place
+`bufferSubData` of the RGBA array; the positions are not re-sent.
+
+Level of detail keeps one **compact prefix** per dimension: the largest reduced
+level's points in hierarchical order, held as the same two streams (a compact
+position store and a compact color store, one VAO), plus one original-ID
+element buffer and one R32UI index texture shared by every reduced level. The
+compact stores are gathered through one fixed 65,536-point staging block
+(`GATHER_CHUNK_POINTS`), positions and colors in separate passes, colors one
+32-bit word at a time — which is why color arrays handed to the renderer must
+start on a 4-byte boundary. A recolor rewrites only each resident dimension's
+compact color store, in place, the next time that dimension renders.
+
+The compact copy is deliberate. Drawing reduced levels through the original-ID
+element buffer straight from the full-detail streams would remove the copy and
+its recolor cost, but it turns sequential vertex fetch into a gather, and that
+measured 2.0–2.4× slower per reduced-level frame at 5M points (Chromium, Apple
+M1 Pro, ANGLE Metal). Splitting the streams did not cost vertex throughput:
+the split full-detail draw measured within noise of the old 16-byte
+interleaved record at 5M points.
 
 - **Smoke / volumetric density**
   - Backend: `SmokeRenderer` (`cellucid/assets/js/rendering/smoke-cloud/`)
@@ -124,7 +162,10 @@ The viewer exposes a small API surface used by `DataState` and `main.js`.
 ### Incremental updates (critical for performance)
 
 - `viewer.updateColors(colors)`
-  - Updates color buffer without reloading positions.
+  - Rewrites the 4-byte-per-point color stream in place on the next frame, plus
+    4 bytes per compact LOD point for each dimension that has LOD resources
+    when it next renders. Positions, the alpha texture and the LOD topology
+    are not touched.
 
 - `viewer.updateTransparency(alphaArray)`
   - Updates alpha/visibility texture/buffer.
@@ -133,6 +174,10 @@ The viewer exposes a small API surface used by `DataState` and `main.js`.
 - `viewer.updatePositions(positions)`
   - Used for dimension switching (same point count, different embedding).
   - Must preserve the same indices; mismatched lengths are rejected.
+  - It is a new data publication: both streams are re-allocated straight from
+    their arrays (12 + 4 bytes a point, nothing repacked), the alpha texture is
+    republished, and spatial indices are rebuilt when LOD or frustum culling
+    needs them. With LOD on, the spatial-index build dominates its cost.
 
 Design rule:
 - Prefer incremental updates (`updateColors`, `updateTransparency`, `updatePositions`) over full `setData` reloads.
@@ -373,6 +418,9 @@ textures bound the other transient memory.
 
 Filtering often only needs alpha changes.
 Do not rebuild/re-upload positions or full color buffers for filtering.
+For the same reason, do not merge the position and color streams back into one
+interleaved record: a recolor would then have to repack and re-upload the
+positions beside every color, four times the bytes it needs.
 
 Alpha itself is not re-uploaded wholesale either. Visibility lives in a texture
 whose width is the device’s maximum texture size, and `updateAlphas` compares
