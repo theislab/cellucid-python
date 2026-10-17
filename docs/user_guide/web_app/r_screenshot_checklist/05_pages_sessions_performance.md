@@ -478,9 +478,7 @@ under {doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_a
   needed.** Cellucid's "share a link" means *a link to the dataset* — a public
   URL or a GitHub `owner/repo/path` typed into `#github-repo-url` or the remote
   server field — **not** a shareable app URL that encodes state. There is no
-  session-in-URL feature: `restoreFromUrl()` exists in the serializer but is not
-  wired to any user-facing share control, and Save State is a plain file
-  download. Photographing the browser's URL bar would therefore illustrate
+  session-in-URL feature, and Save State is a plain file download. Photographing the browser's URL bar would therefore illustrate
   nothing on this page while risking a `localhost:PORT` or file path. Show the
   **in-app input fields** instead, which is where the link actually lives.
 - **needs** — Three images, each answering one of the page's three artifact

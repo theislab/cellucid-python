@@ -188,7 +188,7 @@ written into the manifest at save and re-derived from live state at restore:
 | `sourceType` | `dataSourceManager.getCurrentSourceType()` | `null` only when no data-source manager owns the loaded state |
 | `datasetId` | `dataSourceManager.getCurrentDatasetId()` | same nullability |
 | `cellCount` | `state.pointCount` | |
-| `varCount` | `state.varData.fields.length` | |
+| `varCount` | the dataset's own var fields in `state.varData.fields` | user-defined fields (for example a duplicated gene) are not counted, so a session that added one still matches the freshly loaded dataset |
 | `cellOrder.dimension` | `state.getViewDimensionLevel('live')` | exactly 1, 2, or 3 |
 | `cellOrder.digest` | `digestCellOrder(state.positionsArray)` | 16 lowercase hex characters |
 
