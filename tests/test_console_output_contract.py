@@ -77,3 +77,25 @@ def test_prepare_accepts_unicode_values_with_strict_cp1252_console(
     assert "\\u2192" in stdout
     assert "\\u2713" in stdout
     assert (target / "dataset_identity.json").is_file()
+
+
+def test_cli_help_usage_and_version_survive_strict_cp1252_console() -> None:
+    completed = _run_with_cp1252(
+        "from cellucid.cli import create_parser, main\n"
+        "codes = [main(['--help']), main(['serve', '--help']), main(['--version'])]\n"
+        "parser = create_parser()\n"
+        "serve = parser._subparsers._group_actions[0].choices['serve']\n"
+        "serve.description = '细胞 → 🧬'\n"
+        "try:\n"
+        "    parser.parse_args(['serve', '--help'])\n"
+        "except SystemExit as error:\n"
+        "    codes.append(error.code)\n"
+        "assert codes == [0, 0, 0, 0], codes\n"
+    )
+
+    stderr = completed.stderr.decode("cp1252")
+    assert completed.returncode == 0, stderr
+    assert "UnicodeEncodeError" not in stderr
+    stdout = completed.stdout.decode("cp1252")
+    assert "usage: cellucid serve" in stdout
+    assert "\\u7ec6\\u80de \\u2192 \\U0001f9ec" in stdout

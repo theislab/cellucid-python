@@ -22,7 +22,7 @@ Open:
 
 It includes:
 - six quick presets: 100K, 500K, 1M, 5M, 10M, 20M points,
-- a custom point count input accepting any whole number from 1 to 50,000,000,
+- a custom point count input accepting any whole number from 1 to 250,000,000,
 - eight synthetic **data patterns**,
 - a **Load Synthetic Data** button,
 - a metric grid that stays hidden until the first run finishes,
@@ -262,11 +262,18 @@ analysis no longer changes your shader quality as a side effect.
 - Synthetic benchmark data is not your real dataset. Reload the page to restore your original data.
 - Don’t start with 20M points on a laptop. Ramp up: 100K → 500K → 1M → 5M.
 - If you hit “WebGL context lost”, reduce point count and/or reduce GPU load (smaller window, no snapshots, no smoke).
-- The custom point count is capped at 50,000,000. That is a deliberate refusal,
-  not a hardware limit: the position and colour arrays for that many points
-  already run to hundreds of megabytes before anything reaches the GPU. A value
-  outside 1–50,000,000 is rejected with a **Point count out of range** notice
-  rather than attempted.
+- The custom point count is capped at 250,000,000, and that ceiling is the
+  hardware's rather than an arbitrary refusal. The renderer's interaction-state
+  texture addresses one point per texel, so the true limit is
+  `MAX_TEXTURE_SIZE²` — 268,435,456 on a context reporting the common 16,384 —
+  and 250,000,000 sits just inside it. A value outside 1–250,000,000 is rejected
+  with a **Point count out of range** notice rather than attempted.
+- What you will meet before that ceiling is memory. The position and colour
+  arrays alone are 16 bytes per point: 800 MB at 50,000,000 points and 4 GB at
+  250,000,000, before any per-point state or GPU copy. On a machine that cannot
+  allocate it the request fails as an allocation error, which is the honest
+  outcome — the limit that binds is your machine's memory, and the control does
+  not pretend to know what that is.
 - The controls in this panel start out disabled and become usable once the app
   has finished wiring them. If a preset looks greyed out for a moment during a
   slow start, that is the intended behaviour — see

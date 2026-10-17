@@ -6,7 +6,7 @@ import sys
 from typing import TextIO
 
 
-def _text_for_console_stream(text: str, stream: TextIO) -> str:
+def _text_for_console_stream(text: str, stream: object) -> str:
     """Return text that the stream can encode without changing stream policy."""
     encoding = getattr(stream, "encoding", None)
     if not encoding:

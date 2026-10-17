@@ -466,9 +466,9 @@ options:
                         large dataset is the longest part of startup
 
 Auto-detection:
-    - .h5ad files → served directly via AnnData
-    - .zarr directories → served directly via AnnData
-    - Export directories (or exports roots with multiple datasets) → served as pre-exported data
+    - .h5ad files -> served directly via AnnData
+    - .zarr directories -> served directly via AnnData
+    - Export directories (or exports roots with multiple datasets) -> served as pre-exported data
 
 Examples:
     # Serve an h5ad file (auto-detected)

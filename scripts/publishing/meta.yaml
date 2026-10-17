@@ -8,7 +8,7 @@ package:
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/cellucid-{{ version }}.tar.gz
-  sha256: c390218fa0346de9b058ad356725e3a82419ceef68f5501cbf41b37c534d764e
+  sha256: f7fdda22a297bdd74b7db0c3ff4b630951547cc53bdc9dd1c59c98a88d9cf4ea
 
 build:
   entry_points:

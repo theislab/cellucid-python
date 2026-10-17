@@ -37,6 +37,16 @@ Version 0.9.1 is the PyPI submission release.
 
 ### Changed
 
+- **Web app**: the synthetic benchmark generator's custom point-count ceiling is
+  raised from 50,000,000 to 250,000,000. The previous value was a declared product
+  limit chosen well below the hardware's; the new one is the hardware's, sitting
+  just inside the `MAX_TEXTURE_SIZE²` bound on the renderer's interaction-state
+  texture (268,435,456 on a context reporting 16,384). A request that the machine
+  cannot allocate now fails as an allocation error rather than being refused in
+  advance, because the limit that actually binds is the machine's memory — 16 bytes
+  per point, so 4 GB of source arrays at the new ceiling — and the control cannot
+  know what that is. The point-count input, both validators and the worker boundary
+  all read the one constant, so they cannot drift apart.
 - The neighbor graph and the vector-field overlay are read only when asked for:
   `serve_connectivity=True` / `--connectivity` and `serve_vector_fields=True` /
   `--vector-fields` on the direct-AnnData path. Each is otherwise never touched,
@@ -75,6 +85,12 @@ Version 0.9.1 is the PyPI submission release.
 
 ### Fixed
 
+- `cellucid serve --help` no longer fails with `UnicodeEncodeError` on a Windows console
+  using a single-byte code page such as CP1252. argparse wrote help, usage, version and
+  error text straight to the stream, bypassing the escaping every other console line
+  already gets; the CLI's parsers now route that text through the same writer, so any
+  character the console cannot show is printed as a backslash escape instead of
+  aborting the command. The `serve` help text itself is now plain ASCII.
 - A bind address is no longer printed as a URL. `--host 0.0.0.0` used to print
   `http://0.0.0.0:<port>` and try to open it; the banner now prints the loopback origin,
   which is what a browser on the serving machine and the near end of an SSH tunnel both

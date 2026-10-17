@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import errno
 import logging
 import platform
@@ -20,11 +21,14 @@ import socket
 import sys
 import traceback
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 # Import shared configuration from _server_base
-from ._console import console_print
+from ._console import _text_for_console_stream, console_print
 from ._server_base import CELLUCID_WEB_URL, DEFAULT_HOST, DEFAULT_PORT
+
+if TYPE_CHECKING:
+    from _typeshed import SupportsWrite
 
 ISSUE_TRACKER_URL = "https://github.com/theislab/cellucid-python/issues"
 
@@ -54,6 +58,24 @@ _OPERATOR_ERROR_TYPES: Final = (
     OSError,
     ImportError,
 )
+
+
+class _ConsoleArgumentParser(argparse.ArgumentParser):
+    """Argument parser whose help, usage, version, and errors are console-escaped.
+
+    argparse writes to the stream directly, so on a CP1252 Windows console any
+    character outside that code page -- in help text, or in a path echoed back
+    in an error -- raised ``UnicodeEncodeError`` before a command ran. This
+    applies the escaping ``console_print`` gives every other console line.
+    Subparsers inherit this class, so every parser in the tree is covered.
+    """
+
+    def _print_message(self, message: str, file: SupportsWrite[str] | None = None) -> None:
+        if message:
+            stream = sys.stderr if file is None else file
+            # argparse's own tolerance of a missing stream, e.g. under pythonw.
+            with contextlib.suppress(AttributeError, OSError):
+                stream.write(_text_for_console_stream(message, stream))
 
 
 def _create_common_server_parser() -> argparse.ArgumentParser:
@@ -191,9 +213,9 @@ def _add_serve_subparser(subparsers, common_parser: argparse.ArgumentParser) -> 
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Auto-detection:
-    - .h5ad files → served directly via AnnData
-    - .zarr directories → served directly via AnnData
-    - Export directories (or exports roots with multiple datasets) → served as pre-exported data
+    - .h5ad files -> served directly via AnnData
+    - .zarr directories -> served directly via AnnData
+    - Export directories (or exports roots with multiple datasets) -> served as pre-exported data
 
 Examples:
     # Serve an h5ad file (auto-detected)
@@ -602,7 +624,7 @@ def create_parser() -> argparse.ArgumentParser:
     # Import version here to avoid circular imports.
     from . import __version__
 
-    parser = argparse.ArgumentParser(
+    parser = _ConsoleArgumentParser(
         prog="cellucid",
         description="Cellucid - Interactive Single-Cell Data Visualization",
         formatter_class=argparse.RawDescriptionHelpFormatter,
