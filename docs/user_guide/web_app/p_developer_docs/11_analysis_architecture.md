@@ -215,8 +215,8 @@ these properties, and each one is pinned by a test:
   group specifications when a run starts, not once per gene.
 - **Rank tests tabulate values without a `Map`.** Wilcoxon (DE and markers),
   Spearman ranks and order statistics number distinct values through
-  `DistinctValueIndex` in `compute/math-utils.js` and fall back to a native
-  sort past 4,096 distinct values. Results are bit identical to the
+  `DistinctValueIndex` in `compute/math-utils.js` up to 4,096 distinct
+  values and sort natively above that. Results are bit identical to the
   sort-based definition (`tests/analysis-engine-rank-kernel-identity.test.mjs`,
   `tests/statistical-tests.test.mjs`).
 - **Page membership is recomputed only when the page changes.**
