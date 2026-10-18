@@ -154,6 +154,8 @@ Install the Python tools with `pip install cellucid`. For R installation and
 supported inputs, begin with the {doc}`R guide
 <user_guide/r_package/installation>`.
 
+If you use Cellucid in your work, see {doc}`citing` for how to cite it.
+
 ```{toctree}
 :maxdepth: 2
 :hidden:
@@ -164,4 +166,5 @@ Python <user_guide/python_package/index>
 R <user_guide/r_package/index>
 contributing
 changelog
+citing
 ```

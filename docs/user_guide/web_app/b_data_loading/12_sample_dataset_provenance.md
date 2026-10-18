@@ -133,7 +133,8 @@ artifact, but you cannot regenerate it from a recipe in the repository.
 
 - **Citing a sample.** Cite the upstream study, not Cellucid and not the
   dataset repository. Each `exports/<id>/dataset_identity.json` carries the
-  study name, its URL, and the citation text under `source`.
+  study name, its URL, and the citation text under `source`. To cite Cellucid
+  itself, see {doc}`/citing`.
 - **Confirming you hold the published generation.** Compare the directory you
   have against the recorded generation digest: `sources/pancreas.json` for
   `pancreas`, `sources/unpinned-generations.json` for the other four. Both

@@ -12,6 +12,13 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Added
 
+- **Citation**: a placeholder citation for the forthcoming Cellucid bioRxiv
+  preprint, the same in every repository. It is written once, as the
+  `preferred-citation` of `theislab/cellucid`'s `CITATION.cff`, and copied from
+  there to this repository's `CITATION.cff`, the README, and the new
+  [Citing Cellucid](https://cellucid.readthedocs.io/en/latest/citing.html) page;
+  the test suite fails if a copy drifts. Until the preprint has a DOI, every copy
+  says it is a placeholder.
 - **Web app**: cells can be highlighted on a touch screen. Every selection tool
   started only from an `Alt` press, which a phone or tablet does not have, so touch
   users could not select at all. A **Select mode** switch in the Highlighting panel
