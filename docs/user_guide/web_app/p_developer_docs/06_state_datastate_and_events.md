@@ -88,6 +88,22 @@ JavaScript memory against 228 MB now, and kept a permanent 76 MB duplicate.
 So never mutate an inactive context's arrays in place through the state, and
 never let two contexts hold the same array.
 
+### Field switch cost
+
+Switching the colored field recolors every cell on the main thread, so its
+per-cell loops are kept to table reads. Category colors come from one RGBA word
+per category (`_writeCategoryColors`, shared by coloring and the color refresh
+after a filter edit); continuous colors sample the colormap without allocating.
+The value scans that only depend on a field's data are proved once per array:
+a continuous field's range and non-finite check (`scanContinuousValues`), and a
+categorical field's code-range check (`requireCategoryCodesInInventory`).
+Category counts resolve the active filters once per count instead of once per
+cell. Field arrays are never written in place once published — a changed
+field gets a new array — which is what makes those per-array proofs valid.
+At 5,000,000 cells (Chromium, Apple M1 Pro) a cached switch to a continuous
+field blocked the main thread for about 480 ms and now for about 140 ms; to a
+categorical field, about 400 ms and now about 180 ms.
+
 ### Highlights (multi-page highlight system)
 
 Highlights are modeled as:
