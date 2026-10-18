@@ -455,6 +455,16 @@ Each entry is either:
   `minValue <= maxValue`; see
   [How a quantized continuous payload decodes](python_package-quantized-continuous-payloads)
 
+A continuous field holds `float32` whatever the source column's type. An integer
+column converts like any other number: values up to 16,777,216 (2^24) stay
+exact, and a larger integer becomes its nearest `float32`, so 16,777,217 reads
+as 16,777,216. Both writers do this, and the web app's direct `.h5ad` and Zarr
+readers do the same for observation columns, embeddings and expression values,
+so one file shows the same numbers on every path. Only values outside the finite
+`float32` range are refused. An identifier column whose exact values matter
+(barcodes stored as integers, genomic positions) belongs in a string column,
+which exports as a categorical field.
+
 #### `_categoricalFields`
 
 Each entry is either:

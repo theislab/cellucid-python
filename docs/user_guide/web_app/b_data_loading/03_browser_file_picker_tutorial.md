@@ -173,7 +173,10 @@ plain key never joins the set. This is the same rule the Python package applies,
 so one file opens the same way in this picker and through `cellucid serve`.
 
 Optional (but highly recommended):
-- `obs` columns for coloring and filtering
+- `obs` columns for coloring and filtering (numeric columns are read as
+  32-bit floats, exactly as `cellucid.prepare` exports them: an integer above
+  16,777,216 becomes its nearest 32-bit value, so keep identifier columns as
+  strings if their exact values matter)
 - expression matrix `X` (dense or sparse) for gene coloring
 - `obsp['connectivities']` if you want connectivity visualization
 
