@@ -52,6 +52,8 @@
 // Use `openSection` / `closeSection` rather than clicking a summary, so a
 // scenario is idempotent.
 
+import { OVERLAY_ROOT_ID, paintOverlay } from './overlay.mjs';
+
 // The point count is published before startup has finished: the sample's
 // published default session (`startup.step('session', …)` in the web app's
 // `main.js`) is applied *after* it, and that restore sets the navigation mode,
@@ -376,6 +378,12 @@ export const SCENARIOS = Object.freeze([
   // reason as the blocks above, and because these are the only scenarios that
   // hand the application a file from disk rather than driving its controls.
   ...buildDataLoadingRefusalScenarios(),
+
+  // f_highlighting_selection. Separate builder for the same reason as the
+  // blocks above: every figure there is one stage of the same few real
+  // gestures on the same 2D view, so they share one prelude and one set of
+  // fixed gesture coordinates that nothing else in this file uses.
+  ...buildHighlightingScenarios(),
 ]);
 
 // ---------------------------------------------------------------------------
@@ -1865,22 +1873,22 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'sessions_sharing',
       name: 'save-restore-04-restore-confirmation',
       describes:
-        'A stack of three notifications after a completed restore: at the '
-        + 'bottom a download entry titled "Loaded" reading "Session fully '
-        + 'restored.", above it a second "Session fully restored." entry, and '
-        + 'at the top "Session loaded successfully".',
+        'The one notification a completed restore publishes: the restore\'s '
+        + 'progress entry, now titled "Loaded" and reading "Session fully '
+        + 'restored.".',
       dataset: 'pancreas',
       steps: [
         READY,
         // No RENDERER_CHANGES here, unlike the scenarios either side. A
         // restored state with LOD on raises "LOD node mappings ready (N ms)"
         // as well, and that notification races the restore's own: across
-        // three otherwise identical runs it landed above or below "Session
-        // loaded successfully", so the stack — and the bytes — changed from
-        // run to run, and its N is a timing of the capture host besides.
+        // three otherwise identical runs it landed above or below the
+        // restore's entry, so the stack — and the bytes — changed from run to
+        // run, and its N is a timing of the capture host besides.
+        // `saveThenRestore` already waits for "Session fully restored.", the
+        // only notification a completed restore publishes.
         { openSection: '#session-section' },
         saveThenRestore({ holdNotifications: true }),
-        { waitForText: '#notification-center', text: 'Session loaded successfully' },
         // Under 1000 ms on purpose: `holdNotificationTimers` defers every
         // in-page timer of a second or more, this step's own included.
         { waitForStable: '#notification-center', forMs: 700 },
@@ -2728,6 +2736,585 @@ function buildDataLoadingRefusalScenarios() {
       ],
       shot: { mode: 'element', selector: '#notification-center', padding: 10 },
       settle: REFUSAL_SETTLE,
+    },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Highlighting and selection: f_highlighting_selection.
+//
+// Every figure is a real gesture on the Pancreas sample, made the way the
+// pages tell a reader to make it: a tool button, then `Alt` held while the
+// mouse presses, drags and releases over the plot. The 2D embedding is used
+// because a flat projection makes the geometry of a gesture legible, and the
+// gestures are fixed CSS coordinates in the fixed 1440x1000 viewport over that
+// fixed view. A coordinate is only as good as the camera it was measured
+// against, so every gesture that completes asserts the step readout the panel
+// writes for it (`Step 1: 842 cells`, `Step 1: 591 cells`, …) and every
+// gesture that is photographed mid-drag asserts the drag class the renderer
+// puts on the canvas. A moved default camera therefore fails the capture
+// instead of photographing a different selection under an unchanged caption.
+// ---------------------------------------------------------------------------
+
+/**
+ * The one lasso every lasso figure draws, as viewport CSS points: an ellipse
+ * of 36 segments around the upper part of the left lobe of the 2D embedding
+ * (mostly Ductal cells), starting at its lower-left and running clockwise.
+ * The whole loop encloses 842 cells.
+ *
+ * @param {number} fraction how much of the loop has been drawn, 0..1
+ * @returns {Array<{x: number, y: number}>}
+ */
+function highlightLassoPath(fraction) {
+  const centerX = 440;
+  const centerY = 390;
+  const radiusX = 120;
+  const radiusY = 165;
+  const segments = 36;
+  const start = 0.75 * Math.PI;
+  const points = [];
+  for (let index = 0; index <= Math.round(segments * fraction); index += 1) {
+    const angle = start + (2 * Math.PI * index) / segments;
+    points.push({
+      x: Math.round(centerX + radiusX * Math.cos(angle)),
+      y: Math.round(centerY + radiusY * Math.sin(angle)),
+    });
+  }
+  return points;
+}
+
+/**
+ * A straight drag as twelve evenly spaced pointer positions.
+ *
+ * @param {{x: number, y: number}} from
+ * @param {{x: number, y: number}} to
+ */
+function highlightDragPath(from, to) {
+  const points = [];
+  for (let index = 0; index <= 12; index += 1) {
+    points.push({
+      x: Math.round(from.x + ((to.x - from.x) * index) / 12),
+      y: Math.round(from.y + ((to.y - from.y) * index) / 12),
+    });
+  }
+  return points;
+}
+
+/**
+ * Hold `Alt`, press at the first point and move through the rest — the
+ * gesture every highlight tool reads. `release: false` leaves the button and
+ * `Alt` held, which is how a figure shows a gesture in progress: the preview
+ * the renderer paints while dragging exists only while the button is down.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {Array<{x: number, y: number}>} path
+ * @param {{release: boolean}} options
+ */
+async function altGesture(page, path, { release }) {
+  const [first, ...rest] = path;
+  await page.mouse.move(first.x, first.y);
+  await page.keyboard.down('Alt');
+  await page.mouse.down();
+  for (const point of rest) {
+    await page.mouse.move(point.x, point.y, { steps: 3 });
+  }
+  if (release) {
+    await page.mouse.up();
+    await page.keyboard.up('Alt');
+  }
+}
+
+/**
+ * Draw the pointer glyph where a canvas gesture is, plus any rings.
+ *
+ * `capture.mjs`'s own `cursor` field anchors to an element and, for `press`,
+ * issues a real `mouse.down()`. A gesture on the canvas is neither: its point
+ * is a coordinate in the plot, and the button is either already held (a
+ * second press would restart the gesture) or already released (a fresh
+ * press would start a new one). So the glyph is painted here, with the same
+ * overlay code, at the coordinate the gesture actually used, and the real
+ * pointer is left exactly where the gesture left it.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {{x: number, y: number}} point
+ * @param {Array<{on: string, label?: string}>} [rings]
+ */
+async function paintGesturePointer(page, point, rings = []) {
+  const ringRects = [];
+  for (const ring of rings) {
+    const box = await page.locator(ring.on).first().boundingBox();
+    if (box === null || box.width <= 0 || box.height <= 0) {
+      throw new Error(`Ring selector has no painted area: ${ring.on}`);
+    }
+    ringRects.push({ ...box, label: ring.label ?? null });
+  }
+  await page.evaluate(paintOverlay, {
+    rootId: OVERLAY_ROOT_ID,
+    cursor: { x: point.x, y: point.y, state: 'press' },
+    rings: ringRects,
+  });
+}
+
+/**
+ * Pin the highlight glow, the one animation a highlight figure cannot settle.
+ *
+ * Highlighted and preview cells are drawn with a glow that pulses on the
+ * shader uniform `u_time` (`0.5 + 0.5 * sin(u_time * 4.0)` in the web app's
+ * `high-perf-shaders.js`), fed from `performance.now()` minus the moment the
+ * highlight renderer was built. No two frames agree, so the settle loop never
+ * converges, and a frame-pinned capture is no better: the phase depends on
+ * how long startup took on the capture host. So the uniform, and only that
+ * uniform, is held at zero — the midpoint of the pulse. It is the same kind of
+ * intervention as the seeded `Math.random`: the clock the app reads for
+ * everything else, its timers, and every other uniform are untouched.
+ *
+ * @param {{context: import('@playwright/test').BrowserContext}} options
+ */
+function pinHighlightGlow({ context }) {
+  return context.addInitScript(pinShaderTimeInPage);
+}
+
+/** The page-side half of `pinHighlightGlow`; serialised, closes over nothing. */
+function pinShaderTimeInPage() {
+  const timeLocations = new WeakSet();
+  for (const Context of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) {
+    if (Context === undefined) continue;
+    const getUniformLocation = Context.prototype.getUniformLocation;
+    const uniform1f = Context.prototype.uniform1f;
+    Context.prototype.getUniformLocation = function (program, name) {
+      const location = getUniformLocation.call(this, program, name);
+      if (name === 'u_time' && location !== null) timeLocations.add(location);
+      return location;
+    };
+    Context.prototype.uniform1f = function (location, value) {
+      return uniform1f.call(this, location, timeLocations.has(location) ? 0 : value);
+    };
+  }
+}
+
+/** @returns {Array<Object>} */
+function buildHighlightingScenarios() {
+  // Open on first load and not the subject; collapsed so the panel fits.
+  // Declared here, not beside the helpers: `SCENARIOS` calls this builder
+  // while the module is still initialising, before a later top-level
+  // `const` exists.
+  const NON_HIGHLIGHT_SECTIONS = [
+    '#session-section',
+    '#visualization-section',
+    '#compare-views-section',
+    '#coloring-filtering-section',
+    '#page-analysis-section',
+  ];
+  const PANEL = { mode: 'element', selector: '#highlighted-cells-section', padding: 6 };
+  const WINDOW = { mode: 'window' };
+  const settle = { attempts: 20, gapMs: 220 };
+  const readout = text => ({ waitForText: '#highlight-mode-description', text });
+
+  const LASSO_END = highlightLassoPath(0.8).at(-1);
+  const BETA_CELL = { x: 1040, y: 225 };
+  const EMPTY_SPACE = { x: 860, y: 250 };
+  const SEED = { x: 440, y: 420 };
+  // Proximity drags outward and KNN drags up, by the same 112 px, from the
+  // same seed cell, so the two figures compare like with like.
+  const PROXIMITY_END = { x: 540, y: 470 };
+  const KNN_END = { x: 440, y: 308 };
+
+  /**
+   * Pancreas, flat 2D view in Planar navigation, the given colouring, and
+   * every other open section collapsed so Highlighting sits whole in the
+   * window. The 2D switch announces itself; waiting for that notice and then
+   * for the notification center to drain is what makes the view final before
+   * the first coordinate is used.
+   */
+  const ready2d = field => [
+    PANCREAS_READY,
+    { waitForStable: '#categorical-field' },
+    { select: '#categorical-field', label: field },
+    {
+      waitForText: '#stats',
+      text: field === 'None' ? 'Field: None' : `Field: ${field} (category)`,
+    },
+    { select: '#dimension-select', value: '2' },
+    { waitForText: '#notification-center', text: 'Switched to 2D embedding' },
+    ...NON_HIGHLIGHT_SECTIONS.map(selector => ({ closeSection: selector })),
+    NOTIFICATIONS_DRAINED,
+  ];
+  const READY = ready2d('cell_type');
+
+  const LASSO_RELEASED = [
+    ...READY,
+    { click: '#highlight-mode-lasso' },
+    { run: page => altGesture(page, highlightLassoPath(1), { release: true }) },
+    readout('Step 1: 842 cells'),
+  ];
+  const LASSO_CONFIRMED = [
+    ...LASSO_RELEASED,
+    { click: '#lasso-confirm-btn' },
+    { waitForText: '#highlight-count', text: '842 cells highlighted' },
+    // Off the panel, so no control keeps the hover styling of the click.
+    { run: page => page.mouse.move(1300, 940) },
+  ];
+  const ANNOTATION_CLICKED = [
+    ...READY,
+    { run: page => altGesture(page, [BETA_CELL], { release: true }) },
+    readout('Step 1: 591 cells'),
+  ];
+
+  return [
+    {
+      id: 'highlighting-choose-mode',
+      topic: 'highlighting_selection',
+      name: 'choose-highlight-mode',
+      describes:
+        'The Highlighting panel before anything is selected: the four Highlight '
+        + 'mode buttons — Annotation based (active), KNN drag, Proximity drag and '
+        + 'Lasso — ringed, with the pointer on Lasso; below a dashed divider the '
+        + 'Select mode switch, off, with the hint "tap, click or drag selects '
+        + 'without Alt"; the Annotation based help text; one page tab reading '
+        + 'Page 1 (0); and the empty group list reading "No cells highlighted".',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [...READY, { scrollIntoView: '#highlighted-cells-section' }],
+      shot: PANEL,
+      cursor: { on: '#highlight-mode-lasso', at: 'center', state: 'hover' },
+      rings: [{ on: '#highlight-mode', label: '1' }],
+      settle,
+    },
+    {
+      id: 'highlighting-lasso-draw',
+      topic: 'highlighting_selection',
+      name: '01-draw-lasso',
+      describes:
+        'The 2D planar Pancreas embedding mid-lasso: Alt is held, the pointer '
+        + 'is pressed at the end of a dotted path drawn most of the way round the '
+        + 'upper part of the left lobe, and the cells the path already encloses '
+        + 'are drawn in the highlight colour while the step readout has not yet '
+        + 'appeared.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...READY,
+        { click: '#highlight-mode-lasso' },
+        { run: page => altGesture(page, highlightLassoPath(0.8), { release: false }) },
+        { waitFor: '#glcanvas.lassoing' },
+        { run: page => paintGesturePointer(page, LASSO_END) },
+      ],
+      shot: WINDOW,
+      settle,
+    },
+    {
+      id: 'highlighting-lasso-step',
+      topic: 'highlighting_selection',
+      name: '02-review-lasso-step',
+      describes:
+        'The Highlighting panel after the lasso was released, showing the step '
+        + 'readout "Step 1: 842 cells" with the help line "Alt to intersect, '
+        + 'Shift+Alt to add, Ctrl+Alt to subtract", and the ringed Confirm, undo, '
+        + 'redo and Cancel step controls with the pointer on Confirm; the page '
+        + 'tab still reads Page 1 (0) and the list still reads "No cells '
+        + 'highlighted".',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [...LASSO_RELEASED, { scrollIntoView: '#highlighted-cells-section' }],
+      shot: PANEL,
+      cursor: { on: '#lasso-confirm-btn', at: 'center', state: 'hover' },
+      rings: [{ on: '#lasso-step-controls', label: '2' }],
+      settle,
+    },
+    {
+      id: 'highlighting-lasso-confirmed',
+      topic: 'highlighting_selection',
+      name: '03-confirm-lasso-group',
+      describes:
+        'The Highlighting panel after Confirm: the page tab reads Page 1 842, '
+        + 'and the ringed group list shows the summary "842 cells highlighted", a '
+        + 'Clear button, and one group row labelled "Lasso (842 cells) (842)" '
+        + 'with a checkbox and a remove control.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [...LASSO_CONFIRMED, { scrollIntoView: '#highlighted-cells-section' }],
+      shot: PANEL,
+      rings: [{ on: '#highlighted-groups', label: '3' }],
+      settle,
+    },
+    {
+      id: 'highlighting-lasso-result-window',
+      topic: 'highlighting_selection',
+      name: '04-view-highlighted-cells',
+      describes:
+        'The whole window after confirming the lasso group: the 842 enclosed '
+        + 'cells in the upper part of the left lobe are drawn in the highlight '
+        + 'colour, and the Highlighting panel reports 842 cells highlighted with '
+        + 'one Lasso group.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: LASSO_CONFIRMED,
+      shot: WINDOW,
+      settle,
+    },
+    {
+      id: 'highlighting-annotation-click',
+      topic: 'highlighting_selection',
+      name: 'select-category-by-click',
+      describes:
+        'Annotation based selection after Alt+click on one cell at the tip of '
+        + 'the green Beta arm: all 591 Beta cells are drawn in the highlight '
+        + 'colour, and the panel reads "Step 1: 591 cells" with the help line '
+        + '"Alt to replace, Shift+Alt to add, Ctrl+Alt to subtract" above the '
+        + 'Confirm, undo, redo and Cancel controls.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...ANNOTATION_CLICKED,
+        { run: page => paintGesturePointer(page, BETA_CELL) },
+      ],
+      shot: WINDOW,
+      settle,
+    },
+    {
+      id: 'highlighting-proximity-drag',
+      topic: 'highlighting_selection',
+      name: 'drag-proximity-radius',
+      describes:
+        'Proximity drag mid-gesture on the 2D embedding: a dashed circle '
+        + 'centred on a dot at the seed cell in the left lobe, the cells inside '
+        + 'it drawn in the highlight colour, the pointer pressed on the circle\'s '
+        + 'edge, and the panel still showing the Proximity drag help text.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...READY,
+        { click: '#highlight-mode-proximity' },
+        {
+          run: page => altGesture(
+            page, highlightDragPath(SEED, PROXIMITY_END), { release: false }
+          ),
+        },
+        { waitFor: '#glcanvas.proximity-dragging' },
+        { run: page => paintGesturePointer(page, PROXIMITY_END) },
+      ],
+      shot: WINDOW,
+      settle,
+    },
+    {
+      id: 'highlighting-knn-drag',
+      topic: 'highlighting_selection',
+      name: 'drag-knn-degree',
+      describes:
+        'KNN drag mid-gesture from the same seed cell, dragged upward by the '
+        + 'same distance: a small dashed circle labelled 3° around the seed, and '
+        + 'the highlighted cells spreading through the left lobe along the '
+        + 'neighbour graph rather than filling a disc, with the pointer pressed '
+        + 'above the seed.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...READY,
+        { click: '#highlight-mode-knn' },
+        // Entering KNN mode loads the neighbour graph if it is not loaded yet,
+        // under a "Loading neighbor graph" notification, and a press made
+        // before it lands only starts that load. Draining the notification
+        // center waits for the load (and its completion notice) to finish.
+        NOTIFICATIONS_DRAINED,
+        {
+          run: page => altGesture(
+            page, highlightDragPath(SEED, KNN_END), { release: false }
+          ),
+        },
+        { waitFor: '#glcanvas.knn-dragging' },
+        { run: page => paintGesturePointer(page, KNN_END) },
+      ],
+      shot: WINDOW,
+      settle,
+    },
+    {
+      id: 'highlighting-two-pages',
+      topic: 'highlighting_selection',
+      name: 'compare-highlight-pages',
+      describes:
+        'The Highlighting panel with two page tabs ringed — Page 1 with a blue '
+        + 'swatch carrying 842, and the active Page 2 with a red swatch carrying '
+        + '223, each with a combine (⋈) and a delete (×) control — the group list '
+        + 'showing one "Proximity (223 cells) (223)" group, and the pointer on '
+        + 'the button that adds another page.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...LASSO_CONFIRMED,
+        { click: '#add-highlight-page' },
+        { waitForText: '#highlight-pages-tabs', text: 'Page 2' },
+        { click: '#highlight-mode-proximity' },
+        {
+          run: page => altGesture(
+            page,
+            highlightDragPath({ x: 1180, y: 640 }, { x: 1230, y: 670 }),
+            { release: true }
+          ),
+        },
+        readout('Step 1: 223 cells'),
+        { click: '#proximity-confirm-btn' },
+        { waitForText: '#highlight-count', text: '223 cells highlighted' },
+        { scrollIntoView: '#highlighted-cells-section' },
+      ],
+      shot: PANEL,
+      cursor: { on: '#add-highlight-page', at: 'center', state: 'hover' },
+      rings: [{ on: '#highlight-pages-tabs', label: '1' }],
+      settle,
+    },
+    {
+      id: 'highlighting-across-views',
+      topic: 'highlighting_selection',
+      name: 'share-highlight-across-views',
+      describes:
+        'Two 3D panels of the same dataset side by side with the sidebar '
+        + 'collapsed: the left panel at the default close-up camera, the right '
+        + 'panel zoomed out and rotated; the cells confirmed by one lasso drawn '
+        + 'in the left panel are drawn in the highlight colour in both.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        PANCREAS_READY,
+        { waitForStable: '#categorical-field' },
+        { select: '#categorical-field', label: 'cell_type' },
+        { waitForText: '#stats', text: 'Field: cell_type (category)' },
+        { click: '#split-keep-view-btn' },
+        {
+          run: page => page.waitForFunction(() => (
+            document.querySelectorAll('#split-view-badges-list > .split-badge').length === 2
+          )),
+        },
+        // Kept views start with linked cameras; unlinking is what lets the
+        // second panel look from another angle.
+        { click: '#camera-lock-btn' },
+        { waitForText: '#camera-lock-btn', text: 'Unlocked Cam' },
+        { click: '#highlight-mode-lasso' },
+        { click: '#sidebar-toggle' },
+        { waitForText: '#sidebar-toggle', text: '☰' },
+        NOTIFICATIONS_DRAINED,
+        {
+          // Zoom out and orbit the focused right panel only. The pointer
+          // rests before release so no drag velocity is carried past it.
+          run: async page => {
+            await page.mouse.move(1080, 500);
+            for (let notch = 0; notch < 5; notch += 1) {
+              await page.mouse.wheel(0, 300);
+              await page.waitForTimeout(80);
+            }
+            await page.mouse.down();
+            await page.mouse.move(1260, 420, { steps: 15 });
+            await page.waitForTimeout(300);
+            await page.mouse.up();
+          },
+        },
+        // One lasso, in the left panel, around the Ductal flap.
+        {
+          run: page => altGesture(page, [
+            { x: 50, y: 370 }, { x: 200, y: 300 }, { x: 330, y: 285 },
+            { x: 425, y: 330 }, { x: 420, y: 420 }, { x: 300, y: 475 },
+            { x: 180, y: 515 }, { x: 60, y: 430 }, { x: 50, y: 370 },
+          ], { release: true }),
+        },
+        readout('Step 1: 1,204 cells'),
+        { click: '#sidebar-toggle' },
+        { waitForText: '#sidebar-toggle', text: '✕' },
+        { click: '#lasso-confirm-btn' },
+        { waitForText: '#highlight-count', text: '1,204 cells highlighted' },
+        { click: '#sidebar-toggle' },
+        { waitForText: '#sidebar-toggle', text: '☰' },
+        { run: page => page.mouse.move(720, 990) },
+        NOTIFICATIONS_DRAINED,
+      ],
+      shot: WINDOW,
+      settle,
+    },
+    {
+      id: 'highlighting-missed-click-notice',
+      topic: 'highlighting_selection',
+      name: 'read-missed-click-notice',
+      describes:
+        'A proximity Alt+click on empty space: the pointer is pressed above the '
+        + 'embedding where no cell is drawn, and the ringed line in the '
+        + 'Highlighting panel adds "That click did not land on a cell, so there '
+        + 'is nothing to select. Zoom in to make cells easier to hit: only the '
+        + 'cells the viewer is currently drawing can be clicked." under the '
+        + 'Proximity drag help text.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...READY,
+        { click: '#highlight-mode-proximity' },
+        { run: page => altGesture(page, [EMPTY_SPACE], { release: true }) },
+        readout('That click did not land on a cell'),
+        {
+          run: page => paintGesturePointer(page, EMPTY_SPACE, [
+            { on: '#highlight-mode-description', label: '1' },
+          ]),
+        },
+      ],
+      shot: WINDOW,
+      settle,
+    },
+    {
+      id: 'highlighting-no-active-field-notice',
+      topic: 'highlighting_selection',
+      name: 'read-no-active-field-notice',
+      describes:
+        'The Highlighting panel in Annotation based mode with no coloured '
+        + 'field, with the ringed line "Annotation selection needs an active '
+        + 'field. Choose a Categorical obs or Continuous obs field under Coloring '
+        + '& Filtering, then Alt+click a cell (or tap it in Select mode)." in '
+        + 'place of the usual help text.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...ready2d('None'),
+        readout('Annotation selection needs an active field'),
+        { scrollIntoView: '#highlighted-cells-section' },
+      ],
+      shot: PANEL,
+      rings: [{ on: '#highlight-mode-description', label: '1' }],
+      settle,
+    },
+    {
+      id: 'highlighting-annotation-step',
+      topic: 'highlighting_selection',
+      name: 'read-annotation-step',
+      describes:
+        'The Highlighting panel after an annotation Alt+click on a Beta cell, '
+        + 'with the ringed step readout "Step 1: 591 cells" and the categorical '
+        + 'help line "Alt to replace, Shift+Alt to add, Ctrl+Alt to subtract".',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [...ANNOTATION_CLICKED, { scrollIntoView: '#highlighted-cells-section' }],
+      shot: PANEL,
+      rings: [{ on: '#highlight-mode-description', label: '1' }],
+      settle,
+    },
+    {
+      id: 'highlighting-named-page',
+      topic: 'highlighting_selection',
+      name: 'highlighting-selected-page',
+      describes:
+        'The Highlighting panel with one page renamed "Left lobe" carrying 842 '
+        + 'cells, the summary "842 cells highlighted", and one group row labelled '
+        + '"Lasso (842 cells) (842)".',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...LASSO_CONFIRMED,
+        // Rename by double-clicking the tab name, as the UI page documents.
+        { run: page => page.dblclick('.highlight-page-tab-name') },
+        { fill: '.highlight-page-tab-input', value: 'Left lobe' },
+        { press: 'Enter' },
+        { waitForText: '#highlight-pages-tabs', text: 'Left lobe' },
+        // Enter returns focus to the tab; a click on the summary line moves
+        // it off, so the tab is drawn without a keyboard focus ring.
+        { click: '#highlight-count' },
+        { run: page => page.mouse.move(1300, 940) },
+        { scrollIntoView: '#highlighted-cells-section' },
+      ],
+      shot: PANEL,
+      settle,
     },
   ];
 }

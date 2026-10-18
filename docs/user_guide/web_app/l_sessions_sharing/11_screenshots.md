@@ -46,7 +46,7 @@ The one confirmation a save produces.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-04-restore-confirmation.png
 :alt: The one notification a completed restore publishes: the restore's progress entry, now titled "Loaded" and reading "Session fully restored.".
-:width: 538px
+:width: 520px
 
 A completed restore reports **Session fully restored.** once, on its own
 progress entry. Nothing else announces it.

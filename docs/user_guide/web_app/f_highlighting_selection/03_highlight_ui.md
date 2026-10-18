@@ -151,7 +151,7 @@ On drop, the UI offers:
 This creates a new page whose name reflects the operation (e.g. `Page A ∩ Page B`).
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/compare-highlight-pages.png
-:alt: The Highlighting panel with two page tabs, a blue Page 1 carrying 870 and an active red Page 2 carrying 250, the group list showing one Proximity group, and the pointer on the button that adds another page.
+:alt: The Highlighting panel with two page tabs ringed — Page 1 with a blue swatch carrying 842, and the active Page 2 with a red swatch carrying 223, each with a combine (⋈) and a delete (×) control — the group list showing one "Proximity (223 cells) (223)" group, and the pointer on the button that adds another page.
 :width: 516px
 
 Two pages. Each tab carries a colour swatch, the page name, and that page's

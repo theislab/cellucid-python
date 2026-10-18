@@ -74,7 +74,7 @@ save time, so repeated saves never overwrite each other.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-04-restore-confirmation.png
 :alt: The one notification a completed restore publishes: the restore's progress entry, now titled "Loaded" and reading "Session fully restored.".
-:width: 538px
+:width: 520px
 
 A successful restore reports once. **Session fully restored.** is the
 restore's own progress entry completing: every chunk applied and every owner

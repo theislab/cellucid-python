@@ -1083,7 +1083,7 @@ def test_every_documented_screenshot_uses_its_intrinsic_responsive_width() -> No
 #
 # **This number may only go down.** It is a ratchet: it stops the backlog growing
 # while it is worked off, and reaching 0 is what closes the gap.
-UNPROVENANCED_SCREENSHOT_BUDGET = 79
+UNPROVENANCED_SCREENSHOT_BUDGET = 65
 
 # Records whose ``sha256`` does not describe the file they name, so the published
 # bytes have no provenance even though a record exists. Recapturing the scenario

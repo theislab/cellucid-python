@@ -60,7 +60,7 @@ Set both **Categorical obs** and **Continuous obs** to `None` and the tool has
 nothing to work from. It says so rather than failing silently:
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/read-no-active-field-notice.png
-:alt: The Highlighting panel in Annotation based mode with no coloured field, showing the line that annotation selection needs an active field chosen under Coloring and Filtering.
+:alt: The Highlighting panel in Annotation based mode with no coloured field, with the ringed line "Annotation selection needs an active field. Choose a Categorical obs or Continuous obs field under Coloring & Filtering, then Alt+click a cell (or tap it in Select mode)." in place of the usual help text.
 :width: 516px
 
 With no coloured field the usual `Alt+click` invitation is replaced by an
@@ -198,7 +198,8 @@ This approximates a 3D volume by combining multiple 2D “cuts”.
 ## KNN selection when the neighbor graph is missing
 
 **What you see**
-- KNN drag mode shows a message like “Neighbor graph not available”, or KNN selection does nothing.
+- Choosing KNN drag raises the notification “No neighbor graph available for this dataset”, and KNN selection does nothing.
+- Or, with a graph that has not finished loading: the first `Alt+click` only starts the load (“Loading neighbor graph for KNN mode”) and selects nothing.
 
 **Why**
 - KNN selection requires a connectivity graph.

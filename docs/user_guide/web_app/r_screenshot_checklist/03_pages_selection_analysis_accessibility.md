@@ -201,13 +201,6 @@ contains no picture of any control.
   explicit `.highlight-page-tab-combine` button on every tab. The button is the
   discoverable and keyboard-reachable path and is undocumented.
 
-**RECAPTURE** — every `highlighting_selection/*.png` that frames the Highlight mode
-block (`choose-highlight-mode.png` is one) predates the **Select mode** switch below
-its divider and the **Combine** control (Intersect / Add / Subtract) that the switch
-reveals. None of the `highlighting_selection/` images has a `capture.mjs` scenario,
-so none can be regenerated; each needs a scenario, then an `:alt:` that names the
-Select mode switch wherever it is in frame.
-
 ---
 
 ## {doc}`/user_guide/web_app/f_highlighting_selection/04_selection_synchronization`

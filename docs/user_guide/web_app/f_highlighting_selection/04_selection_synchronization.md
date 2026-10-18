@@ -61,7 +61,7 @@ People typically expect:
 - Are still subject to visibility: each panel will only show highlights for cells that are visible in that panel (filters apply per view).
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/share-highlight-across-views.png
-:alt: Two 3D panels of the same dataset at different camera angles with the sidebar collapsed; the cells confirmed by one lasso are drawn in the highlight colour in both panels.
+:alt: Two 3D panels of the same dataset side by side with the sidebar collapsed: the left panel at the default close-up camera, the right panel zoomed out and rotated; the cells confirmed by one lasso drawn in the left panel are drawn in the highlight colour in both.
 :width: 1440px
 
 One lasso, drawn once in one panel, shown in two. The panels are looking at the

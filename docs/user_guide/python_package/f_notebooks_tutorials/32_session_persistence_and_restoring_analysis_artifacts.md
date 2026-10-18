@@ -245,8 +245,8 @@ not act on it.
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/highlighting-selected-page.png
-:alt: Highlighting panel showing a named page with highlighted cells.
-:width: 246px
+:alt: The Highlighting panel with one page renamed "Left lobe" carrying 842 cells, the summary "842 cells highlighted", and one group row labelled "Lasso (842 cells) (842)".
+:width: 516px
 
 Highlighted cells are stored on a named page that can be used by analysis and session workflows.
 ```

@@ -66,11 +66,11 @@ Two rules hold for every message in the table below:
 | “Annotation selection needs an active field. Choose a Categorical obs or Continuous obs field under Coloring & Filtering, then Alt+click a cell (or tap it in Select mode).” | Annotation based is selected but no field is coloured, so the viewer never starts the gesture at all. | Choose a categorical or continuous field first. |
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/read-missed-click-notice.png
-:alt: A proximity Alt+click on empty space, with the pointer pressed where no cell is drawn and the Highlighting panel showing the notice that the click did not land on a cell and that only the cells the viewer is currently drawing can be clicked.
+:alt: A proximity Alt+click on empty space: the pointer is pressed above the embedding where no cell is drawn, and the ringed line in the Highlighting panel adds "That click did not land on a cell, so there is nothing to select. Zoom in to make cells easier to hit: only the cells the viewer is currently drawing can be clicked." under the Proximity drag help text.
 :width: 1440px
 
-Where to look. The pointer was pressed in empty space on the right; the
-explanation appears on the left, under the **Highlight mode** buttons. It is
+Where to look. The pointer was pressed in empty space above the embedding;
+the explanation appears on the left, under the **Highlight mode** buttons. It is
 appended to the mode's usual help text, not shown in its place.
 ```
 
@@ -299,7 +299,7 @@ on the selection.
 
 ---
 
-## Symptom: “KNN drag says neighbor graph not available (or does nothing)”
+## Symptom: “KNN drag says no neighbor graph is available (or does nothing)”
 
 ### Likely causes (ordered)
 1) Your dataset export does not include connectivities/edges.
