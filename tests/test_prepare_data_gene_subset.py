@@ -47,14 +47,14 @@ def _prepare_gene_export(
         gene_expression=gene_expression,
         gene_identifiers=gene_identifiers,
         var_gene_id_column=var_gene_id_column,
-        X_umap_2d=np.array(
+        embeddings={"X_umap_2d": np.array(
             [
                 [0.0, 0.0],
                 [1.0, 0.0],
                 [0.0, 1.0],
             ],
             dtype=np.float32,
-        ),
+        )},
         out_dir=tmp_path,
         dataset_id="gene-subset",
         dataset_name="Gene subset",
@@ -109,7 +109,7 @@ def test_var_identifiers_must_be_strings(
 ):
     with pytest.raises(
         TypeError,
-        match=rf"{error_label} identifier at position 1 must be a string",
+        match=rf"{error_label}: Name at position 1 must be a string, got int",
     ):
         _prepare_gene_export(
             tmp_path,
@@ -140,15 +140,23 @@ def test_gene_identifier_string_scalar_is_not_treated_as_a_sequence(tmp_path):
         )
 
 
-def test_duplicate_var_identifiers_are_rejected(tmp_path):
-    with pytest.raises(
-        ValueError,
-        match="Gene key 'gene_a' is duplicated",
-    ):
-        _prepare_gene_export(
-            tmp_path,
-            var=pd.DataFrame(index=["gene_a", "gene_a", "gene_c"]),
-        )
+def test_duplicate_var_identifiers_are_made_unique_and_reported(tmp_path):
+    """One make-unique rule in every reader and writer: anndata's own."""
+    _prepare_gene_export(
+        tmp_path,
+        var=pd.DataFrame(index=["gene_a", "gene_a", "gene_c"]),
+    )
+
+    var_manifest = json.loads((tmp_path / "var_manifest.json").read_text(encoding="utf-8"))
+    assert var_manifest["fields"] == [[0, "gene_a"], [1, "gene_a-1"], [2, "gene_c"]]
+    assert var_manifest["gene_name_sets"] == [
+        {
+            "source": None,
+            "filled_from_index": 0,
+            "renamed": [["gene_a", "gene_a-1"]],
+            "names": None,
+        }
+    ]
 
 
 def test_duplicate_requested_gene_identifiers_are_rejected(tmp_path):
@@ -238,21 +246,36 @@ def test_an_undrawable_unexported_gene_name_reaches_no_manifest_and_no_rule(tmp_
     assert var_manifest["fields"] == [[0, "gene_a"], [1, "gene_c"]]
 
 
-def test_unexported_duplicate_var_identifiers_are_still_rejected(tmp_path):
-    """Identity is checked over the whole var even when the export is narrowed.
+def test_names_are_made_unique_over_the_whole_var_before_a_subset_is_taken(tmp_path):
+    """A gene keeps its name however the export is narrowed.
 
-    Every var row is addressable through gene_identifiers=, so a repeated
-    identifier makes that lookup ambiguous no matter which genes are selected.
+    Every var row is addressable through gene_identifiers=, by the name it has
+    after the whole var was made unique, so the second 'gene_c' is requested as
+    'gene_c-1' and the plain name addresses the first occurrence. What the
+    manifest reports covers the exported genes only, in exported order.
     """
-    with pytest.raises(
-        ValueError,
-        match="Gene key 'gene_c' is duplicated",
-    ):
-        _prepare_gene_export(
-            tmp_path,
-            var=pd.DataFrame(index=["gene_a", "gene_c", "gene_c"]),
-            gene_identifiers=["gene_a"],
-        )
+    _prepare_gene_export(
+        tmp_path,
+        var=pd.DataFrame(index=["gene_a", "gene_c", "gene_c"]),
+        gene_identifiers=["gene_c-1", "gene_a"],
+    )
+
+    var_manifest = json.loads((tmp_path / "var_manifest.json").read_text(encoding="utf-8"))
+    assert var_manifest["fields"] == [[0, "gene_c-1"], [1, "gene_a"]]
+    assert var_manifest["gene_name_sets"][0]["renamed"] == [["gene_c", "gene_c-1"]]
+    values = np.fromfile(tmp_path / "var" / "0.values.f32", dtype="<f4")
+    assert values.tolist() == [3.0, 6.0, 9.0]
+
+    other = tmp_path.parent / f"{tmp_path.name}-first"
+    _prepare_gene_export(
+        other,
+        var=pd.DataFrame(index=["gene_a", "gene_c", "gene_c"]),
+        gene_identifiers=["gene_c"],
+    )
+    other_manifest = json.loads((other / "var_manifest.json").read_text(encoding="utf-8"))
+    assert other_manifest["fields"] == [[0, "gene_c"]]
+    assert other_manifest["gene_name_sets"][0]["renamed"] == []
+    assert np.fromfile(other / "var" / "0.values.f32", dtype="<f4").tolist() == [2.0, 5.0, 8.0]
 
 
 def test_none_selects_var_index_and_literal_index_selects_the_column(tmp_path):
@@ -266,7 +289,7 @@ def test_none_selects_var_index_and_literal_index_selects_the_column(tmp_path):
     index_manifest = json.loads(
         (index_export / "var_manifest.json").read_text(encoding="utf-8")
     )
-    assert index_manifest["var_gene_id_column"] is None
+    assert index_manifest["gene_name_sets"][0]["source"] is None
     assert index_manifest["fields"] == [[0, "row_a"], [1, "row_b"], [2, "row_c"]]
 
     column_export = tmp_path / "literal-index-column"
@@ -274,7 +297,7 @@ def test_none_selects_var_index_and_literal_index_selects_the_column(tmp_path):
     column_manifest = json.loads(
         (column_export / "var_manifest.json").read_text(encoding="utf-8")
     )
-    assert column_manifest["var_gene_id_column"] == "index"
+    assert column_manifest["gene_name_sets"][0]["source"] == "index"
     assert column_manifest["fields"] == [[0, "column_a"], [1, "column_b"], [2, "column_c"]]
 
 

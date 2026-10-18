@@ -7,6 +7,13 @@ validated against the field overlay the session declares before a column is
 built, including the operation that produced it, its creation timestamp, and,
 for categoricals, the category list and the overlap strategy that resolved
 cells belonging to more than one source page.
+
+A continuous alias of a gene names that gene the way the session's data
+mapping named it -- its gene-name set on its gene axis, made unique with the
+shared rule -- and copies values from the expression matrix the mapping reads.
+A categorical record carries no centroids: label positions are derived from
+codes and coordinates whenever an embedding is shown, so a session never
+persists them.
 """
 
 from __future__ import annotations
@@ -19,6 +26,7 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
+from ..data_mapping import mapped_expression_matrix, resolve_gene_names
 from ..session_codecs import decode_user_defined_codes
 from ._primitives import (
     _require_category_list,
@@ -99,6 +107,7 @@ def _numeric_series(
 def _materialize_continuous_alias(
     adata: Any,
     *,
+    mapping: dict[str, Any],
     source: str,
     source_field: dict[str, Any],
     label: str,
@@ -113,13 +122,20 @@ def _materialize_continuous_alias(
         source_index = matching[0]
         values = adata.obs.iloc[:, source_index].to_numpy(copy=True)
     else:
-        matching = [index for index, key in enumerate(adata.var_names) if key == source_key]
+        # A gene is named the way the viewer named it: by the data mapping's
+        # gene-name set on its gene axis, made unique with the shared rule, so
+        # the second of two 'MATR3' rows is 'MATR3-1' here exactly as it was
+        # in the session. Its values come from the matrix the mapping read.
+        gene_names = resolve_gene_names(adata, mapping).names
+        matching = [index for index, key in enumerate(gene_names) if key == source_key]
         if len(matching) != 1:
             raise ValueError(f"{label} source gene {source_key!r} must exist exactly once")
         source_index = matching[0]
-        if getattr(adata, "X", None) is None:
-            raise ValueError(f"{label} cannot copy gene values because adata.X is absent")
-        values = adata.X[:, source_index]
+        try:
+            matrix = mapped_expression_matrix(adata, mapping)
+        except ValueError as error:
+            raise ValueError(f"{label} cannot copy gene values: {error}") from error
+        values = matrix[:, source_index]
 
     declared_index = source_field.get("sourceIndex")
     if declared_index is not None and declared_index != source_index:
@@ -152,28 +168,6 @@ def _validate_category_metadata(
     codes_type = field["codesType"]
     if codes_type not in {"Uint8Array", "Uint16Array"}:
         raise ValueError(f"{label}.codesType must be Uint8Array or Uint16Array")
-    if not isinstance(field["centroidsByDim"], dict):
-        raise TypeError(f"{label}.centroidsByDim must be an object")
-    normalized_dims = field["normalizedDims"]
-    if (
-        not isinstance(normalized_dims, list)
-        or any(
-            isinstance(item, bool) or not isinstance(item, int) or item not in {1, 2, 3}
-            for item in normalized_dims
-        )
-        or len(normalized_dims) != len(set(normalized_dims))
-    ):
-        raise ValueError(f"{label}.normalizedDims must be unique dimensions 1, 2, or 3")
-    centroid_dims = set()
-    for key in field["centroidsByDim"]:
-        if key not in {"1", "2", "3"}:
-            raise ValueError(f"{label}.centroidsByDim keys must be dimensions \"1\", \"2\", or \"3\"")
-        centroid_dims.add(int(key))
-    # User-defined centroids are computed from normalized positions, so every
-    # stored dimension is recorded as normalized: a mismatch would draw a
-    # dimension's labels normalized twice, or not at all.
-    if centroid_dims != set(normalized_dims):
-        raise ValueError(f"{label}.normalizedDims must name exactly the centroidsByDim dimensions")
     if not isinstance(field["sourcePages"], list):
         raise TypeError(f"{label}.sourcePages must be an array")
     if field["overlapStrategy"] not in _OVERLAP_STRATEGIES:
@@ -238,6 +232,7 @@ def _plan_user_defined_fields(
     chunk_ids: set[str],
     adata: Any,
     *,
+    mapping: dict[str, Any],
     prefix: str,
     existing_columns: set[str],
     materialize: bool,
@@ -341,6 +336,7 @@ def _plan_user_defined_fields(
                 _reserve_column(existing_columns, column_name)
                 values = _materialize_continuous_alias(
                     adata,
+                    mapping=mapping,
                     source=source,
                     source_field=source_field,
                     label=f"Continuous field {field_id!r}",

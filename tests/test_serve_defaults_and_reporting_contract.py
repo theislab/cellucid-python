@@ -2,8 +2,9 @@
 
 Three rules meet here. An embedding is read from the key that names its
 dimension, or from Scanpy's own ``X_umap`` at the dimension its column count
-states. A neighbor graph is read only when it is asked for, because reading one
-is the longest thing opening a large object can do. And a bind to every
+states, unless a slot is named explicitly. A neighbor graph is read only when
+``knn_key`` names one, because reading one is the longest thing opening a large
+object can do. And a bind to every
 interface is never rendered as a URL, because no client can open one.
 """
 
@@ -75,7 +76,7 @@ def _adapter(adata: ad.AnnData, **kwargs: Any) -> AnnDataAdapter:
 def test_a_graph_is_not_read_when_it_was_not_asked_for() -> None:
     adapter = _adapter(_adata(connectivity=True))
     try:
-        assert adapter.serve_connectivity is False
+        assert adapter.knn_key is None
         assert adapter.has_connectivity() is False
         assert adapter.get_connectivity_manifest() is None
         identity = adapter.get_dataset_identity()
@@ -88,7 +89,7 @@ def test_a_graph_is_not_read_when_it_was_not_asked_for() -> None:
 
 
 def test_the_same_graph_is_served_in_full_when_it_is_asked_for() -> None:
-    adapter = _adapter(_adata(connectivity=True), serve_connectivity=True)
+    adapter = _adapter(_adata(connectivity=True), knn_key="connectivities")
     try:
         assert adapter.has_connectivity() is True
         manifest = adapter.get_connectivity_manifest()
@@ -100,8 +101,8 @@ def test_the_same_graph_is_served_in_full_when_it_is_asked_for() -> None:
 
 
 def test_asking_for_a_graph_that_does_not_exist_is_an_error() -> None:
-    with pytest.raises(ValueError, match="Connectivity was asked for"):
-        _adapter(_adata(connectivity=False), serve_connectivity=True)
+    with pytest.raises(ValueError, match=r"knn_key names obsp\['connectivities'\], which this object does not have"):
+        _adapter(_adata(connectivity=False), knn_key="connectivities")
 
 
 def test_an_unasked_graph_is_never_touched_by_construction() -> None:
@@ -137,7 +138,7 @@ def test_the_dataset_report_separates_no_graph_from_an_unserved_one(capsys) -> N
     try:
         printed = capsys.readouterr().out
         assert "Connectivity: not served" in printed
-        assert "--connectivity" in printed
+        assert "--knn connectivities" in printed
     finally:
         server.stop()
 
@@ -351,7 +352,7 @@ def test_opening_an_object_reports_every_phase_of_the_build(capsys) -> None:
         "Embeddings: resolving obsm keys",
         "[3/5] Analyzing dataset",
         "[4/5] Building manifests",
-        "Centroids: one per categorical field and dimension",
+        "Centroids: one per categorical field and embedding",
     ]:
         assert expected in printed, expected
 
@@ -394,7 +395,7 @@ def test_the_adapter_is_silent_unless_a_caller_asks_for_progress(capsys) -> None
 
 
 def test_asking_for_a_graph_reports_it_before_reading_it(capsys) -> None:
-    adapter = _adapter(_adata(connectivity=True), serve_connectivity=True, quiet=False)
+    adapter = _adapter(_adata(connectivity=True), knn_key="connectivities", quiet=False)
     try:
         printed = capsys.readouterr().out
         assert "Connectivity: reading obsp['connectivities']" in printed
@@ -408,15 +409,18 @@ def test_asking_for_a_graph_reports_it_before_reading_it(capsys) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_connectivity_flag_is_off_unless_it_is_given() -> None:
+def test_the_knn_flag_is_off_unless_it_names_a_matrix() -> None:
     from cellucid.cli import create_parser
 
     base = ["serve", "data.h5ad", "--dataset-name", "N", "--dataset-id", "n"]
-    assert create_parser().parse_args(base).connectivity is None
-    assert create_parser().parse_args([*base, "--connectivity"]).connectivity is True
+    assert create_parser().parse_args(base).knn is None
+    assert create_parser().parse_args([*base, "--knn", "connectivities"]).knn == "connectivities"
+    # The boolean flag it replaced is gone, not aliased.
+    with pytest.raises(SystemExit):
+        create_parser().parse_args([*base, "--connectivity"])
 
 
-def test_the_connectivity_flag_is_refused_for_a_prepared_export(tmp_path) -> None:
+def test_the_knn_flag_is_refused_for_a_prepared_export(tmp_path) -> None:
     import json
 
     from cellucid.cli import _run_serve, create_parser
@@ -424,14 +428,17 @@ def test_the_connectivity_flag_is_refused_for_a_prepared_export(tmp_path) -> Non
     export = tmp_path / "export"
     export.mkdir()
     (export / "dataset_identity.json").write_text(
-        json.dumps({"version": 2, "id": "e", "name": "E"}),
+        json.dumps({"version": 3, "id": "e", "name": "E"}),
         encoding="utf-8",
     )
     (export / "obs_manifest.json").write_text("{}", encoding="utf-8")
-    (export / "points_2d.bin").write_bytes(b"\x00" * 8)
+    (export / "embeddings").mkdir()
+    (export / "embeddings" / "0_2d.bin").write_bytes(b"\x00" * 8)
 
-    args = create_parser().parse_args(["serve", str(export), "--quiet", "--connectivity"])
-    with pytest.raises(ValueError, match="--connectivity"):
+    args = create_parser().parse_args(
+        ["serve", str(export), "--quiet", "--knn", "connectivities"]
+    )
+    with pytest.raises(ValueError, match="--knn"):
         _run_serve(args)
 
 

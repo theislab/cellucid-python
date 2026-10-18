@@ -79,8 +79,8 @@ def _prepared_fixture(output: Path, *, created_at: str | None = FIXED_CREATED_AT
                 dtype=np.float64,
             )
         ),
-        X_umap_2d=embedding,
-        vector_fields={"velocity_umap_2d": vectors},
+        embeddings={"X_umap_2d": embedding},
+        vector_fields={"velocity_umap": {"X_umap_2d": vectors}},
         out_dir=output,
         dataset_name="Deterministic gzip",
         dataset_id="deterministic-gzip",
@@ -156,7 +156,7 @@ def _direct_adapter() -> AnnDataAdapter:
         centroid_min_points=1,
         dataset_name="Deterministic direct AnnData",
         dataset_id="deterministic-direct-anndata",
-        serve_connectivity=True,
+        knn_key="connectivities",
         serve_vector_fields=True,
     )
 
@@ -238,6 +238,7 @@ def test_invalid_created_at_rejects_before_filesystem_mutation(
             dataset_id="rejected-timestamp",
             created_at=created_at,  # type: ignore[arg-type]
             obs_categorical_dtype="uint16",
+            embeddings={"X_umap": np.array([[0.0, 0.0], [1.0, 1.0]])},
         )
 
     assert not parent.exists()
@@ -259,10 +260,10 @@ def test_every_direct_anndata_gzip_payload_is_byte_stable(
             compress=True
         )
         return [
-            adapter.get_points_binary(2, compress=True),
+            adapter.get_embedding_binary("X_umap_2d", compress=True),
             adapter.get_vector_field_binary(
                 "velocity_umap",
-                2,
+                "X_umap_2d",
                 compress=True,
             ),
             adapter.get_obs_continuous_values("score", compress=True),

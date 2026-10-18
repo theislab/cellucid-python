@@ -57,8 +57,23 @@ _ANNDATA_VECTOR_BINDING_KEYS = frozenset({"key", "embedding"})
 DIMENSIONAL_UMAP_KEYS: tuple[str, ...] = ("X_umap_1d", "X_umap_2d", "X_umap_3d")
 UNSUFFIXED_UMAP_KEY = "X_umap"
 
-#: The AnnData ``obsm`` grammar of a per-dimension UMAP vector field.
+#: The AnnData ``obsm`` grammar of a per-dimension UMAP vector field. The three
+#: dimensional embedding keys match it too (``X_umap_2d`` reads as field
+#: ``X_umap``), so test keys with :func:`is_vector_field_key`, which excludes them.
 VECTOR_KEY_PATTERN = re.compile(r"^(?P<field>.+_umap)_(?P<dimension>[123])d$")
+
+
+def is_vector_field_key(key: object) -> bool:
+    """Whether an ``obsm`` key declares a UMAP vector field.
+
+    ``X_umap_1d``, ``X_umap_2d`` and ``X_umap_3d`` are embeddings, not vectors,
+    although they fit the vector grammar.
+    """
+    return (
+        isinstance(key, str)
+        and key not in DIMENSIONAL_UMAP_KEYS
+        and VECTOR_KEY_PATTERN.fullmatch(key) is not None
+    )
 
 _GENE_NAMES_COLUMN_PREFIX = "column:"
 _LAYER_PREFIX = "layer:"
@@ -167,16 +182,16 @@ def make_unique_names(
                 raise DataMappingError(
                     "missing_name",
                     f"Name at position {position} is empty and no index was supplied "
-                    "to fall back to.",
+                    "to take its name from.",
                 )
-            fallback = index[position]
-            if not isinstance(fallback, str) or not fallback:
+            index_name = index[position]
+            if not isinstance(index_name, str) or not index_name:
                 raise DataMappingError(
                     "missing_index_name",
-                    f"Name at position {position} is empty, and the index name it "
-                    f"falls back to is not a non-empty string: {fallback!r}.",
+                    f"Name at position {position} is empty, and its index name is not "
+                    f"a non-empty string: {index_name!r}.",
                 )
-            filled.append(fallback)
+            filled.append(index_name)
             filled_from_index += 1
             continue
         if not isinstance(value, str):
@@ -226,7 +241,7 @@ def unique_names_note(
     """Return the one-line note that reports what making names unique changed.
 
     ``source`` is the ``var`` column the names came from, or None for the var
-    index (which cannot fall back to itself). The text is shared with the web
+    index (which cannot take names from itself). The text is shared with the web
     app and pinned by the conformance fixture, so it quotes names with plain
     single quotes and never escapes them.
     """
@@ -688,7 +703,7 @@ def best_guess_embedding_slots(
         if entry.usable
         and entry.width is not None
         and entry.width >= 1
-        and VECTOR_KEY_PATTERN.fullmatch(entry.key) is None
+        and not is_vector_field_key(entry.key)
         and entry.key != latent_key
     ]
     width_by_key = {entry.key: entry.width for entry in candidates}
@@ -755,9 +770,10 @@ def default_vector_bindings(
     """
     bindings: list[dict[str, Any]] = []
     for key in keys:
-        match = VECTOR_KEY_PATTERN.fullmatch(key)
-        if match is None:
+        if not is_vector_field_key(key):
             continue
+        match = VECTOR_KEY_PATTERN.fullmatch(key)
+        assert match is not None
         slot = dimension_slot(int(match.group("dimension")))
         ref = slots.get(slot)
         if ref is None or ref["key"] not in (f"X_umap_{slot}", UNSUFFIXED_UMAP_KEY):
@@ -842,7 +858,7 @@ def obsm_entry_defect(
         return None
     if not item["usable"]:
         return str(item["reason"])
-    if VECTOR_KEY_PATTERN.fullmatch(key) is not None:
+    if is_vector_field_key(key):
         return "a vector field"
     if key == latent_key:
         return "the latent space"
@@ -1136,7 +1152,7 @@ def resolve_gene_names(adata: Any, mapping: Mapping[str, Any]) -> UniqueNames:
     """Resolve the gene names a mapping shows, with the shared make-unique rule.
 
     The names come from the mapping's gene axis: its index, or one of its
-    columns with empty values falling back to the index. Index names are
+    columns, where an empty value takes the row's index name. Index names are
     stringified the way anndata stores them.
     """
     var = mapped_var_axis(adata, mapping)

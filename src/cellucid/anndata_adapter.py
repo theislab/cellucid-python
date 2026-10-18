@@ -118,6 +118,7 @@ from .continuous_payload_diagnosis import (
 )
 from .data_mapping import (
     DIMENSION_SLOTS,
+    DIMENSIONAL_UMAP_KEYS,
     VECTOR_KEY_PATTERN,
     DataMappingError,
     EmbeddingKeySpec,
@@ -159,6 +160,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger("cellucid.anndata_adapter")
 
 
+def _is_empty_gene_name(value: object) -> bool:
+    """Whether one gene-name value is empty: None, "", NaN, or a pandas missing value."""
+    if value is None or value == "":
+        return True
+    if isinstance(value, float):
+        return math.isnan(value)
+    return type(value).__name__ in {"NAType", "NaTType"}
+
+
 @dataclass(frozen=True)
 class ServedEmbedding:
     """One embedding the adapter serves: an ``obsm`` key read at fixed columns.
@@ -173,6 +183,7 @@ class ServedEmbedding:
     key: str
     columns: tuple[int, ...]
     dimension: int
+    width: int
 
     @property
     def file(self) -> str:
@@ -487,7 +498,7 @@ class AnnDataAdapter:
         gene_id_column : str, optional
             Exact column of the served gene axis (``var``, or ``raw.var`` when
             ``expression_source="raw"``) whose values name the genes. If None,
-            names come from that axis's index. An empty value falls back to the
+            names come from that axis's index. An empty value takes the
             row's index name, and repeated names are made unique the way
             anndata's ``var_names_make_unique()`` does (``MATR3``, ``MATR3-1``).
         normalize_embeddings : bool
@@ -1004,8 +1015,17 @@ class AnnDataAdapter:
                 f"gene_id_column {self.gene_id_column!r} not found in {axis}. "
                 f"Available columns: {list(var.columns)}"
             )
+        values = var[self.gene_id_column].tolist()
+        for position, value in enumerate(values):
+            # Names are never coerced: a numeric column is a different
+            # identifier space, and stringifying it would invent names.
+            if not isinstance(value, str) and not _is_empty_gene_name(value):
+                raise TypeError(
+                    f"var column {self.gene_id_column!r} identifier at position {position} "
+                    f"must be a string, got {type(value).__name__}."
+                )
         try:
-            return make_unique_names(var[self.gene_id_column].tolist(), index=index)
+            return make_unique_names(values, index=index)
         except DataMappingError as error:
             raise ValueError(f"gene_id_column {self.gene_id_column!r}: {error}") from error
 
@@ -1118,6 +1138,18 @@ class AnnDataAdapter:
                 entry = entry_by_key[ref["key"]]
                 if not entry.usable or entry.width is None:
                     raise ValueError(f"Embedding {ref['key']!r} {entry.reason}.")
+                dimension = slot_dimension(slot)
+                if (
+                    slot not in requested
+                    and ref["key"] in DIMENSIONAL_UMAP_KEYS
+                    and entry.width != dimension
+                ):
+                    # X_umap_<d>d names its own dimension, so a different width
+                    # is a malformed declaration, not a wider array to slice.
+                    raise ValueError(
+                        f"Embedding {ref['key']!r} must have exactly {dimension} columns; "
+                        f"got {entry.width}."
+                    )
                 try:
                     validate_embedding_columns(
                         ref["columns"], dimension=slot_dimension(slot), width=entry.width
@@ -1130,17 +1162,27 @@ class AnnDataAdapter:
                     self._obsm_source(ref["key"], ref["columns"])
                     raise ValueError(f"Embedding {ref['key']!r} cannot be plotted: {defect}.")
 
-        resolved: list[tuple[int, str, str, tuple[int, ...]]] = []
+        resolved: list[tuple[int, str, str, tuple[int, ...], int]] = []
         for slot, ref in slots.items():
             if ref is None:
                 continue
-            entry = entry_by_key[ref["key"]]
-            embedding_id = canonical_embedding_id(ref["key"], ref["columns"], width=entry.width)
-            resolved.append((slot_dimension(slot), embedding_id, ref["key"], tuple(ref["columns"])))
+            width = entry_by_key[ref["key"]].width
+            assert width is not None
+            embedding_id = canonical_embedding_id(ref["key"], ref["columns"], width=width)
+            resolved.append(
+                (slot_dimension(slot), embedding_id, ref["key"], tuple(ref["columns"]), width)
+            )
         resolved.sort(key=lambda item: (item[0], item[1]))
         self._embeddings = [
-            ServedEmbedding(id=embedding_id, index=index, key=key, columns=columns, dimension=dimension)
-            for index, (dimension, embedding_id, key, columns) in enumerate(resolved)
+            ServedEmbedding(
+                id=embedding_id,
+                index=index,
+                key=key,
+                columns=columns,
+                dimension=dimension,
+                width=width,
+            )
+            for index, (dimension, embedding_id, key, columns, width) in enumerate(resolved)
         ]
         self._embedding_defaults = {
             f"{item.dimension}d": item.id for item in self._embeddings
@@ -1153,7 +1195,8 @@ class AnnDataAdapter:
         self._check_closed()
         return list(self._embeddings)
 
-    def _served_embedding(self, embedding_id: str) -> ServedEmbedding:
+    def _served_embedding(self, embedding_id: object) -> ServedEmbedding:
+        embedding_id = _require_nonempty_string(embedding_id, label="embedding_id")
         for item in self._embeddings:
             if item.id == embedding_id:
                 return item
@@ -1181,12 +1224,17 @@ class AnnDataAdapter:
         vector_field_default: object,
     ) -> dict[str, Any] | None:
         """Bind and validate every ``<field>_umap_<d>d`` vector by the default rule."""
+        served_keys = {item.key for item in self._embeddings}
         keys: list[str] = []
         for key in self.adata.obsm:
             if not isinstance(key, str):
                 raise TypeError("AnnData obsm keys must be native strings.")
             if not key:
                 raise ValueError("AnnData obsm keys must be non-empty strings.")
+            # An embedding is never also a vector field: X_umap_2d matches the
+            # vector grammar, and so does any served key that happens to.
+            if key in DIMENSIONAL_UMAP_KEYS or key in served_keys:
+                continue
             keys.append(key)
         slots = {f"{item.dimension}d": {"key": item.key, "columns": list(item.columns)} for item in self._embeddings}
         id_by_slot = {f"{item.dimension}d": item.id for item in self._embeddings}
@@ -1269,12 +1317,17 @@ class AnnDataAdapter:
         # Precision-preserving, like the prepared export: the extents are
         # measured at the input's own precision and the coordinates are
         # rounded to float32 once, in get_embedding_binary().
-        raw = self._obsm_source(item.key, item.columns)
-        if raw.shape != (self.n_cells, item.dimension):
+        source_shape = tuple(int(extent) for extent in np.shape(self.adata.obsm[item.key]))
+        expected_shape = (self.n_cells,) if item.width == 1 and len(source_shape) == 1 else (
+            self.n_cells,
+            item.width,
+        )
+        if source_shape != expected_shape:
             raise ValueError(
                 f"Embedding {item.key!r} changed after adapter initialization; "
-                f"expected shape ({self.n_cells}, {item.dimension}), got {raw.shape}."
+                f"expected shape {expected_shape}, got {source_shape}."
             )
+        raw = self._obsm_source(item.key, item.columns)
 
         if self.normalize_embeddings:
             raw, center, scale_factor, _max_range = _normalize_finite_float32_embedding(

@@ -15,7 +15,7 @@ from ..continuous_payload_diagnosis import describe_non_finite
 _QUANTIZATION_ARITHMETIC_CHUNK_SIZE = 1_048_576
 
 def _is_constant_continuous_range(min_val: float, max_val: float) -> bool:
-    """Name compact_v1's constant-field case from one payload's bounds.
+    """Name compact_v2's constant-field case from one payload's bounds.
 
     A gene detected in no published cell, or an obs column a subset flattened,
     is ordinary scientific data, so the format encodes it rather than rejecting

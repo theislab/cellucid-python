@@ -1573,6 +1573,55 @@
           }
         }
       ]
+    },
+    {
+      "keys": [
+        "X_umap_2d",
+        "X_umap_3d",
+        "velocity_umap_2d",
+        "velocity_umap_3d"
+      ],
+      "slots": {
+        "1d": null,
+        "2d": {
+          "key": "X_umap_2d",
+          "columns": [
+            0,
+            1
+          ]
+        },
+        "3d": {
+          "key": "X_umap_3d",
+          "columns": [
+            0,
+            1,
+            2
+          ]
+        }
+      },
+      "expected": [
+        {
+          "key": "velocity_umap_2d",
+          "embedding": {
+            "key": "X_umap_2d",
+            "columns": [
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "key": "velocity_umap_3d",
+          "embedding": {
+            "key": "X_umap_3d",
+            "columns": [
+              0,
+              1,
+              2
+            ]
+          }
+        }
+      ]
     }
   ],
   "nothingPlottable": [

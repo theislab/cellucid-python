@@ -293,7 +293,7 @@ def _validate_prepare_codec_options(
     obs_categorical_dtype: object,
     centroid_outlier_quantile: float | None,
 ) -> None:
-    """Validate the sole current compact_v1 codec configuration."""
+    """Validate the sole current compact_v2 codec configuration."""
     if compression is not None and (type(compression) is not int or not 1 <= compression <= 9):
         raise ValueError("compression must be None or one integer from 1 to 9.")
 
@@ -433,14 +433,14 @@ def _prepare_generation(
         names. None uses var.index. Whatever this selects is recorded
         faithfully: Cellucid performs no symbol lookup and ships no mapping, so
         the caller decides what a gene is called. An empty value (``""``,
-        ``None`` or NaN) falls back to that row's var.index name, and repeated
+        ``None`` or NaN) takes that row's var.index name, and repeated
         names are made unique the way anndata's ``var_names_make_unique()``
         does it: the second ``MATR3`` becomes ``MATR3-1``. What was filled and
         renamed is printed and recorded in ``var_manifest.json``.
     var_gene_name_columns : sequence of str, optional
         Further var columns the viewer offers as alternative gene names, such
         as ``["gene_symbols"]`` beside an Ensembl index. Each one is resolved
-        with the same fallback and uniqueness rule and stored as metadata in
+        with the same empty-name and uniqueness rule and stored as metadata in
         ``var_manifest.json``; no expression payload is duplicated.
     gene_identifiers : sequence of str, optional
         Unique gene identifiers to export, matched against the default gene

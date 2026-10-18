@@ -11,6 +11,23 @@ from cellucid.session_bundle import SESSION_BUNDLE_MAGIC, CellucidSessionBundle
 from cellucid.session_codecs import decode_delta_uvarint, decode_user_defined_codes, decode_uvarint
 
 
+def _mapping_fingerprint_keys() -> dict:
+    """The cell-order record and data mapping every fingerprint carries."""
+    return {
+        "cellOrder": {
+            "embedding": {"key": "X_umap", "columns": None},
+            "dimension": 2,
+            "digest": "0123456789abcdef",
+        },
+        "dataMapping": {
+            "kind": "export",
+            "embeddings": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None},
+            "geneNames": "index",
+            "vectorFields": [],
+        },
+    }
+
+
 def _encode_uvarint(value: int) -> bytes:
     out = bytearray()
     v = int(value)
@@ -121,8 +138,6 @@ def test_apply_session_bundle_to_anndata(tmp_path):
                 "codesType": "Uint8Array",
                 "isDeleted": False,
                 "isPurged": False,
-                "centroidsByDim": {},
-                "normalizedDims": [],
                 "sourceField": None,
                 "operation": None,
                 "sourcePages": [],
@@ -161,6 +176,7 @@ def test_apply_session_bundle_to_anndata(tmp_path):
             "datasetId": "test",
             "cellCount": n_obs,
             "varCount": n_vars,
+            **_mapping_fingerprint_keys(),
         },
         "chunks": [
             {
@@ -294,6 +310,7 @@ def test_apply_session_rejects_out_of_range_categorical_codes_without_mutation()
                 "datasetId": "exact",
                 "cellCount": 3,
                 "varCount": 1,
+                **_mapping_fingerprint_keys(),
             }
             self._chunks = {
                 "core/field-overlays": {
@@ -310,8 +327,6 @@ def test_apply_session_rejects_out_of_range_categorical_codes_without_mutation()
                             "isPurged": False,
                             "codesLength": 3,
                             "codesType": "Uint8Array",
-                            "centroidsByDim": {},
-                            "normalizedDims": [],
                             "sourceField": None,
                             "operation": None,
                             "sourcePages": [],

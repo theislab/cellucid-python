@@ -219,15 +219,31 @@ def _event_request(
     )
 
 
+# The exact current fingerprint shape: a session names the embedding its cell
+# order was digested over and the data mapping it was saved with.
+_FINGERPRINT = {
+    "sourceType": None,
+    "datasetId": None,
+    "cellCount": 0,
+    "varCount": 0,
+    "cellOrder": {
+        "embedding": {"key": "X_umap", "columns": None},
+        "dimension": 2,
+        "digest": "0123456789abcdef",
+    },
+    "dataMapping": {
+        "kind": "export",
+        "embeddings": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None},
+        "geneNames": "index",
+        "vectorFields": [],
+    },
+}
+
+
 def _empty_session_bundle() -> bytes:
     manifest = {
         "createdAt": "2026-07-26T00:00:00.000Z",
-        "datasetFingerprint": {
-            "sourceType": None,
-            "datasetId": None,
-            "cellCount": 0,
-            "varCount": 0,
-        },
+        "datasetFingerprint": _FINGERPRINT,
         "chunks": [],
     }
     manifest_bytes = json.dumps(
@@ -243,12 +259,7 @@ def _corrupt_gzip_session_bundle() -> bytes:
     stored = b"not-a-gzip-stream"
     manifest = {
         "createdAt": "2026-07-26T00:00:00.000Z",
-        "datasetFingerprint": {
-            "sourceType": None,
-            "datasetId": None,
-            "cellCount": 0,
-            "varCount": 0,
-        },
+        "datasetFingerprint": _FINGERPRINT,
         "chunks": [
             {
                 "id": "corrupt",

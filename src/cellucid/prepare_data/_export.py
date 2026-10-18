@@ -78,7 +78,7 @@ def prepare(
 
     Gene names come from ``var_gene_id_column`` (or ``var.index``), and every
     column in ``var_gene_name_columns`` becomes an alternative set of names the
-    viewer can switch to. In each set an empty value falls back to the var
+    viewer can switch to. In each set an empty value takes the var
     index name and repeated names are made unique (``MATR3``, ``MATR3-1``).
 
     ``out_dir`` defaults to ``./exports`` and is resolved against the current

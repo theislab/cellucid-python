@@ -65,8 +65,6 @@ _CATEGORY_FIELD_KEYS = _FIELD_COMMON_KEYS | {
     "categories",
     "codesLength",
     "codesType",
-    "centroidsByDim",
-    "normalizedDims",
     "sourcePages",
     "overlapStrategy",
     "overlapLabel",

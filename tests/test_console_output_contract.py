@@ -58,7 +58,7 @@ def test_prepare_accepts_unicode_values_with_strict_cp1252_console(
         "prepare(\n"
         "    latent_space=embedding.copy(),\n"
         "    obs=pd.DataFrame({'score': [0.25, 0.5, 0.75]}),\n"
-        "    X_umap_2d=embedding,\n"
+        "    embeddings={'X_umap': embedding},\n"
         "    out_dir=Path(sys.argv[1]),\n"
         "    dataset_name='细胞 atlas 🧬',\n"
         "    dataset_id='unicode-console',\n"

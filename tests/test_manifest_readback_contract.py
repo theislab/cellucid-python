@@ -38,9 +38,9 @@ def _prepare(out_dir: Path, **overrides: object) -> None:
                 "val": np.arange(n_cells) / n_cells,
             }
         ),
-        "X_umap_2d": np.column_stack(
+        "embeddings": {"X_umap_2d": np.column_stack(
             [np.arange(n_cells) / n_cells, np.arange(n_cells)[::-1] / n_cells]
-        ),
+        )},
         "out_dir": out_dir,
         "obs_categorical_dtype": "uint8",
         "dataset_name": "Read back",
@@ -187,15 +187,12 @@ def test_read_back_accepts_every_manifest_the_writer_emits(tmp_path: Path) -> No
             )
         },
         "one_dimension": {
-            "X_umap_2d": None,
-            "X_umap_1d": (np.arange(n_cells) / n_cells).reshape(n_cells, 1),
+            "embeddings": {"X_umap_1d": (np.arange(n_cells) / n_cells).reshape(n_cells, 1)},
         },
         "vectors": {
-            "vector_fields": {
-                "velocity_umap_2d": np.column_stack(
+            "vector_fields": {"velocity_umap": {"X_umap_2d": np.column_stack(
                     [np.arange(n_cells) / n_cells, np.arange(n_cells)[::-1] / n_cells]
-                )
-            },
+                )}},
             "vector_field_default": "velocity_umap",
         },
     }

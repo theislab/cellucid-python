@@ -116,7 +116,7 @@ def _write_current_prepared_dataset(
     (root / "dataset_identity.json").write_text(
         json.dumps(
             {
-                "version": 2,
+                "version": 3,
                 "id": dataset_id,
                 "name": dataset_name,
                 "description": "",
@@ -130,9 +130,16 @@ def _write_current_prepared_dataset(
                     "n_edges": None,
                 },
                 "embeddings": {
-                    "available_dimensions": [2],
                     "default_dimension": 2,
-                    "files": {"2d": "points_2d.bin"},
+                    "defaults": {"2d": "X_umap"},
+                    "items": {
+                        "X_umap": {
+                            "label": "X_umap",
+                            "dimension": 2,
+                            "file": "embeddings/0_2d.bin",
+                            "source": {"key": "X_umap", "columns": [0, 1]},
+                        }
+                    },
                 },
                 "obs_fields": [],
                 "export_settings": {
@@ -148,7 +155,7 @@ def _write_current_prepared_dataset(
     (root / "obs_manifest.json").write_text(
         json.dumps(
             {
-                "_format": "compact_v1",
+                "_format": "compact_v2",
                 "n_points": 1,
                 "centroid_outlier_quantile": None,
                 "latent_key": "latent_space",
@@ -160,7 +167,8 @@ def _write_current_prepared_dataset(
         ),
         encoding="utf-8",
     )
-    (root / "points_2d.bin").write_bytes(b"\x00" * 8)
+    (root / "embeddings").mkdir()
+    (root / "embeddings" / "0_2d.bin").write_bytes(b"\x00" * 8)
 
 
 @pytest.mark.parametrize(

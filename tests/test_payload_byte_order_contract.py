@@ -163,7 +163,7 @@ def test_a_big_endian_host_publishes_a_byte_identical_export(
     keeping its values, which is exactly the state every array is in on such a
     host. The two export directories must be identical file for file. With the
     writer emitting native order this fails on every multi-byte payload:
-    points, quantized codes, outlier quantiles, gene values, and both
+    embeddings, vectors, quantized codes, outlier quantiles, gene values, and both
     connectivity endpoint arrays.
     """
     native_dir = tmp_path / "native"
@@ -190,9 +190,10 @@ def test_a_big_endian_host_publishes_a_byte_identical_export(
     # The simulation must actually have reached every payload family, or the
     # comparison above proves nothing about the ones it missed.
     assert {name.split(".")[0] for name in swapped_payloads} >= {
-        "points_1d",
-        "points_2d",
-        "points_3d",
+        "0_1d",
+        "1_2d",
+        "2_3d",
+        "0_1",
         "0",
         "1",
     }
@@ -229,13 +230,11 @@ def _prepare_full_export(out_dir: Path) -> None:
     prepare(
         latent_space=embedding.copy(),
         obs=obs,
-        X_umap_1d=embedding[:, :1],
-        X_umap_2d=embedding[:, :2],
-        X_umap_3d=embedding,
+        embeddings={"X_umap_1d": embedding[:, :1], "X_umap_2d": embedding[:, :2], "X_umap_3d": embedding},
         var=pd.DataFrame(index=pd.Index(["gene_a", "gene_b", "gene_c"], dtype=str)),
         gene_expression=rng.random((N_CELLS, 3), dtype=np.float64),
         connectivities=connectivities,
-        vector_fields={"velocity_umap_2d": rng.normal(size=(N_CELLS, 2))},
+        vector_fields={"velocity_umap": {"X_umap_2d": rng.normal(size=(N_CELLS, 2))}},
         out_dir=out_dir,
         dataset_id="byte-order-contract",
         dataset_name="Byte order contract",
@@ -288,15 +287,15 @@ def _served_adapter() -> AnnDataAdapter:
         centroid_min_points=4,
         dataset_name="Byte order contract",
         dataset_id="byte-order-contract",
-        serve_connectivity=True,
+        knn_key="connectivities",
         serve_vector_fields=True,
     )
 
 
 def _served_payloads(adapter: AnnDataAdapter) -> dict[str, object]:
     return {
-        "points": adapter.get_points_binary(2),
-        "vectors": adapter.get_vector_field_binary("velocity_umap", 2),
+        "points": adapter.get_embedding_binary("X_umap_2d"),
+        "vectors": adapter.get_vector_field_binary("velocity_umap", "X_umap_2d"),
         "continuous": adapter.get_obs_continuous_values("score"),
         "codes": adapter.get_obs_categorical_codes("cell_type"),
         "outliers": adapter.get_obs_outlier_quantiles("cell_type"),

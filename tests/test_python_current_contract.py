@@ -42,7 +42,7 @@ CURRENT_TEXT_SUFFIXES = {
 
 def _identity(dataset_id: str, name: str = "Dataset") -> dict[str, object]:
     return {
-        "version": 2,
+        "version": 3,
         "id": dataset_id,
         "name": name,
         "stats": {

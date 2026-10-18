@@ -14,13 +14,14 @@ import copy
 from pathlib import Path
 from typing import Any
 
+from ..data_mapping import mapped_var_count, require_mapping_matches_anndata
 from ..session_bundle import CellucidSessionBundle
+from ..session_bundle import _validate_fingerprint as _validate_bundle_fingerprint
 from ._chunks import _validate_current_chunk_inventory
 from ._fields import _plan_user_defined_fields
 from ._highlights import _plan_highlights
 from ._primitives import (
     _require_exact_bool,
-    _require_exact_keys,
     _require_nonempty_string,
     _require_nonnegative_int,
 )
@@ -33,19 +34,20 @@ def _validate_fingerprint(
     *,
     expected_dataset_id: str,
 ) -> dict[str, Any]:
-    # cellOrder ties the session to the cell ordering it was saved against. It
-    # is accepted but not required, and never re-derived here: this applies a
-    # session to an AnnData whose row order the caller controls, and the
-    # viewer's digest is over exported coordinates an AnnData need not contain.
-    # Enforcing that identity is the viewer's job; accepting both shapes is what
-    # lets the viewer add the field without stranding existing session files.
-    expected_keys = {"sourceType", "datasetId", "cellCount", "varCount"}
-    fp = _require_exact_keys(
-        fingerprint,
-        expected_keys,
-        label="session datasetFingerprint",
-        optional_keys={"cellOrder"},
-    )
+    """Verify the fingerprint against ``adata`` before anything is applied.
+
+    The order is the viewer's: identity and cell count first, then the data
+    mapping -- every key it names must exist on ``adata`` -- and then the gene
+    count of the axis that mapping reads. ``cellOrder`` is validated for shape
+    only. Its digest is taken over the normalized coordinates the viewer drew,
+    and this bridge applies a session to an AnnData whose row order the caller
+    controls, so re-deriving it would compare against coordinates the caller
+    never asked to be drawn; enforcing that identity is the viewer's job.
+    """
+    try:
+        fp = _validate_bundle_fingerprint(fingerprint)
+    except ValueError as error:
+        raise ValueError(f"session datasetFingerprint is invalid: {error}") from error
     _require_nonempty_string(fp["sourceType"], label="datasetFingerprint.sourceType")
     dataset_id = _require_nonempty_string(
         fp["datasetId"],
@@ -66,13 +68,25 @@ def _validate_fingerprint(
             f"datasetId {dataset_id!r} != expected_dataset_id {expected_dataset_id!r}"
         )
     n_obs = getattr(adata, "n_obs", None)
-    n_vars = getattr(adata, "n_vars", None)
     if cell_count != n_obs:
         mismatches.append(f"cellCount {cell_count} != adata.n_obs {n_obs}")
-    if var_count != n_vars:
-        mismatches.append(f"varCount {var_count} != adata.n_vars {n_vars}")
     if mismatches:
         raise ValueError("Dataset fingerprint mismatch: " + "; ".join(mismatches))
+
+    mapping = fp["dataMapping"]
+    require_mapping_matches_anndata(adata, mapping)
+    expected_var_count = mapped_var_count(adata, mapping)
+    if var_count != expected_var_count:
+        axis = (
+            "adata.raw.n_vars"
+            if mapping["kind"] == "anndata" and mapping["expression"] == "raw"
+            else "genes on a mapping without expression"
+            if mapping["kind"] == "anndata" and mapping["expression"] is None
+            else "adata.n_vars"
+        )
+        raise ValueError(
+            f"Dataset fingerprint mismatch: varCount {var_count} != {axis} {expected_var_count}"
+        )
     return copy.deepcopy(fp)
 
 
@@ -204,6 +218,7 @@ def apply_cellucid_session_to_anndata(
         bundle,
         chunk_ids,
         adata,
+        mapping=fingerprint["dataMapping"],
         prefix=user_defined_prefix,
         existing_columns=existing_columns,
         materialize=add_user_defined_fields,

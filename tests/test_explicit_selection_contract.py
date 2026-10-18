@@ -49,7 +49,8 @@ def test_an_explicit_declaration_decides_over_the_unsuffixed_key() -> None:
     )
     try:
         generic_identity = generic_only.get_dataset_identity()
-        assert generic_identity["embeddings"]["available_dimensions"] == [2]
+        assert list(generic_identity["embeddings"]["items"]) == ["X_umap"]
+        assert generic_identity["embeddings"]["defaults"] == {"2d": "X_umap"}
         assert "umap_resolution" not in generic_identity["embeddings"]
     finally:
         generic_only.close()
@@ -61,7 +62,8 @@ def test_an_explicit_declaration_decides_over_the_unsuffixed_key() -> None:
         dataset_id="explicit-umap",
     )
     identity = adapter.get_dataset_identity()
-    assert identity["embeddings"]["available_dimensions"] == [2]
+    assert list(identity["embeddings"]["items"]) == ["X_umap_2d"]
+    assert identity["embeddings"]["defaults"] == {"2d": "X_umap_2d"}
     assert "umap_resolution" not in identity["embeddings"]
 
 
@@ -109,7 +111,7 @@ def _prepare(
             {"cluster": pd.Categorical(["A", "B", "A"])},
             index=["cell-1", "cell-2", "cell-3"],
         ),
-        "X_umap_2d": _embedding(),
+        "embeddings": {"X_umap_2d": _embedding()},
         "out_dir": out_dir,
         "dataset_name": "Categorical dtype",
         "dataset_id": "categorical-dtype",

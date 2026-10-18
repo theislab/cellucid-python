@@ -19,7 +19,7 @@ def _prepare_identity_kwargs(out_dir):
     return {
         "latent_space": embedding.copy(),
         "obs": pd.DataFrame(index=["cell-1", "cell-2", "cell-3"]),
-        "X_umap_2d": embedding,
+        "embeddings": {"X_umap_2d": embedding},
         "out_dir": out_dir,
         "dataset_id": "identity-contract",
         "dataset_name": "Identity contract",
@@ -39,14 +39,14 @@ def _prepare_obs_export(tmp_path, obs, *, force):
             dtype=np.float32,
         ),
         obs=obs,
-        X_umap_2d=np.array(
+        embeddings={"X_umap_2d": np.array(
             [
                 [0.0, 0.0],
                 [1.0, 0.0],
                 [0.0, 1.0],
             ],
             dtype=np.float32,
-        ),
+        )},
         out_dir=tmp_path,
         dataset_id="obs-contract",
         dataset_name="Observation contract",
@@ -289,9 +289,9 @@ def test_prepare_rejects_nonfinite_embedding_before_output_mutation(
 ):
     out_dir = tmp_path / "must-not-exist"
     kwargs = _prepare_identity_kwargs(out_dir)
-    embedding = kwargs["X_umap_2d"].copy()
+    embedding = kwargs["embeddings"]["X_umap_2d"].copy()
     embedding[1, 0] = invalid_value
-    kwargs["X_umap_2d"] = embedding
+    kwargs["embeddings"]["X_umap_2d"] = embedding
 
     with pytest.raises(ValueError, match=r"X_umap_2d.*finite"):
         prepare(**kwargs)
@@ -302,7 +302,7 @@ def test_prepare_rejects_nonfinite_embedding_before_output_mutation(
 def test_prepare_rejects_degenerate_embedding_before_output_mutation(tmp_path):
     out_dir = tmp_path / "must-not-exist"
     kwargs = _prepare_identity_kwargs(out_dir)
-    kwargs["X_umap_2d"] = np.ones((3, 2), dtype=np.float32)
+    kwargs["embeddings"]["X_umap_2d"] = np.ones((3, 2), dtype=np.float32)
 
     with pytest.raises(ValueError, match=r"X_umap_2d.*no coordinate variation"):
         prepare(**kwargs)
@@ -433,14 +433,14 @@ def test_prepare_accepts_any_gene_name_that_is_no_longer_a_path(
 @pytest.mark.parametrize(
     ("identity", "invalid_field"),
     [
-        ({"version": 2, "name": "Declared name"}, "dataset_id"),
-        ({"version": 2, "id": "declared-id"}, "dataset_name"),
-        ({"version": 2, "id": 7, "name": "Declared name"}, "dataset_id"),
-        ({"version": 2, "id": "data/set", "name": "Declared name"}, "dataset_id"),
-        ({"version": 2, "id": " padded ", "name": "Declared name"}, "dataset_id"),
-        ({"version": 2, "id": "declared-id", "name": ""}, "dataset_name"),
-        ({"version": 2, "id": "declared-id", "name": "   "}, "dataset_name"),
-        ({"version": 2, "id": "declared-id", "name": " padded"}, "dataset_name"),
+        ({"version": 3, "name": "Declared name"}, "dataset_id"),
+        ({"version": 3, "id": "declared-id"}, "dataset_name"),
+        ({"version": 3, "id": 7, "name": "Declared name"}, "dataset_id"),
+        ({"version": 3, "id": "data/set", "name": "Declared name"}, "dataset_id"),
+        ({"version": 3, "id": " padded ", "name": "Declared name"}, "dataset_id"),
+        ({"version": 3, "id": "declared-id", "name": ""}, "dataset_name"),
+        ({"version": 3, "id": "declared-id", "name": "   "}, "dataset_name"),
+        ({"version": 3, "id": "declared-id", "name": " padded"}, "dataset_name"),
     ],
 )
 def test_dataset_manifest_rejects_malformed_identity_without_filename_fabrication(
@@ -474,7 +474,7 @@ def test_dataset_manifest_rejects_nonportable_default_without_mutation(
     (dataset_dir / "dataset_identity.json").write_text(
         json.dumps(
             {
-                "version": 2,
+                "version": 3,
                 "id": "declared-id",
                 "name": "Declared name",
             }

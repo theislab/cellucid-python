@@ -41,7 +41,7 @@ def _minimal_adata(*, connectivity: bool = True) -> ad.AnnData:
 def _running_server(
     adata: ad.AnnData,
     *,
-    serve_connectivity: bool = True,
+    knn_key: str | None = "connectivities",
     serve_vector_fields: bool = True,
 ) -> Iterator[tuple[AnnDataServer, str, int]]:
     server = AnnDataServer(
@@ -52,7 +52,7 @@ def _running_server(
         serve_web_ui=False,
         dataset_name="HTTP contract",
         dataset_id="http-contract",
-        serve_connectivity=serve_connectivity,
+        knn_key=knn_key,
         serve_vector_fields=serve_vector_fields,
     )
     server.start_background()
@@ -142,7 +142,7 @@ def test_direct_server_preserves_biological_names_and_routes_by_payload_index() 
         dtype=np.float32,
     )
 
-    with _running_server(adata, serve_connectivity=False) as (_server, host, port):
+    with _running_server(adata, knn_key=None) as (_server, host, port):
         status, _headers, body = _request(
             host,
             port,
@@ -215,13 +215,13 @@ def test_corrupt_connectivity_aborts_adapter_initialization(
 
     with pytest.raises(
         ValueError,
-        match="direct server was not initialized",
+        match=r"obsp\['connectivities'\] (cannot be served as the neighbour graph|is not symmetric)",
     ) as error:
         AnnDataAdapter(
             adata,
             dataset_name="Corrupt connectivity",
             dataset_id="corrupt-connectivity",
-            serve_connectivity=True,
+            knn_key="connectivities",
         )
 
     assert error.value.__cause__ is not None
@@ -233,7 +233,7 @@ def test_identity_and_manifest_are_one_validated_connectivity_capability() -> No
         _minimal_adata(),
         dataset_name="Connected",
         dataset_id="connected",
-        serve_connectivity=True,
+        knn_key="connectivities",
     )
     identity = connected.get_dataset_identity()
     manifest = connected.get_connectivity_manifest()
@@ -254,7 +254,7 @@ def test_identity_and_manifest_are_one_validated_connectivity_capability() -> No
         dataset_name="Disconnected",
         dataset_id="disconnected",
     )
-    assert disconnected.serve_connectivity is False
+    assert disconnected.knn_key is None
     identity = disconnected.get_dataset_identity()
     assert identity["stats"]["has_connectivity"] is False
     assert identity["stats"]["n_edges"] is None
@@ -305,7 +305,7 @@ def test_server_initialization_rejects_an_advertised_missing_manifest() -> None:
             port=0,
             quiet=True,
             serve_web_ui=False,
-            serve_connectivity=True,
+            knn_key="connectivities",
             dataset_name="Missing manifest",
             dataset_id="missing-manifest",
         )
@@ -326,7 +326,7 @@ def test_head_uses_only_prevalidated_metadata_and_never_materializes_payloads() 
         "get_obs_manifest",
         "get_var_manifest",
         "get_connectivity_manifest",
-        "get_points_binary",
+        "get_embedding_binary",
         "get_obs_continuous_values",
         "get_gene_expression",
         "get_connectivity_edges",
@@ -389,13 +389,13 @@ def test_accept_encoding_parser_obeys_exact_tokens_and_quality(
 
 def test_get_honors_gzip_quality_zero_and_positive_quality() -> None:
     with _running_server(_minimal_adata()) as (server, host, port):
-        expected = server.adapter.get_points_binary(2)
+        expected = server.adapter.get_embedding_binary("X_umap_2d")
 
         status, headers, body = _request(
             host,
             port,
             "GET",
-            "/points_2d.bin",
+            "/embeddings/0_2d.bin",
             headers={"Accept-Encoding": "br, gzip;q=0"},
         )
         assert status == 200
@@ -407,7 +407,7 @@ def test_get_honors_gzip_quality_zero_and_positive_quality() -> None:
             host,
             port,
             "GET",
-            "/points_2d.bin",
+            "/embeddings/0_2d.bin",
             headers={"Accept-Encoding": "br, gzip;q=0.5"},
         )
         assert status == 200
@@ -487,7 +487,7 @@ def test_file_backed_weighted_h5ad_serves_all_aligned_graph_payloads(
         serve_web_ui=False,
         dataset_name="Weighted file-backed H5AD",
         dataset_id="weighted-file-backed-h5ad",
-        serve_connectivity=True,
+        knn_key="connectivities",
     )
     assert server.adapter.is_backed is True
     server.start_background()
@@ -548,7 +548,7 @@ def test_real_weighted_zarr_serves_the_same_float64_payload(
         serve_web_ui=False,
         dataset_name="Weighted Zarr",
         dataset_id="weighted-zarr",
-        serve_connectivity=True,
+        knn_key="connectivities",
     )
     assert server.adapter.is_backed is False
     server.start_background()
@@ -605,25 +605,22 @@ def test_server_publishes_the_exact_vector_manifest_and_payload() -> None:
             "fields": {
                 "velocity_umap": {
                     "label": "velocity_umap",
-                    "available_dimensions": [2],
-                    "default_dimension": 2,
                     "files": {
-                        "2d": "vectors/0_2d.bin",
+                        "X_umap_2d": "vectors/0_0.bin",
                     },
-                    "basis": "umap",
                 }
             },
         }
 
         expected = server.adapter.get_vector_field_binary(
             "velocity_umap",
-            2,
+            "X_umap_2d",
         )
         status, headers, body = _request(
             host,
             port,
             "GET",
-            "/vectors/0_2d.bin",
+            "/vectors/0_0.bin",
             headers={"Accept-Encoding": "gzip"},
         )
         assert status == 200
@@ -631,19 +628,27 @@ def test_server_publishes_the_exact_vector_manifest_and_payload() -> None:
         assert gzip.decompress(body) == expected
 
         assert _request(host, port, "GET", "/vectors/velocity_umap_2d.bin")[0] == 404
-        assert _request(host, port, "GET", "/vectors/1_2d.bin")[0] == 404
+        # The v2 dimension-suffixed name, an unknown field, and an unbound
+        # embedding index all name no payload.
+        assert _request(host, port, "GET", "/vectors/0_2d.bin")[0] == 404
+        assert _request(host, port, "GET", "/vectors/1_0.bin")[0] == 404
+        assert _request(host, port, "GET", "/vectors/0_1.bin")[0] == 404
 
 
 @pytest.mark.parametrize(
     "path",
     [
-        "/points_2d.bin.extra.bin",
-        "/points_2d.bin.gz",
-        "/points_2d.bin/extra",
-        "/points_22d.bin",
+        "/embeddings/0_2d.bin.extra.bin",
+        "/embeddings/0_2d.bin.gz",
+        "/embeddings/0_2d.bin/extra",
+        "/embeddings/0_22d.bin",
+        "/embeddings/0_3d.bin",
+        "/embeddings/1_2d.bin",
+        "/embeddings/00_2d.bin",
+        "/points_2d.bin",
     ],
 )
-def test_points_route_rejects_every_non_exact_suffix(path: str) -> None:
+def test_embedding_route_rejects_every_non_exact_suffix(path: str) -> None:
     server = AnnDataServer(
         _minimal_adata(),
         host="127.0.0.1",
@@ -655,8 +660,8 @@ def test_points_route_rejects_every_non_exact_suffix(path: str) -> None:
     )
     with mock.patch.object(
         server.adapter,
-        "get_points_binary",
-        side_effect=AssertionError("invalid route reached point payload"),
+        "get_embedding_binary",
+        side_effect=AssertionError("invalid route reached an embedding payload"),
     ):
         server.start_background()
         assert server._server is not None
@@ -689,7 +694,7 @@ def test_every_header_a_cross_origin_reader_acts_on_is_exposed() -> None:
             host,
             port,
             "GET",
-            "/points_2d.bin",
+            "/embeddings/0_2d.bin",
             headers={
                 "Accept-Encoding": "gzip",
                 "Origin": f"http://{host}:{port + 1}",

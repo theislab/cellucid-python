@@ -75,7 +75,7 @@ from ._server_base import (
 from .anndata_adapter import AnnDataAdapter, _classify_anndata_path
 from .connectivity_contract import build_connectivity_manifest
 from .continuous_payload_diagnosis import NonFinitePayloadError
-from .data_mapping import VECTOR_KEY_PATTERN, EmbeddingKeySpec
+from .data_mapping import EmbeddingKeySpec, is_vector_field_key
 
 if TYPE_CHECKING:
     import anndata
@@ -779,7 +779,7 @@ class AnnDataServer:
             }
             if not quiet:
                 print_step(4, 5, "Building manifests")
-                print_detail("Centroids", "one per categorical field and dimension")
+                print_detail("Centroids", "one per categorical field and embedding")
             (
                 self._identity,
                 self._metadata_bodies,
@@ -997,7 +997,7 @@ class AnnDataServer:
             return False
         try:
             return any(
-                isinstance(key, str) and VECTOR_KEY_PATTERN.fullmatch(key) is not None
+                is_vector_field_key(key)
                 for key in self.adapter.adata.obsm
             )
         except Exception:

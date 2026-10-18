@@ -80,7 +80,7 @@ def test_prepare_rejects_invalid_latent_values_atomically(
         prepare(
             latent_space=latent,
             obs=_obs(),
-            X_umap_2d=_embedding(),
+            embeddings={"X_umap_2d": _embedding()},
             out_dir=output,
             dataset_name="Invalid latent",
             dataset_id="invalid-latent",
@@ -104,7 +104,7 @@ def test_prepare_rejects_invalid_gene_values_atomically(
             obs=_obs(),
             var=pd.DataFrame(index=["GeneA"]),
             gene_expression=invalid.reshape(3, 1),
-            X_umap_2d=_embedding(),
+            embeddings={"X_umap_2d": _embedding()},
             out_dir=output,
             dataset_name="Invalid expression",
             dataset_id="invalid-expression",

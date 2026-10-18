@@ -41,7 +41,7 @@ def _prepared_server(tmp_path: Path) -> Iterator[tuple[str, int]]:
     prepare(
         latent_space=embedding.copy(),
         obs=pd.DataFrame({"score": [0.25, 0.5, 0.75]}),
-        X_umap_2d=embedding,
+        embeddings={"X_umap": embedding},
         out_dir=output,
         dataset_name="Protocol endpoint contract",
         dataset_id="protocol-endpoint-contract",

@@ -1,8 +1,8 @@
-"""compact_v1 has a case for a constant continuous field, and prepare() uses it.
+"""compact_v2 has a case for a constant continuous field, and prepare() uses it.
 
 A gene expressed at one level in every published cell -- very often zero, once
 an atlas is subset to one lineage -- is ordinary scientific data, and so is an
-obs column a subset flattened. compact_v1 publishes such a field as equal
+obs column a subset flattened. compact_v2 publishes such a field as equal
 bounds with every code ``0``, so dequantization returns the exact constant
 instead of an approximation, and nothing anywhere divides by
 ``maxValue - minValue``.
@@ -89,7 +89,7 @@ def _prepare_lineage_subset(out_dir, *, sparse_expression=False, obs=None, laten
         obs=resolved_obs,
         var=var,
         gene_expression=expression,
-        X_umap_2d=embedding,
+        embeddings={"X_umap_2d": embedding},
         out_dir=out_dir,
         obs_keys=list(resolved_obs.columns),
         dataset_id="lineage-subset",
@@ -287,7 +287,7 @@ def test_float64_variation_that_collapses_under_float32_is_published_as_a_consta
         obs=obs,
         var=var,
         gene_expression=expression,
-        X_umap_2d=embedding,
+        embeddings={"X_umap_2d": embedding},
         out_dir=out_dir,
         obs_keys=list(obs.columns),
         dataset_id="lineage-subset",
@@ -449,7 +449,7 @@ def test_nonfinite_gene_values_are_rejected_before_any_file_is_written(tmp_path,
             obs=obs,
             var=var,
             gene_expression=expression,
-            X_umap_2d=embedding,
+            embeddings={"X_umap_2d": embedding},
             out_dir=tmp_path / "lineage-subset",
             obs_keys=list(obs.columns),
             dataset_id="lineage-subset",

@@ -77,12 +77,14 @@ def test_anndata_adapter_emits_exact_current_compact_manifests() -> None:
         "_continuousFields",
         "_categoricalFields",
     ]
-    assert obs["_format"] == "compact_v1"
+    assert obs["_format"] == "compact_v2"
     assert obs["_continuousFields"] == [[0, "score"]]
     assert len(obs["_categoricalFields"]) == 1
     categorical = obs["_categoricalFields"][0]
     assert categorical[:5] == [1, "cluster", ["A", "B"], "uint8", 255]
+    # compact_v2 keys centroids by served embedding id, not by dimension.
     assert isinstance(categorical[5], dict)
+    assert list(categorical[5]) == ["X_umap_2d"]
     assert len(categorical) == 6
     assert obs["_obsSchemas"] == {
         "continuous": {
@@ -104,14 +106,16 @@ def test_anndata_adapter_emits_exact_current_compact_manifests() -> None:
     assert list(var) == [
         "_format",
         "n_points",
-        "var_gene_id_column",
         "compression",
         "quantization",
         "_varSchema",
         "fields",
+        "gene_name_sets",
     ]
-    assert var["_format"] == "compact_v1"
-    assert var["var_gene_id_column"] is None
+    assert var["_format"] == "compact_v2"
+    assert var["gene_name_sets"] == [
+        {"source": None, "filled_from_index": 0, "renamed": [], "names": None}
+    ]
     assert var["quantization"] is None
     assert var["_varSchema"] == {
         "kind": "continuous",
@@ -576,7 +580,9 @@ def test_generic_umap_is_ignored_when_an_explicit_embedding_exists() -> None:
         dataset_name="Explicit UMAP",
         dataset_id="explicit-umap",
     )
-    assert adapter.get_dataset_identity()["embeddings"]["available_dimensions"] == [2]
+    embeddings = adapter.get_dataset_identity()["embeddings"]
+    assert list(embeddings["items"]) == ["X_umap_2d"]
+    assert embeddings["defaults"] == {"2d": "X_umap_2d"}
 
 
 @pytest.mark.parametrize("invalid_value", [np.nan, np.inf, -np.inf])
@@ -621,7 +627,7 @@ def test_extreme_finite_umap_normalizes_without_float32_range_overflow() -> None
         dataset_id="extreme-finite-umap",
     )
 
-    normalized = adapter.get_embedding(2)
+    normalized = adapter.get_embedding("X_umap_2d")
     assert np.isfinite(normalized).all()
     assert normalized.min() >= -1.0
     assert normalized.max() <= 1.0
@@ -637,7 +643,7 @@ def test_embedding_shape_mutation_after_initialization_is_rejected() -> None:
     adata.obsm["X_umap_2d"] = np.ones((adata.n_obs, 3), dtype=np.float32)
 
     with pytest.raises(ValueError, match=r"changed after adapter initialization"):
-        adapter.get_embedding(2)
+        adapter.get_embedding("X_umap_2d")
 
 
 def test_numeric_gene_identifier_column_is_not_string_coerced() -> None:

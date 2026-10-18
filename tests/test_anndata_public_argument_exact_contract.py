@@ -58,49 +58,44 @@ def _adapter() -> AnnDataAdapter:
     )
 
 
-@pytest.mark.parametrize("dimension", [True, False, 2.0, np.int64(2), "2", None])
-@pytest.mark.parametrize(
-    "operation",
-    ["embedding", "embedding_3d", "points", "vector"],
-)
-def test_every_public_dimension_argument_requires_one_native_integer(
-    dimension: object,
+@pytest.mark.parametrize("embedding_id", [True, 2, 2.0, np.str_("X_umap_2d"), None, b"X_umap_2d"])
+@pytest.mark.parametrize("operation", ["embedding", "binary", "vector"])
+def test_every_public_embedding_argument_requires_one_native_string(
+    embedding_id: object,
     operation: str,
 ) -> None:
     adapter = _adapter()
-    with pytest.raises(TypeError, match="dim.*integer"):
+    if isinstance(embedding_id, np.str_):
+        # A numpy string is a str subclass; it names the served embedding.
         if operation == "embedding":
-            adapter.get_embedding(dimension)  # type: ignore[arg-type]
-        elif operation == "embedding_3d":
-            adapter.get_embedding_3d(dimension)  # type: ignore[arg-type]
-        elif operation == "points":
-            adapter.get_points_binary(dimension)  # type: ignore[arg-type]
+            assert adapter.get_embedding(embedding_id).shape == (3, 2)
+        return
+    with pytest.raises(TypeError, match="embedding_id.*string"):
+        if operation == "embedding":
+            adapter.get_embedding(embedding_id)  # type: ignore[arg-type]
+        elif operation == "binary":
+            adapter.get_embedding_binary(embedding_id)  # type: ignore[arg-type]
         else:
             adapter.get_vector_field_binary(
                 "velocity_umap",
-                dimension,  # type: ignore[arg-type]
+                embedding_id,  # type: ignore[arg-type]
             )
 
 
-@pytest.mark.parametrize("dimension", [0, 4, -1])
-@pytest.mark.parametrize(
-    "operation",
-    ["embedding", "embedding_3d", "points", "vector"],
-)
-def test_every_public_dimension_argument_rejects_an_unsupported_integer(
-    dimension: int,
+@pytest.mark.parametrize("embedding_id", ["", "X_umap", "X_latent", "X_umap_2d[1,0]"])
+@pytest.mark.parametrize("operation", ["embedding", "binary", "vector"])
+def test_every_public_embedding_argument_rejects_an_unserved_id(
+    embedding_id: str,
     operation: str,
 ) -> None:
     adapter = _adapter()
-    with pytest.raises(ValueError, match="dimension|Dimension"):
+    with pytest.raises(ValueError, match="embedding_id|not served|not bound"):
         if operation == "embedding":
-            adapter.get_embedding(dimension)
-        elif operation == "embedding_3d":
-            adapter.get_embedding_3d(dimension)
-        elif operation == "points":
-            adapter.get_points_binary(dimension)
+            adapter.get_embedding(embedding_id)
+        elif operation == "binary":
+            adapter.get_embedding_binary(embedding_id)
         else:
-            adapter.get_vector_field_binary("velocity_umap", dimension)
+            adapter.get_vector_field_binary("velocity_umap", embedding_id)
 
 
 def _compressed_call(
@@ -109,11 +104,11 @@ def _compressed_call(
     compress: object,
 ) -> object:
     if operation == "points":
-        return adapter.get_points_binary(2, compress=compress)  # type: ignore[arg-type]
+        return adapter.get_embedding_binary("X_umap_2d", compress=compress)  # type: ignore[arg-type]
     if operation == "vector":
         return adapter.get_vector_field_binary(
             "velocity_umap",
-            2,
+            "X_umap_2d",
             compress=compress,  # type: ignore[arg-type]
         )
     if operation == "continuous":
@@ -209,7 +204,7 @@ def test_prepare_rejects_invalid_centroid_minimum_before_target_mutation(
         prepare(
             latent_space=embedding.copy(),
             obs=pd.DataFrame({"group": pd.Categorical(["A", "A", "B"])}),
-            X_umap_2d=embedding,
+            embeddings={"X_umap": embedding},
             out_dir=output,
             dataset_name="Centroid contract",
             dataset_id="centroid-contract",
@@ -231,7 +226,7 @@ def test_prepare_accepts_one_positive_native_centroid_minimum(
     prepare(
         latent_space=embedding.copy(),
         obs=pd.DataFrame({"group": pd.Categorical(["A", "A", "B"])}),
-        X_umap_2d=embedding,
+        embeddings={"X_umap": embedding},
         out_dir=output,
         dataset_name="Centroid contract",
         dataset_id="centroid-contract",

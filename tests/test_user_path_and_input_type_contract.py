@@ -56,7 +56,7 @@ def _prepare_kwargs(**overrides: object) -> dict[str, object]:
     kwargs: dict[str, object] = {
         "latent_space": embedding.copy(),
         "obs": pd.DataFrame({"score": [0.25, 0.5, 0.75]}),
-        "X_umap_2d": embedding,
+        "embeddings": {"X_umap_2d": embedding},
         "dataset_name": "Path contract",
         "dataset_id": "path-contract",
         "obs_categorical_dtype": "uint16",

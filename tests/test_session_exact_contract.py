@@ -22,6 +22,23 @@ from cellucid.session_bundle import (
 from cellucid.session_codecs import decode_delta_uvarint, decode_user_defined_codes
 
 
+def _mapping_fingerprint_keys() -> dict:
+    """The cell-order record and data mapping every fingerprint carries."""
+    return {
+        "cellOrder": {
+            "embedding": {"key": "X_umap", "columns": None},
+            "dimension": 2,
+            "digest": "0123456789abcdef",
+        },
+        "dataMapping": {
+            "kind": "export",
+            "embeddings": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None},
+            "geneNames": "index",
+            "vectorFields": [],
+        },
+    }
+
+
 def _uvarint(value: int) -> bytes:
     output = bytearray()
     remaining = value
@@ -102,6 +119,7 @@ def _write_bundle(
             "datasetId": "exact",
             "cellCount": 3,
             "varCount": 2,
+            **_mapping_fingerprint_keys(),
         },
         "chunks": [meta for meta, _payload in entries],
     }
@@ -172,6 +190,7 @@ class _MemoryBundle:
             "datasetId": "exact",
             "cellCount": 3,
             "varCount": 2,
+            **_mapping_fingerprint_keys(),
         }
         self.manifest = {
             "createdAt": "2026-07-25T00:00:00.000Z",
@@ -440,8 +459,6 @@ def _categorical_field(
         "isPurged": False,
         "codesLength": 3,
         "codesType": "Uint8Array",
-        "centroidsByDim": {},
-        "normalizedDims": [],
         "sourceField": None,
         "operation": None,
         "sourcePages": [],
@@ -505,6 +522,7 @@ def test_session_apply_rejects_dataset_mismatch_without_mutation() -> None:
             "datasetId": "other",
             "cellCount": 3,
             "varCount": 2,
+            **_mapping_fingerprint_keys(),
         },
     )
 
@@ -1196,52 +1214,6 @@ def test_user_defined_category_preserves_exact_key_and_is_cell_aligned() -> None
     assert "Exact cell label" not in output.var
 
 
-@pytest.mark.parametrize(
-    ("centroids_by_dim", "normalized_dims", "accepted"),
-    [
-        ({"2": [], "3": []}, [2, 3], True),
-        ({"1": []}, [1], True),
-        ({"2": []}, [], False),
-        ({}, [2], False),
-        ({"2": [], "3": []}, [3], False),
-        ({"4": []}, [], False),
-        ({"2d": []}, [], False),
-    ],
-)
-def test_user_defined_centroids_name_exactly_their_normalized_dimensions(
-    centroids_by_dim: dict[str, list[Any]],
-    normalized_dims: list[int],
-    accepted: bool,
-) -> None:
-    # The web app computes user-defined centroids from normalized positions
-    # and records every stored dimension as normalized; the reader holds a
-    # session to the same rule.
-    field = _categorical_field(key="Centroid status")
-    field["centroidsByDim"] = centroids_by_dim
-    field["normalizedDims"] = normalized_dims
-    bundle = _MemoryBundle(
-        chunks={
-            "core/field-overlays": _field_overlays([field]),
-            "user-defined/codes/user_cat_1": _raw_u8_codes([0, 1, 0]),
-        }
-    )
-
-    def apply() -> Any:
-        return apply_cellucid_session_to_anndata(
-            bundle,
-            _adata(),
-            expected_dataset_id="exact",
-            add_highlights=False,
-            store_uns=False,
-        )
-
-    if accepted:
-        assert apply().obs["Centroid status"].tolist() == ["A", "B", "A"]
-    else:
-        with pytest.raises(ValueError, match="centroidsByDim"):
-            apply()
-
-
 def test_user_defined_category_materializes_current_boolean_category_values() -> None:
     bundle = _MemoryBundle(
         chunks={
@@ -1497,55 +1469,61 @@ def test_on_disk_percent_encoded_analysis_inventory_applies_without_artifact_dec
     ]
 
 
+def _complete_fingerprint(**changes: Any) -> dict[str, Any]:
+    fingerprint: dict[str, Any] = {
+        "sourceType": "anndata",
+        "datasetId": "exact",
+        "cellCount": 3,
+        "varCount": 2,
+        **_mapping_fingerprint_keys(),
+    }
+    for key, value in changes.items():
+        if value is None:
+            fingerprint.pop(key)
+        else:
+            fingerprint[key] = value
+    return fingerprint
+
+
 @pytest.mark.parametrize(
-    "fingerprint",
+    ("fingerprint", "detail"),
     [
-        {
-            "sourceType": "anndata",
-            "datasetId": "exact",
-            "cellCount": 3,
-        },
-        {
-            "sourceType": "anndata",
-            "datasetId": "exact",
-            "cellCount": 3,
-            "varCount": 2,
-            "legacy": True,
-        },
+        (_complete_fingerprint(varCount=None), "missing varCount"),
+        (_complete_fingerprint(cellOrder=None), "missing cellOrder"),
+        (_complete_fingerprint(dataMapping=None), "missing dataMapping"),
+        (_complete_fingerprint(legacy=True), "unknown legacy"),
     ],
 )
-def test_bundle_requires_exact_four_key_dataset_fingerprint(
+def test_bundle_requires_exact_six_key_dataset_fingerprint(
     tmp_path: Path,
     fingerprint: dict[str, Any],
+    detail: str,
 ) -> None:
     path = _write_bundle(
         tmp_path / "fingerprint.cellucid-session",
         [],
         fingerprint=fingerprint,
     )
-    with pytest.raises(ValueError, match="datasetFingerprint fields"):
+    with pytest.raises(ValueError, match=f"datasetFingerprint fields: {detail}"):
         CellucidSessionBundle(path).list_chunk_ids()
 
 
 def test_bundle_accepts_exact_nullable_web_dataset_identity(
     tmp_path: Path,
 ) -> None:
-    path = _write_bundle(
-        tmp_path / "nullable-fingerprint.cellucid-session",
-        [],
-        fingerprint={
-            "sourceType": None,
-            "datasetId": None,
-            "cellCount": 0,
-            "varCount": 0,
-        },
-    )
-    assert CellucidSessionBundle(path).dataset_fingerprint == {
+    fingerprint = {
         "sourceType": None,
         "datasetId": None,
         "cellCount": 0,
         "varCount": 0,
+        **_mapping_fingerprint_keys(),
     }
+    path = _write_bundle(
+        tmp_path / "nullable-fingerprint.cellucid-session",
+        [],
+        fingerprint=fingerprint,
+    )
+    assert CellucidSessionBundle(path).dataset_fingerprint == fingerprint
 
 
 def test_bundle_rejects_removed_depends_on_chunk_metadata(

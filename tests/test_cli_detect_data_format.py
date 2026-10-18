@@ -16,16 +16,19 @@ def test_cli_detect_exported_root_dir(tmp_path: Path) -> None:
     ds1 = exports_root / "ds1"
     ds1.mkdir()
     (ds1 / "dataset_identity.json").write_text(
-        '{"version": 2, "id": "ds1", "name": "ds1"}', encoding="utf-8"
+        '{"version": 3, "id": "ds1", "name": "ds1"}', encoding="utf-8"
     )
     (ds1 / "obs_manifest.json").write_text("{}", encoding="utf-8")
-    (ds1 / "points_3d.bin").write_bytes(b"\x00")
+    (ds1 / "embeddings").mkdir()
+    (ds1 / "embeddings" / "0_3d.bin").write_bytes(b"\x00")
 
     assert _detect_data_format(exports_root) == "exported"
 
 
-def test_unsupported_four_dimensional_points_are_not_detected_as_export(
+@pytest.mark.parametrize("layout", ["root-points", "empty-embeddings"])
+def test_a_directory_without_embedding_payloads_is_not_detected_as_export(
     tmp_path: Path,
+    layout: str,
 ) -> None:
     from cellucid.cli import _detect_data_format
     from cellucid.server import CORSRequestHandler
@@ -33,16 +36,37 @@ def test_unsupported_four_dimensional_points_are_not_detected_as_export(
     dataset_dir = tmp_path / "unsupported"
     dataset_dir.mkdir()
     (dataset_dir / "dataset_identity.json").write_text(
-        '{"version": 2, "id": "unsupported", "name": "Unsupported"}',
+        '{"version": 3, "id": "unsupported", "name": "Unsupported"}',
         encoding="utf-8",
     )
     (dataset_dir / "obs_manifest.json").write_text("{}", encoding="utf-8")
-    (dataset_dir / ("points_" + "4d.bin")).write_bytes(b"\x00")
+    if layout == "root-points":
+        # A version-2 layout: coordinates at the root, no embeddings/ axis.
+        (dataset_dir / ("points_" + "3d.bin")).write_bytes(b"\x00")
+    else:
+        (dataset_dir / "embeddings").mkdir()
 
     with pytest.raises(ValueError, match="complete exported dataset"):
         _detect_data_format(dataset_dir)
     handler = CORSRequestHandler.__new__(CORSRequestHandler)
     assert handler._is_dataset_dir(dataset_dir) is False
+
+
+def test_a_version_two_identity_is_refused_with_the_re_export_remedy(tmp_path: Path) -> None:
+    from cellucid.cli import _detect_data_format
+
+    dataset_dir = tmp_path / "old"
+    dataset_dir.mkdir()
+    (dataset_dir / "dataset_identity.json").write_text(
+        '{"version": ' + "2" + ', "id": "old", "name": "Old"}',
+        encoding="utf-8",
+    )
+    (dataset_dir / "obs_manifest.json").write_text("{}", encoding="utf-8")
+    (dataset_dir / "embeddings").mkdir()
+    (dataset_dir / "embeddings" / "0_2d.bin").write_bytes(b"\x00" * 8)
+
+    with pytest.raises(ValueError, match="version must be exactly 3.*Re-export"):
+        _detect_data_format(dataset_dir)
 
 
 def test_server_datasets_use_identity_id(tmp_path: Path) -> None:
@@ -51,9 +75,10 @@ def test_server_datasets_use_identity_id(tmp_path: Path) -> None:
     dataset_dir = tmp_path / "my_folder_name"
     dataset_dir.mkdir()
     (dataset_dir / "obs_manifest.json").write_text("{}", encoding="utf-8")
-    (dataset_dir / "points_3d.bin").write_bytes(b"\x00")
+    (dataset_dir / "embeddings").mkdir()
+    (dataset_dir / "embeddings" / "0_3d.bin").write_bytes(b"\x00")
     (dataset_dir / "dataset_identity.json").write_text(
-        json.dumps({"version": 2, "id": "stable_dataset_id", "name": "Nice Name"}), encoding="utf-8"
+        json.dumps({"version": 3, "id": "stable_dataset_id", "name": "Nice Name"}), encoding="utf-8"
     )
 
     handler = CORSRequestHandler.__new__(CORSRequestHandler)
@@ -66,10 +91,10 @@ def test_server_datasets_use_identity_id(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("identity", "invalid_field"),
     [
-        ({"version": 2, "name": "Nice Name"}, "dataset_id"),
-        ({"version": 2, "id": "stable-id"}, "dataset_name"),
-        ({"version": 2, "id": 7, "name": "Nice Name"}, "dataset_id"),
-        ({"version": 2, "id": "stable-id", "name": ""}, "dataset_name"),
+        ({"version": 3, "name": "Nice Name"}, "dataset_id"),
+        ({"version": 3, "id": "stable-id"}, "dataset_name"),
+        ({"version": 3, "id": 7, "name": "Nice Name"}, "dataset_id"),
+        ({"version": 3, "id": "stable-id", "name": ""}, "dataset_name"),
     ],
 )
 def test_server_rejects_malformed_identity_instead_of_using_directory_name(
@@ -82,7 +107,8 @@ def test_server_rejects_malformed_identity_instead_of_using_directory_name(
     dataset_dir = tmp_path / "must-not-become-identity"
     dataset_dir.mkdir()
     (dataset_dir / "obs_manifest.json").write_text("{}", encoding="utf-8")
-    (dataset_dir / "points_3d.bin").write_bytes(b"\x00")
+    (dataset_dir / "embeddings").mkdir()
+    (dataset_dir / "embeddings" / "0_3d.bin").write_bytes(b"\x00")
     (dataset_dir / "dataset_identity.json").write_text(
         json.dumps(identity),
         encoding="utf-8",
@@ -158,8 +184,11 @@ def test_cli_passes_exact_identity_without_backed_state_to_zarr(
         dataset_name="CLI fixture",
         dataset_id="cli-fixture",
         obs_keys=["cell_type", "total_counts"],
+        gene_id_column=None,
+        embedding_keys=None,
+        knn_key=None,
+        expression_source="X",
         vector_field_default="drift_umap",
-        serve_connectivity=False,
         serve_vector_fields=True,
     )
 
@@ -169,7 +198,7 @@ def _write_cli_export(directory: Path) -> None:
     (directory / "dataset_identity.json").write_text(
         json.dumps(
             {
-                "version": 2,
+                "version": 3,
                 "id": "cli-export",
                 "name": "CLI export",
             }
@@ -177,7 +206,8 @@ def _write_cli_export(directory: Path) -> None:
         encoding="utf-8",
     )
     (directory / "obs_manifest.json").write_text("{}", encoding="utf-8")
-    (directory / "points_2d.bin").write_bytes(b"\x00" * 8)
+    (directory / "embeddings").mkdir()
+    (directory / "embeddings" / "0_2d.bin").write_bytes(b"\x00" * 8)
 
 
 def test_cli_no_command_and_parse_errors_return_nonzero_without_system_exit(

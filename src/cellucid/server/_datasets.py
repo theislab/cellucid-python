@@ -36,14 +36,7 @@ def _read_exported_dataset_entry(
         dataset_dir / "dataset_identity.json",
         dataset_dir / "obs_manifest.json",
     )
-    embeddings_dir = dataset_dir / EMBEDDINGS_DIRNAME
-    if (
-        not dataset_dir.is_dir()
-        or any(not path.is_file() for path in required_files)
-        or embeddings_dir.is_symlink()
-        or not embeddings_dir.is_dir()
-        or not any(embeddings_dir.iterdir())
-    ):
+    if not dataset_dir.is_dir() or any(not path.is_file() for path in required_files):
         raise ValueError(f"{dataset_dir.name!r} is not a complete exported dataset.")
 
     try:
@@ -62,6 +55,18 @@ def _read_exported_dataset_entry(
         raise ValueError(
             f"dataset_identity.json version must be exactly {IDENTITY_VERSION}. "
             "Re-export the dataset with the current prepare() or cellucid_prepare()."
+        )
+    # Checked after the version, so an export written in an earlier format is
+    # told to re-export rather than that a directory is missing.
+    embeddings_dir = dataset_dir / EMBEDDINGS_DIRNAME
+    if (
+        embeddings_dir.is_symlink()
+        or not embeddings_dir.is_dir()
+        or not any(embeddings_dir.iterdir())
+    ):
+        raise ValueError(
+            f"{dataset_dir.name!r} is not a complete exported dataset: it has no "
+            f"{EMBEDDINGS_DIRNAME}/ payloads."
         )
 
     dataset_id = _require_dataset_id(
