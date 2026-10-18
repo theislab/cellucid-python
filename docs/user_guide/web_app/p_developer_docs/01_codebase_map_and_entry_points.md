@@ -58,7 +58,9 @@ cellucid/
     └── js/
         ├── analytics/             # Google Analytics helpers. Inert unless the
         │                          #   page is served from a production hostname
-        │                          #   (see ui/core/ga-init.js).
+        │                          #   (see ui/core/ga-init.js). Reached only by
+        │                          #   the dynamic import in app/optional-analytics.js,
+        │                          #   so a blocker refusing it cannot stop the app.
         ├── app/                   # App layer (state + UI wiring + sessions + analysis)
         │   ├── main.js            # App entry point (bootstrap + dataset load orchestration)
         │   ├── state/             # DataState (state/core) + managers

@@ -36,6 +36,15 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Fixed
 
+- **Web app**: with an ad or tracking blocker (uBlock Origin, Brave, AdGuard, iOS
+  content blockers — anything shipping EasyPrivacy, which lists
+  `/analytics/tracker.js`), Cellucid did not start and showed “Cellucid could not
+  load its code…”. The analytics module was a static import, so its refused
+  request aborted the whole module graph. Analytics is now loaded with a dynamic
+  import and stays off when refused; the dataset-load vocabulary it shared with
+  the controls moved to `app/data-load-methods.js`. No other application file
+  matches the EasyList, EasyPrivacy, uBlock Origin or AdGuard lists.
+
 - **Web app**: choosing volumetric smoke on a device without float blending
   (Safari on iPhone and iPad, many Android browsers) failed mid-build with
   “Smoke density unavailable: GPU smoke density requires EXT_float_blend for

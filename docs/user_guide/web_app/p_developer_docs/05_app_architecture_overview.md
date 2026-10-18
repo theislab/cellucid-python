@@ -66,7 +66,9 @@ The high-level startup flow is:
    If the canvas yields no `webgl2` context this throws immediately and the
    startup-failure card replaces the app. There is no software renderer.
 3) `main.js` creates the app state: `createDataState({ viewer, labelLayer })`.
-4) `main.js` initializes notifications and analytics, then sets up the `DataSourceManager`.
+4) `main.js` initializes notifications, starts loading the optional analytics
+   (`app/optional-analytics.js`, a dynamic import that falls back to inert entry
+   points when a privacy blocker refuses it), then sets up the `DataSourceManager`.
 5) The app decides what to load first:
    - URL params (`?remote=…`, `?github=…`, `?dataset=…`) may override the default demo.
    - Jupyter context (iframe) may register a Jupyter data source and auto-load.

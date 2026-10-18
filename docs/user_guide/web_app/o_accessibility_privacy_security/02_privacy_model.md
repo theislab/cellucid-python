@@ -121,8 +121,10 @@ Pick any one of these; each is sufficient:
 - **Use the local server or notebook viewer.** `cellucid serve` and the Jupyter
   embedding are not on the production hostnames.
 - **Block it at the network or browser layer** if you must use the public site —
-  but prefer one of the first two, because they remove the code path rather than
-  the request.
+  an ad or tracking blocker refusing Google's script or Cellucid's own
+  `assets/js/analytics/` files leaves the app fully working, because analytics
+  is loaded as an optional part. Prefer one of the first two all the same,
+  because they remove the code path rather than the request.
 
 Naming exports neutrally (`cohort_a` rather than the study name) is a sensible
 habit regardless, since the same string also lands in figure metadata and

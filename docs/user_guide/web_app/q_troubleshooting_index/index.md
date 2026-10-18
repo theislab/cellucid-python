@@ -242,9 +242,12 @@ So:
 - **Never becomes ready** — that is a startup failure. Look for the “Cellucid
   could not start” card, or check the console.
 - **The line turns red and reads “Cellucid could not load its code…”** — one of
-  the app's own files failed to download (a dropped connection, a proxy, or a
-  site update that landed while the page was loading), so nothing could start.
-  Check the connection and reload the page.
+  the app's own files failed to download (a dropped connection, a proxy or
+  firewall, a browser extension that blocks requests to this site, or a site
+  update that landed while the page was loading), so nothing could start. Check
+  the connection and reload the page; if it persists, try with extensions
+  disabled. Ad and tracking blockers refusing the usage-analytics files do
+  *not* cause this: analytics is optional and the app starts without it.
 
 ---
 
