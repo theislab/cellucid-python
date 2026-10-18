@@ -25,6 +25,13 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Fixed
 
+- **Web app**: a panel's undock, dock, copy and close buttons no longer sit inside
+  its header's open/close toggle. A `<summary>` is itself a button, so each was a
+  control nested in a control — announced poorly by screen readers and flagged by
+  accessibility checkers. They now stand beside the header, look and sit exactly
+  where they did, are named after their panel ("Undock Visualization panel into a
+  floating window"), and come just before the header in `Tab` order.
+
 - **Web app**: in multiview, a finger dragging a pane now focuses that pane first,
   as a mouse press does, instead of moving whichever pane last had focus, and a
   touch drag saves the camera to the focused pane when cameras are unlocked.

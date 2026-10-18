@@ -288,6 +288,13 @@ are safe to rely on:
   and is the first `Tab` stop.
 - Every icon-only button resolves to exactly one accessible name; the sidebar
   toggle's name and its expanded state change together.
+- No panel header nests a control inside its open/close toggle. A panel's
+  undock, dock, copy and close buttons sit beside the header rather than in it,
+  are named after their panel (“Undock Visualization panel into a floating
+  window”), and come just before the panel's header in `Tab` order. The header
+  opens and closes the panel with `Enter` or `Space`; activating one of its
+  buttons never does, and after docking or undocking, focus moves to the button
+  that reverses the move.
 - Both **Select mode** toggles are buttons named “Select mode” whose
   `aria-pressed` state always matches, and the Intersect / Add / Subtract
   buttons are a named group with one pressed button.
