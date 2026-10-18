@@ -14,14 +14,25 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 - **Web app**: cells can be highlighted on a touch screen. Every selection tool
   started only from an `Alt` press, which a phone or tablet does not have, so touch
-  users could not select at all. A **Select mode** toggle in the Highlighting panel
-  (repeated at the bottom of the plot on touch screens) now stands in for a held
-  `Alt`: while it is on, a one-finger tap or drag runs the active tool through the
-  same path an `Alt` press takes, and its Intersect / Add / Subtract buttons stand
-  in for `Shift` and `Ctrl`. Two fingers always pinch to zoom and, newly, drag to
-  pan; a second finger landing mid-selection abandons that gesture rather than
-  committing it. `Esc` with nothing in progress leaves the mode. Mouse and keyboard
-  behaviour is unchanged while it is off.
+  users could not select at all. A **Select mode** switch in the Highlighting panel
+  now stands in for a held `Alt`: while it is on, a one-finger tap or drag runs the
+  active tool through the same path an `Alt` press takes, and its Intersect / Add /
+  Subtract buttons stand in for `Shift` and `Ctrl`. Two fingers always pinch to zoom
+  and, newly, drag to pan; a second finger landing mid-selection abandons that
+  gesture rather than committing it. `Esc` with nothing in progress leaves the mode.
+  Mouse and keyboard behaviour is unchanged while it is off.
+
+- **Web app**: a **selection bar** at the bottom of the plot carries Select mode's
+  controls, so a selection can be made, combined, confirmed, cancelled and cleared
+  without opening the menu, which covers the whole screen on a phone. It shows the
+  same switch and Intersect / Add / Subtract choice as the panel, the active
+  tool's cell count with its Undo, Cancel and Confirm while a selection is in
+  progress, the active page's highlighted count with Clear, and a one-line note
+  when a tap on empty plot changed nothing. Every control on it is the panel's
+  control shown again, so the two always agree. It is always shown on touch
+  screens (just the switch while the mode is off), shown to a mouse while the
+  mode is on, centred in the part of the plot the sidebar leaves uncovered, and
+  notifications stack above it.
 
 ### Fixed
 
@@ -31,6 +42,19 @@ Version 0.9.2 is a patch release on 0.9.1.
   accessibility checkers. They now stand beside the header, look and sit exactly
   where they did, are named after their panel ("Undock Visualization panel into a
   floating window"), and come just before the header in `Tab` order.
+
+- **Web app**: multiview panes are laid out in the part of the window the sidebar
+  leaves uncovered. The grid was cut from the whole canvas, so with the sidebar
+  open the left pane was partly hidden under it (at 1440 px with two panes, 430 px
+  of the left pane was visible against 720 px of the right one). Every pane now
+  has the same size beside the open sidebar, and the layout follows at once when
+  the sidebar is closed, opened, resized, or the window or its pixel density
+  changes. One layout drives drawing, picking, hover, focus, every selection
+  tool, projectiles, the pane title chips, centroid labels, figure export, and
+  the selection bar, so what you click is always the pane you see. Wheel zoom
+  now focuses the pane under the cursor, free-fly is centred in the uncovered
+  area like Orbit and Planar, and the hidden sidebar is `inert`, so `Tab` no
+  longer walks into it.
 
 - **Web app**: in multiview, a finger dragging a pane now focuses that pane first,
   as a mouse press does, instead of moving whichever pane last had focus, and a

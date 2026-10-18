@@ -420,7 +420,7 @@ Selection/highlighting problems are often mismatches between:
 2) Confirm the active highlight page and that the group checkbox is enabled.  
 3) Confirm you are interacting with the intended panel: {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`  
 4) Confirm the tool’s modifier keys (`Alt`, `Shift+Alt`, `Ctrl/Cmd+Alt`), or on a
-   touch screen that **Select mode** is pressed.  
+   touch screen that **Select mode** is on.  
 5) If clicks miss cells, **zoom in** — the pick radius is fixed and only drawn
    cells are hittable. Point size is not the knob.
 

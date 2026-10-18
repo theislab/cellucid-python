@@ -81,14 +81,15 @@ that device.
   shown. An undocked panel moves by dragging its header with a finger.
 - Selecting cells (highlighting) is an {kbd}`Alt` + click or
   {kbd}`Alt` + drag gesture with a keyboard. A touch screen has no
-  {kbd}`Alt`, so turn on **Select mode** instead: the toggle sits in the
-  **Highlighting** panel and, on a touch screen, also at the bottom of the plot.
-  While it is on, a one-finger tap or drag runs the active highlight tool
-  exactly as {kbd}`Alt` + click or {kbd}`Alt` + drag does, and two fingers
-  still zoom and pan. Its **Intersect / Add / Subtract** buttons stand in for
-  {kbd}`Shift` and {kbd}`Ctrl`. Tap the toggle again (or press {kbd}`Esc`
-  with nothing in progress) to go back to navigating. See
-  {doc}`../f_highlighting_selection/03_highlight_ui`.
+  {kbd}`Alt`, so turn on **Select mode** instead: its switch sits in the
+  **Highlighting** panel and, on a touch screen, on the selection bar at the
+  bottom of the plot. While it is on, a one-finger tap or drag runs the active
+  highlight tool exactly as {kbd}`Alt` + click or {kbd}`Alt` + drag does, and
+  two fingers still zoom and pan. Its **Intersect / Add / Subtract** buttons
+  stand in for {kbd}`Shift` and {kbd}`Ctrl`, and the bar also confirms,
+  cancels and clears selections, so the menu can stay closed. Turn the switch
+  off (or press {kbd}`Esc` with nothing in progress) to go back to
+  navigating. See {ref}`selection-bar`.
 
 ---
 

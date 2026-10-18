@@ -40,6 +40,10 @@ Inside this section you will see four sub-areas, top to bottom:
 3) **Highlighted groups** (the list + count + Clear)
 4) `Create Categorical` (a collapsed accordion that turns pages into an obs column)
 
+On the plot itself, the **selection bar** repeats Select mode's switch and
+combine choice, the active tool's step controls, and the page's count and
+**Clear** (see {ref}`selection-bar`).
+
 ---
 
 ## 1) Highlight mode (choose how you build a selection)
@@ -89,15 +93,54 @@ choosing one:
 - Two fingers always navigate: pinch to zoom, move both to pan. A second finger
   that lands while a one-finger selection is still being drawn abandons that
   gesture without selecting anything, and the panel says it was interrupted.
-- On a touch screen the same toggle is repeated at the bottom of the plot, so
-  you can switch between navigating and selecting with the sidebar closed.
-  The switch and the plot button always show the same state.
-- To leave Select mode, turn the switch off or press the plot button again, or press `Esc` when no
+- A tap or click on empty plot selects nothing and changes nothing: it never
+  clears what you have. The panel (and the selection bar) say so, so a miss
+  does not look like a broken tool.
+- To leave Select mode, turn either switch off, or press `Esc` when no
   selection is in progress (the first `Esc` cancels a selection in progress).
 
 Select mode is an input setting, like holding `Alt`: it is not saved in
-sessions. The step controls (**Confirm**, **Undo**, **Cancel**) stay in this
-panel, so on a phone you reopen the sidebar to confirm a selection.
+sessions.
+
+(selection-bar)=
+#### The selection bar (on the plot)
+
+The **selection bar** is a small card at the bottom of the plot that carries
+Select mode's controls, so you can select, combine, confirm, discard, clear and
+leave the mode without opening the menu — which on a phone covers the whole
+screen. Every control on it is the Highlighting panel's own control shown a
+second time: both show the same state and do exactly the same thing.
+
+From top to bottom it shows:
+
+1. **What a tap or drag will do**, for the active tool (for example
+   “Lasso: draw around cells to select them.”), or, while a selection is in
+   progress, **how many cells it holds** with that tool's **Undo**, **Cancel**
+   and **Confirm**. **Cancel** discards the selection in progress (as `Esc`
+   does); **Confirm** saves it to the active highlight page.
+2. A one-line note when your last gesture changed nothing (for example
+   “No cell there. Nothing changed; zoom in to hit cells.”).
+3. **What is saved on the active highlight page** (“40 cells highlighted”),
+   with **Clear**, which removes this page's highlights exactly as the panel's
+   **Clear** does. It sits on its own row, below **Confirm**, so a second tap
+   after confirming cannot clear what you just saved.
+4. The **Select mode** switch and the **Intersect / Add / Subtract** choice.
+
+When the bar shows:
+
+- On a touch screen (any device with a touch pointer, including a laptop with
+  a touch screen) it is always there. While Select mode is off it is only the
+  switch, plus a selection still in progress, so you can turn the mode off to
+  rotate with one finger and still confirm or cancel what you drew.
+- With a mouse it appears while Select mode is on, and goes away when you turn
+  it off.
+- On a phone it hides while the full-screen menu is open.
+
+It is centred in the part of the plot the sidebar leaves uncovered (the same
+area the multiview grid is laid out in, so the bar and the panels always
+agree), and notifications stack above it rather than covering it. A finger on the bar never
+reaches the plot, so tapping or dragging on it never starts a selection or moves
+the camera.
 
 ---
 

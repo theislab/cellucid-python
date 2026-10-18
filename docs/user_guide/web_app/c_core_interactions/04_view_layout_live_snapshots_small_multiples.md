@@ -68,6 +68,28 @@ changes in one selected view do not propagate to the other panels. Highlight
 pages are a separate feature and should not be treated as part of the
 per-snapshot contract.
 
+## Where the panels sit
+
+`Grid compare` lays the panels out in the part of the window the sidebar does
+not cover. With the sidebar open, the panels start at its right edge; every
+panel has the same size, so the left panel is never partly hidden under the
+sidebar. Closing the sidebar (the `☰`/`✕` tab or `H`), dragging its edge to
+resize it, resizing the window, or moving the window to a screen with another
+pixel density re-lays the panels out at once. While the sidebar slides open or
+closed, the panels keep the area beside the open sidebar and take the full
+width when the closing slide has finished, so no frame shows a covered panel.
+On a phone the menu is a full-screen sheet that you close to reach the plot,
+and the panels then use the whole screen.
+
+Everything you do on the plot follows the same layout: a click or tap focuses
+the panel under it, picking, hover, every selection tool, projectiles, the
+panel title chips, and the selection bar all use the panel rectangles you see.
+
+A single view (one panel, or `Edit selected view`) still draws across the whole
+window, but the camera centre - the orbit or pan target, or the free-fly look
+direction - sits at the centre of the uncovered part, so the data is centred
+where you can see it.
+
 ## Select and edit the intended panel
 
 Click a view badge to make that view active. Field selectors, filters,

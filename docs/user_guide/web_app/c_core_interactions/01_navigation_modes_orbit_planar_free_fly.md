@@ -110,8 +110,11 @@ Keyboard navigation works in all modes. In orbit mode:
 - **2 finger pinch**: zoom
 - **2 finger drag**: pan (move both fingers together)
 
-With **Select mode** on (Highlighting panel), one finger runs the active
-selection tool instead of rotating; two fingers still pinch and pan.
+With **Select mode** on (its switch is on the selection bar at the bottom of
+the plot and in the Highlighting panel), one finger runs the active selection
+tool instead of rotating; two fingers still pinch and pan. To rotate between
+two selection steps, turn the switch off, rotate, and turn it back on: the
+selection in progress stays on the bar, with its **Confirm** and **Cancel**.
 
 ### Orbit options (UI)
 
@@ -211,11 +214,12 @@ In **Grid compare** layout, you can see multiple views at once.
 
 Key rule:
 
-- The view you last clicked becomes the **focused view** for camera/navigation.
+- The view you last clicked, tapped, or scrolled over becomes the **focused view** for camera/navigation.
 
 Practical implications:
 
-- If you scroll/drag and “the wrong panel moves”, click inside the panel you intend to control.
+- Scrolling (wheel zoom) over a panel focuses that panel and zooms it; with **Zoom to cursor** the point under the cursor in that panel stays put.
+- If you drag and “the wrong panel moves”, click inside the panel you intend to control.
 - When **cameras are unlocked**, each view can store its own camera state; clicking a different panel can switch you to its saved camera.
 
 ---

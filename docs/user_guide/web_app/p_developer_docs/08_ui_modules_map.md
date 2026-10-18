@@ -91,7 +91,8 @@ The `ui/` layer also has directories this page does not otherwise cover:
 
 | Module | File | Owns |
 |---|---|---|
-| Sidebar toggle/resize | `ui/modules/sidebar-controls.js` | sidebar visibility + `--sidebar-width` |
+| Sidebar toggle/resize | `ui/modules/sidebar-controls.js` | sidebar visibility (`inert` while hidden) + `--sidebar-width`; publishes the sidebar's left occlusion of the canvas, from which the viewer resolves the presented layout |
+| Selection bar placement | `ui/modules/select-bar-placement.js` | centres `#select-bar` in the viewer's presented area (`viewer.onPresentedLayoutChange`) |
 | Stats display | `ui/modules/stats-display.js` | top stats line (dataset/field/cell counts) |
 
 ### Dataset + session modules

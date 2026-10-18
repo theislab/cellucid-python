@@ -262,9 +262,9 @@ The genuine gap is **selection**, not navigation:
 
 - **Lasso and area selection require a pointer.** There is no keyboard equivalent
   for dragging a region over the plot. The pointer does not need a held key,
-  though: with **Select mode** on (Highlighting panel), a plain click, tap, or
-  drag runs the active tool, and its **Intersect / Add / Subtract** buttons
-  replace `Shift` and `Ctrl`. That serves touch screens and anyone who cannot
+  though: with **Select mode** on (Highlighting panel or the selection bar on
+  the plot), a plain click, tap, or drag runs the active tool, and its
+  **Intersect / Add / Subtract** buttons replace `Shift` and `Ctrl`. That serves touch screens and anyone who cannot
   hold a modifier key while pressing.
 - **Clicking an individual cell requires a pointer.** Picking is a
   point-and-shoot operation against the drawn scene.
@@ -288,6 +288,9 @@ are safe to rely on:
   and is the first `Tab` stop.
 - Every icon-only button resolves to exactly one accessible name; the sidebar
   toggle's name and its expanded state change together.
+- While the sidebar is hidden it is `inert`: none of its controls can take
+  focus, be reached with `Tab`, or be read by a screen reader until the sidebar
+  is shown again.
 - No panel header nests a control inside its open/close toggle. A panel's
   undock, dock, copy and close buttons sit beside the header rather than in it,
   are named after their panel (“Undock Visualization panel into a floating
@@ -295,9 +298,13 @@ are safe to rely on:
   opens and closes the panel with `Enter` or `Space`; activating one of its
   buttons never does, and after docking or undocking, focus moves to the button
   that reverses the move.
-- Both **Select mode** toggles are buttons named “Select mode” whose
-  `aria-pressed` state always matches, and the Intersect / Add / Subtract
-  buttons are a named group with one pressed button.
+- Both **Select mode** switches (the Highlighting panel's and the selection
+  bar's) are switches (`role="switch"`) named “Select mode” whose
+  `aria-checked` state always matches, and each Intersect / Add / Subtract
+  choice is a named group with one pressed button, the same one on both. The
+  selection bar is a region named “Selection”; its cell count and its note on
+  a gesture that changed nothing are announced politely, and every control on
+  it is reachable and operable from the keyboard.
 - Every control in every analysis panel has an accessible name, and highlight
   page chips are operable with both `Enter` and `Space`, keep focus after
   activation, and announce their state (“120 cells”, “no cells, cannot be

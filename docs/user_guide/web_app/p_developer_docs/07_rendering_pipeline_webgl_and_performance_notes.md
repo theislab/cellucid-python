@@ -221,15 +221,69 @@ The viewer:
 - caches per-view positions for snapshot views
 - uses optimized paths for alpha/transparency sharing so it does not re-upload N full buffers per view
 
+### The presented layout: one source of truth for where views are
+
+The canvas fills the window and the sidebar overlays its left edge. The
+**presented area** is the part of the canvas the sidebar leaves uncovered, and
+every view is laid out relative to it by one pure function,
+`resolvePresentedLayout()` in `assets/js/rendering/viewer/presented-view-layout.js`.
+
+- `ui/modules/sidebar-controls.js` measures the sidebar and publishes the
+  fraction of the canvas it covers from the left
+  (`computeLeftOcclusionRatio()` in `rendering/viewport-center.js`) to
+  `viewer.setViewportLeftOcclusionRatio()`. It republishes on a toggle, during
+  a resize drag (from cached geometry, without a layout read), on window and
+  canvas resizes, and on responsive breakpoints. The open/close slide is a CSS
+  transform no `ResizeObserver` sees, so while it runs the presented area stays
+  the one beside the *open* sidebar (it shrinks at once on opening and grows
+  only when the closing slide has ended): panes are never under the moving
+  sidebar and keep equal areas in every frame. On the phone layout the open
+  sidebar is a full-screen sheet the user closes to reach the plot, so it
+  covers nothing. The hidden sidebar is `inert`.
+- The viewer resolves the layout from the canvas backing-store and CSS sizes
+  (so device-pixel-ratio changes are included), the occlusion ratio, the
+  layout mode, the focused view, and the view inventory. It is memoised: it is
+  recomputed only when one of those inputs changes, together with one
+  projection matrix per pane, and is otherwise one frozen object.
+  `viewer.getPresentedLayout()` returns it and
+  `viewer.onPresentedLayoutChange(listener)` delivers each new one.
+- **Grid** (`Grid compare` with two or more views): the presented area is split
+  into `cols × rows` cells of identical integer framebuffer size, starting at
+  the first framebuffer column right of the sidebar. No cell is under the
+  sidebar, every cell has the same area, and each renders with a symmetric
+  projection and its own scissor rectangle.
+- **Single view**: the pane keeps the whole canvas (the scene continues under
+  the sidebar), and its projection is shifted horizontally so the principal
+  point - the camera target in Orbit and Planar, the look direction in
+  Free-fly - sits at the centre of the presented area. This is what a single
+  view always showed in Orbit and Planar; Free-fly now uses the same centre,
+  so switching modes no longer shifts the picture.
+
+Each pane carries its WebGL viewport (`viewport*`, framebuffer pixels,
+bottom-left origin), its render rectangle (`css*`) and presented rectangle
+(`visibleCss*`) in canvas-local CSS pixels, and `projectionCenterNdcX`. Every
+mapping between the screen and a view reads these panes: the render loop's
+viewports, scissors and per-pane projections (so frustum culling and LOD see
+the real pane shape), `getViewportInfoAtScreen()` and therefore click/tap
+focus, wheel zoom (which focuses the pane under the cursor), picking (nothing
+outside a pane's presented rectangle can be picked), hover delivery to
+Jupyter, every highlight tool (lasso polygons are clipped to the pane's
+presented rectangle; proximity and KNN indicators are clipped like the WebGL
+scissor), projectile aiming and the charge ring, centroid labels, view title
+chips, overlays, `getPresentedViewState()` (figure export and its preview),
+and the selection bar, which is centred in `presentedArea`.
+
 ### Layout arithmetic, and why it changes the cost
 
 ```
 cols = viewCount <= 3 ? viewCount : ceil(sqrt(viewCount))
 rows = ceil(viewCount / cols)
+paneWidth = floor((canvasWidth - presentedLeft) / cols)
 paneHeight = floor(canvasHeight / rows)
 ```
 
-So: 2 views → 1×2, 3 → 1×3, 4 → 2×2.
+So: 2 views → 1×2, 3 → 1×3, 4 → 2×2. Figure export arranges multi-panel
+figures with the same column rule (`getPresentedGridColumns()`).
 
 `paneHeight` is what the point vertex shaders receive as the viewport-height
 uniform, and perspective point size is proportional to it. Point **area** is

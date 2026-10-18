@@ -158,9 +158,10 @@ If you want a keyboard-first workflow, the UI supports:
 
 - `Alt` + drag for area selection (and other shortcuts; see the in‑app “Keyboard Shortcuts” accordion).
 
-On a phone or tablet, press **Select mode** in the Highlighting panel (or at the
-bottom of the plot) and draw with one finger instead; two fingers still zoom and
-pan.
+On a phone or tablet, turn on **Select mode** on the selection bar at the
+bottom of the plot (or in the Highlighting panel) and draw with one finger
+instead; two fingers still zoom and pan. The bar then confirms, cancels or
+clears the selection without the menu.
 
 ### 6) Export or save what you did
 

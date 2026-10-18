@@ -68,7 +68,10 @@ On a touch screen, or anywhere without an `Alt` key, turn on **Select mode** in
 the Highlighting panel: a one-finger tap or drag then does what `Alt+click` or
 `Alt+drag` does in every tool below, and its **Intersect / Add / Subtract**
 buttons replace `Alt`, `Shift+Alt`, and `Ctrl/Cmd+Alt`. Two fingers still zoom
-and pan. See {ref}`select-mode`.
+and pan. The same switch and choice sit on the **selection bar** at the bottom
+of the plot, beside each tool's **Confirm**, **Undo** and **Cancel**, so on a
+phone a selection can be finished without reopening the menu. See
+{ref}`select-mode` and {ref}`selection-bar`.
 
 ### Rule 3: selections are multi-step (and undoable)
 Each gesture typically becomes a “step”.
@@ -77,6 +80,10 @@ Step controls (per tool) let you:
 - **Confirm**: commit the current candidate set into a new highlight group
 - **Undo / Redo**: roll back up to a few recent steps
 - **Cancel**: discard the current candidate set
+
+While a selection is in progress the **selection bar** on the plot shows its
+cell count with the same **Undo**, **Cancel** and **Confirm** (no Redo); they
+are the panel's buttons, pressed from the plot (see {ref}`selection-bar`).
 
 :::{note}
 Undo/redo history is intentionally short (to keep memory bounded). If you need a very long “edit history”, confirm intermediate groups and keep them (or save a session).
@@ -231,7 +238,10 @@ To approximate a “3D volume selection”:
 
 ### Multi-view behavior
 In grid multi-view, lasso applies to the specific panel you started the gesture in.
-Try to keep the lasso path inside one panel to avoid ambiguity.
+Only cells that panel actually shows can be selected: the part of a path that
+strays into a neighbouring panel (or under the sidebar) selects nothing there.
+Proximity and KNN likewise grow from the cell under the pointer in the panel
+you pressed, and their circles are drawn clipped to that panel.
 
 ### Performance considerations
 Lasso preview can be expensive on very large datasets because it may need to evaluate many points repeatedly while you draw.

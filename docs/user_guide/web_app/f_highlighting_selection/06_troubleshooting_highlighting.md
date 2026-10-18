@@ -23,8 +23,9 @@ These checks solve most “it’s broken” reports in under a minute:
    - See {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`
 7) **Modifier keys:** are you holding `Alt` to start a selection gesture?
    - `Shift+Alt` = add; `Ctrl/Cmd+Alt` = subtract.
-   - On a touch screen there is no `Alt`: is **Select mode** pressed? See
-     {ref}`select-mode`.
+   - On a touch screen there is no `Alt`: is **Select mode** on (its switch, in
+     the Highlighting panel or on the selection bar at the bottom of the plot)?
+     See {ref}`select-mode`.
 8) **Tool mode:** are you in the tool you think you are in (Lasso vs Proximity vs KNN vs Annotation based)?
    - **Annotation based** additionally needs a coloured field. With none, the
      panel replaces its `Alt+click` invitation with the sentence that asks for
@@ -181,6 +182,24 @@ Repeat the gesture you are actually debugging before you trust the line.
 
 ---
 
+## Symptom: “In Select mode I can’t deselect or clear”
+
+Tapping empty plot never clears anything in Select mode: it selects nothing,
+changes nothing, and the selection bar says “No cell there. Nothing changed”.
+What removes a selection depends on whether it is still in progress or saved:
+
+- **In progress** (the selection bar reads “N cells selected” beside **Undo**,
+  **Cancel** and **Confirm**): **Cancel** discards it, **Undo** steps back once.
+  `Esc` cancels it too.
+- **Saved** to the page (the bar reads “N cells highlighted”): **Clear** on the
+  bar, or **Clear** under the page tabs in the Highlighting panel, removes this
+  page's highlights. Other pages are not touched. To remove one group, use its ×
+  in the panel's list.
+- **Leaving Select mode** keeps both: turn either switch off, or press `Esc`
+  with nothing in progress.
+
+---
+
 ## Symptom: “I can’t start lasso / nothing happens when I draw”
 
 ### Likely causes (ordered)
@@ -201,8 +220,8 @@ Repeat the gesture you are actually debugging before you trust the line.
 
 ### Fix
 - Use `Alt+drag` (not plain drag).
-- On a touch screen, press **Select mode** (in the Highlighting panel or at
-  the bottom of the plot) and draw with one finger.
+- On a touch screen, turn on **Select mode** (in the Highlighting panel or on
+  the selection bar at the bottom of the plot) and draw with one finger.
 - If `Alt`/`Option` is captured, disable the extension or operating-system
   shortcut that owns the gesture, then activate **Lasso** and use
   `Alt`/`Option`+drag again.
