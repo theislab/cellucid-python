@@ -60,6 +60,18 @@ Version 0.9.2 is a patch release on 0.9.1.
   the first dataset had loaded, so during a slow first load a phone user, who
   sees the menu full-screen, tapped it and nothing happened.
 
+- **Web app**: smaller layout fixes.
+  - On a short screen (a phone on its side), startup notifications covered the
+    welcome dialog's buttons; while it is open they now wait beneath it.
+  - A long view title in a narrow multiview pane ran into the next pane's
+    title; it now ends in an ellipsis inside its own pane, with the full name
+    on hover.
+  - The benchmark's Frame Time reading wrapped onto three lines. The second
+    number now sits on its own line, labelled `CPU` for what it measures: the
+    main-thread time spent issuing the frame, not GPU time.
+  - Figure export's Background and Font selects now have visible labels, with
+    the same trailing colon as every other label.
+
 - **Web app**: in multiview, a finger dragging a pane now focuses that pane first,
   as a mouse press does, instead of moving whichever pane last had focus, and a
   touch drag saves the camera to the focused pane when cameras are unlocked.

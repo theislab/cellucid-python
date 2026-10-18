@@ -146,7 +146,7 @@ generation time.
 |---|---|---|
 | **Points** | count | How many synthetic points were published |
 | **FPS** | whole frames per second | Derived from recent frame times |
-| **Frame Time** | `X.XX ms`, sometimes with a `(render Y.YY ms)` suffix | Wall time for a frame |
+| **Frame Time** | `X.XX ms`, sometimes with a `CPU Y.YY ms` line under it | Wall time for a frame; the second line is the main-thread time spent issuing the last frame's draw calls (not GPU time), shown only when the browser's coarse timer resolves it above zero |
 | **GPU Memory** | `N.N MB`, or `~N.N MB (estimate)` | Reported where the browser exposes it; otherwise estimated from the point count |
 | **LOD Level** | `Full`, or `Level N` | Which level of detail the renderer settled on |
 | **Visible Points** | count | How many points survived LOD and culling |
