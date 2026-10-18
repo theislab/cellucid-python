@@ -228,6 +228,10 @@ Voting behavior:
 - Clicking ▲ casts an upvote.
 - Clicking ▼ casts a downvote.
 - Clicking the same button again removes your vote (returns to “no vote”).
+- A removed vote, or a deleted comment, stays removed when you Pull before
+  publishing again: your own published file only fills in local state when it
+  changed since your last Publish or Pull (for example, after publishing from
+  another device).
 
 :::{important}
 Downvotes are part of the consensus math. Use them deliberately:

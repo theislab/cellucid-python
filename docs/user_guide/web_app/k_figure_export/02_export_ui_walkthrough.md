@@ -193,7 +193,9 @@ Two things the exported legend spells out that the on-screen legend does not
 have to, because a figure travels without the app around it:
 
 - **Hidden categories keep their entry and are marked `(hidden)`**, with a
-  hollow gray outline instead of their color. The entry stays so a filtered
+  hollow gray outline instead of their color. This includes a ticked category
+  that other filters leave with no cells (the row the on-screen legend shows
+  disabled). The entry stays so a filtered
   figure cannot be mistaken for a complete one; the color goes so nobody hunts
   the plot for points that were never drawn.
 - **A logarithmic colorbar is labeled `Log10 color scale`** together with its
@@ -353,6 +355,8 @@ This is useful when:
 4) (Optional) Click **Lock aspect** to keep the crop aspect synced to the plot size.
 5) Click **Confirm** to apply the crop (the preview will switch to a framed preview).
 6) Export.
+
+When the frame's aspect differs from the plot's, the frame is fitted inside the plot without distortion (empty bands on two sides), identically in PNG, every SVG mode, and the preview. Use **Lock aspect** or **Fit plot** to make the frame fill the plot exactly.
 
 Useful actions:
 - **Reset** resets the crop to the full frame.

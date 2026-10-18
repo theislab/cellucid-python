@@ -172,8 +172,12 @@ Renames the field key shown in the UI.
 Naming rules (enforced):
 - name must be non-empty
 - no leading/trailing whitespace
-- cannot contain `:`
+- no control or zero-width character (`U+200B`, `U+2060`, `U+FEFF`)
 - must be unique among visible fields
+
+A rename is dataset-wide: it applies to the live view and to every kept view at
+once, including their panel labels and filter summaries, and a saved session
+records it that way.
 
 To “undo” a rename:
 - rename the field back to its original key (the `*` marker disappears).

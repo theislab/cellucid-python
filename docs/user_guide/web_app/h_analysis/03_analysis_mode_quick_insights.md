@@ -75,7 +75,8 @@ For each selected composition field:
 
 Interpretation notes:
 - The bar shows only the **top categories**; the long tail is not shown.
-- Missing values may appear as `(missing)` when present.
+- Cells with a missing category are left out: they are neither listed nor
+  counted in the denominator of the percentages.
 
 ### 2) Statistics (continuous obs)
 

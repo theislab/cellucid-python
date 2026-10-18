@@ -65,6 +65,12 @@ If enabled, Cellucid can reuse cached marker results for the same dataset + grou
 and only when the group-by field still assigns exactly the same cells to the same groups.
 Editing that field — merging two categories, or moving one to unassigned — changes the grouping, so the
 next run is recomputed rather than read from the cache.
+Results are also tied to the loaded data generation. A prepared export carries
+its export time (`created_at` in `dataset_identity.json`), so its results are
+kept across page loads and are never reused for a re-export under the same
+`dataset_id`. A dataset without one — an `.h5ad` or Zarr opened directly, for
+example — keeps results only for the current load: reopening the file, even
+under the same name, computes markers afresh.
 This can make repeated runs much faster.
 
 ### 5) Performance Settings (collapsible)
@@ -84,7 +90,7 @@ For each group `g` and each gene:
 
 For each gene and group, Cellucid computes (conceptually):
 - `meanInGroup`, `meanOutGroup`
-- `log2FoldChange = log2((meanInGroup + 0.01) / (meanOutGroup + 0.01))`
+- `log2FoldChange = log2((meanInGroup + 0.01) / (meanOutGroup + 0.01))` for non-negative expression; when the gene has negative values (scaled or z-scored data) both means are first shifted by the gene's most negative value over all grouped cells, the same rule Differential Expression uses ({doc}`06_analysis_mode_differential_expression_de`), so the sign always matches `meanInGroup − meanOutGroup`
 - `pValue` (Wilcoxon U or Welch t-test)
 - `adjustedPValue` via Benjamini–Hochberg (computed per group across genes)
 - `percentInGroup`, `percentOutGroup` = percent of cells with expression `> 0`
@@ -249,7 +255,9 @@ or a heavily subset gene panel is the usual reason.
 
 If “Use cached results” is enabled:
 - reruns may return instantly with the same markers.
-Disable caching if you suspect you changed the underlying dataset or want a fresh recompute.
+- a re-export or a reopened file is a new data generation and is recomputed;
+  only an export with an unchanged `created_at` is answered from the cache.
+Disable caching if you want a fresh recompute.
 
 ---
 

@@ -226,7 +226,9 @@ IndexedDB holds larger cached payloads that would be unreasonable to store in
 - **Community Annotation file cache** — the raw annotation JSON downloaded from
   GitHub, for speed and offline-ish behaviour.
 - **Marker cache** — the results of marker-discovery runs, including the
-  computed statistic arrays.
+  computed statistic arrays. Only results for a prepared export that records
+  its export time (`created_at`) are written here; results for a dataset
+  without one stay in memory for that load.
 
 Privacy implications:
 - If you use Community Annotation on sensitive repos, cached copies of

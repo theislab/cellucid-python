@@ -224,11 +224,12 @@ Its **Filtering** block is degenerate. Both readouts print the same number,
 because the field's minimum *is* its maximum, and there is no interval for the
 sliders to divide.
 
-:::{warning}
-Do not use the range sliders on a constant field. There is no range to select,
-and the slider positions no longer correspond to values in the data. Use a
-categorical field, or the outlier filter, to gate cells instead — or filter on
-this field upstream, before export, where a constant column is easy to spot.
+:::{note}
+The sliders and `RESET` still work, but there is nothing to select: every
+slider position maps onto the one value, so the filter always keeps every cell.
+Use a categorical field, or the outlier filter, to gate cells instead — or
+filter on this field upstream, before export, where a constant column is easy
+to spot.
 :::
 
 ### A dataset with no continuous obs fields at all

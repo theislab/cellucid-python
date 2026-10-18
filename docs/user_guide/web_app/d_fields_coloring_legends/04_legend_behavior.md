@@ -189,7 +189,9 @@ Practical guidance:
 
 Notes:
 - Zeros, negatives, and missing values render as neutral “None” gray.
-- Log scale affects coloring only; filtering remains in original units.
+- Log scale affects coloring only; filtering remains in original units. With
+  **Rescale colorbar to slider range** on, a slider range that holds no positive
+  value simply draws its cells gray; the range filter still applies.
 
 ### Rescale colorbar to slider range
 
@@ -270,7 +272,7 @@ If community annotation voting is enabled for the current categorical field:
 - category labels become clickable to open a voting modal,
 - rename/merge/delete label tools are disabled (to keep votes stable),
 - additional per-category summary lines can appear (consensus suggestions),
-- a small `◉` button can appear to quickly create/remove a highlight for that category.
+- a small `◉` button can appear to quickly create/remove a highlight for that category. It highlights the category's currently visible cells, so it is disabled while the category has none (for example while its checkbox is cleared).
 
 If you don’t use Community Annotation, you can ignore this.
 

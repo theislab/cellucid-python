@@ -162,12 +162,16 @@ Common things that restore:
 - categorical category visibility toggles (legend checkboxes)
 - continuous filter ranges (Min/Max sliders)
 - continuous color ranges and log-scale toggles (when present)
-- outlier filter enable/threshold (when present)
+- outlier filter enable/threshold on categorical fields that carry latent outlier quantiles
 - “filter enabled/disabled” state for fields
 
 Because filtering is view-scoped, restore replays the correct filter state into:
 - the live view, and
 - each snapshot view.
+
+Each view is saved from its own state, whichever view is selected when you
+save: saving with a kept view selected still records the live view's own
+coloring field and filters as the live view's.
 
 ### 3) Field overlays and field registry state — eager
 
@@ -226,7 +230,7 @@ target live or snapshot active field needs it, and lazy otherwise.
 ### 7) Analysis windows + caches — windows eager, caches lazy
 
 Sessions can persist:
-- **open floating analysis windows** (which analysis modes were open, their settings, and geometry) — eager
+- **open floating analysis windows** (which analysis modes were open, their settings, and geometry) — eager; the windows reopen only after the highlight pages and analysis caches they refer to have been restored, so a window comparing saved pages opens on those pages even in a fresh tab
 - **some analysis caches/artifacts** to speed up later analysis — lazy
 
 The eager `analysis/cache-inventory` chunk lists the exact ordered cache

@@ -80,7 +80,7 @@ Examples:
 
 The summary table is meant to be “readable truth” even when plots are ambiguous:
 
-- For categorical variables: per-page category counts/percentages (limited to the most common categories in the table view)
+- For categorical variables: per-page category counts/percentages (limited to the most common categories in the table view). Cells with a missing category are left out of the plots, the table, the percentages and the tests, as for every analysis ({doc}`01_analysis_mental_model`).
 - For continuous variables: per-page count/mean/median/min/max/std
 
 ### C) Statistical annotations (tests)

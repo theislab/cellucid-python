@@ -81,19 +81,17 @@ See {doc}`01_analysis_mental_model` for the visibility vs membership distinction
 ### Minimum group size
 
 DE requires enough cells in both groups:
-- the implementation enforces a minimum of **10 valid cells** per group (default).
-- the run itself is only refused when a chosen page has **zero** cells; a page with
-  one to nine cells is accepted and started.
-- the check is applied **per gene**, on the cells that actually carry a
-  measured value for that gene. A gene that falls below the minimum on either
-  side is skipped: it gets no p-value, no adjusted p-value, and is excluded from
-  the FDR correction. The summary reports how many genes this happened to — see
+- the implementation enforces a minimum of **10 cells** per group (default).
+- the run is refused before any gene is loaded when either chosen group has fewer
+  cells than that: a page of five cells stops with
+  `Differential expression requires at least 10 cells per group; received 5 and …`.
+  A page with zero cells cannot be selected at all.
+- the same minimum is applied again **per gene**, on the cells that actually
+  carry a measured value for that gene. A gene that falls below the minimum on
+  either side is skipped: it gets no p-value, no adjusted p-value, and is
+  excluded from the FDR correction. The summary reports how many genes this
+  happened to — see
   [Which genes the correction is applied to](#which-genes-the-correction-is-applied-to).
-- so a page of five cells does not error. It runs, every gene fails the per-gene
-  check, and you get a result reading `Genes tested (FDR denominator) 0` with the
-  entire panel counted under *Not tested*. An empty volcano with a zero
-  denominator is the app telling you the group was too small, not that nothing
-  differs.
 
 ---
 
@@ -136,6 +134,19 @@ Where:
 - `meanA` is the mean expression in **Page A**
 - `meanB` is the mean expression in **Page B**
 - `0.01` is a fixed pseudocount to avoid division by zero
+
+That is the whole formula whenever the compared cells are non-negative, which
+is every count, normalized or log1p matrix. Scaled or z-scored expression can
+be negative, and a ratio of negative means has no meaning (it is undefined when
+the means straddle `-0.01` and its sign inverts when both are negative). For
+such a gene both means are first shifted by `m`, the most negative value over
+the cells of both pages:
+
+`log2FC = log2((meanA − m + 0.01) / (meanB − m + 0.01))`
+
+so the fold change is always finite and its sign is always the sign of
+`meanA − meanB`. Its magnitude depends on that shift, so read it as a ranking
+of direction and strength rather than a biological fold for scaled data.
 
 Interpretation:
 - `log2FC > 0` → gene is higher in **Page A**

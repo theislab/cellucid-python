@@ -26,8 +26,8 @@ Handled by:
 
 | Param | Example | Meaning |
 |---|---|---|
-| `dataset` | `?dataset=suo` | Selects a local-demo dataset by id |
-| `source` | `?source=local-demo&dataset=suo` | Selects the source type for `dataset` (default: `local-demo`) |
+| `dataset` | `?dataset=suo` | Selects a local-demo dataset by id; on a page served by the Python server (which auto-connects to its own origin) a bare `dataset` names a server dataset instead |
+| `source` | `?source=local-demo&dataset=suo` | Selects the source type for `dataset` (default: `local-demo`). Picking a sample writes this explicit form, so the URL reloads as the sample on any origin |
 | `remote` | `?remote=https://data.example.org&dataset=study-a` | Connects to a remote data server; `dataset` is required when its manifest contains multiple datasets |
 | `anndata` | `?remote=http://127.0.0.1:8765&anndata=true` | Hint: remote server is serving live AnnData (UI shows performance warning) |
 | `github` | `?github=owner/repo/path&dataset=study-a` | Connects to a GitHub-hosted exports path; `dataset` is required when its manifest contains multiple datasets |
@@ -40,6 +40,7 @@ Notes:
 - **Mixed content:** when the viewer origin is HTTPS (e.g. `https://www.cellucid.com`), browsers will block `remote=http://127.0.0.1:<port>` (HTTPS page fetching HTTP). For local prepared-data servers, open the exact server-backed Viewer URL (`http://127.0.0.1:<port>/?source=remote`) served by `cellucid-python`; direct AnnData uses `?anndata=true`.
 - For **local-user** (browser file picker), the URL is intentionally kept clean (no local paths in the URL).
 - `url-state.js` uses `history.replaceState()` so UI changes don’t spam browser history.
+- Publishing a new data source replaces every data-source param (`dataset`, `source`, `remote`, `github`, `anndata`); `anndata=true` describes the Python AnnData server the page was opened from, so it is not carried over to another source.
 
 ### Community annotation param
 

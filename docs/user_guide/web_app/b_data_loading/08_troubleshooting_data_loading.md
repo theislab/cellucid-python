@@ -72,6 +72,14 @@ and the middle clause is the one that identifies the layer:
 | what is published there is not in a format Cellucid can read | Reached and readable, but not a Cellucid export | Re-export with `prepare()` |
 | nothing readable came back — the connection may have failed, or that address may not hold Cellucid data | Ambiguous: no usable response arrived | Your network *and* your address |
 
+An address the field cannot use never reaches this table. A GitHub path that is
+not `owner/repo/exports`, `owner/repo@branch/exports`, or a GitHub URL, and a
+remote address with a trailing slash, a `?…` query, or no `http(s)://`, are
+refused before any request is made, with one message about the address itself
+(for example `Invalid GitHub path. Use format: owner/repo/exports (or
+owner/repo@branch/exports), or paste a GitHub URL.`). An empty field asks for an
+address the same way.
+
 :::{warning}
 Read the size row and the format row as opposites. *Larger than Cellucid opens
 in a browser* means the export is perfectly valid and merely too big, so
@@ -264,6 +272,17 @@ unchanged.
 **Fix**
 - Ensure `obs` is populated before exporting.
 - Re-export with `obs=adata.obs` (and appropriate categorical/continuous handling).
+
+:::{note}
+An `obs` column or gene name that starts or ends with whitespace, or that
+contains a control or zero-width character (`U+200B`, `U+2060`, `U+FEFF`), is
+not a name Cellucid can show exactly. Both writers refuse it, and an `.h5ad` or
+Zarr opened directly is refused when it loads, with a message such as
+`Invalid compact_v1 obs manifest: field name "cell_type " cannot be displayed
+exactly: Field name cannot have leading/trailing whitespace`. Rename the column
+(for example `adata.obs.columns = adata.obs.columns.str.strip()`) and open the
+file again.
+:::
 
 ---
 
