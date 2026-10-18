@@ -62,8 +62,8 @@ If you only do one thing from this page, do this list in order.
 - Two of the biggest levers have already been pulled for you, and are worth
   checking rather than assuming: at or above five million cells `Antialiasing
   (smooth point edges)` starts off, and the point size starts small, both chosen
-  from the cell count. Turning antialiasing off saved 19–34% of the frame in the
-  measurements on
+  from the cell count. Turning antialiasing off saved 19–34% of the frame in 3D
+  and about 90% in a dense 2D view, in the measurements on
   {doc}`02_performance_considerations_what_gets_slow_and_why`; it applies to the
   next frame either way.
 - `Level-of-Detail (LOD)` starts off. Turn it on whenever the frame is slow while

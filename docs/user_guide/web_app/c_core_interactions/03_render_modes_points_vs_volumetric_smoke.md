@@ -66,8 +66,9 @@ Its relevant controls are:
   count implies rather than at a fixed default — which is why the same slider
   position looks different on a 3,696-cell trajectory and on an atlas.
 - **Shader quality:** `Full (lighting + fog)`, `Light (circular, no lighting)`,
-  or `Ultra-light (square points)` — a **look** choice, not a speed one. The
-  three measured the same frame time at every point size tested. Note that
+  or `Ultra-light (square points)` — mostly a **look** choice: in 3D views the
+  three measured the same frame time at every point size tested, while in a 2D
+  view with antialiasing on `Light` takes about half of `Full`'s frame time. Note that
   `Ultra-light` draws squares rather than round dots, so it also changes far
   more pixels when antialiasing is off.
 - **Renderer settings:** `Level-of-Detail (LOD)` draws a coarser subset of the
@@ -89,7 +90,7 @@ Its relevant controls are:
   open. Clicking it ends automatic selection.
 
 Every measured number behind those four bullets — the point-size curve and its
-reachable range, why shader quality is not a speed lever, the two-million-point
+reachable range, when shader quality is and is not a speed lever, the two-million-point
 LOD budget, and the dataset size at which antialiasing switches itself off —
 lives in one place:
 {doc}`../n_benchmarking_performance/02_performance_considerations_what_gets_slow_and_why`.

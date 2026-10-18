@@ -410,8 +410,10 @@ render()  (self-rescheduling rAF; draws only when something can have changed)
 ```
 
 The frame gate decides whether a frame is drawn at all. Any mutating viewer or
-renderer call, any viewer input event, and any canvas resize marks the next frame
-for drawing; held navigation keys, inertia, smooth zoom, a grid fade, smoke mode
+renderer call, any viewer input that changes something (a drag, free-look, a
+selection gesture, `Alt`, navigation keys outside text fields, releasing a held
+key), and any canvas resize marks the next frame for drawing — hovering or typing
+into a sidebar field draws nothing; held navigation keys, inertia, smooth zoom, a grid fade, smoke mode
 while it animates or is still waiting for its noise volumes, enabled overlays, visible highlights (their glow animates), and live projectiles
 keep frames drawing, and so does a camera motion still waiting for its
 `camera-settled` event. After the last such cause the viewer keeps drawing until
@@ -474,10 +476,19 @@ Below that the frame is primitive-bound; above it, fill-bound.
 **Do not re-open these.** Each was measured and rejected, and the numbers are in
 the maintenance ledger rather than being folklore:
 
-- **Fragment-shader simplification of any kind.** Fog, lighting, the alpha
-  `texelFetch`, the round `discard`, the mere presence of `discard`, and the
-  whole `full` → `light` → `ultralight` ladder (43 → 9 → 2 statements in the
-  translated Metal) each stayed inside its own twin band at every point size.
+- **Fragment-shader simplification of any kind, in 3D views.** Fog, lighting,
+  the alpha `texelFetch`, the round `discard`, the mere presence of `discard`,
+  and the whole `full` → `light` → `ultralight` ladder (43 → 9 → 2 statements in
+  the translated Metal) each stayed inside its own twin band at every point
+  size. These measurements are 3D: depth testing rejects hidden fragments
+  before shading. **2D views are different** — they draw without depth, so every
+  overlapping, fog-translucent fragment is shaded and blended in order, per
+  sample under MSAA. There, `full` and `light` now use a single `discard`, and
+  `light` has a no-depth variant (`HP_FS_LIGHT_NO_DEPTH`, picked by
+  `_pointProgramName()` for dimension ≤ 2) that writes a zero-alpha fragment
+  instead of discarding, which leaves the pixels byte-identical. At 1,000,000
+  cells in 2D with antialiasing, `light` went from 30.7 to 17.0 ms and `full`
+  from 33.8 to 30.6 ms.
 - **A different primitive.** `GL_POINTS` beat instanced quads and both triangle
   arrangements by 1.41–2.12× at one sample and by up to 1.90× with MSAA enabled
   at 4 samples, with the quad arms' rasterised and shaded fragment counts matched to
@@ -487,7 +498,8 @@ the maintenance ledger rather than being folklore:
   vertex-ALU hoist.** All measured; none won.
 
 What did move: **antialiasing**, worth about a fifth of the frame at point size
-0.75 and a third at large sizes. It is a live user setting (`#hp-antialias`) and
+0.75 and a third at large sizes in 3D — and about 10× in a dense 2D view, where
+nothing is depth-rejected (1,000,000 cells: 33.8 ms on against 3.4 ms off). It is a live user setting (`#hp-antialias`) and
 no longer a context-creation attribute: `scene-msaa-target.js` owns a
 multisampled renderbuffer resolved by a blit each frame, so a change applies to
 the next frame with no reload. The stored preference is three-state — `auto`

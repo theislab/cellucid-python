@@ -69,9 +69,11 @@ Three things that are commonly assumed to cost per frame, and do not:
   *cheaper* to navigate than the same dataset unfiltered, not more expensive.
 - **Standing still.** When nothing changes, the frame transfers no data to the
   GPU at all. Holding a view steady does not accumulate cost.
-- **Shader quality.** `Full`, `Light` and `Ultra-light` measured the same on the
-  machine below, at every point size tested. The setting changes what a point
-  looks like, not how fast the frame draws — see the next section.
+- **Shader quality, in 3D views.** `Full`, `Light` and `Ultra-light` measured the
+  same on the machine below, at every point size tested — see the next section.
+  In a **2D view with antialiasing on** it does matter: `Light` took about half
+  of `Full`'s frame time (1,000,000 cells: 17.0 against 30.6 ms), because a 2D
+  view draws without depth testing and shades every overlapping point.
 
 High-leverage knobs:
 - **Make the window smaller** while exploring (fewer pixels) — *usually the biggest immediate win*.
@@ -269,12 +271,12 @@ one rendering setting that moves it, and what antialiasing costs. It is here
 rather than inside the cost model because it is evidence for one item in that
 list, and reading it is optional.
 
-### Where the frame time actually goes, and why shader quality is not a lever
+### Where the frame time actually goes, and why shader quality is not a lever in 3D
 
 All the figures in this section and the next were measured on **one machine** —
 an Apple M1 Pro driving WebGL2 through ANGLE Metal, 1440×1000 at device pixel
-ratio 1, 10,000,000 synthetic points, LOD and frustum culling off, camera held
-fixed. Treat the absolute milliseconds as belonging to that machine. What
+ratio 1, 10,000,000 synthetic points in 3D, LOD and frustum culling off, camera held
+fixed. A 2D view behaves differently — see the end of this section. Treat the absolute milliseconds as belonging to that machine. What
 carries across hardware is the *shape*: which term scales with what.
 
 Split by GPU timer query, at point size 0.75. The shares are read against the
@@ -402,6 +404,15 @@ A GPU timer query over the same runs agreed within three points at every size
 and about a third at large ones**. Note that the saving *grows* with point size:
 antialiasing costs per pixel covered, so it is worth least in exactly the
 millions-of-tiny-dots case that most needs the frames.
+
+**2D views.** Everything above is a 3D measurement, where depth testing discards
+about 95% of fragments before they are shaded. A 2D embedding is drawn without
+depth: every overlapping point is shaded and blended in order, and under
+antialiasing that happens per sample. There, antialiasing costs about **10×**
+(1,000,000 cells: 33.8 ms on, 3.4 ms off) and `Shader quality: Light` about
+halves the antialiased frame. Automatic antialiasing currently decides from the
+cell count alone (on below 5,000,000 cells), so a dense 2D view below that size
+starts antialiased; turn it off if the frame is slow.
 
 What you give up, on the same frames: **18% of pixels change at point size
 0.75** and 32% with `Ultra-light (square points)`. Small dots are almost

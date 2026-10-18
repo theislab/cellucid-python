@@ -36,6 +36,18 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Fixed
 
+- **Web app**: faster, quieter full-detail rendering with identical pixels.
+  Hovering the plot or typing into a sidebar field redrew the whole scene for a
+  one-second settle window (237 full frames over two seconds of hover at 1M
+  cells); only input that changes something now draws. In 2D views — drawn
+  without depth testing — the point shaders use a single `discard`, and `Light`
+  quality uses a no-depth program that blends a zero-alpha fragment instead of
+  discarding: at 1M cells with antialiasing, `Light` 30.7 → 17.0 ms and `Full`
+  33.8 → 30.6 ms per frame, byte-identical in 45 compared scenes. Orbit and pan
+  inertia, smooth zoom and held-key acceleration now scale with elapsed time, so
+  a 120 Hz display no longer moves the camera at double speed, and the render
+  loop allocates about half as much per frame.
+
 - **Web app**: with an ad or tracking blocker (uBlock Origin, Brave, AdGuard, iOS
   content blockers — anything shipping EasyPrivacy, which lists
   `/analytics/tracker.js`), Cellucid did not start and showed “Cellucid could not
