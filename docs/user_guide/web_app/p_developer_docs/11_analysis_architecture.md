@@ -198,6 +198,39 @@ On dataset reload (especially “in-place” reloads for local-user), analysis m
 There are dev-only helpers to sanity check this:
 - see `window._comparisonModule` and local-user switch self-test wiring in `ui/modules/dataset-controls.js`.
 
+### 4) The per-gene streaming path
+
+Differential expression and marker discovery repeat the same steps once per
+gene, so anything in that loop is multiplied by the gene count. The loop keeps
+these properties, and each one is pinned by a test:
+
+- **Decoding happens in the decode worker.** A quantized gene payload is read on
+  the main thread as transferred (still gzip when the URL ends in `.gz`) and
+  handed to the quantization worker, which inflates it under the exact declared
+  length and dequantizes it. Both the worker and the main-thread backend decode
+  through one table-driven kernel, `decodeQuantizedToFloat32` in
+  `cellucid/assets/js/data/quantization-contract.js`, which is bit identical to
+  evaluating `minValue + code * scale` per cell.
+- **Per-run work is done once per run.** `StreamingGeneLoader` validates both
+  group specifications when a run starts, not once per gene.
+- **Rank tests tabulate values without a `Map`.** Wilcoxon (DE and markers),
+  Spearman ranks and order statistics number distinct values through
+  `DistinctValueIndex` in `compute/math-utils.js` and fall back to a native
+  sort past 4,096 distinct values. Results are bit identical to the
+  sort-based definition (`tests/analysis-engine-rank-kernel-identity.test.mjs`,
+  `tests/statistical-tests.test.mjs`).
+- **Page membership is recomputed only when the page changes.**
+  `DataLayer` keeps each page's membership and digest beside the structure it
+  came from (the page, its group list, each group, its `enabled` flag, its
+  `cellIndices` array and length) and reuses them while all of those are the
+  same objects. Highlight `cellIndices` arrays are therefore never edited in
+  place once published; replace the array instead.
+- **Yields are time-sliced.** Long loops hand the event loop back every 12 ms
+  through a posted message (`createSlicedYield` in
+  `shared/concurrency-utils.js`), not after a fixed item count through
+  `setTimeout(0)`, whose 4 ms clamp turned a 20,000-gene run into seconds of
+  idle waiting.
+
 ---
 
 ## Troubleshooting (analysis)

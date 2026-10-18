@@ -212,6 +212,15 @@ Analysis cost depends on the mode, but the big drivers are usually:
 - the number of features involved (e.g., genes),
 - repeated reruns caused by changing inputs frequently.
 
+Differential expression and Marker Genes stream one gene at a time, and each
+gene of a prepared export is one request. The gene is inflated and dequantized
+in a decode worker and its statistics run in the analysis worker pool, so the
+main thread only fetches and hands work over: the page stays responsive during
+a run, and with an export served over the network the run time is mostly the
+number of genes times the request round trip divided by **Network
+parallelism**. With a local folder there is no network, and decoding and
+statistics set the pace instead.
+
 Practical workflow:
 - define groups carefully (avoid “everything vs everything” when you don’t need it),
 - keep analysis scope small while iterating,
