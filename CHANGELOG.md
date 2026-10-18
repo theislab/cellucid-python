@@ -36,6 +36,17 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Fixed
 
+- **Web app**: usage analytics rebuilt around one declared schema
+  (`assets/js/analytics/schema.js`). It no longer sends dataset names, ids built
+  from local file names, exact counts, error text or full page URLs (the page
+  view carried `remote=` and `github=` addresses and their tokens); a dataset is
+  described by count ranges, dimensions and writer version, with an id only for
+  the public samples. Each load is reported once (it was reported twice), timed
+  from the click or file pick (local loads excluded the file read), and reported
+  when it fails before activation (such failures sent nothing). New events cover
+  startup success and failure, feature adoption, and device classes. Every
+  payload is validated against GA4's limits, and analytics is never awaited.
+
 - **Web app**: faster, quieter full-detail rendering with identical pixels.
   Hovering the plot or typing into a sidebar field redrew the whole scene for a
   one-second settle window (237 full frames over two seconds of hover at 1M

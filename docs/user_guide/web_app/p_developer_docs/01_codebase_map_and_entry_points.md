@@ -61,6 +61,8 @@ cellucid/
         │                          #   (see ui/core/ga-init.js). Reached only by
         │                          #   the dynamic import in app/optional-analytics.js,
         │                          #   so a blocker refusing it cannot stop the app.
+        │                          #   schema.js declares every event and parameter
+        │                          #   (the GA4 event dictionary and admin setup).
         ├── app/                   # App layer (state + UI wiring + sessions + analysis)
         │   ├── main.js            # App entry point (bootstrap + dataset load orchestration)
         │   ├── state/             # DataState (state/core) + managers

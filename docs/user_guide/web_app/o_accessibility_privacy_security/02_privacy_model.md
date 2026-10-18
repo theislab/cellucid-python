@@ -16,9 +16,10 @@ Cellucid is primarily a **client-side web app**: your data is loaded into your b
 Cellucid does not upload your dataset’s *contents* anywhere, but:
 
 - some workflows **do fetch data over the network** (remote servers, GitHub-hosted exports),
-- the public deployment **sends usage analytics to Google**, including the
-  **name, id and size of whatever dataset you open** — even a local one (see
-  the next section; this is the surprise most people miss),
+- the public deployment **sends usage analytics to Google**: which features you
+  use and how loads go, with your dataset described only by coarse shape
+  (cell-count range, dimensions) — never its name, file name or contents (see the
+  next section),
 - some features **store state locally** in the browser (preferences, caches, Community Annotation),
 - and some exported artifacts **embed metadata** (sessions, PNG/SVG provenance) that can reveal sensitive context.
 
@@ -70,46 +71,53 @@ flag is set to false, is not writable afterwards, and **no analytics script is
 ever fetched**. There is no configuration to get wrong: the decision is made
 from the hostname before anything else runs.
 
-The measurement is configured with IP anonymisation on, and events are sent by
-the browser’s background beacon mechanism so they do not block the interface.
+Events are sent by the browser's background beacon mechanism, so they do not
+block the interface. Every event passes one declared schema
+(`assets/js/analytics/schema.js`) before it is sent: each value is a closed
+list, a bounded number, or a fixed pattern — never free text, a name, a path, a
+URL, or an error message — and an event that does not fit is dropped whole.
 
 ### What is sent
 
-Two kinds of event:
+- **One page view per visit**, with the page address reduced to
+  `https://www.cellucid.com/`: the query string — dataset ids, `remote=` and
+  `github=` addresses, `exportsBaseUrl` — is never part of it.
+- **`app_ready`** — how long startup took (milliseconds and a range such as
+  `1-3s`) and whether a dataset opened.
+- **`startup_failure`** — where startup stopped (a fixed phase name), which kind
+  of source the page asked for, and the failure's fixed error code and class.
+- **`data_load`** — once per dataset load that finishes or fails:
 
-**Interface events** — which named button you clicked, the kind of click, the
-pointer type, modifier keys, and the current dataset id.
+  | Field | Example content |
+  |---|---|
+  | loading method | `local-user-prepared`, `local-user-h5ad`, `remote-connect`, `github-url-param`, … |
+  | source kind | `local-user`, `remote`, `github`, `local-demo`, … |
+  | outcome and duration | `success`, `3812` ms, `3-10s` |
+  | cell and gene count **ranges** | `10k-100k`, `1M-10M` — never the exact counts |
+  | obs field count, embedding dimensions | `14`, `2+3` |
+  | connectivity / vector field present | yes/no |
+  | writer version of the export | `0.9.2` |
+  | dataset id | **only for the deployment's own public sample datasets** |
+  | on failure | a fixed error code and class, and the HTTP status |
 
-The button's name here is a fixed identifier the developers assigned, such as
-`session:save` or `legend:highlight-category`. It is never read from what the
-button says. That distinction matters because many controls are labelled from
-your data — the legend's category buttons are named after your categories, and
-the highlight page buttons after names you typed — so a tracker that identified
-a control by its own text would send those. A control with no assigned
-identifier is counted only as its element type.
+- **`feature_used`** — the first use, per page load, of a feature you started
+  yourself, from a fixed list (for example `render_mode` / `smoke`,
+  `figure_export`, `highlight_tool` / `lasso`). The feature's name is a fixed
+  identifier the developers assigned; nothing is read from what a control says,
+  so category names or page names you typed are never sent.
+- **`web_vital`** — page-speed measurements, once each per page load: LCP, CLS,
+  INP, FCP, TTFB and the long-task total and maximum, rounded, with a
+  good / needs-improvement / poor rating.
+- **Four device classes**, attached to the events above: touch / mouse / hybrid
+  input; phone / tablet / desktop / wide window; hardware / software graphics
+  (the graphics card's name itself is never sent); and whether volumetric smoke
+  is supported.
 
-**Dataset load events** — and these are the ones that matter for privacy:
-
-| Field | Example content |
-|---|---|
-| loading method | `local-user-prepared`, `local-user-h5ad`, `remote-connect`, `github-url-param`, … |
-| dataset id | the id from `dataset_identity.json` |
-| **dataset name** | the human-readable name your export was given |
-| cell count, gene count, obs field count, edge count | the shape of your data |
-| whether connectivity exists | yes/no |
-| duration, success/failure, HTTP status | how the load went |
-| failure reason | the first 160 characters of the error message |
-
-Plus page-performance measurements (paint and responsiveness timings).
-
-:::{warning}
-**Loading a local file is not analytically silent.** The values in your dataset
-never leave the browser — but on the public site its *name*, its *id* and its
-*shape* do, and so does the text of any error it produced.
-
-If your export is called `AML_relapse_cohort_2026_donor7`, that string is what
-gets sent. If a load fails, the error message — which can contain a file name —
-is sent with it.
+:::{note}
+**Loading a local file sends no name.** Its values never leave the browser, and
+on the public site only the descriptors in the table do: the loading method,
+outcome, duration, count ranges, dimensions and writer version. Its name, its id
+and the text of any error stay in the browser.
 :::
 
 ### How to avoid it entirely
@@ -137,15 +145,15 @@ session bundles.
 This table is the “most useful” version of the privacy model.
 If you only read one thing, read this.
 
-| Workflow | Where the dataset is read from | Does dataset **content** traverse the network? | Does dataset **identity and shape** reach analytics on the public site? | Typical privacy risk |
+| Workflow | Where the dataset is read from | Does dataset **content** traverse the network? | What reaches analytics on the public site? | Typical privacy risk |
 |---|---|---:|---:|---|
-| **Local demo** (`source=local-demo`) | Hosted demo exports | Yes (demo files are downloaded) | Yes | Low (public demo), but still trackable traffic |
-| **Local prepared export folder** (directory picker) | Your local disk | No (files read locally) | **Yes** | Medium: name, id and cell counts are reported; the local folder path can also leak via screenshots and figure metadata |
-| **Local `.h5ad` / `.zarr`** (file picker) | Your local disk | No (files read locally) | **Yes** | Medium: as above, plus large local file access and potential local caching |
-| **Remote server** (`remote=...`) | A server you connect to (often `127.0.0.1`) | Yes (files or chunks downloaded from that server) | Yes | Depends: can be "local-only" or a true data transfer |
-| **GitHub-hosted exports** (`github=owner/repo/...`) | GitHub raw content | Yes (downloaded from GitHub) | Yes | High if data is private; also GitHub access logs exist |
+| **Local demo** (`source=local-demo`) | Hosted demo exports | Yes (demo files are downloaded) | Load descriptors and the public sample's id | Low (public demo), but still trackable traffic |
+| **Local prepared export folder** (directory picker) | Your local disk | No (files read locally) | Coarse shape only — no name or id | Low–medium: only count ranges and dimensions are reported; the folder name can still leak via screenshots and figure metadata |
+| **Local `.h5ad` / `.zarr`** (file picker) | Your local disk | No (files read locally) | Coarse shape only — no name or id | Low–medium: as above, plus large local file access and potential local caching |
+| **Remote server** (`remote=...`) | A server you connect to (often `127.0.0.1`) | Yes (files or chunks downloaded from that server) | Coarse shape only — never the server address | Depends: can be "local-only" or a true data transfer |
+| **GitHub-hosted exports** (`github=owner/repo/...`) | GitHub raw content | Yes (downloaded from GitHub) | Coarse shape only — never the repository path | High if data is private; also GitHub access logs exist |
 | **Jupyter embedded viewer** | A local Python server + iframe bridge | Yes (browser ↔ local server) | No — the notebook viewer is never on a production hostname | Usually low if truly local, but can be risky if ports are exposed |
-| **Community Annotation** (GitHub sync) | GitHub API + repo contents, through Cellucid's auth proxy | Yes | Yes | You are explicitly publishing annotations/votes to GitHub; treat as public unless repo is private and access-controlled |
+| **Community Annotation** (GitHub sync) | GitHub API + repo contents, through Cellucid's auth proxy | Yes | That the feature was used | You are explicitly publishing annotations/votes to GitHub; treat as public unless repo is private and access-controlled |
 
 Two nuances that matter:
 
@@ -463,9 +471,11 @@ Use this as a starting point for approvals and internal documentation.
      see {ref}`analytics`. For most review boards it is the first question.
 2) **Where is dataset content stored?**
    - local disk only vs remote server vs GitHub
-3) **If the public host is used, what identifiers does it report?**
-   - dataset name, dataset id, cell/gene/field counts, and load error text.
-   - Are your export names free of study, cohort or patient identifiers?
+3) **If the public host is used, what does it report about your data?**
+   - No name, id, path or error text: only the loading method, outcome,
+     duration, cell/gene count ranges, field count, dimensions and the export's
+     writer version (a dataset id only for the public sample datasets). See
+     {ref}`analytics`.
 4) **What local persistence exists?**
    - `localStorage` preferences **and Community Annotation session content**,
      IndexedDB annotation and marker caches, browser HTTP cache
