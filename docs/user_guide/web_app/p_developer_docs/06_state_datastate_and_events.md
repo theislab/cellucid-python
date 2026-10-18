@@ -46,7 +46,8 @@ Code:
   `positionsDimension` components per cell (x, xy or xyz — never padded to
   XYZ); both are updated together on live dimension switches and read by smoke
   density and the session fingerprint
-- `colorsArray`: RGBA color buffer (uint8 packed)
+- `colorsArray`: RGBA color buffer (uint8 packed); smoke density reads it too,
+  so the cloud carries the active field's colours
 - `categoryTransparency`: per-point alpha (float32), used for filtering/visibility
 - `outlierQuantilesArray`: per-point outlier quantiles (float32), used by outlier filter logic
 

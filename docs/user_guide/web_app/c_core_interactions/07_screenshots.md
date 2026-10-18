@@ -42,6 +42,17 @@ stays in both modes. Choosing smoke also shows an `Alpha` pill beside the
 `core-render-mode-select`.
 ```
 
+```{figure} ../../../_static/screenshots/web_app/window-smoke-cloud.png
+:alt: The whole window in Volumetric smoke cloud mode: the Pancreas cells drawn as a soft, lit cloud tinted with the colours of their clusters inside the grid box, and the sidebar showing the Volumetric smoke controls with Grid density 128³, Ray quality High, Render resolution 0.50x, Noise detail 128³, Cloud density 1.00 and Animation speed Still.
+:width: 1440px
+
+**Volumetric smoke cloud**, coloured by `clusters`. The cloud carries each
+cluster's legend colour, the `Alpha` pill is showing, and every smoke control is
+at its initial value except `Animation speed:`, held at 0 (`Still`) so the
+frame stops changing and the capture is reproducible. Scenario
+`core-window-smoke-cloud`.
+```
+
 ## Dimension switching
 
 ```{figure} ../../../_static/screenshots/web_app/window-dimension-3d.png

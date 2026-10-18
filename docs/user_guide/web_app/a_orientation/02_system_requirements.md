@@ -48,7 +48,7 @@ Cellucid’s limiting resource is usually the **GPU** (not CPU):
 
 - **GPU memory (VRAM)**: more VRAM = fewer “context lost” crashes on large datasets.
 - **GPU driver quality**: outdated drivers can cause rendering glitches or failures.
-- **System RAM**: helps for very large datasets and smoke mode (but does not replace VRAM).
+- **System RAM**: helps for very large datasets (but does not replace VRAM).
 
 Rule of thumb:
 
@@ -200,7 +200,7 @@ This section is intentionally long. Use the symptom that matches what you see.
 
 **Prevention**
 
-- Avoid enabling smoke mode at very high grid sizes on laptops.
+- Avoid enabling smoke mode at high render resolution and ray quality on laptops.
 
 ---
 
@@ -217,7 +217,7 @@ Cellucid shows an overlay and requires a reload when the GPU context is lost.
 **How to confirm**
 
 - It often happens right after a heavy action:
-  - switching to smoke with a high grid,
+  - switching to smoke at a high render resolution,
   - increasing ray quality,
   - opening many views/snapshots,
   - or loading a very large dataset.
@@ -226,7 +226,7 @@ Cellucid shows an overlay and requires a reload when the GPU context is lost.
 
 1) Reload the page.
 2) After reload, reduce GPU load:
-   - avoid smoke mode or lower grid/quality,
+   - avoid smoke mode, or lower its render resolution, ray quality, and noise detail,
    - keep fewer views,
    - reduce point size,
    - close other GPU-heavy tabs.
@@ -260,7 +260,7 @@ Cellucid shows an overlay and requires a reload when the GPU context is lost.
   choice is automatic from the cell count — on below 5,000,000 cells, off at or
   above — so on a large dataset it is already clear and there is nothing left to
   turn off.
-- If using smoke: reduce grid density, ray quality, and render resolution.
+- If using smoke: reduce render resolution and ray quality, then grid density; or set animation speed to 0 (`Still`) so a still view is not redrawn.
 
 Lowering `Shader quality:` is a reasonable-sounding move that does **not** help:
 the three qualities measured the same at every point size tested. It changes how

@@ -2293,6 +2293,29 @@
       "web_repository_revision": "fc22ffcd2dbc69931275c226b43218da2677b135",
       "browser": "chromium 151.0.7922.34",
       "captured_at": "2026-10-18T09:34:58Z"
+    },
+    "core-window-smoke-cloud": {
+      "id": "core-window-smoke-cloud",
+      "topic": "web_app",
+      "name": "window-smoke-cloud",
+      "describes": "The whole window in Volumetric smoke cloud mode: the Pancreas cells drawn as a soft, lit cloud tinted with the colours of their clusters inside the grid box, and the sidebar showing the Volumetric smoke controls with Grid density 128³, Ray quality High, Render resolution 0.50x, Noise detail 128³, Cloud density 1.00 and Animation speed Still.",
+      "dataset": "pancreas",
+      "theme": "light",
+      "viewport": "1440x1000",
+      "device_scale_factor": 2,
+      "crop": "full window",
+      "captured_css": "1440x1000",
+      "native_px": "2880x2000",
+      "emitted_px": "1440x1000",
+      "cursor": null,
+      "rings": [],
+      "settled": true,
+      "uses_timeout": false,
+      "page_errors": [],
+      "sha256": "ef8be42ccdedead466849c06477d877f56c85c0a7074e8f8815fa9ef7f00917b",
+      "web_repository_revision": "09f738bb66ad6b73cfbc650170c93f5ffd59740e",
+      "browser": "chromium 151.0.7922.34",
+      "captured_at": "2026-10-18T13:24:35Z"
     }
   }
 }

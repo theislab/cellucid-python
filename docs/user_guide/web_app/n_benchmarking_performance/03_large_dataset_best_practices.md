@@ -259,7 +259,7 @@ These are so common that it’s worth recognizing them immediately.
   views of 10,000,000 cells: 30 → 147 ms a frame). With Level-of-Detail on, the
   same four views took 13.5 ms.
 - **High-DPI + large window**: smooth on an external monitor, choppy on a laptop retina display.
-- **Smoke mode on a laptop**: looks great, then crashes (context lost) when grid density is too high.
+- **Smoke mode on a laptop**: looks great, then crashes (context lost) when render resolution and ray quality push one frame past the GPU watchdog.
 - **Overlay across views**: overlays scale with pixels × views in every layout.
 - **Huge highlight groups**: highlighting costs GPU memory per highlighted cell
   per view, and it does not go away when you look elsewhere.

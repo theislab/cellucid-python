@@ -161,7 +161,7 @@ dataset size.
 
 ### How to confirm
 - It often happens right after:
-  - enabling smoke mode with high grid density,
+  - enabling smoke mode at a high render resolution or ray quality,
   - enabling overlays at high density,
   - loading a very large dataset,
   - selecting a very large highlight group,
@@ -185,7 +185,7 @@ Related docs:
 
 ---
 
-## Edge case: smoke mode quality cliffs (grid density + ray quality)
+## Edge case: smoke mode quality cliffs (render resolution + ray quality)
 
 ### What you see
 - Smoke mode is extremely slow or immediately causes context loss.
@@ -193,22 +193,32 @@ Related docs:
 
 ### Why it happens
 Smoke mode is a ray-marched volumetric rendering:
-- **Grid density** increases density-build time and GPU memory;
-  the current exact choices run from 32³ through 128³ and start at 128³.
+- **Render resolution** sets the rays rendered each frame: 0.25x to 1.00x of
+  the canvas, and never more than 2560×1440 rays.
+- **Ray quality** sets samples per voxel along each ray (0.5 to 2).
+- **Grid density** sets density-build time and, through the voxel size, the
+  samples each ray takes; the exact choices run from 32³ through 128³ and start
+  at 128³. Its memory is bounded: the 128³ volume is 8 MiB.
+- **Noise detail** sets the size of the two noise volumes (32³ to 128³, about
+  18 MiB together at 128³).
 - **Visible-cell count** increases density-build validation and submission.
-- **Render resolution** increases the pixels rendered each frame.
-- **Ray quality** increases ray-march steps per pixel.
+
+A WebGL context is lost when one frame runs past the GPU watchdog (about two
+seconds on Windows and macOS), so the frame-cost controls are the ones that
+matter there.
 
 ### How to confirm
 - Lower render resolution first, then ray quality, when frame rate is poor.
-- Lower grid density when entering Smoke or rebuilding after a filter is slow,
-  or when GPU memory pressure is the problem. Grid changes are applied after
-  the approximately 300 ms slider debounce and then rebuild the volume.
+- Lower grid density when entering Smoke or rebuilding after a filter or
+  recolour is slow. Grid changes are applied after the approximately 300 ms
+  slider debounce and then rebuild the volume.
 
 ### Fix
 - Lower render resolution and ray quality in **Volumetric smoke:**.
-- Lower grid density for build latency or memory pressure.
-- Lower noise detail if memory pressure remains.
+- Lower noise detail next.
+- Lower grid density for build latency.
+- Set animation speed to 0 (`Still`) when nothing needs to move: a settled
+  still view is not redrawn.
 - Return to points mode when doing scientific work; use smoke selectively.
 
 ### Prevention

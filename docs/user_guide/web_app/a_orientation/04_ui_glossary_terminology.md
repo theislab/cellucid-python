@@ -77,8 +77,9 @@ keyboard and screen-reader behavior.
 
 - **`Render mode:`**: the dropdown that decides how points are drawn. It has
   exactly two options: `Points`, the default, which draws one point per cell;
-  and `Volumetric smoke cloud (alpha)`, which draws a continuous density cloud
-  instead. **“Smoke mode”** in these pages always means the second one.
+  and `Volumetric smoke cloud (alpha)`, which draws a continuous density cloud,
+  coloured by the active field, instead. **“Smoke mode”** in these pages always
+  means the second one.
 - **Maturity tag**: a small pill beside a control's label naming how finished
   the currently selected option is. It describes the option you chose, not the
   control it sits next to.

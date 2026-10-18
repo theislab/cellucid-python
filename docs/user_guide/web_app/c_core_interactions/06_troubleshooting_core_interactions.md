@@ -197,22 +197,25 @@ If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/0
 
 ### Likely causes
 
-- Grid density too high for your GPU.
+- Render resolution too high for your GPU (it runs from 0.25× to 1.00×).
 - Ray quality too high.
-- Render resolution too high (close to 1.0× or above).
+- Grid density high, which lengthens every density build and adds samples to
+  every ray.
 
 ### How to confirm
 
 - Lower render resolution, then ray quality. If frame rate improves, the
-  steady-state ray-marching cost was dominant. If entering smoke or changing a
-  filter is the slow part, lower grid density instead.
+  steady-state ray-marching cost was dominant. If entering smoke, changing a
+  filter, or recolouring is the slow part, lower grid density instead.
 
 ### Fix (fastest wins)
 
 1) Lower **Render resolution**.
 2) Lower **Ray quality**.
-3) Lower **Grid density**.
-4) Lower **Noise detail**.
+3) Lower **Noise detail**.
+4) Lower **Grid density**.
+5) Set **Animation speed** to 0 (`Still`) if nothing needs to move: a settled
+   still view is not redrawn.
 
 ---
 

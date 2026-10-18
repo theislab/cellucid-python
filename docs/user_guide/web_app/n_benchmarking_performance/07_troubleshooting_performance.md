@@ -168,7 +168,7 @@ Related docs:
 ## Symptom: “WebGL context lost” or “the canvas goes blank”
 
 ### Likely causes (ordered)
-1) GPU out of memory (too many points/views, smoke grid too high, overlay too heavy).
+1) GPU out of memory or a frame past the GPU watchdog (too many points/views, smoke render resolution or ray quality too high, overlay too heavy).
 2) GPU driver crash/reset (unstable drivers, integrated GPUs under pressure).
 3) Corporate/managed environment disables/blocks hardware acceleration.
 

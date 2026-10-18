@@ -113,15 +113,47 @@ interleaved record at 5M points.
 - **Smoke / volumetric density**
   - Backend: `SmokeRenderer` (`cellucid/assets/js/rendering/smoke-cloud/`)
   - `viewer.buildSmokeVolumeGPU(...)` builds the visible-point volume through
-    one WebGL2 transaction: bounded position batches → R32F splat atlas →
-    logarithmic GPU maximum reduction → normalized R8 atlas → R8 3D texture.
+    one WebGL2 transaction: bounded position + colour batches → R32F density
+    splat atlas (eight trilinear corners per cell) and RGBA32F colour splat
+    atlas (one texel per cell) → logarithmic GPU maximum reduction of the
+    density → normalized RGBA8 atlas → RGBA8 3D texture with mipmaps. Red is
+    the normalized density; green, blue, and alpha are the cells' mean display
+    colour premultiplied by that density, so filtering and mipmapping average
+    colour by the cells that produced it (`density-shaders.js`).
+  - A flat cloud — a 1D or 2D embedding, or a planar 3D one, thinner than two
+    voxels along an axis — is spread along that axis into a soft slab of fixed
+    half-thickness (`SMOKE_SLAB_HALF_THICKNESS`, about four voxels of the 128³
+    grid) by both splat passes, so a ray never steps over a voxel-thin sheet.
+  - From each published volume, `buildDerivedVolumesGPU(...)` derives two more
+    for the fixed key-light direction: a lighting volume (RG16F, half the grid:
+    r = optical depth towards the key light, g = sky occlusion) that replaces a
+    per-sample shadow ray, and an occupancy volume (R8, one texel per 4³ block
+    of voxels: the largest density a sample in the block can read) that lets
+    the ray march leap over empty blocks. Both are rebuilt only when the
+    density volume or the light direction changes; the live density and
+    absorption scale them in the shader.
   - The product path performs no `readPixels` synchronization. It publishes the
     new texture and bounds before completing its notification, preserves the
     prior volume on failure, and returns only a frozen non-owning summary.
+  - The volume is a function of visibility, positions, and colours. The viewer
+    reports every live position or colour republication (a field, colormap,
+    category colour or log-scale change, a dimension switch, a new dataset)
+    through `setSmokeSourceChangeHandler`, and the render controls mark the
+    volume dirty exactly as they do for a visibility change.
   - The exact UI grid inventory is 32³, 48³, 64³, 96³, and 128³. The builder
     accepts exact integer sizes from 8 through 128 and rejects values outside
     that range before allocation. At 128³, its 2D atlas is 1536×1408—below
-    WebGL2's required 2048 minimum `MAX_TEXTURE_SIZE`.
+    WebGL2's required 2048 minimum `MAX_TEXTURE_SIZE`—and the published RGBA8
+    volume is 8 MiB. The transient float atlases peak below 50 MiB, which is
+    why the grid is not the memory lever it was.
+  - Per frame, the ray march takes `Ray quality` samples per voxel (0.5–2,
+    capped at `MAX_SMOKE_MARCH_STEPS` = 512 per ray) into an offscreen target
+    of 0.25–1.00× the canvas, never more than 2560×1440 pixels
+    (`MAX_SMOKE_TARGET_PIXELS`), and upsamples it with an alpha-gated
+    bilateral composite. The noise volumes are 32³–128³. The ray-start jitter
+    is a fixed blue-noise tile, so a still camera with `Animation speed` 0
+    produces identical frames, and `SmokeRenderer.needsContinuousFrames()`
+    then lets the viewer stop drawing.
   - A build requires a clean GL error state, `EXT_color_buffer_float`,
     `EXT_float_blend`, and sufficient 2D/3D texture limits. These are explicit
     preconditions; there is no alternate density implementation.
@@ -372,8 +404,8 @@ render()  (self-rescheduling rAF; draws only when something can have changed)
 
 The frame gate decides whether a frame is drawn at all. Any mutating viewer or
 renderer call, any viewer input event, and any canvas resize marks the next frame
-for drawing; held navigation keys, inertia, smooth zoom, a grid fade, smoke mode,
-enabled overlays, visible highlights (their glow animates), and live projectiles
+for drawing; held navigation keys, inertia, smooth zoom, a grid fade, smoke mode
+while it animates or is still waiting for its noise volumes, enabled overlays, visible highlights (their glow animates), and live projectiles
 keep frames drawing, and so does a camera motion still waiting for its
 `camera-settled` event. After the last such cause the viewer keeps drawing until
 both one second has passed and 12 frames have been drawn
@@ -514,11 +546,12 @@ Prefer:
 - reusing scratch buffers (float32/uint8) sized to `pointCount`
 - debouncing expensive work in UI modules
 
-Smoke density never makes a full duplicate position array. It retains the
-dataset-owned positions, alpha, and optional outlier-quantile arrays, validates
-them in place, and streams visible positions through a transient buffer fixed
-at 262,144 points in the source layout (at most 3 MiB, for a 3D embedding).
-Large inputs are submitted in bounded batches.
+Smoke density never makes a full duplicate position or colour array. It
+retains the dataset-owned positions, colours, alpha, and optional
+outlier-quantile arrays, validates them in place, and streams visible cells
+through two transient buffers fixed at 262,144 cells: positions in the source
+layout (at most 3 MiB, for a 3D embedding) and RGBA8 colours (1 MiB), 4 MiB per
+batch. Large inputs are submitted in bounded batches.
 Do not replace this with a buffer sized to the complete dataset or introduce
 GPU→CPU volume readback. The grid cap and early release of completed reduction
 textures bound the other transient memory.

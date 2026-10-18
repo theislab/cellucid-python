@@ -106,6 +106,32 @@ Version 0.9.2 is a patch release on 0.9.1.
   as a mouse press does, instead of moving whichever pane last had focus, and a
   touch drag saves the camera to the focused pane when cameras are unlocked.
 
+- **Web app**: the volumetric smoke cloud is rebuilt and fixed.
+  - It drew near-black soot whatever the cells were coloured by. The cloud now
+    takes the active field's colours: each region shows the mean display colour
+    of the cells there, lit by a key light and sky occlusion pre-computed once
+    per build rather than by a shadow ray from every sample.
+  - Switching dimension or recolouring (field, colormap, category colour, log
+    scale) left the previous volume on screen. Both now rebuild it, and a 2D or
+    1D embedding is spread into a soft slab instead of a sheet rays stepped over.
+  - `Ray quality` changed almost nothing. It now sets samples per voxel, 0.5 to
+    2 (`High`, 1.41, by default), and empty space is skipped at no cost.
+  - The cloud shimmered and the GPU never idled: the ray-start jitter moved
+    every frame and every frame was redrawn. The jitter is now fixed, and at
+    `Animation speed` 0, which reads `Still`, a still view is not redrawn.
+  - `Render resolution` reached 2.00x and `Noise detail` 256³, either of which
+    could stall one frame long enough to lose the WebGL context. Render
+    resolution now runs 0.25x–1.00x (default 0.50x) and a frame marches at most
+    2560×1440 rays; noise detail is 32³–128³ (default 128³).
+  - `Cloud density`, `Fine detail` and `Light absorption` printed readouts that
+    changed with grid and noise resolution, so a recorded value did not
+    reproduce a look. Every smoke slider now has one fixed scale.
+
+  The documentation's control tables, recovery order and pipeline description
+  are corrected (grid size was never the cause of context loss: the grid is
+  capped at 128³, an 8 MiB volume), and the sample datasets' saved views now
+  open with the new smoke defaults.
+
 - A refused upload or event now reaches the client as the status the server sent.
   Every early refusal of a POST -- an expired or unknown session-bundle request, bad
   viewer credentials, a wrong `Content-Type`, an oversized body, an unknown path, a

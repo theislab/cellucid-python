@@ -1139,6 +1139,45 @@ function buildFilteringScenarios() {
       cursor: { on: '#render-mode', at: 'right', dx: -18, state: 'press' },
       settle,
     },
+    {
+      // Smoke animates by default, so a capture of it would never settle.
+      // Animation speed 0 reads `Still`, and a still smoke view is not
+      // redrawn at all once its noise exists (`needsContinuousFrames()` in the
+      // web app's `smoke-renderer.js`): two consecutive frames are then the
+      // same bytes, which is what the settle loop waits for. The ray-start
+      // jitter is a fixed blue-noise tile, not a per-frame offset, so nothing
+      // else moves.
+      id: 'core-window-smoke-cloud',
+      topic: 'web_app',
+      name: 'window-smoke-cloud',
+      describes:
+        'The whole window in Volumetric smoke cloud mode: the Pancreas cells '
+        + 'drawn as a soft, lit cloud tinted with the colours of their '
+        + 'clusters inside the grid box, and the sidebar showing the '
+        + 'Volumetric smoke controls with Grid density 128³, Ray quality High, '
+        + 'Render resolution 0.50x, Noise detail 128³, Cloud density 1.00 and '
+        + 'Animation speed Still.',
+      dataset: 'pancreas',
+      steps: [
+        READY,
+        ...clusters,
+        { select: '#render-mode', value: 'smoke' },
+        { waitFor: '#smoke-speed' },
+        {
+          run: async page => {
+            const speed = page.locator('#smoke-speed');
+            await speed.fill('0');
+            await speed.dispatchEvent('input');
+            await speed.blur();
+          },
+        },
+        { waitForText: '#smoke-speed-display', text: 'Still' },
+        { scrollIntoView: '#smoke-controls' },
+        NOTIFICATIONS_DRAINED,
+      ],
+      shot: { mode: 'window' },
+      settle: { attempts: 40, gapMs: 250 },
+    },
 
     // ------------------------------------------------------------- orientation
     {

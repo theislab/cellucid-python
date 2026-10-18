@@ -35,18 +35,18 @@ which is a legitimate single use.
 
 ## Current inventory
 
-### `c_core_interactions/` — 26 blocks, 15 distinct images
+### `c_core_interactions/` — 28 blocks, 16 distinct images
 
 | Page | Blocks | Images |
 | --- | ---: | --- |
 | section index | 1 | `navigation-controls-orbit` |
 | {doc}`/user_guide/web_app/c_core_interactions/01_navigation_modes_orbit_planar_free_fly` | 3 | `navigation-controls-orbit`, `-planar`, `-freefly` |
 | {doc}`/user_guide/web_app/c_core_interactions/02_camera_controls_advanced` | 2 | `navigation-controls-freefly`, `camera-path-configured-panel` |
-| {doc}`/user_guide/web_app/c_core_interactions/03_render_modes_points_vs_volumetric_smoke` | 1 | `render-mode-select` |
+| {doc}`/user_guide/web_app/c_core_interactions/03_render_modes_points_vs_volumetric_smoke` | 2 | `render-mode-select`, `window-smoke-cloud` |
 | {doc}`/user_guide/web_app/c_core_interactions/04_view_layout_live_snapshots_small_multiples` | 1 | `multiview-two-panels` |
 | {doc}`/user_guide/web_app/c_core_interactions/05_dimension_switching_1d_2d_3d` | 3 | `window-dimension-1d`, `-2d`, `-3d` |
 | {doc}`/user_guide/web_app/c_core_interactions/06_troubleshooting_core_interactions` | **0** | — |
-| `07_screenshots.md` | 15 | the section's gallery |
+| `07_screenshots.md` | 16 | the section's gallery |
 
 ### `d_fields_coloring_legends/` — 25 blocks, 11 distinct images
 

@@ -805,9 +805,10 @@ that instruction and none of them shows it.
   Keep the benchmark panel image on `08_screenshots.md`, where its acceptance
   caption belongs.
 - **notes** — The smoke-mode grid choices (32³, 48³, 64³, 96³, 128³, starting at
-  128³) were not re-verified in this pass — they belong to
-  `c_core_interactions` and the render-mode source, outside this section's
-  scope. Flagging as unverified, not as wrong.
+  128³), the 0.25x–1.00x render-resolution range and the 2560×1440 ray budget
+  were verified against `SMOKE_GRID_SIZES` in `smoke-density-contract.js`,
+  `smoke-control-scales.js`, and `MAX_SMOKE_TARGET_PIXELS` in
+  `smoke-renderer.js` (web `09f738bb6`).
 
 ## {doc}`/user_guide/web_app/n_benchmarking_performance/03_large_dataset_best_practices`
 
@@ -938,9 +939,9 @@ that instruction and none of them shows it.
      `perf-category-explosion-legend.png` · `:width: 246px`. Lower priority than
      the context-lost image — it needs a new fixture.
 - **notes** — "Grid changes are applied after the approximately 300 ms slider
-  debounce" (line 129) is a precise claim about the smoke-mode controls that was
-  not verified in this pass; it lives in the render-mode module outside this
-  section. Flagging as unverified.
+  debounce" is verified: `scheduleSliderSmokeRebuild()` in
+  `app/ui/modules/render-controls.js` waits 300 ms, and only the grid slider
+  schedules a rebuild (web `09f738bb6`).
 
 ## {doc}`/user_guide/web_app/n_benchmarking_performance/07_troubleshooting_performance`
 

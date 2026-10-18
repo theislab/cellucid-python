@@ -113,17 +113,27 @@ Smoke mode is intentionally heavy and can dominate GPU time.
 Separate build cost from frame cost:
 
 - **Visible-cell count** scales density-build validation and GPU submission
-  approximately linearly.
-- **Grid density** scales density-build work and GPU memory steeply—roughly
-  with the cube of the selected grid width.
+  approximately linearly. A build runs on entering smoke and again after every
+  visibility, colour, or dimension change while smoke is active.
+- **Grid density** scales the build's splat and normalization work with the
+  cube of the grid width, but its memory is capped: 128³ is the largest grid on
+  every device, an 8 MiB volume, with under 50 MiB of temporary atlases during
+  the build. Through the voxel size it also sets how many samples each ray
+  takes.
 - **Render resolution** and **Ray quality** are the main steady-state
-  per-frame costs because they control rendered pixels and ray-march work.
+  per-frame costs: a frame costs about rays × samples per ray. Render
+  resolution runs from 0.25x to 1.00x of the canvas and a frame never marches
+  more than 2560×1440 rays; Ray quality is 0.5 to 2 samples per voxel.
+- **Animation speed** decides whether smoke costs anything while you are not
+  interacting: at 0 (`Still`) a settled view is not redrawn.
 
 Practical consequences:
 - The exact grid choices are 32³, 48³, 64³, 96³, and 128³; 128³ is the
   initial and maximum setting on every supported WebGL2 implementation.
 - Smoke can look “blank” if density is low or if few points are visible (filters/outliers).
-- Smoke can cause “context lost” if grid/quality are too high for your GPU.
+- Smoke can cause “context lost” when one frame runs past the GPU watchdog
+  (about two seconds): lower render resolution, then ray quality, then noise
+  detail. Grid size is not the memory problem it once was.
 
 ---
 
