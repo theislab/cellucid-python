@@ -81,7 +81,7 @@ concern, and per publication step.
 At a high level:
 
 1) **Validate embeddings** and infer `n_cells`.
-2) **Normalize embeddings** (center + scale) and write `points_*d.bin`.
+2) **Normalize each embedding** (center + scale) and write `embeddings/<index>_<dim>d.bin`.
 3) Validate/convert `latent_space` and `obs`.
 4) Export optional **vector fields** (scaled with embedding normalization).
 5) Export **obs**:

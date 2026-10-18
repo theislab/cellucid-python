@@ -58,7 +58,7 @@ ones that scale:
   path entirely.
 - **Reading the neighbor graph** — proportional to stored neighbors, not to
   cells, so it grows fastest of all. It is therefore asked for rather than
-  assumed: off unless you pass `serve_connectivity=True`, or `--connectivity`.
+  assumed: off unless you pass `knn_key="connectivities"`, or `--knn connectivities`.
 
 Startup reports five numbered steps so a long pause has a label above it rather
 than looking like a hang; the second is the adapter build and the fourth is the
@@ -155,6 +155,7 @@ Common “good defaults” for large-ish datasets:
 ```python
 prepare(
     ...,
+    embeddings={"X_umap": adata.obsm["X_umap"]},
     dataset_name="My study",
     dataset_id="my-study-v1",
     obs_categorical_dtype="uint16",
@@ -255,7 +256,7 @@ How to confirm:
   and step 2 names each part of the adapter build as it starts.
 
 Fix:
-- drop `serve_connectivity=True` / `--connectivity` if the session will not draw
+- drop `knn_key="connectivities"` / `--knn connectivities` if the session will not draw
   the graph,
 - narrow the served obs columns with `obs_keys=` / `--obs-key`,
 - export once and serve the export for every session after.

@@ -71,10 +71,10 @@ prepare(
     obs=adata.obs,
     var=adata.var,
     gene_expression=adata.X,
-    X_umap_2d=adata.obsm["X_umap_2d"],
+    embeddings={"X_umap_2d": adata.obsm["X_umap_2d"]},
     vector_fields={
-        # You can pass the new obsm entry directly
-        key: adata.obsm[key],
+        # A field id, then the embedding the new obsm entry is drawn over
+        "T_fwd_umap": {"X_umap_2d": adata.obsm[key]},
     },
     out_dir="./my_export",
     dataset_name="My study",
@@ -87,9 +87,11 @@ prepare(
 
 ## Naming conventions (important)
 
-Every vector-field declaration key must follow
-`<field>_<basis>_<dim>d`, for example `velocity_umap_2d` or
-`T_fwd_umap_3d`. Unsuffixed keys are not discovered as vector fields.
+When an AnnData object is served directly, a vector field is discovered from an
+`obsm` key of the form `<field>_umap_<dim>d`, for example `velocity_umap_2d` or
+`T_fwd_umap_3d` — the keys {func}`~cellucid.add_transition_drift_to_obsm` writes.
+Unsuffixed keys are not discovered. {func}`~cellucid.prepare` reads no `obsm`
+keys: pass `vector_fields={field_id: {embedding_id: array}}` instead.
 
 ---
 
@@ -119,7 +121,7 @@ Every vector-field declaration key must follow
 - The product `T @ embedding` must produce `(n_cells, dim)`
 
 ### Dimension mismatch between export and vectors
-- If you export `X_umap_3d` but only provide `*_umap_2d` vectors, the 3D overlay will not be available.
+- If you export a 3D embedding but bind the field only to a 2D one, the 3D overlay will not be available.
 
 ---
 

@@ -60,8 +60,7 @@ exports/                     # "exports root" (this is what you point Cellucid a
 ├── datasets.json            # required
 ├── pbmc_demo/               # dataset folder (name can differ from dataset_id)
 │   ├── dataset_identity.json
-│   ├── points_2d.bin.gz
-│   ├── points_3d.bin.gz
+│   ├── embeddings/          # one coordinate file per embedding
 │   ├── obs_manifest.json
 │   ├── var_manifest.json
 │   ├── obs/
@@ -103,15 +102,18 @@ prepare(
     var=adata.var,
     gene_expression=adata.X,
     connectivities=adata.obsp["connectivities"],
-    X_umap_1d=adata.obsm["X_umap_1d"],
-    X_umap_2d=adata.obsm["X_umap_2d"],
-    X_umap_3d=adata.obsm["X_umap_3d"],
-    vector_fields={
-        "velocity_umap_1d": adata.obsm["velocity_umap_1d"],
-        "velocity_umap_2d": adata.obsm["velocity_umap_2d"],
-        "velocity_umap_3d": adata.obsm["velocity_umap_3d"],
+    embeddings={
+        "X_umap_1d": adata.obsm["X_umap_1d"],
+        "X_umap_2d": adata.obsm["X_umap_2d"],
+        "X_umap_3d": adata.obsm["X_umap_3d"],
     },
-    vector_field_default="velocity_umap",
+    vector_fields={
+        "velocity": {
+            "X_umap_1d": adata.obsm["velocity_umap_1d"],
+            "X_umap_2d": adata.obsm["velocity_umap_2d"],
+            "X_umap_3d": adata.obsm["velocity_umap_3d"],
+        },
+    },
     out_dir=export_dir,
     dataset_id="pbmc_demo",
     dataset_name="PBMC demo",

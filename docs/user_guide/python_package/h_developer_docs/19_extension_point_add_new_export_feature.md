@@ -55,7 +55,7 @@ Implementation files:
   public entry point and its argument contracts)
 - `cellucid-python/src/cellucid/prepare_data/_generation.py` (the writer that
   builds one generation in a staging directory)
-- `cellucid-python/src/cellucid/prepare_data/_manifest.py` (the compact_v1 manifest
+- `cellucid-python/src/cellucid/prepare_data/_manifest.py` (the compact_v2 manifest
   format and the payload paths it declares)
 
 Checklist:

@@ -65,6 +65,7 @@ Example:
 ```python
 prepare(
     ...,
+    embeddings={"X_umap": adata.obsm["X_umap"]},
     out_dir="./exports/pbmc_v1",
     dataset_name="PBMC 10k (Seurat v3 tutorial)",
     dataset_id="pbmc_10k_v1",
@@ -94,39 +95,50 @@ viewer = show_anndata("data.h5ad", dataset_name="My study (raw)", dataset_id="my
 
 ## How sessions decide “same dataset or not”
 
-A `.cellucid-session` bundle contains a lightweight **dataset fingerprint** in its manifest (not the full dataset). It has four scalars — `sourceType`, `datasetId`, `cellCount`, `varCount` — and a fifth field, `cellOrder`, recording *which ordering* of the cells the session was saved against.
+A `.cellucid-session` bundle contains a lightweight **dataset fingerprint** in
+its manifest (not the full dataset). In the current session format it has exactly six required fields: four scalars — `sourceType`, `datasetId`,
+`cellCount`, `varCount` — plus `cellOrder`, recording *which ordering* of the
+cells the session was saved against, and `dataMapping`, recording *which arrays*
+it was showing.
 
 In Python, `apply_cellucid_session_to_anndata(...)` uses this fingerprint as a safety guard:
+- compares `datasetId` to the required `expected_dataset_id`,
 - compares `cellCount` to `adata.n_obs`,
-- compares `varCount` to `adata.n_vars`,
-- compares `datasetId` to the required `expected_dataset_id`.
+- checks that every key `dataMapping` names exists on `adata` (its `obsm`
+  embeddings and their columns, `obsp` graph, layer or `raw`, latent space, and
+  gene-name column),
+- compares `varCount` to the gene count of the axis that mapping reads:
+  `adata.raw.n_vars` for `expression: "raw"`, `0` for a mapping without
+  expression, `adata.n_vars` otherwise.
 
 Any mismatch raises `ValueError` before AnnData is mutated. Application is
-strict and atomic.
+strict and atomic, and a bundle without `cellOrder` or `dataMapping` is refused.
 
-### `cellOrder` is accepted here, enforced in the viewer
+### `cellOrder` is shape-checked here, its digest is verified in the viewer
 
-`cellOrder` is exactly a `dimension` (1, 2, or 3) and a 16-character lowercase
-hexadecimal `digest` of the coordinates the session was saved against. It closes
-a hole the four scalars cannot: sessions store selections as row numbers, and a
-dataset re-exported at the same id from re-sorted input matches all four scalars
-while every row number now denotes a different cell.
+`cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
+16-character lowercase hexadecimal `digest` of the coordinates of that
+embedding. `embedding` is `{"key", "columns"}`: an exported embedding id with
+`columns: null`, or an AnnData `obsm` key with the 0-based columns that were
+read, one per dimension. It closes a hole the four scalars cannot: sessions store
+selections as row numbers, and a dataset re-exported at the same id from
+re-sorted input matches all four scalars while every row number now denotes a
+different cell.
 
-Python's readers are deliberately **asymmetric** with the web app's:
+`dataMapping` records which stored arrays the session was showing. Its `kind`
+is `"export"` — exactly `kind`, `embeddings` (the `1d`/`2d`/`3d` slots),
+`geneNames` (`"index"` or `"column:<name>"`), and `vectorFields` — or
+`"anndata"`, which adds `knn`, `expression` (`"X"`, `"raw"`, `"layer:<name>"`,
+or null), and `latent`.
 
-- the **web app requires** `cellOrder` and compares both of its members, so a
-  session file written before the record existed is refused;
-- **Python accepts a bundle with or without it**, and when it is present
-  validates only its shape — exactly `dimension` and `digest`, `dimension`
-  exactly 1, 2, or 3, `digest` exactly 16 lowercase hexadecimal characters.
-
-This is not an oversight. Python cannot verify the digest: it is taken over
-*exported* coordinates, and `apply_cellucid_session_to_anndata(...)` targets an
-`AnnData` whose row order the caller controls, so there is nothing here to check
-it against. Enforcing cell-order identity is the viewer's job.
+Both readers require both records. Python validates `cellOrder`'s shape and
+never its digest: the digest is taken over normalized coordinates the viewer
+drew, and `apply_cellucid_session_to_anndata(...)` targets an `AnnData` whose
+row order the caller controls, so there is nothing here to check it against.
+Enforcing cell-order identity is the viewer's job.
 
 The consequence runs one way: **a bundle Python accepts may still be refused by
-the web app.** Do not read that as a disagreement between the two readers.
+the web app**, because only the viewer compares the digest. Do not read that as a disagreement between the two readers.
 
 ```{important}
 These guards prevent the most dangerous failure mode: silently applying highlights/labels to the wrong cells.
@@ -232,12 +244,12 @@ Likely causes:
 - different number of cells/genes,
 - different dataset ID,
 - you are loading a different export folder than you think,
-- a different embedding dimension is on screen than the one the session was
-  saved in — the message names both, and switching back resolves it,
 - the dataset was re-exported at the same ID from re-sorted input, so the
   counts match but the cell order does not,
-- the session file predates the `cellOrder` record, so its selections can never
-  be confirmed and it is refused outright.
+- the session names an embedding, graph, layer, or gene-name column the dataset
+  does not have,
+- the session file predates the current fingerprint (no `cellOrder` with an
+  `embedding`, or no `dataMapping`), so it is refused outright.
 
 How to confirm:
 - inspect `dataset_identity.json` in the export folder you loaded,
@@ -245,7 +257,6 @@ How to confirm:
 
 Fix:
 - load the correct dataset export folder,
-- switch back to the dimension the message names, if that is what it reports,
 - or create a fresh session from the dataset generation you intend to use.
 
 The current web and Python readers do not accept a layout-only partial
@@ -256,9 +267,10 @@ restore. Identity or format mismatch rejects the complete operation.
 Likely causes:
 - `expected_dataset_id` does not match the bundle's `datasetId`,
 - cell or variable counts differ,
-- the bundle's `cellOrder` record is malformed — Python does not require the
-  field, but it rejects a present one that is not exactly a `dimension` of 1,
-  2, or 3 and a 16-character lowercase hexadecimal `digest`.
+- the bundle's `dataMapping` names an `obsm`, `obsp`, layer, `raw`, or `var`
+  column the target `AnnData` does not have,
+- `varCount` disagrees with the gene axis the mapping reads,
+- the bundle's `cellOrder` or `dataMapping` record is missing or malformed.
 
 A different row order is *not* on that list. Python compares counts and the
 dataset ID, and a permutation changes neither, so it will apply the session

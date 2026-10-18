@@ -177,8 +177,8 @@ adoption, then reads gene-expression chunks on demand. Archive extraction and
 decoded chunk memory remain subject to the documented browser limits.
 
 ‡ These are the direct-AnnData paths, and on all six the neighbor graph **and**
-the vector fields are off unless asked for — `--connectivity` /
-`--vector-fields` on the CLI, `serve_connectivity=True` /
+the vector fields are off unless asked for — `--knn connectivities` /
+`--vector-fields` on the CLI, `knn_key="connectivities"` /
 `serve_vector_fields=True` in Python. The other eight rows either read a
 prepared export or scan `obsm` in the browser, so there is nothing to switch on.
 

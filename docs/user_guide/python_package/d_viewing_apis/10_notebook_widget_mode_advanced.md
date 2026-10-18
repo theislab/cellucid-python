@@ -84,7 +84,7 @@ viewer = AnnDataViewer(
     port=8765,
     dataset_name="Example",
     dataset_id="example",
-    serve_connectivity=True,
+    knn_key="connectivities",
 )
 ```
 
@@ -95,7 +95,7 @@ viewer = show_anndata(
     "data.h5ad",
     dataset_name="My study",
     dataset_id="my-study-v1",
-    serve_connectivity=True,
+    knn_key="connectivities",
 )
 ```
 
@@ -224,14 +224,13 @@ print(viewer.viewer_url)
   object, or generation directory: {doc}`15_troubleshooting_viewing`.
 - The cell has produced no output for minutes → you are inside the constructor.
   Nothing is printed there; see “A notebook viewer builds quietly” above, and
-  drop `serve_connectivity=True` if this session will not draw edges.
+  drop `knn_key="connectivities"` if this session will not draw edges.
 - The edge overlay is missing although `adata.obsp['connectivities']` exists →
-  the graph is opt-in. Rebuild the viewer with `serve_connectivity=True`.
-- Construction raised “Connectivity was asked for, and adata.obsp has no
-  'connectivities' matrix to serve” → run `sc.pp.neighbors(adata)` first, or
+  the graph is opt-in. Rebuild the viewer with `knn_key="connectivities"`.
+- Construction raised “knn_key names obsp['connectivities'],
+  which this object does not have.” → run `sc.pp.neighbors(adata)` first, or
   construct without the parameter.
-- Construction raised “No UMAP embedding Cellucid can read was found in
-  adata.obsm” → the object declares none of `X_umap_1d`, `X_umap_2d`, or
-  `X_umap_3d`, and either has no bare `X_umap` or has one whose width is not 1,
-  2, or 3 columns. The message lists the keys present and names that shape;
+- Construction raised “Cellucid found nothing to plot” → no `obsm` array can be
+  plotted. The message lists every `obsm` entry and why it was not used; name a
+  usable one with `embedding_keys={"2d": "<key>"}`.
   {doc}`08_anndata_mode_show_anndata_and_serve_anndata` has the complete rules.

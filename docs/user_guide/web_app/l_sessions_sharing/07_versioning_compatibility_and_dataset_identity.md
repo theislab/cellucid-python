@@ -93,15 +93,24 @@ Treat a dataset id as a content identity:
 3. save a new session after the changed dataset is loaded; and
 4. tell collaborators the exact loading route and dataset revision.
 
-## The Python reader is deliberately more permissive
+## The Python reader and the extended session format
 
-The `cellucid` Python package reads the same `.cellucid-session` files, and it
-accepts a fingerprint **with or without** `cellOrder`, validating only the
-record's shape when it is present. It cannot do more: the digest is taken over
-exported coordinates, and
-`apply_cellucid_session_to_anndata()` targets an `AnnData` whose row order the
-caller controls, so there is nothing on that side to check the digest against.
-Enforcing cell-order identity is the web app's job.
+The `cellucid` Python package reads `.cellucid-session` files in the extended
+session format that accompanies export format 3. That format extends the fingerprint above with two records, both required:
+`cellOrder` gains an `embedding` member naming the embedding its digest was
+taken over (an exported embedding id, or an AnnData `obsm` key with its 0-based
+columns), and a sixth field, `dataMapping`, records which stored arrays —
+embeddings, vector-field bindings, gene names, and for AnnData sources the
+neighbour graph, expression matrix, and latent space — the session was showing.
+A file without them is refused, so a session saved by an earlier viewer release
+is not applied by the current Python package. The exact shapes are in
+{doc}`../../python_package/e_jupyter_hooks/11_session_bundles_apply_session_to_anndata`.
+
+Python validates `cellOrder`'s shape and never its digest: the digest is taken
+over coordinates the viewer drew, and `apply_cellucid_session_to_anndata()`
+targets an `AnnData` whose row order the caller controls, so there is nothing on
+that side to check it against. Enforcing cell-order identity is the web app's
+job.
 
 The practical consequence is one-directional: a bundle Python accepts may still
 be refused by the app. That is not an inconsistency to report. See

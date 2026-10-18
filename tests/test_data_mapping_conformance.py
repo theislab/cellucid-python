@@ -24,7 +24,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "data_mapping_conformance.json"
 
 #: The same digest is pinned in cellucid-r (tests/testthat/test-data-mapping-
 #: conformance.R) and in the web app. Update all three together.
-FIXTURE_SHA256 = "da5f48332d4370bc74ad162e129e854398b1392ad76f7bdf68b389ad0bd11b65"
+FIXTURE_SHA256 = "b5b35f7d86f4472d4fc8117c49ada6341aaf9834998bff778ef8d4a07bc4fb43"
 
 
 def _fixture() -> dict[str, Any]:

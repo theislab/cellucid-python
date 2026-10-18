@@ -454,9 +454,13 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
         "A different embedding dimension is on screen",
         "stores its cells in a different order",
         "A session file saved before Cellucid recorded cell order",
-        "accepts a fingerprint **with or without** `cellOrder`",
+        # The Python reader requires the extended fingerprint and never
+        # verifies the digest; the page must say both.
+        "A file without them is refused",
+        "Python validates `cellOrder`'s shape and never its digest",
     ):
         assert exact in identity
+    assert "accepts a fingerprint **with or without** `cellOrder`" not in identity
     for exact in (
         "All five must match",
         "`cellOrder`, itself exactly a `dimension` (1, 2, or 3)",

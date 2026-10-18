@@ -5,12 +5,12 @@
 **Goal:** install `cellucid`, verify the CLI, and avoid the most common environment pitfalls
 
 :::{note}
-**Active package version: 0.10.0.** Version 0.10.0 is the current PyPI <!-- CELLUCID_VERSION -->
+**Active package version: 0.9.3.** Version 0.9.3 is the current PyPI <!-- CELLUCID_VERSION -->
 release. If the [PyPI package page](https://pypi.org/project/cellucid/) lists
-0.10.0, the normal install and pin commands below retrieve it. Until then, they <!-- CELLUCID_VERSION -->
+0.9.3, the normal install and pin commands below retrieve it. Until then, they <!-- CELLUCID_VERSION -->
 resolve only to versions available from PyPI; install the active source
 straight from the official GitHub repository (see **From the official source
-repository** below) when validating 0.10.0 before publication. <!-- CELLUCID_VERSION -->
+repository** below) when validating 0.9.3 before publication. <!-- CELLUCID_VERSION -->
 :::
 
 ## Requirements
@@ -120,7 +120,7 @@ pip install -U cellucid
 Pin a specific version (recommended for paper pipelines):
 
 ```bash
-pip install "cellucid==0.10.0"  # CELLUCID_VERSION
+pip install "cellucid==0.9.3"  # CELLUCID_VERSION
 ```
 
 ### Core scientific runtime

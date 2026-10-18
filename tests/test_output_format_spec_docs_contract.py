@@ -20,7 +20,7 @@ import pytest
 
 from cellucid._compression import deterministic_gzip_compress
 from cellucid.connectivity_contract import connectivity_index_storage
-from cellucid.prepare_data import prepare
+from cellucid.prepare_data import Embedding, prepare
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SPEC_PAGE = (
@@ -38,7 +38,9 @@ EXPORTED_GENES = ["gene_c", "gene_a"]
 OBS_SECTION = ("## Obs manifest:", "## Var manifest:")
 VAR_SECTION = ("## Var manifest:", "## Connectivity manifest:")
 CONNECTIVITY_SECTION = ("## Connectivity manifest:", "## Vector files:")
-IDENTITY_SECTION = ("## Required file: `dataset_identity.json`", "## Points files:")
+IDENTITY_SECTION = ("## Required file: `dataset_identity.json`", "## Embedding files:")
+EMBEDDING_SECTION = ("## Embedding files:", "## Obs manifest:")
+LAYOUT_SECTION = ("## The writer proves the layout before publishing", "## Determinism")
 FAST_PATH_SECTION = ("### Minimal export folder (required)", "### Typical full export folder")
 VECTOR_SECTION = ("## Vector files:", "## Compression strategy")
 DETERMINISM_SECTION = (
@@ -93,13 +95,17 @@ def export(tmp_path_factory) -> Path:
                 "leiden": pd.Categorical(["a", "b", "a", "b", "c", "c"]),
             }
         ),
-        var=pd.DataFrame(index=INPUT_GENES),
+        var=pd.DataFrame(
+            {"symbol": ["SYM_A", "SYM_A", None, "SYM_D"]},
+            index=INPUT_GENES,
+        ),
+        var_gene_name_columns=["symbol"],
         gene_expression=np.arange(n_cells * len(INPUT_GENES), dtype=np.float32).reshape(
             n_cells, len(INPUT_GENES)
         ),
         gene_identifiers=EXPORTED_GENES,
         connectivities=connectivities,
-        X_umap_2d=coordinates,
+        embeddings={"X_umap": coordinates},
         out_dir=out_dir,
         dataset_id="spec-contract",
         dataset_name="Spec contract",
@@ -135,13 +141,20 @@ def vector_export(tmp_path_factory) -> Path:
                 "leiden": pd.Categorical(["a", "b", "a", "b", "c", "c"]),
             }
         ),
-        X_umap_2d=coordinates_2d,
-        X_umap_3d=coordinates_3d,
-        vector_fields={
-            "velocity_umap_2d": coordinates_2d * 0.1,
-            "velocity_umap_3d": coordinates_3d * 0.1,
+        embeddings={
+            "X_umap": coordinates_2d,
+            "X_tsne": Embedding(coordinates_2d[:, ::-1], label="t-SNE", source_key="X_tsne"),
+            "X_pca": Embedding(coordinates_3d, columns=[2, 0]),
+            "X_umap_3d": coordinates_3d,
         },
-        vector_field_default="velocity_umap",
+        embedding_defaults={"2d": "X_umap"},
+        vector_fields={
+            "velocity": {
+                "X_umap": coordinates_2d * 0.1,
+                "X_umap_3d": coordinates_3d * 0.1,
+            },
+        },
+        vector_field_default="velocity",
         compression=6,
         out_dir=out_dir,
         dataset_id="spec-contract-vectors",
@@ -231,8 +244,15 @@ def test_minimal_export_folder_lists_every_always_required_entry() -> None:
     """CEL-AUDIT-0030: the page claimed identity plus one points file sufficed."""
     fast_path = _section(_spec(), FAST_PATH_SECTION)
 
-    for required in ("dataset_identity.json", "obs_manifest.json", "obs/", "points_2d.bin"):
+    for required in (
+        "dataset_identity.json",
+        "obs_manifest.json",
+        "obs/",
+        "embeddings/",
+        "0_2d.bin",
+    ):
         assert required in fast_path
+    assert "points_2d.bin(.gz) or points_3d.bin(.gz)" not in fast_path
     assert "**not optional and never degrades gracefully**" in fast_path
 
 
@@ -314,7 +334,7 @@ def test_identity_source_documents_name_as_its_only_required_key(
     assert "**not part of the export format**" in identity_section
 
 
-def test_vector_field_label_and_basis_are_documented_as_derived(
+def test_vector_field_label_is_documented_as_derived(
     vector_export: Path,
 ) -> None:
     """CEL-0010: the example's ``"label": "Velocity (UMAP)"`` cannot be loaded."""
@@ -326,19 +346,22 @@ def test_vector_field_label_and_basis_are_documented_as_derived(
 
     for payload in (identity, documented):
         fields = payload["vector_fields"]["fields"]
+        items = list(payload["embeddings"]["items"])
         compression = payload["export_settings"]["compression"]
         suffix = "" if compression is None else ".gz"
+        assert list(fields) == sorted(fields)
         for index, (field_id, field) in enumerate(fields.items()):
+            assert list(field) == ["label", "files"]
             assert field["label"] == field_id
-            assert field["basis"] == "umap"
-            assert field["default_dimension"] == max(field["available_dimensions"])
+            assert field["files"]
+            assert list(field["files"]) == [item for item in items if item in field["files"]]
             assert field["files"] == {
-                f"{dimension}d": f"vectors/{index}_{dimension}d.bin{suffix}"
-                for dimension in field["available_dimensions"]
+                embedding_id: f"vectors/{index}_{items.index(embedding_id)}.bin{suffix}"
+                for embedding_id in field["files"]
             }
         assert payload["vector_fields"]["default_field"] in fields
 
-    for relative in identity["vector_fields"]["fields"]["velocity_umap"]["files"].values():
+    for relative in identity["vector_fields"]["fields"]["velocity"]["files"].values():
         assert (vector_export / relative).is_file()
 
     identity_section = _section(_spec(), IDENTITY_SECTION)
@@ -349,9 +372,125 @@ def test_vector_field_label_and_basis_are_documented_as_derived(
     )
     assert documented_example is not None
     assert '"label": "Velocity (UMAP)"' not in documented_example.group(1)
+    assert '"basis"' not in documented_example.group(1)
     assert "**derived by the writer, not chosen by you**" in identity_section
     # The page must name the failure, not merely avoid demonstrating it.
     assert '`"label": "Velocity (UMAP)"` on a field called' in identity_section
+
+
+def test_embedding_items_follow_the_documented_producer_rule(vector_export: Path) -> None:
+    """Identity v3: items in (dimension, id) order, each file derived from its index."""
+    identity = _manifest(vector_export, "dataset_identity.json")
+    documented = _documented_json_object(
+        _section(_spec(), IDENTITY_SECTION),
+        '"cellucid_data_version"',
+    )
+    for payload in (identity, documented):
+        assert payload["version"] == 3
+        embeddings = payload["embeddings"]
+        assert list(embeddings) == ["default_dimension", "defaults", "items"]
+        items = embeddings["items"]
+        assert list(items) == sorted(items, key=lambda key: (items[key]["dimension"], key))
+        suffix = "" if payload["export_settings"]["compression"] is None else ".gz"
+        for index, item in enumerate(items.values()):
+            assert list(item) == ["label", "dimension", "file", "source"]
+            assert list(item["source"]) == ["key", "columns"]
+            assert len(item["source"]["columns"]) == item["dimension"]
+            assert item["file"] == f"embeddings/{index}_{item['dimension']}d.bin{suffix}"
+            if payload is identity:
+                assert (vector_export / item["file"]).is_file()
+        dimensions = sorted({item["dimension"] for item in items.values()})
+        assert list(embeddings["defaults"]) == [f"{dimension}d" for dimension in dimensions]
+        for slot, embedding_id in embeddings["defaults"].items():
+            assert items[embedding_id]["dimension"] == int(slot[0])
+        assert embeddings["default_dimension"] == max(dimensions)
+
+    items = identity["embeddings"]["items"]
+    assert items["X_pca"]["source"] == {"key": None, "columns": [2, 0]}
+    assert items["X_tsne"]["label"] == "t-SNE"
+    assert items["X_tsne"]["source"]["key"] == "X_tsne"
+    section = _section(_spec(), EMBEDDING_SECTION)
+    assert "`embeddings/{index}_{dimension}d.bin`" in section
+    assert "normalized **on its own**" in section
+    assert not list(vector_export.glob("points_*"))
+
+
+def test_obs_manifest_centroids_are_documented_by_embedding(vector_export: Path) -> None:
+    manifest = _manifest(vector_export, "obs_manifest.json")
+    identity = _manifest(vector_export, "dataset_identity.json")
+    assert manifest["_format"] == "compact_v2"
+    for field in manifest["_categoricalFields"]:
+        assert list(field[5]) == list(identity["embeddings"]["items"])
+        for embedding_id, centroids in field[5].items():
+            dimension = identity["embeddings"]["items"][embedding_id]["dimension"]
+            assert all(len(centroid["position"]) == dimension for centroid in centroids)
+
+    section = _section(_spec(), OBS_SECTION)
+    assert '- `"_format": "compact_v2"`' in section
+    assert "`centroidsByEmbedding` is an object keyed by embedding id" in section
+    assert "centroidsByDim" not in _spec()
+
+
+def test_var_manifest_gene_name_sets_match_the_documented_shape(export: Path) -> None:
+    manifest = _manifest(export, "var_manifest.json")
+    section = _section(_spec(), VAR_SECTION)
+    documented = _documented_json_object(section, '"gene_name_sets"')["gene_name_sets"]
+
+    assert manifest["_format"] == "compact_v2"
+    assert "var_gene_id_column" not in manifest
+    for name_sets in (manifest["gene_name_sets"], documented):
+        assert [list(entry) for entry in name_sets] == [
+            ["source", "filled_from_index", "renamed", "names"]
+        ] * len(name_sets)
+        assert name_sets[0]["names"] is None
+        assert all(entry["source"] is not None for entry in name_sets[1:])
+
+    default_names = [field[1] for field in manifest["fields"]]
+    assert default_names == EXPORTED_GENES
+    alternative = manifest["gene_name_sets"][1]
+    assert alternative["source"] == "symbol"
+    # gene_c has no symbol and takes its own index name, which is the default name.
+    assert alternative["names"] == [None, "SYM_A"]
+    assert alternative["filled_from_index"] == 1
+    assert alternative["renamed"] == []
+    resolved = [
+        default if name is None else name
+        for name, default in zip(alternative["names"], default_names, strict=True)
+    ]
+    assert len(set(resolved)) == len(resolved)
+
+    assert "`names[i] ?? fields[i][1]`" in section
+    assert "**metadata only**" in section
+    assert "without fetching or re-reading anything under `var/`" in section
+    assert "there is no `var_gene_id_column` key" in section
+
+
+def test_make_unique_rule_is_documented_with_its_shared_note() -> None:
+    spec = _spec()
+    assert "### Empty and repeated gene names: the make-unique rule" in spec
+    assert "`A, A, A-1, A` becomes `A, A-2, A-1, A-3`" in spec
+    assert "resolved over the **whole** `var`" in spec
+    assert (
+        "312 genes have no 'gene_symbols' value and use their var index name. "
+        "41 duplicate names were made unique, e.g. 'MATR3' → 'MATR3-1'."
+    ) in spec
+    assert "data_mapping_conformance.json" in spec
+
+
+def test_six_reconciliation_surfaces_are_documented() -> None:
+    section = _section(_spec(), LAYOUT_SECTION)
+    assert "checks **six** surfaces" in section
+    for surface in (
+        "`Observation`",
+        "`Gene`",
+        "`Connectivity`",
+        "`Vector field`",
+        "`Embedding`",
+        "`Export` root",
+    ):
+        assert surface in section
+    assert "The root holds no payload at all." in section
+    assert "performs the same six reconciliations" in section
 
 
 def test_vector_files_section_documents_the_recomputed_producer_path() -> None:
@@ -359,9 +498,10 @@ def test_vector_files_section_documents_the_recomputed_producer_path() -> None:
     section = _section(_spec(), VECTOR_SECTION)
 
     assert "so a reader never has to build one" not in _spec()
-    assert "vectors/{index}_{dim}d.bin.gz   otherwise" in section
-    assert "it rejects the dataset when the declared\nstring is anything else" in section
-    assert "must be the **largest** entry of `available_dimensions`" in section
+    assert "vectors/{fieldIndex}_{embeddingIndex}.bin.gz   otherwise" in section
+    assert "it rejects the dataset\nwhen the declared string is anything else" in section
+    assert "scaled by **the bound embedding's own scale\n  factor**" in section
+    assert "must be the **largest** entry of `available_dimensions`" not in section
 
 
 def test_categorical_code_width_caps_are_documented(tmp_path) -> None:
@@ -382,7 +522,7 @@ def test_categorical_code_width_caps_are_documented(tmp_path) -> None:
         prepare(
             latent_space=coordinates,
             obs=pd.DataFrame({"crowded": [f"c{index}" for index in range(n_cells)]}),
-            X_umap_2d=coordinates,
+            embeddings={"X_umap": coordinates},
             centroid_min_points=1,
             out_dir=tmp_path / "exports",
             dataset_id="spec-contract-cap",
@@ -419,7 +559,7 @@ def test_gzip_header_is_canonical_at_every_documented_level(
     rule the R writer was made to match, so each named byte is checked against a
     real export and against the encoder the exporter shares with the server.
     """
-    header = (vector_export / "points_2d.bin.gz").read_bytes()[:10]
+    header = (vector_export / "embeddings/0_2d.bin.gz").read_bytes()[:10]
 
     assert header[:2] == b"\x1f\x8b"  # gzip magic
     assert header[2] == 0x08  # deflate

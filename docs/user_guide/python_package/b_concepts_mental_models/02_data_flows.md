@@ -39,6 +39,7 @@ from cellucid import prepare, show
 
 prepare(
     ...,
+    embeddings={"X_umap": adata.obsm["X_umap"]},
     out_dir="./my_export",
     dataset_name="Example",
     dataset_id="example",
@@ -92,7 +93,7 @@ Notebook iframe / browser tab  ◀────────────  Cellucid
 1) Python starts a `CellucidServer` that serves the export folder over HTTP.
 2) Before binding, Python establishes the exact source web generation; the
    browser then loads it from the same server.
-3) The web app fetches `points_2d.bin(.gz)` / `obs_manifest.json` / expression binaries, etc.
+3) The web app fetches `embeddings/<index>_<dim>d.bin(.gz)` / `obs_manifest.json` / expression binaries, etc.
 4) Interactions (selection/hover/click) can be sent back to Python via `/_cellucid/events`.
 
 **Why this is fast:** the export folder is already in a viewer-optimized format (binary, quantized, compressible).

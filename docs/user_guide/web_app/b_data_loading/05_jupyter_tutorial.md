@@ -127,7 +127,7 @@ Three things confirm the call worked:
 When you call `show(...)` or `show_anndata(...)`, Cellucid does two things:
 
 1) Starts a **local data server** (usually `127.0.0.1:<some_port>`)
-   - This server reads your data and exposes a small HTTP API (e.g. `/points_3d.bin`, `/obs_manifest.json`, `/dataset_identity.json`).
+   - This server reads your data and exposes a small HTTP API (e.g. `/embeddings/0_2d.bin`, `/obs_manifest.json`, `/dataset_identity.json`).
    - The server is intentionally **localhost-bound** in Jupyter mode for safety (it is not meant to be public).
 
 2) Displays an **iframe** in your notebook pointing at the **same server**:
@@ -270,16 +270,25 @@ followed by these exact keyword-only parameters:
 - `web_cache_dir`: directory where the verified generation is published
 - `latent_key`: choose one exact latent-space key in `obsm`; `None` leaves
   latent-derived outlier quantiles unavailable
-- `gene_id_column`: `None` uses `var.index`; any non-blank string names that
-  exact `var` column (default: `None`)
+- `gene_id_column`: `None` uses `var.index` (`raw.var.index` with
+  `expression_source="raw"`); any non-blank string names that exact column
+  (default: `None`). Empty values take the index name and repeated names are
+  made unique (`MATR3`, `MATR3-1`)
 - `obs_keys`: exact `obs` columns to serve; `None` (the default) serves every
   column. Name them to leave out a column Cellucid cannot serve, such as a
   datetime column
 - `normalize_embeddings`: normalize coordinates to `[-1, 1]` (default: True)
 - `centroid_outlier_quantile`: quantile used for categorical centroids
 - `centroid_min_points`: minimum category size used for categorical centroids
-- `serve_connectivity`: read, validate, and serve `adata.obsp['connectivities']`
-  (default: `False`). The neighbor graph is never touched unless you ask for it
+- `embedding_keys`: the `obsm` array of a dimension slot, such as
+  `{"2d": "X_tsne"}` or `{"2d": ("X_pca", [0, 1])}` with 0-based columns
+  (default: `None`, which uses `X_umap_1d`/`X_umap_2d`/`X_umap_3d` or a bare
+  `X_umap`, then a deterministic best guess)
+- `knn_key`: the `obsp` matrix to read, validate, and serve as the neighbor
+  graph, such as `"connectivities"` (default: `None`). No graph is touched
+  unless you name one, and a matrix that is not symmetric is refused
+- `expression_source`: where expression is read: `"X"` (default), `"raw"`, or
+  `"layer:<name>"`
 - `serve_vector_fields`: read, validate, and serve the `<field>_umap_<n>d`
   arrays in `obsm` as the velocity/drift overlay (default: `False`), for the
   same reason — every declared field is read in full before the viewer appears
@@ -357,7 +366,7 @@ viewer = show_anndata(
     "data.h5ad",
     dataset_name="My study",
     dataset_id="my-study-v1",
-    serve_connectivity=True,
+    knn_key="connectivities",
 )
 ```
 
@@ -397,7 +406,7 @@ order:
    and normalized.
 3. **Vector fields** — `obsm` is scanned and every declared
    `<field>_umap_<dim>d` array read, *only* when `serve_vector_fields=True`.
-4. **Connectivity** — the edge list, *only* when `serve_connectivity=True`.
+4. **Connectivity** — the edge list, *only* when `knn_key="connectivities"`.
 5. **Manifests and centroids** — one centroid per categorical field per
    available dimension, then a cross-check of every served route.
 6. **Viewer generation and bind** — the configured web generation is
@@ -905,31 +914,23 @@ This section is intentionally redundant and explicit: it is designed for “I ne
 - If you need a stable AnnData port, construct
   `AnnDataViewer(..., port=..., dataset_name=..., dataset_id=...)`.
 
-### Symptom: “`show_anndata` says no UMAP embeddings”
+### Symptom: “`show_anndata` says Cellucid found nothing to plot”
 
 **Likely causes**
-- Your AnnData declares none of `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` in
-  `obsm` **and** carries no bare `X_umap` either.
-- Or it carries a bare `X_umap` that is not 1, 2, or 3 columns wide — a latent
-  space named after a plot, which names a dimension no viewer renders.
+- No `obsm` array can be plotted: each one is a table, sparse, not one row per
+  cell, or non-finite in the columns that would be drawn.
 
 **How to confirm**
 - `print(adata.obsm.keys())`
-- Read the error itself: it lists the keys the object has, names the shape of
-  `X_umap` when its width is the reason nothing resolved, and prints an exact
-  assignment to run for every other array that could be an embedding.
+- Read the error itself: it lists every `obsm` entry and why it was not used.
 
 **Fix**
 - Compute UMAP (`sc.tl.umap(adata)` writes a two-column `X_umap`, which is read
   as 2D as written), or
-- assign the columns you mean to draw under the key for their own count:
-
-  ```python
-  adata.obsm["X_umap_2d"] = umap_coordinates_2d
-  ```
-
+- name a usable array explicitly:
+  `show_anndata(adata, embedding_keys={"2d": "X_tsne"}, dataset_name=..., dataset_id=...)`.
 - If you serve a `.h5ad` or `.zarr` path rather than an in-memory object,
-  re-save the file after the assignment.
+  re-save the file after a repair.
 
 ### Symptom: “The KNN graph is there, but there is no edge overlay”
 
@@ -950,17 +951,17 @@ print(identity["stats"]["has_connectivity"], identity["stats"]["n_edges"])
 `False None` means the graph was not served.
 
 **Fix**
-- Recreate the viewer with `serve_connectivity=True`.
+- Recreate the viewer with `knn_key="connectivities"`.
 
 ### Symptom: “The cell has printed nothing for minutes”
 
 **Likely causes**
 - You are inside the constructor on a large object. A notebook viewer builds
   quietly, so no step report appears.
-- You passed `serve_connectivity=True`, and the edge list is being built.
+- You passed `knn_key="connectivities"`, and the edge list is being built.
 
 **Fix**
-- Wait, but first drop `serve_connectivity=True` if this session will not draw
+- Wait, but first drop `knn_key="connectivities"` if this session will not draw
   edges.
 - Narrow `obs_keys=` to the columns you actually color by.
 - Export once with `cellucid.prepare(...)` and use `show()` for repeated

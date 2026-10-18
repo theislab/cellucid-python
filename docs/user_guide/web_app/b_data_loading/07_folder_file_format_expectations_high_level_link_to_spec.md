@@ -34,8 +34,12 @@ Minimum expected files:
 my_export/
 ├── dataset_identity.json          # required
 ├── obs_manifest.json              # required
-└── points_2d.bin(.gz)             # at least one non-empty 1d/2d/3d file
+├── obs/                           # required
+└── embeddings/                    # required: at least one file, e.g. 0_2d.bin(.gz)
 ```
+
+This is export format 3; such an export needs a viewer release that reads
+format 3.
 
 Typical full layout (recommended for most datasets):
 
@@ -45,9 +49,7 @@ my_export/
 ├── obs_manifest.json
 ├── var_manifest.json                 # optional (if gene expression exported)
 ├── connectivity_manifest.json        # optional (if connectivities exported)
-├── points_1d.bin(.gz)                # optional
-├── points_2d.bin(.gz)                # optional
-├── points_3d.bin(.gz)                # optional
+├── embeddings/                       # one file per embedding, any number per dimension
 ├── obs/
 ├── var/
 ├── connectivity/
@@ -56,7 +58,8 @@ my_export/
 
 Notes:
 - The `.gz` suffix appears when you export with compression enabled (gzip).
-- The viewer reads `dataset_identity.json` first; it describes what dimensions/files exist.
+- The viewer reads `dataset_identity.json` first; it lists every embedding, its
+  dimension and file, and which one each dimension shows first.
 - If you load a folder and Cellucid says “not a valid export”, it usually means `dataset_identity.json` is missing or malformed.
 - Payload files are named by an **integer index**, never by a field name. Read
   the paths out of the manifests rather than assembling them from a label.
@@ -181,11 +184,12 @@ Exports store vectors as binary files under `vectors/` and describe them in `dat
 Typical filenames:
 
 ```text
-vectors/<index>_<dim>d.bin
-vectors/<index>_<dim>d.bin.gz        # if export compression is enabled
+vectors/<field index>_<embedding index>.bin
+vectors/<field index>_<embedding index>.bin.gz        # if export compression is enabled
 ```
 
-`<index>` is the vector field's position, not its name. Payload files across
+The first index is the vector field's position and the second the position of the
+embedding it is drawn over; neither is a name. Payload files across
 the whole export are named by an integer index and never by a field name; the
 manifest beside them is what says which field an index belongs to. Always read
 the paths out of `dataset_identity.json["vector_fields"]` rather than assembling
@@ -196,13 +200,13 @@ Typical identity schema (high-level):
 ```json
 {
   "vector_fields": {
-    "default_field": "velocity_umap",
+    "default_field": "velocity",
     "fields": {
-      "velocity_umap": {
-        "available_dimensions": [2, 3],
+      "velocity": {
+        "label": "velocity",
         "files": {
-          "2d": "vectors/0_2d.bin.gz",
-          "3d": "vectors/0_3d.bin.gz"
+          "X_umap": "vectors/0_1.bin.gz",
+          "X_umap_3d": "vectors/0_2.bin.gz"
         }
       }
     }

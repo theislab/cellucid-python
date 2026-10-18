@@ -274,10 +274,11 @@ Recommendation:
 ### `obs_manifest.json` (compact format)
 
 The Python exporter writes a compact manifest:
-- `"_format": "compact_v1"`
+- `"_format": "compact_v2"`
 - schema patterns under `"_obsSchemas"`
 - continuous field tuples under `"_continuousFields"`
-- categorical field tuples under `"_categoricalFields"`
+- categorical field tuples under `"_categoricalFields"`, each carrying its
+  category centroids per exported embedding (`centroidsByEmbedding`)
 
 The web app expands this into a verbose “fields array” at load time.
 

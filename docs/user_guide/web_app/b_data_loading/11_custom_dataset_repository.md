@@ -93,11 +93,11 @@ my-cellucid-datasets/
     ├── datasets.json
     ├── study-a/
     │   ├── dataset_identity.json
-    │   ├── points_2d.bin.gz
+    │   ├── embeddings/
     │   └── ...
     └── study-b/
         ├── dataset_identity.json
-        ├── points_3d.bin.gz
+        ├── embeddings/
         └── ...
 ```
 
@@ -177,7 +177,7 @@ prepare(
     dataset_name="Study A",
     dataset_id="study-a",
     obs_categorical_dtype="uint16",
-    X_umap_2d=adata.obsm["X_umap_2d"],
+    embeddings={"X_umap_2d": adata.obsm["X_umap_2d"]},
 )
 ```
 

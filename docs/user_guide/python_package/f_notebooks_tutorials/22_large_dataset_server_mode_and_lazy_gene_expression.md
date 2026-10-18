@@ -137,7 +137,7 @@ viewer = cellucid.show_anndata(
     "data.h5ad",
     dataset_name="My dataset",
     dataset_id="my-dataset",
-    serve_connectivity=True,
+    knn_key="connectivities",
 )
 ```
 
@@ -269,7 +269,7 @@ If gene requests are consistently slow:
 
 ### 4) Only ask for the neighbor graph when you will draw it
 
-`serve_connectivity=True` / `--connectivity` is the most expensive switch on the
+`knn_key="connectivities"` / `--knn connectivities` is the most expensive switch on the
 direct path, and it is paid in full at startup on every session. Leave it off
 for exploration, and turn it on for the session that actually inspects edges. If
 you need the graph repeatedly, `prepare(connectivities=...)` validates it once
@@ -312,7 +312,7 @@ How to confirm:
   already warned with both counts.
 
 Fix:
-- drop `serve_connectivity=True` / `--connectivity` if this session will not
+- drop `knn_key="connectivities"` / `--knn connectivities` if this session will not
   draw edges
 - narrow `obs_keys=` to the columns you actually color by
 - export once with `prepare()` for repeated viewing
@@ -328,7 +328,7 @@ How to confirm:
 
   ```text
         Connectivity: yes (125,481,922 edges)
-        Connectivity: not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)
+        Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)
         Connectivity: no
   ```
 
@@ -336,26 +336,21 @@ How to confirm:
   object really has none.
 
 Fix:
-- restart with `serve_connectivity=True`, or `--connectivity` from the terminal.
+- restart with `knn_key="connectivities"`, or `--knn connectivities` from the terminal.
 
-### Symptom: “No UMAP embedding Cellucid can read was found in adata.obsm”
+### Symptom: “Cellucid found nothing to plot”
 
 Likely causes:
-- `obsm` carries no `X_umap_1d`, `X_umap_2d`, `X_umap_3d`, or bare `X_umap`
-- it carries a bare `X_umap` that is not 1, 2, or 3 columns wide
+- no `obsm` array can be plotted: each one is a table, sparse, not one row per
+  cell, or non-finite in the columns that would be drawn
 
 How to confirm:
-- read the message. It lists the `obsm` keys the object does have, names the
-  shape of `X_umap` when its width is the reason nothing resolved, and prints an
-  exact assignment to run for every other array that could be an embedding.
+- read the message. It lists every `obsm` entry and why it was not used.
 
 Fix:
-- assign the columns you mean to draw under the key for their own count, then
-  re-save the file if you serve a path rather than an in-memory object:
-
-  ```python
-  adata.obsm["X_umap_2d"] = umap_coordinates_2d
-  ```
+- repair or compute an embedding, or name a usable one with
+  `embedding_keys={"2d": "<key>"}` (`--embedding-2d <key>` from the terminal),
+  then re-save the file if you serve a path rather than an in-memory object.
 
 ### Symptom: remote viewer iframe is blank or unreachable
 

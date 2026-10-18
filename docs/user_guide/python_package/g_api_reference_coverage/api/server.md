@@ -86,7 +86,7 @@ graph **off by default**. Ask for it explicitly:
 
 ```bash
 cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset \
-    --connectivity
+    --knn connectivities
 ```
 
 ```python
@@ -96,7 +96,7 @@ server = serve_anndata(
     "data.h5ad",
     dataset_name="My dataset",
     dataset_id="my-dataset",
-    serve_connectivity=True,
+    knn_key="connectivities",
 )
 ```
 
@@ -116,8 +116,8 @@ single longest part of startup — a 50-neighbor graph over millions of cells is
 hundreds of millions of stored neighbors — and most sessions never draw the
 graph.
 
-`--connectivity` and `serve_connectivity=` apply to direct AnnData input only.
-Passing `--connectivity` with a prepared export directory is rejected, like
+`--knn KEY` and `knn_key=` apply to direct AnnData input only.
+Passing `--knn` with a prepared export directory is rejected, like
 every other AnnData-only flag: an export already holds the connectivity
 artifacts or it does not, and {func}`~cellucid.serve` publishes exactly what is
 there.
@@ -187,7 +187,7 @@ Startup prints five numbered steps; the transcript is in {doc}`../../../web_app/
   real work on a large object, not a formality after the load succeeds.
 - `Connectivity` in step 3 has three states, not two:
   - `yes (N edges)` — the graph was asked for, read, and validated;
-  - `not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)` — a graph exists and was not asked for;
+  - `not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)` — a graph exists and was not asked for;
   - `no` — the object has no graph. Checking `obsp` membership is a key lookup,
     not a read of the matrix, so naming the middle state costs nothing that
     opting out was meant to save.
@@ -243,12 +243,12 @@ server`.
 - Cellucid servers are designed for local/private use (not hardened for public internet exposure).
 
 ### “The graph is there, but the viewer will not draw edges”
-- In AnnData mode the neighbor graph is opt-in. Without `--connectivity` (or
-  `serve_connectivity=True`) the server never reads `obsp['connectivities']`,
+- In AnnData mode the neighbor graph is opt-in. Without `--knn connectivities` (or
+  `knn_key="connectivities"`) the server never reads `obsp['connectivities']`,
   and the connectivity manifest and edge routes answer 404.
 - Step 3 of startup says so explicitly: `Connectivity: not served
-  (obsp['connectivities'] is present; pass serve_connectivity=True, or
-  --connectivity, to draw it)`.
+  (obsp['connectivities'] is present; pass knn_key='connectivities', or
+  --knn connectivities, to draw it)`.
 - A prepared export is different: it serves the connectivity artifacts it
   contains, so re-export with `connectivities=` if they are missing.
 

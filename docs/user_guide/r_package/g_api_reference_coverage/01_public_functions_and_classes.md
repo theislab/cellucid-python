@@ -17,7 +17,7 @@ space, and cell metadata:
 cellucid_prepare(
   latent_space = pca,
   obs = obs,
-  X_umap_2d = umap2,
+  embeddings = list(X_umap = umap2),
   obs_categorical_dtype = "uint16",
   dataset_name = "My dataset",
   dataset_id = "my_dataset",
@@ -46,7 +46,7 @@ type.
 | `dataset_name` | — | Non-empty name, shown to the reader verbatim. |
 | `dataset_id` | — | Portable identifier: 1–180 ASCII letters, numbers, `.`, `_`, `-`. |
 
-At least one of `X_umap_1d`, `X_umap_2d`, `X_umap_3d` is also required.
+`embeddings`, with at least one embedding, is also required.
 
 Details: {doc}`../c_data_preparation_api/02_input_requirements_global` ·
 {doc}`../c_data_preparation_api/04_obs_cell_metadata`
@@ -55,10 +55,9 @@ Details: {doc}`../c_data_preparation_api/02_input_requirements_global` ·
 
 | Argument | Default | What it is |
 |---|---|---|
-| `X_umap_1d` | `NULL` | `(n_cells, 1)`, or a plain length-`n_cells` numeric vector. |
-| `X_umap_2d` | `NULL` | `(n_cells, 2)`. |
-| `X_umap_3d` | `NULL` | `(n_cells, 3)`. |
-| `vector_fields` | `NULL` | Named list of per-cell displacements. Every name must match `<field>_umap_<1\|2\|3>d`. |
+| `embeddings` | — | Named list mapping each embedding id to a coordinate matrix (1–3 columns), a numeric vector (1D), or a `cellucid_embedding()`. Any number per dimension. |
+| `embedding_defaults` | `NULL` | Named character vector or list such as `c("2d" = "X_umap")`, naming the embedding each dimension shows first. Required for every dimension with more than one embedding. |
+| `vector_fields` | `NULL` | Named list of fields, each a named list binding arrays to exported embedding ids: `list(velocity = list(X_umap = v2))`. Each array has its embedding's dimension. |
 | `vector_field_default` | `NULL` | Field id to select on load. Required when `vector_fields` holds more than one field. |
 | `connectivities` | `NULL` | `(n_cells, n_cells)` symmetric graph with a zero diagonal. |
 
@@ -72,7 +71,8 @@ Details: {doc}`../c_data_preparation_api/03_embeddings_and_coordinates` ·
 |---|---|---|
 | `var` | `NULL` | `data.frame` with `n_genes` rows. Required when `gene_expression` is supplied. |
 | `gene_expression` | `NULL` | Matrix-like `(n_cells, n_genes)`. Cells are rows; the matrix is never transposed for you. |
-| `var_gene_id_column` | `NULL` | Column of `var` holding the gene identifiers. `NULL` uses `rownames(var)`. |
+| `var_gene_id_column` | `NULL` | Column of `var` holding the default gene names. `NULL` uses `rownames(var)`. Empty values take the row name; repeated names are made unique (`MATR3`, `MATR3-1`). |
+| `var_gene_name_columns` | `NULL` | Character vector of further `var` columns offered as alternative gene-name sets; metadata only. |
 | `gene_identifiers` | `NULL` | Character vector selecting which genes to export. `NULL` exports all of them. |
 
 Details: {doc}`../c_data_preparation_api/05_var_gene_metadata` ·

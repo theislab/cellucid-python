@@ -19,7 +19,7 @@ If you only need the **user-facing** “how do I export my AnnData?” guide, st
 
 `prepare(...)` turns “Python-side data structures” into a **static export folder** that the web app can load:
 
-- embedding coordinates (`points_2d.bin`, `points_3d.bin`, …)
+- embedding coordinates (`embeddings/0_2d.bin`, `embeddings/1_3d.bin`, …), any number per dimension
 - obs fields (categorical + continuous)
 - gene expression (var fields)
 - optional connectivity (KNN edges)
@@ -41,9 +41,9 @@ Implementation is in:
 The pipeline stages are:
 
 1) **Validate inputs** (shapes, presence of required objects, dtype assumptions)
-2) **Normalize embeddings** (each dimension independently to `[-1, 1]`, aspect ratio preserved)
-3) **Write embedding binaries** (`points_<dim>d.bin(.gz)`)
-4) **Write vector fields** (optional) (`vectors/<field>_<dim>d.bin(.gz)`)
+2) **Normalize embeddings** (each embedding independently to `[-1, 1]`, aspect ratio preserved)
+3) **Write embedding binaries** (`embeddings/<index>_<dim>d.bin(.gz)`)
+4) **Write vector fields** (optional) (`vectors/<field index>_<embedding index>.bin(.gz)`)
 5) **Write obs field binaries + `obs_manifest.json`**
 6) **Write gene binaries + `var_manifest.json`**
 7) **Write connectivity + `connectivity_manifest.json`** (optional)
@@ -59,7 +59,8 @@ The pipeline stages are:
 
 - `latent_space`: used to compute outlier quantiles per category (helps visualization and centroid stability)
 - `obs`: the per-cell metadata table
-- at least one embedding: `X_umap_1d`, `X_umap_2d`, or `X_umap_3d`
+- at least one embedding in `embeddings` (resolved, ordered, and given its
+  defaults in `prepare_data/_embeddings.py`)
 
 Optional inputs:
 - `var` + `gene_expression` for gene overlays
@@ -75,7 +76,7 @@ Everything is indexed by **cell row order**:
 - `obs` has `len(obs) == n_cells`
 - `gene_expression` has shape `(n_cells, n_genes)`
 - `connectivities` has shape `(n_cells, n_cells)`
-- every vector field has shape `(n_cells, dim)`
+- every vector array has shape `(n_cells, dim)` of the embedding it is bound to
 
 If these are inconsistent, `prepare` raises early (shape mismatch).
 
@@ -83,24 +84,26 @@ If these are inconsistent, `prepare` raises early (shape mismatch).
 
 ## Stage 2 — Embedding normalization
 
-For each provided 1D, 2D, or 3D embedding, `prepare` normalizes coordinates to
-fit within `[-1, 1]`.
+For each embedding item (its selected source columns), `prepare` normalizes
+coordinates to fit within `[-1, 1]`.
 
 Important details:
 
-- **Normalization is per dimension**: 2D and 3D embeddings are normalized independently.
-- **Aspect ratio is preserved** within a dimension: a single scale factor is used for all axes.
-- The viewer depends on this so “zoom level” is comparable across datasets and embedding dims.
+- **Normalization is per embedding**: a 2D UMAP, a 2D t-SNE, and a 3D UMAP are
+  each normalized independently.
+- **Aspect ratio is preserved** within an embedding: a single scale factor is used for all axes.
+- The viewer depends on this so “zoom level” is comparable across datasets and embeddings.
 
 Developer impact:
 - if you change normalization, you also change the meaning/scale of vector fields and centroids.
 
 ---
 
-## Stage 3 — Writing `points_<dim>d.bin(.gz)`
+## Stage 3 — Writing `embeddings/<index>_<dim>d.bin(.gz)`
 
-For each available dimension:
-- file name: `points_<dim>d.bin` (or `points_<dim>d.bin.gz` if gzip enabled)
+For each embedding item, in item order (dimension ascending, then id in code-point order):
+- file name: `embeddings/<index>_<dim>d.bin` (or `.bin.gz` if gzip enabled),
+  where `<index>` is the item's position in that order
 - dtype: `float32`
 - layout: row-major, packed `(n_cells, dim)` floats
 
@@ -117,23 +120,17 @@ Do not confuse this with HTTP `Content-Encoding: gzip` (that’s a separate mech
 Vector fields are per-cell displacement vectors (e.g., velocity, CellRank drift) aligned to the embedding space.
 
 Inputs:
-- `vector_fields: dict[str, array]`
+- `vector_fields: dict[field_id, dict[embedding_id, array]]`
 
 Accepted shapes:
-- `(n_cells, 1)` for 1D
-- `(n_cells, 2)` for 2D
-- `(n_cells, 3)` for 3D
-
-Naming conventions:
-
-- Every declaration key must be dimension-suffixed:
-  `<field_id>_<dim>d` (e.g. `velocity_umap_2d`, `T_fwd_umap_3d`)
+- `(n_cells, d)` where `d` is the dimension of the bound embedding (a plain
+  `(n_cells,)` vector for a 1D embedding)
 
 Export rules:
 - vector files are written under `vectors/`
-- file name: `vectors/<index>_<dim>d.bin(.gz)`
+- file name: `vectors/<field index>_<embedding index>.bin(.gz)`
 - dtype: `float32`
-- scaling: vectors are scaled by the **same scale factor used to normalize the corresponding points**
+- scaling: each array is scaled by the **scale factor used to normalize the embedding it is bound to**
 - rounding: the caller's own values are scaled at their own precision and the
   product is rounded to `float32` exactly once, at the write. Rounding the
   input first and the product second rounds twice, and a component whose two
@@ -144,8 +141,9 @@ Export rules:
 Important invariants:
 - `field_id` satisfies the identifier contract used on every axis: non-empty,
   distinct, and drawable exactly as stored. It is never a path.
-- each field's payload files are `vectors/<index>_<dim>d.bin(.gz)`, where
-  `<index>` is the field's position in the sorted field list.
+- each field's payload files are `vectors/<field index>_<embedding index>.bin(.gz)`,
+  where `<field index>` is the field's position in the sorted field list and
+  `<embedding index>` the bound item's payload index.
 
 ---
 
@@ -203,7 +201,7 @@ Outlier quantiles:
 - `_continuousFields`: list of `[index, key]` or
   `[index, key, minValue, maxValue]`
 - `_categoricalFields`: list of
-  `[index, key, categories, codesDtype, codesMissingValue, centroidsByDim]`,
+  `[index, key, categories, codesDtype, codesMissingValue, centroidsByEmbedding]`,
   plus `outlierMinValue, outlierMaxValue` when outlier quantization is on
 - `_obsSchemas`: path patterns that tell the viewer how to derive filenames
 
@@ -304,7 +302,7 @@ When you change `prepare`, verify:
 
 1) `dataset_identity.json` exists and looks sane.
 2) `obs_manifest.json` parses and references real files.
-3) at least one `points_*d.bin` exists (and has the right shape).
+3) every `embeddings.items[*].file` exists (and has the right shape).
 4) optional files (vectors/connectivity/var) are internally consistent with manifests.
 
 Quick Python snippet to validate points shape:
@@ -318,9 +316,11 @@ from pathlib import Path
 export_dir = Path("my_export")
 identity = json.loads((export_dir / "dataset_identity.json").read_text("utf-8"))
 n = identity["stats"]["n_cells"]
-points_path = export_dir / identity["embeddings"]["files"]["3d"]
+embeddings = identity["embeddings"]
+item = embeddings["items"][embeddings["defaults"]["3d"]]
+points_path = export_dir / item["file"]
 raw = gzip.open(points_path, "rb").read() if points_path.suffix == ".gz" else points_path.read_bytes()
-pts = np.frombuffer(raw, dtype=np.float32).reshape(n, 3)
+pts = np.frombuffer(raw, dtype=np.float32).reshape(n, item["dimension"])
 print(pts.shape, pts.min(), pts.max())
 ```
 

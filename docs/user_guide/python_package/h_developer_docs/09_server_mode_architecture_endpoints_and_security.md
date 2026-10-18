@@ -141,9 +141,10 @@ The exported server can serve:
 `/_cellucid/datasets` lists what’s available (used for multi-dataset browsing).
 
 Detection rules:
-- a dataset is a directory containing a valid version-2
-  `dataset_identity.json`, an object-valued `obs_manifest.json`, and at least
-  one non-empty supported `points_1d`, `points_2d`, or `points_3d` binary;
+- a dataset is a directory containing a valid version-3
+  `dataset_identity.json`, an object-valued `obs_manifest.json`, and a non-empty
+  `embeddings/` directory; the files served from it are exactly the
+  `embeddings.items[*].file` paths the identity declares;
 - once any immediate child is a dataset candidate, every immediate
   subdirectory must be one complete current dataset. Stray directories reject
   the root;
@@ -169,7 +170,8 @@ Examples:
 - `/dataset_identity.json`
 - `/obs_manifest.json`
 - `/var_manifest.json`
-- `/points_3d.bin`
+- `/embeddings/<index>_<dim>d.bin`
+- `/vectors/<field index>_<embedding index>.bin`
 - `/obs/<index>.values.f32`
 - `/var/<index>.values.f32`
 
@@ -184,7 +186,7 @@ Key behaviors:
 - **gzip behavior**: an exact unsuffixed binary route may return
   `Content-Encoding: gzip` when the request advertises gzip support; `.gz` route
   variants return `404`
-- **one rooted route contract**: data paths such as `/points_3d.bin` are served
+- **one rooted route contract**: data paths such as `/embeddings/0_2d.bin` are served
   exactly at the root; dataset-prefixed variants return `404`.
 
 ---
@@ -297,7 +299,7 @@ Use:
 
 ```bash
 curl -I http://127.0.0.1:8765/obs_manifest.json
-curl -I http://127.0.0.1:8765/points_3d.bin
+curl -I http://127.0.0.1:8765/embeddings/0_2d.bin
 ```
 
 ### Symptom: “Hooks don’t fire”

@@ -23,8 +23,8 @@ This is the fastest way to prove “Cellucid works” and to start exploring a d
 ### Prerequisites
 
 - A notebook environment (Jupyter / JupyterLab / VSCode notebooks / Colab)
-- An AnnData object with at least one explicitly dimensioned embedding:
-  `X_umap_1d`, `X_umap_2d`, or `X_umap_3d`
+- An AnnData object with at least one embedding in `obsm` — the `X_umap` that
+  `sc.tl.umap()` writes is read as written
 
 ```{tip}
 If you don’t want notebooks at all, skip to Level 2 and use the CLI: `cellucid serve ...`.
@@ -58,9 +58,9 @@ obs = pd.DataFrame(
 var = pd.DataFrame(index=["G1", "G2"])
 
 adata = ad.AnnData(X=X, obs=obs, var=var)
-adata.obsm["X_umap_2d"] = np.array([[0, 0],
-                                    [1, 0],
-                                    [0, 1]], dtype=np.float32)
+adata.obsm["X_umap"] = np.array([[0, 0],
+                                 [1, 0],
+                                 [0, 1]], dtype=np.float32)
 ```
 
 ### Step 2: Confirm you have an embedding
@@ -70,14 +70,11 @@ list(adata.obsm.keys())
 ```
 
 **Coming from Scanpy?** `sc.tl.umap(adata)` writes `adata.obsm["X_umap"]`, and
-Cellucid reads only the keys that declare a dimension. One statement fixes it:
-
-```python
-adata.obsm["X_umap_2d"] = adata.obsm["X_umap"]   # or X_umap_3d for n_components=3
-```
-
-If none of `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` exists, compute
-an embedding and store it under the key that exactly declares its dimension.
+Cellucid reads it at the dimension its own column count states — two columns as
+2D, three as 3D — with nothing to rename. With no `X_umap` at all, Cellucid
+picks another `obsm` array by a deterministic best guess (t-SNE before PCA, for
+example) and says which one; pass `embedding_keys={"2d": "X_tsne"}` to choose
+it yourself.
 
 ### Step 3: Show the viewer
 
@@ -124,8 +121,8 @@ viewer.highlight_cells([0, 2], color="#00cc66")
 
 - **Not in a notebook**: `show_anndata(...)` returns a viewer without
   displaying or printing it; open `viewer.viewer_url` explicitly.
-- **No embedding**: provide `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` in
-  `adata.obsm`.
+- **Nothing to plot**: the error lists every `obsm` entry and why it was not
+  used; compute an embedding or name one with `embedding_keys`.
 - **HTTPS notebooks / remote kernels**: see {doc}`03_compatibility_matrix_must_be_explicit`.
 - **Viewer source unavailable**: viewer-serving startup stops; see
   {doc}`../installation`.
@@ -152,7 +149,7 @@ This is the “real workflow” for large datasets and collaboration: you create
   Used for outlier quantile calculation (category summaries).  
   Good choices: PCA, scVI latent space, ScanVI, etc.
 - `obs` (DataFrame with `n_cells` rows)
-- At least one embedding array: `X_umap_1d` and/or `X_umap_2d` and/or `X_umap_3d`
+- At least one embedding in `embeddings={...}` (any number per dimension)
 
 Optional but common:
 - `var` + `gene_expression` (for gene coloring/search)
@@ -181,7 +178,7 @@ This is a “starter” extraction pattern. Your pipeline may differ.
 ```python
 import numpy as np
 
-X_umap_2d = np.asarray(adata.obsm["X_umap_2d"], dtype=np.float32)
+umap = np.asarray(adata.obsm["X_umap"], dtype=np.float32)
 
 latent = np.asarray(adata.obsm["X_pca"], dtype=np.float32)
 ```
@@ -195,7 +192,7 @@ prepare(
     # Required
     latent_space=latent,
     obs=adata.obs,
-    X_umap_2d=X_umap_2d,
+    embeddings={"X_umap": umap},
 
     # Optional but common (enables gene coloring/search)
     var=adata.var,
@@ -247,7 +244,7 @@ Common top-level files/folders:
 - `dataset_identity.json`
 - `obs_manifest.json` and `obs/`
 - `var_manifest.json` and `var/` (only if you export gene expression)
-- `points_2d.bin` / `points_3d.bin` (depending on what you provided)
+- `embeddings/` (one coordinate file per embedding you provided)
 - `connectivity_manifest.json` and `connectivity/` (optional)
 - `vectors/` (optional)
 
@@ -421,7 +418,7 @@ Organize by symptom. Each entry points to the most likely root causes.
 - You did not pass `latent_space=...`.
 
 **Fix**
-- Use PCA, scVI, or another `n_cells`-aligned representation as `latent_space`. If the embedding is the only representation you have, pass `X_umap_2d` explicitly and record that choice in your workflow.
+- Use PCA, scVI, or another `n_cells`-aligned representation as `latent_space`. If the embedding is the only representation you have, pass it as `latent_space` too and record that choice in your workflow.
 
 ---
 

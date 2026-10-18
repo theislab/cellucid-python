@@ -153,25 +153,25 @@ Connectivity is served only when asked for. The dataset report says which state
 you are in:
 
 ```text
-      Connectivity: not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)
+      Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)
 ```
 
-Add `--connectivity` on the command line, or `serve_connectivity=True` in
+Add `--knn connectivities` on the command line, or `knn_key="connectivities"` in
 Python, and expect startup to take longer: the whole graph is read and validated
 before the server binds.
 
-### `Connectivity was asked for, and adata.obsp has no 'connectivities' matrix`
+### `knn_key names obsp['connectivities'], which this object does not have`
 
 You asked for a graph this object does not carry. Compute one with
 `sc.pp.neighbors(adata)` before serving, or serve without asking for it.
 
-### The UMAP is not found, but `obsm['X_umap']` exists
+### The wrong embedding is shown, or `Cellucid found nothing to plot`
 
-A bare `X_umap` of 1, 2, or 3 columns is read at the dimension its column count
-states, so this should work. If it is refused, the message names the shape it
-found: an array of some other width -- a latent space named after a plot -- names
-a dimension no viewer draws. Assign the columns you mean to draw under the key
-for their own count.
+A bare `X_umap` of 1, 2, or 3 columns fills the slot of its own width. Without
+any `X_umap*` key, a slot is guessed and the startup report marks it
+`(guessed)`; name the array you want with `--embedding-2d KEY` (or
+`--embedding-2d KEY:0,1` for chosen columns). When nothing can be plotted, the
+message lists every `obsm` entry and why it was not used.
 
 ## Related pages
 

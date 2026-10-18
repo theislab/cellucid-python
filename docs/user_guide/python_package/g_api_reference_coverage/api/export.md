@@ -33,8 +33,6 @@ If you want the long-form, user-guide style walkthroughs, see:
 ```python
 from cellucid import prepare
 
-X_umap_2d = adata.obsm["X_umap_2d"]
-
 prepare(
     latent_space=adata.obsm["X_pca"],
     obs=adata.obs,
@@ -42,7 +40,7 @@ prepare(
     gene_expression=adata.X,
     connectivities=adata.obsp.get("connectivities"),
 
-    X_umap_2d=X_umap_2d,
+    embeddings={"X_umap": adata.obsm["X_umap"]},
 
     out_dir="./my_export",
     dataset_name="My study",
@@ -134,9 +132,7 @@ my_export/
 ├── obs_manifest.json
 ├── var_manifest.json                 # optional (gene expression)
 ├── connectivity_manifest.json        # optional (KNN edges)
-├── points_1d.bin.gz                  # optional
-├── points_2d.bin.gz                  # optional
-├── points_3d.bin.gz                  # optional
+├── embeddings/                       # one coordinate file per embedding
 ├── obs/                              # obs field binaries
 ├── var/                              # gene expression binaries
 ├── connectivity/                     # KNN edge binaries
@@ -144,7 +140,10 @@ my_export/
 ```
 
 Notes:
-- You must provide at least one of `points_1d/2d/3d`.
+- You must provide at least one embedding in `embeddings`; any number may share a
+  dimension, with `embedding_defaults` naming the one shown first.
+- `var_gene_name_columns` adds alternative gene-name sets to `var_manifest.json`
+  without duplicating any expression payload.
 
 ---
 

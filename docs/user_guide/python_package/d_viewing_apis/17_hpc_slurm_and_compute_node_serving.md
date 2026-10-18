@@ -220,11 +220,11 @@ spent inside step 2:
       Embeddings: 2D
       Obs fields: 22 categorical, 12 continuous
       Vector fields: no
-      Connectivity: not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)
+      Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)
       ✓ Analysis complete
 
 [4/5] Building manifests...
-      Centroids: one per categorical field and dimension
+      Centroids: one per categorical field and embedding
       ✓ Manifests built
 
 [5/5] Starting server...
@@ -304,7 +304,7 @@ storage, and both are now under your control:
   over 18 million cells is roughly 900 million stored neighbors; deduplicating
   it into edges, checking it is symmetric, and ordering it takes minutes and
   several times the graph's own memory. `cellucid serve` does none of that by
-  default. Pass `--connectivity` (or `serve_connectivity=True`) only when you
+  default. Pass `--knn connectivities` (or `knn_key="connectivities"`) only when you
   intend to draw the graph. See
   {doc}`08_anndata_mode_show_anndata_and_serve_anndata`.
 - **Every gene query reads from the shared filesystem.** Serving a backed

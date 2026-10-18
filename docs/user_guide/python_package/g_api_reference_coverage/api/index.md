@@ -89,7 +89,7 @@ The CLI serve subcommand auto-detects direct AnnData input or exported directori
 
 ## Reference conventions
 
-- “**Exported dataset directory**” means a folder created by {func}`~cellucid.prepare` (contains `dataset_identity.json`, `obs_manifest.json`, and `points_*d.bin(.gz)`).
+- “**Exported dataset directory**” means a folder created by {func}`~cellucid.prepare` (contains `dataset_identity.json`, `obs_manifest.json`, and `embeddings/` with one `<index>_<dim>d.bin(.gz)` per embedding).
 - “**AnnData mode**” means serving data directly from an `AnnData` object or `.h5ad`/`.zarr` without running `prepare` first (convenient, but typically slower).
 - Many APIs are **lazy-imported** from `cellucid.__init__` to keep CLI startup fast; importing `cellucid` is intentionally lightweight.
 

@@ -95,11 +95,11 @@ are already written on disk.
       Embeddings: 2D
       Obs fields: 22 categorical, 12 continuous
       Vector fields: no
-      Connectivity: not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)
+      Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)
       ✓ Analysis complete
 
 [4/5] Building manifests...
-      Centroids: one per categorical field and dimension
+      Centroids: one per categorical field and embedding
       ✓ Manifests built
 
 [5/5] Starting server...
@@ -186,7 +186,7 @@ to an IPv6 literal is bracketed as a URL requires, so `--host ::` prints
   Cellucid cannot serve, such as a `datetime64` collection date
 - `--vector-field-default FIELD_ID`: exact default field ID; required when
   direct AnnData declares more than one vector field
-- `--connectivity`: also serve the `obsp['connectivities']` neighbor graph.
+- `--knn connectivities`: also serve the `obsp['connectivities']` neighbor graph.
   **Off by default** — see below
 
 Every flag in this group applies to direct AnnData input only. Supplying one
@@ -198,7 +198,7 @@ export already declares its identity, its columns, and its artifacts in
 
 ```bash
 cellucid serve /path/to/data.h5ad --dataset-name "My study" --dataset-id my-study-v1 \
-    --connectivity
+    --knn connectivities
 ```
 
 `--vector-fields` does the same for the `obsm` `<field>_umap_<n>d` overlay
@@ -282,15 +282,15 @@ If something looks wrong, open these in a browser (replace `<port>`):
   `cellucid` accept?)
 - `http://127.0.0.1:<port>/dataset_identity.json` (dataset metadata)
 - `http://127.0.0.1:<port>/connectivity_manifest.json` (edge count and neighbor
-  maximum — 404 unless the server was started with `--connectivity`)
+  maximum — 404 unless the server was started with `--knn connectivities`)
 
 ## Edge cases (common)
 
 - **Port already in use**: the requested port fails. Choose another explicit
   port, or use `--port 0` to request one operating-system-assigned port.
-- **`--connectivity` on an object with no graph**: startup fails naming
+- **`--knn connectivities` on an object with no graph**: startup fails naming
   `obsp['connectivities']` instead of serving a dataset with no edges.
-- **`--connectivity` (or any other AnnData flag) on an export directory**:
+- **`--knn connectivities` (or any other AnnData flag) on an export directory**:
   startup fails naming the flag; remove it and run the command again.
 - **A bare `X_umap` that is not 1, 2, or 3 columns wide**: startup fails and the
   message names the array's shape.

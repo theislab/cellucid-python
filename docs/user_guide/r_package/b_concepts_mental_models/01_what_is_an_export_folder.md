@@ -15,7 +15,8 @@ Minimal export (no gene expression, no connectivity):
 
 ```
 <out_dir>/
-  points_2d.bin
+  embeddings/
+    0_2d.bin
   obs_manifest.json
   dataset_identity.json
   obs/
@@ -50,13 +51,13 @@ If you include vector fields (velocity/displacement):
 ```
 <out_dir>/
   vectors/
-    0_2d.bin
-    0_3d.bin
+    0_0.bin
+    0_1.bin
     ...
 ```
 
 ```{note}
-If you set `compression=...`, the binary files are written as `*.gz` (for example `points_2d.bin.gz`).
+If you set `compression=...`, the binary files are written as `*.gz` (for example `embeddings/0_2d.bin.gz`).
 The JSON manifests record whether compression is enabled.
 ```
 
@@ -103,14 +104,14 @@ str(ident, max.level = 2)
 
 What to look for:
 - `stats$n_cells`, `stats$n_genes`
-- `embeddings$available_dimensions`
+- `embeddings$items` (every embedding, with its dimension and file) and `embeddings$defaults`
 - `obs_fields` (summary of categorical vs continuous fields)
 - `export_settings` (compression/quantization)
 
 ## Common edge cases
 
 - **No gene expression**: `var_manifest.json` and `var/` are absent; gene search/overlays are unavailable.
-- **Only 3D UMAP**: you will have `points_3d.bin` but not `points_2d.bin`.
+- **Only a 3D UMAP**: `embeddings/` holds one `0_3d.bin` and no 2D file.
 - **Compression enabled**: binaries are `.gz`; make sure you host them with correct MIME types (most servers do).
 
 ## Troubleshooting pointers

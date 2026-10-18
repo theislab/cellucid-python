@@ -189,6 +189,7 @@ from cellucid import prepare
 
 prepare(
     # ... data args ...
+    embeddings={"X_umap": adata.obsm["X_umap"]},
     out_dir="./my_export",
     dataset_id="my_atlas_v1",  # keep this stable for the entire annotation round
     dataset_name="My Atlas (v1)",

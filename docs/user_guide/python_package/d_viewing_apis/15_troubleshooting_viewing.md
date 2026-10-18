@@ -123,104 +123,87 @@ cellucid serve /path/to/data --web-cache-dir /path/to/cache
 ## Symptom: Viewer loads but dataset is blank / stuck loading
 
 ### Likely causes (ordered)
-- export directory is missing required files (manifests or points binaries)
+- export directory is missing required files (manifests or `embeddings/` binaries)
 - you passed the wrong directory (parent folder vs dataset folder)
-- AnnData mode: no readable UMAP embedding in `obsm`, or a shape mismatch
+- AnnData mode: no plottable embedding in `obsm`, or a shape mismatch
 
 ### How to confirm
 - open `/_cellucid/datasets` and see what it lists
 - open `/dataset_identity.json` and check:
   - `stats.n_cells`
-  - `embeddings.available_dimensions`
+  - `embeddings.items` and `embeddings.defaults`
 - in AnnData mode: check `adata.obsm.keys()` and shapes
 
 ### Fix
 - for exports: validate your folder layout (see {doc}`07_exported_directory_mode_show_and_serve`)
-- for AnnData: confirm `obsm` carries an embedding Cellucid can read — a bare
-  `X_umap` of 1, 2, or 3 columns, or an explicit `X_umap_1d` / `X_umap_2d` /
-  `X_umap_3d` (see {doc}`08_anndata_mode_show_anndata_and_serve_anndata`)
+- for AnnData: confirm which `obsm` array each slot shows (the startup report
+  names it), or name one with `embedding_keys` (see
+  {doc}`08_anndata_mode_show_anndata_and_serve_anndata`)
 
 ---
 
-## Symptom: my UMAP is in `X_umap` and it used to be refused
+## Symptom: the viewer shows a different embedding than I expected
 
-### What happens now
-- an object that declares none of `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` but
-  carries the bare `X_umap` that `sc.tl.umap()` writes is served as written
-- that one array is read at the dimension its own column count states: one
-  column is 1D, two columns are 2D, three columns are 3D
+### What decides it
+- a slot you name with `embedding_keys` (Python) or `--embedding-<n>d` (CLI)
+  shows that array, at the 0-based columns you give
+- every other slot follows the default rule: `X_umap_1d` / `X_umap_2d` /
+  `X_umap_3d` fill their own slots, and with none of them present a bare
+  `X_umap` of 1, 2, or 3 columns fills the slot of its own width
+- only when neither fills any slot is a deterministic best guess made from the
+  other `obsm` arrays (UMAP-like names first, latent spaces such as PCA last),
+  and a wide array is then shown in 2D at columns 0 and 1
 - nothing in your object is renamed, assigned, or written back — resolution is a
   read, and a served `.h5ad` is opened read-only-backed
 
 ### How to confirm
-- the startup transcript names the array it resolved:
+- the startup transcript names the array each slot resolved to, and marks a
+  guessed one:
 
 ```text
       Embeddings: resolving obsm keys
-      Embeddings: 2D from obsm['X_umap']
+      Embeddings: 2D from obsm['X_tsne'] (guessed)
 ```
 
-- or open `/dataset_identity.json` and read `embeddings.available_dimensions`
+- or open `/dataset_identity.json` and read `embeddings.items`, whose `source`
+  records the `obsm` key and columns of each served embedding
 
-### Good to know
-- one array yields one dimension. To offer 2D *and* 3D in the same session,
-  declare `X_umap_2d` and `X_umap_3d`
-- a dimensional key anywhere in `obsm` decides the set on its own, and the bare
-  key then stays out: an object holding both `X_umap_3d` and `X_umap` serves 3D
-  only
-- the same rule applies to `show_anndata(...)`, `serve_anndata(...)`,
-  `AnnDataViewer(...)`, `AnnDataAdapter(...)` including `AnnDataAdapter.from_file`,
-  `add_transition_drift_to_obsm(...)`, `cellucid serve` on a path it detects as
-  direct AnnData input, and the browser’s own `.h5ad` and `.zarr` readers
-- `prepare()` shares none of it: coordinates arrive there as arrays in its
-  `X_umap_1d=`, `X_umap_2d=`, and `X_umap_3d=` arguments, and it never looks at
-  `obsm` keys
+### Fix
+- name the array you want: `embedding_keys={"2d": "X_umap_harmony"}` or
+  `--embedding-2d X_umap_harmony`; `embedding_keys={"2d": ("X_pca", [0, 1])}` or
+  `--embedding-2d X_pca:0,1` for chosen columns of a wide array
+- `prepare()` shares none of this: it exports exactly the arrays you pass in
+  `embeddings=`, and never looks at `obsm` keys
 
 Full rules: {doc}`08_anndata_mode_show_anndata_and_serve_anndata`.
 
 ---
 
-## Symptom: “No UMAP embedding Cellucid can read was found in adata.obsm”
+## Symptom: “Cellucid found nothing to plot”
 
 ### Likely causes (ordered)
-- `X_umap` is present but is some other width — a latent space named after a
-  plot, and no rename makes it drawable
-- UMAP was never computed, so `obsm` carries no embedding at all
-- a dimensional key exists but does not carry the column count its name
-  declares, or its rows do not match `adata.n_obs`
+- no embedding was ever computed, so `obsm` holds only tables, sparse arrays, or
+  nothing at all
+- every candidate array holds a non-finite value (or no spread) in the columns
+  that would be plotted
+- arrays do not have one row per cell (`adata.n_obs`)
 
 ### How to confirm
 
-```python
-print(list(adata.obsm.keys()))
-for k in ["X_umap", "X_umap_1d", "X_umap_2d", "X_umap_3d"]:
-    if k in adata.obsm:
-        print(k, getattr(adata.obsm[k], "shape", None))
-print("n_cells:", adata.n_obs)
-```
-
-The message itself lists the `obsm` keys the object has, and names the shape of
-an `X_umap` whose width no viewer can draw:
+The message lists every `obsm` entry and says why it was not used:
 
 ```text
-No UMAP embedding Cellucid can read was found in adata.obsm. Cellucid reads the exact keys 'X_umap_1d', 'X_umap_2d', and 'X_umap_3d', and reads a bare 'X_umap' as the dimension its own column count states. Available obsm keys: ['X_pca', 'X_umap'].
-  adata.obsm['X_umap'] has shape (3696, 10), and Cellucid draws 1, 2, or 3 dimensions, so that array names a dimension no viewer renders. Assign the columns you mean to draw under the key for their own count.
+Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,696) and at least one numeric column. obsm holds: X_df (table), spatial (3,696 × 2, NaN at cell 17).
 ```
 
 ### Fix
-- assign the columns you actually mean to draw under the key for their own
-  count — when some other `obsm` array has `n_obs` rows and 1, 2, or 3 columns,
-  the message prints one copy-pasteable statement per candidate:
-
-```python
-adata.obsm["X_umap_2d"] = umap_coordinates_2d
-```
-
-- or compute UMAP and store it under `X_umap_2d` / `X_umap_3d` directly
-- a key whose array contradicts its own name is an error, not a
-  reinterpretation: `X_umap_3d` holding `(n_obs, 2)` fails construction rather
-  than being served as 2D
-- serving a `.h5ad` or `.zarr` path? Re-save the file after the assignment
+- compute an embedding (`sc.tl.umap(adata)`), or repair the array the message
+  names (the first non-finite cell is given)
+- or name a usable array explicitly with `embedding_keys` / `--embedding-<n>d`
+- a dimensional key whose array does not have exactly its own column count is an
+  error, not a reinterpretation: `X_umap_3d` holding `(n_obs, 2)` fails
+  construction rather than being served as 2D
+- serving a `.h5ad` or `.zarr` path? Re-save the file after a repair
 
 ---
 
@@ -404,7 +387,7 @@ Deep dive: {doc}`10_notebook_widget_mode_advanced`.
 
 ```text
       Connectivity: yes (33,476 edges)
-      Connectivity: not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)
+      Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)
       Connectivity: no
 ```
 
@@ -415,33 +398,33 @@ Deep dive: {doc}`10_notebook_widget_mode_advanced`.
   404 while it is off
 
 ### Fix
-- in Python, pass `serve_connectivity=True`:
+- in Python, pass `knn_key="connectivities"`:
 
 ```python
 viewer = show_anndata(
     "data.h5ad",
     dataset_name="My study",
     dataset_id="my-study-v1",
-    serve_connectivity=True,
+    knn_key="connectivities",
 )
 ```
 
-- from the terminal, add `--connectivity`:
+- from the terminal, add `--knn connectivities`:
 
 ```bash
 cellucid serve /path/to/data.h5ad \
   --dataset-name "My study" \
   --dataset-id my-study-v1 \
-  --connectivity
+  --knn connectivities
 ```
 
 - the keyword is accepted by `show_anndata(...)`, `serve_anndata(...)`,
   `AnnDataViewer(...)`, `AnnDataServer(...)`, `AnnDataAdapter(...)`, and
-  `AnnDataAdapter.from_file`; `--connectivity` is AnnData-only and is rejected
+  `AnnDataAdapter.from_file`; `--knn connectivities` is AnnData-only and is rejected
   for a prepared export, like every other AnnData-only flag
 - asking for a graph the object does not carry is now an error, not silence:
-  `Connectivity was asked for, and adata.obsp has no 'connectivities' matrix to
-  serve.` Compute one with `sc.pp.neighbors(adata)` first
+  `knn_key names obsp['connectivities'],
+  which this object does not have.` Compute one with `sc.pp.neighbors(adata)` first
 
 ### Expect it to cost time
 Reading the graph is the single longest part of starting a server on a large

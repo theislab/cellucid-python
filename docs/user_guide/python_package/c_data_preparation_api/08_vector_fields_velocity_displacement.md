@@ -18,16 +18,16 @@ In the web app they appear as an animated overlay (often called “velocity over
 
 Minimum requirements:
 
-1) Export the matching embedding dimension (2D vectors require `X_umap_2d`, 3D vectors require `X_umap_3d`).
-2) Provide a `vector_fields` dictionary where the values have shape `(n_cells, dim)`.
-3) Use an exact dimension-suffixed key and a safe field id.
+1) Export the embedding the vectors are drawn over.
+2) Pass `vector_fields` as `{field id: {embedding id: array}}`, where each array
+   has shape `(n_cells, dim)` of that embedding.
 
 ```text
 prepare(
     ...,
-    X_umap_2d=adata.obsm["X_umap_2d"],
+    embeddings={"X_umap": adata.obsm["X_umap"]},
     vector_fields={
-        "velocity_umap_2d": adata.obsm["velocity_umap_2d"],
+        "velocity": {"X_umap": adata.obsm["velocity_umap"]},
     },
     ...
 )
@@ -43,7 +43,7 @@ Then load the export in the web app and enable the overlay:
 ### What vector fields enable in the UI
 
 When vector fields are present, the web app can:
-- list available vector fields (per embedding dimension),
+- list available vector fields for the embedding a view shows,
 - render an animated particle-flow overlay,
 - let users tune overlay parameters (density, speed, etc.).
 
@@ -59,69 +59,76 @@ Planar mode with `velocity_umap`; the field, density, speed, trail, size,
 opacity, palette, and LOD controls are visible.
 ```
 
+### Binding a field to embeddings
+
+A vector field is drawn over one embedding at a time, so each array is bound to
+an exported embedding by its id. One field may be bound to several embeddings —
+typically a 2D and a 3D UMAP:
+
+```text
+prepare(
+    ...,
+    embeddings={
+        "X_umap": adata.obsm["X_umap"],
+        "X_umap_3d": adata.obsm["X_umap_3d"],
+        "X_tsne": adata.obsm["X_tsne"],
+    },
+    embedding_defaults={"2d": "X_umap"},
+    vector_fields={
+        "velocity": {
+            "X_umap": adata.obsm["velocity_umap"],
+            "X_umap_3d": adata.obsm["velocity_umap_3d"],
+        },
+        "T_fwd": {"X_umap": adata.obsm["T_fwd_umap"]},
+    },
+    vector_field_default="velocity",
+    ...
+)
+```
+
+Here `X_tsne` has no vectors bound to it: the velocity overlay is offered for
+the two UMAPs and not for the t-SNE, because a vector computed in UMAP space
+points the wrong way in any other layout.
+
+- Every embedding id a field names must be one of the exported `embeddings`.
+- A field must bind at least one embedding.
+- `vector_field_default` names the field selected first. It is required when
+  more than one field is exported, and must be one of them.
+
 ### Supported shapes and dtypes
 
-Each vector field is a per-cell array:
-- shape: exactly `(n_cells, dim)`, where `dim` is the dimension its key declares
-- a `_1d` key also accepts a plain `(n_cells,)` vector as the single column it
-  declares; `_2d` and `_3d` keys require the full 2D array
+Each bound array is a per-cell array:
+- shape: exactly `(n_cells, dim)`, where `dim` is the dimension of the embedding
+  it is bound to; a plain `(n_cells,)` vector is accepted for a 1D embedding
 - dtype: any real numeric dtype; the export scales your values at their own
   precision and rounds the product to `float32` once, at the write
+- values: finite, and representable as a nonzero finite `float32`
 
-Vectors must be aligned to the same cell order as embeddings and `obs`.
-
-### Naming convention (required)
-
-Every declaration key must match `<field>_umap_<1|2|3>d` exactly:
-
-- keys end with `_<dim>d` (e.g., `_2d`, `_3d`)
-- the base id becomes the “field id” in `dataset_identity.json`
-
-Examples:
-- `velocity_umap_2d`, `velocity_umap_3d` → field id `velocity_umap`
-- `T_fwd_umap_2d` → field id `T_fwd_umap`
-
-An unsuffixed key such as `velocity_umap` is rejected, and in `adata.obsm` it is
-never picked up as a vector field. The dimension is always declared, never
-inferred from an array's width: a field can carry both a 2D and a 3D version,
-and a suffix that disagrees with the array's shape is a mistake worth catching
-rather than a shape to trust.
+Vectors must be aligned to the same cell order as embeddings and `obs`. For an
+embedding exported from chosen columns of a wider array (`Embedding(...,
+columns=[...])`), pass the vectors for those same columns, in the same order.
 
 #### Identity rule: a vector field id is a name, not a path
 
-A vector payload is named by its integer position on the vectors axis, never by
-its field id, so no filename rule reaches the id. What remains is what the
-identity is for. Exactly as for an obs key and a gene id, a vector field id
-must be:
+A vector payload is named by integer positions, never by its field id, so no
+filename rule reaches the id. Exactly as for an obs key, an embedding id, and a
+gene name, a vector field id must be:
 
 - a non-empty string,
 - distinct from every other vector field id, and
 - text the viewer can draw exactly as it is stored: no control characters, no
   zero-width characters, and no leading or trailing whitespace.
 
-`cellucid-r` applies the identical rule, and the web app accepts exactly these
-keys, so an id one accepts is an id all three accept. Spaces, slashes, and
-punctuation are ordinary characters here — an id is not a filename. What the id
-*must* keep is the `_umap` tail the key pattern captures, so
-`RNA velocity (steady state)_umap` and `chr1:1000000-1000500_umap` are valid
-ids, declared by the keys `RNA velocity (steady state)_umap_2d` and
-`chr1:1000000-1000500_umap_2d`.
-
-### Dimension matching
-
-Each vector declaration requires an embedding with the same dimension.
-
-Example:
-- you provide `velocity_umap_3d`, but did not export `X_umap_3d`
-- result: validation fails before export
-
-For a 3D overlay, export both `X_umap_3d` and the corresponding 3D vectors.
+`cellucid-r` applies the identical rule. Spaces, slashes, and punctuation are
+ordinary characters here — `RNA velocity (steady state)` is a valid field id.
+The field's label in the viewer is its id.
 
 ### Scale and normalization (why overlays sometimes look “too small”)
 
 Remember:
-- `prepare()` normalizes each embedding dimension to fit roughly `[-1, 1]`.
-- To keep vectors consistent with those normalized coordinates, the exporter scales vectors by the same per-dimension scale factor.
+- `prepare()` normalizes each embedding on its own to fit roughly `[-1, 1]`.
+- To keep vectors consistent with those normalized coordinates, the exporter
+  scales each array by the scale factor of **the embedding it is bound to**.
 
 Practical implications:
 - Provide vectors in the same coordinate system as your *original* embedding.
@@ -130,7 +137,7 @@ Practical implications:
 If vectors look too small/large in the UI, it’s usually because:
 - vectors are not in embedding coordinates (wrong basis), or
 - vectors have an unexpected magnitude distribution (needs preprocessing), or
-- you are viewing a different embedding dimension than the vectors you exported.
+- you bound the field to an embedding other than the one the vectors were computed in.
 
 ---
 
@@ -139,26 +146,35 @@ If vectors look too small/large in the UI, it’s usually because:
 Vector files are written under:
 
 ```text
-out_dir/vectors/<index>_<dim>d.bin(.gz)
+out_dir/vectors/<field index>_<embedding index>.bin(.gz)
 ```
 
 - dtype: `float32`, rounded once from the scaled value
-- shape: `(n_cells, dim)`
-- `<index>` is the field's position in the sorted field list, `0 … N-1`; the
-  field id itself never appears in a path
+- shape: `(n_cells, dim)` of the bound embedding
+- `<field index>` is the field's position in the sorted field list, and
+  `<embedding index>` the bound embedding's position in the exported embedding
+  order; no id ever appears in a path
 
-The presence and locations of vector files are recorded in:
-- `dataset_identity.json["vector_fields"]`
+The presence and locations of vector files are recorded in
+`dataset_identity.json["vector_fields"]`, as `files` mapping each bound embedding
+id to its path.
 
 Full spec: {doc}`09_output_format_specification_exports_directory`
+
+```{note}
+Serving an AnnData object directly discovers vector fields differently: it reads
+`obsm` keys of the form `<field>_umap_<n>d` and binds each to the slot of its
+dimension when that slot shows a UMAP. See
+{doc}`../d_viewing_apis/08_anndata_mode_show_anndata_and_serve_anndata`.
+```
 
 ---
 
 ## Edge cases and common footguns
 
-- **Wrong basis**: vectors must be in the same coordinate system as the embedding (UMAP space if you name them `_umap_*`).
+- **Wrong basis**: vectors must be in the same coordinate system as the embedding they are bound to.
 - **Row-order mismatch**: vectors aligned to a different cell order than points/obs.
-- **Mixed availability**: you export 2D vectors but load the dataset in 3D mode (overlay may appear missing).
+- **Mixed availability**: you bound only a 2D embedding but view the dataset in 3D (no overlay is offered there).
 - **All-zero vectors**: overlay renders but looks static/empty.
 - **NaN/Inf in vectors**: validation fails before export.
 
@@ -169,29 +185,35 @@ Full spec: {doc}`09_output_format_specification_exports_directory`
 ### Symptom: overlay option missing in the UI
 
 Meaning:
-- no `vector_fields` metadata was found in `dataset_identity.json`.
+- no `vector_fields` metadata was found in `dataset_identity.json`, or the
+  field is not bound to the embedding the view shows.
 
 How to confirm:
-- open `<out_dir>/dataset_identity.json` and search for `"vector_fields"`.
+- open `<out_dir>/dataset_identity.json` and read `"vector_fields"` → `files`.
 - check that `<out_dir>/vectors/` exists.
 
 Fix:
-- export with `vector_fields=...` and re-export with `force=True`.
+- export with `vector_fields=...` bound to the embedding you view, and re-export with `force=True`.
 
-### Symptom: exporter reports that a vector field requires a matching embedding
-
-Meaning:
-- you provided vectors for a dimension you didn’t export points for.
+### Symptom: `Vector field 'velocity' is bound to embedding 'X_tsne', which is not one of the exported embeddings`
 
 Fix:
-- export the matching `X_umap_<dim>d` embedding, or remove that vector dimension.
+- export that embedding in `embeddings=`, or bind the field to one you export.
+
+### Symptom: `Vector field 'velocity' on embedding 'X_umap' must have exactly 2 columns, got 3.`
+
+Meaning:
+- the array's width is not the bound embedding's dimension.
+
+Fix:
+- bind the 3D vectors to the 3D embedding (or pass the matching 2D vectors).
 
 ### Symptom: overlay renders but looks wrong (direction/magnitude)
 
 Likely causes:
 - vectors are not in embedding space (wrong coordinate system),
 - vectors need preprocessing/clipping,
-- you’re looking at a different dimension than the exported vectors.
+- the field is bound to the wrong embedding.
 
 Fix:
 - verify basis and shape, and validate by plotting vectors against embedding in Python before export.

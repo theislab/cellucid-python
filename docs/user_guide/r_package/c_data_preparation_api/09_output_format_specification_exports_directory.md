@@ -21,7 +21,7 @@ go. Nothing here is R-specific except the examples: an export written by
 At the top level you will typically see:
 
 - `dataset_identity.json` (always)
-- `points_1d.bin` / `points_2d.bin` / `points_3d.bin` (at least one; optionally `.gz`)
+- `embeddings/` (always; one `<index>_<dim>d.bin` per embedding, optionally `.gz`)
 - `obs_manifest.json` (always)
 - `obs/` (always)
 - `var_manifest.json` + `var/` (only if gene expression is exported)
@@ -49,22 +49,31 @@ row2_col1, row2_col2, ..., row2_colN,
 
 In R, the exporter achieves row-major by writing `as.vector(t(mat))`.
 
-## Embeddings: `points_*d.bin`
+## Embeddings: `embeddings/<index>_<dim>d.bin`
 
-Files:
-- `points_1d.bin`
-- `points_2d.bin`
-- `points_3d.bin`
+Files: one per entry of `embeddings`, for example
+- `embeddings/0_1d.bin`
+- `embeddings/1_2d.bin`
+- `embeddings/2_2d.bin`
+- `embeddings/3_3d.bin`
+
+`<index>` is the embedding's position after sorting by dimension and then by id
+in code-point order (`sort(method = "radix")`, which is what Python's `sorted()`
+does), so both writers name the same embedding with the same file.
 
 Encoding:
 - float32, little-endian
 - row-major
 
 Shape:
-- `(n_cells, dim)`
+- `(n_cells, dim)`, where `dim` is the number of columns plotted
 
 Notes:
-- values are normalized (center + scale); see {doc}`03_embeddings_and_coordinates`
+- each embedding is normalized on its own (center + one shared scale); see
+  {doc}`03_embeddings_and_coordinates`
+- only the selected columns are written; `dataset_identity.json` records them
+  0-based under `source.columns` (`cellucid_embedding(columns = c(4, 2))` is
+  recorded as `[3, 1]`)
 - every source coordinate must be finite *and* representable as a nonzero finite
   `float32`. That is checked before normalization, not at the write:
   normalization pulls every coordinate into roughly `[-1, 1]`, so a coordinate
@@ -81,7 +90,7 @@ This JSON file tells the viewer:
 - how categorical codes and outlier files are encoded
 
 Important keys (high level):
-- `_format`: format identifier (currently `"compact_v1"`)
+- `_format`: format identifier (currently `"compact_v2"`)
 - `n_points`
 - `centroid_outlier_quantile`
 - `latent_key` (currently `"latent_space"`)
@@ -97,8 +106,12 @@ Every field entry begins with its own **payload index**, an integer:
 
 - continuous: `[index, key]`, or `[index, key, minValue, maxValue]` when quantized
 - categorical: `[index, key, categories, codes_dtype, codes_missing_value,
-  centroids_by_dim]`, or the same six followed by
+  centroidsByEmbedding]`, or the same six followed by
   `outlierMinValue, outlierMaxValue` when outliers are quantized
+
+`centroidsByEmbedding` is an object keyed by embedding id — every exported
+embedding, in file order — whose centroid positions have that embedding's
+dimension.
 
 Both arrays write into `obs/`, so their indices are **one shared space**: across
 `_continuousFields` and `_categoricalFields` together the indices are exactly
@@ -165,19 +178,19 @@ Semantics:
 ## Var manifest: `var_manifest.json` (only if gene expression exported)
 
 This manifest tells the viewer:
-- what the gene IDs are,
+- what the gene names are, in the default set and in every alternative set,
 - how to find each gene’s values file,
 - and (if quantized) the min/max for dequantization.
 
-Important keys (high level):
-- `_format` (currently `"compact_v1"`)
+Important keys (all seven are required):
+- `_format` (currently `"compact_v2"`)
 - `n_points`
-- `var_gene_id_column`
 - `compression`
 - `quantization` (null, 8, or 16)
 - `_varSchema` (path pattern, dtype, quantization flags); the pattern is a
   template over `{index}`, for example `var/{index}.values.f32.gz`
 - `fields`: list of gene entries
+- `gene_name_sets`: the default gene-name set and every alternative set
 
 Each `fields` entry is:
 - `[index, gene_id]` for float32 exports, or
@@ -185,9 +198,18 @@ Each `fields` entry is:
 
 The first element is the gene's payload index. Within `var/` the indices are exactly
 `0 … N-1`, each used once, and `cellucid_prepare()` proves that before
-publishing. There is **one** identity per gene: the entry carries the exact
-identifier read from `rownames(var)` or `var_gene_id_column`, and nothing else.
-No accession is retained beside it, and no parallel identifier array exists.
+publishing. The second is the gene's name in the default set: what
+`rownames(var)` or `var_gene_id_column` holds, with an empty value (`""` or
+`NA`) taking the row name and a repeated name made unique (`MATR3`, `MATR3-1`).
+
+`gene_name_sets[1]` onwards hold the columns named in `var_gene_name_columns`.
+Each set is `{source, filled_from_index, renamed, names}`: `source` is the
+column (`null` for the row names in the default set), `filled_from_index` and
+`renamed` report what the make-unique rule changed over the exported genes, and
+`names` is `null` for the default set and otherwise one name per gene, `null`
+where it equals the default name. The sets are metadata only — every set names
+the same `var/` payloads. The normative definition is the
+{doc}`shared specification <../../python_package/c_data_preparation_api/09_output_format_specification_exports_directory>`.
 
 ## Var binaries: `var/`
 
@@ -243,15 +265,17 @@ This is the top-level “what’s in this dataset?” file.
 
 Important keys (high level):
 
-- `version` (currently 2)
+- `version` (currently 3)
 - `id`, `name`, `description`
 - `created_at`
 - `cellucid_data_version` (R package version)
 - `stats` (counts: cells, exported genes, fields, edges; `n_genes` respects `gene_identifiers`)
 - `embeddings`:
-  - `available_dimensions`
-  - `default_dimension`
-  - `files` mapping (e.g. `"2d": "points_2d.bin.gz"`)
+  - `default_dimension` (the highest dimension exported)
+  - `defaults` (the embedding each dimension shows first, e.g. `"2d": "X_umap"`)
+  - `items`: one entry per embedding id, with `label`, `dimension`, `file`
+    (e.g. `"embeddings/1_2d.bin.gz"`), and `source` (`key`, and the 0-based
+    `columns`)
 - `obs_fields`: summary list of exported obs fields
 - `export_settings`: compression/quantization settings
 - optional `source` (name/url/citation)
@@ -263,17 +287,19 @@ label. `description` may be `""`; the others may not be empty.
 
 ## Vector fields: `vectors/` (optional)
 
-Vector binaries are float32 matrices stored row-major:
+Vector binaries are float32 matrices stored row-major, one per field and bound
+embedding:
 
-- `vectors/<i>_2d.bin`, `vectors/<i>_3d.bin`, etc
+- `vectors/<i>_<e>.bin`, for example `vectors/0_1.bin` and `vectors/0_3.bin`
 
 `<i>` is the field's payload index, assigned by sorting the field ids by code
 point so that `cellucid-r` and the `cellucid` Python package assign the same
-index to the same field. Within `vectors/` the indices are exactly `0 … N-1`,
-each used once.
+index to the same field, and `<e>` is the payload index of the embedding the
+array is drawn over. Each array has that embedding's dimension and is scaled by
+that embedding's normalization factor.
 
 The web app discovers them via `dataset_identity.json` (`vector_fields` section),
-which is what maps each field id to its files.
+which maps each field id to `{label, files}`, `files` keyed by embedding id.
 
 Every component must be finite and representable as a nonzero finite `float32`.
 The small end matters as much as the large one: a nonzero component below
@@ -284,9 +310,9 @@ zero.
 ## The writer proves the layout before publishing
 
 Before a candidate generation is published, `cellucid_prepare()` reconciles what
-is on disk against what the export declares, on **five** surfaces: the four
-payload directories — `Observation`, `Gene`, `Connectivity`, and `Vector field` —
-and the `Export` root itself. On each one, every path the export declares must
+is on disk against what the export declares, on **six** surfaces: the five
+payload directories — `Observation`, `Gene`, `Connectivity`, `Vector field`, and
+`Embedding` — and the `Export` root itself. On each one, every path the export declares must
 exist and every file present must be declared. A mismatch stops the export with,
 for example:
 
@@ -298,18 +324,17 @@ absent: c("var/7.values.u8.gz"). Written but undeclared: c("var/8.values.u8.gz")
 That is what makes the index space trustworthy: a stale file from an earlier
 generation cannot survive beside a current manifest.
 
-The root is checked for a reason of its own. `points_<dim>d.bin(.gz)` is the only
-payload this format declares by path *from the export root* — in
-`dataset_identity.json`, under `embeddings.files` — so no axis manifest can speak
-for it, and its declared name and its written name are two expressions of one
-`compression` setting. After a successful export the root holds exactly
-`dataset_identity.json`, `obs_manifest.json`, the declared point payloads,
-whichever of `var_manifest.json` and `connectivity_manifest.json` the export
-wrote, and the payload directories it created — and nothing else. A leftover
+The `Embedding` surface is declared from `dataset_identity.json`: every item's
+`file` must be exactly `embeddings/<index>_<dim>d.bin` (plus `.gz` when
+compressed) before the directory is compared with it. The root holds no payload
+at all: after a successful export it holds exactly `dataset_identity.json`,
+`obs_manifest.json`, whichever of `var_manifest.json` and
+`connectivity_manifest.json` the export wrote, and the payload directories it
+created — and nothing else. A leftover
 scratch file, or a directory the export did not create, is refused rather than
 published.
 
-`prepare()` in the `cellucid` Python package performs the same five
+`prepare()` in the `cellucid` Python package performs the same six
 reconciliations and refuses the same generations. Only the rendering of the two
 lists differs, as `['var/7.values.u8.gz']` rather than `c("var/7.values.u8.gz")`.
 
@@ -320,7 +345,7 @@ Before sharing an export folder:
 1) Confirm the identity file parses:
    - `jsonlite::read_json(file.path(out_dir, "dataset_identity.json"))`
 2) Confirm required files exist:
-   - `points_*d.bin[.gz]`
+   - every `embeddings/<index>_<dim>d.bin[.gz]` the identity declares
    - `obs_manifest.json`
    - `obs/` directory is non-empty
 3) If gene expression is included:

@@ -67,7 +67,7 @@ Whether the data comes from:
 
 the browser viewer uses the *same* conceptual file contract:
 
-- points: `points_2d.bin(.gz)`, `points_3d.bin(.gz)`, …
+- embeddings: `embeddings/0_2d.bin(.gz)`, `embeddings/1_3d.bin(.gz)`, …
 - obs manifest + field binaries: `obs_manifest.json`, `obs/<field>...`
 - var manifest + gene binaries: `var_manifest.json`, `var/<gene>...`
 - (optional) connectivity + vectors: `connectivity_manifest.json`, `connectivity/...`, `vectors/...`

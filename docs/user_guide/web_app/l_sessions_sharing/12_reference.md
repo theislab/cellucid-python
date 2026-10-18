@@ -48,6 +48,21 @@ The root has exactly `createdAt`, `datasetFingerprint`, and `chunks`:
   dimension that was on screen when the session was saved, exactly `1`, `2`, or
   `3`. `digest` is 16 lowercase hexadecimal characters computed over every cell
   coordinate of that embedding in dataset row order.
+
+```{note}
+The extended session format that accompanies export format 3 extends this
+fingerprint:
+`cellOrder` gains an `embedding` member — `{"key", "columns"}`, an exported
+embedding id with `columns: null` or an AnnData `obsm` key with its 0-based
+columns — naming the embedding the digest was taken over, and a sixth required
+field, `dataMapping`, records the arrays the session was showing. A
+`dataMapping` of `kind` `"export"` has exactly `kind`, `embeddings` (the
+`1d`/`2d`/`3d` slots), `geneNames` (`"index"` or `"column:<name>"`), and
+`vectorFields`; `kind` `"anndata"` adds `knn`, `expression` (`"X"`, `"raw"`,
+`"layer:<name>"`, or null), and `latent`. The current Python package reads
+only that format; see
+{doc}`../../python_package/e_jupyter_hooks/11_session_bundles_apply_session_to_anndata`.
+```
 - `chunks` is the ordered inventory.
 
 Every chunk entry has exactly these nine keys:

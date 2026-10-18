@@ -165,8 +165,8 @@ Passing `vector_field_default=` without `serve_vector_fields=True` is refused
 rather than silently ignored: `vector_field_default` selects among *served*
 fields, so with nothing served there is nothing for it to select.
 
-`prepare()` is unaffected — Option B below passes the arrays through
-`vector_fields=`, which has always been the ask.
+`prepare()` does not scan `obsm` — Option B below passes the arrays through
+`vector_fields=`, bound by id to the exported embedding they are drawn over.
 
 ### Option A: view directly from AnnData (notebook)
 
@@ -206,8 +206,9 @@ If you are exporting anyway:
 ```python
 from cellucid import prepare
 
+# A field id, then the exported embedding each array is drawn over.
 vector_fields = {
-    "T_fwd_umap_2d": adata.obsm["T_fwd_umap_2d"],
+    "T_fwd_umap": {"X_umap_2d": adata.obsm["T_fwd_umap_2d"]},
 }
 
 prepare(
@@ -215,7 +216,7 @@ prepare(
     obs=adata.obs,
     var=adata.var,
     gene_expression=adata.X,
-    X_umap_2d=adata.obsm["X_umap_2d"],
+    embeddings={"X_umap_2d": adata.obsm["X_umap_2d"]},
     vector_fields=vector_fields,
     out_dir="exports/my_dataset_with_vectors",
     dataset_name="My dataset with vectors",

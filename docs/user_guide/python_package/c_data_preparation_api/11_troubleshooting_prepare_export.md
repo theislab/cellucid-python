@@ -34,14 +34,15 @@ If things look “plausible but wrong”, assume alignment is wrong until proven
 
 - You did not pass `latent_space` (required).
 - You did not pass `obs` (required).
-- You did not pass any of `X_umap_1d/2d/3d` (at least one required).
+- You did not pass `embeddings` (at least one embedding is required).
 
 ### How to confirm
 
 Read the exact exception message; the exporter raises clear errors such as:
 - `ValueError: latent_space is required for outlier quantile calculation.`
 - `ValueError: obs DataFrame is required.`
-- `ValueError: At least one dimensional embedding must be provided.`
+- `TypeError: prepare() missing 1 required keyword-only argument: 'embeddings'`
+- `ValueError: embeddings must contain at least one embedding.`
 - `TypeError: obs must be a pandas DataFrame, got dict.` (also raised for
   `var`, naming whatever type you actually passed)
 
@@ -53,7 +54,7 @@ Provide the missing arguments. A minimal working call is:
 prepare(
     latent_space=latent,   # (n_cells, n_latent_dims)
     obs=obs_df,            # n_cells rows
-    X_umap_2d=X_umap_2d,   # (n_cells, 2)  (or X_umap_3d)
+    embeddings={"X_umap": umap},   # (n_cells, 2) or (n_cells, 3)
     dataset_name="My study",
     dataset_id="my-study-v1",
     obs_categorical_dtype="uint16",
@@ -84,7 +85,7 @@ Use the preflight checklist:
 Print shapes for every cell-aligned input:
 
 ```python
-print("emb:", X_umap_2d.shape if X_umap_2d is not None else None, X_umap_3d.shape if X_umap_3d is not None else None)
+print("emb:", {key: np.shape(values) for key, values in embeddings.items()})
 print("latent:", latent.shape)
 print("obs:", obs.shape)
 print("X:", None if X is None else X.shape)
@@ -102,7 +103,7 @@ adata2 = adata[mask].copy()
 prepare(
     latent_space=adata2.obsm["X_pca"],
     obs=adata2.obs,
-    X_umap_2d=adata2.obsm["X_umap_2d"],
+    embeddings={"X_umap": adata2.obsm["X_umap"]},
     dataset_name="My study",
     dataset_id="my-study-v1",
     obs_categorical_dtype="uint16",
@@ -157,7 +158,7 @@ wrong matrix. The message counts `NaN`, `+Inf`, `-Inf`, values beyond the
 the first five offending cell indices. A continuous `obs` column reports the
 same shape under `Continuous obs field '<key>'`.
 
-Every other numeric input `prepare()` takes — `X_umap_*d`, `latent_space`, a
+Every other numeric input `prepare()` takes — an embedding, `latent_space`, a
 vector field, `transition_matrix` — is refused with the same counts. Those have
 axes rather than one value per cell, so their positions read as `[row, column]`,
 zero-based and row-major, the way you would index the array you passed. A sparse
@@ -483,6 +484,8 @@ See: {doc}`04_obs_cell_metadata`
 
 - Re-export genes with `force=True`.
 - Ensure `var_gene_id_column` is what you think it is.
+- A gene repeated in `var` is exported as `NAME-1`, `NAME-2`, …; search for (or
+  request in `gene_identifiers`) the unique name the export printed.
 - Export the genes you need (or use server mode for full access).
 
 See:
@@ -519,25 +522,25 @@ See:
 ### Likely causes
 
 1) You didn’t export `vector_fields` at all.
-2) You declared vectors for 3D but didn’t provide `X_umap_3d` (validation fails).
-3) A declaration key does not match `<field>_umap_<1|2|3>d` exactly — the
-   `_umap` tail and the dimension suffix are both required.
-4) A vector field id is empty, duplicated, or carries characters the viewer
-   cannot draw (control, zero-width, or leading/trailing whitespace). Punctuation
-   and spaces are fine: an id is a name, not a filename.
-5) Vector arrays have wrong shape (not `(n_cells, dim)`).
+2) A field is bound to an embedding id you did not export (validation fails).
+3) The field is bound to a different embedding than the one the view shows —
+   a field bound to `X_umap` is not offered over `X_tsne`.
+4) A vector field id is empty or carries characters the viewer cannot draw
+   (control, zero-width, or leading/trailing whitespace). Punctuation and
+   spaces are fine: an id is a name, not a filename.
+5) Vector arrays have the wrong shape (not `(n_cells, dim)` of the bound embedding).
 
 ### How to confirm
 
 - Open `<out_dir>/dataset_identity.json` and search for `"vector_fields"`.
 - Confirm `<out_dir>/vectors/` exists and contains `*.bin(.gz)` files.
-- Read the validation error for the vector key and its required embedding dimension.
+- Read `vector_fields.fields.<id>.files`: its keys are the embeddings the field is drawn over.
 
 ### Fix
 
-- Export vectors with required dimension-suffixed keys such as
-  `velocity_umap_2d` and `velocity_umap_3d`.
-- Export matching embeddings.
+- Bind each field to the embeddings it was computed in, for example
+  `vector_fields={"velocity": {"X_umap": v2, "X_umap_3d": v3}}`.
+- Export those embeddings.
 - Re-export with `force=True`.
 
 See: {doc}`08_vector_fields_velocity_displacement`
@@ -603,13 +606,15 @@ it verbatim in a bug report along with the `prepare()` call.
 
 1) You selected the wrong folder in the file picker (one level too high/low).
 2) `dataset_identity.json` is missing or malformed.
-3) Export is partial (interrupted run; missing points file).
+3) The folder was exported by an earlier release (`"version": 2`, with
+   `points_<dim>d.bin` files at its root) and must be regenerated.
 
 ### How to confirm
 
 Check that the folder root contains:
 - `dataset_identity.json`
-- at least one points file (`points_2d.bin(.gz)` or `points_3d.bin(.gz)`)
+- `obs_manifest.json` and an `embeddings/` folder holding the files
+  `dataset_identity.json` declares under `embeddings.items`
 
 Web app loading docs:
 - {doc}`../../web_app/b_data_loading/03_browser_file_picker_tutorial`
@@ -622,7 +627,8 @@ Web app loading docs:
 
 ### Prevention
 
-- Add an automated “export validation” step to your pipeline (check for identity + points file).
+- Add an automated “export validation” step to your pipeline (check for the
+  identity, the obs manifest, and every declared embedding file).
 
 ---
 
@@ -648,7 +654,8 @@ Example:
 my_export/
   dataset_identity.json
   obs_manifest.json
-  points_3d.bin.gz
+  embeddings/
+    0_3d.bin.gz
   obs/
     0.codes.u8.gz
     0.outliers.u8.gz

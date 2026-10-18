@@ -170,7 +170,7 @@
       }
     },
     {
-      "name": "empty values fall back to the index first",
+      "name": "empty values take their index name first",
       "names": [
         "MATR3",
         "",
@@ -1082,7 +1082,7 @@
       }
     },
     {
-      "name": "every narrow candidate failing falls back to a wide one",
+      "name": "when every narrow candidate fails, a wide one is used",
       "obsm": [
         {
           "key": "X_tsne",

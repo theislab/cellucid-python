@@ -216,7 +216,7 @@ named differently.
 
 **Likely causes**
 - AnnData is missing required `obsm` keys.
-- Export folder is missing `points_2d.bin(.gz)` / `points_3d.bin(.gz)`.
+- Export folder is missing its embedding files (`embeddings/` in a format-3 export).
 
 **How to confirm**
 - AnnData (Python):
@@ -225,7 +225,7 @@ named differently.
   print(adata.obsm.keys())
   ```
 
-- Exports: check that your export folder has at least one `points_*d.bin` file and that `dataset_identity.json["embeddings"]` lists it.
+- Exports: check that every file `dataset_identity.json["embeddings"]` declares exists in the export folder.
 
 **Fix**
 - Compute UMAP and store it in `obsm` under a supported key, or re-export with embeddings.

@@ -40,7 +40,7 @@ When you call `show_anndata(...)`, the viewer can work, but it is not optimized 
 - your notebook state becomes part of “the dataset”
 
 When you call `prepare(...)`, Cellucid writes a **dataset directory** with:
-- embedding point clouds (`points_2d.bin(.gz)`, `points_3d.bin(.gz)`, ...)
+- embedding point clouds (`embeddings/0_2d.bin(.gz)`, `embeddings/1_3d.bin(.gz)`, ...)
 - obs metadata manifest + binary columns
 - var (gene) manifest + per-gene expression vectors
 - optional connectivities and vector fields
@@ -63,7 +63,7 @@ from cellucid import prepare, show
 
 out_dir = Path("exports") / "my_dataset"
 
-X_umap_2d = np.asarray(adata.obsm["X_umap_2d"])
+umap = np.asarray(adata.obsm["X_umap"])
 latent_space = np.asarray(adata.obsm["X_pca"])
 connectivities = adata.obsp["connectivities"] if "connectivities" in adata.obsp else None
 
@@ -74,7 +74,7 @@ prepare(
     gene_expression=adata.X,
     var_gene_id_column=None,
     connectivities=connectivities,
-    X_umap_2d=X_umap_2d,
+    embeddings={"X_umap": umap},
     out_dir=out_dir,
     # Practical defaults (tune later):
     var_quantization=8,
@@ -125,22 +125,23 @@ Best practice:
 
 ### Required: at least one embedding
 
-The exact 2D UMAP key is:
-- `adata.obsm["X_umap_2d"]` with shape `(n_cells, 2)`
+Scanpy writes the UMAP to:
+- `adata.obsm["X_umap"]` with shape `(n_cells, 2)` (or `(n_cells, 3)` with
+  `n_components=3`)
 
-If your UMAP is 3D, you might have:
-- `adata.obsm["X_umap_3d"]` with shape `(n_cells, 3)`
+`prepare()` takes the array itself, under an id you choose:
+`embeddings={"X_umap": umap}`. Add more entries for more embeddings.
 
 Extract safely:
 
 ```python
 import numpy as np
 
-X_umap_2d = np.asarray(adata.obsm["X_umap_2d"])  # (n_cells, 2)
+umap = np.asarray(adata.obsm["X_umap"])  # (n_cells, 2)
 ```
 
 ```{note}
-Embeddings are normalized by `prepare(...)` into `[-1, 1]` independently per dimension. This preserves geometry but discards absolute scale (which is usually fine for visualization).
+Embeddings are normalized by `prepare(...)` into `[-1, 1]`, each one independently. This preserves geometry but discards absolute scale (which is usually fine for visualization).
 ```
 
 ### Required (for gene coloring): expression matrix + var table
@@ -243,7 +244,7 @@ prepare(
     gene_expression=X,
     var_gene_id_column=var_gene_id_column,
     connectivities=connectivities,
-    X_umap_2d=X_umap_2d,
+    embeddings={"X_umap": umap},
     out_dir=out_dir,
     force=False,
     var_quantization=8,
@@ -271,7 +272,7 @@ ls -la exports/my_dataset
 You should see (at minimum):
 - `dataset_identity.json`
 - `obs_manifest.json`
-- at least one `points_*d.bin` (or `.bin.gz`)
+- an `embeddings/` folder with at least one `<index>_<dim>d.bin` (or `.bin.gz`)
 
 ### Open in a notebook
 
@@ -307,7 +308,7 @@ A loaded dataset in Cellucid: the sidebar controls the active view while the cat
 
 All per-cell arrays must have the same first dimension (`n_cells`):
 - `obs` rows
-- embeddings (`X_umap_*d`)
+- every array in `embeddings`
 - `gene_expression` rows
 - `connectivities` shape `(n_cells, n_cells)`
 
@@ -317,7 +318,7 @@ Confirm:
 print("n_cells:", adata.n_obs)
 print("obs rows:", adata.obs.shape[0])
 print("X shape:", adata.X.shape)
-print("umap shape:", X_umap_2d.shape)
+print("umap shape:", umap.shape)
 ```
 
 ### Too many categories for uint8

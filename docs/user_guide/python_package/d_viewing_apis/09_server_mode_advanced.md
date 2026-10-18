@@ -72,7 +72,7 @@ both the dimension and the key it came from. Full rule:
 
 ```text
       Connectivity: yes (74,771 edges)
-      Connectivity: not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)
+      Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)
       Connectivity: no
 ```
 
@@ -211,9 +211,9 @@ version of the protocol a running server speaks.
 ## Connectivity routes on the direct-AnnData server (opt-in)
 
 On the direct-AnnData server the neighbor graph is served only when you ask for
-it: `serve_connectivity=True` on `AnnDataAdapter`, `AnnDataAdapter.from_file`,
+it: `knn_key="connectivities"` on `AnnDataAdapter`, `AnnDataAdapter.from_file`,
 `AnnDataServer`, `serve_anndata`, `AnnDataViewer`, or `show_anndata`, or
-`--connectivity` on the command line. The default is off, because building the
+`--knn connectivities` on the command line. The default is off, because building the
 edge list is the single longest part of opening a large object — a 50-neighbor
 graph over millions of cells is hundreds of millions of stored neighbors — and
 most sessions never draw the graph.
@@ -274,12 +274,12 @@ exports_root/
   dataset_a/
     dataset_identity.json
     obs_manifest.json
-    points_3d.bin.gz
+    embeddings/
     ...
   dataset_b/
     dataset_identity.json
     obs_manifest.json
-    points_2d.bin.gz
+    embeddings/
     ...
 ```
 

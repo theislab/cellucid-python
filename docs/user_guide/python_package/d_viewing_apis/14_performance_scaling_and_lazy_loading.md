@@ -95,14 +95,14 @@ startup, and only the browser's gene requests stay on demand.
 ## The neighbor graph is the expensive optional part
 
 Connectivity is off unless you ask for it, in Python with
-`serve_connectivity=True` and on the command line with `--connectivity`:
+`knn_key="connectivities"` and on the command line with `--knn connectivities`:
 
 ```bash
 cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset \
-    --connectivity
+    --knn connectivities
 ```
 
-`--connectivity` is an AnnData-only flag. Supplying it for a prepared export is
+`--knn connectivities` is an AnnData-only flag. Supplying it for a prepared export is
 an error, exactly like `--dataset-name` and `--obs-key`: an export either holds
 the connectivity artifacts already or it does not.
 
@@ -131,7 +131,7 @@ The dataset report in step 3 therefore has three states, not two:
 | Reported | Meaning |
 | --- | --- |
 | `Connectivity: yes (N edges)` | The graph was asked for, validated, and is served |
-| `Connectivity: not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)` | A graph exists on the object and this server was not asked for it |
+| `Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)` | A graph exists on the object and this server was not asked for it |
 | `Connectivity: no` | The object carries no graph at all |
 
 Distinguishing the middle state costs nothing: membership in `obsp` is a key
@@ -222,11 +222,11 @@ Importing dependencies (anndata, numpy, scipy)... done
       Embeddings: 2D
       Obs fields: 15 categorical, 3 continuous
       Vector fields: no
-      Connectivity: not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)
+      Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)
       ✓ Analysis complete
 
 [4/5] Building manifests...
-      Centroids: one per categorical field and dimension
+      Centroids: one per categorical field and embedding
       ✓ Manifests built
 
 [5/5] Starting server...
@@ -247,7 +247,7 @@ Cellucid web UI cache: 100%|█████████████████�
 ════════════════════════════════════════════════════════════
 ```
 
-The same object with `--connectivity` adds two lines to step 2, and the pause
+The same object with `--knn connectivities` adds two lines to step 2, and the pause
 between them is where the minutes go:
 
 ```text
@@ -329,8 +329,8 @@ If performance is unexpectedly bad:
 - confirm direct H5AD input is being served through Python
 - read the numbered steps and identify which phase the time is in
 - confirm connectivity is off unless you need it — it is the longest phase of a
-  large startup, and it is off unless you passed `serve_connectivity=True` or
-  `--connectivity`
+  large startup, and it is off unless you passed `knn_key="connectivities"` or
+  `--knn connectivities`
 - consider exporting once (`prepare`) and using export mode
 
 More symptom-based help: {doc}`15_troubleshooting_viewing`.

@@ -5,17 +5,20 @@ All notable changes to Cellucid will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.10.0]
+## [0.9.2]
 <!-- CELLUCID_VERSION -->
 
-Version 0.10.0 changes the export format to **version 3** so that one export
-can carry several embeddings per dimension and several sets of gene names. It is
-a clean break: exports written by 0.9.x are not read by 0.10.0, and 0.10.0
-exports need the viewer release that reads format 3. Re-export with
-`prepare()` (or `cellucid_prepare()` from the R package 0.10.0, which writes the
-same bytes).
+### Export format 3 and the data mapping
 
-### Changed
+These entries belong to the data-mapping release; its version number is set
+when this work is merged. The export format changes to **version 3** so that
+one export can carry several embeddings per dimension and several sets of gene
+names. It is a clean break: exports in the earlier format are not read, and
+format-3 exports need a viewer release that reads format 3. Re-export with
+`prepare()` (or `cellucid_prepare()` from the matching R release, which writes
+the same bytes).
+
+#### Changed
 
 - **Export format v3** (`dataset_identity.json` `version: 3`).
   `embeddings` is now `{default_dimension, defaults, items}`: every exported
@@ -64,7 +67,7 @@ same bytes).
   compares `varCount` on the mapped gene axis, and resolves var-sourced fields
   through the mapped gene names and expression matrix.
 
-### Added
+#### Added
 
 - `var_gene_name_columns=` on `prepare()`: further `var` columns offered as
   alternative gene names (for example symbols beside an Ensembl index).
@@ -77,13 +80,12 @@ same bytes).
 - A sixth reconciled surface, **Embedding**: the writer proves `embeddings/`
   holds exactly the files `dataset_identity.json` declares.
 
-### Removed
+#### Removed
 
 - `vector_fields.missing_embedding_message()`, `resolve_embedding_keys()`,
   `embedding_declaration_hints()` and the other helpers of the one-UMAP-per-
   dimension rule, together with `AnnDataAdapter.get_points_binary()`.
 
-## [0.9.2]
 
 Version 0.9.2 is a patch release on 0.9.1.
 
@@ -719,7 +721,6 @@ declared `0.0.9`. Release 0.9.1 restores one exact version across both systems.
   - Jupyter integration (`show()`, `show_anndata()`)
 - Export functionality for web deployment
 
-[0.10.0]: https://github.com/theislab/cellucid-python/releases/tag/v0.10.0
 [0.9.2]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.2
 [0.9.1]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.1
 [0.0.9]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.0

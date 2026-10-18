@@ -4,82 +4,107 @@
 **Time:** 15–30 minutes  
 **Goal:** export embeddings that render correctly and predictably in the web viewer
 
-Embeddings (UMAP coordinates) are the **minimum required geometry** for Cellucid to render anything.
+Embeddings are the **minimum required geometry** for Cellucid to render anything.
 
-`prepare()` supports exporting the *same dataset* in multiple dimensionalities (1D, 2D, 3D). The web app can then switch between them at runtime.
+`prepare()` exports **any number of embeddings, in any of 1D, 2D, and 3D** — a
+UMAP and a t-SNE in 2D, a 3D UMAP, two PCA components, spatial coordinates —
+each under an id of your choosing. One embedding per dimension is that
+dimension's default, and the viewer opens in the highest dimension the export
+carries.
 
 ---
 
 ## Fast path (what you must provide)
 
-You must provide **at least one** of:
-- `X_umap_1d` with shape `(n_cells, 1)`, or a plain `(n_cells,)` vector, or
-- `X_umap_2d` with shape `(n_cells, 2)`, or
-- `X_umap_3d` with shape `(n_cells, 3)`.
+Pass at least one embedding in `embeddings=`, keyed by its id:
+
+```python
+from cellucid import prepare
+
+prepare(
+    latent_space=adata.obsm["X_pca"],
+    obs=adata.obs,
+    embeddings={"X_umap": adata.obsm["X_umap"]},
+    out_dir="./exports/my_dataset",
+    dataset_name="My dataset",
+    dataset_id="my-dataset-v1",
+    obs_categorical_dtype="uint16",
+)
+```
+
+A plain array with 1, 2, or 3 columns — or a plain `(n_cells,)` vector, for 1D —
+is plotted whole, and its column count is its dimension. `prepare()` takes
+arrays, not `obsm` keys: the id is only a name, and your object is never renamed
+or mutated.
 
 Minimal sanity checks before export:
 
 ```python
 import numpy as np
 
-assert X_umap_2d.ndim == 2 and X_umap_2d.shape[1] == 2
-assert np.isfinite(X_umap_2d).all()  # no NaN/Inf
-```
-
-`prepare()` takes arrays, not `obsm` keys: pass each set of coordinates to the
-argument named for its dimension. Scanpy writes `sc.tl.umap()` output to
-`adata.obsm["X_umap"]`, so an export call reads
-`X_umap_2d=adata.obsm["X_umap"]` — your object is never renamed or mutated to
-make that work.
-
-```{note}
-**`prepare()` and serving AnnData directly are two different paths, with two
-different rules. Do not carry one over to the other.**
-
-`prepare()` is unchanged. It takes explicit `X_umap_1d=`, `X_umap_2d=`, and
-`X_umap_3d=` **array** arguments, and reads no `obsm` keys at all. Which
-dimension an array is exported as is decided by the argument you pass it to.
-
-Serving an AnnData object directly ({func}`~cellucid.serve_anndata`,
-{func}`~cellucid.show_anndata`, `cellucid serve …`) reads `obsm` keys instead.
-There, `X_umap_1d`, `X_umap_2d`, and `X_umap_3d` each name their own dimension
-and always decide it, and an object that declares none of them but carries a
-bare `X_umap` has it read at the dimension its own column count states — 1, 2,
-or 3 columns, resolved by its own width, with no rename and no change to your
-object. A bare `X_umap` of any other width is refused with a message naming its
-shape, and an explicit dimensional key anywhere in `obsm` means the bare key
-never joins the resolved set.
-
-The full serve-path rule is in
-{doc}`../d_viewing_apis/08_anndata_mode_show_anndata_and_serve_anndata`.
+umap = adata.obsm["X_umap"]
+assert umap.ndim == 2 and umap.shape[1] in (1, 2, 3)
+assert np.isfinite(umap).all()  # no NaN/Inf
 ```
 
 ---
 
 ## Practical path (computational users)
 
-### Supported embedding arguments (exact)
+### Several embeddings, and which one is shown first
 
-| Argument | Shape | Stored as |
-|---|---:|---|
-| `X_umap_1d` | `(n_cells, 1)` or `(n_cells,)` | `points_1d.bin(.gz)` |
-| `X_umap_2d` | `(n_cells, 2)` | `points_2d.bin(.gz)` |
-| `X_umap_3d` | `(n_cells, 3)` | `points_3d.bin(.gz)` |
+```python
+from cellucid import Embedding, prepare
 
-All embeddings you provide must:
-- be 2D arrays (`ndim == 2`) — except `X_umap_1d`, which also accepts a plain
-  `(n_cells,)` vector and reshapes it to the single column it declares, exactly
-  as AnnData does when such an array is put in `obsm`,
-- have the correct number of columns for their dimensionality,
-- and have the same number of rows (`n_cells`) across all provided dimensions.
+prepare(
+    latent_space=adata.obsm["X_pca"],
+    obs=adata.obs,
+    embeddings={
+        "X_umap": Embedding(adata.obsm["X_umap"], label="UMAP", source_key="X_umap"),
+        "X_tsne": Embedding(adata.obsm["X_tsne"], label="t-SNE", source_key="X_tsne"),
+        "X_pca": Embedding(adata.obsm["X_pca"], columns=[0, 1], label="PC 1 / PC 2"),
+        "X_umap_3d": adata.obsm["X_umap_3d"],
+    },
+    embedding_defaults={"2d": "X_umap"},
+    out_dir="./exports/my_dataset",
+    dataset_name="My dataset",
+    dataset_id="my-dataset-v1",
+    obs_categorical_dtype="uint16",
+)
+```
+
+- **`embeddings`** maps each id to an array or to an {class}`~cellucid.Embedding`.
+  An id obeys the field-identity rule: a non-empty string the viewer can draw
+  exactly as stored. Ids are distinct by construction, because they are mapping
+  keys.
+- **`embedding_defaults`** names the embedding each dimension shows first, as
+  `{"1d": ..., "2d": ..., "3d": ...}`. It is required for every dimension that
+  has more than one embedding, and optional otherwise: a dimension with exactly
+  one embedding uses it. A key for a dimension with no embedding, or a value that
+  is not an embedding of that dimension, is rejected.
+- The highest dimension present is the one the viewer opens in.
+
+### `Embedding`: columns, label, and provenance
+
+| Field | Meaning |
+|---|---|
+| `values` | a real `(n_cells, width)` array, or a `(n_cells,)` vector (width 1); sparse input is densified |
+| `columns` | the 0-based columns to plot, one per axis, so their count (1, 2, or 3) is the dimension. Required when `width > 3`; defaults to every column otherwise |
+| `label` | display text for the embedding, such as `"t-SNE"`; defaults to the id |
+| `source_key` | provenance, such as the `obsm` key the array came from; recorded in `dataset_identity.json` and changes nothing else; defaults to `None` |
+
+`columns` may reorder or drop columns of a narrow array too:
+`Embedding(adata.obsm["X_umap_3d"], columns=[0, 1])` exports the first two UMAP
+axes as a 2D embedding. Columns must be distinct and exist in the array. Only
+the selected columns are read, so a non-finite value in an unselected PCA
+component does not reject the export.
 
 ### Coordinate normalization (what `prepare()` actually does)
 
-Cellucid normalizes each dimensionality **independently** to fit a stable coordinate range for rendering.
+Cellucid normalizes **each embedding independently** to fit a stable coordinate
+range for rendering:
 
-For each dimension `dim ∈ {1,2,3}`:
-
-1) Compute per-axis min/max across all cells.
+1) Compute per-axis min/max across all cells of the selected columns.
 2) Compute the per-axis ranges and take `max_range = max(axis_ranges)`.
 3) Compute the bounding-box center `center = (mins + maxs) / 2`.
 4) Scale all axes by the same factor `scale_factor = 2 / max_range` (aspect ratio preserved).
@@ -90,18 +115,18 @@ X_normalized = (X - center) * scale_factor
 ```
 
 Practical implications:
-- Distances are preserved up to a single scale factor **within each dimensionality**.
-- You should **not** compare distances between 2D and 3D exports (they are normalized independently).
+- Distances are preserved up to a single scale factor **within each embedding**.
+- You should **not** compare distances between two embeddings (they are normalized independently).
 - An embedding with all points identical is rejected because its largest
   per-axis range is zero, so no finite normalization scale exists.
+- A vector field is scaled by the factor of the embedding it is bound to; see
+  {doc}`08_vector_fields_velocity_displacement`.
 
 ### Default dimension and UI switching
 
-The export records:
-- which dimensions are available (1/2/3),
-- and a default dimension (priority: 3D > 2D > 1D).
-
-In the web app, users can switch between available dimensions.
+The export records every embedding with its dimension, the default embedding of
+each dimension, and the highest dimension as the one shown first. In the web app,
+users can switch between the available dimensions.
 
 Related UI docs:
 - Dimension switching: {doc}`../../web_app/c_core_interactions/05_dimension_switching_1d_2d_3d`
@@ -113,45 +138,58 @@ Related UI docs:
 For a 2D embedding, Cellucid selects 2D with Planar navigation; both settings remain explicit if the user chooses another valid configuration.
 ```
 
-### “UMAP” naming vs what you can actually use
+### What you can export
 
-The argument names are UMAP-branded (`X_umap_*d`), but the viewer treats them as **generic coordinates**.
-
-You can export:
+The viewer treats every embedding as **generic coordinates**, so you can export:
 - UMAP coordinates (most common),
-- t-SNE coordinates (as long as they are `(n_cells, 2)` or `(n_cells, 3)`),
+- t-SNE, force-directed, PHATE, or diffusion-map coordinates,
+- two or three principal components of a PCA, through `columns`,
 - spatial coordinates (e.g., x/y) as a 2D embedding.
 
-What you cannot do (yet):
-- export multiple *different* embeddings of the same dimensionality and choose among them in the UI (e.g., both UMAP and t-SNE 2D).
-
-If you need multiple embeddings, use separate exports for now.
+Exports in format 3 carry any number of embeddings per dimension, and need a
+viewer release that reads format 3.
 
 ### Spatial coordinates (common pitfalls)
 
-If you use spatial coordinates as `X_umap_2d`:
+If you export spatial coordinates:
 - Make sure units and axis scaling are meaningful (Cellucid preserves aspect ratio).
 - If your dataset is in microns and spans a huge range, normalization will still fit it to `[-1,1]`, but relative geometry is preserved.
 - If you want “square pixels”, ensure x and y are in the same units.
+
+```{note}
+**`prepare()` and serving AnnData directly are two different paths.**
+
+`prepare()` reads no `obsm` keys: it exports exactly the arrays you pass in
+`embeddings=`. Serving an AnnData object directly
+({func}`~cellucid.serve_anndata`, {func}`~cellucid.show_anndata`,
+`cellucid serve …`) reads `obsm` keys instead — the slots you name with
+`embedding_keys`, then `X_umap_1d`/`X_umap_2d`/`X_umap_3d` or a bare `X_umap`,
+then a deterministic best guess. The full serve-path rule is in
+{doc}`../d_viewing_apis/08_anndata_mode_show_anndata_and_serve_anndata`.
+```
 
 ---
 
 ## Deep path (expert / developer)
 
-### File format: `points_<dim>d.bin(.gz)`
+### File format: `embeddings/<index>_<dim>d.bin(.gz)`
 
+- one file per embedding, in item order: dimension ascending, then id in
+  code-point order. `{index}` is the position in that order
 - dtype: `float32`
 - shape: `(n_cells, dim)`
-- storage: raw row-major float32 bytes (optionally gzip-compressed)
+- storage: raw row-major little-endian float32 bytes (optionally gzip-compressed)
 
-The web app reads these via typed arrays and uses `dataset_identity.json["embeddings"]` to know which files exist.
+`dataset_identity.json["embeddings"]` lists every item — its `label`,
+`dimension`, exact `file`, and `source` (`key` and the 0-based `columns`) — with
+each dimension's default and the default dimension.
 
 Full output spec: {doc}`09_output_format_specification_exports_directory`
 
 ### Determinism and reproducibility
 
 Embedding normalization is deterministic given:
-- the exact embedding arrays,
+- the exact embedding arrays and selected columns,
 - and their floating-point values.
 
 If you recompute UMAP (stochastic), you will get a different export even if everything else is unchanged.
@@ -160,36 +198,39 @@ If you recompute UMAP (stochastic), you will get a different export even if ever
 
 ## Edge cases and common footguns
 
-- **NaN/Inf coordinates**: must be removed before export.
-- **Right array, wrong argument**: the dimension is decided by the argument name,
-  not by the array, so a `(n_cells, 3)` array passed to `X_umap_2d` is rejected
-  rather than truncated.
+- **NaN/Inf coordinates**: must be removed from the selected columns before export.
+- **A wide array without `columns`**: a 50-column PCA is rejected rather than
+  truncated; name the columns to plot.
+- **Two embeddings of one dimension, no default**: rejected until
+  `embedding_defaults` names the one shown first.
 - **Mismatched rows**: embeddings computed on a subset but `obs`/`X` not subset identically.
 - **All-identical embedding**: rejected before export; recompute or supply an
   embedding with a nonzero finite range on at least one axis.
+- **Renumbered files**: adding an embedding changes the payload index of every
+  item after it; resolve paths through `dataset_identity.json`, never by name.
 
 ---
 
 ## Troubleshooting (embeddings)
 
-### Symptom: `prepare()` errors with “must have exactly 2 columns”
-
-Likely causes:
-- You passed a 3D embedding to `X_umap_2d` (or vice versa).
+### Symptom: `Embedding 'X_pca' has 50 columns, and an embedding plots 1, 2, or 3 of them`
 
 Fix:
-- Pass the array to the matching argument name (`X_umap_3d` for `(n_cells, 3)`).
+- Pass `Embedding(adata.obsm["X_pca"], columns=[0, 1])`, naming the 0-based
+  columns to plot.
 
-### Symptom: the object rendered when served directly, but `prepare()` reports no embedding
+### Symptom: `... so embedding_defaults must name the one shown first`
 
 Meaning:
-- The serve path read the object's own bare `X_umap` at the dimension its column
-  count states. `prepare()` reads no `obsm` keys, so an array you never passed
-  never reaches it.
+- Two or more embeddings share a dimension.
 
 Fix:
-- Pass the array to the argument for its dimension, for example
-  `X_umap_2d=adata.obsm["X_umap"]` for a two-column array.
+- Add `embedding_defaults={"2d": "X_umap"}` (or the dimension the message names).
+
+### Symptom: `Embedding 'X_pca': Each axis needs a different column.`
+
+Fix:
+- List each column once in `columns`.
 
 ### Symptom: viewer loads but points are missing / everything is blank
 
@@ -198,8 +239,8 @@ Likely causes:
 - Exported the wrong folder (not the dataset folder root).
 
 How to confirm:
-- `np.isfinite(X_umap).all()`
-- Check that `out_dir/dataset_identity.json` exists and points file exists.
+- `np.isfinite(values).all()` on the array you passed.
+- Check that `out_dir/dataset_identity.json` and `out_dir/embeddings/` exist.
 
 Fix:
 - Filter/recompute embedding; re-export with `force=True` (or to a new directory).
@@ -207,10 +248,10 @@ Fix:
 ### Symptom: dimension switch control missing
 
 Meaning:
-- Only one of 1D/2D/3D was exported.
+- Only one dimension was exported.
 
 Fix:
-- Export multiple dimensionalities by providing multiple `X_umap_*d` arrays.
+- Export embeddings of more than one dimension, for example a 2D and a 3D UMAP.
 
 ---
 

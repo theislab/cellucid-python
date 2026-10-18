@@ -210,12 +210,20 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 - `obs_continuous_quantization=8` for smaller metadata
 - if exporting expression: `var_quantization=8` and/or `gene_identifiers=gene_panel`
 
+Every Seurat reduction can be exported side by side — `Embeddings(seu, "tsne")`
+under `X_tsne`, two PCA components through `cellucid_embedding(columns = ...)` —
+as long as its rows follow the same `cells` order. When a dimension has more
+than one, add `embedding_defaults = c("2d" = "X_umap")`.
+
 ```r
 cellucid_prepare(
   latent_space = latent_space,
   obs = obs,
-  X_umap_2d = umap2,
-  # X_umap_3d = umap3,  # optional
+  embeddings = list(
+    X_umap = cellucid_embedding(umap2, label = "UMAP", source_key = "umap")
+    # X_umap_3d = umap3,  # optional
+    # X_pca = cellucid_embedding(Embeddings(seu, "pca")[cells, ], columns = c(1, 2)),
+  ),
   obs_categorical_dtype = "uint16",
   dataset_name = "Seurat Export",
   dataset_id = "seurat_export",
