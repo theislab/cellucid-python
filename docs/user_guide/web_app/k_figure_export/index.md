@@ -96,7 +96,8 @@ Example: a 1200×900 plot at 300 DPI will produce an image roughly `1200×(300/9
   - `<dataset>_<color-field>_<view>_dpi300_<timestamp>.png` (when exporting multiple DPIs)
   - `<dataset>_<color-field>_<view>_batch_<timestamp>.zip` (batch download)
   - `<view>` is `multiview` for a grid, and `<color-field>` is dropped when the
-    grid's panels do not all use the same field.
+    grid's panels do not all use the same field. A view still labelled with
+    its color field adds no `<view>` segment, so the field appears once.
 
 :::{important}
 Exports can embed provenance metadata that may include **dataset names/ids, the

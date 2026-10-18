@@ -240,7 +240,8 @@ are browser chrome — Playwright cannot capture them, and both would expose
 
 - **Interaction:** immediately after the file is supplied, capture the
   NotificationCenter download card while it is still progressing.
-- **Crop:** `#notification-center` — the card titled `Loading session`, its
+- **Crop:** `#notification-center` — the card titled `Loading` that names
+  `Session file`, its
   `.notification-progress-bar`, `.notification-progress-text`,
   `.notification-speed`, and the `×` button
   (`.notification-dismiss[data-role="cancel"]`, `aria-label="Cancel"`).

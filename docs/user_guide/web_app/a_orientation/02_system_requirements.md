@@ -73,6 +73,13 @@ that device.
 - On a phone-sized screen (720 px wide or less) the sidebar opens over the whole
   screen. Tap **✕** in its top-right corner to close it and see the plot; tap
   **☰** in the top-left corner to bring it back.
+- On a touch screen the small icon buttons grow to fingertip size, and the
+  controls that otherwise wait for a mouse to hover over them (the analysis
+  rows' copy buttons, the highlight page tabs' buttons, plot toolbars) are always
+  shown. An undocked panel moves by dragging its header with a finger.
+- Selecting cells (highlighting) is an {kbd}`Alt` + click or
+  {kbd}`Alt` + drag gesture, so it needs a keyboard; it is not available by
+  touch alone.
 
 ---
 
