@@ -42,7 +42,10 @@ Code:
 `DataState` owns the arrays that back rendering and visibility:
 
 - `pointCount`: number of points/cells
-- `positionsArray`: normalized positions (used for smoke density; updated on dimension switches)
+- `positionsArray`: the live view's normalized positions, with exactly
+  `positionsDimension` components per cell (x, xy or xyz — never padded to
+  XYZ); both are updated together on live dimension switches and read by smoke
+  density and the session fingerprint
 - `colorsArray`: RGBA color buffer (uint8 packed)
 - `categoryTransparency`: per-point alpha (float32), used for filtering/visibility
 - `outlierQuantilesArray`: per-point outlier quantiles (float32), used by outlier filter logic
@@ -252,8 +255,10 @@ Two consequences for contributors:
 
 - Dimension changes:
   - loads new positions for the requested dimension
-  - updates `positionsArray`
-  - calls `viewer.updatePositions(newPositions)`
+  - updates `positionsArray` and `positionsDimension` (live view)
+  - calls `viewer.updatePositions(newPositions, dimensionLevel)` (or
+    `viewer.setViewPositions` for a kept view) before
+    `viewer.setViewDimension`: a view's dimension is its position layout
   - triggers `dimension:changed`
 
 The bulk of this wiring lives under:
@@ -284,7 +289,7 @@ state.on('highlight:changed', () => console.log('highlight:changed'));
 ### 3) Confirm invariants
 
 Useful checks:
-- `state.pointCount` matches `state.colorsArray.length / 4` and `state.positionsArray.length / 3`.
+- `state.pointCount` matches `state.colorsArray.length / 4` and `state.positionsArray.length / state.positionsDimension`.
 - `state.getActiveViewId()` is what you think it is (live vs snapshot).
 
 If these invariants break, most UI behavior becomes misleading.

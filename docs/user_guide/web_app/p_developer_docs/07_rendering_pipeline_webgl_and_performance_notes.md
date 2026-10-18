@@ -41,7 +41,8 @@ Hard constraints:
 
 - **Scatter points (main cloud)**
   - Backend: `HighPerfRenderer` (`cellucid/assets/js/rendering/high-perf-renderer.js`)
-  - Receives: positions (float32), colors (RGBA uint8 packed), and alpha/transparency.
+  - Receives: positions (float32, one component per embedding axis), colors
+    (RGBA uint8 packed), and alpha/transparency.
   - Notes:
     - Spatial indexing is dimension-aware (binary tree / quadtree / octree), used for picking/LOD.
     - Positions and colors are **two separate vertex streams** — see
@@ -53,8 +54,23 @@ Full detail is drawn from two `ARRAY_BUFFER`s bound into one VAO:
 
 | Attribute | Stream | Layout | Bytes per point | Usage |
 | --- | --- | --- | --- | --- |
-| 0 `a_position` | `buffers.positions` | Float32 XYZ, tightly packed | 12 | `STATIC_DRAW` |
+| 0 `a_position` | `buffers.positions` | Float32, one component per embedding axis (x, xy or xyz), tightly packed | 4, 8 or 12 | `STATIC_DRAW` |
 | 1 `a_color` | `buffers.colors` | RGBA8, normalized | 4 | `DYNAMIC_DRAW` |
+
+Positions are never padded to XYZ. Every view's positions — `DataState`, the
+viewer's per-view cache, the renderer, the spatial index, the LOD compact
+store, snapshot geometry and the edge position texture — hold exactly as many
+components per cell as the embedding has, and that count is the view's
+dimension level (`rendering/position-layout.js`). The shaders keep a `vec3`
+`a_position`; the attribute is bound with 1, 2 or 3 components and WebGL
+supplies 0 for the axes a 1D or 2D stream does not carry, which is exactly the
+value of an axis the embedding does not have. A 2D embedding therefore costs
+8 bytes a point of positions instead of 12 on both the CPU and the GPU, and is
+normalized in place on load instead of being expanded into a padded copy. CPU
+code that needs a 3D point reads it with `readPositionXYZ`, which writes the
+missing axes as zero without allocating. Because a view's dimension *is* its
+position layout, a view changes dimension only by publishing that dimension's
+positions (`updatePositions` / `setViewPositions`).
 
 Alpha is not taken from the color stream while a dataset is loaded: it lives in
 a separate R8 texture (one texel per point), so a visibility change touches
@@ -65,15 +81,17 @@ Each full-detail store is allocated straight from the published typed array
 renderer holds no client copy of either. A recolor is one in-place
 `bufferSubData` of the RGBA array; the positions are not re-sent.
 
-Level of detail keeps one **compact prefix** per dimension: the largest reduced
+Level of detail keeps one **compact prefix** for the live geometry (the live
+positions have one dimension, so there is exactly one): the largest reduced
 level's points in hierarchical order, held as the same two streams (a compact
-position store and a compact color store, one VAO), plus one original-ID
+position store with the live dimension's components and a compact color
+store, one VAO), plus one original-ID
 element buffer and one R32UI index texture shared by every reduced level. The
 compact stores are gathered through one fixed 65,536-point staging block
 (`GATHER_CHUNK_POINTS`), positions and colors in separate passes, colors one
 32-bit word at a time — which is why color arrays handed to the renderer must
-start on a 4-byte boundary. A recolor rewrites only each resident dimension's
-compact color store, in place, the next time that dimension renders.
+start on a 4-byte boundary. A recolor rewrites only that compact color store,
+in place, the next time the live dimension renders.
 
 The compact copy is deliberate. Drawing reduced levels through the original-ID
 element buffer straight from the full-detail streams would remove the copy and
@@ -155,27 +173,30 @@ The viewer exposes a small API surface used by `DataState` and `main.js`.
 
 ### Core dataset load
 
-- `viewer.setData({ positions, colors, outlierQuantiles, transparency, dimensionLevel })`
+- `viewer.setData({ positions, colors, transparency, dimensionLevel })`
   - Initializes point buffers and builds spatial indices.
+  - `positions` hold exactly `dimensionLevel` Float32 values per point.
   - `colors` are RGBA uint8 packed; `transparency` is a separate float array used for filtering.
 
 ### Incremental updates (critical for performance)
 
 - `viewer.updateColors(colors)`
   - Rewrites the 4-byte-per-point color stream in place on the next frame, plus
-    4 bytes per compact LOD point for each dimension that has LOD resources
-    when it next renders. Positions, the alpha texture and the LOD topology
+    4 bytes per compact LOD point when the live dimension, which owns the LOD
+    resources, next renders. Positions, the alpha texture and the LOD topology
     are not touched.
 
 - `viewer.updateTransparency(alphaArray)`
   - Updates alpha/visibility texture/buffer.
   - Also triggers highlight/overlay rebuild hooks (e.g., selection needs the new visibility mask).
 
-- `viewer.updatePositions(positions)`
+- `viewer.updatePositions(positions, dimensionLevel)`
   - Used for dimension switching (same point count, different embedding).
-  - Must preserve the same indices; mismatched lengths are rejected.
+  - Must preserve the same indices; `positions` must hold exactly
+    `pointCount * dimensionLevel` values, and other lengths are rejected.
   - It is a new data publication: both streams are re-allocated straight from
-    their arrays (12 + 4 bytes a point, nothing repacked), the alpha texture is
+    their arrays (4 bytes per embedding axis + 4 bytes a point, nothing
+    repacked), the alpha texture is
     republished, and spatial indices are rebuilt when LOD or frustum culling
     needs them. With LOD on, the spatial-index build dominates its cost.
 
@@ -422,7 +443,8 @@ Prefer:
 Smoke density never makes a full duplicate position array. It retains the
 dataset-owned positions, alpha, and optional outlier-quantile arrays, validates
 them in place, and streams visible positions through a transient buffer fixed
-at 262,144 XYZ points (3 MiB). Large inputs are submitted in bounded batches.
+at 262,144 points in the source layout (at most 3 MiB, for a 3D embedding).
+Large inputs are submitted in bounded batches.
 Do not replace this with a buffer sized to the complete dataset or introduce
 GPU→CPU volume readback. The grid cap and early release of completed reduction
 textures bound the other transient memory.
@@ -524,12 +546,13 @@ Fix:
 ### Symptom: “Dimension switch breaks rendering”
 
 Likely causes:
-- `updatePositions` received wrong length (`pointCount * 3` required).
+- `updatePositions` received the wrong length (`pointCount * dimensionLevel`
+  required).
 - Embedding fetch failed and returned empty/invalid buffer.
 
 How to confirm:
 - DevTools → Network: check embedding requests.
-- Console: look for `[Viewer] updatePositions: position count mismatch`.
+- Console: look for `Viewer live positions must contain exactly … values`.
 
 Fix:
 - Validate embedding buffers before calling viewer updates.

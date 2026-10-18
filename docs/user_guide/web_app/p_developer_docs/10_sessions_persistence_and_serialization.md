@@ -190,11 +190,15 @@ written into the manifest at save and re-derived from live state at restore:
 | `cellCount` | `state.pointCount` | |
 | `varCount` | the dataset's own var fields in `state.varData.fields` | user-defined fields (for example a duplicated gene) are not counted, so a session that added one still matches the freshly loaded dataset |
 | `cellOrder.dimension` | `state.getViewDimensionLevel('live')` | exactly 1, 2, or 3 |
-| `cellOrder.digest` | `digestCellOrder(state.positionsArray)` | 16 lowercase hex characters |
+| `cellOrder.digest` | `digestCellOrder(state.positionsArray, cellOrder.dimension)` | 16 lowercase hex characters |
 
 `getDatasetFingerprint()` throws unless `state.positionsArray` is a
-`Float32Array` of exactly `cellCount * 3` values, so a fingerprint is never
-produced from a partially published dataset.
+`Float32Array` of exactly `cellCount * cellOrder.dimension` values, so a
+fingerprint is never produced from a partially published dataset. The digest
+is defined over XYZ triples: a 1D or 2D embedding is held with only its own
+components per cell, and the axes it lacks are folded in as the zero words they
+are, so the digest does not depend on the in-memory layout and every saved
+session and published preset keeps matching.
 
 ### Why `cellOrder` exists
 

@@ -338,7 +338,8 @@ When something “doesn’t load”, do the following in order:
 5) **Confirm point buffer sizes**
    - After load, check:
      - `window._cellucidState.pointCount`
-     - `window._cellucidState.positionsArray.length === pointCount * 3`
+     - `window._cellucidState.positionsArray.length === pointCount * window._cellucidState.positionsDimension`
+       (positions hold the embedding's own components: 1, 2 or 3 per cell)
 
 6) **Check gzip support**
    - Cellucid requires native `DecompressionStream('gzip')` for `.gz` files.

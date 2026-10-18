@@ -67,8 +67,12 @@ At a high level:
   every cell on the CPU.
 - A recolor (switching the colored field or gene) uploads 4 bytes per point —
   only the color stream; positions live in a separate stream and are not
-  re-sent. With LOD built, each dimension's shared reduced copy is recolored
-  the same way, 4 bytes per reduced point.
+  re-sent. With LOD built, the live embedding's shared reduced copy is
+  recolored the same way, 4 bytes per reduced point.
+- Positions cost 4 bytes per embedding axis per point, on the CPU and on the
+  GPU: a 2D UMAP or t-SNE is held as x and y only (8 bytes a point), never
+  padded to XYZ, so it takes a third less position memory than a 3D
+  embedding of the same cells.
 - Some modules add full-screen passes or per-view framebuffers, making performance scale with **pixel count**.
 
 So “performance” is usually about:
