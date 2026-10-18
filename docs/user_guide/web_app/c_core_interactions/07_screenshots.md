@@ -34,20 +34,20 @@ Pancreas sample at twice the device pixel ratio.
 :width: 480px
 
 `Render mode` sits at the top of **Visualization** and has exactly two options,
-`Points` and `Volumetric smoke cloud (alpha)`. Almost everything below it —
+`Points` and `Volumetric smoke cloud (beta)`. Almost everything below it —
 starting with the **Depth perception** box shown here — belongs to the points
 renderer and is hidden in smoke mode; **Image quality** is the exception and
-stays in both modes. Choosing smoke also shows an `Alpha` pill beside the
+stays in both modes. Choosing smoke also shows a `Beta` pill beside the
 `Render mode:` label, which is why no pill is visible here. Scenario
 `core-render-mode-select`.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/window-smoke-cloud.png
-:alt: The whole window in Volumetric smoke cloud mode: the Pancreas cells drawn as a soft, lit cloud tinted with the colours of their clusters inside the grid box, and the sidebar showing the Volumetric smoke controls with Grid density 128³, Ray quality High, Render resolution 0.50x, Noise detail 128³, Cloud density 1.00 and Animation speed Still.
+:alt: The whole window in Volumetric smoke cloud mode: the Pancreas cells drawn as a soft, lit cloud tinted with the colours of their clusters inside the grid box, and the sidebar showing Render mode set to Volumetric smoke cloud (beta) with its Beta tag, then the Volumetric smoke controls with Grid density 128³, Ray quality High, Render resolution 0.50x, Noise detail 128³, Cloud density 1.00 and Animation speed Still.
 :width: 1440px
 
 **Volumetric smoke cloud**, coloured by `clusters`. The cloud carries each
-cluster's legend colour, the `Alpha` pill is showing, and every smoke control is
+cluster's legend colour, the `Beta` pill is showing, and every smoke control is
 at its initial value except `Animation speed:`, held at 0 (`Still`) so the
 frame stops changing and the capture is reproducible. Scenario
 `core-window-smoke-cloud`.

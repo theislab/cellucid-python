@@ -36,6 +36,11 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Fixed
 
+- **Web app**: the volumetric smoke cloud is now **beta** rather than alpha. It
+  is coloured, bounded and idle-aware after this release's rewrite; the tag beside
+  `Render mode:` reads `Beta` in the calmer info tone, and its hover text no
+  longer says the mode is still changing.
+
 - **Web app**: analysis plots of large pages draw several times faster, with
   identical results. Plotly's violin density evaluated its kernel once per value
   at every curve point; a local, test-pinned patch to the vendored Plotly

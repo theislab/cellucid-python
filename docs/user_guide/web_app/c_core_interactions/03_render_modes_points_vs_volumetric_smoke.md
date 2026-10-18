@@ -5,8 +5,8 @@
 
 Cellucid starts in **Points**. Choose **Volumetric smoke cloud** only when a
 density-shaped overview is more useful than individual-cell inspection. The
-dropdown labels it `(alpha)` and the sidebar tags it `Alpha`: it is still
-changing, it is slower than points, and figure export cannot reproduce it.
+dropdown labels it `(beta)` and the sidebar tags it `Beta`: it is slower than
+points, and figure export cannot reproduce it.
 
 ## Choose the representation before tuning it
 
@@ -28,16 +28,16 @@ or turn an embedding into a physical tissue volume.
 Use **Visualization → Render mode:**:
 
 - `Points` is the default.
-- `Volumetric smoke cloud (alpha)` reveals **Volumetric smoke:** and hides the
+- `Volumetric smoke cloud (beta)` reveals **Volumetric smoke:** and hides the
   points-only depth, renderer, connectivity, and vector-field controls.
   **Image quality** stays, in both modes, because both renderers draw into the
   same application-owned multisampled scene target rather than into a buffer of
   their own.
 
-A pill reading `Alpha` sits beside the `Render mode:` label and is shown only
+A pill reading `Beta` sits beside the `Render mode:` label and is shown only
 while smoke is the selected mode. It names the maturity of the selected option,
 not of the control, so `Points` never wears it, and its hover text reads
-`Volumetric smoke cloud is in alpha: it is still changing, it is slower than points, and figure export cannot reproduce it.`
+`Volumetric smoke cloud is in beta: it is slower than points, and figure export cannot reproduce it.`
 Smoke is the only thing in Cellucid carrying a maturity tag; see
 {doc}`../a_orientation/04_ui_glossary_terminology`.
 
@@ -109,7 +109,7 @@ legend colour and a continuous field blends its colormap. Density sets how
 opaque a region is; the colour says which cells produced it.
 
 ```{figure} ../../../_static/screenshots/web_app/window-smoke-cloud.png
-:alt: The whole window in Volumetric smoke cloud mode: the Pancreas cells drawn as a soft, lit cloud tinted with the colours of their clusters inside the grid box, and the sidebar showing the Volumetric smoke controls with Grid density 128³, Ray quality High, Render resolution 0.50x, Noise detail 128³, Cloud density 1.00 and Animation speed Still.
+:alt: The whole window in Volumetric smoke cloud mode: the Pancreas cells drawn as a soft, lit cloud tinted with the colours of their clusters inside the grid box, and the sidebar showing Render mode set to Volumetric smoke cloud (beta) with its Beta tag, then the Volumetric smoke controls with Grid density 128³, Ray quality High, Render resolution 0.50x, Noise detail 128³, Cloud density 1.00 and Animation speed Still.
 :width: 1440px
 
 The Pancreas sample coloured by `clusters` and switched to smoke, with every
@@ -228,7 +228,7 @@ views carry the initial values in the tables above. See
 1. Return to `Points`.
 2. Confirm that points are visible and **Showing … points** is not zero.
 3. Relax categorical, continuous, and outlier filters.
-4. Select `Volumetric smoke cloud (alpha)` again.
+4. Select `Volumetric smoke cloud (beta)` again.
 5. Increase `Cloud density:` only after visible cells are confirmed.
 
 ### Interaction is slow or the WebGL context is lost

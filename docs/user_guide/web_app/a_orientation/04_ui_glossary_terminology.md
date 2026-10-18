@@ -77,17 +77,17 @@ keyboard and screen-reader behavior.
 
 - **`Render mode:`**: the dropdown that decides how points are drawn. It has
   exactly two options: `Points`, the default, which draws one point per cell;
-  and `Volumetric smoke cloud (alpha)`, which draws a continuous density cloud,
+  and `Volumetric smoke cloud (beta)`, which draws a continuous density cloud,
   coloured by the active field, instead. **“Smoke mode”** in these pages always
   means the second one.
 - **Maturity tag**: a small pill beside a control's label naming how finished
   the currently selected option is. It describes the option you chose, not the
   control it sits next to.
-- **`Alpha`**: the only maturity tag in the app. It sits beside `Render mode:`
-  and appears only while `Volumetric smoke cloud (alpha)` is the selected mode;
+- **`Beta`**: the only maturity tag in the app. It sits beside `Render mode:`
+  and appears only while `Volumetric smoke cloud (beta)` is the selected mode;
   `Points` never wears it, and nothing else in Cellucid is tagged.
 - Its hover text reads
-  `Volumetric smoke cloud is in alpha: it is still changing, it is slower than points, and figure export cannot reproduce it.`
+  `Volumetric smoke cloud is in beta: it is slower than points, and figure export cannot reproduce it.`
 
 See {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` for
 what alpha means in practice for that mode.

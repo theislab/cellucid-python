@@ -2312,10 +2312,10 @@
       "settled": true,
       "uses_timeout": false,
       "page_errors": [],
-      "sha256": "ef8be42ccdedead466849c06477d877f56c85c0a7074e8f8815fa9ef7f00917b",
-      "web_repository_revision": "09f738bb66ad6b73cfbc650170c93f5ffd59740e",
+      "sha256": "9d80b6399d2a1c87d821359a92209b5fe155a8662973ad456776d780e3c0dd2b",
+      "web_repository_revision": "f82f2067a9d7c5bc6203fb57991e9ca5b592098e",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-18T13:24:35Z"
+      "captured_at": "2026-10-18T13:40:49Z"
     }
   }
 }
