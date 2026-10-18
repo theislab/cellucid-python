@@ -1,11 +1,14 @@
 """
 Discovering the exported datasets a served directory declares.
 
-A served root is either one export directory or a directory of them. Each
-candidate is admitted only with a readable ``dataset_identity.json`` whose id
-and name pass the same contracts the writer applied, and whose directory name
-is a portable filename component, because that name becomes the URL path the
-viewer requests.
+A served root is either one export directory or a directory of them. An export
+directory is recognised by its ``dataset_identity.json``, ``obs_manifest.json``
+and ``embeddings/`` directory. Each candidate is admitted only with a readable
+version-3 ``dataset_identity.json`` whose id and name pass the same contracts
+the writer applied, and whose directory name is a portable filename component,
+because that name becomes the URL path the viewer requests. Which embedding
+files it must hold is decided by its declaration, which the artifact inventory
+reads.
 """
 
 from __future__ import annotations
@@ -14,6 +17,8 @@ import json
 from pathlib import Path
 
 from .._contracts import (
+    EMBEDDINGS_DIRNAME,
+    IDENTITY_VERSION,
     _require_dataset_id,
     _require_dataset_name,
     _require_portable_filename_component,
@@ -31,25 +36,13 @@ def _read_exported_dataset_entry(
         dataset_dir / "dataset_identity.json",
         dataset_dir / "obs_manifest.json",
     )
-    point_files: list[Path] = []
-    for dimension in (1, 2, 3):
-        candidates = [
-            dataset_dir / f"points_{dimension}d.bin",
-            dataset_dir / f"points_{dimension}d.bin.gz",
-        ]
-        existing = [candidate for candidate in candidates if candidate.exists()]
-        if len(existing) > 1:
-            raise ValueError(
-                f"{dataset_dir.name!r} is not a complete exported dataset: "
-                f"both compressed and uncompressed {dimension}D points exist."
-            )
-        point_files.extend(existing)
-
+    embeddings_dir = dataset_dir / EMBEDDINGS_DIRNAME
     if (
         not dataset_dir.is_dir()
         or any(not path.is_file() for path in required_files)
-        or not point_files
-        or any(path.stat().st_size == 0 for path in point_files)
+        or embeddings_dir.is_symlink()
+        or not embeddings_dir.is_dir()
+        or not any(embeddings_dir.iterdir())
     ):
         raise ValueError(f"{dataset_dir.name!r} is not a complete exported dataset.")
 
@@ -65,8 +58,11 @@ def _read_exported_dataset_entry(
         raise TypeError("dataset_identity.json must contain a JSON object.")
     if not isinstance(obs_manifest, dict):
         raise TypeError("obs_manifest.json must contain a JSON object.")
-    if type(identity.get("version")) is not int or identity["version"] != 2:
-        raise ValueError("dataset_identity.json version must be exactly 2.")
+    if type(identity.get("version")) is not int or identity["version"] != IDENTITY_VERSION:
+        raise ValueError(
+            f"dataset_identity.json version must be exactly {IDENTITY_VERSION}. "
+            "Re-export the dataset with the current prepare() or cellucid_prepare()."
+        )
 
     dataset_id = _require_dataset_id(
         identity.get("id"),
@@ -86,37 +82,32 @@ def _read_exported_dataset_entry(
     return entry
 
 
+def _declares_exported_dataset(directory: Path) -> bool:
+    """Whether a directory holds any marker of one export generation."""
+    return any(
+        marker.exists()
+        for marker in (
+            directory / "dataset_identity.json",
+            directory / "obs_manifest.json",
+            directory / EMBEDDINGS_DIRNAME,
+        )
+    )
+
+
 def _list_exported_datasets(data_dir: Path) -> list[dict[str, str]]:
     """Classify one exact prepared dataset or a root containing only datasets."""
     data_dir = Path(data_dir).expanduser()
     if not data_dir.is_dir():
         raise NotADirectoryError(f"Prepared-data path must be a directory: {data_dir}")
 
-    direct_markers = (
-        data_dir / "dataset_identity.json",
-        data_dir / "obs_manifest.json",
-        *data_dir.glob("points_*d.bin"),
-        *data_dir.glob("points_*d.bin.gz"),
-    )
-    if any(path.exists() for path in direct_markers):
+    if _declares_exported_dataset(data_dir):
         return [_read_exported_dataset_entry(data_dir, public_path="/")]
 
     subdirectories = sorted(path for path in data_dir.iterdir() if path.is_dir())
     if not subdirectories:
         return []
 
-    candidate_flags = [
-        any(
-            marker.exists()
-            for marker in (
-                subdir / "dataset_identity.json",
-                subdir / "obs_manifest.json",
-                *subdir.glob("points_*d.bin"),
-                *subdir.glob("points_*d.bin.gz"),
-            )
-        )
-        for subdir in subdirectories
-    ]
+    candidate_flags = [_declares_exported_dataset(subdir) for subdir in subdirectories]
     if not any(candidate_flags):
         return []
 

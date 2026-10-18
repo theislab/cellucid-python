@@ -240,7 +240,14 @@ Examples:
     # Serve the neighbor graph and the velocity overlay, both off by default
     # because each is read and checked in full before the server binds
     cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \\
-        --connectivity --vector-fields
+        --knn connectivities --vector-fields
+
+    # Choose what is plotted: t-SNE in 2D, PCA components 1 and 2 in a second
+    # run, and expression from a layer named by the gene-symbol column
+    cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \\
+        --embedding-2d X_tsne --expression layer:log1p --gene-id-column gene_symbols
+    cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \\
+        --embedding-2d X_pca:0,1
 
     # For SSH tunnel access from a remote server:
     # On the server: cellucid serve /path/to/data
@@ -315,19 +322,68 @@ Examples:
         ),
     )
 
+    for dimension in (1, 2, 3):
+        serve_parser.add_argument(
+            f"--embedding-{dimension}d",
+            type=str,
+            default=None,
+            dest=f"embedding_{dimension}d",
+            metavar="KEY[:COLUMNS]",
+            help=(
+                f"AnnData obsm array to plot in {dimension}D, optionally with its "
+                f"0-based columns, e.g. X_pca:{','.join(str(c) for c in range(dimension))}. "
+                "Overrides the default (X_umap_<n>d or X_umap) for this dimension"
+            ),
+        )
+
     serve_parser.add_argument(
-        "--connectivity",
-        action="store_true",
+        "--knn",
+        type=str,
         default=None,
+        metavar="KEY",
         help=(
-            "Serve the obsp['connectivities'] neighbor graph. Off by default: "
-            "reading it costs time and memory proportional to the stored "
-            "neighbor count, which on a large dataset is the longest part of "
-            "startup"
+            "AnnData obsp matrix to serve as the neighbor graph, usually "
+            "'connectivities'. Off by default: reading it costs time and memory "
+            "proportional to the stored neighbor count, which on a large dataset "
+            "is the longest part of startup. A matrix that is not symmetric, "
+            "such as 'distances', is refused"
         ),
     )
 
+    serve_parser.add_argument(
+        "--gene-id-column",
+        type=str,
+        default=None,
+        metavar="COLUMN",
+        help=(
+            "AnnData var column (raw.var with --expression raw) whose values "
+            "name the genes; the var index is used when omitted"
+        ),
+    )
+
+    serve_parser.add_argument(
+        "--expression",
+        type=str,
+        default=None,
+        metavar="X|raw|layer:NAME",
+        help="Where AnnData gene expression is read: X (default), raw, or layer:NAME",
+    )
+
     serve_parser.set_defaults(func=_run_serve)
+
+
+def _parse_embedding_flag(value: str, *, flag: str) -> str | tuple[str, list[int]]:
+    """Parse ``KEY`` or ``KEY:c0,c1`` into an ``embedding_keys`` value.
+
+    The columns are 0-based. A key that itself contains ``:`` is read whole
+    unless what follows its last ``:`` is a comma-separated list of integers.
+    """
+    if not value:
+        raise ValueError(f"{flag} needs an obsm key, for example {flag} X_tsne.")
+    key, separator, columns = value.rpartition(":")
+    if separator and key and columns and all(part.isdigit() for part in columns.split(",")):
+        return key, [int(part) for part in columns.split(",")]
+    return value
 
 
 def _run_serve(args: argparse.Namespace) -> None:
@@ -364,7 +420,12 @@ def _run_serve(args: argparse.Namespace) -> None:
                     "--vector-field-default",
                     args.vector_field_default is not None,
                 ),
-                ("--connectivity", args.connectivity is not None),
+                ("--embedding-1d", args.embedding_1d is not None),
+                ("--embedding-2d", args.embedding_2d is not None),
+                ("--embedding-3d", args.embedding_3d is not None),
+                ("--knn", args.knn is not None),
+                ("--gene-id-column", args.gene_id_column is not None),
+                ("--expression", args.expression is not None),
                 ("--vector-fields", args.vector_fields is not None),
             )
             if supplied
@@ -428,13 +489,24 @@ def _run_serve(args: argparse.Namespace) -> None:
         if not args.quiet:
             console_print("done")
 
+        embedding_keys = {
+            f"{dimension}d": _parse_embedding_flag(
+                getattr(args, f"embedding_{dimension}d"),
+                flag=f"--embedding-{dimension}d",
+            )
+            for dimension in (1, 2, 3)
+            if getattr(args, f"embedding_{dimension}d") is not None
+        }
         adapter_options = {
             "latent_key": args.latent_key,
+            "gene_id_column": args.gene_id_column,
             "dataset_name": args.dataset_name,
             "dataset_id": args.dataset_id,
             "obs_keys": args.obs_key,
+            "embedding_keys": embedding_keys or None,
+            "knn_key": args.knn,
+            "expression_source": "X" if args.expression is None else args.expression,
             "vector_field_default": args.vector_field_default,
-            "serve_connectivity": bool(args.connectivity),
             "serve_vector_fields": bool(args.vector_fields),
         }
         serve_anndata(

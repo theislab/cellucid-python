@@ -68,24 +68,24 @@ def _compute_centroids_for_field(
     return centroids
 
 
-def _compute_centroids_for_all_dimensions(
-    embeddings: dict[int, np.ndarray],
+def _compute_centroids_for_all_embeddings(
+    coordinates_by_id: dict[str, np.ndarray],
     codes: np.ndarray,
     categories: list[JsonScalar],
     outlier_quantile: float = 0.95,
     min_points: int = 10,
-) -> dict[int, list[dict]]:
+) -> dict[str, list[dict]]:
     """
-    Compute centroids for each available dimension.
+    Compute centroids on every exported embedding.
 
-    Returns a dictionary keyed by dimension (1, 2, 3) with centroid lists for each.
+    Returns a dictionary keyed by embedding id, in the order the ids were given.
     """
-    centroids_by_dim = {}
-    for dim, coords in embeddings.items():
-        centroids_by_dim[dim] = _compute_centroids_for_field(
+    return {
+        embedding_id: _compute_centroids_for_field(
             coords, codes, categories, outlier_quantile, min_points
         )
-    return centroids_by_dim
+        for embedding_id, coords in coordinates_by_id.items()
+    }
 
 
 def _compute_latent_space_quantiles(

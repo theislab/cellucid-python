@@ -9,12 +9,13 @@ session capture -- is inherited unchanged from :class:`BaseViewer`.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .._contracts import _require_dataset_id, _require_dataset_name
 from .._server_base import CELLUCID_WEB_URL
+from ..data_mapping import EmbeddingKeySpec
 from ._base import BaseViewer, logger
 
 if TYPE_CHECKING:
@@ -69,8 +70,10 @@ class AnnDataViewer(BaseViewer):
         dataset_name: str,
         dataset_id: str,
         obs_keys: Sequence[str] | None = None,
+        embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
+        knn_key: str | None = None,
+        expression_source: str = "X",
         vector_field_default: str | None = None,
-        serve_connectivity: bool = False,
         serve_vector_fields: bool = False,
         client_server_url: str | None = None,
         web_source_url: str = CELLUCID_WEB_URL,
@@ -101,15 +104,22 @@ class AnnDataViewer(BaseViewer):
             obs_keys: Exact ``obs`` columns to serve, in this order. If None,
                 every column is served. Naming the columns leaves out a column
                 Cellucid cannot serve, such as a ``datetime64`` collection date.
+            embedding_keys: The embedding of a dimension slot, such as
+                ``{"2d": "X_tsne"}`` or ``{"2d": ("X_pca", [2, 0])}`` with 0-based
+                columns. Slots not named follow the default rule, and a
+                deterministic best guess applies when no slot resolves.
+            knn_key: The ``obsp`` matrix to serve as the neighbour graph, such as
+                ``"connectivities"``. None by default, because building the edge
+                list is the longest part of opening a large object and most
+                sessions never draw the graph. A matrix that is not symmetric is
+                refused.
+            expression_source: ``"X"`` (the default), ``"raw"``, or
+                ``"layer:<name>"``.
             vector_field_default: Exact field id required when multiple UMAP
                 vector fields exist.
-            serve_connectivity: Whether to read, validate, and serve
-                ``adata.obsp['connectivities']``. False by default, because
-                building the edge list is the longest part of opening a large
-                object and most sessions never draw the graph.
             serve_vector_fields: Whether to read, validate, and serve the
                 ``<field>_umap_<n>d`` vector arrays in ``obsm``. False by default,
-                for the same reason as ``serve_connectivity``.
+                for the same reason as ``knn_key``.
             client_server_url: Exact browser-reachable data server base URL.
             web_source_url: Origin publishing the web asset inventory.
             web_cache_dir: Directory holding the active verified web build.
@@ -146,8 +156,10 @@ class AnnDataViewer(BaseViewer):
                 dataset_name=dataset_name,
                 dataset_id=dataset_id,
                 obs_keys=obs_keys,
+                embedding_keys=embedding_keys,
+                knn_key=knn_key,
+                expression_source=expression_source,
                 vector_field_default=vector_field_default,
-                serve_connectivity=serve_connectivity,
                 serve_vector_fields=serve_vector_fields,
             )
             self._activate()
@@ -169,8 +181,10 @@ class AnnDataViewer(BaseViewer):
         dataset_name: str,
         dataset_id: str,
         obs_keys: Sequence[str] | None,
+        embedding_keys: Mapping[str, EmbeddingKeySpec] | None,
+        knn_key: str | None,
+        expression_source: str,
         vector_field_default: str | None,
-        serve_connectivity: bool,
         serve_vector_fields: bool,
     ) -> None:
         """Start the AnnData server."""
@@ -194,8 +208,10 @@ class AnnDataViewer(BaseViewer):
             dataset_name=dataset_name,
             dataset_id=dataset_id,
             obs_keys=obs_keys,
+            embedding_keys=embedding_keys,
+            knn_key=knn_key,
+            expression_source=expression_source,
             vector_field_default=vector_field_default,
-            serve_connectivity=serve_connectivity,
             serve_vector_fields=serve_vector_fields,
         )
         self._server.start_background()
@@ -246,8 +262,10 @@ def show_anndata(
     dataset_name: str,
     dataset_id: str,
     obs_keys: Sequence[str] | None = None,
+    embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
+    knn_key: str | None = None,
+    expression_source: str = "X",
     vector_field_default: str | None = None,
-    serve_connectivity: bool = False,
     serve_vector_fields: bool = False,
     client_server_url: str | None = None,
     web_source_url: str = CELLUCID_WEB_URL,
@@ -279,15 +297,22 @@ def show_anndata(
         obs_keys: Exact ``obs`` columns to serve, in this order. If None, every
             column is served. Naming the columns leaves out a column Cellucid
             cannot serve, such as a ``datetime64`` collection date.
+        embedding_keys: The embedding of a dimension slot, such as
+            ``{"2d": "X_tsne"}`` or ``{"2d": ("X_pca", [2, 0])}`` with 0-based
+            columns. Slots not named follow the default rule, and a
+            deterministic best guess applies when no slot resolves.
+        knn_key: The ``obsp`` matrix to serve as the neighbour graph, such as
+            ``"connectivities"``. None by default, because building the edge
+            list is the longest part of opening a large object and most
+            sessions never draw the graph. A matrix that is not symmetric is
+            refused.
+        expression_source: ``"X"`` (the default), ``"raw"``, or
+            ``"layer:<name>"``.
         vector_field_default: Exact field id required when multiple UMAP
             vector fields exist.
-        serve_connectivity: Whether to read, validate, and serve
-            ``adata.obsp['connectivities']``. False by default, because building
-            the edge list is the longest part of opening a large object and most
-            sessions never draw the graph.
         serve_vector_fields: Whether to read, validate, and serve the
             ``<field>_umap_<n>d`` vector arrays in ``obsm``. False by default, for
-            the same reason as ``serve_connectivity``.
+            the same reason as ``knn_key``.
         client_server_url: Exact browser-reachable data server base URL.
         web_source_url: Origin publishing the web asset inventory.
         web_cache_dir: Directory holding the active verified web build.
@@ -341,8 +366,10 @@ def show_anndata(
         dataset_name=dataset_name,
         dataset_id=dataset_id,
         obs_keys=obs_keys,
+        embedding_keys=embedding_keys,
+        knn_key=knn_key,
+        expression_source=expression_source,
         vector_field_default=vector_field_default,
-        serve_connectivity=serve_connectivity,
         serve_vector_fields=serve_vector_fields,
         client_server_url=client_server_url,
         web_source_url=web_source_url,

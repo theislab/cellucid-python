@@ -106,13 +106,17 @@ def _declared_dataset_artifacts(
     paths = {"dataset_identity.json", "obs_manifest.json"}
 
     embeddings = identity.get("embeddings")
-    if not isinstance(embeddings, dict) or not isinstance(embeddings.get("files"), dict):
-        raise ValueError("dataset_identity.json embeddings.files must be a JSON object.")
-    for dimension, artifact_path in embeddings["files"].items():
+    if not isinstance(embeddings, dict) or not isinstance(embeddings.get("items"), dict):
+        raise ValueError("dataset_identity.json embeddings.items must be a JSON object.")
+    if not embeddings["items"]:
+        raise ValueError("dataset_identity.json embeddings.items must declare an embedding.")
+    for embedding_id, item in embeddings["items"].items():
+        if not isinstance(item, dict):
+            raise ValueError(f"dataset_identity.json embedding {embedding_id!r} is invalid.")
         paths.add(
             _require_artifact_path(
-                artifact_path,
-                label=f"dataset_identity.json embeddings.files.{dimension}",
+                item.get("file"),
+                label=f"dataset_identity.json embedding {embedding_id!r} file",
             )
         )
 
@@ -253,11 +257,11 @@ def _declared_dataset_artifacts(
         for field_id, field in vector_fields["fields"].items():
             if not isinstance(field, dict) or not isinstance(field.get("files"), dict):
                 raise ValueError(f"dataset_identity.json vector field {field_id!r} is invalid.")
-            for dimension, artifact_path in field["files"].items():
+            for embedding_id, artifact_path in field["files"].items():
                 paths.add(
                     _require_artifact_path(
                         artifact_path,
-                        label=f"vector field {field_id!r} file {dimension}",
+                        label=f"vector field {field_id!r} file for {embedding_id!r}",
                     )
                 )
     if include_published_state:

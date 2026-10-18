@@ -1,13 +1,13 @@
 """
-The compact_v1 on-disk manifest format.
+The compact_v2 on-disk manifest format.
 
 One place names what the export format calls things -- the format version, the
 two payload directories, the codes extension of each categorical dtype -- and
 one place re-derives, from an emitted manifest alone, exactly which payload
 files a reader will go looking for. The writer checks itself against that
 derivation before it publishes, so a manifest can never describe a directory
-that was not written. The same check reconciles the export root, where the
-point payloads live and where ``dataset_identity.json`` is the declaration.
+that was not written. The same check reconciles the ``embeddings/`` directory,
+whose declaration is ``dataset_identity.json``, and the export root itself.
 
 Those checks all run on the payload in memory, which proves nothing about the
 file a reader opens. ``json.dumps`` is not a total function into the JSON the
@@ -28,8 +28,9 @@ from .._contracts import _require_unique_identifiers
 DEFAULT_OBS_DIRNAME = "obs"
 DEFAULT_VAR_DIRNAME = "var"
 
-# Manifest format version for compact format
-MANIFEST_FORMAT_VERSION = "compact_v1"
+# The format version both compact manifests (obs and var) carry. compact_v2
+# keys categorical centroids by embedding id and adds gene-name sets to var.
+MANIFEST_FORMAT_VERSION = "compact_v2"
 
 
 def _reject_non_standard_json_constant(name: str) -> object:
@@ -209,15 +210,11 @@ def _require_declared_payloads_on_disk(
     against the directory that was actually written.
 
     ``directory_name=None`` reconciles the export root itself rather than one
-    axis directory. The root is where the point payloads live, and they are the
-    only artifact this format declares by path from there -- in
-    ``dataset_identity.json`` -- so nothing else in the package can catch a
-    coordinate file whose name on disk is not the name the viewer is told to
-    fetch. The root also holds the manifests and the axis directories, so
-    ``declared_directories`` names the subdirectories that belong to the
-    generation: a directory that is not one of them is refused by kind, which
-    also keeps a declared payload from being satisfied by a directory of the
-    same name.
+    axis directory. The root holds only the manifests and the axis
+    directories, so ``declared_directories`` names the subdirectories that
+    belong to the generation: a directory that is not one of them is refused by
+    kind, which also keeps a declared payload from being satisfied by a
+    directory of the same name.
     """
     directory = out_dir if directory_name is None else out_dir / directory_name
     prefix = "" if directory_name is None else f"{directory_name}/"
@@ -258,9 +255,11 @@ def _identity_obs_fields_from_compact_manifest(
         "_categoricalFields",
     }
     if not isinstance(manifest, dict) or set(manifest) != expected_keys:
-        raise ValueError("obs manifest must contain exactly the current compact_v1 fields.")
+        raise ValueError(
+            f"obs manifest must contain exactly the current {MANIFEST_FORMAT_VERSION} fields."
+        )
     if manifest["_format"] != MANIFEST_FORMAT_VERSION:
-        raise ValueError("obs manifest must use the current compact_v1 format.")
+        raise ValueError(f"obs manifest must use the current {MANIFEST_FORMAT_VERSION} format.")
     # The schema map is an object in every generation, including one carrying
     # no observation field at all, where it is empty. The viewer refuses a
     # non-object here, so the kind is asserted rather than only the contents.
@@ -270,9 +269,9 @@ def _identity_obs_fields_from_compact_manifest(
     continuous_fields = manifest["_continuousFields"]
     categorical_fields = manifest["_categoricalFields"]
     if not isinstance(continuous_fields, list):
-        raise ValueError("compact_v1 obs manifest _continuousFields must be a list.")
+        raise ValueError("compact obs manifest _continuousFields must be a list.")
     if not isinstance(categorical_fields, list):
-        raise ValueError("compact_v1 obs manifest _categoricalFields must be a list.")
+        raise ValueError("compact obs manifest _categoricalFields must be a list.")
 
     identity_fields: list[dict] = []
     manifest_keys: list[str] = []
@@ -287,7 +286,7 @@ def _identity_obs_fields_from_compact_manifest(
             or not field[1]
         ):
             raise ValueError(
-                "compact_v1 continuous observation fields must be exact "
+                "compact continuous observation fields must be exact "
                 "[index, key] or [index, key, minValue, maxValue] tuples."
             )
         payload_indices.append(field[0])
@@ -303,10 +302,12 @@ def _identity_obs_fields_from_compact_manifest(
             or not isinstance(field[1], str)
             or not field[1]
             or not isinstance(field[2], list)
+            or _json_kind(field[5]) != "object"
         ):
             raise ValueError(
-                "compact_v1 categorical observation fields must be exact "
-                "six- or eight-member tuples with a category array."
+                "compact categorical observation fields must be exact six- or "
+                "eight-member tuples with a category array and a centroid object "
+                "keyed by embedding id."
             )
         payload_indices.append(field[0])
         key = field[1]
@@ -325,10 +326,25 @@ def _identity_obs_fields_from_compact_manifest(
 
 
 def _gene_names_from_compact_manifest(manifest: dict) -> list[str]:
-    """Validate one emitted var manifest and return its exact gene names."""
+    """Validate one emitted var manifest and return its exact default gene names."""
+    expected_keys = {
+        "_format",
+        "n_points",
+        "compression",
+        "quantization",
+        "_varSchema",
+        "fields",
+        "gene_name_sets",
+    }
+    if not isinstance(manifest, dict) or set(manifest) != expected_keys:
+        raise ValueError(
+            f"var manifest must contain exactly the current {MANIFEST_FORMAT_VERSION} fields."
+        )
+    if manifest["_format"] != MANIFEST_FORMAT_VERSION:
+        raise ValueError(f"var manifest must use the current {MANIFEST_FORMAT_VERSION} format.")
     fields = manifest["fields"]
     if not isinstance(fields, list):
-        raise ValueError("compact_v1 var manifest fields must be a list.")
+        raise ValueError("compact var manifest fields must be a list.")
 
     names: list[str] = []
     payload_indices: list[object] = []
@@ -341,7 +357,7 @@ def _gene_names_from_compact_manifest(manifest: dict) -> list[str]:
             or not field[1]
         ):
             raise ValueError(
-                "compact_v1 var fields must be exact [index, name] or "
+                "compact var fields must be exact [index, name] or "
                 "[index, name, minValue, maxValue] tuples."
             )
         payload_indices.append(field[0])
@@ -349,7 +365,91 @@ def _gene_names_from_compact_manifest(manifest: dict) -> list[str]:
 
     _require_unique_identifiers(names, label="Gene")
     _require_dense_payload_indices(payload_indices, axis="Gene")
+    _require_gene_name_sets(manifest["gene_name_sets"], default_names=names)
     return names
+
+
+_GENE_NAME_SET_KEYS = ["source", "filled_from_index", "renamed", "names"]
+
+
+def _require_gene_name_sets(sets: object, *, default_names: list[str]) -> None:
+    """Validate the gene-name sets of one var manifest against its field names.
+
+    Set 0 is the default: its names are the field names, so its ``names`` is
+    null. Every later set lists one name per field, null where it equals the
+    default name, and resolves to names that are distinct within the set. No
+    two sets read the same source.
+    """
+    if not isinstance(sets, list) or not sets:
+        raise ValueError("var manifest gene_name_sets must be a non-empty list.")
+    sources: list[object] = []
+    for position, name_set in enumerate(sets):
+        label = f"var manifest gene_name_sets[{position}]"
+        if not isinstance(name_set, dict) or list(name_set) != _GENE_NAME_SET_KEYS:
+            raise ValueError(f"{label} must hold exactly the keys {_GENE_NAME_SET_KEYS}.")
+        source = name_set["source"]
+        if source is not None and (not isinstance(source, str) or not source):
+            raise ValueError(f"{label}.source must be null or a non-empty column name.")
+        if position > 0 and source is None:
+            raise ValueError(f"{label}.source must name a var column.")
+        sources.append(source)
+        filled = name_set["filled_from_index"]
+        if type(filled) is not int or not 0 <= filled <= len(default_names):
+            raise ValueError(f"{label}.filled_from_index must count exported genes.")
+        if source is None and filled != 0:
+            raise ValueError(f"{label}: the var index cannot fill names from itself.")
+        renamed = name_set["renamed"]
+        if not isinstance(renamed, list) or any(
+            not isinstance(pair, list)
+            or len(pair) != 2
+            or not all(isinstance(name, str) and name for name in pair)
+            for pair in renamed
+        ):
+            raise ValueError(f"{label}.renamed must be a list of [from, to] name pairs.")
+        names = name_set["names"]
+        if position == 0:
+            if names is not None:
+                raise ValueError(f"{label}.names must be null: the field names are this set.")
+            resolved = list(default_names)
+        else:
+            if not isinstance(names, list) or len(names) != len(default_names):
+                raise ValueError(f"{label}.names must hold one entry per gene.")
+            if any(name is not None and (not isinstance(name, str) or not name) for name in names):
+                raise ValueError(f"{label}.names must hold non-empty strings or null.")
+            if any(name == default for name, default in zip(names, default_names, strict=True)):
+                raise ValueError(
+                    f"{label}.names must be null wherever a name equals the default name."
+                )
+            resolved = [
+                default if name is None else name
+                for name, default in zip(names, default_names, strict=True)
+            ]
+        _require_unique_identifiers(resolved, label=f"{label} gene")
+    if len(set(sources)) != len(sources):
+        raise ValueError("var manifest gene_name_sets must read each source once.")
+
+
+def _declared_embedding_payload_paths(identity: dict) -> set[str]:
+    """Re-derive every embedding payload path ``dataset_identity.json`` declares.
+
+    The declared ``file`` of the item at position ``index`` must be exactly
+    ``embeddings/{index}_{dimension}d.bin``, plus ``.gz`` when the export is
+    compressed, so the declaration is checked against that rule before it is
+    compared with the directory.
+    """
+    embeddings = identity["embeddings"]
+    compression = identity["export_settings"]["compression"]
+    suffix = ".gz" if compression is not None else ""
+    declared: set[str] = set()
+    for index, (embedding_id, item) in enumerate(embeddings["items"].items()):
+        expected = f"embeddings/{index}_{item['dimension']}d.bin{suffix}"
+        if item["file"] != expected:
+            raise RuntimeError(
+                f"Embedding {embedding_id!r} declares file {item['file']!r}; "
+                f"the format requires {expected!r}."
+            )
+        declared.add(expected)
+    return declared
 
 
 _CODES_EXTENSION_BY_DTYPE = {"uint8": "u8", "uint16": "u16"}

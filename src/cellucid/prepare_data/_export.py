@@ -8,7 +8,7 @@ any interrupted previous run, and publishes -- or rolls back -- the generation
 the writer builds.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Literal
 
@@ -25,6 +25,7 @@ from .._contracts import (
     _require_positive_native_integer,
     _resolve_created_at,
 )
+from ._embeddings import Embedding
 from ._generation import _prepare_generation
 from ._locking import _exclusive_export_generation
 from ._transaction import (
@@ -59,13 +60,26 @@ def prepare(
     source_name: str | None = None,
     source_url: str | None = None,
     source_citation: str | None = None,
-    X_umap_1d: np.ndarray | None = None,
-    X_umap_2d: np.ndarray | None = None,
-    X_umap_3d: np.ndarray | None = None,
-    vector_fields: dict[str, np.ndarray | sparse.spmatrix] | None = None,
+    embeddings: Mapping[str, np.ndarray | sparse.spmatrix | Embedding],
+    embedding_defaults: Mapping[str, str] | None = None,
+    vector_fields: Mapping[str, Mapping[str, np.ndarray | sparse.spmatrix]] | None = None,
     vector_field_default: str | None = None,
+    var_gene_name_columns: Sequence[str] | None = None,
 ) -> None:
     """Build and atomically publish one complete canonical Cellucid export generation.
+
+    ``embeddings`` maps each embedding id to an array, or to an
+    :class:`~cellucid.Embedding` that names the columns to plot, a display
+    label, and the key it came from. Any number of embeddings per dimension
+    may be exported; ``embedding_defaults`` names the one each dimension shows
+    first, and is required for every dimension that has more than one.
+    ``vector_fields`` binds each field to embedding ids, for example
+    ``{"velocity": {"X_umap": velocity_2d}}``.
+
+    Gene names come from ``var_gene_id_column`` (or ``var.index``), and every
+    column in ``var_gene_name_columns`` becomes an alternative set of names the
+    viewer can switch to. In each set an empty value falls back to the var
+    index name and repeated names are made unique (``MATR3``, ``MATR3-1``).
 
     ``out_dir`` defaults to ``./exports`` and is resolved against the current
     working directory at call time, so a later :func:`os.chdir` changes where a
@@ -181,11 +195,11 @@ def prepare(
                 source_name=source_name,
                 source_url=source_url,
                 source_citation=source_citation,
-                X_umap_1d=X_umap_1d,
-                X_umap_2d=X_umap_2d,
-                X_umap_3d=X_umap_3d,
+                embeddings=embeddings,
+                embedding_defaults=embedding_defaults,
                 vector_fields=vector_fields,
                 vector_field_default=vector_field_default,
+                var_gene_name_columns=var_gene_name_columns,
             )
             _publish_export_generation(
                 staging_dir,

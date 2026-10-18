@@ -9,8 +9,11 @@ prepare first.
 Key features:
 - Works with in-memory AnnData, backed h5ad files, and eagerly loaded zarr stores
 - Handles sparse matrices (CSR/CSC) transparently with automatic format conversion
-- Reads UMAP dimensions from X_umap_1d/X_umap_2d/X_umap_3d, or from a bare X_umap
-  at the dimension its own column count states
+- Resolves one embedding per dimension slot: X_umap_1d/X_umap_2d/X_umap_3d, or a
+  bare X_umap at the dimension its own column count states, or any obsm array
+  named explicitly with ``embedding_keys``; when none of those exist it makes a
+  deterministic best guess (see :mod:`cellucid.data_mapping`)
+- Reads expression from X, raw, or one layer (``expression_source``)
 - Computes centroids and outlier quantiles on-demand with caching
 - Lazy loading: gene expression and obs data are loaded on-demand
 - No quantization (full float32 precision, gzip compression for network transfer)
@@ -25,7 +28,7 @@ Lazy Loading Behavior:
 Memory Management:
 -----------------
 The adapter maintains several caches for performance:
-- Embedding cache: Normalized UMAP coordinates (one per dimension)
+- Embedding cache: Normalized coordinates (one per served embedding)
 - Centroid cache: Computed label centroids
 - Gene expression LRU cache: Recently accessed gene columns (max 100 genes)
 - CSC cache: For CSR matrices, a CSC copy is created for efficient column access
@@ -81,7 +84,8 @@ import math
 import re
 import sys
 from collections import OrderedDict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -93,6 +97,8 @@ from scipy import sparse
 from ._byte_order import little_endian_payload_bytes
 from ._compression import deterministic_gzip_compress
 from ._contracts import (
+    EMBEDDINGS_DIRNAME,
+    IDENTITY_VERSION,
     _require_dataset_id,
     _require_dataset_name,
     _require_field_identities,
@@ -110,6 +116,29 @@ from .continuous_payload_diagnosis import (
     NonFinitePayloadError,
     diagnose_continuous_payload,
 )
+from .data_mapping import (
+    DIMENSION_SLOTS,
+    VECTOR_KEY_PATTERN,
+    DataMappingError,
+    EmbeddingKeySpec,
+    ObsmEntry,
+    UniqueNames,
+    best_guess_embedding_slots,
+    canonical_embedding_id,
+    default_columns,
+    default_embedding_slots,
+    default_vector_bindings,
+    describe_obsm,
+    describe_obsm_entry,
+    expression_layer,
+    make_unique_names,
+    nothing_plottable_message,
+    obsm_entries,
+    obsm_entry_defect,
+    slot_dimension,
+    unique_names_note,
+    validate_embedding_columns,
+)
 from .prepare_data._arrays import (
     _normalize_finite_float32_embedding,
     _require_continuous_obs_values,
@@ -117,13 +146,9 @@ from .prepare_data._arrays import (
     _require_finite_float32_array,
 )
 from .prepare_data._categories import _json_category_values
+from .prepare_data._manifest import MANIFEST_FORMAT_VERSION
 from .vector_fields import (
-    SUPPORTED_EMBEDDING_KEYS,
-    UNSUFFIXED_EMBEDDING_KEY,
     _finite_float32_matrix,
-    is_vector_field_declaration_key,
-    missing_embedding_message,
-    resolve_embedding_keys,
     scale_vector_field,
     validate_vector_fields,
 )
@@ -134,12 +159,66 @@ if TYPE_CHECKING:
 logger = logging.getLogger("cellucid.anndata_adapter")
 
 
-def _require_dimension(value: object) -> int:
-    """Require one native 1D, 2D, or 3D dimension."""
-    if type(value) is not int:
-        raise TypeError("dim must be a native integer dimension.")
-    if value not in (1, 2, 3):
-        raise ValueError(f"Invalid dimension {value}. Expected 1, 2, or 3.")
+@dataclass(frozen=True)
+class ServedEmbedding:
+    """One embedding the adapter serves: an ``obsm`` key read at fixed columns.
+
+    ``id`` is the canonical embedding id (``key``, or ``key[c0,c1]`` when only
+    some columns are read), ``index`` its position in (dimension, id) order and
+    therefore its payload file, ``embeddings/{index}_{dimension}d.bin``.
+    """
+
+    id: str
+    index: int
+    key: str
+    columns: tuple[int, ...]
+    dimension: int
+
+    @property
+    def file(self) -> str:
+        return f"{EMBEDDINGS_DIRNAME}/{self.index}_{self.dimension}d.bin"
+
+
+def _require_embedding_keys(value: object) -> dict[str, tuple[str, list[int] | None]]:
+    """Validate ``embedding_keys``: ``{"2d": "X_tsne"}`` or ``{"2d": ("X_pca", [0, 1])}``."""
+    if value is None:
+        return {}
+    if isinstance(value, str | bytes) or not isinstance(value, Mapping):
+        raise TypeError(
+            "embedding_keys must map '1d', '2d', or '3d' to an obsm key or to a "
+            "(key, columns) pair, for example {'2d': 'X_tsne'}."
+        )
+    resolved: dict[str, tuple[str, list[int] | None]] = {}
+    for slot, spec in value.items():
+        if slot not in DIMENSION_SLOTS:
+            raise ValueError(f"embedding_keys key {slot!r} must be '1d', '2d', or '3d'.")
+        if isinstance(spec, str):
+            key, columns = spec, None
+        elif isinstance(spec, tuple) and len(spec) == 2 and isinstance(spec[0], str):
+            key = spec[0]
+            if isinstance(spec[1], str | bytes) or not isinstance(spec[1], Sequence):
+                raise TypeError(f"embedding_keys[{slot!r}] columns must be a sequence of integers.")
+            columns = list(spec[1])
+        else:
+            raise TypeError(
+                f"embedding_keys[{slot!r}] must be an obsm key or a (key, columns) pair."
+            )
+        if not key:
+            raise ValueError(f"embedding_keys[{slot!r}] must name a non-empty obsm key.")
+        resolved[slot] = (key, columns)
+    return resolved
+
+
+def _require_expression_source(value: object) -> str:
+    """Validate ``expression_source``: ``"X"``, ``"raw"`` or ``"layer:<name>"``."""
+    if not isinstance(value, str) or not (
+        value in ("X", "raw")
+        or (value.startswith("layer:") and len(value) > len("layer:"))
+    ):
+        raise ValueError(
+            "expression_source must be 'X', 'raw', or 'layer:<name>', "
+            f"got {value!r}."
+        )
     return value
 
 
@@ -388,8 +467,10 @@ class AnnDataAdapter:
         dataset_name: str,
         dataset_id: str,
         obs_keys: Sequence[str] | None = None,
+        embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
+        knn_key: str | None = None,
+        expression_source: str = "X",
         vector_field_default: str | None = None,
-        serve_connectivity: bool = False,
         serve_vector_fields: bool = False,
         quiet: bool = True,
     ) -> None:
@@ -404,8 +485,11 @@ class AnnDataAdapter:
             Key in obsm for latent space used for outlier quantile calculation.
             If None, outlier quantiles are explicitly unavailable.
         gene_id_column : str, optional
-            Exact column in ``var`` containing gene identifiers. If None,
-            identifiers come from ``var.index``.
+            Exact column of the served gene axis (``var``, or ``raw.var`` when
+            ``expression_source="raw"``) whose values name the genes. If None,
+            names come from that axis's index. An empty value falls back to the
+            row's index name, and repeated names are made unique the way
+            anndata's ``var_names_make_unique()`` does (``MATR3``, ``MATR3-1``).
         normalize_embeddings : bool
             If True, normalize embeddings to [-1, 1] range (recommended).
         centroid_outlier_quantile : float
@@ -424,22 +508,36 @@ class AnnDataAdapter:
             column is served. Naming the columns is how a dataset carrying an
             unservable column, such as a ``datetime64`` collection date, is
             served without editing ``adata``.
+        embedding_keys : mapping, optional
+            The embedding to serve in a dimension slot, overriding the default
+            for that slot: ``{"2d": "X_tsne"}`` reads the first two columns of
+            ``obsm['X_tsne']``, and ``{"2d": ("X_pca", [2, 0])}`` reads the
+            0-based columns named. Slots not named follow the default rule:
+            ``X_umap_1d``/``X_umap_2d``/``X_umap_3d``, or a bare 1- to 3-column
+            ``X_umap``. When neither names any slot, Cellucid makes a
+            deterministic best guess from the other ``obsm`` arrays.
+        knn_key : str, optional
+            The ``obsp`` matrix to serve as the neighbour graph, usually
+            ``"connectivities"``. None by default: an edge list costs time and
+            memory proportional to the number of stored neighbours, which on a
+            large object is the single longest part of startup, and most
+            sessions never draw the graph. The matrix is read and checked when
+            it is named -- it must be square, finite, non-negative, symmetric,
+            and zero on the diagonal -- and a matrix that is not symmetric, such
+            as ``distances``, is refused with that reason.
+        expression_source : str
+            Where gene expression is read: ``"X"`` (the default), ``"raw"``
+            (``raw.X``, with genes named from ``raw.var``), or
+            ``"layer:<name>"``.
         vector_field_default : str, optional
             Exact field id to select when multiple UMAP vector fields exist.
-        serve_connectivity : bool
-            Whether to read, validate, and serve ``adata.obsp['connectivities']``.
-            False by default: an edge list costs time and memory proportional to
-            the number of stored neighbors, which on a large object is the single
-            longest part of startup, and most sessions never draw the graph.
-            Passing True reads and validates the whole graph before the server
-            binds, because the edge count and the neighbor maximum are part of
-            the manifest the viewer fetches first.
         serve_vector_fields : bool
             Whether to read, validate, and serve the ``<field>_umap_<n>d`` vector
-            arrays in ``obsm``. False by default, for the same reason as
-            ``serve_connectivity``: every declared field is read and checked in
-            full before the server binds, and a session that never turns the
-            overlay on pays nothing for it now.
+            arrays in ``obsm``. A key binds to the slot of its dimension only
+            when that slot shows ``X_umap_<n>d`` or ``X_umap``. False by
+            default, for the same reason as ``knn_key``: every declared field
+            is read and checked in full before the server binds, and a session
+            that never turns the overlay on pays nothing for it now.
         quiet : bool
             Whether to build without reporting progress. True by default, so
             using this class as a library prints nothing. A server passes its
@@ -483,15 +581,18 @@ class AnnDataAdapter:
             normalize_embeddings,
             label="normalize_embeddings",
         )
-        self.serve_connectivity = _require_native_boolean(
-            serve_connectivity,
-            label="serve_connectivity",
-        )
+        self.knn_key: str | None
+        if knn_key is None:
+            self.knn_key = None
+        else:
+            self.knn_key = _require_nonempty_string(knn_key, label="knn_key")
+        self.expression_source: str = _require_expression_source(expression_source)
         self.serve_vector_fields = _require_native_boolean(
             serve_vector_fields,
             label="serve_vector_fields",
         )
         self.quiet = _require_native_boolean(quiet, label="quiet")
+        requested_embeddings = _require_embedding_keys(embedding_keys)
 
         if (
             type(centroid_outlier_quantile) is not float
@@ -511,38 +612,40 @@ class AnnDataAdapter:
         self.dataset_name: str = dataset_name
         self.dataset_id: str = dataset_id
 
-        if self.gene_id_column is None:
-            raw_gene_ids = self.adata.var.index.tolist()
-            gene_label = "var index"
-        else:
-            if self.gene_id_column not in self.adata.var.columns:
-                raise KeyError(
-                    f"gene_id_column {self.gene_id_column!r} not found in var. "
-                    f"Available columns: {list(self.adata.var.columns)}"
-                )
-            raw_gene_ids = self.adata.var[self.gene_id_column].tolist()
-            gene_label = f"var column {self.gene_id_column!r}"
-        gene_ids = _require_field_identities(
-            raw_gene_ids,
-            label=gene_label,
-        )
+        # The expression matrix and the gene axis it belongs to. raw carries its
+        # own var, so reading expression from raw also names genes from raw.var.
+        self._expression_matrix: Any = self._resolve_expression_matrix()
+        gene_axis = self._gene_axis_frame()
+        self._gene_names: UniqueNames = self._resolve_gene_names(gene_axis)
+        gene_ids = self._gene_names.names
+        if self._expression_matrix is not None:
+            # Only names a gene axis actually serves reach the viewer, so only
+            # served names are held to the display rule.
+            gene_ids = _require_field_identities(
+                gene_ids,
+                label=(
+                    "gene axis index"
+                    if self.gene_id_column is None
+                    else f"gene axis column {self.gene_id_column!r}"
+                ),
+            )
 
         # Public source attribution never includes the local filesystem path.
         self._source_type: str = "memory"
 
-        # Caches for computed data
-        self._embedding_cache: dict[int, np.ndarray] = {}
-        # Per-dimension normalization info for embeddings (center + scale_factor).
-        # Used to scale vector fields into the same normalized space as points.
-        self._embedding_norm: dict[int, dict[str, Any]] = {}
+        # Caches for computed data, keyed by served embedding id.
+        self._embedding_cache: dict[str, np.ndarray] = {}
+        # Per-embedding normalization info (center + scale_factor). Used to
+        # scale vector fields into the same normalized space as the points.
+        self._embedding_norm: dict[str, dict[str, Any]] = {}
 
         # Optional per-cell vector fields (e.g. velocity, CellRank drift).
         # Structure matches dataset_identity.json: {"default_field": ..., "fields": {...}}.
         self._vector_fields_metadata: dict[str, Any] | None = None
-        self._vector_field_obsm_keys: dict[str, dict[int, str]] = {}
+        self._vector_field_obsm_keys: dict[str, dict[str, str]] = {}
         self._vector_field_payload_index_by_id: dict[str, int] = {}
-        self._vector_field_cache: dict[tuple[str, int], np.ndarray] = {}
-        self._centroid_cache: dict[str, list[dict[str, Any]]] = {}
+        self._vector_field_cache: dict[tuple[str, str], np.ndarray] = {}
+        self._centroid_cache: dict[tuple[str, str], list[dict[str, Any]]] = {}
         self._outlier_quantile_cache: dict[str, np.ndarray] = {}
         self._latent_space: np.ndarray | None = None
         self._gene_ids_cache: list[str] | None = gene_ids
@@ -567,8 +670,10 @@ class AnnDataAdapter:
         # LRU cache for gene expression values using O(1) OrderedDict
         self._gene_expression_cache: LRUCache = LRUCache()
 
-        # UMAP embedding key resolution (dimension -> obsm key)
-        self._umap_embedding_key_by_dim: dict[int, str] = {}
+        # Served embeddings, in (dimension, id) order, and each slot's default.
+        self._embeddings: list[ServedEmbedding] = []
+        self._embedding_defaults: dict[str, str] = {}
+        self._guessed_slots: list[str] = []
         # Track if adapter has been closed
         self._closed: bool = False
         self._close_complete: bool = False
@@ -608,15 +713,29 @@ class AnnDataAdapter:
                         raise
                     raise NonFinitePayloadError(diagnosis) from exc
 
-        # Auto-detect available dimensions
+        note = unique_names_note(
+            filled_from_index=self._gene_names.filled_from_index,
+            renamed=self._gene_names.renamed,
+            source=self.gene_id_column,
+        )
+        if note is not None and self._expression_matrix is not None:
+            self._report("Gene names", note)
+
+        # Resolve the embedding of every dimension slot.
         self._report("Embeddings", "resolving obsm keys")
-        self._available_dimensions: list[int] = self._detect_dimensions()
-        self._default_dimension: int = self._select_default_dimension()
+        self._resolve_embeddings(requested_embeddings)
+        self._default_dimension: int = max(item.dimension for item in self._embeddings)
         self._report(
             "Embeddings",
             ", ".join(
-                f"{dimension}D from obsm[{self._umap_embedding_key_by_dim[dimension]!r}]"
-                for dimension in self._available_dimensions
+                f"{item.dimension}D from obsm[{item.key!r}]"
+                + (
+                    ""
+                    if list(item.columns) == default_columns(item.dimension)
+                    else f" columns {list(item.columns)}"
+                )
+                + (" (guessed)" if f"embeddings.{item.dimension}d" in self._guessed_slots else "")
+                for item in self._embeddings
             ),
         )
 
@@ -656,7 +775,7 @@ class AnnDataAdapter:
 
         logger.info(
             f"AnnDataAdapter initialized: {self.n_cells:,} cells, "
-            f"{self.n_genes:,} genes, dimensions: {self._available_dimensions}"
+            f"{self.n_genes:,} genes, embeddings: {[item.id for item in self._embeddings]}"
         )
 
     @classmethod
@@ -672,8 +791,10 @@ class AnnDataAdapter:
         dataset_name: str,
         dataset_id: str,
         obs_keys: Sequence[str] | None = None,
+        embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
+        knn_key: str | None = None,
+        expression_source: str = "X",
         vector_field_default: str | None = None,
-        serve_connectivity: bool = False,
         serve_vector_fields: bool = False,
         quiet: bool = True,
     ) -> AnnDataAdapter:
@@ -693,8 +814,8 @@ class AnnDataAdapter:
         latent_key : str, optional
             Explicit key in ``obsm`` for the latent space.
         gene_id_column : str, optional
-            Exact column in ``var`` containing gene identifiers. If None,
-            identifiers come from ``var.index``.
+            Exact column of the served gene axis whose values name the genes.
+            If None, names come from that axis's index.
         normalize_embeddings : bool
             Whether to normalize embeddings into the viewer coordinate range.
         centroid_outlier_quantile : float
@@ -711,12 +832,18 @@ class AnnDataAdapter:
         obs_keys : sequence of str, optional
             Exact ``obs`` columns to serve, in this order. If None, every
             column is served.
+        embedding_keys : mapping, optional
+            The embedding of a dimension slot, such as ``{"2d": "X_tsne"}`` or
+            ``{"2d": ("X_pca", [0, 1])}``. Slots not named follow the default
+            rule, and a best guess applies when no slot resolves.
+        knn_key : str, optional
+            The ``obsp`` matrix to serve as the neighbour graph. None by
+            default, because building the edge list is the longest part of
+            opening a large object.
+        expression_source : str
+            ``"X"`` (the default), ``"raw"``, or ``"layer:<name>"``.
         vector_field_default : str, optional
             Exact field id required when multiple UMAP vector fields exist.
-        serve_connectivity : bool
-            Whether to read, validate, and serve ``adata.obsp['connectivities']``.
-            False by default, because building the edge list is the longest part
-            of opening a large object.
         serve_vector_fields : bool
             Whether to read, validate, and serve the ``<field>_umap_<n>d`` vector
             arrays in ``obsm``. False by default.
@@ -780,8 +907,10 @@ class AnnDataAdapter:
                 dataset_name=dataset_name,
                 dataset_id=dataset_id,
                 obs_keys=obs_keys,
+                embedding_keys=embedding_keys,
+                knn_key=knn_key,
+                expression_source=expression_source,
                 vector_field_default=vector_field_default,
-                serve_connectivity=serve_connectivity,
                 serve_vector_fields=serve_vector_fields,
                 quiet=quiet,
             )
@@ -810,8 +939,10 @@ class AnnDataAdapter:
 
     @property
     def n_genes(self) -> int:
-        """Number of genes."""
+        """Number of genes on the served gene axis (``var``, or ``raw.var``)."""
         self._check_closed()
+        if self.expression_source == "raw":
+            return int(self.adata.raw.n_vars)
         return cast(int, self.adata.n_vars)
 
     @property
@@ -830,126 +961,286 @@ class AnnDataAdapter:
             return
         print_detail(label, value)
 
-    def _detect_dimensions(self) -> list[int]:
-        """
-        Validate and resolve the UMAP embeddings ``obsm`` offers.
-
-        ``X_umap_1d``, ``X_umap_2d``, and ``X_umap_3d`` each name their own
-        dimension. An object that declares none of them but carries Scanpy's
-        own ``X_umap`` is read at the dimension its column count states, so no
-        rename is needed to serve it.
-
-        Returns
-        -------
-        list[int]
-            Sorted list of available dimensions (e.g., [2, 3])
-
-        Raises
-        ------
-        ValueError
-            If a declared embedding is malformed, ambiguous, or absent.
-        """
-        self._umap_embedding_key_by_dim = {}
-        available: list[int] = []
-
-        for dim, key in sorted(resolve_embedding_keys(self.adata.obsm).items()):
-            embedding = _require_finite_embedding_source(
-                self.adata.obsm[key],
-                label=f"Embedding {key!r}",
-            )
-            if embedding.ndim != 2:
+    def _resolve_expression_matrix(self) -> Any:
+        """Return the expression matrix ``expression_source`` names, or None for no X."""
+        source = self.expression_source
+        if source == "X":
+            return self.adata.X
+        if source == "raw":
+            raw = getattr(self.adata, "raw", None)
+            if raw is None or raw.X is None:
                 raise ValueError(
-                    f"Embedding {key!r} must be a 2D array; got shape {embedding.shape}."
+                    "expression_source='raw' reads adata.raw.X, and this object has no raw."
                 )
-            if embedding.shape[0] != self.n_cells:
-                raise ValueError(
-                    f"Embedding {key!r} must have exactly {self.n_cells} rows; "
-                    f"got {embedding.shape[0]}."
-                )
-            if embedding.shape[1] != dim:
-                raise ValueError(
-                    f"Embedding {key!r} must have exactly {dim} columns; got {embedding.shape[1]}."
-                )
-            if self.normalize_embeddings:
-                _normalize_finite_float32_embedding(
-                    embedding,
-                    label=f"Embedding {key!r}",
-                )
-            available.append(dim)
-            self._umap_embedding_key_by_dim[dim] = key
-
-        if not available:
+            return raw.X
+        layer = expression_layer(source)
+        if layer is None or layer not in self.adata.layers:
             raise ValueError(
-                missing_embedding_message(
-                    self.adata.obsm,
-                    n_cells=self.n_cells,
-                    headline="No UMAP embedding Cellucid can read was found in adata.obsm.",
-                )
+                f"expression_source={source!r} names no layer of this object. "
+                f"adata.layers holds: {list(self.adata.layers.keys())}."
             )
+        matrix = self.adata.layers[layer]
+        if tuple(matrix.shape) != (self.adata.n_obs, self.adata.n_vars):
+            raise ValueError(
+                f"adata.layers[{layer!r}] has shape {tuple(matrix.shape)}; expected "
+                f"({self.adata.n_obs}, {self.adata.n_vars})."
+            )
+        return matrix
 
-        return sorted(available)
+    def _gene_axis_frame(self) -> pd.DataFrame:
+        """The ``var`` frame of the served gene axis."""
+        if self.expression_source == "raw":
+            return cast(pd.DataFrame, self.adata.raw.var)
+        return cast(pd.DataFrame, self.adata.var)
 
-    def _select_default_dimension(self) -> int:
-        """Select the highest declared dimension."""
-        return max(self._available_dimensions)
+    def _resolve_gene_names(self, var: pd.DataFrame) -> UniqueNames:
+        """Name every gene of the served axis with the shared make-unique rule."""
+        index = [str(name) for name in var.index.tolist()]
+        if self.gene_id_column is None:
+            return make_unique_names(index)
+        if self.gene_id_column not in var.columns:
+            axis = "raw.var" if self.expression_source == "raw" else "var"
+            raise KeyError(
+                f"gene_id_column {self.gene_id_column!r} not found in {axis}. "
+                f"Available columns: {list(var.columns)}"
+            )
+        try:
+            return make_unique_names(var[self.gene_id_column].tolist(), index=index)
+        except DataMappingError as error:
+            raise ValueError(f"gene_id_column {self.gene_id_column!r}: {error}") from error
+
+    def _obsm_source(self, key: str, columns: Sequence[int]) -> np.ndarray:
+        """Read the selected columns of one dense ``obsm`` array, unnormalized."""
+        value = self.adata.obsm[key]
+        array = np.asarray(value)
+        if array.ndim == 1:
+            array = array.reshape(-1, 1)
+        return _require_finite_embedding_source(
+            array[:, list(columns)],
+            label=f"Embedding {key!r}",
+        )
+
+    def _embedding_load_defect(self, key: str, columns: list[int]) -> str | None:
+        """Return why one ``obsm`` array cannot be plotted at ``columns``, or None.
+
+        This is the load-time check of the data mapping: the selected columns
+        must be finite, representable as float32, and span a nonzero range.
+        """
+        array = np.asarray(self.adata.obsm[key])
+        if array.ndim == 1:
+            array = array.reshape(-1, 1)
+        selected = array[:, columns]
+        if selected.dtype.kind not in {"i", "u", "f"}:
+            return "not a numeric array"
+        with np.errstate(over="ignore", invalid="ignore"):
+            finite = np.isfinite(selected)
+            if not finite.all():
+                row = int(np.argwhere(~finite)[0][0])
+                value = float(selected[row][~finite[row]][0])
+                kind = "NaN" if math.isnan(value) else ("Infinity" if value > 0 else "-Infinity")
+                return f"{kind} at cell {row}"
+            narrowed = selected.astype(np.float32)
+            bad = ~np.isfinite(narrowed) | ((selected != 0) & (narrowed == 0))
+            if bad.any():
+                row = int(np.argwhere(bad)[0][0])
+                return f"not representable as float32 at cell {row}"
+        if self.normalize_embeddings:
+            spans = selected.astype(np.float64).max(axis=0) - selected.astype(np.float64).min(axis=0)
+            if float(spans.max()) <= 0:
+                return "no coordinate variation"
+        return None
+
+    def _resolve_embeddings(self, requested: dict[str, tuple[str, list[int] | None]]) -> None:
+        """Resolve one embedding per dimension slot, then order and index them.
+
+        Explicitly requested slots are validated and must load. Slots not named
+        follow the default rule, and its keys must load too: a caller who wrote
+        ``X_umap_2d`` meant it. Only when neither fills any slot is the best
+        guess made, and a guessed candidate that fails to load is skipped for
+        the next one. When nothing loads at all, the error lists what ``obsm``
+        holds.
+        """
+        n_cells = self.n_cells
+        described = describe_obsm(self.adata.obsm, n_obs=n_cells)
+        entries = obsm_entries(described)
+        entry_by_key: dict[str, ObsmEntry] = {entry.key: entry for entry in entries}
+
+        slots: dict[str, dict[str, Any] | None] = default_embedding_slots(entries)
+        for slot, (key, columns) in requested.items():
+            entry = entry_by_key.get(key)
+            if entry is None:
+                raise ValueError(
+                    f"embedding_keys[{slot!r}] names obsm[{key!r}], which this object does "
+                    f"not have. obsm holds: {[item.key for item in entries]}."
+                )
+            if not entry.usable or entry.width is None:
+                raise ValueError(f"embedding_keys[{slot!r}]: obsm[{key!r}] {entry.reason}.")
+            dimension = slot_dimension(slot)
+            try:
+                resolved_columns = validate_embedding_columns(
+                    default_columns(dimension) if columns is None else columns,
+                    dimension=dimension,
+                    width=entry.width,
+                )
+            except DataMappingError as error:
+                raise ValueError(f"embedding_keys[{slot!r}] obsm[{key!r}]: {error}") from error
+            slots[slot] = {"key": key, "columns": resolved_columns}
+
+        guessed: list[str] = []
+        if all(ref is None for ref in slots.values()):
+            guess = best_guess_embedding_slots(
+                entries,
+                latent_key=self.latent_key,
+                load_check=self._embedding_load_defect,
+            )
+            slots = guess.slots
+            guessed = guess.guessed
+            if all(ref is None for ref in slots.values()):
+                rejected = dict(guess.rejected)
+                descriptions = [
+                    describe_obsm_entry(
+                        key=item["key"],
+                        storage=item["storage"],
+                        shape=item["shape"],
+                        defect=obsm_entry_defect(
+                            item, latent_key=self.latent_key, rejected=rejected
+                        ),
+                    )
+                    for item in described
+                ]
+                raise ValueError(
+                    nothing_plottable_message(n_obs=n_cells, descriptions=descriptions)
+                )
+        else:
+            for slot, ref in slots.items():
+                if ref is None:
+                    continue
+                entry = entry_by_key[ref["key"]]
+                if not entry.usable or entry.width is None:
+                    raise ValueError(f"Embedding {ref['key']!r} {entry.reason}.")
+                try:
+                    validate_embedding_columns(
+                        ref["columns"], dimension=slot_dimension(slot), width=entry.width
+                    )
+                except DataMappingError as error:
+                    raise ValueError(f"Embedding {ref['key']!r}: {error}") from error
+                defect = self._embedding_load_defect(ref["key"], ref["columns"])
+                if defect is not None:
+                    # The full validator names the count and the first positions.
+                    self._obsm_source(ref["key"], ref["columns"])
+                    raise ValueError(f"Embedding {ref['key']!r} cannot be plotted: {defect}.")
+
+        resolved: list[tuple[int, str, str, tuple[int, ...]]] = []
+        for slot, ref in slots.items():
+            if ref is None:
+                continue
+            entry = entry_by_key[ref["key"]]
+            embedding_id = canonical_embedding_id(ref["key"], ref["columns"], width=entry.width)
+            resolved.append((slot_dimension(slot), embedding_id, ref["key"], tuple(ref["columns"])))
+        resolved.sort(key=lambda item: (item[0], item[1]))
+        self._embeddings = [
+            ServedEmbedding(id=embedding_id, index=index, key=key, columns=columns, dimension=dimension)
+            for index, (dimension, embedding_id, key, columns) in enumerate(resolved)
+        ]
+        self._embedding_defaults = {
+            f"{item.dimension}d": item.id for item in self._embeddings
+        }
+        self._guessed_slots = guessed
+
+    @property
+    def embeddings(self) -> list[ServedEmbedding]:
+        """The served embeddings, in (dimension, id) order."""
+        self._check_closed()
+        return list(self._embeddings)
+
+    def _served_embedding(self, embedding_id: str) -> ServedEmbedding:
+        for item in self._embeddings:
+            if item.id == embedding_id:
+                return item
+        raise ValueError(
+            f"Embedding {embedding_id!r} is not served. Served: {[item.id for item in self._embeddings]}."
+        )
+
+    def get_embedding_id_for_payload(self, component: str) -> str | None:
+        """Resolve one ``{index}_{dimension}d.bin`` route to its served embedding id."""
+        self._check_closed()
+        match = re.fullmatch(r"(\d+)_([123])d\.bin", component)
+        if match is None:
+            return None
+        index = _payload_route_index(match.group(1))
+        if index is None or not 0 <= index < len(self._embeddings):
+            return None
+        item = self._embeddings[index]
+        if item.dimension != int(match.group(2)):
+            return None
+        return item.id
 
     def _detect_vector_fields(
         self,
         *,
         vector_field_default: object,
     ) -> dict[str, Any] | None:
-        """Validate every declared UMAP vector; each defaults to its highest dimension."""
-        candidates: dict[object, object] = {}
+        """Bind and validate every ``<field>_umap_<d>d`` vector by the default rule."""
+        keys: list[str] = []
         for key in self.adata.obsm:
             if not isinstance(key, str):
                 raise TypeError("AnnData obsm keys must be native strings.")
             if not key:
                 raise ValueError("AnnData obsm keys must be non-empty strings.")
-            # An embedding is never also a vector field, whichever key resolved it.
-            if key == UNSUFFIXED_EMBEDDING_KEY or key in SUPPORTED_EMBEDDING_KEYS:
-                continue
-            if is_vector_field_declaration_key(key):
-                candidates[key] = self.adata.obsm[key]
+            keys.append(key)
+        slots = {f"{item.dimension}d": {"key": item.key, "columns": list(item.columns)} for item in self._embeddings}
+        id_by_slot = {f"{item.dimension}d": item.id for item in self._embeddings}
+        bindings = default_vector_bindings(keys, slots)
+        values: dict[str, dict[str, Any]] = {}
+        obsm_keys: dict[str, dict[str, str]] = {}
+        for binding in bindings:
+            match = VECTOR_KEY_PATTERN.fullmatch(binding["key"])
+            assert match is not None
+            field_id = match.group("field")
+            embedding_id = id_by_slot[f"{match.group('dimension')}d"]
+            values.setdefault(field_id, {})[embedding_id] = self.adata.obsm[binding["key"]]
+            obsm_keys.setdefault(field_id, {})[embedding_id] = binding["key"]
 
         validated = validate_vector_fields(
-            candidates,
+            values,
             n_cells=self.n_cells,
-            available_dimensions=self._available_dimensions,
+            embedding_dimensions={item.id: item.dimension for item in self._embeddings},
             vector_field_default=vector_field_default,
+            label_for=lambda field_id, embedding_id: (
+                f"Vector field {obsm_keys[field_id][embedding_id]!r}"
+            ),
         )
-        self._vector_field_obsm_keys = validated.source_keys
         if not validated.fields:
-            # Asking for vector fields asks for whatever ``obsm`` declares, and
-            # declaring none is an ordinary result: a key outside the
-            # ``<field>_umap_<n>d`` grammar is not a malformed vector field, it
-            # is not a vector field. This is where it differs from connectivity,
-            # which names one exact matrix and so cannot be absent once asked
-            # for. A malformed declaration still fails, in validation above.
+            # Asking for vector fields asks for whatever ``obsm`` declares and
+            # the default rule binds, and declaring none is an ordinary result:
+            # a key outside the ``<field>_umap_<n>d`` grammar is not a vector
+            # field, and a UMAP vector does not bind to a slot showing another
+            # layout. A malformed declaration still fails, in validation above.
             return None
 
-        fields: dict[str, dict[str, Any]] = {}
         field_ids = _require_field_identities(
             list(validated.fields),
             label="Vector field",
         )
+        self._vector_field_obsm_keys = {
+            field_id: {embedding_id: obsm_keys[field_id][embedding_id] for embedding_id in by}
+            for field_id, by in validated.fields.items()
+        }
         self._vector_field_payload_index_by_id = {
             field_id: index for index, field_id in enumerate(field_ids)
         }
-        for field_id, vectors_by_dimension in validated.fields.items():
-            dimensions = sorted(vectors_by_dimension)
+        index_by_embedding = {item.id: item.index for item in self._embeddings}
+        fields: dict[str, dict[str, Any]] = {}
+        for field_id, by_embedding in validated.fields.items():
             payload_index = self._vector_field_payload_index_by_id[field_id]
             # Same key order as the prepared export and as cellucid-r.
             fields[field_id] = {
                 "label": field_id,
-                "available_dimensions": dimensions,
-                "default_dimension": max(dimensions),
                 "files": {
-                    f"{dimension}d": (f"vectors/{payload_index}_{dimension}d.bin")
-                    for dimension in dimensions
+                    embedding_id: f"vectors/{payload_index}_{index_by_embedding[embedding_id]}.bin"
+                    for embedding_id in by_embedding
                 },
-                "basis": "umap",
             }
-
         return {
             "default_field": validated.default_field,
             "fields": fields,
@@ -959,113 +1250,74 @@ class AnnDataAdapter:
     # EMBEDDING DATA
     # =========================================================================
 
-    def get_embedding(self, dim: int) -> np.ndarray:
+    def get_embedding(self, embedding_id: str) -> np.ndarray:
         """
-        Get embedding coordinates for a dimension.
+        Get the normalized coordinates of one served embedding.
 
-        Returns a normalized float64 array of shape (n_cells, dim). The payload
-        is float32, but the rounding happens once, in ``get_points_binary()``,
+        Returns a float64 array of shape (n_cells, dimension). The payload is
+        float32, but the rounding happens once, in ``get_embedding_binary()``,
         so a centroid measured from these coordinates is not measured from
         already-rounded ones.
         """
         self._check_closed()
-        dim = _require_dimension(dim)
+        item = self._served_embedding(embedding_id)
+        if item.id in self._embedding_cache:
+            return self._embedding_cache[item.id]
 
-        if dim not in self._available_dimensions:
-            raise ValueError(
-                f"Dimension {dim}D not available. Available: {self._available_dimensions}"
-            )
-
-        if dim in self._embedding_cache:
-            return self._embedding_cache[dim]
-
-        # Get raw embedding
-        key = self._umap_embedding_key_by_dim.get(dim)
-        if not key or key not in self.adata.obsm:
-            raise ValueError(
-                f"Could not find embedding for dimension {dim}. "
-                f"Expected an embedding resolved for {dim}D. Available obsm keys: {list(self.adata.obsm.keys())}"
-            )
+        if item.key not in self.adata.obsm:
+            raise ValueError(f"Embedding source obsm[{item.key!r}] no longer exists.")
         # Precision-preserving, like the prepared export: the extents are
         # measured at the input's own precision and the coordinates are
-        # rounded to float32 once, in get_points_binary().
-        raw = _require_finite_embedding_source(
-            self.adata.obsm[key],
-            label=f"Embedding {key!r}",
-        )
-        if raw.ndim != 2 or raw.shape != (self.n_cells, dim):
+        # rounded to float32 once, in get_embedding_binary().
+        raw = self._obsm_source(item.key, item.columns)
+        if raw.shape != (self.n_cells, item.dimension):
             raise ValueError(
-                f"Embedding {key!r} changed after adapter initialization; "
-                f"expected shape ({self.n_cells}, {dim}), got {raw.shape}."
+                f"Embedding {item.key!r} changed after adapter initialization; "
+                f"expected shape ({self.n_cells}, {item.dimension}), got {raw.shape}."
             )
 
         if self.normalize_embeddings:
             raw, center, scale_factor, _max_range = _normalize_finite_float32_embedding(
                 raw,
-                label=f"Embedding {key!r}",
+                label=f"Embedding {item.key!r}",
             )
-            self._embedding_norm[dim] = {
+            self._embedding_norm[item.id] = {
                 "center": center,
                 "scale_factor": float(scale_factor),
             }
         else:
-            self._embedding_norm[dim] = {
-                "center": np.zeros((dim,), dtype=np.float64),
+            self._embedding_norm[item.id] = {
+                "center": np.zeros((item.dimension,), dtype=np.float64),
                 "scale_factor": 1.0,
             }
 
-        self._embedding_cache[dim] = raw
+        self._embedding_cache[item.id] = raw
         return raw
 
-    def get_embedding_3d(self, dim: int) -> np.ndarray:
-        """
-        Get embedding padded to 3D for WebGL rendering.
-
-        1D -> (x, 0, 0)
-        2D -> (x, y, 0)
-        3D -> (x, y, z)
-
-        This is a render payload, so it carries the same float32 values
-        ``get_points_binary()`` writes.
-        """
-        embedding = self.get_embedding(dim)
-        n_cells = embedding.shape[0]
-
-        if dim == 3:
-            return embedding.astype(np.float32)
-        elif dim == 2:
-            result = np.zeros((n_cells, 3), dtype=np.float32)
-            result[:, :2] = embedding
-            return result
-        elif dim == 1:
-            result = np.zeros((n_cells, 3), dtype=np.float32)
-            result[:, 0] = embedding[:, 0]
-            return result
-        else:
-            raise ValueError(f"Unsupported dimension: {dim}")
-
-    def get_points_binary(self, dim: int, compress: bool = False) -> bytes:
-        """Get embedding as binary data (for HTTP response)."""
+    def get_embedding_binary(self, embedding_id: str, compress: bool = False) -> bytes:
+        """Get one served embedding as little-endian float32 bytes."""
         compress = _require_native_boolean(compress, label="compress")
-        embedding = self.get_embedding(dim)
+        embedding = self.get_embedding(embedding_id)
         data = little_endian_payload_bytes(embedding.astype(np.float32))
 
         if compress:
             return deterministic_gzip_compress(data, compresslevel=6)
         return data
 
-    def get_vector_field_binary(self, field_id: str, dim: int, compress: bool = False) -> bytes:
+    def get_vector_field_binary(
+        self, field_id: str, embedding_id: str, compress: bool = False
+    ) -> bytes:
         """
         Get a per-cell vector field (displacement vectors) as binary float32 data.
 
-        Vector fields are scaled by the SAME per-dimension normalization scale as
-        the embedding points, so they are in the same normalized space as the
-        `points_{dim}d.bin` responses.
+        Vector fields are scaled by the normalization factor of the embedding
+        they are bound to, so they are in the same normalized space as that
+        embedding's points.
         """
         self._check_closed()
 
         field = _require_nonempty_string(field_id, label="field_id")
-        dimension = _require_dimension(dim)
+        embedding = _require_nonempty_string(embedding_id, label="embedding_id")
         compress = _require_native_boolean(compress, label="compress")
 
         if self._vector_fields_metadata is None:
@@ -1075,13 +1327,14 @@ class AnnDataAdapter:
             raise ValueError(f"Vector field '{field}' not available")
 
         source_keys = self._vector_field_obsm_keys[field]
-        if dimension not in source_keys:
-            raise ValueError(f"Vector field {field!r} does not provide {dimension}D data.")
-        obsm_key = source_keys[dimension]
+        if embedding not in source_keys:
+            raise ValueError(f"Vector field {field!r} is not bound to embedding {embedding!r}.")
+        obsm_key = source_keys[embedding]
         if obsm_key not in self.adata.obsm:
             raise ValueError(f"Vector field source {obsm_key!r} no longer exists.")
+        item = self._served_embedding(embedding)
 
-        cache_key = (field, dimension)
+        cache_key = (field, embedding)
         if cache_key not in self._vector_field_cache:
             # The same validator the prepared export uses, so the served
             # bytes are the prepared bytes: the caller's own values are scaled
@@ -1090,20 +1343,12 @@ class AnnDataAdapter:
                 self.adata.obsm[obsm_key],
                 label=f"Vector field {obsm_key!r}",
                 n_rows=self.n_cells,
-                declared_dimension=dimension,
+                declared_dimension=item.dimension,
             )
-            expected_shape = (self.n_cells, dimension)
-            if raw.ndim != 2 or raw.shape != expected_shape:
-                raise ValueError(
-                    f"Vector field {obsm_key!r} changed after adapter "
-                    f"initialization; expected shape {expected_shape}, "
-                    f"got {raw.shape}."
-                )
-
-            self.get_embedding(dimension)
-            if dimension not in self._embedding_norm:
-                raise RuntimeError(f"Missing normalization state for {dimension}D embedding.")
-            scale_factor = self._embedding_norm[dimension]["scale_factor"]
+            self.get_embedding(embedding)
+            if embedding not in self._embedding_norm:
+                raise RuntimeError(f"Missing normalization state for embedding {embedding!r}.")
+            scale_factor = self._embedding_norm[embedding]["scale_factor"]
             self._vector_field_cache[cache_key] = scale_vector_field(
                 raw,
                 scale_factor=scale_factor,
@@ -1114,6 +1359,31 @@ class AnnDataAdapter:
         if compress:
             return deterministic_gzip_compress(data, compresslevel=6)
         return data
+
+    def get_vector_field_route(self, component: str) -> tuple[str, str] | None:
+        """Resolve one ``{fieldIndex}_{embeddingIndex}.bin`` route to (field, embedding)."""
+        self._check_closed()
+        match = re.fullmatch(r"(\d+)_(\d+)\.bin", component)
+        if match is None or self._vector_fields_metadata is None:
+            return None
+        field_index = _payload_route_index(match.group(1))
+        embedding_index = _payload_route_index(match.group(2))
+        if field_index is None or embedding_index is None:
+            return None
+        field_id = next(
+            (
+                field
+                for field, index in self._vector_field_payload_index_by_id.items()
+                if index == field_index
+            ),
+            None,
+        )
+        if field_id is None or not 0 <= embedding_index < len(self._embeddings):
+            return None
+        embedding_id = self._embeddings[embedding_index].id
+        if embedding_id not in self._vector_field_obsm_keys.get(field_id, {}):
+            return None
+        return field_id, embedding_id
 
     # =========================================================================
     # LATENT SPACE FOR OUTLIER COMPUTATION
@@ -1278,14 +1548,14 @@ class AnnDataAdapter:
     def _compute_centroids_for_field(
         self,
         key: str,
-        dim: int,
+        embedding_id: str,
     ) -> list[dict]:
-        """Compute centroids for a categorical field at a given dimension."""
-        cache_key = f"{key}_{dim}d"
+        """Compute centroids for a categorical field on one served embedding."""
+        cache_key = (key, embedding_id)
         if cache_key in self._centroid_cache:
             return self._centroid_cache[cache_key]
 
-        coords = self.get_embedding(dim)
+        coords = self.get_embedding(embedding_id)
         s = self._obs_series(key)
         cat = s.astype("category")
         categories = _json_category_values(
@@ -1333,12 +1603,10 @@ class AnnDataAdapter:
         return centroids
 
     def get_centroids_for_field(self, key: str) -> dict[str, list[dict]]:
-        """Get centroids for all available dimensions."""
-        result = {}
-        for dim in self._available_dimensions:
-            centroids = self._compute_centroids_for_field(key, dim)
-            result[str(dim)] = centroids
-        return result
+        """Get centroids on every served embedding, keyed by embedding id."""
+        return {
+            item.id: self._compute_centroids_for_field(key, item.id) for item in self._embeddings
+        }
 
     def _compute_outlier_quantiles(self, key: str) -> np.ndarray:
         """Compute per-cell outlier quantiles for a categorical field."""
@@ -1397,32 +1665,10 @@ class AnnDataAdapter:
     # =========================================================================
 
     def get_gene_ids(self) -> list[str]:
-        """Get list of gene identifiers."""
+        """Get the served gene names: the gene axis's names, made unique."""
         self._check_closed()
-
-        if self._gene_ids_cache is not None:
-            return self._gene_ids_cache
-
-        if self.gene_id_column is None:
-            values = self.adata.var.index.tolist()
-            label = "var index"
-        else:
-            if self.gene_id_column not in self.adata.var.columns:
-                raise KeyError(
-                    f"gene_id_column '{self.gene_id_column}' not found in var. "
-                    f"Available columns: {list(self.adata.var.columns)}"
-                )
-            values = self.adata.var[self.gene_id_column].tolist()
-            label = f"var column {self.gene_id_column!r}"
-
-        self._gene_ids_cache = _require_field_identities(
-            values,
-            label=label,
-        )
-
-        # Build index for O(1) lookup
-        self._gene_id_to_idx_cache = {gid: idx for idx, gid in enumerate(self._gene_ids_cache)}
-        self._gene_payload_index_by_id = dict(self._gene_id_to_idx_cache)
+        if self._gene_ids_cache is None:
+            raise RuntimeError("Gene names were not resolved.")
         return self._gene_ids_cache
 
     def get_gene_payload_index(self, gene_id: str) -> int:
@@ -1441,17 +1687,6 @@ class AnnDataAdapter:
         if index is None or not 0 <= index < len(gene_ids):
             return None
         return gene_ids[index]
-
-    def get_vector_field_id_for_payload_index(self, component: str) -> str | None:
-        """Resolve one payload-index route component to its exact vector field id."""
-        self._check_closed()
-        index = _payload_route_index(component)
-        if index is None:
-            return None
-        for field_id, payload_index in self._vector_field_payload_index_by_id.items():
-            if payload_index == index:
-                return field_id
-        return None
 
     def _get_gene_idx(self, gene_id: str) -> int:
         """Get gene index with O(1) lookup."""
@@ -1501,7 +1736,7 @@ class AnnDataAdapter:
         """
         self._check_closed()
 
-        X = self.adata.X
+        X = self._expression_matrix
 
         if X is None:
             raise ValueError("AnnData has no X expression matrix; gene expression is unavailable")
@@ -1548,7 +1783,7 @@ class AnnDataAdapter:
 
     def _get_validated_gene_values(self, gene_id: str) -> np.ndarray:
         """Return one exact finite Float32 per-cell gene vector."""
-        if self.adata.X is None:
+        if self._expression_matrix is None:
             raise ValueError("AnnData has no X expression matrix; gene expression is unavailable")
         values = self._gene_expression_cache.get(gene_id)
         if values is None:
@@ -1596,8 +1831,8 @@ class AnnDataAdapter:
     # =========================================================================
 
     def _initialize_connectivity(self) -> None:
-        """Validate the complete asked-for connectivity capability atomically."""
-        if not self.serve_connectivity:
+        """Read and check the neighbour graph ``knn_key`` names, atomically."""
+        if self.knn_key is None:
             # Not reading obsp at all is the point: on a large object the edge
             # list is the most expensive thing startup could do, and a session
             # that never draws the graph should never pay for it.
@@ -1605,27 +1840,31 @@ class AnnDataAdapter:
             self._connectivity_manifest = None
             return
 
+        key = self.knn_key
         try:
-            self._has_connectivity = "connectivities" in self.adata.obsp
+            present = key in self.adata.obsp
         except Exception as exc:
-            raise ValueError("Could not inspect adata.obsp for 'connectivities'") from exc
-
-        if not self._has_connectivity:
+            raise ValueError(f"Could not inspect adata.obsp for {key!r}") from exc
+        if not present:
             raise ValueError(
-                "Connectivity was asked for, and adata.obsp has no 'connectivities' "
-                "matrix to serve. Compute the neighbor graph with "
-                "sc.pp.neighbors(adata) before serving, or serve without asking "
-                "for connectivity."
+                f"knn_key names obsp[{key!r}], which this object does not have. "
+                f"obsp holds: {list(self.adata.obsp.keys())}. Compute the neighbour "
+                "graph with sc.pp.neighbors(adata), or serve without a graph."
             )
+        self._has_connectivity = True
 
-        self._report("Connectivity", "reading obsp['connectivities']")
+        self._report("Connectivity", f"reading obsp[{key!r}]")
         try:
             edges = self._compute_connectivity_edges()
         except Exception as exc:
-            raise ValueError(
-                "Invalid adata.obsp['connectivities']; the direct server was not "
-                f"initialized: {exc}"
-            ) from exc
+            self._has_connectivity = False
+            reason = str(exc)
+            if "symmetric" in reason:
+                raise ValueError(
+                    f"obsp[{key!r}] is not symmetric \u2014 choose a connectivities matrix. "
+                    f"The neighbour graph must be undirected: {reason}"
+                ) from exc
+            raise ValueError(f"obsp[{key!r}] cannot be served as the neighbour graph: {reason}") from exc
 
         self._connectivity_manifest = build_connectivity_manifest(
             n_cells=self.n_cells,
@@ -1654,11 +1893,11 @@ class AnnDataAdapter:
         if self._connectivity_cache is not None:
             return self._connectivity_cache
 
-        if not self.has_connectivity():
-            raise ValueError("No connectivity data in adata.obsp['connectivities']")
+        if not self.has_connectivity() or self.knn_key is None:
+            raise ValueError("This adapter serves no neighbour graph.")
 
         self._connectivity_cache = validate_connectivity_edges(
-            self.adata.obsp["connectivities"],
+            self.adata.obsp[self.knn_key],
             n_cells=self.n_cells,
         )
         return self._connectivity_cache
@@ -1731,14 +1970,22 @@ class AnnDataAdapter:
             else None
         )
 
-        # Build embeddings metadata
+        # Build embeddings metadata: one item per served slot.
         embeddings_meta = {
-            "available_dimensions": self._available_dimensions,
             "default_dimension": self._default_dimension,
-            "files": {f"{dim}d": f"points_{dim}d.bin" for dim in self._available_dimensions},
+            "defaults": dict(self._embedding_defaults),
+            "items": {
+                item.id: {
+                    "label": item.id,
+                    "dimension": item.dimension,
+                    "file": item.file,
+                    "source": {"key": item.key, "columns": list(item.columns)},
+                }
+                for item in self._embeddings
+            },
         }
         identity = {
-            "version": 2,
+            "version": IDENTITY_VERSION,
             "id": self.dataset_id,
             "name": self.dataset_name,
             "description": "Loaded directly from AnnData",
@@ -1746,7 +1993,7 @@ class AnnDataAdapter:
             "cellucid_data_version": "anndata_adapter",
             "stats": {
                 "n_cells": self.n_cells,
-                "n_genes": 0 if self.adata.X is None else self.n_genes,
+                "n_genes": 0 if self._expression_matrix is None else self.n_genes,
                 "n_obs_fields": len(obs_fields),
                 "n_categorical_fields": n_categorical,
                 "n_continuous_fields": n_continuous,
@@ -1804,12 +2051,11 @@ class AnnDataAdapter:
                     field_key=key,
                 )
 
-                # Get centroids for all dimensions
-                centroids_by_dim = self.get_centroids_for_field(key)
+                # One centroid list per served embedding, keyed by its id.
+                centroids_by_embedding = self.get_centroids_for_field(key)
 
-                # Outlier quantile min/max (always 0-1 since it's a quantile)
                 categorical_fields.append(
-                    [payload_index, key, categories, dtype_str, missing_value, centroids_by_dim]
+                    [payload_index, key, categories, dtype_str, missing_value, centroids_by_embedding]
                 )
 
         # Build compact manifest format
@@ -1843,7 +2089,7 @@ class AnnDataAdapter:
                 }
 
         return {
-            "_format": "compact_v1",
+            "_format": MANIFEST_FORMAT_VERSION,
             "n_points": self.n_cells,
             "centroid_outlier_quantile": self.centroid_outlier_quantile,
             "latent_key": self.latent_key,
@@ -1855,12 +2101,25 @@ class AnnDataAdapter:
 
     def get_var_manifest(self) -> dict:
         """Generate var_manifest.json content."""
-        if self.adata.X is None:
+        gene_name_set: dict[str, Any]
+        if self._expression_matrix is None:
             fields = []
+            gene_name_set = {
+                "source": self.gene_id_column,
+                "filled_from_index": 0,
+                "renamed": [],
+                "names": None,
+            }
         else:
             fields = [
                 [self.get_gene_payload_index(gene_id), gene_id] for gene_id in self.get_gene_ids()
             ]
+            gene_name_set = {
+                "source": self.gene_id_column,
+                "filled_from_index": self._gene_names.filled_from_index,
+                "renamed": [list(pair) for pair in self._gene_names.renamed],
+                "names": None,
+            }
 
         # Path pattern must match prepare format for consistency
         # Note: We don't use compression (.gz) in adapter mode - gzip is applied
@@ -1874,13 +2133,13 @@ class AnnDataAdapter:
         }
 
         return {
-            "_format": "compact_v1",
+            "_format": MANIFEST_FORMAT_VERSION,
             "n_points": self.n_cells,
-            "var_gene_id_column": self.gene_id_column,
             "compression": None,
             "quantization": None,
             "_varSchema": var_schema,
             "fields": fields,
+            "gene_name_sets": [gene_name_set],
         }
 
     def get_connectivity_manifest(self) -> dict | None:
@@ -1917,7 +2176,7 @@ class AnnDataAdapter:
         Memory Released
         ---------------
 
-        - Embedding cache (normalized UMAP coordinates)
+        - Embedding cache (normalized coordinates)
         - Centroid cache (computed label centroids)
         - Outlier quantile cache
         - Gene expression LRU cache (up to 100 gene columns)
@@ -1936,6 +2195,7 @@ class AnnDataAdapter:
         # Clear all caches to free memory
         self._embedding_cache.clear()
         self._embedding_norm.clear()
+        self._expression_matrix = None
         self._vector_field_cache.clear()
         self._vector_field_obsm_keys.clear()
         self._vector_field_payload_index_by_id.clear()
@@ -1980,7 +2240,8 @@ class AnnDataAdapter:
             return "AnnDataAdapter(closed)"
         backed_str = " (backed)" if self.is_backed else ""
         source_str = f" from {self._source_type}" if self._source_type != "memory" else ""
+        embeddings = ", ".join(item.id for item in self._embeddings)
         return (
             f"AnnDataAdapter({self.n_cells:,} cells, {self.n_genes:,} genes, "
-            f"dims={self._available_dimensions}{backed_str}{source_str})"
+            f"embeddings=[{embeddings}]{backed_str}{source_str})"
         )

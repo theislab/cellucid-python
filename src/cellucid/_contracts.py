@@ -22,6 +22,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 JsonScalar = str | bool | int | float
+
+#: The version of ``dataset_identity.json`` every writer emits and every reader
+#: requires. Version 3 declares any number of embeddings per dimension.
+IDENTITY_VERSION = 3
+
+#: The axis directory an export's embedding payloads live in.
+EMBEDDINGS_DIRNAME = "embeddings"
 _PORTABLE_COMPONENT_PATTERN = re.compile(
     r"^[A-Za-z0-9][A-Za-z0-9._-]{0,179}$",
     flags=re.ASCII,

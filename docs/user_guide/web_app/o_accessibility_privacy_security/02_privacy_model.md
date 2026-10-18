@@ -96,7 +96,7 @@ URL, or an error message — and an event that does not fit is dropped whole.
   | cell and gene count **ranges** | `10k-100k`, `1M-10M` — never the exact counts |
   | obs field count, embedding dimensions | `14`, `2+3` |
   | connectivity / vector field present | yes/no |
-  | writer version of the export | `0.9.2` |
+  | writer version of the export | `0.10.0` |
   | dataset id | **only for the deployment's own public sample datasets** |
   | on failure | a fixed error code and class, and the HTTP status |
 

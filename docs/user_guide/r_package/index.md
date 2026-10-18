@@ -10,11 +10,11 @@ If you want notebook embedding, servers, and programmatic control, see the {doc}
 For the web UI experience after export (loading, filtering, analysis, sessions, community annotation), see {doc}`../web_app/index`.
 ```
 
-:::{admonition} Active package version — 0.9.2
+:::{admonition} Active package version — 0.10.0
 :class: note
 <!-- CELLUCID_VERSION -->
 
-Version **0.9.2** is the active Cellucid for R source and documentation
+Version **0.10.0** is the active Cellucid for R source and documentation
 version and the CRAN submission release. The
 [CRAN package index](https://cran.r-project.org/web/packages/available_packages_by_name.html)
 is authoritative for registry availability. Check an installed environment
@@ -42,7 +42,7 @@ matching CRAN and official-source installation paths.
 :link: installation
 :link-type: doc
 
-Install version 0.9.2 from the source currently available to you, verify the <!-- CELLUCID_VERSION -->
+Install version 0.10.0 from the source currently available to you, verify the <!-- CELLUCID_VERSION -->
 loaded package, and diagnose dependency or environment problems.
 :::
 

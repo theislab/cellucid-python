@@ -2,15 +2,15 @@
 
 **Audience:** everyone  
 **Time:** 5–15 minutes (depending on your setup)  
-**Goal:** install Cellucid for R, verify version 0.9.2, and choose the correct <!-- CELLUCID_VERSION -->
+**Goal:** install Cellucid for R, verify version 0.10.0, and choose the correct <!-- CELLUCID_VERSION -->
 source for current registry availability
 
 :::{note}
-**Active package version: 0.9.2.** Version 0.9.2 is the CRAN submission
+**Active package version: 0.10.0.** Version 0.10.0 is the CRAN submission
 release. The
 [CRAN package index](https://cran.r-project.org/web/packages/available_packages_by_name.html)
 is authoritative for registry availability. Use the CRAN command below when
-the index lists `cellucid` 0.9.2; otherwise install the active source from the
+the index lists `cellucid` 0.10.0; otherwise install the active source from the
 official GitHub repository.
 :::
 
@@ -29,16 +29,16 @@ Those packages are only needed if you want to follow the Seurat/SCE recipes in t
 
 ## Install Cellucid
 
-### From CRAN when version 0.9.2 is listed
+### From CRAN when version 0.10.0 is listed
 <!-- CELLUCID_VERSION -->
 
-When the CRAN package index lists `cellucid` 0.9.2, install it with: <!-- CELLUCID_VERSION -->
+When the CRAN package index lists `cellucid` 0.10.0, install it with: <!-- CELLUCID_VERSION -->
 
 ```r
 install.packages("cellucid")
 ```
 
-If the index does not list version 0.9.2 yet, use the official source <!-- CELLUCID_VERSION -->
+If the index does not list version 0.10.0 yet, use the official source <!-- CELLUCID_VERSION -->
 installation below.
 
 ### From the official source repository
@@ -70,7 +70,7 @@ packageVersion("cellucid")
 
 You should see:
 - No error on `library(cellucid)`
-- Version `0.9.2` from `packageVersion` <!-- CELLUCID_VERSION -->
+- Version `0.10.0` from `packageVersion` <!-- CELLUCID_VERSION -->
 
 ## Optional dependencies (recommended)
 

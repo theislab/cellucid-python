@@ -5,8 +5,12 @@ All notable changes to Cellucid will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.9.2]
+## [0.10.0]
 <!-- CELLUCID_VERSION -->
+
+CHANGELOG_PLACEHOLDER
+
+## [0.9.2]
 
 Version 0.9.2 is a patch release on 0.9.1.
 
@@ -642,6 +646,7 @@ declared `0.0.9`. Release 0.9.1 restores one exact version across both systems.
   - Jupyter integration (`show()`, `show_anndata()`)
 - Export functionality for web deployment
 
+[0.10.0]: https://github.com/theislab/cellucid-python/releases/tag/v0.10.0
 [0.9.2]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.2
 [0.9.1]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.1
 [0.0.9]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.0
