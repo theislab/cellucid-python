@@ -77,7 +77,14 @@ module* rather than by the coordinator:
 - `field-selector-gene-expression.js` ← initialized by `field-selector.js`
 - `field-selector-deleted-fields.js` ← initialized by `field-selector.js`
 
-If you are tracing why a control is inert, check which of the two paths owns it
+Two more are not initialized by the coordinator at all:
+`sidebar-controls.js` and `select-bar-placement.js` are wired by
+`ui/core/sidebar-layout.js`, which `main.js` calls right after the viewer is
+created. The sidebar toggle is painted with the first frame, and on a phone it
+is the only way out of the full-screen menu, so it must work before the first
+dataset has loaded, which is when the coordinator runs.
+
+If you are tracing why a control is inert, check which of these paths owns it
 before assuming the coordinator does.
 
 The `ui/` layer also has directories this page does not otherwise cover:

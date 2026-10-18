@@ -56,6 +56,10 @@ Version 0.9.2 is a patch release on 0.9.1.
   area like Orbit and Planar, and the hidden sidebar is `inert`, so `Tab` no
   longer walks into it.
 
+- **Web app**: the sidebar's ✕ works from the first frame. It was wired only once
+  the first dataset had loaded, so during a slow first load a phone user, who
+  sees the menu full-screen, tapped it and nothing happened.
+
 - **Web app**: in multiview, a finger dragging a pane now focuses that pane first,
   as a mouse press does, instead of moving whichever pane last had focus, and a
   touch drag saves the camera to the focused pane when cameras are unlocked.
