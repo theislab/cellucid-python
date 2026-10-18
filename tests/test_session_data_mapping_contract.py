@@ -23,6 +23,9 @@ from scipy import sparse
 
 from cellucid.anndata_session import apply_cellucid_session_to_anndata
 
+# The duplicate var names are the point of several cases here.
+pytestmark = pytest.mark.filterwarnings("ignore:Variable names are not unique:UserWarning")
+
 _PROFILES = {
     "core/field-overlays": ("field-overlays", "json", "Field overlays", True),
     "cinematic/camera": ("cinematic-camera", "json", "Cinematic camera path", True),

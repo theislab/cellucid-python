@@ -5,20 +5,52 @@ All notable changes to Cellucid will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.9.2]
+## [0.9.3]
 <!-- CELLUCID_VERSION -->
 
-### Export format 3 and the data mapping
+Version 0.9.3 changes the export format to **version 3**, so that one export can
+carry several embeddings per dimension and several sets of gene names, and
+carries the web app changes made since 0.9.2. It is a clean break: exports in
+the earlier format are not read, and format-3 exports need a viewer release that
+reads format 3. Re-export with `prepare()` (or `cellucid_prepare()` from the
+matching R release, which writes the same bytes).
 
-These entries belong to the data-mapping release; its version number is set
-when this work is merged. The export format changes to **version 3** so that
-one export can carry several embeddings per dimension and several sets of gene
-names. It is a clean break: exports in the earlier format are not read, and
-format-3 exports need a viewer release that reads format 3. Re-export with
-`prepare()` (or `cellucid_prepare()` from the matching R release, which writes
-the same bytes).
+### Added
 
-#### Changed
+- `var_gene_name_columns=` on `prepare()`: further `var` columns offered as
+  alternative gene names (for example symbols beside an Ensembl index).
+- `embedding_keys=` (`--embedding-1d/2d/3d KEY[:c0,c1]`), `expression_source=`
+  (`--expression X|raw|layer:NAME`) and `--gene-id-column` for serving AnnData.
+- `cellucid.data_mapping`: the data-mapping model shared with the web app and
+  the R package, with a conformance fixture
+  (`tests/fixtures/data_mapping_conformance.json`) and a cross-writer byte
+  parity fixture (`tests/fixtures/writer_parity_v3.json`).
+- A sixth reconciled surface, **Embedding**: the writer proves `embeddings/`
+  holds exactly the files `dataset_identity.json` declares.
+
+- **Web app**: cells can be highlighted on a touch screen. Every selection tool
+  started only from an `Alt` press, which a phone or tablet does not have, so touch
+  users could not select at all. A **Select mode** switch in the Highlighting panel
+  now stands in for a held `Alt`: while it is on, a one-finger tap or drag runs the
+  active tool through the same path an `Alt` press takes, and its Intersect / Add /
+  Subtract buttons stand in for `Shift` and `Ctrl`. Two fingers always pinch to zoom
+  and, newly, drag to pan; a second finger landing mid-selection abandons that
+  gesture rather than committing it. `Esc` with nothing in progress leaves the mode.
+  Mouse and keyboard behaviour is unchanged while it is off.
+
+- **Web app**: a **selection bar** at the bottom of the plot carries Select mode's
+  controls, so a selection can be made, combined, confirmed, cancelled and cleared
+  without opening the menu, which covers the whole screen on a phone. It shows the
+  same switch and Intersect / Add / Subtract choice as the panel, the active
+  tool's cell count with its Undo, Cancel and Confirm while a selection is in
+  progress, the active page's highlighted count with Clear, and a one-line note
+  when a tap on empty plot changed nothing. Every control on it is the panel's
+  control shown again, so the two always agree. It is always shown on touch
+  screens (just the switch while the mode is off), shown to a mouse while the
+  mode is on, centred in the part of the plot the sidebar leaves uncovered, and
+  notifications stack above it.
+
+### Changed
 
 - **Export format v3** (`dataset_identity.json` `version: 3`).
   `embeddings` is now `{default_dimension, defaults, items}`: every exported
@@ -721,6 +753,7 @@ declared `0.0.9`. Release 0.9.1 restores one exact version across both systems.
   - Jupyter integration (`show()`, `show_anndata()`)
 - Export functionality for web deployment
 
+[0.9.3]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.3
 [0.9.2]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.2
 [0.9.1]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.1
 [0.0.9]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.0
