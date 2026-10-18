@@ -125,11 +125,13 @@ Each badge contains:
 - `×` when that view can be removed.
 
 ```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
-:alt: Cellucid showing two side-by-side kept views of the same dataset.
+:alt: The whole window in Grid compare with the sidebar open: two equal panels fill the area to the right of the sidebar and show the Pancreas 3D embedding from the same locked camera — the left panel, the live view, coloured by cell_type, and the right panel, the kept snapshot, recoloured by S_score on a Viridis scale — each under a title chip naming its field. The sidebar, scrolled to Compare Views, lists badge 1 cell_type and the selected badge 2 S_score above the Layout select set to Grid compare, and Coloring & Filtering shows S_score in the Continuous obs select.
 :width: 1440px
 
-Two panels compare one dataset while retaining independent coloring and filter
-contexts.
+Grid compare with the sidebar open. The live view (badge 1, cell_type) and a
+kept snapshot recoloured by S_score (badge 2, selected) sit in two equal panels
+to the right of the sidebar, framed by one locked camera, and each panel keeps
+its own coloring.
 ```
 
 Removing `×` from a snapshot deletes that snapshot. When at least two snapshots

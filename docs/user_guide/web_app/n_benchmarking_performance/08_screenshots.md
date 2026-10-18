@@ -85,18 +85,19 @@ grid. That difference matters more than the count, because point size follows
 the height of the pane a point is drawn in.
 
 ```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
-:alt: Cellucid showing two side-by-side views of the same dataset.
+:alt: The whole window in Grid compare with the sidebar open: two equal panels fill the area to the right of the sidebar and show the Pancreas 3D embedding from the same locked camera — the left panel, the live view, coloured by cell_type, and the right panel, the kept snapshot, recoloured by S_score on a Viridis scale — each under a title chip naming its field. The sidebar, scrolled to Compare Views, lists badge 1 cell_type and the selected badge 2 S_score above the Layout select set to Grid compare, and Coloring & Filtering shows S_score in the Continuous obs select.
 :width: 1440px
 
-Two views share the full canvas height, so each point keeps its full size and
-the pair shades roughly twice the pixels of a single view. This is the most
+Two views share the full canvas height and split the width to the right of the
+sidebar equally, so each point keeps its full size and the pair draws every
+cell twice — roughly twice the point shading of a single view. This is the most
 expensive layout per unit of insight — tune in one view first, then split.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/dark-theme-multiview.png
-:alt: Two Cellucid views displayed side by side with the dark theme.
+:alt: The whole window in the dark theme on the Grid (dark) background, in Grid compare with the sidebar open: two equal panels to the right of the sidebar show the Pancreas 3D embedding coloured by cell_type from the same locked camera, each under a cell_type title chip. The sidebar, scrolled to Visualization, reads Theme Dark and Background Grid (dark), and Compare Views below it lists the two view badges.
 :width: 1440px
 
-Theme and background changes apply consistently across the comparison layout,
-and neither choice changes the cost of the frame.
+Theme and background apply to every panel of the comparison layout alike, and
+neither choice changes the cost of the frame.
 ```

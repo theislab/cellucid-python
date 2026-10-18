@@ -384,6 +384,12 @@ export const SCENARIOS = Object.freeze([
   // gestures on the same 2D view, so they share one prelude and one set of
   // fixed gesture coordinates that nothing else in this file uses.
   ...buildHighlightingScenarios(),
+
+  // Multiview (Grid compare). Separate builder for the same reason as the
+  // blocks above: every figure here is the same two-panel grid — the live view
+  // plus one kept snapshot under locked cameras — and they share one prelude,
+  // one zoom gesture and one layout assertion that nothing else uses.
+  ...buildMultiviewScenarios(),
 ]);
 
 // ---------------------------------------------------------------------------
@@ -3314,6 +3320,190 @@ function buildHighlightingScenarios() {
         { scrollIntoView: '#highlighted-cells-section' },
       ],
       shot: PANEL,
+      settle,
+    },
+  ];
+}
+
+
+// ---------------------------------------------------------------------------
+// Multiview: c_core_interactions and n_benchmarking_performance.
+//
+// Grid compare lays its panels out in the presented area — the part of the
+// canvas the sidebar does not cover — as equal cells (`resolvePresentedLayout`
+// in the web app's `rendering/viewer/presented-view-layout.js`). These figures
+// exist to show that layout, so each one asserts it before the shutter rather
+// than trusting it: every panel's title chip is centred on the panel it
+// labels, so the chips' centres pin down where the panels are.
+// ---------------------------------------------------------------------------
+
+/** @returns {Array<Object>} */
+function buildMultiviewScenarios() {
+  const settle = { attempts: 20, gapMs: 220 };
+
+  /** Colour the selected view and wait for the stats line to say so. */
+  const colourBy = (select, field, kind) => [
+    { waitForStable: select },
+    { select, label: field },
+    { waitForText: '#stats', text: `Field: ${field} (${kind})` },
+  ];
+
+  /**
+   * Keep view: the live view becomes badge 1 and the new snapshot, badge 2,
+   * is the selected view. The grid exists once both badges and both panel
+   * title chips do.
+   */
+  const KEEP_VIEW = [
+    { click: '#split-keep-view-btn' },
+    {
+      run: page => page.waitForFunction(() => (
+        document.querySelectorAll('#split-view-badges-list > .split-badge').length === 2
+        && document.querySelectorAll('#view-title-layer .view-title-chip').length === 2
+      )),
+    },
+  ];
+
+  /**
+   * The published sample's camera is framed for one full-window view; a panel
+   * a little under half as wide shows the embedding too close. Four wheel
+   * notches over the right panel zoom both panels out (the cameras are locked),
+   * and the pointer then rests in the bottom-left corner of the window, clear of
+   * the embedding and of every control, so nothing in the frame carries hover
+   * styling.
+   */
+  const ZOOM_OUT = {
+    run: async page => {
+      await page.mouse.move(1150, 500);
+      for (let notch = 0; notch < 4; notch += 1) {
+        await page.mouse.wheel(0, 300);
+        await page.waitForTimeout(80);
+      }
+      await page.mouse.move(150, 995);
+    },
+  };
+
+  /**
+   * The layout under test: two equal panels side by side, starting at the
+   * sidebar's right edge when it is open and at the window's left edge when it
+   * is closed. Waiting for it, rather than reading it once, also waits out the
+   * sidebar's open/close slide.
+   */
+  const TWO_EQUAL_PANELS_IN_PRESENTED_AREA = {
+    run: page => page.waitForFunction(() => {
+      const sidebar = document.querySelector('#sidebar');
+      const left = sidebar.classList.contains('hidden')
+        ? 0
+        : Math.ceil(sidebar.getBoundingClientRect().right);
+      const chips = [...document.querySelectorAll('#view-title-layer .view-title-chip')];
+      const panelWidth = (window.innerWidth - left) / chips.length;
+      return chips.length === 2 && chips.every((chip, index) => {
+        const rect = chip.getBoundingClientRect();
+        const centre = rect.left + rect.width / 2;
+        return Math.abs(centre - (left + panelWidth * (index + 0.5))) < 1;
+      });
+    }),
+  };
+
+  /** Scroll the sidebar so one section's header sits at its top edge. */
+  const scrollSidebarTo = selector => ({
+    run: page => page.locator(selector).evaluate(
+      element => element.scrollIntoView({ block: 'start' })
+    ),
+  });
+
+  return [
+    {
+      id: 'core-multiview-two-panels',
+      topic: 'web_app',
+      name: 'multiview-two-panels',
+      describes:
+        'The whole window in Grid compare with the sidebar open: two equal '
+        + 'panels fill the area to the right of the sidebar and show the '
+        + 'Pancreas 3D embedding from the same locked camera — the left panel, '
+        + 'the live view, coloured by cell_type, and the right panel, the kept '
+        + 'snapshot, recoloured by S_score on a Viridis scale — each under a '
+        + 'title chip naming its field. The sidebar, scrolled to Compare Views, '
+        + 'lists badge 1 cell_type and the selected badge 2 S_score above the '
+        + 'Layout select set to Grid compare, and Coloring & Filtering shows '
+        + 'S_score in the Continuous obs select.',
+      dataset: 'pancreas',
+      steps: [
+        PANCREAS_READY,
+        ...colourBy('#categorical-field', 'cell_type', 'category'),
+        ...KEEP_VIEW,
+        // The snapshot is the selected view, so this recolours it alone.
+        ...colourBy('#continuous-field', 'S_score', 'continuous'),
+        { waitForText: '#view-title-layer .view-title-chip.active', text: 'S_score' },
+        ZOOM_OUT,
+        TWO_EQUAL_PANELS_IN_PRESENTED_AREA,
+        scrollSidebarTo('#compare-views-section'),
+        NOTIFICATIONS_DRAINED,
+      ],
+      shot: { mode: 'window' },
+      settle,
+    },
+    {
+      id: 'performance-dark-theme-multiview',
+      topic: 'web_app',
+      name: 'dark-theme-multiview',
+      describes:
+        'The whole window in the dark theme on the Grid (dark) background, in '
+        + 'Grid compare with the sidebar open: two equal panels to the right of '
+        + 'the sidebar show the Pancreas 3D embedding coloured by cell_type from '
+        + 'the same locked camera, each under a cell_type title chip. The '
+        + 'sidebar, scrolled to Visualization, reads Theme Dark and Background '
+        + 'Grid (dark), and Compare Views below it lists the two view badges.',
+      dataset: 'pancreas',
+      theme: 'dark',
+      steps: [
+        PANCREAS_READY,
+        { select: '#theme-select', value: 'dark' },
+        { run: page => page.waitForFunction(() => document.documentElement.dataset.theme === 'dark') },
+        { select: '#background-select', value: 'grid-dark' },
+        ...colourBy('#categorical-field', 'cell_type', 'category'),
+        ...KEEP_VIEW,
+        ZOOM_OUT,
+        TWO_EQUAL_PANELS_IN_PRESENTED_AREA,
+        scrollSidebarTo('#visualization-section'),
+        NOTIFICATIONS_DRAINED,
+      ],
+      shot: { mode: 'window' },
+      settle,
+    },
+    {
+      id: 'core-connectivity-multiview',
+      topic: 'web_app',
+      name: 'connectivity-multiview',
+      describes:
+        'Two equal panels filling the whole window with the sidebar closed, '
+        + 'both showing the Pancreas 3D embedding coloured by cell_type from the '
+        + 'same locked camera, and in both the KNN connectivity edges, drawn at '
+        + 'line width 2.0, form a grey web between the cells.',
+      dataset: 'pancreas',
+      steps: [
+        PANCREAS_READY,
+        ...colourBy('#categorical-field', 'cell_type', 'category'),
+        ...KEEP_VIEW,
+        // Turned on after the snapshot exists and while it is the selected
+        // view, so edges in the live panel show the setting reaching it too.
+        { run: page => page.check('#toggle-connectivity') },
+        { waitForText: '#connectivity-info', text: '33k total · 33k visible · 33k shown' },
+        // Thicker than the 1.0 default so the edges survive the page's
+        // downscale; the alt text names the width.
+        {
+          run: async page => {
+            await page.fill('#connectivity-width', '20');
+            await page.dispatchEvent('#connectivity-width', 'change');
+          },
+        },
+        { waitForText: '#connectivity-width-display', text: '2.0' },
+        { click: '#sidebar-toggle' },
+        { waitForText: '#sidebar-toggle', text: '☰' },
+        ZOOM_OUT,
+        TWO_EQUAL_PANELS_IN_PRESENTED_AREA,
+        NOTIFICATIONS_DRAINED,
+      ],
+      shot: { mode: 'window' },
       settle,
     },
   ];

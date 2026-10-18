@@ -990,6 +990,13 @@ that instruction and none of them shows it.
     `:width: 1440px` each. **Deferred** with the rest of section N.
   - Promote the five new benchmark-panel captures from `05` into this gallery so
     the section owns its images.
+- **recaptured** — Both multiview frames went stale when Grid compare moved its
+  panels into the area the sidebar leaves uncovered (equal panels starting at
+  the sidebar's right edge, where the left panel used to sit partly under the
+  sidebar). They were recaptured on `pancreas` at 1440 × 1000 by
+  `core-multiview-two-panels` and `performance-dark-theme-multiview` in
+  `docs/_tooling/screenshots/scenarios.mjs`, and both captions now state the
+  layout they show. The drop / re-caption decision above still stands.
 - **notes** — **Stale-risk by construction.** The caption for
   `benchmark-panel.png` states "Build 2026-07-26.4 … 17 FPS, a 57.67 ms frame
   sample, full LOD, all 10.0M points visible, generation in 1,592 ms", and the

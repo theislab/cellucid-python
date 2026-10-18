@@ -280,7 +280,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
      - Step 4 (line 105): after clicking `#split-keep-view-btn`, full window
        showing two panels and the new view badge, cursor on "Keep view".
        `_static/screenshots/web_app/tour-04-keep-view.png`. Note
-       `web_app/multiview-two-panels.png` already exists (1440x900) and is used
+       `web_app/multiview-two-panels.png` already exists (1440x1000) and is used
        in section C and N — check it before capturing a near-duplicate; if it
        shows the badge clearly, reuse it here and skip the capture.
      - Step 5 (line 113): `.highlight-mode-btn[data-mode="lasso"]` active, a
@@ -1022,7 +1022,7 @@ terminal and Jupyter captures:
   highlight groups, pages, and the "what you see is per view" rule.
   **That page is in section F, not mine** — but it is the page that would carry
   any screenshot a reader might come to `g_` looking for, and it is worth telling
-  whoever audits section F that `web_app/multiview-two-panels.png` (1440x900,
+  whoever audits section F that `web_app/multiview-two-panels.png` (1440x1000,
   already in the tree) and `highlighting_selection/highlighting-selected-page.png`
   already cover adjacent ground for it.
 

@@ -58,7 +58,7 @@ Where the gaps now are:
 - **``l_sessions_sharing`` and ``n_benchmarking_performance``** carry the thinnest
   coverage of the illustrated sections — 34 directives over 23 pages, 12 of them
   with none.
-- **Provenance, not count, is the live risk.** 65 of the 155 published images
+- **Provenance, not count, is the live risk.** 62 of the 155 published images
   have no record in ``captures.json`` and therefore cannot be re-verified by
   ``node capture.mjs check``. That absence is what let an empty screenshot ship.
   ``tests/test_docs_current_api_contract.py::test_screenshot_provenance_records_describe_the_published_images``

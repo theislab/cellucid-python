@@ -88,11 +88,12 @@ seen face-on as a flat, screen-aligned surface.
 ## Comparing views
 
 ```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
-:alt: Cellucid showing two side-by-side views of the same dataset.
+:alt: The whole window in Grid compare with the sidebar open: two equal panels fill the area to the right of the sidebar and show the Pancreas 3D embedding from the same locked camera — the left panel, the live view, coloured by cell_type, and the right panel, the kept snapshot, recoloured by S_score on a Viridis scale — each under a title chip naming its field. The sidebar, scrolled to Compare Views, lists badge 1 cell_type and the selected badge 2 S_score above the Layout select set to Grid compare, and Coloring & Filtering shows S_score in the Continuous obs select.
 :width: 1440px
 
-Two kept views support side-by-side comparison while retaining one dataset
-identity.
+Two kept views compare one dataset side by side. The panels split the area to
+the right of the sidebar equally, and each keeps its own coloring: the live
+view by cell_type, the selected snapshot by S_score.
 ```
 
 ## Connectivity edges
@@ -106,10 +107,13 @@ opacity, line width, and the maximum rendered edge count.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/connectivity-multiview.png
-:alt: Two Cellucid views showing the same point cloud and connectivity edges.
+:alt: Two equal panels filling the whole window with the sidebar closed, both showing the Pancreas 3D embedding coloured by cell_type from the same locked camera, and in both the KNN connectivity edges, drawn at line width 2.0, form a grey web between the cells.
 :width: 1440px
 
-Connectivity rendering remains synchronized across kept views of the dataset.
+Connectivity settings apply to every panel: the edges were switched on, and
+widened to 2.0, while the kept snapshot was the selected view, and the live
+panel draws them too. With the sidebar closed the two panels split the whole
+window.
 ```
 
 ## Camera paths

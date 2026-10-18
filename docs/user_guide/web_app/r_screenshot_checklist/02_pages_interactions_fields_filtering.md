@@ -82,15 +82,21 @@ Confirmed against the tree, not inherited from the original audit.
    `*-before`/`*-after` pair under `_static/screenshots/`. The three
    `navigation-controls-*` stills show the *control panels*, not the motion the
    page is about, so the "why did the wrong view move" gap is still open.
-3. **Thirteen images in these sections have no provenance record**, so
-   `node capture.mjs check` cannot re-verify them — 12 under `web_app/`
+3. **Ten images in these sections have no provenance record**, so
+   `node capture.mjs check` cannot re-verify them — 9 under `web_app/`
    (`app-overview-cell-type`, `camera-path-configured-panel`,
    `camera-path-transport-visible`, `camera-path-unconfigured`,
-   `connectivity-edges-controls`, `connectivity-multiview`,
-   `dark-theme-multiview`, `dimension-2d-planar-default`,
-   `dimension-navigation-controls-2d`, `multiview-two-panels`,
-   `startup-loaded-build`, `welcome-startup`) and one under `filtering/`
+   `connectivity-edges-controls`, `dimension-2d-planar-default`,
+   `dimension-navigation-controls-2d`, `startup-loaded-build`,
+   `welcome-startup`) and one under `filtering/`
    (`coloring-filtering-cell-type-panel`). They predate the capture tool.
+   The three multiview frames that used to be on this list —
+   `multiview-two-panels`, `connectivity-multiview` and
+   `dark-theme-multiview` — went stale when Grid compare moved its panels out
+   from under the sidebar, and were recaptured on `pancreas` by
+   `buildMultiviewScenarios()` (`core-multiview-two-panels`,
+   `core-connectivity-multiview`, `performance-dark-theme-multiview`), so they
+   now carry provenance.
    `tests/test_docs_current_api_contract.py::test_screenshot_provenance_records_describe_the_published_images`
    holds the total across all topics at a number that may only decrease.
 4. **KNN Connectivity has UI, working controls on all five samples and two
@@ -125,6 +131,12 @@ All panels render into the single `#glcanvas` through GL viewports
 node. To photograph one panel, crop the canvas region or set
 `Layout: Edit selected view` so the panel fills the canvas. Never write a
 capture scenario that crops to a per-panel selector.
+
+`Grid compare` lays the panels out in the part of the canvas the sidebar does
+not cover, as equal cells starting at the sidebar's right edge (the whole width
+when the sidebar is closed). The one DOM anchor per panel is its title chip in
+`#view-title-layer`, centred on the panel it labels; `buildMultiviewScenarios()`
+asserts the panel geometry through those chips before every multiview capture.
 
 ### DOM crop targets
 
