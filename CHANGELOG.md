@@ -36,6 +36,15 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Fixed
 
+- **Web app**: choosing volumetric smoke on a device without float blending
+  (Safari on iPhone and iPad, many Android browsers) failed mid-build with
+  “Smoke density unavailable: GPU smoke density requires EXT_float_blend for
+  exact R32F accumulation.”, and restoring a smoke session there threw. Smoke's
+  requirements are now checked up front; such a device gets a plain message
+  (“Volumetric smoke isn't available on this device: …”) and stays in Points,
+  sessions restore into Points, and other smoke errors no longer show internal
+  detail.
+
 - **Web app**: the volumetric smoke cloud is now **beta** rather than alpha. It
   is coloured, bounded and idle-aware after this release's rewrite; the tag beside
   `Render mode:` reads `Beta` in the calmer info tone, and its hover text no

@@ -155,7 +155,8 @@ is fixed. Zoom in instead.
 |---|---|---|
 | **“WebGL Context Lost”** dialog, “WebGL context lost. Reload required to continue.”, with a **Reload** button | The GPU dropped the context, usually from memory pressure. A reload is genuinely required — the viewer does not resume from a restored context | {doc}`../n_benchmarking_performance/07_troubleshooting_performance` |
 | “WebGL context restored, but Cellucid requires a reload…” | Your browser handed the context back; Cellucid still needs a reload | Reload |
-| “Smoke rendering failed: …” / “Smoke density could not be built: …” | Volumetric rendering could not run; the view keeps drawing points | {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` |
+| “Volumetric smoke isn't available on this device: …” (titled **Volumetric smoke unavailable**) | This browser's graphics driver lacks something the smoke cloud needs, most often float blending (iPhone/iPad Safari, many Android browsers); the view stays in Points | {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` |
+| “Volumetric smoke could not be built. Points rendering works as usual.” / “Volumetric smoke stopped rendering, so the view is back in Points.” | A smoke build or frame failed; the view is in Points and the technical detail is in the browser console | {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` |
 | “Volumetric smoke requires a single view. Clear snapshots first.” | Smoke mode is single-view only | {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples` |
 | “Velocity overlay unavailable” | The overlay could not be built for this dataset or dimension | {doc}`../i_vector_field_velocity/07_troubleshooting_velocity_overlay` |
 

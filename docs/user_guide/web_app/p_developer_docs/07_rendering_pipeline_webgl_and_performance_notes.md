@@ -155,8 +155,15 @@ interleaved record at 5M points.
     produces identical frames, and `SmokeRenderer.needsContinuousFrames()`
     then lets the viewer stop drawing.
   - A build requires a clean GL error state, `EXT_color_buffer_float`,
-    `EXT_float_blend`, and sufficient 2D/3D texture limits. These are explicit
-    preconditions; there is no alternate density implementation.
+    `EXT_float_blend`, `MAX_3D_TEXTURE_SIZE` ≥ 128 and `MAX_TEXTURE_SIZE` ≥
+    1536. These are checked once per context, up front and without allocating,
+    by `detectSmokeSupport()` (`rendering/smoke-cloud/smoke-capabilities.js`,
+    exposed as `viewer.getSmokeSupport()`); every build entry point refuses with
+    a `SmokeUnsupportedError` whose message is user-facing and whose `detail`
+    names the missing capability. Choosing smoke on such a device, or restoring
+    a session saved in smoke, keeps Points and shows that message. There is no
+    alternate density implementation. `OES_texture_float_linear` is not needed:
+    every float32 texture smoke uses is NEAREST and read with `texelFetch`.
   - Per-build framebuffers, vertex arrays, staging buffers, atlases, and
     reduction textures are deleted on success and failure, and every touched
     GL binding/capability is restored. Programs plus the corner/quad buffers

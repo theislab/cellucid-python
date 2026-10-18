@@ -218,10 +218,24 @@ It stores slider positions, and because every scale is fixed, the same
 positions restore the same readouts. The session does not contain the dataset
 or a frozen GPU volume; loading it with the matching dataset rebuilds smoke from
 that dataset's restored visible cells and colours. The built-in samples' saved
-views carry the initial values in the tables above. See
+views carry the initial values in the tables above. A session saved in smoke and
+opened on a device that cannot run smoke restores everything else and opens in
+`Points`, with the message below. See
 {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
 
 ## Failure and recovery
+
+### Smoke is not available on this device
+
+Smoke builds its cloud by adding every cell into high-precision (float32)
+buffers on the GPU, which needs float blending. Safari on iPhone and iPad, and
+many Android browsers, do not offer it. Cellucid checks this before building
+anything: choosing smoke there shows a notification titled **Volumetric smoke
+unavailable** — “Volumetric smoke isn't available on this device: its graphics
+driver can't blend high-precision colour, which the smoke cloud needs to add up
+the cells. Points rendering works as usual.” — and `Render mode:` stays on
+`Points`. Other missing capabilities get the same headline with their own
+reason. Use a desktop browser for smoke.
 
 ### The cloud is blank
 

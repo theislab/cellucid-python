@@ -72,6 +72,10 @@ that device.
 - Touch devices work for navigation and selection (one finger orbits — pans in
   planar mode — two fingers pinch to zoom and drag to pan), but are much more
   likely to run out of GPU memory.
+- **Volumetric smoke** needs float blending (`EXT_float_blend`), which Safari
+  on iPhone and iPad and many Android browsers do not offer. There, choosing
+  smoke shows “Volumetric smoke isn't available on this device: …” and the view
+  stays in Points; everything else works.
 - On a phone-sized screen (720 px wide or less) the sidebar opens over the whole
   screen. Tap **✕** in its top-right corner to close it and see the plot; tap
   **☰** in the top-left corner to bring it back.
