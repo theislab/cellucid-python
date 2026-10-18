@@ -359,10 +359,11 @@ dataset/repo/branch/user scope. See
 You open this by clicking a category label in the categorical legend when the selected field is annotatable.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-11-consensus.png
-:alt: The full application window with the Community voting modal open over the viewer, showing a disputed status banner, two suggestion cards with vote buttons, attribution lines and comment boxes, and a New suggestion form at the bottom.
+:alt: The voting modal for the Beta cluster whose status banner reads Consensus, "Beta cell", 100 percent, 4 voters, above one suggestion card at net 4 with its vote buttons, attribution line and comment box, and a New suggestion form at the bottom.
 :width: 996px
 
-The complete voting modal for one category, over the viewer it belongs to.
+The voting modal for one category: the status line, the suggestion cards, and
+the **New suggestion** form beneath them.
 ```
 
 ### What you see at a glance
@@ -380,7 +381,7 @@ The status line is exact about which of the three states applies and why:
 | Pending | `Pending (<n> voters)` | fewer than `minAnnotators` voters; no confidence is reported |
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-12-disputed.png
-:alt: A voting modal whose status banner reads Disputed, "Alpha cell, Alpha/PP doublet", 0 percent, 4 voters, above two suggestion cards each at net 0 with two upvotes and two downvotes.
+:alt: A voting modal whose status banner reads Disputed, "Beta (immature), Beta cell", 0 percent, 4 voters, above two suggestion cards each at net 0 with two upvotes and two downvotes.
 :width: 996px
 
 **Disputed by a tie.** Both suggestions have identical net votes and identical
@@ -389,10 +390,10 @@ the banner names every tied label alphabetically.
 ```
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-09-pending.png
-:alt: A voting modal whose status banner reads "Pending (2 voters)" above one suggestion card showing net 2.
+:alt: A voting modal whose status banner reads "Pending (1 voters)" above one suggestion card showing net 1.
 :width: 996px
 
-**Pending.** Two voters against a three-annotator minimum. No confidence figure
+**Pending.** One voter against a three-annotator minimum. No confidence figure
 is reported, because the column's own rule says there is not yet enough
 participation to compute one.
 ```
@@ -400,7 +401,7 @@ participation to compute one.
 ### Suggestion card anatomy
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-10-vote.png
-:alt: One suggestion card headed "Alpha cell" with net 0 at the right, Ontology, Markers and Evidence lines, up and down vote buttons at 2 each, Edit, Delete and Merge buttons, an attribution line naming the proposer and their title, and a comment input showing a 0 of 500 counter.
+:alt: One suggestion card headed "Beta cell" with net 4 at the right, Ontology, Markers and Evidence lines, an upvote button at 4 under the mouse pointer and a downvote button at 0, Edit and Delete buttons, an attribution line naming the proposer and their title, and a comment input showing a 0 of 500 counter.
 :width: 1028px
 
 One card, with every element named below present: label, `net` score, the three

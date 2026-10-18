@@ -302,7 +302,7 @@ so expand when you need to read which gene a column is.
 
 ```{figure} ../../../_static/screenshots/analysis/marker-genes-clustered.png
 :alt: A heatmap with cell-type groups down one axis and gene names across the other, dendrograms attached to both axes, and a colour bar for the Z-scored expression.
-:width: 1160px
+:width: 1156px
 
 **Clustered** mode, shown in the expanded view. Genes and groups are each
 reordered by hierarchical clustering, and the two dendrograms are drawn along

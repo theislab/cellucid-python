@@ -150,7 +150,7 @@ of these, and neither is a bug:
 :::{grid-item}
 ```{figure} ../../../_static/screenshots/analysis/volcano-threshold-a.png
 :alt: A volcano plot at a log2 fold-change threshold of 0.5, with broad red and blue clouds of coloured points either side of a narrow grey band, and a legend below the axis title reading Up (750), Down (841) and Not significant (2162).
-:width: 1160px
+:width: 1156px
 
 `|log₂FC| ≥ 0.5` — 1,591 genes called.
 ```
@@ -159,7 +159,7 @@ of these, and neither is a bug:
 :::{grid-item}
 ```{figure} ../../../_static/screenshots/analysis/volcano-threshold-b.png
 :alt: The same volcano plot at a log2 fold-change threshold of 3, with the dashed threshold lines pushed far apart and nearly every point grey, and a legend below the axis title reading Up (0), Down (192) and Not significant (3561).
-:width: 1160px
+:width: 1156px
 
 `|log₂FC| ≥ 3` — 192 genes called, from the identical run.
 ```

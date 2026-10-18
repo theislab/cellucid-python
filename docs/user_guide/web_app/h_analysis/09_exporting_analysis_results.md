@@ -256,14 +256,16 @@ PDF export anywhere in the analysis panel.
 ```
 
 ```{figure} ../../../_static/screenshots/analysis/marker-genes-expanded.png
-:alt: The expanded Marker Genes modal headed MARKER GENES: CELL_TYPE with a clustered heatmap and dendrograms in the plot area, an Export row of PNG, SVG and CSV buttons above a PLOT OPTIONS column, a SUMMARY STATISTICS panel naming the category, mode, method and counts, and a STATISTICAL ANALYSIS panel holding the Top Marker Genes table, with a pointer on the CSV button.
+:alt: The expanded Marker Genes modal headed MARKER GENES: CELL_TYPE with a clustered heatmap and dendrograms in the plot area, an Export row of PNG, SVG and CSV buttons above a PLOT OPTIONS column, a SUMMARY STATISTICS panel naming the category, mode, method and counts, and a STATISTICAL ANALYSIS panel holding the Top Marker Genes table, with a pointer on the CSV button; the run-time Duration row is omitted.
 :width: 1440px
 
 The expanded Marker Genes result combines the heatmap, the method summary, the
 ranked table, and the PNG, SVG and CSV export actions. Exports exist **only**
 here — the sidebar preview has none. **Mode** in the summary table is the value
 the CSV button dispatches on: `clustered` here, so `CSV` downloads
-`marker_genes_heatmap.csv`.
+`marker_genes_heatmap.csv`. The summary table's last row, **Duration**, is left
+out of this picture: it is how long the run took on the machine that made the
+screenshot.
 ```
 
 ---

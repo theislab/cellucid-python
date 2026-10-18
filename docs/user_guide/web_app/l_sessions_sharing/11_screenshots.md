@@ -35,7 +35,7 @@ session is restored onto a dataset that is already open.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-03-save-confirmation.png
 :alt: A notification reading "Session saved successfully".
-:width: 610px
+:width: 528px
 
 The one confirmation a save produces.
 ```
@@ -45,8 +45,8 @@ The one confirmation a save produces.
 ## Restoring
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-04-restore-confirmation.png
-:alt: A stack of notifications ending with "Session fully restored." and "Session loaded successfully".
-:width: 592px
+:alt: A stack of three notifications after a completed restore: at the bottom a download entry titled "Loaded" reading "Session fully restored.", above it a second "Session fully restored." entry, and at the top "Session loaded successfully".
+:width: 538px
 
 A completed restore reports **Session fully restored.** and then **Session
 loaded successfully**. Both are required; either one alone is not a completed
@@ -110,14 +110,14 @@ A refused session leaves the application exactly as it was. These are the two
 you are most likely to meet.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/refusal-01-different-dataset.png
-:alt: Notifications reporting that the session was saved on a different dataset than the one open now, naming both the saved and the current cell and gene counts.
+:alt: A notification titled "Loading failed" reporting that the session was saved on a different dataset than the one open now, naming 3,696 cells and 3,753 genes when it was saved and 219,731 cells and 5,754 genes now, and advising to open the dataset the session was saved on.
 :width: 760px
 
 Wrong dataset. The message names both sizes so you can tell which one you meant.
 ```
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/refusal-02-not-a-session-file.png
-:alt: Notifications reading "Invalid session file (bad MAGIC header)."
+:alt: A notification titled "Loading failed" reading "Session file: Invalid session file (bad MAGIC header).", with a dismiss button at its right, after a file that is not a session bundle was chosen in Load State.
 :width: 760px
 
 Wrong file. `Invalid session file (bad MAGIC header).` means the file does not

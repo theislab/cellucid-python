@@ -206,14 +206,12 @@ So for a Zarr ZIP, list the keys yourself in Python (`print(adata.obsm.keys())`)
 rather than looking for them in the message.
 
 ```{figure} ../../../_static/screenshots/data_loading/fail-missing-umap-embedding.png
-:alt: A Cellucid notification listing the expected X_umap_1d, X_umap_2d and X_umap_3d keys and then the single obsm key the selected file actually contained, X_pca.
+:alt: A Cellucid notification listing the expected X_umap_1d, X_umap_2d and X_umap_3d keys or a plain X_umap of 1, 2, or 3 columns, and then the single obsm key the selected file actually contained, X_pca.
 :width: 760px
 
 The trailing list is the useful half: it names the `obsm` keys your file does
 have, so you can see immediately whether the embedding is missing or merely
-named differently. This capture predates the current wording, which also names
-the plain `X_umap` among the keys it accepts; the key list at the end is
-unchanged.
+named differently.
 ```
 
 **Likely causes**

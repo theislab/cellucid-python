@@ -259,7 +259,7 @@ Drag **log2 FC threshold** and compare.
 :::{grid-item}
 ```{figure} ../../../_static/screenshots/analysis/volcano-threshold-a.png
 :alt: A volcano plot at a log2 fold-change threshold of 0.5, with large red and blue clouds of coloured points on both sides of a narrow grey band, and a legend below the axis title reading Up (750), Down (841) and Not significant (2162).
-:width: 1160px
+:width: 1156px
 
 **|log₂FC| ≥ 0.5** — a permissive cutoff. 1,591 genes are called: 750 up and
 841 down.
@@ -269,7 +269,7 @@ Drag **log2 FC threshold** and compare.
 :::{grid-item}
 ```{figure} ../../../_static/screenshots/analysis/volcano-threshold-b.png
 :alt: The same volcano plot at a log2 fold-change threshold of 3, with the threshold lines pushed far apart and almost every point now grey, and a legend below the axis title reading Up (0), Down (192) and Not significant (3561).
-:width: 1160px
+:width: 1156px
 
 **|log₂FC| ≥ 3** — a strict cutoff. The same run now reports 192 significant
 genes instead of 1,591, all of them downregulated.

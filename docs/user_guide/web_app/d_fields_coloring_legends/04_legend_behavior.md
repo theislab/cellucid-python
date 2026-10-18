@@ -171,7 +171,7 @@ At the top, you’ll see:
 Click the gradient bar to open the **colormap menu**, then click a palette to apply it.
 
 ```{figure} ../../../_static/screenshots/web_app/legend-colormap-menu-open.png
-:alt: A legend headed COLOR SCALE (VIRIDIS) with its gradient bar expanded into a grid of small named gradient swatches — Viridis highlighted as active, then Plasma, Inferno, Magma, Cividis, Turbo, Twilight, Coolwarm and many more — above the numeric range and the Log color scale and Rescale colorbar toggles.
+:alt: A legend headed COLOR SCALE (VIRIDIS) with its gradient bar expanded into a grid of small named gradient swatches — Viridis highlighted as active, then Plasma, Inferno, Magma, Cividis, Turbo, Twilight, Coolwarm and many more — above the Min and Max range sliders and the FILTER and RESET buttons.
 :width: 428px
 
 The colormap menu, open. The active palette is marked, and the heading above

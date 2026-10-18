@@ -34,7 +34,8 @@ This page is the “UI map” for highlighting:
 In the left sidebar, open the accordion section labeled **Highlighting**.
 
 Inside this section you will see four sub-areas, top to bottom:
-1) **Highlight mode** (toolbelt for selection, with the **Select mode** toggle)
+1) **Highlight mode** (the four selection tools, then the **Select mode** switch
+   below a divider — an input setting, not a fifth tool)
 2) **Highlight pages** (tabs)
 3) **Highlighted groups** (the list + count + Clear)
 4) `Create Categorical` (a collapsed accordion that turns pages into an obs column)
@@ -69,17 +70,19 @@ For the annotation-based tool on categorical fields, `Alt` acts like “replace�
 (select-mode)=
 ### Select mode (touch screens, or no `Alt` key)
 
-A touch screen has no `Alt` key, so the **Select mode** button under the
-Highlight mode buttons stands in for holding it:
+A touch screen has no `Alt` key, so the **Select mode** switch below the four
+Highlight mode tools stands in for holding it. It is drawn as a switch, not as
+another tool button, because it changes how every tool is triggered rather than
+choosing one:
 
-- While **Select mode** is pressed, a plain primary press runs the active tool
+- While **Select mode** is on, a plain primary press runs the active tool
   exactly as an `Alt` press does: a one-finger tap (or a plain click) is an
   `Alt+click`, and a one-finger drag is an `Alt+drag` — a lasso, a proximity
   radius, a KNN degree, or a continuous range, whichever tool is active. It
   works in every navigation mode and, in multiview, selects in the pane the
   finger lands on without moving view focus, as `Alt+click` does.
-- Pressing it shows three buttons, **Intersect**, **Add**, and **Subtract**,
-  which stand in for the modifiers a finger cannot press: **Intersect** is a
+- Turning it on shows a **Combine** choice of **Intersect**, **Add** and
+  **Subtract** (one segmented control), which stands in for the modifiers a finger cannot press: **Intersect** is a
   plain `Alt` gesture (and is the “replace” behaviour of the annotation tool on
   categorical fields), **Add** is `Shift+Alt`, **Subtract** is `Ctrl/Cmd+Alt`.
   A held `Shift` or `Ctrl/Cmd` key still wins over the button.
@@ -88,8 +91,8 @@ Highlight mode buttons stands in for holding it:
   gesture without selecting anything, and the panel says it was interrupted.
 - On a touch screen the same toggle is repeated at the bottom of the plot, so
   you can switch between navigating and selecting with the sidebar closed.
-  Both buttons always show the same state.
-- To leave Select mode, press either button again, or press `Esc` when no
+  The switch and the plot button always show the same state.
+- To leave Select mode, turn the switch off or press the plot button again, or press `Esc` when no
   selection is in progress (the first `Esc` cancels a selection in progress).
 
 Select mode is an input setting, like holding `Alt`: it is not saved in

@@ -25,16 +25,19 @@ It includes:
 - a custom point count input accepting any whole number from 1 to 250,000,000,
 - eight synthetic **data patterns**,
 - a **Load Synthetic Data** button,
-- a metric grid that stays hidden until the first run finishes,
+- a live metric readout that appears as soon as the panel is open,
 - a **Copy Situation Report** button,
 - and an **Analyze Performance** tool that suggests what to change.
 
 ```{figure} ../../../_static/screenshots/benchmarking_performance/benchmark-panel-controls.png
-:alt: The Performance Benchmark panel before any run, showing the six point-count presets from 100K to 20M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons.
+:alt: The Performance Benchmark panel before any run, showing the six point-count presets from 100K to 20M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons; the live performance readout is omitted.
 :width: 516px
 
-The panel before its first run. Everything above **Load Synthetic Data** is
-input; everything below it appears only once a run has produced numbers.
+The panel before its first run. The live metric readout that sits between
+**Load Synthetic Data** and **Copy Situation Report** is left out of this
+picture on purpose: it would show the frame rate of the machine that took the
+screenshot. Its fields are listed in the table under *What the panel reports*
+below.
 ```
 
 :::{important}
@@ -134,8 +137,10 @@ while a large set is built.
 
 ## What the panel reports (every field, and its unit)
 
-After a run, the grid shows six headline tiles, then a timing breakdown, then
-the generation time.
+The grid appears as soon as the panel is opened and measures whatever is
+loaded — your own dataset until a synthetic run replaces it. It shows six
+headline tiles, then a timing breakdown, and after a synthetic run the
+generation time.
 
 | Field | Unit / format | What it means |
 |---|---|---|

@@ -1083,13 +1083,13 @@ def test_every_documented_screenshot_uses_its_intrinsic_responsive_width() -> No
 #
 # **This number may only go down.** It is a ratchet: it stops the backlog growing
 # while it is worked off, and reaching 0 is what closes the gap.
-UNPROVENANCED_SCREENSHOT_BUDGET = 86
+UNPROVENANCED_SCREENSHOT_BUDGET = 79
 
 # Records whose ``sha256`` does not describe the file they name, so the published
 # bytes have no provenance even though a record exists. Recapturing the scenario
 # is the fix; correcting the digest in place would be inventing provenance for an
 # image nobody can show came from that run.
-DIVERGENT_SCREENSHOT_RECORDS = frozenset({"annotation-lifecycle-03-install-app"})
+DIVERGENT_SCREENSHOT_RECORDS: frozenset[str] = frozenset()
 
 
 def test_screenshot_provenance_records_describe_the_published_images() -> None:

@@ -237,15 +237,13 @@ Available obsm keys: X_pca.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/fail-missing-umap-embedding.png
-:alt: A Cellucid notification about a missing UMAP embedding, listing X_umap_1d, X_umap_2d and X_umap_3d as the expected obsm keys and then naming X_pca as the only key the selected file contained, with a dismiss button at its right.
+:alt: A Cellucid notification about a missing UMAP embedding, listing X_umap_1d, X_umap_2d and X_umap_3d or a plain X_umap of 1, 2, or 3 columns as the expected obsm keys and then naming X_pca as the only key the selected file contained, with a dismiss button at its right.
 :width: 760px
 
 The trailing list is the useful half: it names the `obsm` keys your file *does*
 have — here only `X_pca` — so you can see at a glance what to rename or
 recompute. `X_pca` is refused whatever its width: only a key that names a UMAP
-dimension, or the plain `X_umap`, is read as an embedding. The capture predates
-the current wording quoted above, which also names the plain `X_umap`; the key
-list at the end is unchanged.
+dimension, or the plain `X_umap`, is read as an embedding.
 ```
 
 ### The file is bigger than the browser ceiling

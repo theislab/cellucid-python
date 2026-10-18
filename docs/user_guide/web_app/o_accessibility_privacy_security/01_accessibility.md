@@ -242,15 +242,15 @@ Two focus rules, both deliberate:
   are typing, so those keys still drive the scene behind the overlay.
 
 ```{figure} ../../../_static/screenshots/web_app/keyboard-shortcuts.png
-:alt: The Keyboard Shortcuts panel open in the Cellucid sidebar, listing five groups of shortcuts: the ungrouped global keys R, F, H, 1/2/3, O/P/G and ?; Navigation (Orbit / Planar / Free-fly) with W A S D and Shift; Orbit and Planar only with the zoom keys; Free-fly specific with E/Q and Esc; and Highlighting with Alt+click, Alt+drag, Shift+Alt+click, Ctrl+Alt+click, Esc and X.
+:alt: The Keyboard Shortcuts panel open in the Cellucid sidebar, listing five groups of shortcuts: the ungrouped global keys R, F, H, 1/2/3, O/P/G and ?; Navigation (Orbit / Planar / Free-fly) with W A S D and Shift; Orbit and Planar only with the zoom keys; Free-fly specific with E/Q and Esc; and Highlighting with Alt+click, Alt+drag, Shift+Alt+click, Ctrl+Alt+click, Esc to cancel a selection in progress, Esc to leave Select mode when nothing is in progress, and X.
 :width: 516px
 
 Press `?` to open this panel in the app. It is the authoritative list, and it
 shows **five** groups. The three tables above restate every keyboard row of all
 five: the ungrouped global keys, then Navigation together with the two
-mode-specific groups, then the three keyboard rows of Highlighting (the panel
-now lists a second `Esc` row, *Leave Select mode when nothing is in progress*,
-which this screenshot predates). The four pointer gestures in that last group
+mode-specific groups, then the keyboard rows of Highlighting — `X` and the two
+`Esc` rows, *Cancel selection in progress* and *Leave Select mode when nothing
+is in progress*. The four pointer gestures in that last group
 (`Alt`+click, `Alt`+drag, `Shift`+`Alt`+click and `Ctrl`+`Alt`+click) are
 deliberately not restated here — they need a pointer, which is the subject of
 the next section.

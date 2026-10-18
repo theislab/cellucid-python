@@ -221,7 +221,7 @@ Fix:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/analysis/detailed-categorical.png
-:alt: The Detailed panel with Variable set to Categorical obs then cell_type, a Compare pages block with Page 1 and Rest of Page 1 both selected, a Plot Type select reading Bar Plot under a pointer, and a grouped bar plot of cell-type counts beneath it whose horizontal axis carries a single category name.
+:alt: The Detailed panel with Variable set to Categorical obs then cell_type, a Compare pages block with Page 1 and Rest of Page 1 both selected, a Plot Type select reading Bar Plot under a pointer, and a grouped bar plot of cell-type counts beneath it whose horizontal axis carries two category names, Ductal and Delta, at its two ends.
 :width: 488px
 
 Detailed with one variable (`cell_type`) across two pages. The plot-type choice
@@ -235,8 +235,8 @@ as many labels as its box can show without one name touching the next, and the
 ones it cannot show are dropped whole — every label you can see is a real
 category, spelled in full, and the two ends of the axis are kept where there is
 room for more than one. How many survive is a property of the drawn box, not of
-your data: eight cell types leave room for **one** name in the 224-pixel sidebar
-above and **five** in the expanded view below. The bars are all there either
+your data: eight cell types leave room for **two** names — the two ends — in the
+224-pixel sidebar above and **five** in the expanded view below. The bars are all there either
 way; it is the labels that are rationed. Read the shape in the sidebar, read the
 names in the full view, and read every name in the exported CSV.
 :::

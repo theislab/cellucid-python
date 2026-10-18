@@ -487,14 +487,15 @@ If you hit these repeatedly, treat it as a data preparation issue:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/benchmarking_performance/benchmark-panel-controls.png
-:alt: The Performance Benchmark panel before any run, showing the six point-count presets from 100K to 20M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons.
+:alt: The Performance Benchmark panel before any run, showing the six point-count presets from 100K to 20M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons; the live performance readout is omitted.
 :width: 516px
 
 Every knob in this section that produces a number lives in one place: the
 **Performance Benchmark** accordion in the left sidebar. Use it to find the
 shape of *your* machine’s limits — the answer is different on every GPU, so
-there is no number here to copy. {doc}`05_benchmark_tools` explains each
-control and what its readout means.
+there is no number here to copy, and the live readout is omitted from this
+picture for the same reason. {doc}`05_benchmark_tools` explains each control
+and lists every field of that readout.
 ```
 
 ---

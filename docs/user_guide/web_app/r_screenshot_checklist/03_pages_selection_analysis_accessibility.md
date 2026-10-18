@@ -201,6 +201,13 @@ contains no picture of any control.
   explicit `.highlight-page-tab-combine` button on every tab. The button is the
   discoverable and keyboard-reachable path and is undocumented.
 
+**RECAPTURE** — every `highlighting_selection/*.png` that frames the Highlight mode
+block (`choose-highlight-mode.png` is one) predates the **Select mode** switch below
+its divider and the **Combine** control (Intersect / Add / Subtract) that the switch
+reveals. None of the `highlighting_selection/` images has a `capture.mjs` scenario,
+so none can be regenerated; each needs a scenario, then an `:alt:` that names the
+Select mode switch wherever it is in frame.
+
 ---
 
 ## {doc}`/user_guide/web_app/f_highlighting_selection/04_selection_synchronization`
@@ -484,8 +491,8 @@ Two things the recapture corrected in the instruction above. **Percentages** is 
 off: the figure is captioned as counts and the summary table beside it prints counts, so
 turning it on would put a percentage axis under a counts caption. And "8 categories, all
 legible" is not achievable and is not what the page now claims — a categorical axis is
-thinned to the labels its box can show, which is one name in the sidebar and five in the
-expanded view; `cellucid c177e77ce` made that a clean drop instead of a smear.
+thinned to the labels its box can show, which is two names (the two ends) in the
+sidebar and five in the expanded view; `cellucid c177e77ce` made that a clean drop instead of a smear.
 
 **notes** — The test descriptions match `statistical-tests.js`. "Export … per-cell
 values … `detailed-analysis-data.csv` … columns `page`, `cell_index`, `<variable>`"
@@ -829,7 +836,7 @@ the two `{octicon}` glyphs — is theme-rendered and needs no capture.
 simulation in Figure Export, the `i` help-dialog keyboard contract, the global
 shortcut table, what keyboard cannot do, and motion-sensitivity guidance.
 
-**has** — `web_app/keyboard-shortcuts.png`, `:width: 516px`. Native 516×1154, a
+**has** — `web_app/keyboard-shortcuts.png`, `:width: 516px`. Native 516×1242, a
 258 CSS px crop of `#shortcuts-section` captured at DPR 2 by the
 `accessibility-panel-keyboard-shortcuts` scenario. Not reused elsewhere in the
 docs.
@@ -904,11 +911,9 @@ requires `Alt` on every selection path (today one gate,
 Select mode in place of `Alt`) and the real binding is **`Shift+Alt`+click**. That was
 fixed in `index.html` — and pinned by `tests/keyboard-shortcut-panel-contract.test.mjs`,
 which now ties every row of the panel to the handler that serves it — before the
-recapture, so the current image ships the corrected panel and its five groups.
-
-**RECAPTURE** `web_app/keyboard-shortcuts.png`: the Highlighting group gained a second
-`Esc` row, *Leave Select mode when nothing is in progress*, after this image was taken.
-Same framing; update the figure's `:alt:` text to list the new row.
+recapture, so the current image ships the corrected panel and its five groups,
+including the second Highlighting `Esc` row, *Leave Select mode when nothing is
+in progress*.
 
 ---
 

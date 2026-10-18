@@ -30,7 +30,7 @@ Pancreas sample at twice the device pixel ratio.
 ## Render mode
 
 ```{figure} ../../../_static/screenshots/web_app/render-mode-select.png
-:alt: A control labelled RENDER MODE holding a dropdown that reads Points, ringed in blue with the mouse pointer pressing it, above a dashed box labelled DEPTH PERCEPTION whose first slider, POINT SIZE (LOG), reads 0.75.
+:alt: A control labelled RENDER MODE holding a dropdown that reads Points, ringed in blue with the mouse pointer pressing it, above a dashed box labelled DEPTH PERCEPTION whose first slider, POINT SIZE (LOG), reads 2.87.
 :width: 480px
 
 `Render mode` sits at the top of **Visualization** and has exactly two options,

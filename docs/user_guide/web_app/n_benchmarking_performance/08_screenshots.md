@@ -10,13 +10,14 @@ directly.
 ## The benchmark panel
 
 ```{figure} ../../../_static/screenshots/benchmarking_performance/benchmark-panel-controls.png
-:alt: The Performance Benchmark panel before any run, showing the six point-count presets from 100K to 20M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons.
+:alt: The Performance Benchmark panel before any run, showing the six point-count presets from 100K to 20M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons; the live performance readout is omitted.
 :width: 516px
 
 The **Performance Benchmark** accordion as it appears before a run: six presets
 from 100K to 20M, a custom point count, the data pattern selector, and the three
-actions. The metric grid below **Load Synthetic Data** stays hidden until a run
-finishes.
+actions. The live metric grid that opening the panel shows below **Load
+Synthetic Data** is omitted from the capture; its fields are documented in
+{doc}`05_benchmark_tools`.
 ```
 
 :::{note}

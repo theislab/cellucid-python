@@ -125,13 +125,13 @@ Read the message before changing anything — each cause has its own:
   not repairable by editing the file.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/refusal-01-different-dataset.png
-:alt: Two notifications carrying the same message, that the session was saved on a different dataset than the one open now, naming 120 cells and 6 genes when it was saved against 3,696 cells and 3,753 genes now, and advising to open the dataset the session was saved on.
+:alt: A notification titled "Loading failed" reporting that the session was saved on a different dataset than the one open now, naming 3,696 cells and 3,753 genes when it was saved and 219,731 cells and 5,754 genes now, and advising to open the dataset the session was saved on.
 :width: 760px
 
-The first of the messages, as it appears. It names **both** sizes — what
-the file was saved against and what is open now — so you can tell at a glance
-which of the two is the one you meant to open. The message appears twice because
-the loading indicator carries it as well as the final result.
+The message as it appears: a session saved on the Pancreas sample, loaded while
+the Garcia sample is open. It names **both** sizes — what the file was saved
+against and what is open now — so you can tell at a glance which of the two is
+the one you meant to open.
 ```
 
 If the sender changed fields, categories, or gene order while reusing the same
@@ -164,7 +164,7 @@ file. Session files are binary and their names are easy to confuse with the
 figures and exports saved beside them.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/refusal-02-not-a-session-file.png
-:alt: Two notifications reading "Invalid session file (bad MAGIC header)." — one on a loading entry and one as the final result.
+:alt: A notification titled "Loading failed" reading "Session file: Invalid session file (bad MAGIC header).", with a dismiss button at its right, after a file that is not a session bundle was chosen in Load State.
 :width: 760px
 
 `Invalid session file (bad MAGIC header).` means the file does not begin with

@@ -54,7 +54,7 @@ immediately; nothing is uploaded anywhere.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-03-save-confirmation.png
 :alt: A notification reading "Session saved successfully".
-:width: 610px
+:width: 528px
 
 The confirmation to look for. If you do not see it, the save did not happen —
 check the browser's download permissions for the site.
@@ -73,8 +73,8 @@ save time, so repeated saves never overwrite each other.
    for the panel status to say **Session loaded successfully**.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-04-restore-confirmation.png
-:alt: A stack of notifications showing a download entry that ends in "Session fully restored.", a processing entry for LOD node mappings, a "Session fully restored." entry, and a final "Session loaded successfully" entry.
-:width: 592px
+:alt: A stack of three notifications after a completed restore: at the bottom a download entry titled "Loaded" reading "Session fully restored.", above it a second "Session fully restored." entry, and at the top "Session loaded successfully".
+:width: 538px
 
 A successful restore reports twice, and both matter. **Session fully restored.**
 is the serializer confirming that every chunk applied and every owner committed.
