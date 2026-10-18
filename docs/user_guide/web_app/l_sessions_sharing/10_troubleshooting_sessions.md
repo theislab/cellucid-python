@@ -32,8 +32,10 @@ reports **Session fully restored** only after:
 4. transaction preparation and commit; and
 5. the final UI refresh.
 
-The Session panel then reports **Session loaded successfully**. If any step
-fails, earlier mutations roll back and no partial subset is accepted.
+That notification is the restore's one report of success; there is no second
+toast or panel status. If any step fails, earlier mutations roll back, no
+partial subset is accepted, and the same progress entry ends as **Loading
+failed** with the error.
 
 ## Save State
 

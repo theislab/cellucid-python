@@ -136,7 +136,12 @@ The public file and URL entry points use one owner-controlled restore:
 7. every transaction participant prepares;
 8. every participant commits in order;
 9. the final UI refresh commits; and
-10. the serializer publishes **Session fully restored**.
+10. the serializer publishes **Session fully restored** by completing the
+    restore's own progress notification — the one report of the outcome, as a
+    failure ends that same entry as **Loading failed**. A published sample view
+    is the exception on failure: its caller knows the dataset itself loaded and
+    reports **Sample view unavailable**, so the progress entry is dismissed
+    rather than failed a second time.
 
 Any error invokes rollback in reverse participant order and awaits asynchronous
 rollback. If rollback itself fails, that failure is preserved as the original

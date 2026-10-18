@@ -69,17 +69,17 @@ save time, so repeated saves never overwrite each other.
 1) Load the same dataset first.
 2) Click **Load State**.
 3) Choose the `.cellucid-session` file.
-4) Wait for the download progress to finish with **Session fully restored** and
-   for the panel status to say **Session loaded successfully**.
+4) Wait for the restore's progress notification to finish as **Loaded** with
+   **Session fully restored.**
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-04-restore-confirmation.png
-:alt: A stack of three notifications after a completed restore: at the bottom a download entry titled "Loaded" reading "Session fully restored.", above it a second "Session fully restored." entry, and at the top "Session loaded successfully".
+:alt: The one notification a completed restore publishes: the restore's progress entry, now titled "Loaded" and reading "Session fully restored.".
 :width: 538px
 
-A successful restore reports twice, and both matter. **Session fully restored.**
-is the serializer confirming that every chunk applied and every owner committed.
-**Session loaded successfully** is the panel confirming the operation returned.
-Anything less than both is not a completed restore.
+A successful restore reports once. **Session fully restored.** is the
+restore's own progress entry completing: every chunk applied and every owner
+committed. A restore that fails ends the same entry as **Loading failed**
+instead, naming the error.
 ```
 
 If the view already matched the file, the visual change may be subtle; use the
@@ -141,8 +141,7 @@ chunk rolls back earlier state.
 After loading:
 
 1) Look for a session notification:
-   - require **Session fully restored**, followed by the panel's **Session
-     loaded successfully** status.
+   - require **Session fully restored.** on the restore's progress entry.
 2) If the operation was rejected, read the exact error.
    - A dataset mismatch rejects everything; see
      {doc}`07_versioning_compatibility_and_dataset_identity`.

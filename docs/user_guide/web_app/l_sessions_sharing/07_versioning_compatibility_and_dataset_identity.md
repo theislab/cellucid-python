@@ -67,6 +67,7 @@ exists to catch.
 | Corrupt/truncated framing, dishonest byte count, or invalid gzip/JSON/binary payload | complete rejection, bounded decode, rollback |
 | Newer load starts or the user presses **Cancel** | older restore aborts and its progress is dismissed without a red product error |
 | Bundle made by a different schema/build | accepted only if it is byte-for-byte valid under the one current contract; otherwise rejected |
+| Bundle saved in a different browser (for example Safari, opened in Chrome or Firefox) | restores like any other. A saved camera carries its orbit and free-fly forms; restore compares exactly the one the navigation mode drives and ignores the derived one, whose last bits differ between browser engines |
 
 Cellucid does not store a format-version field and does not guess how to
 translate another schema. For reproducible work, record the app build shown in

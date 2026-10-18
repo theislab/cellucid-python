@@ -45,12 +45,11 @@ The one confirmation a save produces.
 ## Restoring
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-04-restore-confirmation.png
-:alt: A stack of three notifications after a completed restore: at the bottom a download entry titled "Loaded" reading "Session fully restored.", above it a second "Session fully restored." entry, and at the top "Session loaded successfully".
+:alt: The one notification a completed restore publishes: the restore's progress entry, now titled "Loaded" and reading "Session fully restored.".
 :width: 538px
 
-A completed restore reports **Session fully restored.** and then **Session
-loaded successfully**. Both are required; either one alone is not a completed
-restore.
+A completed restore reports **Session fully restored.** once, on its own
+progress entry. Nothing else announces it.
 ```
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-07-restored-view.png

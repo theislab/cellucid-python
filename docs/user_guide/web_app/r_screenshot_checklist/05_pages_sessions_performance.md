@@ -283,24 +283,20 @@ does not mistake it for a failure:**
 
 ### Step 14 — the terminal success message
 
-- **Crop:** `#notification-center` with both the completed download card and the
-  info toast.
+- **Crop:** `#notification-center` with the completed restore card — the only
+  notification a successful restore publishes.
 - **Cursor:** no.
 - **File:** `session-lifecycle-14-fully-restored.png` · `:width: 400px`
 - **Exact strings, from source:**
-  - `session-serializer.js`, `notifications.info(...)` at the end of the restore
-    — info toast: **`Session fully restored.`** (with a trailing period; the
-    docs write it without one).
-  - `session-serializer.js`, `notifications.completeDownload(...)` on the next
-    statement — the download card completes with the same text.
-  - `session-controls.js`, the `#load-state-btn` handler — a separate success
-    toast: **`Session loaded successfully`**.
-- **Correction this capture forces:** {doc}`/user_guide/web_app/l_sessions_sharing/03_save_restore_ux` (line 44) and
-  {doc}`/user_guide/web_app/l_sessions_sharing/10_troubleshooting_sessions` (line 36) say the **panel status** reports
-  `Session loaded successfully`. There is no status element inside
-  `#session-state-controls` — the markup contains only a label, an info button,
-  and the two buttons. Both strings are NotificationCenter toasts. The prose
-  must be corrected in the same change as the capture.
+  - `session-serializer.js`, `notifications.completeDownload(...)` at the end of
+    the restore — the download card titled **`Loaded`** completes with
+    **`Session fully restored.`** (with a trailing period; the docs write it
+    without one).
+  - Nothing else. The restore used to publish the same sentence a second time
+    as an info toast, and the `#load-state-btn` handler added a third success
+    toast, `Session loaded successfully`; both duplicates were removed, and
+    the prose in {doc}`/user_guide/web_app/l_sessions_sharing/03_save_restore_ux` and
+    {doc}`/user_guide/web_app/l_sessions_sharing/10_troubleshooting_sessions` was corrected with them.
 
 ### Optional step 15 — the same file, refused
 
@@ -672,8 +668,9 @@ under {doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_a
   - **Not capturable, and the page should say so:** "File picker never opens"
     and "You canceled the picker" are OS-dialog states. Keep them as prose.
 - **notes** —
-  - "The Session panel then reports **Session loaded successfully**" — it is a
-    toast, not a panel status.
+  - ~~"The Session panel then reports **Session loaded successfully**" — it is
+    a toast, not a panel status.~~ **Done** — that toast no longer exists; the
+    page names the restore's one progress entry instead.
   - "Check the panel status and browser Console for `Failed to save state`" —
     the console logs `Failed to save state:`; the visible toast reads
     `Failed to save session`. Give the reader both strings and say which appears
@@ -1043,7 +1040,8 @@ that instruction and none of them shows it.
    panel status to say **Session loaded successfully**") and `10` ("The Session
    panel then reports…", "Check the panel status…") describe a panel status that
    does not exist; every one of those strings is a NotificationCenter toast.
-   **Still open.**
+   **Partly done** — `Session loaded successfully` is gone from the app and from
+   `03` and `10`; "Check the panel status…" for a failed save is still open.
 
 3. **{doc}`/user_guide/web_app/l_sessions_sharing/09_edge_cases` still describes the pre-`cellOrder` world.** Its "Same
    lightweight fingerprint, changed content" section says re-ordering cells
