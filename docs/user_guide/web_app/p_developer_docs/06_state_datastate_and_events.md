@@ -76,6 +76,18 @@ that treats the snapshot count as unbounded.
 - independent dimension level (embedding)
 - synchronized or independent camera (camera sync is viewer-side; state tracks view id)
 
+Per-cell arrays (colors, category transparency, the visibility mask, outlier
+quantiles) are owned, not copied, as views change. The **active** view's context
+shares the arrays `DataState` itself holds, so syncing it after every coloring,
+filtering or centroid change costs nothing per cell. `setActiveView` moves the
+arrays: the outgoing context keeps the ones the state was using, and the state
+adopts the incoming context's. A new snapshot (“Keep view”) clones them, and a
+context handed to `restoreContext` is copied, because its caller may still hold
+it. Copying on every sync made a 5,000,000-cell load peak at 854 MB of
+JavaScript memory against 228 MB now, and kept a permanent 76 MB duplicate.
+So never mutate an inactive context's arrays in place through the state, and
+never let two contexts hold the same array.
+
 ### Highlights (multi-page highlight system)
 
 Highlights are modeled as:
