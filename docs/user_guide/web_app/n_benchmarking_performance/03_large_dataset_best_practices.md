@@ -60,9 +60,9 @@ If you only do one thing from this page, do this list in order.
 - Keep the browser window modest (pixels matter; retina is expensive).
 - Close other GPU-heavy tabs (video calls + WebGL + Cellucid = sadness).
 - Two of the biggest levers have already been pulled for you, and are worth
-  checking rather than assuming: at or above five million cells `Antialiasing
-  (smooth point edges)` starts off, and the point size starts small, both chosen
-  from the cell count. Turning antialiasing off saved 19–34% of the frame in 3D
+  checking rather than assuming: `Antialiasing (smooth point edges)` starts off
+  at or above five million cells in 3D, or 200,000 cells in a 1D or 2D view, and
+  the point size starts small, both chosen from the cell count. Turning antialiasing off saved 19–34% of the frame in 3D
   and about 90% in a dense 2D view, in the measurements on
   {doc}`02_performance_considerations_what_gets_slow_and_why`; it applies to the
   next frame either way.

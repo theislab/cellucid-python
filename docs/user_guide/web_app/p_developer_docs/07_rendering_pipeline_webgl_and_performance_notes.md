@@ -504,8 +504,11 @@ no longer a context-creation attribute: `scene-msaa-target.js` owns a
 multisampled renderbuffer resolved by a blit each frame, so a change applies to
 the next frame with no reload. The stored preference is three-state — `auto`
 (the default, and what an absent key means), `on`, `off` — and `auto` resolves
-from the dataset's cell count against `AUTOMATIC_ANTIALIAS_CELL_LIMIT = 5_000_000`,
-re-decided on every dataset publication.
+from the dataset's cell count and the active view's dimension — against
+`AUTOMATIC_ANTIALIAS_CELL_LIMIT = 5_000_000` in 3D and
+`AUTOMATIC_ANTIALIAS_CELL_LIMIT_FLAT = 200_000` in 1D/2D, where nothing is
+depth-rejected — re-decided on every dataset publication and on every
+`dimension:changed` of the active view.
 
 **Shader quality selects shading, never geometry.** All three point vertex
 shaders — and the copy `HP_VS_HIGHLIGHT` keeps of the formula — clamp

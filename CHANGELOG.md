@@ -36,6 +36,13 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Fixed
 
+- **Web app**: automatic antialiasing now accounts for the view's dimension.
+  A 1D or 2D view has no depth test, so every point is shaded and antialiasing
+  costs about ten times more there (1M cells: 33.8 ms with it, 3.4 ms without).
+  It is now on below 5,000,000 cells in 3D and below 200,000 cells in 1D/2D,
+  and the automatic choice is re-decided when the active view switches
+  dimension. The status line names both (`Chosen automatically: 3,696 cells in
+  3D.`); an explicit choice is never changed.
 - **Web app**: less memory per cell, so larger datasets fit. Per-cell visibility
   is one byte (exactly 0 or 1) instead of four, the outlier quantiles are no
   longer copied into the state, categorical codes keep their stored width, and

@@ -85,7 +85,7 @@ Its relevant controls are:
   settings** block because it governs the whole scene target, which both
   renderers share, and so it stays available in smoke mode too. Until you click
   the checkbox yourself it follows the dataset, and the status line beneath it
-  says so — `Chosen automatically: 3,696 cells.` on the Pancreas sample, or
+  says so — `Chosen automatically: 3,696 cells in 3D.` on the Pancreas sample, or
   `Chosen automatically from the size of the dataset.` before a dataset is
   open. Clicking it ends automatic selection.
 

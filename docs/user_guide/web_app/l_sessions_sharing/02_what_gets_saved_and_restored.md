@@ -115,9 +115,11 @@ doing, and your choice is stored in this browser rather than in the file.
 
 And it has three states while a checkbox has two. The stored preference is
 `auto` — the default, and what no stored preference means — or `on`, or `off`.
-Under `auto`, Cellucid decides from the size of the dataset you have open: on
-below 5,000,000 cells, off at or above. It re-decides on every dataset
-publication, because datasets are switched in place. Clicking the box ends
+Under `auto`, Cellucid decides from the size of the dataset you have open and
+the dimension of the view you are working in: on below 5,000,000 cells in 3D and
+below 200,000 in a 1D or 2D view, off at or above. It re-decides on every
+dataset publication, because datasets are switched in place, and when the view
+switches between 2D and 3D. Clicking the box ends
 automatic selection permanently, in both directions. A captured tick could only
 ever replay as `on` or `off`, which would turn “let the dataset decide” into a
 choice you never made.
@@ -126,7 +128,7 @@ So a session you open — including the starting view every built-in sample
 publishes — keeps your choice, or the dataset's choice when you have not made
 one, rather than the setting whoever saved the file was using. The status line
 under the control tells you which you are on: it reads `Chosen automatically:
-<n> cells.` while the dataset is deciding, and nothing at all once you have
+<n> cells in <d>D.` while the dataset is deciding, and nothing at all once you have
 clicked the box. (It reads `This browser is not providing antialiasing for this
 view.` when the device cannot multisample.)
 

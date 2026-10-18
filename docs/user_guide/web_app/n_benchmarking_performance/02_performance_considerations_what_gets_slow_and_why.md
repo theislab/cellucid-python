@@ -94,9 +94,9 @@ High-leverage knobs:
 - **Turn off `Antialiasing (smooth point edges)`** under **Visualization →
   Image quality** — measured below, and the largest single lever left on the
   plain path once filtering and window size have been used. It applies to the
-  next frame. Check the box's state before reaching for it: on a dataset of
-  5,000,000 cells or more it is already clear unless you turned it on yourself,
-  so there is nothing left to win there.
+  next frame. Check the box's state before reaching for it: on a 3D view of
+  5,000,000 cells or more, or a 1D/2D view of 200,000 or more, it is already
+  clear unless you turned it on yourself, so there is nothing left to win there.
 - **Change the layout shape, not just the view count** — a two- or three-view
   row is the expensive arrangement; one view and the 2×2 four-view grid shade
   about the same number of pixels. See {doc}`01_performance_mental_model`.
@@ -376,11 +376,13 @@ dataset until you tell it otherwise. It is not a cosmetic setting, so both
 halves of the trade are stated here.
 
 Until you click the checkbox, the choice is automatic and made from the cell
-count: **on below 5,000,000 cells, off at or above**. It is re-decided every time
-a dataset is published, because datasets are switched in place — so opening an
-atlas after a small dataset clears the box on its own. While the choice is
-automatic the line under the control says so, naming the count
-(`Chosen automatically: 18,142,044 cells.`). Clicking the checkbox ends automatic
+count and the active view's dimension: **in 3D, on below 5,000,000 cells; in a
+1D or 2D view, on below 200,000 cells; off at or above**. It is re-decided every
+time a dataset is published, because datasets are switched in place — so opening
+an atlas after a small dataset clears the box on its own — and whenever the
+active view switches between 2D and 3D. While the choice is automatic the line
+under the control says so, naming the count and the dimension
+(`Chosen automatically: 18,142,044 cells in 3D.`). Clicking the checkbox ends automatic
 selection permanently, in both directions: from then on the box holds your answer
 on every dataset, and the status line goes quiet. This is why the 10,000,000-point
 workload measured below is *not* the default configuration — at that size the
@@ -410,9 +412,8 @@ about 95% of fragments before they are shaded. A 2D embedding is drawn without
 depth: every overlapping point is shaded and blended in order, and under
 antialiasing that happens per sample. There, antialiasing costs about **10×**
 (1,000,000 cells: 33.8 ms on, 3.4 ms off) and `Shader quality: Light` about
-halves the antialiased frame. Automatic antialiasing currently decides from the
-cell count alone (on below 5,000,000 cells), so a dense 2D view below that size
-starts antialiased; turn it off if the frame is slow.
+halves the antialiased frame. This is why automatic antialiasing uses a much
+lower limit for 1D and 2D views (200,000 cells) than for 3D (5,000,000).
 
 What you give up, on the same frames: **18% of pixels change at point size
 0.75** and 32% with `Ultra-light (square points)`. Small dots are almost

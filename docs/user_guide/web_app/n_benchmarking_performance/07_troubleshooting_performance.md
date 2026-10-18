@@ -57,8 +57,8 @@ What to do earlier to avoid this next time.
    `Point size (log):` if points already overlap on screen.
 2) Turn off `Antialiasing (smooth point edges)` under **Visualization → Image
    quality**. It applies to the next frame, and it is worth most at large point
-   sizes. Check the box first: at 5,000,000 cells or more it is already clear
-   unless you ticked it yourself.
+   sizes. Check the box first: at 5,000,000 cells or more in 3D, or 200,000 or
+   more in a 2D view, it is already clear unless you ticked it yourself.
 3) Fix the **layout**: go back to one view. If you need the comparison, note
    that a four-view 2×2 grid is usually cheaper than a two- or three-view row
    — see {doc}`06_edge_cases_performance`.

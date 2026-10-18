@@ -207,7 +207,8 @@ Most costs in Cellucid are not “mysterious”—they scale with a small set of
 :::{important}
 **Two of these were already set for you, from the cell count, when the dataset
 opened.** The point size, and whether `Antialiasing (smooth point edges)` is on
-— on below 5,000,000 cells, off at or above. Both are live settings you can
+— on below 5,000,000 cells in 3D and below 200,000 in a 1D or 2D view, off at
+or above. Both are live settings you can
 change at any time, and both are the settings measured in
 {doc}`02_performance_considerations_what_gets_slow_and_why`. Check what they are
 before assuming they sit at some fixed default.

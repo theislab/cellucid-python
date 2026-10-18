@@ -116,7 +116,8 @@ published, and datasets are switched **in place**:
 - **Point size** is chosen so the total drawn area stays roughly constant, so
   the dot diameter falls with the square root of the cell count.
 - **`Antialiasing (smooth point edges)`** is chosen automatically — on below
-  5,000,000 cells, off at or above.
+  5,000,000 cells in 3D and below 200,000 cells in a 1D or 2D view, off at or
+  above.
 
 Neither is a bug and neither is a reset: they are the right opening answers for
 two datasets that are not the same size. But nothing announces the point-size
@@ -124,7 +125,8 @@ change, so it reads as the app behaving differently for no reason.
 
 ### How to confirm
 1) Read the line under the antialiasing checkbox. While the choice is still
-   automatic it names the count, as in `Chosen automatically: 18,142,044 cells.`
+   automatic it names the count and dimension, as in
+   `Chosen automatically: 18,142,044 cells in 3D.`
    Once you have clicked the checkbox yourself the line goes quiet and the box
    holds your answer on every dataset from then on.
 2) Compare `Point size (log):` against what you remember. The opening size is

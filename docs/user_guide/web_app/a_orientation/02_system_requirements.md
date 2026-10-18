@@ -265,9 +265,9 @@ Cellucid shows an overlay and requires a reload when the GPU context is lost.
   applies to the next frame, and was measured at roughly a fifth of the frame
   time at point size 0.75 on one Apple M1 Pro, at the cost of visibly harder
   point edges. Look at the box before you reach for it: until you click it, the
-  choice is automatic from the cell count — on below 5,000,000 cells, off at or
-  above — so on a large dataset it is already clear and there is nothing left to
-  turn off.
+  choice is automatic from the cell count and the view's dimension — on below
+  5,000,000 cells in 3D and below 200,000 in a 1D or 2D view, off at or above —
+  so on a large dataset it is already clear and there is nothing left to turn off.
 - If using smoke: reduce render resolution and ray quality, then grid density; or set animation speed to 0 (`Still`) so a still view is not redrawn.
 
 Lowering `Shader quality:` is a reasonable-sounding move that does **not** help:
