@@ -36,6 +36,18 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Fixed
 
+- **Web app**: multiview and the data path are faster. Kept views drew their
+  reduced Level-of-Detail levels through a gather from the full-detail streams;
+  they now draw the live view's compact positions with their own compact colors,
+  and share the live positions instead of copying them. Measured on an Apple M1
+  Pro (Chromium, ANGLE Metal), 10,000,000 cells in 2D with LOD: two views
+  15.9 → 6.9 ms a frame, four views 43.6 → 13.5 ms, and each kept view now adds
+  38 MB of GPU memory instead of 114 MB. Hiding a category took 225 ms instead
+  of 413 ms, a cached recolor 225 ms instead of 321 ms, and loading a prepared
+  export 1.30 s instead of 1.43 s (30,000,000 cells: 2.89 s instead of 3.45 s).
+  The documentation's claim that a four-view grid costs about as much as one
+  view held only for large, overlapping points and is corrected.
+
 - **Web app**: a panel's undock, dock, copy and close buttons no longer sit inside
   its header's open/close toggle. A `<summary>` is itself a button, so each was a
   control nested in a control — announced poorly by screen readers and flagged by

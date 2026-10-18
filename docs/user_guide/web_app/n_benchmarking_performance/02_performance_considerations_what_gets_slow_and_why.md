@@ -133,7 +133,9 @@ Changing what the points are colored by recomputes one RGBA color per cell on
 the CPU and then uploads only colors: positions and colors are separate GPU
 streams, so a recolor sends 4 bytes per cell and never touches the positions.
 With Level-of-Detail built, the shared reduced copy of each dimension is
-recolored too, 4 bytes per reduced point, when that dimension next draws.
+recolored too, 4 bytes per reduced point, when that dimension next draws; each
+kept view that draws a reduced level re-gathers its own 4 bytes per reduced
+point when its colors change.
 
 Measured renderer cost of one recolor (upload issued and completed), Chromium on
 an Apple M1 Pro through ANGLE Metal, synthetic data; the color computation

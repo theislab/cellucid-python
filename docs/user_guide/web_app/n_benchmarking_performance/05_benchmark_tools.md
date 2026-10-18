@@ -93,8 +93,9 @@ If you want a copy/paste summary for a bug report, click **Copy Situation Report
 If you’re comparing two builds or changes, make the benchmark comparable:
 
 1) Fix window size (pixels matter).
-2) Fix the layout (single view only; clear snapshots). A two-view row and a 2×2
-   grid are different workloads, not “more of the same one”.
+2) Fix the layout (single view only; clear snapshots). Each view draws every
+   point again, and a two-view row and a 2×2 grid also differ in point size, so
+   they are different workloads, not “more of the same one”.
 3) Start in points mode (smoke mode is a different workload).
 4) Use the same preset count and the same pattern.
 5) Let FPS stabilize for ~5–10 seconds, then record the metric.

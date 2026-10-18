@@ -85,19 +85,28 @@ Level of detail keeps one **compact prefix** for the live geometry (the live
 positions have one dimension, so there is exactly one): the largest reduced
 level's points in hierarchical order, held as the same two streams (a compact
 position store with the live dimension's components and a compact color
-store, one VAO), plus one original-ID
-element buffer and one R32UI index texture shared by every reduced level. The
+store, one VAO), plus one R32UI index texture, shared by every reduced level,
+that maps a compact rank back to its cell for the alpha lookup. That is the
+whole LOD generation; there is no element buffer. The
 compact stores are gathered through one fixed 65,536-point staging block
 (`GATHER_CHUNK_POINTS`), positions and colors in separate passes, colors one
 32-bit word at a time — which is why color arrays handed to the renderer must
 start on a 4-byte boundary. A recolor rewrites only that compact color store,
 in place, the next time the live dimension renders.
 
-The compact copy is deliberate. Drawing reduced levels through the original-ID
+A kept (snapshot) view of the live geometry draws its reduced levels from the
+same compact positions, with its own compact color store: 4 bytes per
+maximum-prefix point, gathered from its published colors when they or the
+live owner change, and retired with the view. A kept view with its own
+geometry draws its own tree through a per-view element buffer.
+
+The compact copy is deliberate. Drawing reduced levels through an original-ID
 element buffer straight from the full-detail streams would remove the copy and
 its recolor cost, but it turns sequential vertex fetch into a gather, and that
 measured 2.0–2.4× slower per reduced-level frame at 5M points (Chromium, Apple
-M1 Pro, ANGLE Metal). Splitting the streams did not cost vertex throughput:
+M1 Pro, ANGLE Metal). Kept views drew that way until they got their own compact
+color stores: 12.0 ms against the live pane's 3.8 ms for the same
+1,333,334-point level of a 10,000,000-point embedding. Splitting the streams did not cost vertex throughput:
 the split full-detail draw measured within noise of the old 16-byte
 interleaved record at 5M points.
 
@@ -218,7 +227,10 @@ Key idea:
 
 The viewer:
 - tracks per-view dimension levels (`viewer.setViewDimension(...)` is called from state when available)
-- caches per-view positions for snapshot views
+- shares positions with snapshot views: a snapshot of the live geometry borrows
+  the live positions array and GPU position store, with no copy, and a snapshot
+  with its own geometry adopts the array it was published with. A published
+  positions array is never written afterwards.
 - uses optimized paths for alpha/transparency sharing so it does not re-upload N full buffers per view
 
 ### The presented layout: one source of truth for where views are
@@ -297,10 +309,15 @@ proportional to `viewCount / rows²`, i.e. to `cols / rows`.
 | 3 | 3 × 1 | 3 |
 | 4 | 2 × 2 | 1 |
 
-This is why a 2×2 grid costs about what a single view costs while submitting
-four times the vertices, and why the row layouts are the expensive ones. It
-holds only while size attenuation is non-zero; at zero attenuation point size
-ignores the viewport and every view is straightforwardly additive.
+This is the **fill** part of the cost only. Every view also pays for every
+point it draws, about 5–7 ns per on-screen point sprite on an Apple M1 Pro
+through ANGLE Metal, whatever its size. At the default point size on a large
+dataset that per-point part dominates and views add up: a 10,000,000-point 2D
+embedding took 30 ms for one view and 147 ms for four. The fill ordering above
+matters only when points are large enough to overlap heavily, and only while
+size attenuation is non-zero; at zero attenuation point size ignores the
+viewport. Level of detail is the lever for multiview: with it, the same four
+views took 13.5 ms.
 
 :::{warning}
 Do not “optimise” the viewport-height uniform to the canvas height for
@@ -376,6 +393,9 @@ changed, each cheap to check:
    not the *ordered set of admitted spatial nodes* reuses the published element
    buffer. Even the post-upload error check is gated on the allocation
    watermark, because running it every frame was measured in milliseconds.
+   Highlight buffers follow the same rule: `gl.getError()` runs on the first
+   allocation and when the store grows past the size already verified, not on
+   every republication.
 
 The culled full-detail element buffer lists the visible points in **ascending
 index order**, not leaf by leaf. Every spatial leaf spans the whole point-ID

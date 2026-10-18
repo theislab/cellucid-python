@@ -384,9 +384,9 @@ Use this section when Cellucid is slow, the canvas is blank, or you see WebGL-re
 1) Confirm WebGL2 is hardware-accelerated: {doc}`../a_orientation/02_system_requirements`  
 2) Make the window smaller. This is the highest-yield single test.
 3) Switch to **Points** render mode while debugging (smoke + heavy overlays can hide root causes).  
-4) Clear snapshots. Then, if you need a comparison, note that the four-view
-   grid is often cheaper than a two-view row —
-   {doc}`../n_benchmarking_performance/06_edge_cases_performance` explains why.
+4) Clear snapshots. Then, if you need a comparison of a large dataset, turn on
+   Level-of-Detail first: every view draws every point again —
+   {doc}`../n_benchmarking_performance/06_edge_cases_performance` explains it.
 5) If you see “WebGL context lost”: reload, then re-try with reduced load.
 
 :::{note}

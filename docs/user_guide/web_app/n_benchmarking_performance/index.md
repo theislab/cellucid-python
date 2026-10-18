@@ -23,9 +23,9 @@ both are worth knowing before you start tuning:
 
 - **Hiding cells with a filter makes navigation faster**, not slower. Hidden
   cells are rejected before anything is drawn for them.
-- **A four-view 2×2 grid is not four times the work of one view.** Point size
-  follows pane height, so the grid draws smaller points; the two- and
-  three-view row layouts are the expensive ones.
+- **Each view draws every point again.** On a large dataset frame time grows
+  with the number of views, and Level-of-Detail is what keeps a multiview
+  comparison smooth.
 
 {doc}`01_performance_mental_model` explains both.
 :::

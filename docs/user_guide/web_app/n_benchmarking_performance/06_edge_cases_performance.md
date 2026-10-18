@@ -20,42 +20,46 @@ If you’re here because something is already slow, you can also jump straight t
 
 ---
 
-## Edge case: the two-view row (the layout that actually costs)
+## Edge case: multiview on a large dataset
 
 ### What you see
-- A single view feels fine, but adding one snapshot makes navigation choppy.
-- Adding a *fourth* view does not make it noticeably worse — and may improve it.
+- A single view feels fine, but each kept view makes navigation choppier.
+- With very large points, a two- or three-view row can feel worse than the
+  four-view grid.
 
 ### Why it happens
-This one surprises people, so it is worth stating precisely.
-
 Cellucid renders at most four views: the live view plus up to three snapshots.
 Two or three views are laid out as **one row**; four are laid out as a **2×2
 grid**.
 
-Point size scales with the height of the pane a point is drawn in. In a one-row
-layout every pane is still full canvas height, so the points stay full size and
-you pay for each pane in full — two views shade about twice the pixels of one.
-In the 2×2 grid each pane is half height, so every point is drawn at half the
-diameter and covers about a quarter of the area. Four panes at a quarter of the
-area each add up to roughly the fill cost of a single view.
+Every view draws every visible point again, and each point costs the GPU
+roughly the same whatever its size. On a large dataset at the default point
+size this per-point cost dominates, so frame time grows with the view count:
+four views of a 10,000,000-point 2D embedding took 147 ms a frame against 30 ms
+for one (Chromium, Apple M1 Pro, ANGLE Metal).
 
-So the cost curve is not monotonic: **1 ≈ 4 < 2 < 3.**
+Point size also scales with the height of the pane a point is drawn in. In a
+one-row layout every pane is full canvas height, so points stay full size; in
+the 2×2 grid each pane is half height and every point covers about a quarter
+of the area. So the **fill** part of the cost follows 1 ≈ 4 < 2 < 3, which you
+only notice when points are large enough to overlap heavily.
 
-Overlay buffers and post-processing passes are allocated per view and do not get
-this benefit, so a heavy vector-field overlay still scales with the view count
-in every layout.
+Overlay buffers and post-processing passes are allocated per view, so a heavy
+vector-field overlay also scales with the view count in every layout.
 
 ### How to confirm
-1) Go back to a single view. If FPS recovers, the layout was the cost.
-2) If you were on two or three views, try adding one more to reach four. If FPS
-   recovers there too, you were fill-rate bound and the smaller point size fixed
-   it.
+1) Go back to a single view. If FPS recovers, the extra views were the cost.
+2) Turn on **Level-of-Detail** (Visualization panel). If FPS recovers, you were
+   bound by the number of points drawn; the same four views took 13.5 ms with it.
+3) If you use large points and were on two or three views, try four. If FPS
+   recovers there, you were fill-rate bound and the smaller points fixed it.
 
 ### Fix
+- Turn on Level-of-Detail before comparing views of a large dataset: kept views
+  draw the same reduced levels as the live view.
 - Tune filters/fields in the live view first.
-- Choose the layout for the comparison you actually want, then check both
-  directions if it is slow — one view and four views are the cheap ones.
+- With large points, prefer one view or the four-view grid to a two- or
+  three-view row.
 - If overlays are on, reduce their density before blaming the layout.
 
 ### Prevention

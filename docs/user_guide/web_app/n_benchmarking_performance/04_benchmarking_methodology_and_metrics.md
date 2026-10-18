@@ -140,8 +140,9 @@ Before you measure:
 1) Close other heavy tabs/apps (especially video calls and other WebGL content).
 2) Keep the window size fixed for all runs (don’t benchmark full-screen once and small-window the next time).
 3) Keep the **layout** fixed, not just the view count. One view, a two-view row
-   and a 2×2 grid are three different workloads because point size follows pane
-   height; they are not points on one curve.
+   and a 2×2 grid are three different workloads: each view draws every point
+   again, and point size follows pane height, so they are not points on one
+   curve.
 4) Keep the filter state fixed. Hidden cells are rejected before rasterisation,
    so a run on a filtered view and a run on the full dataset measure different
    scenes.

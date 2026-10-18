@@ -68,7 +68,8 @@ At a high level:
 - A recolor (switching the colored field or gene) uploads 4 bytes per point —
   only the color stream; positions live in a separate stream and are not
   re-sent. With LOD built, the live embedding's shared reduced copy is
-  recolored the same way, 4 bytes per reduced point.
+  recolored the same way, 4 bytes per reduced point, and so is each kept view
+  that draws a reduced level, from its own colors.
 - Positions cost 4 bytes per embedding axis per point, on the CPU and on the
   GPU: a 2D UMAP or t-SNE is held as x and y only (8 bytes a point), never
   padded to XYZ, so it takes a third less position memory than a 3D
@@ -197,7 +198,7 @@ Most costs in Cellucid are not “mysterious”—they scale with a small set of
 |---|---|---|
 | `n_cells` | Many operations are per-cell (visibility recomputation, colors, selections) | filter applies take longer; memory pressure grows |
 | Point size | A dot's area grows with the square of its size, so point size sets how many pixels the renderer has to cover | frame time rises steeply once points start overlapping on screen |
-| Layout shape (1, 2, 3 or 4 views) | Each view submits its own draw, but point size follows pane height — so the *row* layouts (2, 3) cost most and the 2×2 grid costs about as much as one view | a two-view comparison stutters where a four-view grid does not |
+| Number of views (1–4) | Each view draws every point again, so on a large dataset frame time grows with the view count; point size follows pane height, which only matters once points are large and overlapping | multiview stutters where one view is smooth; Level-of-Detail fixes it |
 | Window pixel count (`width × height × dpr²`) | Overlays and post-processing scale with pixels | smoother when window is smaller |
 | `n_enabled_filters` | Each filter change re-derives visibility for every cell, testing each enabled filter | slider scrubbing becomes the main lag source |
 | Category count | Legends/counts and color mapping can degrade with huge category explosions | legends slow; UI becomes cluttered/unusable |
