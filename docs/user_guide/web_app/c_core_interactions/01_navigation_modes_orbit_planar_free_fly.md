@@ -108,6 +108,10 @@ Keyboard navigation works in all modes. In orbit mode:
 
 - **1 finger drag**: rotate
 - **2 finger pinch**: zoom
+- **2 finger drag**: pan (move both fingers together)
+
+With **Select mode** on (Highlighting panel), one finger runs the active
+selection tool instead of rotating; two fingers still pinch and pan.
 
 ### Orbit options (UI)
 
@@ -146,6 +150,10 @@ Planar keyboard speed is controlled by the **Keyboard speed** slider in the Plan
 
 - **1 finger drag**: pan
 - **2 finger pinch**: zoom
+- **2 finger drag**: pan
+
+With **Select mode** on, one finger selects instead of panning; pan with two
+fingers.
 
 ### Planar options (UI)
 
@@ -171,7 +179,7 @@ Two ways to look around:
 To exit pointer lock, press `Esc`.
 
 :::{note}
-Free-fly touch gestures are intentionally disabled in the current implementation (touch events return early in free-fly). If you’re on a touch-only device, use Orbit or Planar instead.
+Free-fly has no touch navigation: a finger neither looks around nor moves the camera in free-fly. If you’re on a touch-only device, use Orbit or Planar instead. **Select mode** still selects with one finger in free-fly, as `Alt`+click does with a mouse.
 :::
 
 ### Keyboard (Free-fly)

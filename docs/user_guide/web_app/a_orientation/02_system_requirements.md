@@ -69,7 +69,9 @@ that device.
 
 - Mouse or trackpad recommended.
 - Keyboard shortcuts are available (see the in-app “Keyboard Shortcuts” accordion).
-- Touch devices can work for basic orbit/planar navigation, but are much more likely to run out of GPU memory.
+- Touch devices work for navigation and selection (one finger orbits — pans in
+  planar mode — two fingers pinch to zoom and drag to pan), but are much more
+  likely to run out of GPU memory.
 - On a phone-sized screen (720 px wide or less) the sidebar opens over the whole
   screen. Tap **✕** in its top-right corner to close it and see the plot; tap
   **☰** in the top-left corner to bring it back.
@@ -78,8 +80,15 @@ that device.
   rows' copy buttons, the highlight page tabs' buttons, plot toolbars) are always
   shown. An undocked panel moves by dragging its header with a finger.
 - Selecting cells (highlighting) is an {kbd}`Alt` + click or
-  {kbd}`Alt` + drag gesture, so it needs a keyboard; it is not available by
-  touch alone.
+  {kbd}`Alt` + drag gesture with a keyboard. A touch screen has no
+  {kbd}`Alt`, so turn on **Select mode** instead: the toggle sits in the
+  **Highlighting** panel and, on a touch screen, also at the bottom of the plot.
+  While it is on, a one-finger tap or drag runs the active highlight tool
+  exactly as {kbd}`Alt` + click or {kbd}`Alt` + drag does, and two fingers
+  still zoom and pan. Its **Intersect / Add / Subtract** buttons stand in for
+  {kbd}`Shift` and {kbd}`Ctrl`. Tap the toggle again (or press {kbd}`Esc`
+  with nothing in progress) to go back to navigating. See
+  {doc}`../f_highlighting_selection/03_highlight_ui`.
 
 ---
 

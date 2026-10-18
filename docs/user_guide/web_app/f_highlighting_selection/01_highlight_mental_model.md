@@ -192,6 +192,10 @@ In Cellucid, these operations are controlled by modifier keys held during the ge
 - `Shift+Alt` = union (add)
 - `Ctrl+Alt` or `Cmd+Alt` = subtract (remove)
 
+Without a keyboard (a phone or tablet), **Select mode** in the Highlighting
+panel stands in for `Alt`, and its **Intersect / Add / Subtract** buttons pick
+the operation instead of the modifier keys ({ref}`select-mode`).
+
 :::{tip}
 In 3D, intersection across multiple angles is the most reliable way to isolate a “true 3D region” using 2D tools.
 Example: draw a lasso, rotate 90°, draw another lasso with `Alt` to intersect.

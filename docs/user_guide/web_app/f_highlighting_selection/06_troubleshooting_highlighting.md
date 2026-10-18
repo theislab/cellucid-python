@@ -23,6 +23,8 @@ These checks solve most “it’s broken” reports in under a minute:
    - See {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`
 7) **Modifier keys:** are you holding `Alt` to start a selection gesture?
    - `Shift+Alt` = add; `Ctrl/Cmd+Alt` = subtract.
+   - On a touch screen there is no `Alt`: is **Select mode** pressed? See
+     {ref}`select-mode`.
 8) **Tool mode:** are you in the tool you think you are in (Lasso vs Proximity vs KNN vs Annotation based)?
    - **Annotation based** additionally needs a coloured field. With none, the
      panel replaces its `Alt+click` invitation with the sentence that asks for
@@ -58,9 +60,10 @@ Two rules hold for every message in the table below:
 |---|---|---|
 | “That click did not land on a cell, so there is nothing to select. Zoom in to make cells easier to hit: only the cells the viewer is currently drawing can be clicked.” | `Alt+click` hit no point. Points draw about a pixel wide when zoomed out, so this is ordinary rather than exceptional. | Zoom in, then click again. **Point size** does not help: picking uses a fixed radius in data space and never reads the drawn size. |
 | “That gesture ended outside the view, so nothing was selected.” | You released the mouse somewhere other than the plot. The gesture was abandoned deliberately — see the symptom below. | Repeat the gesture and release over the plot. |
+| “That gesture was interrupted before it ended, by a second finger or by the browser, so nothing was selected.” | Select mode: a second finger landed while a one-finger selection was still being drawn (two fingers always zoom and pan), or the browser took the touch over. | Draw with one finger only, and lift it before pinching or panning. |
 | “That cell has no value on the active field, so there is nothing to select.” | Annotation based: the clicked cell is missing a value on the active field, so the rule resolves to no cells. | Click a cell that has a value, or switch to a field that covers it. |
 | “That gesture did not change the selection.” | The gesture resolved to exactly the set you already had. | Nothing is wrong. Draw elsewhere, or change the modifier key. |
-| “Annotation selection needs an active field. Choose a Categorical obs or Continuous obs field under Coloring & Filtering, then Alt+click a cell.” | Annotation based is selected but no field is coloured, so the viewer never starts the gesture at all. | Choose a categorical or continuous field first. |
+| “Annotation selection needs an active field. Choose a Categorical obs or Continuous obs field under Coloring & Filtering, then Alt+click a cell (or tap it in Select mode).” | Annotation based is selected but no field is coloured, so the viewer never starts the gesture at all. | Choose a categorical or continuous field first. |
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/read-missed-click-notice.png
 :alt: A proximity Alt+click on empty space, with the pointer pressed where no cell is drawn and the Highlighting panel showing the notice that the click did not land on a cell and that only the cells the viewer is currently drawing can be clicked.
@@ -181,7 +184,8 @@ Repeat the gesture you are actually debugging before you trust the line.
 ## Symptom: “I can’t start lasso / nothing happens when I draw”
 
 ### Likely causes (ordered)
-1) You are not holding `Alt` (lasso mode requires `Alt`).
+1) You are not holding `Alt` (lasso mode requires `Alt`, or **Select mode** on a
+   touch screen).
 2) You are not in **Lasso** mode (toolbelt mismatch).
 3) You are in a navigation interaction state (dragging/rotating) and never entered lasso.
 4) Browser/OS intercepts `Alt` in your environment (rare but possible).
@@ -197,6 +201,8 @@ Repeat the gesture you are actually debugging before you trust the line.
 
 ### Fix
 - Use `Alt+drag` (not plain drag).
+- On a touch screen, press **Select mode** (in the Highlighting panel or at
+  the bottom of the plot) and draw with one finger.
 - If `Alt`/`Option` is captured, disable the extension or operating-system
   shortcut that owns the gesture, then activate **Lasso** and use
   `Alt`/`Option`+drag again.
@@ -204,7 +210,7 @@ Repeat the gesture you are actually debugging before you trust the line.
 ### Prevention
 - Learn the mental split:
   - drag = navigation,
-  - `Alt+drag` = selection tool.
+  - `Alt+drag` (or a drag with **Select mode** on) = selection tool.
 
 ---
 

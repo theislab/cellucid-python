@@ -10,7 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 Version 0.9.2 is a patch release on 0.9.1.
 
+### Added
+
+- **Web app**: cells can be highlighted on a touch screen. Every selection tool
+  started only from an `Alt` press, which a phone or tablet does not have, so touch
+  users could not select at all. A **Select mode** toggle in the Highlighting panel
+  (repeated at the bottom of the plot on touch screens) now stands in for a held
+  `Alt`: while it is on, a one-finger tap or drag runs the active tool through the
+  same path an `Alt` press takes, and its Intersect / Add / Subtract buttons stand
+  in for `Shift` and `Ctrl`. Two fingers always pinch to zoom and, newly, drag to
+  pan; a second finger landing mid-selection abandons that gesture rather than
+  committing it. `Esc` with nothing in progress leaves the mode. Mouse and keyboard
+  behaviour is unchanged while it is off.
+
 ### Fixed
+
+- **Web app**: in multiview, a finger dragging a pane now focuses that pane first,
+  as a mouse press does, instead of moving whichever pane last had focus, and a
+  touch drag saves the camera to the focused pane when cameras are unlocked.
 
 - A refused upload or event now reaches the client as the status the server sent.
   Every early refusal of a POST -- an expired or unknown session-bundle request, bad

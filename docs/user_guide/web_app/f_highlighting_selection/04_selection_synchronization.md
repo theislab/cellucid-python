@@ -32,6 +32,7 @@ Highlighting feels “simple” until you use multi-view snapshots, change filte
 |---|---|---|---|
 | **Filters / visibility mask** | Per view (live + each snapshot may differ) | Session (dataset-dependent) | Filters control which cells are selectable and drawn in that view. |
 | **Selection tool mode** (annotation / lasso / proximity / KNN) | Global UI choice | Session (dataset-dependent layout) | Affects how `Alt` gestures are interpreted. |
+| **Select mode** and its Intersect / Add / Subtract choice | Global input setting | Not saved | Stands in for holding `Alt` (and `Shift`/`Ctrl`) on a touch screen; like a held key, it is not part of a session. |
 | **Selection candidate set** (in-progress selection) | Global (shared across tools) | No | Temporary; can be confirmed into a group or canceled. |
 | **Preview highlight** (while selecting) | Global, rendered per view | No | Shown only for visible cells in each view. |
 | **Highlight pages** | Global (dataset-scoped) | Yes (session, dataset-dependent) | Pages are alternate “workspaces” of highlight groups. |

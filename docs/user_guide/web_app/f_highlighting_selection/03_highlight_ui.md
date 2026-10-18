@@ -34,7 +34,7 @@ This page is the “UI map” for highlighting:
 In the left sidebar, open the accordion section labeled **Highlighting**.
 
 Inside this section you will see four sub-areas, top to bottom:
-1) **Highlight mode** (toolbelt for selection)
+1) **Highlight mode** (toolbelt for selection, with the **Select mode** toggle)
 2) **Highlight pages** (tabs)
 3) **Highlighted groups** (the list + count + Clear)
 4) `Create Categorical` (a collapsed accordion that turns pages into an obs column)
@@ -65,6 +65,36 @@ These controls are tool-specific but behave consistently across tools.
 - `Ctrl+Alt` or `Cmd+Alt` usually means “remove” (subtract).
 
 For the annotation-based tool on categorical fields, `Alt` acts like “replace” (details in {doc}`02_selection_tools_document_each_tool`).
+
+(select-mode)=
+### Select mode (touch screens, or no `Alt` key)
+
+A touch screen has no `Alt` key, so the **Select mode** button under the
+Highlight mode buttons stands in for holding it:
+
+- While **Select mode** is pressed, a plain primary press runs the active tool
+  exactly as an `Alt` press does: a one-finger tap (or a plain click) is an
+  `Alt+click`, and a one-finger drag is an `Alt+drag` — a lasso, a proximity
+  radius, a KNN degree, or a continuous range, whichever tool is active. It
+  works in every navigation mode and, in multiview, selects in the pane the
+  finger lands on without moving view focus, as `Alt+click` does.
+- Pressing it shows three buttons, **Intersect**, **Add**, and **Subtract**,
+  which stand in for the modifiers a finger cannot press: **Intersect** is a
+  plain `Alt` gesture (and is the “replace” behaviour of the annotation tool on
+  categorical fields), **Add** is `Shift+Alt`, **Subtract** is `Ctrl/Cmd+Alt`.
+  A held `Shift` or `Ctrl/Cmd` key still wins over the button.
+- Two fingers always navigate: pinch to zoom, move both to pan. A second finger
+  that lands while a one-finger selection is still being drawn abandons that
+  gesture without selecting anything, and the panel says it was interrupted.
+- On a touch screen the same toggle is repeated at the bottom of the plot, so
+  you can switch between navigating and selecting with the sidebar closed.
+  Both buttons always show the same state.
+- To leave Select mode, press either button again, or press `Esc` when no
+  selection is in progress (the first `Esc` cancels a selection in progress).
+
+Select mode is an input setting, like holding `Alt`: it is not saved in
+sessions. The step controls (**Confirm**, **Undo**, **Cancel**) stay in this
+panel, so on a phone you reopen the sidebar to confirm a selection.
 
 ---
 

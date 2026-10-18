@@ -899,11 +899,16 @@ Create `_static/screenshots/accessibility/` for 2–4; there is no such topic fo
 
 **notes** — The old image baked in an app string that contradicted the selection docs:
 its Highlighting block read `Shift + click — Add to selection`, while the renderer
-requires `altKey` on every selection path (`highlight-renderer.js` lines ~3139, ~3200,
-~3299, ~3352) and the real binding is **`Shift+Alt`+click**. That was fixed in
-`index.html` — and pinned by `tests/keyboard-shortcut-panel-contract.test.mjs`, which
-now ties every row of the panel to the handler that serves it — before the recapture, so
-the current image ships the corrected panel and its five groups.
+requires `Alt` on every selection path (today one gate,
+`resolveSelectionGestureCombine` in `rendering/select-mode.js`, which also accepts
+Select mode in place of `Alt`) and the real binding is **`Shift+Alt`+click**. That was
+fixed in `index.html` — and pinned by `tests/keyboard-shortcut-panel-contract.test.mjs`,
+which now ties every row of the panel to the handler that serves it — before the
+recapture, so the current image ships the corrected panel and its five groups.
+
+**RECAPTURE** `web_app/keyboard-shortcuts.png`: the Highlighting group gained a second
+`Esc` row, *Leave Select mode when nothing is in progress*, after this image was taken.
+Same framing; update the figure's `:alt:` text to list the new row.
 
 ---
 

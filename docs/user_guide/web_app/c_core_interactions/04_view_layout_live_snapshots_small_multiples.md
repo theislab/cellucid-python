@@ -149,8 +149,10 @@ remove an unneeded snapshot if three already exist, and retry.
 
 ### The wrong panel moves
 
-With `Unlocked Cam`, click inside the intended panel first. Use `Locked Cam` if
-all panels should move together.
+With `Unlocked Cam`, click (or, on a touch screen, start dragging) inside the
+intended panel first: a camera press focuses the panel it lands on. A selection
+gesture (`Alt`, or a finger with **Select mode** on) never moves focus. Use
+`Locked Cam` if all panels should move together.
 
 ### Performance drops
 

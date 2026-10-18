@@ -64,6 +64,12 @@ Most tools interpret modifiers like this:
 
 For the **annotation-based** tool on categorical fields, `Alt` behaves like **replace** (not intersect). Details below.
 
+On a touch screen, or anywhere without an `Alt` key, turn on **Select mode** in
+the Highlighting panel: a one-finger tap or drag then does what `Alt+click` or
+`Alt+drag` does in every tool below, and its **Intersect / Add / Subtract**
+buttons replace `Alt`, `Shift+Alt`, and `Ctrl/Cmd+Alt`. Two fingers still zoom
+and pan. See {ref}`select-mode`.
+
 ### Rule 3: selections are multi-step (and undoable)
 Each gesture typically becomes a “step”.
 

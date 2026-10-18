@@ -225,10 +225,11 @@ in muscle memory.
 |---|---|
 | `x` | Remove every highlight group on the **active highlight page** (other pages keep theirs) |
 | `Esc` | Cancel the selection in progress, exactly as the **Cancel** button does |
+| `Esc` (nothing in progress) | Leave **Select mode**, if it is on |
 
-`Esc` is only consumed when a selection is actually in progress, so the same
-key still closes a dialog, dismisses the welcome overlay, or leaves a text field
-alone when there is nothing to abandon.
+`Esc` is only consumed when a selection is actually in progress or Select mode
+is on, so the same key still closes a dialog, dismisses the welcome overlay, or
+leaves a text field alone when there is nothing to abandon.
 
 Two focus rules, both deliberate:
 
@@ -247,10 +248,12 @@ Two focus rules, both deliberate:
 Press `?` to open this panel in the app. It is the authoritative list, and it
 shows **five** groups. The three tables above restate every keyboard row of all
 five: the ungrouped global keys, then Navigation together with the two
-mode-specific groups, then the two keyboard rows of Highlighting. The four
-pointer gestures in that last group (`Alt`+click, `Alt`+drag, `Shift`+`Alt`+click
-and `Ctrl`+`Alt`+click) are deliberately not restated here — they need a mouse,
-which is the subject of the next section.
+mode-specific groups, then the three keyboard rows of Highlighting (the panel
+now lists a second `Esc` row, *Leave Select mode when nothing is in progress*,
+which this screenshot predates). The four pointer gestures in that last group
+(`Alt`+click, `Alt`+drag, `Shift`+`Alt`+click and `Ctrl`+`Alt`+click) are
+deliberately not restated here — they need a pointer, which is the subject of
+the next section.
 ```
 
 ### What keyboard cannot do (yet)
@@ -258,7 +261,11 @@ which is the subject of the next section.
 The genuine gap is **selection**, not navigation:
 
 - **Lasso and area selection require a pointer.** There is no keyboard equivalent
-  for dragging a region over the plot.
+  for dragging a region over the plot. The pointer does not need a held key,
+  though: with **Select mode** on (Highlighting panel), a plain click, tap, or
+  drag runs the active tool, and its **Intersect / Add / Subtract** buttons
+  replace `Shift` and `Ctrl`. That serves touch screens and anyone who cannot
+  hold a modifier key while pressing.
 - **Clicking an individual cell requires a pointer.** Picking is a
   point-and-shoot operation against the drawn scene.
 - Dragging a slider quickly is easier with a pointer, though every slider accepts
@@ -281,6 +288,9 @@ are safe to rely on:
   and is the first `Tab` stop.
 - Every icon-only button resolves to exactly one accessible name; the sidebar
   toggle's name and its expanded state change together.
+- Both **Select mode** toggles are buttons named “Select mode” whose
+  `aria-pressed` state always matches, and the Intersect / Add / Subtract
+  buttons are a named group with one pressed button.
 - Every control in every analysis panel has an accessible name, and highlight
   page chips are operable with both `Enter` and `Space`, keep focus after
   activation, and announce their state (“120 cells”, “no cells, cannot be

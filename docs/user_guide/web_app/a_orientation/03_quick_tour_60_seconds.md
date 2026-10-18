@@ -158,6 +158,10 @@ If you want a keyboard-first workflow, the UI supports:
 
 - `Alt` + drag for area selection (and other shortcuts; see the in‑app “Keyboard Shortcuts” accordion).
 
+On a phone or tablet, press **Select mode** in the Highlighting panel (or at the
+bottom of the plot) and draw with one finger instead; two fingers still zoom and
+pan.
+
 ### 6) Export or save what you did
 
 Pick one:
