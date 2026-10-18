@@ -51,7 +51,9 @@ cellucid/
     ├── external/                  # Vendored third-party libraries, served from
     │                              #   this origin (plotly, gl-matrix, h5wasm).
     │                              #   Nothing is loaded from a CDN; the page CSP
-    │                              #   would block it.
+    │                              #   would block it. plotly.min.js carries one
+    │                              #   local, test-pinned patch (violin density;
+    │                              #   see its header) to re-apply on upgrade.
     ├── fonts/  img/               # Static assets
     └── js/
         ├── analytics/             # Google Analytics helpers. Inert unless the

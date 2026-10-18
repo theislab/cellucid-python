@@ -114,11 +114,13 @@ Cellucid analysis uses caching at multiple levels:
 - **Field loading cache**: obs/gene fields are loaded on demand and kept in memory for responsiveness.
 - **Bulk gene cache**: gene-heavy modes can preload and reuse gene vectors to avoid repeated I/O.
 - **Marker genes cache** (Marker Genes mode): optional caching of marker results so reruns are faster.
+- **Page data cache**: the per-cell values of each page and variable, kept in their own numeric type and bounded at 100 entries and 256 MiB, least recently used first out.
+- **Density curves**: a density plot's curve is reused across cosmetic option changes and CSV export, and recomputed only when the data or the bandwidth changes.
 
 What triggers recomputation depends on the mode, but common triggers include:
 - changing selected pages or variables,
 - changing page membership (adding/removing highlighted cells),
-- changing plot options (thresholds, transforms, plot type),
+- changing plot options that change the numbers (thresholds, transforms, plot type, density bandwidth),
 - opening a copied (floating) analysis window (it recomputes; results are not copied).
 
 :::{note}

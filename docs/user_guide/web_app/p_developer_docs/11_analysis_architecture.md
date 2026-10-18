@@ -115,8 +115,11 @@ This is handled by:
 
 Compute is structured around “operations” with capability metadata: which
 operations can run in a Worker and which can run on the main thread. The
-operations are correlation (`COMPUTE_CORRELATION`) and differential expression
-(`COMPUTE_DIFFERENTIAL`); marker-gene discovery dispatches its own
+operations are correlation (`COMPUTE_CORRELATION`), differential expression
+(`COMPUTE_DIFFERENTIAL`) and kernel density (`COMPUTE_KERNEL_DENSITY`): a
+density-plot curve of more than 20,000,000 kernel terms is split by curve point
+across the worker pool, and every point runs the same loop as the single-thread
+sum, so the curve is bit identical. Marker-gene discovery dispatches its own
 `MARKERS_*` messages to the same worker pool. There is no GPU analysis backend.
 
 Key files:
@@ -211,6 +214,9 @@ these properties, and each one is pinned by a test:
   through one table-driven kernel, `decodeQuantizedToFloat32` in
   `cellucid/assets/js/data/quantization-contract.js`, which is bit identical to
   evaluating `minValue + code * scale` per cell.
+- **Each decode goes to the least-loaded worker** of the quantization pool (a
+  busy worker counts one, plus its queue), not round-robin, so a decode never
+  waits behind a busy worker while another is idle.
 - **Per-run work is done once per run.** `StreamingGeneLoader` validates both
   group specifications when a run starts, not once per gene.
 - **Rank tests tabulate values without a `Map`.** Wilcoxon (DE and markers),

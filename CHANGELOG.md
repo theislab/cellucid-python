@@ -36,6 +36,24 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Fixed
 
+- **Web app**: analysis plots of large pages draw several times faster, with
+  identical results. Plotly's violin density evaluated its kernel once per value
+  at every curve point; a local, test-pinned patch to the vendored Plotly
+  evaluates it once per run of equal values (expression data is mostly ties) and
+  skips terms that are exactly zero, adding the rest in the same order. Box plots
+  that draw points hand Plotly exact precomputed statistics; density curves are
+  computed once (not twice), reused across cosmetic changes, and split across the
+  worker pool when large. At 2,000,000 cells: a gene violin 3.7 → 0.67 s, a
+  continuous box 1.15 → 0.26 s, a continuous density 1.39 → 0.56 s. Page values
+  keep their own numeric type, the page-data cache is bounded at 256 MiB as well
+  as 100 entries, and decodes go to the least-loaded worker.
+
+- **Web app**: on browsers that composite in software (blocklisted GPUs, virtual
+  machines, remote desktops), part of the plot vanished beside a floating panel
+  whose content scrolled: Chromium culled the canvas under the panel's opaque
+  scroller and drew the hole at its mirror image. Each floating window is now its
+  own compositing surface.
+
 - **Web app**: multiview and the data path are faster. Kept views drew their
   reduced Level-of-Detail levels through a gather from the full-detail streams;
   they now draw the live view's compact positions with their own compact colors,
