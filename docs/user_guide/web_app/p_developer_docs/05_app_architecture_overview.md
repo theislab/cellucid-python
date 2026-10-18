@@ -126,7 +126,7 @@ Cellucid has *many* interacting features. The app treats state as first-class:
 - highlight pages/groups and per-point highlight overlay arrays
 - per-view contexts (live view + snapshot views)
 - dimension switching state and vector-field availability
-- caches for loaded obs/var field data (bounded LRU)
+- loaded obs/var field data, released least recently used past 512 MiB of inactive fields (`field/residency.js`)
 
 `DataState` emits events so UI/analysis modules can stay decoupled:
 - `visibility:changed`

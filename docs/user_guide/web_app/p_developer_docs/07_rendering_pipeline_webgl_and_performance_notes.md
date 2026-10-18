@@ -224,7 +224,7 @@ The viewer exposes a small API surface used by `DataState` and `main.js`.
 - `viewer.setData({ positions, colors, transparency, dimensionLevel })`
   - Initializes point buffers and builds spatial indices.
   - `positions` hold exactly `dimensionLevel` Float32 values per point.
-  - `colors` are RGBA uint8 packed; `transparency` is a separate float array used for filtering.
+  - `colors` are RGBA uint8 packed; `transparency` is a separate `Uint8Array` holding exactly 0 or 1 per cell, used for filtering.
 
 ### Incremental updates (critical for performance)
 
@@ -234,7 +234,7 @@ The viewer exposes a small API surface used by `DataState` and `main.js`.
     resources, next renders. Positions, the alpha texture and the LOD topology
     are not touched.
 
-- `viewer.updateTransparency(alphaArray)`
+- `viewer.updateTransparency(alphaArray)` (a `Uint8Array` of 0/1; a Float32 or out-of-range array is rejected)
   - Updates alpha/visibility texture/buffer.
   - Also triggers highlight/overlay rebuild hooks (e.g., selection needs the new visibility mask).
 

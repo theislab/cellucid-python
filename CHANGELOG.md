@@ -36,6 +36,17 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Fixed
 
+- **Web app**: less memory per cell, so larger datasets fit. Per-cell visibility
+  is one byte (exactly 0 or 1) instead of four, the outlier quantiles are no
+  longer copied into the state, categorical codes keep their stored width, and
+  a kept view shares the visibility arrays copy-on-write instead of cloning
+  them. Loaded fields are released by bytes rather than by count, so browsing
+  genes no longer grows memory without bound. A loaded 3D dataset went from
+  36 to 22 bytes per cell, and each kept view from 26 to about 6; 150M cells in
+  2D and 120M in 3D load and render on a 16 GB machine. Pixels, filters and
+  exports are byte-identical. The benchmark's pre-publication GPU estimate now
+  follows the dimension (13 B/point in 2D, 17 in 3D) instead of a fixed 28.
+
 - **Web app**: usage analytics rebuilt around one declared schema
   (`assets/js/analytics/schema.js`). It no longer sends dataset names, ids built
   from local file names, exact counts, error text or full page URLs (the page

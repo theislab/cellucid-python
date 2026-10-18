@@ -5,7 +5,7 @@ This page documents the **developer-facing data loading pipeline** for the Cellu
 - how datasets are discovered and selected
 - how the app derives a dataset **base URL**
 - which files are fetched (and in what order)
-- where caching happens (HTTP cache, in-memory caches, LRU field caches, IndexedDB caches)
+- where caching happens (HTTP cache, in-memory caches, byte-bounded field residency, IndexedDB caches)
 - how remote server / GitHub / file picker / Jupyter modes differ
 
 If you are looking for a user-facing guide, start with:
@@ -59,7 +59,7 @@ dataset_identity.json  obs_manifest.json    embeddings / points
                        var_manifest.json    connectivity (optional)
                           │
                           ▼
-                     DataState                        ← typed arrays + LRU caches
+                     DataState                        ← typed arrays + field residency
 ```
 
 Everything below `DataSourceManager` sees only a base URL and relative paths.
@@ -276,13 +276,15 @@ Examples:
 - `DataSourceManager` caches dataset metadata per source.
 - Some sources cache manifests (`datasets.json`, metadata) after first load.
 
-### 3) `DataState` field caches (bounded LRU)
+### 3) `DataState` field residency (bounded in bytes)
 
-`DataState` maintains LRU caches for loaded field arrays:
-- obs fields (many small arrays)
-- var fields (gene vectors; fewer but larger)
-
-These caches are designed to prevent “scroll through genes for 10 minutes → tab uses 10GB”.
+`DataState` keeps loaded field arrays — obs fields and gene vectors — and
+releases inactive ones least recently used once they exceed 512 MiB
+(`state/managers/field/residency.js`). The active field, fields with filter
+state, and fields still loading are always kept. This is what stops “scroll
+through genes for 10 minutes → tab uses 10 GB”; the earlier entry-count bound
+did not, because each field object kept its arrays alive. Categorical codes
+stay in the type the file stored (uint8 stays uint8).
 
 ### 4) Community annotation caches (IndexedDB + localStorage index)
 

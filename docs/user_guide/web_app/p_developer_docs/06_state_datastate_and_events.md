@@ -48,20 +48,27 @@ Code:
   density and the session fingerprint
 - `colorsArray`: RGBA color buffer (uint8 packed); smoke density reads it too,
   so the cloud carries the active field's colours
-- `categoryTransparency`: per-point alpha (float32), used for filtering/visibility
-- `outlierQuantilesArray`: per-point outlier quantiles (float32), used by outlier filter logic
+- `categoryTransparency`: per-point visibility, a `Uint8Array` holding exactly 0
+  or 1 (every filter keeps or drops a cell; highlight dimming and fog are done
+  in the shaders), validated by `requirePointTransparency`
+  (`rendering/alpha-visibility.js`)
+- outlier quantiles are not copied into the state: the outlier filter reads the
+  active field's own `outlierQuantiles` through `getActiveOutlierQuantiles()`
 
 Key invariant:
 - **indices are stable**: point `i` refers to the same cell across all arrays (positions/colors/alpha/highlights).
 
 ### Field data + caches
 
-Loaded field values are cached in bounded LRU caches to prevent unbounded memory growth:
-
-- `_fieldDataCache`: obs fields (defaults to max 50 entries)
-- `_varFieldDataCache`: gene-expression fields (defaults to max 20 entries)
-
-These caches are shared across views and are critical for performance on large datasets.
+Loaded field values live in `_fieldDataCache` (obs fields) and
+`_varFieldDataCache` (gene-expression fields), shared across views. They are
+bounded in **bytes**, not entries (`field/residency.js`): once inactive fields
+hold more than `INACTIVE_FIELD_BUDGET_BYTES` (512 MiB), the least recently used
+are released. The active field, any field with filter state, and fields still
+loading are always kept, and release runs only when the active field changes, so
+a session restore or an analysis that loads several fields cannot lose one.
+(An entry-count bound did not bound memory: browsing genes kept every one at
+4 bytes per cell.)
 
 ### Multi-view contexts (live + snapshots)
 
@@ -85,12 +92,16 @@ quantiles) are owned, not copied, as views change. The **active** view's context
 shares the arrays `DataState` itself holds, so syncing it after every coloring,
 filtering or centroid change costs nothing per cell. `setActiveView` moves the
 arrays: the outgoing context keeps the ones the state was using, and the state
-adopts the incoming context's. A new snapshot (“Keep view”) clones them, and a
-context handed to `restoreContext` is copied, because its caller may still hold
-it. Copying on every sync made a 5,000,000-cell load peak at 854 MB of
-JavaScript memory against 228 MB now, and kept a permanent 76 MB duplicate.
-So never mutate an inactive context's arrays in place through the state, and
-never let two contexts hold the same array.
+adopts the incoming context's. A new snapshot (“Keep view”) **shares** the
+transparency array and visibility mask with the view it was kept from, copy on
+write (`state/managers/per-cell-array-ownership.js`): every writer goes through
+`writableTransparency`, `writableCellVisibilityMask`, `writableColors` or
+`writableColorAlphaBytes`, which copy first if another view still holds the
+array. A kept view's colours are one copy that the viewer and renderer keep by
+reference; once published, an array is never written again. A context handed
+to `restoreContext` is copied, because its caller may still hold it. So never
+write a per-cell array directly — always take it through a `writable*` helper.
+A kept view now adds about 6–7.4 bytes per cell instead of 26.
 
 ### Field switch cost
 

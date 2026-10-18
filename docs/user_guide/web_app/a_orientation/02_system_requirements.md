@@ -44,11 +44,15 @@ validation contract on every supported platform.
 
 ### Hardware (what matters)
 
-Cellucid’s limiting resource is usually the **GPU** (not CPU):
+Cellucid’s limiting resource is **memory**, in two places — the browser tab's
+JavaScript memory and the GPU — not CPU speed:
 
-- **GPU memory (VRAM)**: more VRAM = fewer “context lost” crashes on large datasets.
+- **System RAM** (the tab's memory): about 18–19 bytes per cell for a 2D
+  embedding and 23–24 for 3D once loaded, plus about 4 bytes per cell for each
+  field or gene you colour by.
+- **GPU memory (VRAM)**: about 13 bytes per cell in 2D and 17 in 3D. On
+  computers with unified memory (Apple silicon) both come out of the same RAM.
 - **GPU driver quality**: outdated drivers can cause rendering glitches or failures.
-- **System RAM**: helps for very large datasets (but does not replace VRAM).
 
 Rule of thumb:
 

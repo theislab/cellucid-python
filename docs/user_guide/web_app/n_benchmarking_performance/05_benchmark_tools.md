@@ -275,11 +275,10 @@ analysis no longer changes your shader quality as a side effect.
   `MAX_TEXTURE_SIZE²` — 268,435,456 on a context reporting the common 16,384 —
   and 250,000,000 sits just inside it. A value outside 1–250,000,000 is rejected
   with a **Point count out of range** notice rather than attempted.
-- What you will meet before that ceiling is memory. The position and colour
-  arrays alone are 16 bytes per point for a 3D pattern (12 for the 2D
-  `flatumap` pattern, whose positions carry x and y only): 800 MB at
-  50,000,000 3D points and 4 GB at 250,000,000, before any per-point state or
-  GPU copy. On a machine that cannot
+- What you will meet before that ceiling is memory: about 41 bytes per point
+  for a 3D pattern and 31.5 for the 2D `flatumap` pattern, tab memory and GPU
+  memory together — about 2 GB at 50,000,000 3D points and 10 GB at
+  250,000,000. On a machine that cannot
   allocate it the request fails as an allocation error, which is the honest
   outcome — the limit that binds is your machine's memory, and the control does
   not pretend to know what that is.
