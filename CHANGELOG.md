@@ -227,6 +227,15 @@ Version 0.9.2 is a patch release on 0.9.1.
   expression data.` (as on a dataset without genes) instead of a page error;
   Analyze performance and Copy situation report ask for data; and Load says no
   dataset is open instead of quoting `0 cells and 0 genes`.
+- **Web app, data**: a dataset re-exported at the same address can no longer
+  show values from its previous version. Gene and observation payloads were
+  reused from the browser cache without asking the server, and payload files
+  are numbered, not named: a re-export that added one gene left
+  `var/3.values.u8.gz` holding another gene of exactly the same size, so the
+  cached file drew the old gene's values under the new gene's name. Every
+  dataset file — catalogs, manifests, payloads and saved views — is now
+  revalidated with the server before use; an unchanged file costs a short
+  "not modified" reply.
 - **Web app, interface**: one calmer design. One font (Inter) in sentence case
   with a small type scale; soft borders; compact spacing. Every panel has
   short headings, and every explanation moved from the panel into an (i) tip

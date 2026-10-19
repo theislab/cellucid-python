@@ -321,10 +321,17 @@ Cellucid uses multiple caches; knowing which one you’re hitting makes debuggin
 
 ### 1) HTTP cache (browser)
 
-Some loaders use fetch options like:
-- `{ cache: 'force-cache' }`
+Every dataset artifact — catalogs, identities, manifests, binary payloads and
+published presets — is fetched with `{ cache: 'no-cache' }`, in one place
+(`DATASET_ARTIFACT_CACHE` in `data/data-source.js`); a caller cannot choose
+another mode. The browser keeps its copy but asks the origin before every use,
+and an unchanged file costs a conditional request answered with 304.
 
-This can speed up repeated loads, but can also make debugging confusing if you expect a changed file to reload immediately.
+Reusing a cached payload without asking would be wrong, not merely stale: a
+payload path is an index, so a re-export at the same URL that adds one gene
+renumbers `var/`, and `var/3.values.u8.gz` then holds another gene with exactly
+the same byte length. Only revalidation keeps the bytes and the manifest that
+names them from one publication.
 
 Debug tip:
 - DevTools → Network → “Disable cache” while you debug.
