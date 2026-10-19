@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import copy
 import math
+import numbers
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -145,6 +146,53 @@ def _is_missing_name(value: object) -> bool:
         return math.isnan(value)
     # pandas.NA and pandas.NaT, detected without importing pandas.
     return type(value).__name__ in {"NAType", "NaTType"}
+
+
+def gene_name_text(value: object) -> str | None:
+    """The text of one gene-name value from a ``var`` column, or None when missing.
+
+    The one rule every path applies (the web app's ``geneNameText``): a string
+    is itself; ``None``, NaN and pandas missing values are missing; a boolean is
+    ``True``/``False``; an integer is its decimal digits; any other real number
+    is ``str(float)``. Anything else cannot name a gene.
+    """
+    if _is_missing_name(value):
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bool) or type(value).__name__ == "bool_":
+        return "True" if value else "False"
+    if isinstance(value, numbers.Integral):
+        return str(int(value))
+    if isinstance(value, numbers.Real):
+        number = float(value)
+        return None if math.isnan(number) else str(number)
+    raise DataMappingError(
+        "name_not_string",
+        f"A gene name must be text or a number, got {type(value).__name__}.",
+    )
+
+
+def column_gene_names(var: Any, column: str | None) -> UniqueNames:
+    """The unique gene names of one ``var`` frame: its index, or one column.
+
+    A column must be one the candidate catalog lists as usable (text,
+    categories or integers); its values are turned into text with
+    :func:`gene_name_text`, an empty one takes the row's index name (which
+    must be text), and the list is made unique with
+    :func:`make_unique_names`. Every path -- ``prepare()``, the served gene
+    list, the mapping routes and the session reader -- names genes with this
+    one function.
+    """
+    index = var.index.tolist()
+    if column is None:
+        return make_unique_names(index)
+    if column not in var.columns:
+        raise KeyError(f"var column {column!r} is absent. Available columns: {list(var.columns)}")
+    verdict = next(item for item in _describe_var_columns(var) if item["key"] == str(column))
+    if not verdict["usable"]:
+        raise DataMappingError("gene_names_column", f"var column {column!r}: {verdict['reason']}.")
+    return make_unique_names([gene_name_text(value) for value in var[column].tolist()], index=index)
 
 
 def make_unique_names(
@@ -1150,24 +1198,10 @@ def _describe_matrix(value: Any) -> dict[str, Any]:
     return {"storage": _storage_of(value), "dtype": _dtype_name(value)}
 
 
-def build_anndata_candidates(
-    adata: Any,
-    *,
-    latent_key: str | None = None,
-    knn_key: str | None = None,
-) -> dict[str, Any]:
-    """Build the candidate catalog of one AnnData object from metadata alone.
-
-    Shapes, dtypes and storage kinds are read; no array values are. The
-    ``defaults`` entry is the mapping §1.4 resolves from that metadata (the
-    best guess, when it applies, uses listing-time usability only), and
-    ``guessed`` names every group that was guessed rather than defaulted.
-    """
+def _describe_layers(adata: Any) -> list[dict[str, Any]]:
+    """Every layer with its listing-time verdict, in the file's key order."""
     n_obs = int(adata.n_obs)
     n_vars = int(adata.n_vars)
-    obsm = describe_obsm(adata.obsm, n_obs=n_obs)
-    obsp = _describe_obsp(adata.obsp, n_obs=n_obs)
-
     layers: list[dict[str, Any]] = []
     for name in adata.layers:
         value = adata.layers[name]
@@ -1189,6 +1223,41 @@ def build_anndata_candidates(
                 "reason": reason,
             }
         )
+    return layers
+
+
+def default_expression_for(adata: Any) -> tuple[str | None, bool]:
+    """The default expression source of one AnnData object, from metadata.
+
+    :func:`default_expression` over what the object holds: ``X`` when present;
+    otherwise ``raw``, the only usable layer, or the best-named one, guessed.
+    """
+    return default_expression(
+        has_x=adata.X is not None,
+        has_raw=getattr(adata, "raw", None) is not None,
+        layers=[layer["key"] for layer in _describe_layers(adata) if layer["usable"]],
+    )
+
+
+def build_anndata_candidates(
+    adata: Any,
+    *,
+    latent_key: str | None = None,
+    knn_key: str | None = None,
+) -> dict[str, Any]:
+    """Build the candidate catalog of one AnnData object from metadata alone.
+
+    Shapes, dtypes and storage kinds are read; no array values are. The
+    ``defaults`` entry is the mapping §1.4 resolves from that metadata (the
+    best guess, when it applies, uses listing-time usability only), and
+    ``guessed`` names every group that was guessed rather than defaulted.
+    """
+    n_obs = int(adata.n_obs)
+    n_vars = int(adata.n_vars)
+    obsm = describe_obsm(adata.obsm, n_obs=n_obs)
+    obsp = _describe_obsp(adata.obsp, n_obs=n_obs)
+
+    layers = _describe_layers(adata)
 
     x_value = adata.X
     raw = getattr(adata, "raw", None)
@@ -1205,12 +1274,7 @@ def build_anndata_candidates(
     slots = guess.slots
     guessed: list[str] = list(guess.guessed)
 
-    usable_layers = [layer["key"] for layer in layers if layer["usable"]]
-    expression, expression_guessed = default_expression(
-        has_x=x_value is not None,
-        has_raw=raw is not None,
-        layers=usable_layers,
-    )
+    expression, expression_guessed = default_expression_for(adata)
     if expression_guessed:
         guessed.append("expression")
 
@@ -1293,13 +1357,10 @@ def resolve_gene_names(adata: Any, mapping: Mapping[str, Any]) -> UniqueNames:
     stringified the way anndata stores them.
     """
     var = mapped_var_axis(adata, mapping)
-    index = [str(name) for name in var.index.tolist()]
     column = gene_names_column(mapping["geneNames"])
-    if column is None:
-        return make_unique_names(index)
-    if column not in var.columns:
+    if column is not None and column not in var.columns:
         raise KeyError(f"The data mapping names genes from var column {column!r}, which is absent.")
-    return make_unique_names(var[column].tolist(), index=index)
+    return column_gene_names(var, column)
 
 
 def mapped_expression_matrix(adata: Any, mapping: Mapping[str, Any]) -> Any:

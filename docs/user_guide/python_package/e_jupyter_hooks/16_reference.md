@@ -82,7 +82,9 @@ Decorators:
 - `@viewer.on_command_error` (a command this notebook sent was rejected by the
   viewer; registering one also silences the default `sys.stderr` notice, and
   only the web build that emits `command_error` sends it)
-- `@viewer.on_message` (catches all eight current event types)
+- `@viewer.on_data_mapping` (the viewer resolved or changed its data mapping;
+  `viewer.data_mapping` holds the latest one)
+- `@viewer.on_message` (catches all nine current event types)
 
 Programmatic registration:
 - `viewer.register_hook(event: str, callback) -> callback`
@@ -93,6 +95,13 @@ Synchronous “pull” API:
 - `viewer.state` (latest event snapshot)
 - `viewer.wait_for_event(event: str, timeout: float | None = 30.0, predicate=None) -> dict`
 - `viewer.wait_for_ready(timeout: float | None = 30.0) -> dict`
+- `viewer.data_mapping` (the latest reported data mapping, or `None`) and
+  `viewer.data_mapping_origin`
+
+Data mapping (the viewer reports it because this package lists `data_mapping` in `GET /_cellucid/protocol`):
+- `viewer.set_data_mapping(*, timeout: float | None = 30.0, **fields) -> dict` —
+  replace top-level mapping fields, validate, send `setDataMapping`, and return
+  the mapping the viewer reports back
 
 ### Session bundles (durable state)
 

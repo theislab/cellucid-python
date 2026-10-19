@@ -84,6 +84,9 @@ Version 0.9.2 is a patch release on 0.9.1.
   alternative gene names (for example symbols beside an Ensembl index).
 - `embedding_keys=` (`--embedding-1d/2d/3d KEY[:c0,c1]`), `expression_source=`
   (`--expression X|raw|layer:NAME`) and `--gene-id-column` for serving AnnData.
+  Without `--expression`, a served object reads `X`, or, without `X`, `raw`,
+  its only layer, or its best-named layer (`norm`/`log` first, `counts` last),
+  and reports that guess -- the rule a file opened in the browser follows.
 - `cellucid.data_mapping`: the data-mapping model shared with the web app and
   the R package, with a conformance fixture
   (`tests/fixtures/data_mapping_conformance.json`) and a cross-writer byte
@@ -97,8 +100,8 @@ Version 0.9.2 is a patch release on 0.9.1.
   `get_mapping_candidates()`. The web app reads it to record the mapping a
   session was saved with. Every other narrow `obsm` array is turned on beside
   the served defaults and served on request at
-  `/_cellucid/mapping/embeddings/{obsm}/{columns}.bin`
-  (`AnnDataAdapter.get_mapping_embedding_binary()`), so a served file shows
+  `/_cellucid/mapping/embeddings/{obsm}/{columns}.bin` (see the data-mapping
+  routes below), so a served file shows
   any of its embeddings and its checklist works as for a file read in the
   browser.
 - **Web app, data mapping**: a **Data mapping** group at the bottom of the
@@ -110,9 +113,9 @@ Version 0.9.2 is a patch release on 0.9.1.
   selections as you like; a prepared dataset lists the embeddings it was
   exported with, all on. Turning an embedding on loads nothing until a view
   shows it. Choices are staged and applied as one step that loads and checks
-  every embedding a view must switch to first; the neighbour graph, gene
-  names, expression matrix, latent space and vector fields are listed
-  read-only. The data mapping's embeddings are now `{enabled, defaults}`, in
+  every embedding a view must switch to first; the neighbour graph, genes,
+  latent space and vector fields have disclosures of their own (below). The
+  data mapping's embeddings are now `{enabled, defaults}`, in
   the web app, `cellucid.data_mapping` and the R package's conformance fixture.
 - **Web app, several embeddings at once**: every view shows one of the
   embeddings that are on, of any dimension — two 3D embeddings side by side, a
@@ -164,8 +167,115 @@ Version 0.9.2 is a patch release on 0.9.1.
   counts `data_mapping` (`embedding`, `embedding_columns`, `default`) and
   `dimension` when the picker switches a view to another dimension. No key or
   embedding name is ever sent.
+- **Further data-mapping routes** beside that catalog: on request, the server
+  serves any catalog entry -- an embedding at chosen columns,
+  a vector field bound to an embedding, a neighbour graph, the gene list and
+  values of `X`, `raw` or a layer named by any `var` column, and outlier
+  quantiles in any latent space. Entries are addressed by catalog position,
+  never by key. An unknown index is 404; an entry whose values fail their check
+  is 422 with `{"error", "key", "reason"}`, so a graph that is not symmetric is
+  refused, not repaired. `reason` is the short clause (`NaN at cell 17`) a file
+  opened in the browser gets in the same words, and the catalog lists an array
+  the best guess already refused as unusable with that reason, as the browser
+  does. HEAD answers lengths without reading payloads, and one
+  byte-bounded, lock-guarded cache serves the server thread and the notebook
+  together. `AnnDataAdapter` gains the `get_mapped_*` methods behind them.
+- **Jupyter:** the `setDataMapping` command and the `data_mapping` event, both
+  listed by `/_cellucid/protocol`. `viewer.data_mapping` (and
+  `viewer.data_mapping_origin`) hold the mapping the viewer last reported,
+  `@viewer.on_data_mapping` runs on each report, and
+  `viewer.set_data_mapping(**fields)` changes the embeddings, graph, gene names,
+  expression, latent space or vector bindings from the notebook, validated before
+  anything is sent.
+- **Web app, served data mapping**: a file served by `cellucid serve` or shown
+  with `show_anndata()` can show any numeric `obsm` array, at any columns, from
+  **Session › Data mapping**, as a file opened in the browser can; the server
+  reads the array on request, and its centroid labels are computed from its
+  positions in the viewer, as for a file read in the browser. A choice
+  the server refuses is listed unusable with the server's reason and the
+  previous mapping stays.
+- **Web app, neighbour graph**: for an AnnData file (in the browser, served or
+  in a notebook), **Session › Data mapping › Neighbour graph** chooses the
+  graph connectivity edges and the KNN drag tool use: None or any square
+  `obsp` matrix with one row per cell. The graph is read and checked when it is
+  applied; one that is not symmetric (`obsp['distances']`) is refused in the
+  server's words and stays unavailable, never repaired. Shown edges are redrawn
+  from the new graph and **Dataset › Connectivity** counts its edges. A session
+  restores the graph it was saved with when the dataset has it. In the browser,
+  a file keeps its own graph and at most one other in memory, and their edges
+  are byte-identical to what `cellucid serve` sends for the same file.
+  `feature_used` counts `data_mapping` / `knn`.
+- **Web app, gene names and expression**: for an AnnData file (in the browser,
+  served or in a notebook), **Session › Data mapping › Genes** chooses the
+  expression matrix (`X`, any layer, `raw.X` with its own gene list, or None)
+  and the gene names (the var index or any text, categorical or integer var
+  column; a floating-point or true/false column is listed with the reason it
+  cannot name genes). Empty names take the var-index name and repeated names
+  are made unique (`MATR3`, `MATR3-1`) by the rule `prepare()` and the server
+  use, and the panel says what that changed and when Ensembl ids have a symbol
+  column beside them. Apply reads the new list first; a view coloured by a
+  gene keeps it with its colour range, log scale and filter (by position while
+  the var axis stays, as between `X` and its layers; by name to or from
+  `raw.X`), a gene not on the new
+  list loses its colouring and is named, cells and highlights are untouched,
+  and analysis windows close. A prepared dataset switches between the
+  gene-name sets it was exported with. A session restores the gene names and
+  matrix it was saved with and checks its gene count against that matrix.
+  The browser reads one matrix at a time (`X`, `layers/<name>` or `raw/X`),
+  and its gene lists and values are byte-identical to what `cellucid serve`
+  sends for the same file. `feature_used` counts `data_mapping` /
+  `gene_names` and `expression`.
+- **Web app, latent space**: for an AnnData file, **Session › Data mapping ›
+  Latent space** chooses the `obsm` array (or None) a categorical field's
+  outlier filter measures distance in. Apply reads and checks the space and
+  computes the quantiles of every loaded categorical field before anything
+  changes, off the main thread (`data/latent-outliers.js`), bit for bit what
+  `prepare()` and `cellucid serve` compute; a space with a bad value is refused
+  in the server's words and stays unavailable. Every view keeps its outlier
+  threshold; None removes the outlier filters. A space larger than 512 MiB as
+  float32 is listed with that reason, as the server lists it.
+- **Web app, vector fields**: **Session › Data mapping › Vector fields** binds
+  vector arrays to embeddings with one checkbox per array that fits each
+  embedding: as wide as its dimension (read whole) or as wide as its array
+  (read at the same columns, `velocity_pca` on `X_pca[2,3]`). Arrays named for
+  the embedding are marked suggested. A prepared dataset lists the bindings it
+  was exported with, any of which can be turned off. Apply rebinds and turns
+  the overlay off; vectors are read, checked and scaled only when the overlay
+  shows them, through `_cellucid/mapping/vectors/...` on every AnnData path,
+  and the overlay holds GPU data only for what it shows. `feature_used` counts
+  `data_mapping` / `latent` and `vector_fields`.
+- **Web app, Jupyter**: the viewer reads `GET /_cellucid/protocol` when it
+  connects. It applies `setDataMapping` as one transaction and answers it with
+  a `data_mapping` event naming the request; it reports every other mapping
+  change, and reports a refused notebook command as `command_error`, to a
+  `cellucid` that lists those events.
+- `/_cellucid/info`'s `version` is the documented signal a newer viewer uses to
+  tell a user their server predates the viewer's export format ("This Cellucid
+  server (0.9.2) is older than the viewer; update it with pip install -U
+  cellucid.").
 
 ### Changed
+
+- **Latent-space outlier quantiles** follow one stated rule in `prepare()`,
+  `cellucid_prepare()` in R (now in C), `cellucid serve` and the web app:
+  float32 values widened to float64, centroid sums accumulated in cell order,
+  squared distances in column order, and the share at that distance or closer
+  as float32 (numpy's pairwise summation and R's long-double sums are no longer
+  part of the result). `tests/fixtures/latent_outlier_conformance.json`
+  (written by `scripts/generate_latent_outlier_conformance.py`) pins the bytes
+  in all three repositories. Quantiles can differ from 0.9.1's in the last rank
+  only where two distances tie within rounding.
+- **`prepare()` gene names from an integer column**: a `var` column of integers
+  names genes by their digits (`7157` is `"7157"`), the rule the viewer,
+  `cellucid serve` and `cellucid_prepare()` in R apply to the same column,
+  instead of being refused. A floating-point or boolean column is refused with
+  the catalog's reason (`floating-point values cannot name genes`).
+- **`cellucid serve` / `show_anndata()` vector fields**: without
+  `--vector-fields` (`serve_vector_fields=True`) the served data mapping binds
+  no vector field, matching what the server declares; with it, the default
+  rule binds `<field>_umap_<d>d` as before. The startup line now reads
+  `Vector fields: not bound (... to bind them, or bind one under Session > Data
+  mapping)`.
 
 - **Export format version 3.** One export can now carry several embeddings per
   dimension and several sets of gene names. This is a clean break: exports in
@@ -316,6 +426,9 @@ Version 0.9.2 is a patch release on 0.9.1.
   expression data.` (as on a dataset without genes) instead of a page error;
   Analyze performance and Copy situation report ask for data; and Load says no
   dataset is open instead of quoting `0 cells and 0 genes`.
+- **Web app, analysis**: marker-gene results are cached per gene list, so
+  results computed with one set of gene names or one expression matrix are
+  never shown for another.
 - **Web app, data**: a dataset re-exported at the same address can no longer
   show values from its previous version. Gene and observation payloads were
   reused from the browser cache without asking the server, and payload files

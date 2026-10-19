@@ -823,11 +823,12 @@ def test_docs_preserve_closed_jupyter_session_and_zarr_contracts() -> None:
         "debug_snapshot",
         "session_bundle",
         "command_error",
+        "data_mapping",
     ):
         assert f"### `{event_type}`" in event_page
     assert "Unknown event types" in event_page
     assert "rejected before any hook runs" in event_page
-    assert "one of eight closed event records" in event_page
+    assert "one of nine closed event records" in event_page
     assert "@viewer.on_command_error" in event_page
     # A command that failed must not read as one that applied.
     assert "did not take effect in the viewer" in event_page
@@ -1185,6 +1186,7 @@ def test_every_documented_hook_list_matches_the_viewer_decorator_surface() -> No
         "on_click",
         "on_ready",
         "on_command_error",
+        "on_data_mapping",
         "on_message",
     }, hooks
 

@@ -15,11 +15,13 @@
 
 ## What this filter is (and is not)
 
-The outlier filter is a **per-cell outlierness score** that comes from your dataset export.
+The outlier filter is a **per-cell outlierness score**, measured in a latent
+space: the one your dataset was exported with, or, for an AnnData file, the one
+chosen under **Session › Data mapping › Latent space**.
 
 It is typically computed for **categorical fields** (e.g., clustering labels) as:
 
-- compute a centroid per category in a latent space (a vector embedding used during export),
+- compute a centroid per category in a latent space (an `obsm` array such as `X_scVI` or `X_pca`),
 - compute each cell’s distance to its category centroid,
 - convert that distance into a within-category **quantile** in `[0, 1]`.
 
@@ -144,6 +146,12 @@ Outlier quantiles are generated during export in `cellucid-python`:
 
 - `cellucid.prepare(..., latent_space=<n_cells × n_dims>, obs=<DataFrame>)`
 - For each categorical obs field, Cellucid computes per-cell quantiles based on latent-space distances to category centroids.
+
+For an `.h5ad`, a Zarr ZIP or a served AnnData, choose the latent space under
+**Session › Data mapping › Latent space**: the browser (or the server)
+computes the same quantiles `prepare()` writes, and your threshold is kept
+when the space changes (see
+[Latent space](../b_data_loading/13_data_mapping.md#latent-space)).
 
 If your dataset is loaded from a source that does not provide outlier quantiles for a field, the UI simply hides the outlier control for that field.
 

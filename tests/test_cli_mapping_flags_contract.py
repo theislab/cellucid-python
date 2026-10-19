@@ -101,7 +101,8 @@ def test_omitted_mapping_flags_select_the_defaults(tmp_path: Path) -> None:
     assert kwargs["embedding_keys"] is None
     assert kwargs["knn_key"] is None
     assert kwargs["gene_id_column"] is None
-    assert kwargs["expression_source"] == "X"
+    # None: X when present, else raw or a layer, reported as guessed.
+    assert kwargs["expression_source"] is None
 
 
 def _prepared_export(tmp_path: Path) -> Path:

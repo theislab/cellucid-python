@@ -41,7 +41,13 @@ from ..continuous_payload_diagnosis import (
     NonFinitePayloadError,
     diagnose_continuous_payload,
 )
-from ..data_mapping import DataMappingError, UniqueNames, make_unique_names, unique_names_note
+from ..data_mapping import (
+    DataMappingError,
+    UniqueNames,
+    column_gene_names,
+    make_unique_names,
+    unique_names_note,
+)
 from ._arrays import (
     _require_continuous_obs_values,
     _require_finite_float32_array,
@@ -121,10 +127,12 @@ def _gene_expression_column(
 def _resolve_gene_name_set(var: pd.DataFrame, column: object, *, label: str) -> UniqueNames:
     """Resolve one complete gene-name set over every var row.
 
-    ``column=None`` names genes by ``var.index``. A column's empty values fall
-    back to that row's index name, and repeated names are made unique with the
-    rule anndata's ``var_names_make_unique()`` applies, shared by every
-    Cellucid reader and writer. Uniqueness is resolved over the whole var
+    ``column=None`` names genes by ``var.index``. A column's values are read
+    as every Cellucid reader reads them (integers as their digits; a
+    floating-point or true/false column is refused), its empty values take
+    that row's index name, and repeated names are made unique with the rule
+    anndata's ``var_names_make_unique()`` applies, shared by every Cellucid
+    reader and writer. Uniqueness is resolved over the whole var
     rather than the exported subset, so a gene keeps its name however the
     export is narrowed.
     """
@@ -146,11 +154,14 @@ def _resolve_gene_name_set(var: pd.DataFrame, column: object, *, label: str) -> 
         raise KeyError(
             f"{label} {column!r} not found in var. Available columns: {list(var.columns)}"
         )
+    # A column is read by the one rule every reader applies (column_gene_names):
+    # text and categories as they are, integers as their decimal digits; a
+    # floating-point or true/false column cannot name genes.
     try:
-        return make_unique_names(var[column].tolist(), index=var.index.tolist())
+        return column_gene_names(var, column)
     except DataMappingError as error:
-        if error.code == "name_not_string":
-            raise TypeError(f"var column {column!r}: {error}") from error
+        if error.code in ("name_not_string", "gene_names_column"):
+            raise TypeError(str(error) if error.code == "gene_names_column" else f"var column {column!r}: {error}") from error
         raise ValueError(f"var column {column!r}: {error}") from error
 
 

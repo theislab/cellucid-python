@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlparse
 
+from ._compression import deterministic_gzip_compress
 from ._console import console_print
 from ._contracts import _require_dataset_id, _require_dataset_name
 from ._server_base import (
@@ -72,11 +73,12 @@ from ._server_base import (
 from ._server_base import (
     CellucidHTTPServer as HTTPServer,
 )
-from .anndata_adapter import (
-    MAPPING_CANDIDATES_PATH,
-    MAPPING_EMBEDDINGS_PREFIX,
-    AnnDataAdapter,
-    _classify_anndata_path,
+from .anndata_adapter import AnnDataAdapter, _classify_anndata_path
+from .anndata_mapping import (
+    MAPPING_ROUTE_PREFIX,
+    MappingLoadError,
+    MappingNotFound,
+    parse_mapping_route,
 )
 from .connectivity_contract import build_connectivity_manifest
 from .continuous_payload_diagnosis import NonFinitePayloadError
@@ -170,8 +172,7 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         /_cellucid/protocol - Viewer wire capabilities this installation accepts
         /_cellucid/mapping/candidates.json - The served data mapping and every
             candidate array, from metadata
-        /_cellucid/mapping/embeddings/{obsm}/{c0-c1}.bin - One enabled obsm
-            array at the given columns, read and normalized on request
+        /_cellucid/mapping/... - Further data-mapping routes (see cellucid.anndata_mapping)
         /_cellucid/events - POST endpoint for frontend events (hooks)
     """
 
@@ -259,12 +260,14 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
                 self.send_json(self.server_info, head_only)
             elif path == "_cellucid/protocol":
                 self.send_json(_protocol_capability_document(), head_only)
-            elif path == MAPPING_CANDIDATES_PATH:
-                self.send_json(self.adapter.get_mapping_candidates(), head_only)
-            elif path.startswith(MAPPING_EMBEDDINGS_PREFIX):
-                self._handle_mapping_embedding(path, head_only, supports_gzip)
             elif path == "connectivity_manifest.json":
                 self.send_error_response(404, "No connectivity data")
+            elif path.startswith(MAPPING_ROUTE_PREFIX):
+                self._handle_mapping(
+                    path[len(MAPPING_ROUTE_PREFIX) :],
+                    head_only,
+                    supports_gzip,
+                )
             elif head_only and path in self.payload_lengths:
                 self._send_binary_head(self.payload_lengths[path])
             elif path not in self.payload_lengths:
@@ -308,24 +311,47 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(content_length))
         self.end_headers()
 
-    def _handle_mapping_embedding(self, path: str, head_only: bool, supports_gzip: bool):
-        """Handle _cellucid/mapping/embeddings/{obsm}/{cols}.bin requests."""
+    def _handle_mapping(self, path: str, head_only: bool, supports_gzip: bool):
+        """Answer one ``_cellucid/mapping/`` route.
+
+        404 when the route names no catalog entry, 422 with
+        ``{"error", "key", "reason"}`` when the entry is unusable or its values fail the load-time check. A HEAD
+        answers the length without reading the payload wherever the catalog
+        determines it.
+        """
+        route = parse_mapping_route(path)
+        if route is None:
+            self.send_error_response(404, f"Not found: {MAPPING_ROUTE_PREFIX}{path}")
+            return
+        mapping = self.adapter.mapping
+        is_json = path.endswith(".json")
         try:
-            compress = supports_gzip
-            data = self.adapter.get_mapping_embedding_binary(
-                path.removeprefix(MAPPING_EMBEDDINGS_PREFIX), compress=compress
+            if head_only:
+                length = mapping.head_length(route)
+            else:
+                body, content_type = mapping.payload(route)
+        except MappingNotFound as exc:
+            self.send_error_response(404, str(exc))
+            return
+        except MappingLoadError as exc:
+            logger.warning("Refused mapping request %s: %s", path, exc)
+            self.send_json_error(422, exc.as_payload())
+            return
+        if head_only:
+            self.send_response(HTTPStatus.OK)
+            self.send_header(
+                "Content-Type", "application/json" if is_json else "application/octet-stream"
             )
-        except ValueError as error:
-            self.send_error_response(422, str(error))
+            self.send_header("Content-Length", str(length))
+            self.end_headers()
             return
-        if data is None:
-            self.send_error_response(404, f"Invalid embedding path: {path}")
-            return
+        compress = supports_gzip and not is_json
         self.send_binary(
-            data,
-            head_only=head_only,
+            deterministic_gzip_compress(body, compresslevel=6) if compress else body,
+            content_type=content_type,
+            head_only=False,
             compressed=compress,
-            vary_accept_encoding=True,
+            vary_accept_encoding=not is_json,
         )
 
     def _handle_embedding(self, path: str, head_only: bool, supports_gzip: bool):
@@ -602,7 +628,7 @@ class AnnDataServer:
         obs_keys: Sequence[str] | None = None,
         embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
         knn_key: str | None = None,
-        expression_source: str = "X",
+        expression_source: str | None = None,
         vector_field_default: str | None = None,
         serve_vector_fields: bool = False,
         serve_web_ui: bool = True,
@@ -665,9 +691,10 @@ class AnnDataServer:
             server binds; one that is not symmetric, such as ``distances``, is
             refused with that reason, and naming a matrix the object does not carry
             is an error.
-        expression_source : str
-            Where gene expression is read: ``"X"`` (the default), ``"raw"``
-            (``raw.X``, with genes named from ``raw.var``), or ``"layer:<name>"``.
+        expression_source : str, optional
+            Where gene expression is read: ``"X"``, ``"raw"`` (``raw.X``, with
+            genes named from ``raw.var``), or ``"layer:<name>"``; None (the
+            default) follows the default rule of :class:`~cellucid.AnnDataAdapter`.
         vector_field_default : str, optional
             Exact field id required when multiple UMAP vector fields exist.
         serve_vector_fields : bool
@@ -997,8 +1024,9 @@ class AnnDataServer:
             vectors_str = f"yes ({names})"
         elif self._holds_unserved_vector_fields():
             vectors_str = (
-                "not served (obsm declares vector fields; pass "
-                "serve_vector_fields=True, or --vector-fields, to draw them)"
+                "not bound (obsm declares vector fields; pass "
+                "serve_vector_fields=True, or --vector-fields, to bind them, or "
+                "bind one under Session > Data mapping)"
             )
         else:
             vectors_str = "no"
@@ -1315,7 +1343,7 @@ def serve_anndata(
     obs_keys: Sequence[str] | None = None,
     embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
     knn_key: str | None = None,
-    expression_source: str = "X",
+    expression_source: str | None = None,
     vector_field_default: str | None = None,
     serve_vector_fields: bool = False,
     serve_web_ui: bool = True,
@@ -1381,9 +1409,10 @@ def serve_anndata(
         server binds; one that is not symmetric, such as ``distances``, is
         refused with that reason, and naming a matrix the object does not carry
         is an error.
-    expression_source : str
-        Where gene expression is read: ``"X"`` (the default), ``"raw"``
-        (``raw.X``, with genes named from ``raw.var``), or ``"layer:<name>"``.
+    expression_source : str, optional
+        Where gene expression is read: ``"X"``, ``"raw"`` (``raw.X``, with
+        genes named from ``raw.var``), or ``"layer:<name>"``; None (the
+        default) follows the default rule of :class:`~cellucid.AnnDataAdapter`.
     vector_field_default : str, optional
         Exact field id required when multiple UMAP vector fields exist.
     serve_vector_fields : bool

@@ -366,7 +366,10 @@ Examples:
         type=str,
         default=None,
         metavar="X|raw|layer:NAME",
-        help="Where AnnData gene expression is read: X (default), raw, or layer:NAME",
+        help=(
+            "Where AnnData gene expression is read: X, raw, or layer:NAME "
+            "(default: X when present, else raw or a layer, reported as guessed)"
+        ),
     )
 
     serve_parser.set_defaults(func=_run_serve)
@@ -505,7 +508,7 @@ def _run_serve(args: argparse.Namespace) -> None:
             "obs_keys": args.obs_key,
             "embedding_keys": embedding_keys or None,
             "knn_key": args.knn,
-            "expression_source": "X" if args.expression is None else args.expression,
+            "expression_source": args.expression,
             "vector_field_default": args.vector_field_default,
             "serve_vector_fields": bool(args.vector_fields),
         }

@@ -63,9 +63,13 @@ If your gene IDs live in a column:
 cellucid_prepare(..., var_gene_id_column = "gene_id")
 ```
 
-Export fails if the column does not exist. An empty value in the column (`""`
-or `NA`) takes the gene's name from `rownames(var)`, and a repeated value is made
-unique (see below).
+Export fails if the column does not exist. A character or factor column names
+genes as it is, and an integer column by its digits (`7157L` is `"7157"`) —
+the rule the viewer, `cellucid serve` and `cellucid-python` apply to the same
+column. A double or logical column cannot name genes and is refused with the
+reason (`var column 'score': floating-point values cannot name genes.`). An
+empty value in the column (`""` or `NA`) takes the gene's name from
+`rownames(var)`, and a repeated value is made unique (see below).
 
 ### Alternative name sets (`var_gene_name_columns`)
 

@@ -88,6 +88,22 @@ bundle = viewer.get_session_bundle(timeout=60)
 
 See {doc}`sessions` for applying the bundle back to AnnData.
 
+### 5) Read and change the data mapping
+
+```python
+viewer.wait_for_event("data_mapping")
+print(viewer.data_mapping["embeddings"])
+viewer.set_data_mapping(
+    embeddings={"1d": None, "2d": {"key": "X_tsne", "columns": [0, 1]}, "3d": None},
+)
+```
+
+`viewer.data_mapping`, `viewer.data_mapping_origin`, `viewer.set_data_mapping()`
+and `@viewer.on_data_mapping` are shared by both viewers. The viewer reports
+its mapping because this package lists `data_mapping` among the events of
+`GET /_cellucid/protocol`; a viewer older than this release never reports one,
+so `set_data_mapping()` raises before sending anything.
+
 ---
 
 ## Lifecycle and cleanup (important)

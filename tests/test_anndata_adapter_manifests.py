@@ -646,19 +646,30 @@ def test_embedding_shape_mutation_after_initialization_is_rejected() -> None:
         adapter.get_embedding("X_umap_2d")
 
 
-def test_numeric_gene_identifier_column_is_not_string_coerced() -> None:
+def test_integer_gene_identifiers_are_their_digits_and_float_columns_are_refused() -> None:
+    # One gene-name rule on every path (data_mapping.column_gene_names, the
+    # web app's geneNameText): integers are their decimal digits, a float or
+    # boolean column cannot name genes, with the catalog's reason.
     adata = _adata_with_current_fields()
     adata.var["gene_id"] = [7, 8]
+    adapter = AnnDataAdapter(
+        adata,
+        gene_id_column="gene_id",
+        dataset_name="Numeric gene identifiers",
+        dataset_id="numeric-gene-identifiers",
+    )
+    assert adapter.get_gene_ids() == ["7", "8"]
 
+    adata.var["dispersion"] = [0.5, 1.5]
     with pytest.raises(
-        TypeError,
-        match=r"var column 'gene_id' identifier at position 0 must be a string",
+        ValueError,
+        match=r"var column 'dispersion': floating-point values cannot name genes",
     ):
         AnnDataAdapter(
             adata,
-            gene_id_column="gene_id",
-            dataset_name="Numeric gene identifiers",
-            dataset_id="numeric-gene-identifiers",
+            gene_id_column="dispersion",
+            dataset_name="Float gene identifiers",
+            dataset_id="float-gene-identifiers",
         )
 
 

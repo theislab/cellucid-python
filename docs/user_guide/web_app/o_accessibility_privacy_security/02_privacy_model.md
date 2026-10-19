@@ -104,11 +104,12 @@ URL, or an error message — and an event that does not fit is dropped whole.
 - **`feature_used`** — the first use, per page load, of a feature you started
   yourself, from a fixed list (for example `render_mode` / `smoke`,
   `figure_export`, `highlight_tool` / `lasso`, `data_mapping` / `embedding`,
-  `embedding_columns` or `default`, and `dimension` / `2` when a view is
-  switched to a 2D embedding). The feature's name is a fixed
+  `embedding_columns`, `default`, `knn`, `gene_names`, `expression`, `latent` or
+  `vector_fields`, and `dimension` / `2` when a view is switched to a 2D
+  embedding). The feature's name is a fixed
   identifier the developers assigned; nothing is read from what a control says,
-  so category names, page names you typed and the `obsm` keys or embedding
-  names you chose are never sent.
+  so category names, page names you typed and the `obsm` or `obsp` keys or
+  embedding names you chose are never sent.
 - **`web_vital`** — page-speed measurements, once each per page load: LCP, CLS,
   INP, FCP, TTFB and the long-task total and maximum, rounded, with a
   good / needs-improvement / poor rating.

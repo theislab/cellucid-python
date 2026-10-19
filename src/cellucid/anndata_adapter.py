@@ -84,7 +84,6 @@ import logging
 import math
 import re
 import sys
-import threading
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -127,16 +126,16 @@ from .data_mapping import (
     ObsmEntry,
     UniqueNames,
     best_guess_embedding_slots,
-    build_anndata_candidates,
     canonical_embedding_id,
+    column_gene_names,
     default_columns,
     default_embedding_slots,
     default_enabled_embeddings,
+    default_expression_for,
     default_vector_bindings,
     describe_obsm,
     describe_obsm_entry,
     expression_layer,
-    make_unique_names,
     nothing_plottable_message,
     obsm_entries,
     obsm_entry_defect,
@@ -162,6 +161,8 @@ from .vector_fields import (
 if TYPE_CHECKING:
     import anndata
 
+    from .anndata_mapping import AnnDataMapping
+
 logger = logging.getLogger("cellucid.anndata_adapter")
 
 #: The route, relative to a served dataset, of the data-mapping catalog: the
@@ -169,16 +170,6 @@ logger = logging.getLogger("cellucid.anndata_adapter")
 MAPPING_CANDIDATES_PATH = "_cellucid/mapping/candidates.json"
 # Route prefix of an enabled ``obsm`` array served on request:
 # ``_cellucid/mapping/embeddings/{obsm index}/{c0-c1-c2}.bin``.
-MAPPING_EMBEDDINGS_PREFIX = "_cellucid/mapping/embeddings/"
-
-
-def _is_empty_gene_name(value: object) -> bool:
-    """Whether one gene-name value is empty: None, "", NaN, or a pandas missing value."""
-    if value is None or value == "":
-        return True
-    if isinstance(value, float):
-        return math.isnan(value)
-    return type(value).__name__ in {"NAType", "NaTType"}
 
 
 @dataclass(frozen=True)
@@ -492,7 +483,7 @@ class AnnDataAdapter:
         obs_keys: Sequence[str] | None = None,
         embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
         knn_key: str | None = None,
-        expression_source: str = "X",
+        expression_source: str | None = None,
         vector_field_default: str | None = None,
         serve_vector_fields: bool = False,
         quiet: bool = True,
@@ -548,10 +539,12 @@ class AnnDataAdapter:
             it is named -- it must be square, finite, non-negative, symmetric,
             and zero on the diagonal -- and a matrix that is not symmetric, such
             as ``distances``, is refused with that reason.
-        expression_source : str
-            Where gene expression is read: ``"X"`` (the default), ``"raw"``
-            (``raw.X``, with genes named from ``raw.var``), or
-            ``"layer:<name>"``.
+        expression_source : str, optional
+            Where gene expression is read: ``"X"``, ``"raw"`` (``raw.X``, with
+            genes named from ``raw.var``), or ``"layer:<name>"``. None (the
+            default) reads ``X`` when the object has one, otherwise ``raw``,
+            the only layer, or the layer whose name contains ``norm`` or
+            ``log``, and reports that choice as guessed.
         vector_field_default : str, optional
             Exact field id to select when multiple UMAP vector fields exist.
         serve_vector_fields : bool
@@ -609,7 +602,15 @@ class AnnDataAdapter:
             self.knn_key = None
         else:
             self.knn_key = _require_nonempty_string(knn_key, label="knn_key")
-        self.expression_source: str = _require_expression_source(expression_source)
+        # None follows the default rule (data_mapping.default_expression): X
+        # when present, otherwise raw, the only layer or the best-named one,
+        # reported as guessed.
+        self._expression_guessed = False
+        if expression_source is None:
+            resolved, self._expression_guessed = default_expression_for(adata)
+            self.expression_source: str | None = resolved
+        else:
+            self.expression_source = _require_expression_source(expression_source)
         self.serve_vector_fields = _require_native_boolean(
             serve_vector_fields,
             label="serve_vector_fields",
@@ -660,7 +661,6 @@ class AnnDataAdapter:
         self._embedding_cache: dict[str, np.ndarray] = {}
         # Normalized coordinates of obsm arrays read on request through the
         # mapping route, by (key, columns).
-        self._mapping_embedding_cache: dict[tuple[str, tuple[int, ...]], np.ndarray] = {}
         # Per-embedding normalization info (center + scale_factor). Used to
         # scale vector fields into the same normalized space as the points.
         self._embedding_norm: dict[str, dict[str, Any]] = {}
@@ -701,10 +701,9 @@ class AnnDataAdapter:
         self._embedding_defaults: dict[str, str] = {}
         self._guessed_slots: list[str] = []
         self._enabled_embeddings: list[dict[str, Any]] = []
-        # The data-mapping catalog, built on first request and then frozen.
-        # The server is threaded, so building it is guarded by a lock.
-        self._mapping_candidates: dict[str, Any] | None = None
-        self._mapping_candidates_lock = threading.Lock()
+        # Every obsm key the best guess loaded and refused, with the reason:
+        # the candidate catalog lists them as unusable, as the browser does.
+        self._guess_rejected: list[tuple[str, str]] = []
         # Track if adapter has been closed
         self._closed: bool = False
         self._close_complete: bool = False
@@ -751,6 +750,11 @@ class AnnDataAdapter:
         )
         if note is not None and self._expression_matrix is not None:
             self._report("Gene names", note)
+        if self._expression_guessed:
+            self._report(
+                "Expression",
+                f"{self.expression_source} (guessed: this object has no X)",
+            )
 
         # Resolve the embedding of every dimension slot.
         self._report("Embeddings", "resolving obsm keys")
@@ -804,6 +808,12 @@ class AnnDataAdapter:
                 f"{self._connectivity_manifest['max_neighbors']:,} neighbors at most",
             )
 
+        # The data-mapping service. Its catalog is built on first use and then
+        # frozen, because every mapping route addresses entries by position.
+        from .anndata_mapping import AnnDataMapping
+
+        self._mapping: AnnDataMapping | None = AnnDataMapping(self)
+
         logger.info(
             f"AnnDataAdapter initialized: {self.n_cells:,} cells, "
             f"{self.n_genes:,} genes, embeddings: {[item.id for item in self._embeddings]}"
@@ -824,7 +834,7 @@ class AnnDataAdapter:
         obs_keys: Sequence[str] | None = None,
         embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
         knn_key: str | None = None,
-        expression_source: str = "X",
+        expression_source: str | None = None,
         vector_field_default: str | None = None,
         serve_vector_fields: bool = False,
         quiet: bool = True,
@@ -871,8 +881,9 @@ class AnnDataAdapter:
             The ``obsp`` matrix to serve as the neighbour graph. None by
             default, because building the edge list is the longest part of
             opening a large object.
-        expression_source : str
-            ``"X"`` (the default), ``"raw"``, or ``"layer:<name>"``.
+        expression_source : str, optional
+            ``"X"``, ``"raw"``, or ``"layer:<name>"``; None (the default)
+            follows the default rule, as in :class:`AnnDataAdapter`.
         vector_field_default : str, optional
             Exact field id required when multiple UMAP vector fields exist.
         serve_vector_fields : bool
@@ -993,8 +1004,10 @@ class AnnDataAdapter:
         print_detail(label, value)
 
     def _resolve_expression_matrix(self) -> Any:
-        """Return the expression matrix ``expression_source`` names, or None for no X."""
+        """Return the expression matrix ``expression_source`` names, or None for none."""
         source = self.expression_source
+        if source is None:
+            return None
         if source == "X":
             return self.adata.X
         if source == "raw":
@@ -1025,28 +1038,23 @@ class AnnDataAdapter:
         return cast(pd.DataFrame, self.adata.var)
 
     def _resolve_gene_names(self, var: pd.DataFrame) -> UniqueNames:
-        """Name every gene of the served axis with the shared make-unique rule."""
-        index = [str(name) for name in var.index.tolist()]
-        if self.gene_id_column is None:
-            return make_unique_names(index)
-        if self.gene_id_column not in var.columns:
+        """Name every gene of the served axis with the shared rule.
+
+        :func:`cellucid.data_mapping.column_gene_names` is the rule every path
+        applies: the index, or a column of text, categories or integers whose
+        empty values take the index name, made unique.
+        """
+        if self.gene_id_column is not None and self.gene_id_column not in var.columns:
             axis = "raw.var" if self.expression_source == "raw" else "var"
             raise KeyError(
                 f"gene_id_column {self.gene_id_column!r} not found in {axis}. "
                 f"Available columns: {list(var.columns)}"
             )
-        values = var[self.gene_id_column].tolist()
-        for position, value in enumerate(values):
-            # Names are never coerced: a numeric column is a different
-            # identifier space, and stringifying it would invent names.
-            if not isinstance(value, str) and not _is_empty_gene_name(value):
-                raise TypeError(
-                    f"var column {self.gene_id_column!r} identifier at position {position} "
-                    f"must be a string, got {type(value).__name__}."
-                )
         try:
-            return make_unique_names(values, index=index)
+            return column_gene_names(var, self.gene_id_column)
         except DataMappingError as error:
+            if self.gene_id_column is None:
+                raise ValueError(f"The var index cannot name genes: {error}") from error
             raise ValueError(f"gene_id_column {self.gene_id_column!r}: {error}") from error
 
     def _obsm_source(self, key: str, columns: Sequence[int]) -> np.ndarray:
@@ -1127,7 +1135,7 @@ class AnnDataAdapter:
             slots[slot] = {"key": key, "columns": resolved_columns}
 
         guessed: list[str] = []
-        rejected_keys: list[str] = []
+        guess_rejected: list[tuple[str, str]] = []
         if all(ref is None for ref in slots.values()):
             guess = best_guess_embedding_slots(
                 entries,
@@ -1136,7 +1144,7 @@ class AnnDataAdapter:
             )
             slots = guess.slots
             guessed = guess.guessed
-            rejected_keys = [key for key, _ in guess.rejected]
+            guess_rejected = list(guess.rejected)
             if all(ref is None for ref in slots.values()):
                 rejected = dict(guess.rejected)
                 descriptions = [
@@ -1214,8 +1222,9 @@ class AnnDataAdapter:
             entries,
             slots,
             latent_key=self.latent_key,
-            rejected=rejected_keys,
+            rejected=[key for key, _ in guess_rejected],
         )
+        self._guess_rejected = guess_rejected
 
     @property
     def embeddings(self) -> list[ServedEmbedding]:
@@ -1275,28 +1284,6 @@ class AnnDataAdapter:
             },
             label="served data mapping",
         )
-
-    def get_mapping_candidates(self) -> dict[str, Any]:
-        """The data-mapping catalog of the served object.
-
-        Every ``obsm``, ``obsp``, layer and ``var`` column, with shapes, dtypes
-        and whether each can be used, read from metadata alone; ``defaults`` is
-        the mapping this adapter serves (:meth:`get_data_mapping`), and
-        ``guessed`` names the slots that were best-guessed. The catalog is built
-        once and then frozen; this returns a copy.
-        """
-        self._check_closed()
-        with self._mapping_candidates_lock:
-            if self._mapping_candidates is None:
-                catalog = build_anndata_candidates(
-                    self.adata,
-                    latent_key=self.latent_key,
-                    knn_key=self.knn_key,
-                )
-                catalog["defaults"] = self.get_data_mapping()
-                catalog["guessed"] = list(self._guessed_slots)
-                self._mapping_candidates = catalog
-            return cast(dict[str, Any], json.loads(json.dumps(self._mapping_candidates)))
 
     def get_embedding_id_for_payload(self, component: str) -> str | None:
         """Resolve one ``{index}_{dimension}d.bin`` route to its served embedding id."""
@@ -1441,81 +1428,6 @@ class AnnDataAdapter:
         self._embedding_cache[item.id] = raw
         return raw
 
-    def get_mapping_embedding_binary(self, component: str, compress: bool = False) -> bytes | None:
-        """One ``obsm`` array of the candidate catalog, read at the given columns.
-
-        ``component`` is the route below :data:`MAPPING_EMBEDDINGS_PREFIX`:
-        ``{obsm index}/{c0-c1-c2}.bin``, the index into the catalog's ``obsm``
-        list (:meth:`get_mapping_candidates`) and 1 to 3 zero-based columns.
-        This is how a viewer shows an enabled embedding the served identity
-        does not list: every narrow ``obsm`` array is enabled
-        (:func:`~cellucid.data_mapping.default_enabled_embeddings`), and the
-        viewer reads each one when a view first shows it. The coordinates are
-        checked and normalized exactly as a served embedding's are.
-
-        Returns None for a route that names no usable array at valid columns.
-        """
-        self._check_closed()
-        compress = _require_native_boolean(compress, label="compress")
-        match = re.fullmatch(
-            r"(0|[1-9][0-9]*)/((?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*)){0,2})\.bin",
-            component,
-        )
-        if match is None:
-            return None
-        index = int(match.group(1))
-        columns = [int(column) for column in match.group(2).split("-")]
-        obsm = self.get_mapping_candidates()["obsm"]
-        if not 0 <= index < len(obsm):
-            return None
-        entry = obsm[index]
-        if (
-            not entry.get("usable")
-            or entry.get("storage") != "dense"
-            or entry["key"] not in self.adata.obsm
-        ):
-            return None
-        shape = entry.get("shape") or []
-        width = 1 if len(shape) == 1 else (int(shape[1]) if len(shape) == 2 else None)
-        if width is None:
-            return None
-        try:
-            columns = list(
-                validate_embedding_columns(columns, dimension=len(columns), width=width)
-            )
-        except DataMappingError:
-            return None
-        key = str(entry["key"])
-        defect = self._embedding_load_defect(key, columns)
-        if defect is not None:
-            raise ValueError(f"Embedding {key!r} cannot be plotted: {defect}.")
-        coordinates = self._mapped_embedding(key, tuple(columns))
-        data = little_endian_payload_bytes(coordinates.astype(np.float32))
-        if compress:
-            return deterministic_gzip_compress(data, compresslevel=6)
-        return data
-
-    def _mapped_embedding(self, key: str, columns: tuple[int, ...]) -> np.ndarray:
-        """Normalized coordinates of one ``obsm`` array at ``columns``.
-
-        A served embedding with the same key and columns is the same
-        coordinates; any other is read, checked and normalized once.
-        """
-        for item in self._embeddings:
-            if item.key == key and item.columns == columns:
-                return self.get_embedding(item.id)
-        cache_key = (key, columns)
-        if cache_key in self._mapping_embedding_cache:
-            return self._mapping_embedding_cache[cache_key]
-        raw = self._obsm_source(key, columns)
-        if self.normalize_embeddings:
-            raw, _center, _scale_factor, _max_range = _normalize_finite_float32_embedding(
-                raw,
-                label=f"Embedding {key!r}",
-            )
-        self._mapping_embedding_cache[cache_key] = raw
-        return raw
-
     def get_embedding_binary(self, embedding_id: str, compress: bool = False) -> bytes:
         """Get one served embedding as little-endian float32 bytes."""
         compress = _require_native_boolean(compress, label="compress")
@@ -1606,6 +1518,61 @@ class AnnDataAdapter:
         if embedding_id not in self._vector_field_obsm_keys.get(field_id, {}):
             return None
         return field_id, embedding_id
+
+    # =========================================================================
+    # DATA MAPPING (every candidate array, read on request)
+    # =========================================================================
+
+    @property
+    def mapping(self) -> AnnDataMapping:
+        """The service behind the ``_cellucid/mapping/`` routes."""
+        self._check_closed()
+        if self._mapping is None:
+            raise RuntimeError("The data-mapping service was not initialized.")
+        return self._mapping
+
+    def get_mapping_candidates(self) -> dict[str, Any]:
+        """The candidate catalog: every obsm, obsp, layer and var column, and the defaults."""
+        return copy.deepcopy(self.mapping.candidates)
+
+    def get_mapped_embedding(self, obsm_index: int, columns: Sequence[int]) -> bytes:
+        """One ``obsm`` array at 0-based ``columns``, normalized, as float32 bytes."""
+        return self.mapping.embedding_bytes(obsm_index, tuple(columns))
+
+    def get_mapped_vectors(
+        self,
+        vector_index: int,
+        vector_columns: Sequence[int],
+        embedding_index: int,
+        embedding_columns: Sequence[int],
+    ) -> bytes:
+        """One ``obsm`` vector field bound to a mapped embedding, as float32 bytes."""
+        return self.mapping.vector_bytes(
+            vector_index, tuple(vector_columns), embedding_index, tuple(embedding_columns)
+        )
+
+    def get_mapped_connectivity(self, obsp_index: int) -> dict[str, Any]:
+        """The edge-pair manifest of one ``obsp`` matrix, checked when asked for."""
+        return self.mapping.connectivity_manifest(obsp_index)
+
+    def get_mapped_connectivity_edges(self, obsp_index: int) -> tuple[bytes, bytes, bytes]:
+        """The source, destination and weight payloads of one ``obsp`` matrix."""
+        return tuple(  # type: ignore[return-value]
+            self.mapping.edge_bytes(obsp_index, filename)
+            for filename in ("edges.src.bin", "edges.dst.bin", "edges.weights.f64.bin")
+        )
+
+    def get_mapped_var_manifest(self, axis: str, names: str) -> dict[str, Any]:
+        """The var manifest of one gene axis (``X``, ``raw``, ``layer-k``) and name set."""
+        return self.mapping.var_manifest(axis, names)
+
+    def get_mapped_gene_values(self, axis: str, names: str, gene_index: int) -> bytes:
+        """One gene's values on a mapped axis, as float32 bytes."""
+        return self.mapping.gene_bytes(axis, names, gene_index)
+
+    def get_mapped_outliers(self, obsm_index: int, field_index: int) -> bytes:
+        """Outlier quantiles of one categorical field in a mapped latent space."""
+        return self.mapping.outlier_bytes(obsm_index, field_index)
 
     # =========================================================================
     # LATENT SPACE FOR OUTLIER COMPUTATION
@@ -2416,9 +2383,12 @@ class AnnDataAdapter:
 
         # Clear all caches to free memory
         self._embedding_cache.clear()
-        self._mapping_embedding_cache.clear()
         self._embedding_norm.clear()
         self._expression_matrix = None
+        mapping = getattr(self, "_mapping", None)
+        if mapping is not None:
+            mapping.close()
+            self._mapping = None
         self._vector_field_cache.clear()
         self._vector_field_obsm_keys.clear()
         self._vector_field_payload_index_by_id.clear()

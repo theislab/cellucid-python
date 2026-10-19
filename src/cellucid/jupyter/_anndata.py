@@ -72,7 +72,7 @@ class AnnDataViewer(BaseViewer):
         obs_keys: Sequence[str] | None = None,
         embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
         knn_key: str | None = None,
-        expression_source: str = "X",
+        expression_source: str | None = None,
         vector_field_default: str | None = None,
         serve_vector_fields: bool = False,
         client_server_url: str | None = None,
@@ -113,8 +113,9 @@ class AnnDataViewer(BaseViewer):
                 list is the longest part of opening a large object and most
                 sessions never draw the graph. A matrix that is not symmetric is
                 refused.
-            expression_source: ``"X"`` (the default), ``"raw"``, or
-                ``"layer:<name>"``.
+            expression_source: ``"X"``, ``"raw"``, or ``"layer:<name>"``;
+                None (the default) follows the default rule of
+                :class:`~cellucid.AnnDataAdapter`.
             vector_field_default: Exact field id required when multiple UMAP
                 vector fields exist.
             serve_vector_fields: Whether to read, validate, and serve the
@@ -183,7 +184,7 @@ class AnnDataViewer(BaseViewer):
         obs_keys: Sequence[str] | None,
         embedding_keys: Mapping[str, EmbeddingKeySpec] | None,
         knn_key: str | None,
-        expression_source: str,
+        expression_source: str | None,
         vector_field_default: str | None,
         serve_vector_fields: bool,
     ) -> None:
@@ -264,7 +265,7 @@ def show_anndata(
     obs_keys: Sequence[str] | None = None,
     embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
     knn_key: str | None = None,
-    expression_source: str = "X",
+    expression_source: str | None = None,
     vector_field_default: str | None = None,
     serve_vector_fields: bool = False,
     client_server_url: str | None = None,
@@ -306,8 +307,9 @@ def show_anndata(
             list is the longest part of opening a large object and most
             sessions never draw the graph. A matrix that is not symmetric is
             refused.
-        expression_source: ``"X"`` (the default), ``"raw"``, or
-            ``"layer:<name>"``.
+        expression_source: ``"X"``, ``"raw"``, or ``"layer:<name>"``; None
+            (the default) follows the default rule of
+            :class:`~cellucid.AnnDataAdapter`.
         vector_field_default: Exact field id required when multiple UMAP
             vector fields exist.
         serve_vector_fields: Whether to read, validate, and serve the

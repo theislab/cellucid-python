@@ -117,7 +117,8 @@ In Python, `BaseViewer`:
 - triggers hook callbacks registered via:
   - `@viewer.on_selection`, `@viewer.on_hover`, `@viewer.on_click`,
     `@viewer.on_ready`, `@viewer.on_command_error` (sent only by the web build
-    that emits `command_error`), and `@viewer.on_message`
+    that emits `command_error`), `@viewer.on_data_mapping`, and
+    `@viewer.on_message`
 
 Protocol details are documented here:
 {doc}`11_hooks_events_protocol_and_schema`.

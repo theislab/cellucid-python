@@ -31,6 +31,12 @@ In the Cellucid ecosystem, this is typically a KNN/SNN graph derived from:
 If you do not need connectivity features, skip this entirely. Exports load fine without it.
 ```
 
+An export carries one graph, chosen here. To compare several graphs, open an
+AnnData `.h5ad` that holds them, in the browser or served
+({doc}`../../web_app/b_data_loading/04_server_tutorial`): **Session › Data
+mapping › Neighbour graph** then switches between every `obsp` matrix, with
+the same checks ({doc}`../../web_app/b_data_loading/13_data_mapping`).
+
 ## Exact exported representation
 
 Cellucid validates the graph without changing it. It does not symmetrize,

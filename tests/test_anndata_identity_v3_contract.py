@@ -430,10 +430,33 @@ def test_a_layer_is_read_by_name_and_an_absent_one_is_named() -> None:
         _adapter(adata, expression_source="raw")
 
 
-@pytest.mark.parametrize("value", ["x", "layers:counts", "layer:", "", None, 1])
+@pytest.mark.parametrize("value", ["x", "layers:counts", "layer:", "", 1])
 def test_expression_source_is_one_exact_spelling(value: object) -> None:
     with pytest.raises(ValueError, match="expression_source must be 'X', 'raw', or 'layer:<name>'"):
         _adapter(_adata(X_umap=_ring(N_CELLS, 2, seed=38)), expression_source=value)
+
+
+def test_an_omitted_expression_source_follows_the_default_rule() -> None:
+    # X when the object has one; otherwise raw, the only usable layer, or the
+    # best-named one, reported as guessed -- the browser's rule.
+    with_x = _adapter(_adata(X_umap=_ring(N_CELLS, 2, seed=39)))
+    try:
+        assert with_x.expression_source == "X"
+        assert "expression" not in with_x.get_mapping_candidates()["guessed"]
+    finally:
+        with_x.close()
+    adata = _adata(X_umap=_ring(N_CELLS, 2, seed=40))
+    adata.layers["counts"] = np.asarray(adata.X).copy()
+    adata.layers["log_norm"] = np.asarray(adata.X).copy()
+    adata.X = None
+    guessed = _adapter(adata)
+    try:
+        assert guessed.expression_source == "layer:log_norm"
+        catalog = guessed.get_mapping_candidates()
+        assert catalog["defaults"]["expression"] == "layer:log_norm"
+        assert "expression" in catalog["guessed"]
+    finally:
+        guessed.close()
 
 
 # ---------------------------------------------------------------------------

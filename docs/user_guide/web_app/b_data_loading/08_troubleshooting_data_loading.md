@@ -273,9 +273,10 @@ file again.
 ### Symptom: “Gene search returns nothing / genes are missing”
 
 **Likely causes (ordered)**
-1) No gene expression provided (`adata.X` missing/empty), so there is nothing to query.
+1) No gene expression provided (no `X`, layer or `raw.X`), so there is nothing to query.
 2) The genes were named from the wrong `var` column, so the names you search for are not the ones published.
-3) Data is extremely large and gene fetch is slow (looks like “nothing”).
+3) The matrix in use has another gene list than the one you expect (`raw.X` often holds more genes than `X`).
+4) Data is extremely large and gene fetch is slow (looks like “nothing”).
 
 **How to confirm**
 - AnnData: `print(adata.X is None)`, `print(adata.n_vars)`, `print(adata.var.head())`
@@ -284,6 +285,7 @@ file again.
   `var_manifest.json` rather than out of the directory listing.
 
 **Fix**
+- For an `.h5ad`, a Zarr ZIP or a served AnnData, choose the matrix and the gene names under **Session › Data mapping › Genes** (see [Genes and expression](13_data_mapping.md#genes-and-expression)).
 - Provide a valid gene expression matrix, and name the genes from the `var` column your readers will search — `gene_id_column=...` in server/Jupyter mode, `var_gene_id_column=...` when exporting.
 - For very large datasets, use server mode (best reliability): {doc}`04_server_tutorial`
 

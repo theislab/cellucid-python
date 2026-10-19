@@ -172,7 +172,7 @@ Meaning:
 - a command Python sent was rejected by the viewer instead of applied.
 
 Expected keys:
-- `command`: exactly one of the nine command types this protocol defines
+- `command`: exactly one of the ten command types this protocol defines
 - `reason`: one line, at most 500 characters
 
 Commands carry no `requestId`, so this event correlates with a command *type*
@@ -185,6 +185,24 @@ registered, because the command methods are one-way — `set_color_by` has
 already returned `None` by the time the rejection arrives on the server thread,
 and nothing can make it raise without blocking every command on a browser round
 trip.
+
+### `data_mapping`
+
+Meaning:
+- the viewer resolved or changed its data mapping (which arrays it plots and
+  reads).
+
+Expected keys:
+- `origin`: one of `default`, `best_guess`, `session`, `user`, `notebook`
+- `requestId`: a string exactly when `origin` is `notebook` (the event answers
+  that `setDataMapping` command); `null` otherwise
+- `mapping`: a complete data mapping, validated by
+  `cellucid.data_mapping.validate_data_mapping` and stored as its canonical copy
+
+`setDataMapping` is the one command that carries a `requestId`: it is new, so
+no deployed build validates a key set for it, and `viewer.set_data_mapping()`
+needs the answer to tell an applied mapping from a refused one. Its key set is
+exactly `type`, `requestId`, `mapping`.
 
 ---
 
@@ -281,9 +299,9 @@ be sniffed the way a version would be:
 {
   "commands": ["clearHighlights", "debug_snapshot", "freeze", "highlight",
                "ping", "requestSessionBundle", "resetCamera", "setColorBy",
-               "setVisibility"],
-  "events": ["click", "command_error", "debug_snapshot", "hover", "pong",
-             "ready", "selection", "session_bundle"]
+               "setDataMapping", "setVisibility"],
+  "events": ["click", "command_error", "data_mapping", "debug_snapshot",
+             "hover", "pong", "ready", "selection", "session_bundle"]
 }
 ```
 

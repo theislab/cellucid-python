@@ -6,6 +6,7 @@ import pytest
 from scipy import sparse
 
 from cellucid.prepare_data import prepare
+from cellucid.prepare_data._generation import _resolve_gene_name_set
 
 _DEFAULT_VAR = object()
 
@@ -90,14 +91,6 @@ def test_identity_gene_count_matches_exported_var_subset(
             pd.DataFrame(index=["gene_a", 2, "gene_c"]),
             None,
             "var index",
-        ),
-        (
-            pd.DataFrame(
-                {"gene_id": ["gene_a", 2, "gene_c"]},
-                index=["row_a", "row_b", "row_c"],
-            ),
-            "gene_id",
-            "var column 'gene_id'",
         ),
     ],
 )
@@ -312,3 +305,32 @@ def test_existing_var_manifest_must_match_requested_subset(tmp_path):
             tmp_path,
             gene_identifiers=["gene_b", "gene_c"],
         )
+
+
+def test_an_integer_gene_name_column_names_genes_by_its_digits(tmp_path):
+    """The rule every reader applies: integers are their decimal digits."""
+    var = pd.DataFrame(
+        {"entrez": pd.array([7157, 672, 7157], dtype="int64")},
+        index=["gene_a", "gene_b", "gene_c"],
+    )
+    names = _resolve_gene_name_set(var, "entrez", label="var_gene_id_column")
+    assert names.names == ["7157", "672", "7157-1"]
+    mixed = pd.DataFrame({"gene_id": ["gene_a", 2, "gene_c"]}, index=["row_a", "row_b", "row_c"])
+    assert _resolve_gene_name_set(mixed, "gene_id", label="var_gene_id_column").names == [
+        "gene_a",
+        "2",
+        "gene_c",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("values", "reason"),
+    [
+        ([0.5, 1.5, 2.5], "floating-point values cannot name genes"),
+        ([True, False, True], "true/false values cannot name genes"),
+    ],
+)
+def test_a_float_or_boolean_gene_name_column_is_refused_with_the_catalog_reason(values, reason):
+    var = pd.DataFrame({"score": values}, index=["gene_a", "gene_b", "gene_c"])
+    with pytest.raises(TypeError, match=rf"var column 'score': {reason}\."):
+        _resolve_gene_name_set(var, "score", label="var_gene_id_column")

@@ -135,6 +135,31 @@ def _known_inbound_events(viewer_id: str) -> list[tuple[str, dict[str, object], 
             },
             {"command": "setColorBy", "reason": "Field CD8A is not loaded"},
         ),
+        (
+            "data_mapping",
+            {
+                "type": "data_mapping",
+                "viewerId": viewer_id,
+                "requestId": None,
+                "origin": "default",
+                "mapping": {
+                    "kind": "export",
+                    "embeddings": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None},
+                    "geneNames": "index",
+                    "vectorFields": [],
+                },
+            },
+            {
+                "requestId": None,
+                "origin": "default",
+                "mapping": {
+                    "kind": "export",
+                    "embeddings": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None},
+                    "geneNames": "index",
+                    "vectorFields": [],
+                },
+            },
+        ),
     ]
 
 

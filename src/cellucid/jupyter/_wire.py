@@ -12,8 +12,9 @@ accepts instead of assuming it.
 
 The checks are exact rather than permissive -- ``type(value) is str`` instead of
 ``isinstance``, exact key sets instead of subsets -- because a viewer running in
-a browser is not a trusted caller. This module holds the standard library only,
-so the protocol can be reasoned about without loading the viewer machinery.
+a browser is not a trusted caller. This module imports only the standard library
+and :mod:`cellucid.data_mapping`, which is standard-library only itself, so the
+protocol can be reasoned about without loading the viewer machinery.
 """
 
 from __future__ import annotations
@@ -22,6 +23,8 @@ import json
 import math
 from typing import Any
 from urllib.parse import urlparse
+
+from ..data_mapping import DataMappingError, validate_data_mapping
 
 # Every command Python may send into the viewer iframe, mapped to the complete
 # key set that command must carry. This mapping is the single declaration of
@@ -38,6 +41,7 @@ _COMMAND_MESSAGE_FIELDS: dict[str, frozenset[str]] = {
     "setVisibility": frozenset({"type", "cells", "visible"}),
     "resetCamera": frozenset({"type"}),
     "freeze": frozenset({"type"}),
+    "setDataMapping": frozenset({"type", "requestId", "mapping"}),
 }
 
 # Every event the viewer may send back, mapped to the complete key set that
@@ -76,7 +80,15 @@ _INBOUND_EVENT_FIELDS: dict[str, frozenset[str]] = {
         }
     ),
     "command_error": frozenset({"type", "viewerId", "command", "reason"}),
+    "data_mapping": frozenset({"type", "viewerId", "requestId", "origin", "mapping"}),
 }
+
+# Why the viewer's data mapping is what it is, as a ``data_mapping`` event
+# reports it. ``notebook`` is the one origin that answers a ``setDataMapping``
+# command, so it is the one origin that carries a ``requestId``.
+_DATA_MAPPING_ORIGINS = frozenset(
+    {"default", "best_guess", "session", "user", "notebook"}
+)
 
 # The optional pair a prepared export adds to its ``/_cellucid/datasets`` entry
 # when it ships a published default session. ``cellucid.server._state`` writes
@@ -315,6 +327,21 @@ def _require_cell_indices(value: object, *, label: str = "cell_indices") -> list
     return value
 
 
+def _require_data_mapping(value: object, *, label: str) -> dict[str, Any]:
+    """Validate one data mapping and return its canonical copy.
+
+    The mapping is checked with :func:`cellucid.data_mapping.validate_data_mapping`,
+    the same rule sessions and the web app apply, so a mapping the viewer would
+    refuse is refused here before it crosses the wire. A mapping that passes is
+    replaced by its canonical copy -- the one that is serialized outbound and
+    stored inbound -- so the order of keys is never a property of the caller.
+    """
+    try:
+        return validate_data_mapping(value, label=label)
+    except DataMappingError as error:
+        raise ValueError(str(error)) from error
+
+
 def _require_frontend_message(message: object) -> str:
     if type(message) is not dict:
         raise TypeError("message must be a native dictionary")
@@ -365,6 +392,18 @@ def _require_frontend_message(message: object) -> str:
             _require_cell_indices(cells, label="setVisibility cells")
         if type(message["visible"]) is not bool:
             raise TypeError("setVisibility visible must be exactly True or False")
+    elif message_type == "setDataMapping":
+        _require_exact_message_text(
+            message["requestId"],
+            label="setDataMapping requestId",
+        )
+        message = {
+            **message,
+            "mapping": _require_data_mapping(
+                message["mapping"],
+                label="setDataMapping mapping",
+            ),
+        }
 
     return json.dumps(
         message,
@@ -519,6 +558,33 @@ def _require_inbound_jupyter_event(
                 "command_error reason must be at most "
                 f"{_COMMAND_ERROR_REASON_LIMIT} characters"
             )
+    elif event_type == "data_mapping":
+        origin = message["origin"]
+        if type(origin) is not str or origin not in _DATA_MAPPING_ORIGINS:
+            raise ValueError(
+                "data_mapping origin must be one of "
+                f"{sorted(_DATA_MAPPING_ORIGINS)}, not {origin!r}"
+            )
+        request_id = message["requestId"]
+        if origin == "notebook":
+            # Only an answer to setDataMapping says "notebook", and an answer
+            # names the request it answers.
+            _require_exact_message_text(
+                request_id,
+                label="data_mapping requestId",
+            )
+        elif request_id is not None:
+            raise ValueError(
+                "data_mapping requestId must be null unless the event answers "
+                "setDataMapping (origin 'notebook')"
+            )
+        message = {
+            **message,
+            "mapping": _require_data_mapping(
+                message["mapping"],
+                label="data_mapping mapping",
+            ),
+        }
     else:
         if message["status"] != "ok":
             raise ValueError("session_bundle status must equal 'ok'")

@@ -162,10 +162,14 @@ id to its path.
 Full spec: {doc}`09_output_format_specification_exports_directory`
 
 ```{note}
-Serving an AnnData object directly discovers vector fields differently: it reads
-`obsm` keys of the form `<field>_umap_<n>d` and binds each to the slot of its
-dimension when that slot shows a UMAP. See
-{doc}`../d_viewing_apis/08_anndata_mode_show_anndata_and_serve_anndata`.
+Serving an AnnData object directly binds vector fields differently: with
+`serve_vector_fields=True` it binds each `obsm` key of the form
+`<field>_umap_<n>d` to the slot of its dimension when that slot shows a UMAP,
+and in the viewer any `obsm` array that fits an embedding can be bound under
+**Session › Data mapping › Vector fields**. An export's bindings are fixed
+here; the viewer can only turn them off. See
+{doc}`../d_viewing_apis/08_anndata_mode_show_anndata_and_serve_anndata` and
+{doc}`../../web_app/b_data_loading/13_data_mapping`.
 ```
 
 ---
@@ -185,8 +189,9 @@ dimension when that slot shows a UMAP. See
 ### Symptom: overlay option missing in the UI
 
 Meaning:
-- no `vector_fields` metadata was found in `dataset_identity.json`, or the
-  field is not bound to the embedding the view shows.
+- no `vector_fields` metadata was found in `dataset_identity.json`, the
+  field is not bound to the embedding the view shows, or its binding was
+  turned off under **Session › Data mapping › Vector fields**.
 
 How to confirm:
 - open `<out_dir>/dataset_identity.json` and read `"vector_fields"` → `files`.

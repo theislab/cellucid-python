@@ -377,16 +377,22 @@ The `Vector fields` line in step 3 has the same three states:
 | Line | Meaning |
 | --- | --- |
 | `Vector fields: yes (velocity_umap)` | The overlay was asked for, read, and validated; the served field IDs are listed |
-| `Vector fields: not served (obsm declares vector fields; pass serve_vector_fields=True, or --vector-fields, to draw them)` | The object carries vectors and this run did not ask for them |
+| `Vector fields: not bound (obsm declares vector fields; pass serve_vector_fields=True, or --vector-fields, to bind them, or bind one under Session > Data mapping)` | The object carries vectors and this run did not ask for them |
 | `Vector fields: no` | `obsm` declares no `<field>_umap_<n>d` key at all |
 
 What the flag changes on the wire:
 
 | | `--vector-fields` omitted | `--vector-fields` passed |
 | --- | --- | --- |
-| `obsm` vector arrays | never read | read and validated before the bind |
+| `obsm` vector arrays at startup | never read | read and validated before the bind |
 | `vector_fields` block in `dataset_identity.json` | absent | present, listing every served field |
 | `vectors/<index>_<dim>d.bin` | 404 | served |
+| Vector fields the viewer opens with | none | `<field>_umap_<d>d` on the UMAP of that dimension |
+
+Either way, the viewer can bind any `obsm` array that fits an embedding under
+**Session › Data mapping › Vector fields**; the server then reads it, checks
+it and scales it on request (`_cellucid/mapping/vectors/...`, below). See
+[Vector fields](13_data_mapping.md#vector-fields).
 
 `--vector-field-default` chooses among *served* fields, so passing it on its own
 raises rather than doing nothing. And as with connectivity, this default applies
@@ -405,6 +411,71 @@ mismatch: you have 2D vectors and are viewing 3D, or the reverse.
 See:
 - {doc}`../i_vector_field_velocity/index`
 - {doc}`../i_vector_field_velocity/01_what_vector_fields_are_user_facing`
+
+### Data-mapping routes: any array, read on request
+
+The flags above choose what the viewer shows first. Beyond them, a direct-AnnData
+server answers a family of routes under `_cellucid/mapping/` that let a viewer
+re-map the dataset while it is open, from **Session › Data mapping**
+({doc}`13_data_mapping`) — another embedding or other columns of one,
+another neighbour graph, gene names from a `var` column, expression from a layer
+or `raw`, another latent space — without restarting the server.
+
+| Route (under `_cellucid/mapping/`) | Payload |
+| --- | --- |
+| `candidates.json` | The candidate catalog: every `obsm`, `obsp`, layer and `var` column, with shape, storage, dtype, and whether it is usable and why not; the mapping the server serves now (`defaults`) and which slots were `guessed` |
+| `embeddings/{i}/{c0}-{c1}[-{c2}].bin` | `obsm` entry `i` read at those 0-based columns, normalized like every embedding, float32 |
+| `vectors/{i}/{vcols}/{e}/{ecols}.bin` | `obsm` entry `i` bound to embedding `e`, scaled by that embedding's factor |
+| `knn/{p}/connectivity_manifest.json` | `obsp` entry `p` as an edge-pair manifest, checked when asked for |
+| `knn/{p}/connectivity/edges.src.bin`, `edges.dst.bin`, `edges.weights.f64.bin` | Its edge payloads |
+| `genes/{axis}/{names}/var_manifest.json` | The gene list of `axis` (`X`, `raw`, or `layer-{k}`) named by `names` — the var index (`genes/X/index/…`) or a column (`genes/X/column-{k}/…`) — made unique |
+| `genes/{axis}/{names}/var/{g}.values.f32` | Gene `g` of that axis, float32 |
+| `latent/{i}/obs/{f}.outliers.f32` | Outlier quantiles of categorical obs field `f` in latent space `i` |
+
+Every route addresses an entry by its **position** in `candidates.json` (`{i}`
+and `{e}` into `obsm`, `{p}` into `obsp`, `{k}` into `layers` or into that
+axis's `var` columns), never by its key, so no URL carries the dataset's
+vocabulary. Columns are 0-based.
+
+Nothing is read until it is requested, and nothing is repaired:
+
+- **404** — the route names no entry (an index past the end, repeated or
+  out-of-range columns, a vector array bound at columns its embedding does not
+  use).
+- **422** with a JSON body
+  `{"error": "...", "key": "<AnnData key>", "reason": "..."}` — the entry
+  exists but cannot be served: the catalog lists it as unusable (a table in
+  `obsm`, a float column as gene names, an array the best guess already
+  refused), or its values fail the load-time check (a NaN in an embedding, a
+  latent space over the 512 MiB budget). `error` is the full sentence;
+  `reason` is the short clause the viewer lists beside the key
+  (`NaN at cell 17`), in the same words a file opened in the browser gets. A
+  neighbour graph is checked only when its manifest or edges are requested;
+  one that is not symmetric is refused — `obsp['distances'] is not symmetric —
+  choose a connectivities matrix.` — and never symmetrized.
+- **HEAD** answers the byte length without reading the payload wherever the
+  catalog determines it (embeddings, vectors, genes, latent outliers). An edge
+  file's length is known once the graph has been read and checked, so a HEAD on
+  it reads the graph.
+
+Payloads are kept in one byte-bounded cache that is safe to use from the
+server thread and a notebook at the same time. The routes exist whatever flags
+the server started with: `--knn` decides only whether the dataset *starts*
+with a graph.
+
+### When the viewer is newer than this server
+
+`cellucid serve` loads the newest viewer from www.cellucid.com, so a viewer can
+be newer than the `cellucid` package that serves it. A server from before
+export format 3 serves a `dataset_identity.json` whose `version` is 2. The
+viewer then asks the same server for `GET /_cellucid/info`, which every
+Cellucid server has always answered with its package `version`, and says:
+
+```text
+This Cellucid server (0.9.2) is older than the viewer; update it with pip install -U cellucid.
+```
+
+Update with `pip install -U cellucid` and start the server again.
 
 ## CLI Options (What They Mean)
 

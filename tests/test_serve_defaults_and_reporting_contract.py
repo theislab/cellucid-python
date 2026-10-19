@@ -498,7 +498,7 @@ def test_the_report_separates_no_vector_fields_from_unserved_ones(capsys) -> Non
     )
     try:
         printed = capsys.readouterr().out
-        assert "Vector fields: not served" in printed
+        assert "Vector fields: not bound" in printed
         assert "--vector-fields" in printed
     finally:
         server.stop()

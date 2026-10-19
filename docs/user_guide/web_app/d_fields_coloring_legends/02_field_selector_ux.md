@@ -102,6 +102,11 @@ Keyboard shortcuts:
 - `Enter` selects the **top** result in the dropdown
 - `Esc` closes the dropdown (and removes focus)
 
+The search covers the gene list in use. Changing the gene names or the
+expression matrix under **Session › Data mapping** replaces that list; a gene
+a view is coloured by stays selected when the new list has it (see
+{doc}`../b_data_loading/13_data_mapping`).
+
 Result limit:
 - the dropdown shows up to **100** matches
 - if there are more, you’ll see a message like `...and 2,341 more. Type to narrow results.`

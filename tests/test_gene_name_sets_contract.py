@@ -214,10 +214,18 @@ def test_what_was_filled_and_renamed_is_printed(
         ({"var_gene_name_columns": "symbol"}, TypeError, r"not a string scalar"),
         ({"var_gene_name_columns": [7]}, TypeError, r"must be a native non-empty string"),
         ({"var_gene_name_columns": [""]}, ValueError, r"must be a native non-empty string"),
-        ({"var_gene_name_columns": ["count"]}, TypeError, r"var column 'count': Name at position 0"),
+        (
+            {"var_gene_name_columns": ["count"]},
+            TypeError,
+            r"var column 'count': floating-point values cannot name genes",
+        ),
         ({"var_gene_name_columns": ["padded"]}, ValueError, r"displayed verbatim"),
         ({"var_gene_name_columns": [" symbol"]}, ValueError, r"displayed verbatim"),
-        ({"var_gene_id_column": "count"}, TypeError, r"var column 'count': Name at position 0"),
+        (
+            {"var_gene_id_column": "count"},
+            TypeError,
+            r"var column 'count': floating-point values cannot name genes",
+        ),
         ({"var_gene_id_column": "missing"}, KeyError, r"var_gene_id_column 'missing' not found"),
     ],
 )
@@ -228,7 +236,8 @@ def test_invalid_gene_name_sets_are_rejected_before_output_mutation(
     message: str,
 ) -> None:
     var = _var()
-    var["count"] = [1, 2, 3, 4, 5]
+    # Integers would name genes by their digits; a float column cannot.
+    var["count"] = [1.5, 2.5, 3.5, 4.5, 5.5]
     var["padded"] = ["a", "b ", "c", "d", "e"]
     var[" symbol"] = ["a", "b", "c", "d", "e"]
     out_dir = tmp_path / "must-not-exist"

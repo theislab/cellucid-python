@@ -120,10 +120,13 @@ Read the message before changing anything — each cause has its own:
   with the reason). A session whose embeddings this dataset
   *does* have is not refused: they are restored. Open the dataset version the
   session was saved on.
-- **"This session was saved with … as its neighbour graph"** (or gene names,
-  expression matrix, latent space, vector fields): the session was saved with
-  another of the arrays the viewer cannot change. The message names the array
-  on each side. Open the dataset version the session was saved on.
+- **"This session uses … as its neighbour graph, which this dataset does not
+  have"** (or gene names, expression matrix, latent space, vector fields): the
+  session names an array this dataset does not have or cannot use. One it has
+  is restored instead of refused.
+- **"This session was saved with … as its gene names"**: a prepared dataset
+  exported with one gene-name set cannot show another. The message names the
+  names on each side. Open the dataset version the session was saved on.
 - **"recorded its cell order on … which this dataset does not have"**: the
   embedding the session was saved in is not part of this dataset.
 - **"the same name and the same number of cells and genes, but the cell

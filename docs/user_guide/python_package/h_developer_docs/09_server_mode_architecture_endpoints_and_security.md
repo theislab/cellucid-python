@@ -80,9 +80,9 @@ curl -s http://127.0.0.1:8765/_cellucid/protocol | python -m json.tool
 {
   "commands": ["clearHighlights", "debug_snapshot", "freeze", "highlight",
                "ping", "requestSessionBundle", "resetCamera", "setColorBy",
-               "setVisibility"],
-  "events": ["click", "command_error", "debug_snapshot", "hover", "pong",
-             "ready", "selection", "session_bundle"]
+               "setDataMapping", "setVisibility"],
+  "events": ["click", "command_error", "data_mapping", "debug_snapshot",
+             "hover", "pong", "ready", "selection", "session_bundle"]
 }
 ```
 

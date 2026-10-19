@@ -264,10 +264,15 @@ Rule of thumb: if your dataset is big enough that you worry about RAM, view from
 Cellucid needs a mapping from “what you type in the gene search box” → a column index in the matrix.
 
 By default, expression is read from `adata.X` and genes are named by
-`var.index`. `expression_source` (`--expression`) chooses another matrix:
-`"raw"` reads `adata.raw.X` and names genes from `adata.raw.var`, and
-`"layer:<name>"` reads `adata.layers[<name>]`, which shares `var`. A source the
-object does not have fails construction.
+`var.index`. An object without `X` reads `adata.raw.X`, else its only layer,
+else its best-named layer (`norm` or `log` first, `counts` and `raw_counts`
+last), and reports that choice as guessed — the rule a file opened in the
+browser follows. `expression_source` (`--expression`) chooses the matrix
+explicitly: `"raw"` reads `adata.raw.X` and names genes from `adata.raw.var`,
+and `"layer:<name>"` reads `adata.layers[<name>]`, which shares `var`. A source
+the object does not have fails construction. The viewer can switch to any
+other matrix or gene-name column afterwards, under **Session › Data mapping ›
+Genes** (see {doc}`../../web_app/b_data_loading/13_data_mapping`).
 
 `gene_id_column` (`--gene-id-column`) names genes from a column of that gene
 axis instead of its index. Any non-blank string names that exact column, so
@@ -313,7 +318,11 @@ Both are off for the same reason: each is read and validated **in full** before
 the server binds its socket, because the manifests the viewer fetches first
 declare what they contain. On a large object that is the difference between a
 server that opens in a second and one that takes minutes, and most sessions never
-turn either overlay on. Neither choice affects anything else the viewer can do.
+turn either overlay on. Neither choice affects anything else the viewer can do,
+and neither limits it: in the viewer, **Session › Data mapping** can choose any
+`obsp` graph and bind any `obsm` array that fits an embedding, and the server
+reads that one on request (see
+{doc}`/user_guide/web_app/b_data_loading/13_data_mapping`).
 
 The startup report names which state you are in, for each of them separately —
 served, present in the object but not asked for, or absent. See
@@ -327,8 +336,10 @@ transcript.
 
 ## Vector fields (velocity/drift overlays)
 
-Cellucid can render per-cell displacement vectors as an animated overlay, when
-you ask for it with `serve_vector_fields=True` or `--vector-fields`.
+Cellucid can render per-cell displacement vectors as an animated overlay. With
+`serve_vector_fields=True` or `--vector-fields` the viewer opens with the
+fields below bound; without it, it opens with none, and any can be bound under
+**Session › Data mapping › Vector fields**.
 
 ### Naming convention (UMAP basis)
 

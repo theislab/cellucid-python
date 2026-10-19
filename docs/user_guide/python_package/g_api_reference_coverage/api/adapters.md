@@ -93,6 +93,34 @@ those `obsm` arrays at the given columns, normalized like a served embedding:
 the payload behind `/_cellucid/mapping/embeddings/...`, which the viewer reads
 for an enabled embedding the identity does not list.
 
+### Data mapping: every candidate array, on request
+
+The `get_mapped_*` methods read one candidate of that catalog on request,
+addressed by its position in it:
+
+| Method | Returns |
+| --- | --- |
+| `get_mapped_embedding(i, columns)` | normalized float32 bytes of `obsm` entry `i` at 0-based `columns` |
+| `get_mapped_vectors(i, vector_columns, e, embedding_columns)` | a vector array bound to embedding `e`, scaled by its factor |
+| `get_mapped_connectivity(p)` / `get_mapped_connectivity_edges(p)` | the edge-pair manifest and edge payloads of `obsp` entry `p` |
+| `get_mapped_var_manifest(axis, names)` | the gene list of `"X"`, `"raw"` or `"layer-k"`, named by `"index"` or `"column-k"` |
+| `get_mapped_gene_values(axis, names, g)` | gene `g` of that axis as float32 bytes |
+| `get_mapped_outliers(i, f)` | outlier quantiles of categorical field `f` in latent space `i` |
+
+An unknown position raises `cellucid.anndata_mapping.MappingNotFound`; an entry
+whose values fail the load-time check raises `MappingLoadError`, whose `key`
+names the AnnData key it is about. Results are cached in one byte-bounded LRU
+behind a lock, so the server thread and the kernel can share one adapter.
+
+```{eval-rst}
+.. autoclass:: cellucid.anndata_mapping.AnnDataMapping
+   :members:
+
+.. autoexception:: cellucid.anndata_mapping.MappingNotFound
+
+.. autoexception:: cellucid.anndata_mapping.MappingLoadError
+```
+
 ## Connectivity is asked for, not assumed
 
 `knn_key` is keyword-only and `None` by default, on

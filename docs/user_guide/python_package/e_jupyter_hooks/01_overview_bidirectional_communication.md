@@ -44,7 +44,8 @@ Once you have a `viewer` (from `show_anndata(...)` or `show(...)`), you can:
   - `@viewer.on_click`: user clicks a cell
   - `@viewer.on_command_error`: a command you sent was rejected by the viewer
     (only the web build that emits `command_error` sends it)
-  - `@viewer.on_message`: one envelope stream for all eight current event types
+  - `@viewer.on_data_mapping`: the viewer resolved or changed its data mapping
+  - `@viewer.on_message`: one envelope stream for all nine current event types
 
 - **Pull durable state (session bundles)**
   - `bundle = viewer.get_session_bundle()` (no browser download required)

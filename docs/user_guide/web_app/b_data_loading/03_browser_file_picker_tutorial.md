@@ -181,15 +181,19 @@ Optional (but highly recommended):
   32-bit floats, exactly as `cellucid.prepare` exports them: an integer above
   16,777,216 becomes its nearest 32-bit value, so keep identifier columns as
   strings if their exact values matter)
-- expression matrix `X` (dense or sparse) for gene coloring
+- an expression matrix (dense or sparse) for gene coloring: `X`, any layer or
+  `raw.X`, named by the var index or any text var column, chosen under
+  **Session › Data mapping › Genes** (see [Genes and expression](13_data_mapping.md#genes-and-expression))
 - `obsp['connectivities']` if you want connectivity visualization
 
 Optional (if you want the vector field / velocity overlay):
 - Per-cell vectors in `obsm` using the naming convention `<field>_umap_<dim>d` (e.g. `velocity_umap_2d`, `velocity_umap_3d`).
 - The overlay dropdown shows the fields bound to the embedding the view shows: `<field>_umap_<d>d` is bound to `X_umap_<d>d` (or `X_umap`), so it is drawn only while the view shows that UMAP.
-- This picker finds them on its own — there is nothing to switch on. (The
-  Python paths are the opposite: `cellucid serve` and `show_anndata()` leave
-  the vectors unread unless asked. See {doc}`04_server_tutorial`.)
+- This picker binds them on its own — there is nothing to switch on. (The
+  Python paths are the opposite: `cellucid serve` and `show_anndata()` bind
+  none unless asked. See {doc}`04_server_tutorial`.) Any other array that fits
+  an embedding (`velocity_pca` on `X_pca`) is bound under **Session › Data
+  mapping › Vector fields**; values are read only when the overlay shows them.
 
 ## Option #5 — Load a Zarr ZIP Archive Directly
 

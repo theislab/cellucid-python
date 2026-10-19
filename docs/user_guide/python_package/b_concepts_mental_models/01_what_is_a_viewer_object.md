@@ -71,7 +71,7 @@ The viewer object also owns:
 - a **URL** you can open manually (`viewer.viewer_url`),
 - hook registries for `on_selection`, `on_hover`, `on_click`, `on_ready`,
   `on_command_error` (only the web build that emits `command_error` sends it),
-  and `on_message`,
+  `on_data_mapping`, and `on_message`,
 - a small, thread-safe **latest-event snapshot** (`viewer.state`),
 - lifecycle methods (`viewer.display()`, `viewer.stop()`).
 

@@ -187,7 +187,7 @@ def test_cli_passes_exact_identity_without_backed_state_to_zarr(
         gene_id_column=None,
         embedding_keys=None,
         knn_key=None,
-        expression_source="X",
+        expression_source=None,
         vector_field_default="drift_umap",
         serve_vector_fields=True,
     )

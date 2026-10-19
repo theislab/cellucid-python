@@ -459,7 +459,7 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
         "Restoring is *verify, then apply*",
         "The session turns on other embeddings, or names other defaults, that this dataset can show",
         "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have.",
-        "The session was saved with another graph, gene names, expression matrix, latent space, or vector bindings",
+        "The session names another graph, gene names, expression matrix, latent space or vector bindings, ones this dataset can use",
         "stores its cells in a different order",
         "A session file saved before Cellucid recorded cell order",
         "a fingerprint with `cellOrder` but no `dataMapping`",

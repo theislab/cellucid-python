@@ -6,6 +6,8 @@
 - Which stored arrays Cellucid can show, and how to turn more on.
 - How several embeddings of one dimension (UMAP, t-SNE, PCA) are shown side by side.
 - What happens when a file has no UMAP.
+- How to choose the neighbour graph, the gene names and the expression matrix,
+  the latent space of outlier filters, and the vector fields.
 - What a session records about it.
 
 ---
@@ -15,9 +17,9 @@
 A dataset can hold several embeddings: a UMAP, a t-SNE, a force-directed
 layout, a PCA, spatial coordinates, in 1D, 2D or 3D. The **data mapping** says
 which of them views can show — any number, of any mix of dimensions — and
-which one is each dimension's **default**. Read-only, it also names the
-neighbour graph, gene names, expression matrix, latent space and vector fields
-Cellucid reads.
+which one is each dimension's **default**. It also names the neighbour graph,
+gene names and expression matrix Cellucid reads, the latent space outlier
+filters measure in, and the vector fields it draws on which embedding.
 
 It is the last group of the **Session** panel, **Data mapping**, below
 **Session file**. Its **Embeddings** list is a checklist; **Read from file**
@@ -25,15 +27,20 @@ lists the rest.
 
 | What you opened | What you can change |
 |---|---|
-| An `.h5ad` file or a Zarr ZIP, read in the browser or served from Python (a notebook or the command-line server) | Turn any numeric `obsm` array on or off, at any 1 to 3 of its columns, as many column selections as you like |
-| A prepared dataset (sample, folder, GitHub, self-hosted) | Turn the embeddings it was exported with on or off, and choose each dimension's default |
+| An `.h5ad` file or a Zarr ZIP, read in the browser or served from Python (a notebook or the command-line server) | Turn any numeric `obsm` array on or off, at any 1 to 3 of its columns, as many column selections as you like; choose any `obsp` graph, `X`, a layer or `raw.X` named by the var index or any var column, any dense `obsm` array as the latent space, and any `obsm` array that fits an embedding as its vector field |
+| A prepared dataset (sample, folder, GitHub, self-hosted) | Turn the embeddings it was exported with on or off, choose each dimension's default, and choose among the gene-name sets and vector fields it was exported with |
 
 A served file opens with the server's defaults (`--embedding-1d/-2d/-3d`, or
 its best guess) and every other narrow `obsm` array turned on; the server reads
-any array the checklist turns on when a view first shows it.
+any array the checklist turns on when a view first shows it, and so for every
+other choice.
 
 Turning an embedding on loads nothing. Its coordinates are read the first time
-a view shows it.
+a view shows it. After Embeddings, one disclosure per further group follows:
+[Genes and expression](#genes-and-expression),
+[Neighbour graph](#neighbour-graph), [Latent space](#latent-space) and
+[Vector fields](#vector-fields). Every group is staged until **Apply**, and
+applied with the embeddings as one step.
 
 ---
 
@@ -157,17 +164,148 @@ A vector field is bound to the embedding it was computed on. It is drawn in
 every view that shows that embedding, and is unavailable in views that show
 another.
 
+## Genes and expression
+
+The **Genes** disclosure chooses the gene list: which matrix gene values are
+read from, and what the genes are called.
+
+**Expression** lists `X`, every layer as `layers['counts']`, and `raw.X` with
+its gene count, as `raw.X · 30,000 genes`, because `raw` has its own, often
+longer, gene list. **None** shows no genes. A file opens on `X`. Without `X`
+it opens on `raw.X`; without either, on its only layer, or, among several, on
+one whose name contains `norm` or `log`, then any other, with `counts` and
+`raw_counts` last (alphabetically within each). The line under the menus then
+says "Expression is guessed: this file has no X." A served file opens on
+`cellucid serve --expression` (`show_anndata(..., expression_source=...)`)
+when it names one, and on the same rule otherwise.
+
+**Gene names** lists the var index and every column of the var table the
+chosen matrix uses (`raw.var` for `raw.X`). Text, categorical and integer
+columns can name genes; integers are written as text (`7`, not `7.0`). A
+floating-point or true/false column is listed disabled with the reason, as
+`dispersions · floating-point values cannot name genes`. A gene whose column
+value is empty or missing takes its var-index name, and repeated names are
+made unique as AnnData's `var_names_make_unique()` does: the second `MATR3`
+becomes `MATR3-1`. The line under the menus says what that changed:
+
+```text
+1 gene has no 'gene_symbols' value and uses its var index name.
+1 duplicate name was made unique, e.g. 'LYZ' → 'LYZ-1'.
+```
+
+When the names are Ensembl ids (at least 90% of a sample look like
+`ENSG00000139618`) and the var table has a symbol column, the line says so:
+"Gene names are Ensembl ids; 'gene_symbols' holds symbols."
+
+Apply reads the new gene list, and the values of every gene a view is
+coloured by, before anything changes. Then:
+
+- A view coloured by a gene keeps that gene, with its colour range, log scale
+  and filter. Other names for the same matrix (the var index and a symbol
+  column, or `X` and a layer) keep the same column: `ENSG00000090382` becomes
+  `LYZ`. Between `raw.X` and the others the gene is found by name. A range or
+  filter outside the new values is narrowed to them.
+- A gene missing from the new list loses its colouring, and Apply says so:
+  "Applied. 'PPBP' is not on the new gene list; its colouring was removed."
+- Cells, highlights, selections, obs filters and colours are kept.
+- Gene search, the gene menus and **Dataset › Genes** use the new list; any
+  other gene loads when it is first used.
+- Analysis windows close, since what they computed came from the previous
+  values.
+
+A prepared dataset offers the gene-name sets `prepare()` exported, such as
+`symbol` and `gene_id`; its expression matrix is fixed.
+
+## Latent space
+
+The **Latent space** disclosure chooses where a categorical field's outlier
+filter measures distance: each cell's distance to its category's centre in
+that space, as the share of its category at that distance or closer (see
+{doc}`../e_filtering/02_outlier_filtering_per_active_field`). Its menu lists
+**None** and every dense `obsm` array with its width, as
+`X_scVI · 10 columns`; an array that is sparse, a table, or larger than
+512 MiB as 32-bit floats is listed disabled with the reason. A file opened in
+the browser starts with **None**; a served file starts with
+`cellucid serve --latent-key` (`show_anndata(..., latent_key=...)`), or None.
+
+Apply reads the space, checks every value (finite, representable as a 32-bit
+float) and computes the quantiles of every categorical field a view has
+loaded before anything changes; a space with a bad value is refused in the
+server's words ("NaN at cell 5") and stays unavailable. Then each field's
+outlier filter uses the new quantiles in every view, and its threshold is
+kept: "hide the farthest 5%" means the same in any space. **None** removes the
+outlier filters. The browser computes exactly what `prepare()` and
+`cellucid serve` compute, off the main thread.
+
+## Vector fields
+
+The **Vector fields** disclosure chooses which `obsm` arrays are drawn as
+vectors (velocity, drift) on which embedding. It lists every embedding that is
+turned on, each with a checkbox per array that fits it:
+
+- an array exactly as wide as the embedding's dimension, read whole
+  (`velocity_umap_2d` on `X_umap`);
+- or an array as wide as the embedding's own array, read at the same columns
+  (`velocity_pca` on `X_pca[2,3]` reads columns 2 and 3).
+
+Arrays named for the embedding come first, marked **suggested**: the default
+rule's `<field>_umap_<d>d` for a UMAP, and `<name>_<basis>` for `X_<basis>`
+(`velocity_umap`, as scVelo writes it). `X_…` arrays are embeddings and are
+not offered. A file opened in the browser starts with the default rule:
+`<field>_umap_<d>d` is bound to the UMAP of that dimension. A served file
+starts with that rule when `cellucid serve --vector-fields`
+(`show_anndata(..., serve_vector_fields=True)`) asks for it, and with none
+otherwise. A prepared dataset lists the bindings it was exported with, and any
+of them can be turned off.
+
+An embedding a field is bound to stays on in the checklist until the field is
+unbound. Apply replaces the bindings and turns the overlay off; nothing is read until
+the overlay shows a field. A view draws a field only while it shows an
+embedding the field is bound to (see
+{doc}`../i_vector_field_velocity/02_enabling_overlay_and_selecting_field`).
+An array whose values cannot be drawn is reported when it is first shown, and
+is then listed disabled with the reason.
+
+## Neighbour graph
+
+For an AnnData file, the **Neighbour graph** disclosure chooses the graph that
+connectivity edges and the KNN drag tool use. Its menu lists **None** and
+every `obsp` matrix, as `connectivities · sparse 10,000 × 10,000`: the
+`connectivities` that `sc.pp.neighbors()` writes, a `<key>_connectivities`
+from `sc.pp.neighbors(key_added=…)`, and any other square matrix with one row
+per cell. A matrix that is not square, or not as large as the dataset, is
+listed disabled with the reason.
+
+A file opened in the browser starts with `obsp['connectivities']` when it has
+one. A served file starts with the graph `cellucid serve --knn KEY` (or
+`show_anndata(..., knn_key=...)`) named, or none.
+
+Apply reads the graph and checks it before anything changes. It must be
+symmetric, with a zero diagonal and no negative, infinite or missing weight.
+A graph that is not, such as the `distances` that `sc.pp.neighbors()` also
+writes, is refused, never repaired:
+
+```text
+obsp['distances'] is not symmetric — choose a connectivities matrix.
+```
+
+The previous graph stays, and the refused one is listed disabled with that
+reason until the dataset is opened again. After a graph changes, shown
+connectivity edges are redrawn from it, the KNN drag tool uses it on its next
+drag, and **Dataset › Connectivity** counts its edges.
+
 ## What stays fixed
 
-**Read from file** lists what else the dataset is read with:
+**Read from file** lists what a dataset is read with but cannot change.
+Every other group has its own disclosure:
 
-| Row | Prepared dataset | File read in the browser | Served file |
+| Group | Prepared dataset | File read in the browser | Served file |
 |---|---|---|---|
-| Neighbour graph | fixed by `prepare()` (not listed) | `obsp['connectivities']` when present | `--knn` |
-| Gene names | the name set chosen by `prepare()` | the var index | `--gene-id-column` |
-| Expression | fixed by `prepare()` (not listed) | `X` | `--expression` |
-| Latent space | fixed by `prepare()` (not listed) | none | `--latent-key` |
-| Vector fields | the bindings `prepare()` wrote | `<field>_umap_<d>d`, bound to `X_umap_<d>d` or `X_umap` | `--vector-fields` |
+| Neighbour graph | fixed by `prepare()` (not listed) | menu; starts on `connectivities` | menu; starts on `--knn` |
+| Gene names | menu of the exported name sets (fixed with one) | menu; starts on the var index | menu; starts on `--gene-id-column` |
+| Expression | fixed by `prepare()` (not listed) | menu; starts on `X` | menu; starts on `--expression` |
+| Latent space | fixed by `prepare()` (not listed) | menu; starts on None | menu; starts on `--latent-key` |
+| Vector fields | checkboxes of the exported bindings (fixed with none) | checkboxes; `<field>_umap_<d>d` bound to `X_umap_<d>d` or `X_umap` | checkboxes; the same rule with `--vector-fields`, else none |
 
 ## Sessions
 
@@ -181,8 +319,14 @@ embedding it shows. Loading the session restores both:
 - If it names an embedding this dataset does not have, the session is refused
   and names it: "This session shows obsm['X_tsne'] columns [0, 1], which this
   dataset does not have."
-- If it was saved with a different neighbour graph, gene names, expression
-  matrix, latent space or vector fields, it is refused and names the group.
+- If it was saved with another neighbour graph, gene names, expression
+  matrix, latent space or vector fields, that choice is restored when this
+  dataset has it and can use it; otherwise the session is refused and names
+  it: "This session uses obsp['scvi_connectivities'] as its neighbour graph,
+  which this dataset does not have." A gene a view was coloured by is
+  restored on the saved gene list, and the gene count is checked against that
+  list (`raw.X` has its own). Outlier thresholds are restored with the
+  latent space they were set in.
 
 See {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
 

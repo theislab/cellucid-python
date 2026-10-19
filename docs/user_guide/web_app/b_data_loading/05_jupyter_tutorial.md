@@ -287,8 +287,9 @@ followed by these exact keyword-only parameters:
 - `knn_key`: the `obsp` matrix to read, validate, and serve as the neighbor
   graph, such as `"connectivities"` (default: `None`). No graph is touched
   unless you name one, and a matrix that is not symmetric is refused
-- `expression_source`: where expression is read: `"X"` (default), `"raw"`, or
-  `"layer:<name>"`
+- `expression_source`: where expression is read: `"X"`, `"raw"`, or
+  `"layer:<name>"` (default `None`: `X`, or without `X` `raw`, then a layer,
+  reported as guessed)
 - `serve_vector_fields`: read, validate, and serve the `<field>_umap_<n>d`
   arrays in `obsm` as the velocity/drift overlay (default: `False`), for the
   same reason — every declared field is read in full before the viewer appears
@@ -581,6 +582,39 @@ Cell indices refer to the **row order** Cellucid is serving.
 - If you subset/shuffle `adata` in Python, the indices will change.
 ```
 
+### Read and change the data mapping
+
+The *data mapping* says which stored arrays the viewer plots and reads: the
+embedding of each dimension slot, the bound vector fields, and for an AnnData
+source the neighbour graph, the gene names, the expression matrix and the
+latent space. The viewer reports it after the dataset loads, and
+`viewer.data_mapping` holds the latest report:
+
+```python
+viewer.wait_for_event("data_mapping")
+viewer.data_mapping["embeddings"]
+# {'1d': None, '2d': {'key': 'X_umap', 'columns': [0, 1]}, '3d': None}
+viewer.data_mapping_origin   # "default", "best_guess", "session", "user" or "notebook"
+```
+
+`viewer.set_data_mapping(...)` replaces the top-level fields you name, checks
+the result before sending it, and waits until the viewer has applied it:
+
+```python
+viewer.set_data_mapping(
+    embeddings={"1d": None, "2d": {"key": "X_pca", "columns": [0, 1]}, "3d": None},
+)
+```
+
+A field this kind of mapping does not have raises `TypeError`, an invalid
+value raises `ValueError`, and a mapping the viewer refuses — an array that
+fails its load-time check, for example — raises `RuntimeError` with the
+viewer's reason. The viewer reads `GET /_cellucid/protocol` when it connects
+and reports mappings (and refused commands) only to a `cellucid` that lists
+those events there, as this release does. A viewer older than this release
+never reports a mapping, so `set_data_mapping()` raises because there is
+nothing to change yet.
+
 ## Reacting to the UI (Hooks: Viewer → Python)
 
 The viewer can send events back to Python so your notebook can react to selection/hover/click, and to a command the viewer refused.
@@ -592,6 +626,7 @@ Supported hooks:
 - `@viewer.on_click`
 - `@viewer.on_command_error` (a command this notebook sent was rejected by the
   viewer; only the web build that emits `command_error` sends it)
+- `@viewer.on_data_mapping` (the viewer resolved or changed which arrays it plots)
 - `@viewer.on_message` (raw debugging)
 
 ### Minimal: print selections

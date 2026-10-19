@@ -49,11 +49,11 @@ within one of them.
 default, the vector-field bindings in use, and for an AnnData source also the
 neighbour graph, the gene names, the expression matrix, and the latent space.
 For a prepared export these are fixed when the export is written, except which
-of its embeddings are turned on and which is each dimension's default; for an
-`.h5ad` or Zarr file opened in the browser they start at the viewer's defaults
-(or its best guess) and the embeddings can be changed under **Session › Data
-mapping**; for an object served by the Python package they are what the server
-serves.
+of its embeddings are turned on, which is each dimension's default, which
+exported gene-name set names the genes and which of its vector bindings are in
+use; for an `.h5ad` or Zarr file opened in the browser, or an object served by
+the Python package, they start at the defaults (or the best guess), and every
+group can be changed under **Session › Data mapping**.
 
 The four scalars and `cellOrder` must equal the currently loaded dataset. The
 data mapping must too, with one exception: its embeddings. A session that turns
@@ -86,7 +86,9 @@ shown.
 | Different source type, id, cell count, or variable count | complete rejection; the message names the saved and current cell and gene counts and asks you to open the dataset the session was saved on |
 | The session turns on other embeddings, or names other defaults, that this dataset can show | the embeddings are turned on, then the views are restored, then the session's data mapping is applied |
 | The session turns on an embedding that this dataset does not have (or cannot plot) | complete rejection; the message names it, for example "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have." |
-| The session was saved with another graph, gene names, expression matrix, latent space, or vector bindings | complete rejection; the message names the group and the array on each side |
+| The session names another graph, gene names, expression matrix, latent space or vector bindings, ones this dataset can use | the choice is restored, then the session |
+| The session names a graph, gene-name column, expression matrix, latent space or vector binding this dataset does not have (or cannot use) | complete rejection; the message names it |
+| The session was saved with gene names a prepared dataset with one name set does not show | complete rejection; the message names the names on each side |
 | The embedding the session recorded its cell order on does not exist in this dataset | complete rejection; the message names the embedding |
 | Same id and same cell and gene counts, but the dataset stores its cells in a different order | complete rejection; the message says the coordinates differ from the ones the session was saved against, names both causes a digest cannot tell apart — a different order, or the same cells re-exported from a re-computed embedding — and asks you to load the version the session was saved on, or re-create the selections here |
 | A session file saved before Cellucid recorded cell order — a fingerprint with only the four scalars | complete rejection with its own message: such a file can never be confirmed, so re-create the selections and save a new session file |

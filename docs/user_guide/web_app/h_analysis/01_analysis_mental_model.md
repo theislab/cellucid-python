@@ -123,6 +123,11 @@ What triggers recomputation depends on the mode, but common triggers include:
 - changing plot options that change the numbers (thresholds, transforms, plot type, density bandwidth),
 - opening a copied (floating) analysis window (it recomputes; results are not copied).
 
+Changing the gene names or the expression matrix under **Session › Data
+mapping** replaces the gene list every gene result was computed from, so every
+analysis window closes and every cache above is cleared; reopen the analysis to
+compute it on the new values (see {doc}`../b_data_loading/13_data_mapping`).
+
 :::{note}
 Caching is a performance feature, not a scientific guarantee.
 
@@ -135,9 +140,11 @@ If you need a stable artifact, export it (CSV/SVG/PNG) and/or save a session bun
 
 Cellucid does not assume your expression values are raw counts or log-normalized.
 
-All analysis operates on the values present in your dataset:
+All analysis operates on the values of the expression matrix in use:
 - If you exported log-normalized expression, DE and signatures use that scale.
 - If you exported counts, they use counts.
+- For an AnnData file, that is the matrix chosen under **Session › Data
+  mapping › Genes** (`X`, a layer such as `log1p`, or `raw.X`).
 
 This matters for interpretation:
 - fold changes are computed on the stored scale (see DE page for exact formula),

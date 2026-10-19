@@ -228,6 +228,13 @@ UI context (how users experience this):
 - {doc}`../../web_app/e_filtering/02_outlier_filtering_per_active_field`
 
 Important details:
+The computation is stated exactly, so `prepare()`, `cellucid_prepare()`,
+`cellucid serve` and the web app give the same bytes: the latent values are
+rounded to float32 and widened to float64, centroid sums are accumulated cell
+by cell in cell order, squared distances column by column, and the share of
+the category at that distance or closer is a float32. A shared conformance
+fixture pins those bytes in all three repositories.
+
 - Categories with fewer than `centroid_min_points` cells get `NaN` outlier quantiles (exported as “missing”).
 - Outlier quantiles can also be quantized using `obs_continuous_quantization`.
 

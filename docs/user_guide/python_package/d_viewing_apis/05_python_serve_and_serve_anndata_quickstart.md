@@ -175,7 +175,9 @@ These are forwarded to the `AnnDataAdapter` and affect how your AnnData is inter
 - `gene_id_column`: the column of the gene axis that names genes (default
   `None`: its index); empty values take the index name and repeated names are
   made unique (`MATR3`, `MATR3-1`)
-- `expression_source`: `"X"` (default), `"raw"`, or `"layer:<name>"`
+- `expression_source`: `"X"`, `"raw"`, or `"layer:<name>"` (default `None`:
+  `X`, or without `X` the guess described in
+  {doc}`08_anndata_mode_show_anndata_and_serve_anndata`)
 
 All omitted optional values retain the signature defaults; identity is never
 derived, and a multi-field vector declaration has no implicit default.

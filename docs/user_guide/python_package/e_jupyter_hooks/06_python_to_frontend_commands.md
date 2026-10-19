@@ -119,6 +119,7 @@ All of these are methods on the `viewer` object returned by `show(...)` or `show
 | `viewer.set_color_by(field)` | Change active color-by field | `"setColorBy"` |
 | `viewer.set_visibility(cells=None, visible=True)` | Hide/show specific cells (or all) | `"setVisibility"` |
 | `viewer.reset_view()` | Reset camera | `"resetCamera"` |
+| `viewer.set_data_mapping(**fields)` | Change what the viewer plots and reads, and wait for it to apply | `"setDataMapping"` |
 
 Diagnostics / utilities (also useful for debugging):
 
@@ -190,6 +191,37 @@ Notes:
 ```json
 { "type": "requestSessionBundle", "requestId": "..." }
 ```
+
+### `setDataMapping` (used by `viewer.set_data_mapping()`)
+
+```json
+{ "type": "setDataMapping", "requestId": "...", "mapping": { "kind": "anndata", "...": "..." } }
+```
+
+`mapping` is a complete data mapping, validated by
+`cellucid.data_mapping.validate_data_mapping` before it is sent; the
+canonical copy is what crosses the wire. Unlike the one-way commands above,
+this one is answered: the viewer replies with a `data_mapping` event of origin
+`notebook` carrying the same `requestId`, or with a `command_error` naming
+`setDataMapping` when it refuses the mapping.
+
+`viewer.set_data_mapping(**fields)` replaces the named top-level fields of the
+mapping the viewer last reported (`embeddings`, `vectorFields`, `geneNames`,
+and for an AnnData source `knn`, `expression`, `latent`; never `kind`),
+validates the result, sends it, and returns the mapping the viewer reports
+back. It raises `RuntimeError` before sending when the viewer has not reported
+a mapping yet, `TypeError` for an unknown field, `ValueError` for an invalid
+value, `RuntimeError` with the viewer's reason when the viewer refuses it, and
+`TimeoutError` when no answer arrives within `timeout` seconds (30 by default).
+
+```python
+viewer.set_data_mapping(
+    embeddings={"1d": None, "2d": {"key": "X_pca", "columns": [0, 1]}, "3d": None},
+)
+```
+
+A viewer older than this release does not understand this command. It also
+never reports a mapping, so `set_data_mapping()` raises before sending one.
 
 ### `ping` / `debug_snapshot` (internal, used by `viewer.debug_connection()`)
 

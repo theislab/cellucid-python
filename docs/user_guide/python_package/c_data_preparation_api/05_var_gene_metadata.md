@@ -52,9 +52,12 @@ but alignment bugs often happen after manual filtering/reindexing.
 
 - If `var_gene_id_column is None` (default), names come from `var.index`.
 - Every string is an exact column selector, including the literal `"index"`.
-- Values must be strings; an empty value (`""`, `None`, or NaN) takes the var
-  index name of its row. A column of integers is refused rather than
-  stringified.
+- A column of text or categories names genes as it is, and a column of
+  integers by their digits (`7157` is `"7157"`) — the rule the viewer,
+  `cellucid serve` and `cellucid_prepare()` in R apply to the same column. A
+  floating-point or boolean column cannot name genes and is refused with the
+  reason (`var column 'score': floating-point values cannot name genes.`). An
+  empty value (`""`, `None`, or NaN) takes the var index name of its row.
 
 Recommendation:
 - For reproducible exports intended for sharing, prefer stable identifiers as

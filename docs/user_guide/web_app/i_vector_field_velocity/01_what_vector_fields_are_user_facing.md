@@ -225,8 +225,13 @@ dimensions of that one sample are not on a common scale.
 Vector fields can arrive via multiple data loading workflows:
 
 - **Prepared exports**: vector field binaries live under `vectors/` and the dataset’s `dataset_identity.json` contains a `vector_fields` metadata block.
-- **AnnData in the browser / server / Jupyter**: vector fields are detected from
-  exact dimension-suffixed `adata.obsm` keys such as `velocity_umap_2d`.
+- **AnnData in the browser / server / Jupyter**: vector fields start from
+  exact dimension-suffixed `adata.obsm` keys such as `velocity_umap_2d`, bound
+  to the UMAP of that dimension; any other `obsm` array that fits an embedding
+  (`velocity_pca` on `X_pca` columns 2 and 3) can be bound under **Session ›
+  Data mapping › Vector fields** (see
+  [Vector fields](../b_data_loading/13_data_mapping.md#vector-fields)).
+  A prepared export's bindings can be turned off there too.
 
 The preparation contracts are documented in
 {doc}`../../python_package/c_data_preparation_api/08_vector_fields_velocity_displacement`;

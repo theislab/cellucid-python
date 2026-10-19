@@ -17,6 +17,7 @@ weak-referencing callback so a collected viewer never keeps a route alive, and
 from __future__ import annotations
 
 import atexit
+import copy
 import html
 import json
 import logging
@@ -48,6 +49,7 @@ from ._hooks import HookCallback, HookRegistry, ViewerState
 from ._wire import (
     _require_cell_indices,
     _require_client_server_url,
+    _require_data_mapping,
     _require_debug_dataset_list,
     _require_exact_message_text,
     _require_frontend_message,
@@ -71,6 +73,7 @@ _COMMAND_PYTHON_CALLERS: dict[str, str] = {
     "setVisibility": "viewer.set_visibility(...)",
     "resetCamera": "viewer.reset_view()",
     "freeze": "viewer.stop()",
+    "setDataMapping": "viewer.set_data_mapping(...)",
 }
 
 # How many recent `command_error` payloads `debug_connection()` reports. The
@@ -167,6 +170,10 @@ class BaseViewer:
         @viewer.on_command_error
         def handle(event):
             print(event['command'], event['reason'])  # a command failed
+
+        @viewer.on_data_mapping
+        def handle(event):
+            print(event['origin'], event['mapping'])  # what the viewer plots
 
         @viewer.on_message
         def handle(event):
@@ -371,6 +378,33 @@ class BaseViewer:
         return self._hooks.on("command_error")
 
     @property
+    def on_data_mapping(self) -> Callable[[HookCallback], HookCallback]:
+        """
+        Decorator to register a handler for the viewer's data mapping.
+
+        Called when the viewer reports which stored arrays it plots and reads:
+        once after the dataset loads, and again whenever the mapping changes --
+        from the viewer's controls, a session, or
+        :meth:`set_data_mapping`. The viewer sends it because this package
+        lists ``data_mapping`` among the events of ``GET /_cellucid/protocol``;
+        a viewer older than this release never sends it.
+
+        Event data:
+            - origin: str - why the mapping is what it is: ``"default"``,
+              ``"best_guess"``, ``"session"``, ``"user"``, or
+              ``"notebook"`` (an answer to :meth:`set_data_mapping`)
+            - requestId: str or None - the request a ``"notebook"`` answer
+              completes; None for every other origin
+            - mapping: dict - the complete data mapping, in canonical form
+
+        Example:
+            @viewer.on_data_mapping
+            def handle(event):
+                print(event["mapping"]["embeddings"])
+        """
+        return self._hooks.on("data_mapping")
+
+    @property
     def on_message(self) -> Callable[[HookCallback], HookCallback]:
         """
         Decorator to register a raw message handler.
@@ -399,7 +433,7 @@ class BaseViewer:
 
         Args:
             event: Event name ('selection', 'hover', 'click', 'ready',
-                'command_error', 'message')
+                'command_error', 'data_mapping', 'message')
             callback: Function to call when event fires
 
         Returns:
@@ -499,6 +533,8 @@ class BaseViewer:
                 self.state.click = data
             elif event == "command_error":
                 self.state.command_error = data
+            elif event == "data_mapping":
+                self.state.data_mapping = data
 
             self._event_cv.notify_all()
 
@@ -604,6 +640,102 @@ class BaseViewer:
             raise RuntimeError("Session bundle upload succeeded but no temp path was returned")
 
         return CellucidSessionBundle(Path(path))
+
+    @property
+    def data_mapping(self) -> dict[str, Any] | None:
+        """The data mapping the viewer last reported, or None before it reported one.
+
+        This is a copy of the ``mapping`` of the latest ``data_mapping`` event:
+        which embedding fills each dimension slot, the bound vector fields,
+        and -- for an AnnData source -- the neighbour graph, the gene names,
+        the expression matrix and the latent space. Editing the copy changes
+        nothing; use :meth:`set_data_mapping`.
+        """
+        with self._state_lock:
+            event = self.state.data_mapping
+            return None if event is None else copy.deepcopy(event["mapping"])
+
+    @property
+    def data_mapping_origin(self) -> str | None:
+        """Why the viewer's data mapping is what it is, or None before it reported one."""
+        with self._state_lock:
+            event = self.state.data_mapping
+            return None if event is None else str(event["origin"])
+
+    def set_data_mapping(self, *, timeout: float | None = 30.0, **fields: Any) -> dict[str, Any]:
+        """
+        Change what the viewer plots and reads, and wait until it applied it.
+
+        Each keyword replaces one top-level field of the mapping the viewer
+        last reported (:attr:`data_mapping`): ``embeddings``, ``vectorFields``,
+        ``geneNames``, and for an AnnData source ``knn``, ``expression`` and
+        ``latent``. ``kind`` cannot change. The merged mapping is validated
+        before anything is sent, so an unknown field or an invalid value raises
+        here and the viewer is untouched.
+
+        The viewer answers with a ``data_mapping`` event of origin
+        ``"notebook"`` naming this request; that event's mapping is returned and
+        becomes :attr:`data_mapping`. If the viewer refuses the mapping -- an
+        array that fails its load-time check, for example -- it reports a
+        ``command_error`` and this raises ``RuntimeError`` with its reason.
+
+        Example:
+            viewer.set_data_mapping(
+                embeddings={
+                    "1d": None,
+                    "2d": {"key": "X_pca", "columns": [0, 1]},
+                    "3d": None,
+                },
+                knn="connectivities",
+            )
+
+        A viewer older than this release does not understand this command and
+        never reports a mapping, so this raises before sending anything.
+        """
+        current = self.data_mapping
+        if current is None:
+            raise RuntimeError(
+                "The viewer has not reported its data mapping yet. It reports one "
+                "after the dataset loads; wait for it with "
+                "viewer.wait_for_event('data_mapping')."
+            )
+        if "kind" in fields:
+            raise TypeError("set_data_mapping cannot change the mapping kind.")
+        allowed = set(current) - {"kind"}
+        unknown = sorted(set(fields) - allowed)
+        if unknown:
+            raise TypeError(
+                f"set_data_mapping got unknown field(s) {unknown}; a "
+                f"{current['kind']} mapping has {sorted(allowed)}."
+            )
+        mapping = _require_data_mapping({**current, **fields}, label="data mapping")
+
+        request_id = secrets.token_hex(16)
+        with self._event_cv:
+            start_seq = self._event_seq
+        self.send_message(
+            {
+                "type": "setDataMapping",
+                "requestId": request_id,
+                "mapping": mapping,
+            }
+        )
+        deadline = None if timeout is None else (time.monotonic() + float(timeout))
+        with self._event_cv:
+            while True:
+                for seq, ev_type, payload in self._recent_events:
+                    if seq <= start_seq:
+                        continue
+                    if ev_type == "data_mapping" and payload["requestId"] == request_id:
+                        return copy.deepcopy(payload["mapping"])
+                    if ev_type == "command_error" and payload["command"] == "setDataMapping":
+                        raise RuntimeError(
+                            "The viewer did not apply the data mapping: " + payload["reason"]
+                        )
+                if deadline is not None and time.monotonic() >= deadline:
+                    raise TimeoutError("Timed out waiting for the viewer to apply the data mapping")
+                remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+                self._event_cv.wait(timeout=remaining)
 
     def apply_session_to_anndata(
         self,

@@ -25,6 +25,7 @@ from scipy import sparse
 
 from cellucid.anndata_adapter import MAPPING_CANDIDATES_PATH, AnnDataAdapter
 from cellucid.anndata_server import AnnDataServer
+from cellucid.anndata_mapping import MappingNotFound, parse_mapping_route
 from cellucid.data_mapping import validate_data_mapping
 
 
@@ -244,22 +245,25 @@ def test_every_enabled_embedding_is_served_on_request() -> None:
         extra = [ref for ref in enabled if (ref["key"], tuple(ref["columns"])) not in served]
         assert extra, "the fixture must enable an embedding the identity does not list"
         for ref in enabled:
-            columns = "-".join(str(column) for column in ref["columns"])
-            route = f"{_obsm_index(adapter, ref['key'])}/{columns}.bin"
-            data = adapter.get_mapping_embedding_binary(route)
-            assert data is not None
+            data = adapter.get_mapped_embedding(_obsm_index(adapter, ref["key"]), ref["columns"])
             values = np.frombuffer(data, dtype="<f4").reshape(adapter.n_cells, len(ref["columns"]))
             assert np.isfinite(values).all()
         # A served embedding read through the route is the same bytes.
         item = adapter.embeddings[0]
-        route = f"{_obsm_index(adapter, item.key)}/{'-'.join(map(str, item.columns))}.bin"
-        assert adapter.get_mapping_embedding_binary(route) == adapter.get_embedding_binary(item.id)
+        assert adapter.get_mapped_embedding(
+            _obsm_index(adapter, item.key), list(item.columns)
+        ) == adapter.get_embedding_binary(item.id)
         # Columns of a wider array, chosen per axis.
         pca = _obsm_index(adapter, "X_pca")
-        assert len(adapter.get_mapping_embedding_binary(f"{pca}/4-0.bin") or b"") == adapter.n_cells * 8
+        assert len(adapter.get_mapped_embedding(pca, [4, 0])) == adapter.n_cells * 8
         # Routes that name nothing plottable.
-        for bad in [f"{pca}/5.bin", f"{pca}/0-0.bin", f"{pca}/0-1-2-3.bin", "99/0.bin", "x/0.bin", f"{pca}/01.bin"]:
-            assert adapter.get_mapping_embedding_binary(bad) is None, bad
+        for bad in [f"embeddings/{pca}/5.bin", f"embeddings/{pca}/0-0.bin", "embeddings/99/0.bin"]:
+            route = parse_mapping_route(bad)
+            assert route is not None, bad
+            with pytest.raises(MappingNotFound):
+                adapter.mapping.payload(route)
+        for unparsed in [f"embeddings/{pca}/0-1-2-3.bin", "embeddings/x/0.bin", f"embeddings/{pca}/01.bin"]:
+            assert parse_mapping_route(unparsed) is None, unparsed
     finally:
         adapter.close()
 
@@ -287,3 +291,19 @@ def test_the_mapping_embedding_route_serves_an_enabled_array(method: str) -> Non
             assert missing.status == 404
         finally:
             connection.close()
+
+
+def test_vector_fields_are_bound_by_default_only_when_served():
+    """``serve_vector_fields`` decides the defaults; the catalog lists the arrays either way."""
+    adata = _adata()
+    quiet = AnnDataAdapter(adata, dataset_name="d", dataset_id="d")
+    served = AnnDataAdapter(adata, dataset_name="d", dataset_id="d", serve_vector_fields=True)
+    try:
+        assert quiet.get_mapping_candidates()["defaults"]["vectorFields"] == []
+        assert served.get_mapping_candidates()["defaults"]["vectorFields"] == [
+            {"key": "velocity_umap_3d", "embedding": {"key": "X_umap_3d", "columns": [0, 1, 2]}}
+        ]
+        assert "velocity_umap_3d" in [item["key"] for item in quiet.get_mapping_candidates()["obsm"]]
+    finally:
+        quiet.close()
+        served.close()

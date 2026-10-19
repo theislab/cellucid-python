@@ -30,6 +30,12 @@ that is not symmetric — Scanpy's `obsp['distances']` — is refused with that
 reason rather than symmetrized. The serve-path details are in
 {doc}`../d_viewing_apis/08_anndata_mode_show_anndata_and_serve_anndata`.
 
+Whatever the server starts with, the viewer can switch to any other `obsp`
+matrix while the dataset is open, under **Session › Data mapping › Neighbour
+graph** ({doc}`../../web_app/b_data_loading/13_data_mapping`); the server
+reads and checks that graph only then. A file opened in the browser offers the
+same choice and starts with `obsp['connectivities']` when it has one.
+
 Serving a **prepared export** is unaffected: that directory either holds the
 connectivity artifacts or it does not.
 ```
