@@ -96,6 +96,9 @@ Version 0.9.2 is a patch release on 0.9.1.
 - **Web app, welcome**: the welcome dialog opens with no choice pre-selected;
   focus rests on the dialog and the first Tab reaches **Choose a dataset**.
   The sidebar footer links GitHub next to Docs and Cite.
+- **Web app, onboarding**: closing the welcome dialog, by any path, no longer
+  focuses the **Sample dataset** dropdown; **Choose a dataset** opens the
+  **Session** panel and moves focus to its heading.
 - **Web app, pointer**: hover, click and selection read the camera as it is,
   not as the last frame drew it, so a pointer read right after the camera
   moved no longer lands on the previous picture.
