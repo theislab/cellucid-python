@@ -57,19 +57,21 @@ moves what actually changed. So the thing to avoid is a repeated recompute loop
 At a high level:
 
 - The viewer maintains large arrays (positions, colors, visibility, selection, sometimes per-view buffers).
-- A settled frame uploads nothing. Buffer and texture writes are gated behind
-  dirty flags, and the frame that follows a camera move reuses its published
-  index buffer unless the set of admitted spatial nodes actually changed. The
-  steady-state cost is uniforms plus draw calls.
+- A settled frame uploads nothing, and neither does a camera move: buffer and
+  texture writes are gated behind dirty flags, and frustum culling draws ranges
+  of the points as they are stored (in the order of their spatial tree), so a
+  moving camera only recomputes which tree nodes are in view. The steady-state
+  cost is uniforms plus at most one multi-draw call per view.
 - A visibility change uploads only the rows of the alpha texture whose bytes
   moved, so the transfer is proportional to how scattered the change is rather
   than to the dataset size. Deciding *which* cells changed is still a pass over
   every cell on the CPU.
 - A recolor (switching the colored field or gene) uploads 4 bytes per point —
   only the color stream; positions live in a separate stream and are not
-  re-sent. With LOD built, the live embedding's shared reduced copy is
-  recolored the same way, 4 bytes per reduced point, and so is each kept view
-  that draws a reduced level, from its own colors.
+  re-sent. Once a view's points are stored in their tree's order (LOD or
+  culling on, or any 3D view with a spatial index), the colors are gathered
+  into that order on the way, which costs a pass over every point on the CPU.
+  Level of detail keeps no second copy of anything.
 - Positions cost 4 bytes per embedding axis per point, on the CPU and on the
   GPU: a 2D UMAP or t-SNE is held as x and y only (8 bytes a point), never
   padded to XYZ, so it takes a third less position memory than a 3D

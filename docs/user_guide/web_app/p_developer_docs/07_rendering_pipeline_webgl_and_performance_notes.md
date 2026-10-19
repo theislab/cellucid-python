@@ -472,7 +472,8 @@ while it animates or is still waiting for its noise volumes, enabled overlays, v
 keep frames drawing, and so does a camera motion still waiting for its
 `camera-settled` event and an adaptive LOD still stepping toward the level its
 camera distance asks for (hysteresis moves one level per drawn frame; the
-renderer reports it per view with `isViewLodConverging`). After the last such
+renderer reports it per view with `isViewLodConverging`, which also holds while
+a view's store is still adopting its tree's draw order). After the last such
 cause the viewer draws two more frames (`FRAME_SETTLE_MIN_FRAMES`) and then
 stops until something changes. Every multi-frame convergence is a cause of its
 own, so the floor only covers the frame that shows a change. There is no
