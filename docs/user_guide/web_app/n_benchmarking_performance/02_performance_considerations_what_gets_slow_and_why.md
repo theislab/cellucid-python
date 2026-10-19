@@ -150,8 +150,8 @@ Practical consequences:
 Changing what the points are colored by recomputes one RGBA color per cell on
 the CPU and then uploads only colors: positions and colors are separate GPU
 streams, so a recolor sends 4 bytes per cell and never touches the positions.
-When a view's points are stored in their spatial tree's order (any 3D view
-with a tree, or LOD or culling on), the GPU gathers the uploaded colors into
+When a view's points are stored in their spatial tree's order (any view whose
+tree exists: the hover index counts), the GPU gathers the uploaded colors into
 that order in one pass; the CPU does no per-cell work for it, and Level of
 Detail adds nothing, because every level draws from the same store. Each kept
 view recolors its own store the same way when its colors change.
@@ -168,10 +168,10 @@ with LOD off or on; the color computation itself is not included:
 At 10,000,000 cells about 5 ms of that is the upload into the transient
 source texture the gather reads (the same bytes as a plain buffer upload,
 which takes about 2.5 ms) and about 1.5 ms the gather pass. That is the known
-trade-off of the stored order: a 3D view is kept in tree order even with LOD
-and culling off, because it then draws a full-detail frame about four times
-faster (10,000,000 points in about 8 ms of GPU time instead of 39), and each
-recolor pays a few milliseconds once for it.
+trade-off of the stored order: a view is kept in tree order even with LOD
+and culling off, because it then draws a full-detail frame about three times
+faster (10,000,000 points: 3D 10 ms against 30, 2D 21 ms against 67), and
+each recolor pays a few milliseconds once for it.
 
 ---
 

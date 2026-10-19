@@ -131,22 +131,30 @@ Version 0.9.2 is a patch release on 0.9.1.
   cameras** (on by default) links only views that show the same embedding, and
   is off and disabled while no two views do.
 - **Web app, rendering**: points are stored on the GPU in the draw order of
-  their spatial tree (by LOD band, then tree leaf, then cell). A reduced level
-  of detail draws a prefix of the stored points, frustum culling draws whole
-  tree-node ranges (one multi-draw call, at most 256 ranges, with no per-point
-  index upload), and full detail draws faster because neighbouring points are
-  neighbours in memory: 10M points 18 ms against 68 ms (Chromium), 15 against
-  57 (WebKit), 14 against 57 (Firefox); a zoomed-in culled frame 7-8 ms against
-  21-31 ms. LOD no longer keeps a second copy of the positions: about 200 MB
-  of GPU memory at 10M points instead of 315. The order is adopted a few
-  milliseconds a frame when a tree arrives, so it never stalls a frame, and a
-  view switched back to a representation it showed keeps its colours without
-  an upload. Colours are gathered into the stored order on the GPU, so a
+  their spatial tree (by LOD band, then tree leaf or coarse node, then cell),
+  in every dimension, whenever the tree exists. A reduced level of detail
+  draws a prefix of the stored points, frustum culling draws whole
+  tree-node ranges (one multi-draw call of at most 1,024 ranges, 256 one call
+  a range without `WEBGL_multi_draw`, bridging the gaps that hide the fewest
+  points, with no per-point index upload), and full detail draws faster
+  because neighbouring points are neighbours in memory: at 10M points about
+  three times faster in 3D and in 2D. LOD no longer keeps a second copy of the
+  positions: about 200 MB of GPU memory at 10M points instead of 320. The
+  tree, its levels of detail and its draw order are built in a worker, so
+  turning LOD or culling on, loading a dataset or showing another
+  representation never blocks the page (it took about 2.2 s at 10M points);
+  the view draws full detail until the tree lands, then adopts its order in
+  one frame, gathered on the GPU. Colours are gathered on the GPU too, so a
   recolour costs one upload of 4 bytes a point and one GPU pass whether LOD is
   on or off: 5-8 ms at 10M points (Chromium), where a recolour with LOD on
-  used to take about 68 ms gathering the reduced copy's colours. Translucent
+  used to take about 68 ms. A view switched back to a representation it
+  showed keeps its colours without an upload, and a representation switch
+  back to a layout already shown no longer rescans its positions. Translucent
   points in 2D overlap in tree order, the same in every view, every level of
   detail and figure export.
+- **Web app**: the in-browser position budget (512 MiB where the browser
+  reports no device memory) never refuses the embeddings the views show plus
+  the one being shown; it only evicts cached embeddings no view shows.
 - **Web app**: a notification can carry one action button; the best-guess
   notification uses it (**Show**) to open the Data mapping section.
 - **Web app, usage analytics**: `data_load` reports how the embeddings were

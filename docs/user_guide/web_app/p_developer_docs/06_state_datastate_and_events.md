@@ -153,7 +153,9 @@ dimension. Cellucid tracks them via:
 Coordinates of an enabled layout are read the first time a view shows it and
 kept while a view shows it; afterwards they stay in a cache whose budget is a
 quarter of `navigator.deviceMemory` (between 512 MiB and 2 GiB), released least
-recently shown first, and entirely under memory pressure.
+recently shown first, and entirely under memory pressure. The budget never
+refuses what the views show: the layouts shown plus the one being shown are
+always admitted, even above it.
 
 Vector fields (velocity/drift overlays) are optional and use:
 - `vectorFieldManager` (from the data layer): lists available fields and loads

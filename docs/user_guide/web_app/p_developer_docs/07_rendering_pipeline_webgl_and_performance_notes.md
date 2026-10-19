@@ -76,21 +76,23 @@ a separate R8 texture (one texel per point), so a visibility change touches
 neither stream.
 
 **Draw order.** A geometry's points are stored on the GPU in the draw order of
-the spatial tree over them (`SpatialIndex#drawOrder`, built by
-`_publishDrawOrder`): grouped by LOD band, then by tree leaf, then by
-ascending cell index. Band `b` holds the cells the hierarchical order first
+the spatial tree over them (`SpatialIndex#drawOrder`, computed by
+`high-perf/draw-order.js`): grouped by LOD band, then by draw unit (a tree
+leaf in 3D, one of 64 coarse nodes in 1D and 2D), then by ascending cell
+index. Band `b` holds the cells the hierarchical order first
 admits at LOD level `b`; the last band holds the full-detail remainder. So:
 
 - a reduced LOD level is one `drawArrays` **prefix** of the stored points;
 - full detail is `drawArrays` over all of them;
 - frustum culling collects the runs of consecutive tree leaves inside the
   frustum (a subtree wholly inside is one run, read from its node) and draws
-  each run as one contiguous range per band. Runs are merged across their
-  smallest gaps until runs × bands fit `MAX_CULLED_DRAW_RANGES` (256), and the
-  ranges go out as one `multiDrawArraysWEBGL` call, or one `drawArrays` per
-  range where `WEBGL_multi_draw` is missing (Firefox). No per-point index is
-  ever written or uploaded after the order is built, and a camera that does not
-  move re-culls nothing.
+  each run as one contiguous range per band. Where the ranges exceed the
+  budget -- 1,024 with `WEBGL_multi_draw` (one `multiDrawArraysWEBGL` call),
+  256 without it (Firefox, one `drawArrays` per range) -- the gaps between runs
+  that hide the fewest points, counted band by band, are bridged first
+  (`SpatialIndex#writeDrawRanges`), so the drawn total stays close to the
+  exact cull. No per-point index is ever written or uploaded after the order
+  is built, and a camera that does not move re-culls nothing.
 
 Neighbouring points are neighbours in memory and on screen, which is also what
 makes the stored order faster at full detail: 10,000,000 points drew in 18 ms
@@ -109,24 +111,38 @@ cell stored in slot `k`), so a visibility change still touches neither stream.
 Picking, highlights, overlays, analysis and export all read source-order CPU
 arrays; nothing but the point draw reads the stored order.
 
-Before a tree exists a geometry is stored in source order (straight from the
-published arrays, no client copy) and draws at full detail only. A tree built
-before the upload (`loadData`/`updatePositions` with LOD or culling on) gathers
-the positions into its order once, through the fixed 65,536-point staging
-block (`GATHER_CHUNK_POINTS`). Colours are never gathered on the CPU: the
-source-order colours go up as a transient R32UI texture, one texel a point
-(the same bytes a source-order store uploads), and one transform-feedback
-pass (`GpuColorPermuter`, `high-perf/gpu-color-permute.js`) writes each stored
-slot's colour, fetched through the order's permutation texture, straight into
-the colour store; a kept view's packed RGB store is written the same way, four
-points a vertex. Colours are copied as 32-bit words, which is why colour arrays
-handed to the renderer must start on a 4-byte boundary. A tree that arrives
-later (the hover index built in a worker, or LOD turned on) is adopted without
-a stall (`_advanceDrawOrderAdoption`): the permutation is uploaded first and
-the positions are gathered into a staging buffer 8 ms a frame, while the views
-keep drawing full detail from the store as it is; then, between two frames,
-the GPU pass gathers the colours every view shows at that moment into staging
-buffers, and every stream is copied into place on the GPU together.
+**Trees are built off the main thread.** The tree over a geometry and its
+draw order (banded by LOD when LOD is on) are built together in a worker
+(`high-perf/spatial-tree-worker.js`, the same `buildSpatialTreeJob` either
+way), so loading a dataset, turning LOD or culling on, keeping a view or
+showing another representation never runs a tree build on the main thread
+(about 2.2 s at 10M points before). Until a view's tree lands, the view draws
+full detail from its store as it is; when it lands, the renderer installs it
+and asks the viewer for a frame (`onAsyncTreeReady`). A build whose positions
+were replaced before it returned is dropped. A geometry larger than 512 MiB of
+positions (about 44M cells in 3D) is not copied to the worker and builds
+inline. A query that needs a tree at once (a click-time pick on a pane whose
+index has not arrived, projectiles) still builds a plain tree directly; the
+viewer asks the worker for every large pane's index when cell info is on and
+when a selection tool is armed, so this is rare.
+
+**A store adopts its tree's order in the frame that first needs it,**
+whenever a tree exists, in every dimension (a hover tree counts too): in 3D
+the order draws a 10M-point full-detail frame about 3x faster, in 2D about
+3x faster too (21 ms against 67 ms, no vsync, Apple M1 Pro). Before a tree
+exists a geometry is stored in source order, straight from the published
+arrays with no client copy. The adoption uploads the permutation (4 bytes a
+point), then rewrites the store's positions and the colours of every view
+that draws it in place on the GPU (`GpuPermuter`,
+`high-perf/gpu-permute.js`): the source words go into a transient integer
+texture -- straight from the store itself on the GPU while it still holds
+source order, otherwise from the CPU array -- and one transform-feedback pass
+writes each stored slot's words, fetched through the order's R32UI
+permutation texture, bit for bit. A kept view's packed RGB store is written
+the same way, four points a vertex. Nothing proportional to the point count
+is gathered on the CPU, and no frame is kept alive for it. Colours are copied
+as 32-bit words, which is why colour arrays handed to the renderer must start
+on a 4-byte boundary.
 
 A recolour rewrites the view's colour store in place: one upload of 4 bytes a
 point and one GPU pass, whether or not the store is in a draw order.
@@ -463,7 +479,7 @@ render()  (self-rescheduling rAF; draws only when something can have changed)
   │                                                                 │
   ├─ draw ranges ── same runs and LOD band? ─────────────── yes ─────┤ (reuse)
   │                                    │ no                         │
-  │                                    └─▶ write ≤ 256 ranges (CPU) │
+  │                                    └─▶ write ≤ 1024 ranges (CPU)│
   │                                                                 │
   └─ useProgram · uniforms · bind alpha + permutation · draw ◀───────┘
 ```
@@ -479,8 +495,7 @@ while it animates or is still waiting for its noise volumes, enabled overlays, v
 keep frames drawing, and so does a camera motion still waiting for its
 `camera-settled` event and an adaptive LOD still stepping toward the level its
 camera distance asks for (hysteresis moves one level per drawn frame; the
-renderer reports it per view with `isViewLodConverging`, which also holds while
-a view's store is still adopting its tree's draw order). After the last such
+renderer reports it per view with `isViewLodConverging`). After the last such
 cause the viewer draws two more frames (`FRAME_SETTLE_MIN_FRAMES`) and then
 stops until something changes. Every multi-frame convergence is a cause of its
 own, so the floor only covers the frame that shows a change. There is no
@@ -499,8 +514,9 @@ changed, each cheap to check:
 2. **Frustum cache** — an exact element-wise comparison of the model-view-projection
    matrix, the dimension and the bounds. An idle camera re-extracts nothing.
 3. **Draw ranges** — a camera move collects the leaf runs inside the frustum
-   (a walk of the tree's nodes, not of its points) and writes at most 256
-   ranges; a level change with the same runs only rewrites the ranges. Nothing
+   (a walk of the tree's nodes, not of its points) and writes at most 1,024
+   ranges (256 without `WEBGL_multi_draw`); a level change with the same runs
+   only rewrites the ranges. Nothing
    is uploaded: the ranges are offsets into the stored points.
    Highlight buffers follow their own rule: `gl.getError()` runs on the first
    allocation and when the store grows past the size already verified, not on
