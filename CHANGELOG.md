@@ -344,6 +344,16 @@ Version 0.9.2 is a patch release on 0.9.1.
   3D view, as they bounce off the grid's walls, and land on it instead of
   falling through. A projectile that had come to rest against a cell no longer
   falls through the grid's floor either.
+- **Web app, rendering**: after a change the viewer draws two more frames
+  instead of twelve before it goes idle; an adaptive LOD still stepping
+  toward its level keeps the scene drawing on its own account, so nothing is
+  cut short. Where a frame takes seconds (a software renderer), every click
+  and change now costs seconds less.
+- **Web app, smoke**: generating the cloud's noise volumes no longer queues
+  GPU work faster than the GPU finishes it. Each batch of slices waits for the
+  previous one and shrinks while the GPU lags, so on a slow or software
+  renderer the page stays responsive while smoke mode prepares (before, a
+  click there could wait half a minute behind the queued noise work).
 - **Python sessions**: reading a session now requires each user-defined
   field's `normalizedDims` to name exactly the dimensions in its
   `centroidsByDim`, as the web app writes them.

@@ -150,7 +150,12 @@ interleaved record at 5M points.
     capped at `MAX_SMOKE_MARCH_STEPS` = 512 per ray) into an offscreen target
     of 0.25–1.00× the canvas, never more than 2560×1440 pixels
     (`MAX_SMOKE_TARGET_PIXELS`), and upsamples it with an alpha-gated
-    bilateral composite. The noise volumes are 32³–128³. The ray-start jitter
+    bilateral composite. The noise volumes are 32³–128³, generated on the GPU
+    a few slices per scheduling turn (`gpu-noise-generator.js`). Each slice
+    batch ends with a fence and the next waits for it, and the batch halves
+    whenever the GPU has not finished one within a turn (doubling back, up to
+    its caps, when it has), so a slow or software renderer never has seconds
+    of noise work queued in front of the frames and input that follow. The ray-start jitter
     is a fixed blue-noise tile, so a still camera with `Animation speed` 0
     produces identical frames, and `SmokeRenderer.needsContinuousFrames()`
     then lets the viewer stop drawing.
@@ -416,11 +421,14 @@ key), and any canvas resize marks the next frame for drawing — hovering or typ
 into a sidebar field draws nothing; held navigation keys, inertia, smooth zoom, a grid fade, smoke mode
 while it animates or is still waiting for its noise volumes, enabled overlays, visible highlights in a quality whose highlight style animates (only `full`: its ring pulses and shimmers; every other quality draws a still ring, and a selection there costs nothing while the view is idle), and live projectiles
 keep frames drawing, and so does a camera motion still waiting for its
-`camera-settled` event. After the last such cause the viewer keeps drawing until
-both one second has passed and 12 frames have been drawn
-(`FRAME_SETTLE_MS`, `FRAME_SETTLE_MIN_FRAMES`), so multi-frame convergences
-such as LOD hysteresis finish even where frames arrive more than a second apart,
-and then stops until something changes. A frame that throws marks the next
+`camera-settled` event and an adaptive LOD still stepping toward the level its
+camera distance asks for (hysteresis moves one level per drawn frame; the
+renderer reports it per view with `isViewLodConverging`). After the last such
+cause the viewer keeps drawing until both one second has passed and two frames
+have been drawn (`FRAME_SETTLE_MS`, `FRAME_SETTLE_MIN_FRAMES`), and then stops
+until something changes. Every multi-frame convergence is a cause of its own,
+so the frame floor only covers the frame that shows a change: where a frame
+takes seconds (a software renderer), a change costs two frames, not a dozen. A frame that throws marks the next
 frame for drawing, so a partial frame is redrawn. The drawing buffer is preserved,
 so the canvas keeps showing — and reading back — the last drawn frame.
 
