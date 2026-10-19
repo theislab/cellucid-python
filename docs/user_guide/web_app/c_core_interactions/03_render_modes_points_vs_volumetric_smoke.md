@@ -65,13 +65,29 @@ Its relevant controls are:
   logarithmic slider, not a percentage, and a dataset opens at the size its cell
   count implies rather than at a fixed default — which is why the same slider
   position looks different on a 3,696-cell trajectory and on an atlas.
-- **Shader quality:** `Full (lighting + fog)`, `Light (circular, no lighting)`,
-  or `Ultra-light (square points)` — a **look** choice: in 3D views the three
-  measured the same frame time at every point size tested, and in 2D views
-  within a few percent of one another. In 1D and 2D views the round qualities
-  draw a smooth one-pixel edge, which antialiasing cannot give a point sprite.
-  Note that `Ultra-light` draws squares rather than round dots, so it also
-  changes far more pixels when antialiasing is off.
+- **Shader quality:** `Full (lighting + fog)`, `Sculpted (soft 3D light)`,
+  `Light (circular, no lighting)`, or `Ultra-light (square points)` — a
+  **look** choice: in 3D views `Full`, `Light` and `Ultra-light` measured the
+  same frame time at every point size tested and `Sculpted` 3–5% above `Full`,
+  and in 2D views all four measured within a few percent of one another
+  (Apple M1 Pro). In 1D and
+  2D views the round qualities draw a smooth one-pixel edge, which
+  antialiasing cannot give a point sprite. Note that `Ultra-light` draws
+  squares rather than round dots, so it also changes far more pixels when
+  antialiasing is off.
+
+  `Sculpted` shades every cell as a soft-lit, glossy ball: a wrapped key
+  light, a sky-and-ground ambient, a broad gloss in place of a hard white
+  highlight (no glitter on dense clouds, and none at all on dots too small to
+  show it), and darkening toward each ball's edge, so touching cells stay
+  separate. The lighting is computed in linear light and normalised so that
+  the **centre of every ball is exactly its legend colour**. Its points are
+  opaque: fog fades their colour toward the fog colour instead of thinning
+  them, and with antialiasing on in a 3D view their edges are smoothed per
+  sample against the depth of what is behind, so a soft rim never shows the
+  background through a nearer cell. Highlighted cells get the same 3D ring as
+  `Full`, held still instead of pulsing, so a selection costs nothing while the
+  view is idle. `Sculpted` is not the default; `Full` is.
 - **Renderer settings:** `Level-of-Detail (LOD)` draws a coarser subset of the
   cells when you are zoomed out; `Frustum culling` skips cells the camera is not
   pointing at. Both are checkboxes and **both start off**. Ticking

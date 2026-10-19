@@ -579,6 +579,33 @@ shaders once made them draw *larger* sprites than `full`, so the "faster"
 quality was up to 1.93× slower at close range. `tests/point-size-clamp-contract.test.mjs`
 pins the three bounds together; keep them identical in any fork.
 
+**`sculpted`, the fourth quality, is opaque by design.** Its fragment
+shaders (`HP_FS_SCULPTED`, `HP_FS_SCULPTED_NO_DEPTH`) light each sprite as a
+sphere in linear light (the colour squared, encoded back with a square root,
+so the round trip is exact) and multiply by `u_invCenterShade`, the
+reciprocal of the lighting at the sphere's centre for the scene light, so the
+centre shows exactly the legend colour (`sculptedCenterShade` mirrors the
+shader's constants). The gloss fades in between sprite radii of two and six
+pixels from the vertex shader's `v_radiusPx`, never from screen-space
+derivatives, which are undefined along a sprite's edge. In a 3D pass the
+points are opaque: `enterOpaquePointBlending` replaces the colour
+(`blendFuncSeparate(ONE, ZERO, ONE, ONE_MINUS_SRC_ALPHA)`) and, when the pass
+draws into the multisampled scene target (`renderParams.multisampled`, from
+`sceneMsaaTarget.isMultisampledThisFrame()`), enables
+`SAMPLE_ALPHA_TO_COVERAGE`, so the antialiased rim becomes a per-sample mask
+that keeps its own depth — the only way to soften an edge with depth writes
+on without the background showing through a nearer point.
+`restorePointDrawBaseline(..., true)` undoes both after the draw
+(`tests/browser/sculpted-point-pass-state.spec.mjs`). Single-sampled, the
+coverage floor of 0.5 gives the same hard edge as every other quality. Because
+the points are opaque, fog cannot thin them; they alone still mix toward
+`u_fogColor`, which the figure export sets to its paper. In 1D and 2D views
+they blend like the other qualities. One list names the qualities
+(`cellucid/assets/js/rendering/shader-quality.js`: `SHADER_QUALITIES`,
+`SHADER_QUALITY_TRAITS`), and one table their highlight styles
+(`HIGHLIGHT_STYLES_BY_QUALITY` in `high-perf-shaders.js`); `sculpted` draws
+`full`'s torus ring with `animated: false`.
+
 **The point-size curve lives in one module**,
 `cellucid/assets/js/rendering/point-size-scale.js`: the slider curve (anchored at
 0.25 at position 0 and 200 at position 100, with the domain extended down to

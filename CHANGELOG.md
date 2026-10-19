@@ -62,6 +62,15 @@ Version 0.9.2 is a patch release on 0.9.1.
   figure export reproduces it in SVG and PNG. **Studio (light) is the new
   default** (the sample datasets open on it too), and the Background menu is
   grouped into Light and Dark.
+- **Web app, shader quality**: a fourth quality, **Sculpted (soft 3D
+  light)**. Every cell is a soft-lit, glossy ball — a wrapped key light, a
+  sky-and-ground ambient, a broad gloss instead of a hard white highlight, and
+  darkening toward the edge that keeps touching cells apart — computed in
+  linear light so the centre of each ball is exactly its legend colour. With
+  antialiasing on, its edges are smooth in 3D views too, without the
+  background showing through nearer cells; highlighted cells get the same 3D
+  ring as `Full`, held still. It costs about what `Full` does (3–5% more in
+  3D views on an Apple M1 Pro, the same in 2D). `Full` stays the default.
 
 ### Fixed
 
