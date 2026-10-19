@@ -354,6 +354,9 @@ Version 0.9.2 is a patch release on 0.9.1.
   previous one and shrinks while the GPU lags, so on a slow or software
   renderer the page stays responsive while smoke mode prepares (before, a
   click there could wait half a minute behind the queued noise work).
+- **Web app, selection tools**: while a lasso, proximity or KNN selection is
+  drawn, a pointer move that leaves the previewed cells unchanged no longer
+  re-uploads the highlight or redraws the scene; only a change does.
 - **Python sessions**: reading a session now requires each user-defined
   field's `normalizedDims` to name exactly the dimensions in its
   `centroidsByDim`, as the web app writes them.

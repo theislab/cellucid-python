@@ -415,7 +415,9 @@ render()  (self-rescheduling rAF; draws only when something can have changed)
 ```
 
 The frame gate decides whether a frame is drawn at all. Any mutating viewer or
-renderer call, any viewer input that changes something (a drag, free-look, a
+renderer call (except a republication of what is already drawn: an unchanged
+view label, or a highlight with the same cells, which is what a selection
+preview sends on most pointer moves), any viewer input that changes something (a drag, free-look, a
 selection gesture, `Alt`, navigation keys outside text fields, releasing a held
 key), and any canvas resize marks the next frame for drawing — hovering or typing
 into a sidebar field draws nothing; held navigation keys, inertia, smooth zoom, a grid fade, smoke mode
