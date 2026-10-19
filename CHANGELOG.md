@@ -260,6 +260,24 @@ Version 0.9.2 is a patch release on 0.9.1.
   capped at 128³, an 8 MiB volume), and the sample datasets' saved views now
   open with the new smoke defaults.
 
+- **Web app, user-defined fields**: a categorical made with
+  `Create Categorical`, a category merge or delete, or a field duplicate now
+  shows its category labels, keeps them when a view switches dimension (that
+  switch threw `Raw 2D positions are unavailable for centroid computation`),
+  and gets them back from a saved session exactly where they were; restoring a
+  session whose active field is one of these no longer fails with
+  `Active categorical field is absent from its rendered selector`.
+- **Web app, sessions**: a dataset without genes can be saved to a session;
+  capture used to fail with `Dataset fingerprint requires the current var
+  field inventory`. Such a dataset now has an empty gene inventory rather than
+  none.
+- **Web app, camera**: at a low frame rate (a large dataset with level of
+  detail off) inertia, zoom and the grid fade now run in real time instead of
+  slowing down below 20 fps; only a stall over a quarter second is cut short.
+- **Python sessions**: reading a session now requires each user-defined
+  field's `normalizedDims` to name exactly the dimensions in its
+  `centroidsByDim`, as the web app writes them.
+
 - A refused upload or event now reaches the client as the status the server sent.
   Every early refusal of a POST -- an expired or unknown session-bundle request, bad
   viewer credentials, a wrong `Content-Type`, an oversized body, an unknown path, a

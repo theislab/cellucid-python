@@ -164,6 +164,16 @@ def _validate_category_metadata(
         or len(normalized_dims) != len(set(normalized_dims))
     ):
         raise ValueError(f"{label}.normalizedDims must be unique dimensions 1, 2, or 3")
+    centroid_dims = set()
+    for key in field["centroidsByDim"]:
+        if key not in {"1", "2", "3"}:
+            raise ValueError(f"{label}.centroidsByDim keys must be dimensions \"1\", \"2\", or \"3\"")
+        centroid_dims.add(int(key))
+    # User-defined centroids are computed from normalized positions, so every
+    # stored dimension is recorded as normalized: a mismatch would draw a
+    # dimension's labels normalized twice, or not at all.
+    if centroid_dims != set(normalized_dims):
+        raise ValueError(f"{label}.normalizedDims must name exactly the centroidsByDim dimensions")
     if not isinstance(field["sourcePages"], list):
         raise TypeError(f"{label}.sourcePages must be an array")
     if field["overlapStrategy"] not in _OVERLAP_STRATEGIES:

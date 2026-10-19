@@ -187,6 +187,9 @@ Sessions persist “field overlays” that affect what fields exist and how they
   - permanently purged fields (non-restorable)
 - **User-defined fields (metadata)**
   - definitions/provenance for derived fields (but not necessarily the heavy codes yet)
+  - each categorical field's category centroids, per embedding dimension, in
+    the normalized coordinates the viewer draws, so its labels come back
+    exactly where they were
 
 This is one reason sessions can restore an experience even if you created derived fields in the UI.
 

@@ -1196,6 +1196,52 @@ def test_user_defined_category_preserves_exact_key_and_is_cell_aligned() -> None
     assert "Exact cell label" not in output.var
 
 
+@pytest.mark.parametrize(
+    ("centroids_by_dim", "normalized_dims", "accepted"),
+    [
+        ({"2": [], "3": []}, [2, 3], True),
+        ({"1": []}, [1], True),
+        ({"2": []}, [], False),
+        ({}, [2], False),
+        ({"2": [], "3": []}, [3], False),
+        ({"4": []}, [], False),
+        ({"2d": []}, [], False),
+    ],
+)
+def test_user_defined_centroids_name_exactly_their_normalized_dimensions(
+    centroids_by_dim: dict[str, list[Any]],
+    normalized_dims: list[int],
+    accepted: bool,
+) -> None:
+    # The web app computes user-defined centroids from normalized positions
+    # and records every stored dimension as normalized; the reader holds a
+    # session to the same rule.
+    field = _categorical_field(key="Centroid status")
+    field["centroidsByDim"] = centroids_by_dim
+    field["normalizedDims"] = normalized_dims
+    bundle = _MemoryBundle(
+        chunks={
+            "core/field-overlays": _field_overlays([field]),
+            "user-defined/codes/user_cat_1": _raw_u8_codes([0, 1, 0]),
+        }
+    )
+
+    def apply() -> Any:
+        return apply_cellucid_session_to_anndata(
+            bundle,
+            _adata(),
+            expected_dataset_id="exact",
+            add_highlights=False,
+            store_uns=False,
+        )
+
+    if accepted:
+        assert apply().obs["Centroid status"].tolist() == ["A", "B", "A"]
+    else:
+        with pytest.raises(ValueError, match="centroidsByDim"):
+            apply()
+
+
 def test_user_defined_category_materializes_current_boolean_category_values() -> None:
     bundle = _MemoryBundle(
         chunks={

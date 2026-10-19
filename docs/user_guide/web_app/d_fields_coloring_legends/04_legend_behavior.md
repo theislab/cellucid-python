@@ -257,6 +257,17 @@ cross-reference into a picture you can read directly — which is usually what
 you want in a figure.
 ```
 
+Where the centres come from:
+- a dataset's own categorical fields carry the centroids written at export, one
+  set per embedding dimension;
+- a field you create — with `Create Categorical`, by merging or deleting a
+  category, by duplicating a field — gets each category's centre as the plain
+  mean of its cells' positions in the embedding the view draws. Centres are
+  computed when the field is made, for every embedding already loaded; an
+  embedding loaded later gets its centres when a view switches to it. Merging
+  or deleting its categories recomputes them, and a saved session stores them
+  and puts them back exactly where they were.
+
 Notes for multiview users:
 - centroid visibility is tracked per view, so different snapshots can show/hide centroids independently.
 

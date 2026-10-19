@@ -287,7 +287,10 @@ It is always present. It is greyed out only until a dataset is loaded.
 4) Press **Create**.
 
 A notification confirms it: `Created "<your name>" (<N> categories)`, and the
-new field appears alongside the dataset's own obs fields.
+new field appears alongside the dataset's own obs fields. Colour by it and
+**Show centroids** / **Show labels** mark each category at the mean position of
+its cells, in whichever dimension the view shows; switching the dimension moves
+the labels with the embedding.
 
 ### The two questions it asks you
 
