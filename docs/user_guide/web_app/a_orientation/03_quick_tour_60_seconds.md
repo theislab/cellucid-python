@@ -79,6 +79,8 @@ counts for every built-in sample are listed in
    1D/2D/3D velocity example; see
    {doc}`../b_data_loading/10_standard_pancreas_dataset`.
 3) Wait for the dataset info panel to populate (Cells/Genes/Obs fields).
+   Every sample opens each dimension on its default embedding; Pancreas also
+   carries a 2D PCA embedding beside its 2D UMAP.
 
 **What success looks like**
 

@@ -39,7 +39,8 @@ Filtering* telling you how many of the dataset's cells are currently drawn.
   the current load. Explicit Jupyter, remote-server, and GitHub-served startup
   links skip it because they already declare a data source.
 - **Suo**: the sample catalog default. It may finish loading behind the welcome
-  overlay before you choose another source.
+  overlay before you choose another source, and opens in 3D on its default
+  embedding.
 - **Default background**: **Studio (light)** in a fresh browser profile. A user-selected
   background remains an explicit preference (see [Background](#background)).
 - **Build**: the web build identity printed in the sidebar footer. Include this
@@ -126,10 +127,13 @@ what alpha means in practice for that mode.
 - **Dataset**: the loaded data bundle (points + metadata + optional gene expression + optional connectivities/vector fields).
 - **Cell / point**: one row/observation rendered as a point. (The UI often says “points” because the viewer is generic.)
 - **Gene / feature**: one variable/feature; used for gene expression coloring and some analyses.
-- **Embedding**: coordinates for points in 1D/2D/3D (UMAP/tSNE/PCA/etc).
+- **Embedding**: coordinates for points in 1D/2D/3D (UMAP/tSNE/PCA/etc). A
+  dataset may carry several embeddings of one dimension (the Pancreas sample has
+  a 2D UMAP and a 2D PCA view); each dimension has one **default embedding**,
+  which is what a view of that dimension shows.
 - **Dimension (1D / 2D / 3D)**: which embedding dimensionality you are currently viewing for a given view.
 - **Connectivity**: a neighbor graph (edges). When enabled, edges are drawn between visible points only.
-- **Vector field / velocity overlay**: an optional overlay that visualizes per-cell vectors (dimension-specific).
+- **Vector field / velocity overlay**: an optional overlay that visualizes per-cell vectors, bound to the embeddings it was computed on.
 
 ---
 
