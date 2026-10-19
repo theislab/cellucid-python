@@ -25,7 +25,7 @@ CONFORMANCE = Path(__file__).parent / "fixtures" / "data_mapping_conformance.jso
 
 ANNDATA_MAPPING: dict[str, Any] = {
     "kind": "anndata",
-    "embeddings": {"1d": None, "2d": {"key": "X_umap", "columns": [0, 1]}, "3d": None},
+    "embeddings": {"enabled": [{"key": "X_umap", "columns": [0, 1]}], "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": [0, 1]}, "3d": None}},
     "knn": None,
     "geneNames": "index",
     "expression": "X",
@@ -34,7 +34,7 @@ ANNDATA_MAPPING: dict[str, Any] = {
 }
 EXPORT_MAPPING: dict[str, Any] = {
     "kind": "export",
-    "embeddings": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None},
+    "embeddings": {"enabled": [{"key": "X_umap", "columns": None}], "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None}},
     "geneNames": "index",
     "vectorFields": [],
 }
@@ -206,7 +206,7 @@ def test_the_viewer_holds_the_latest_reported_mapping() -> None:
     # The property is a copy: editing it does not change what the viewer holds.
     copied = viewer.data_mapping
     assert copied is not None
-    copied["embeddings"]["2d"] = None
+    copied["embeddings"]["defaults"]["2d"] = None
     assert viewer.data_mapping == ANNDATA_MAPPING
 
 
@@ -236,11 +236,16 @@ def test_set_data_mapping_needs_a_reported_mapping() -> None:
         (ANNDATA_MAPPING, {"expression": "layers:x"}, ValueError, "expression"),
         (
             ANNDATA_MAPPING,
-            {"embeddings": {"1d": None, "2d": {"key": "X_pca", "columns": [1, 1]}, "3d": None}},
+            {"embeddings": {"enabled": [{"key": "X_pca", "columns": [1, 1]}], "defaults": {"1d": None, "2d": {"key": "X_pca", "columns": [1, 1]}, "3d": None}}},
             ValueError,
             "different column",
         ),
-        (ANNDATA_MAPPING, {"embeddings": {"1d": None, "2d": None, "3d": None}}, ValueError, "at least one"),
+        (
+            ANNDATA_MAPPING,
+            {"embeddings": {"enabled": [], "defaults": {"1d": None, "2d": None, "3d": None}}},
+            ValueError,
+            "at least one",
+        ),
     ],
 )
 def test_set_data_mapping_validates_before_sending(
@@ -277,13 +282,13 @@ def test_set_data_mapping_sends_the_merged_mapping_and_returns_the_answer(
 
     monkeypatch.setattr(viewer, "send_message", answer)
     applied = viewer.set_data_mapping(
-        embeddings={"1d": None, "2d": {"key": "X_pca", "columns": [3, 1]}, "3d": None},
+        embeddings={"enabled": [{"key": "X_pca", "columns": [3, 1]}], "defaults": {"1d": None, "2d": {"key": "X_pca", "columns": [3, 1]}, "3d": None}},
         knn="connectivities",
     )
 
     expected = {
         **ANNDATA_MAPPING,
-        "embeddings": {"1d": None, "2d": {"key": "X_pca", "columns": [3, 1]}, "3d": None},
+        "embeddings": {"enabled": [{"key": "X_pca", "columns": [3, 1]}], "defaults": {"1d": None, "2d": {"key": "X_pca", "columns": [3, 1]}, "3d": None}},
         "knn": "connectivities",
     }
     assert applied == expected

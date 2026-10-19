@@ -24,8 +24,8 @@ import pytest
 from scipy import sparse
 
 from cellucid.anndata_adapter import MAPPING_CANDIDATES_PATH, AnnDataAdapter
-from cellucid.anndata_server import AnnDataServer
 from cellucid.anndata_mapping import MappingNotFound, parse_mapping_route
+from cellucid.anndata_server import AnnDataServer
 from cellucid.data_mapping import validate_data_mapping
 
 
