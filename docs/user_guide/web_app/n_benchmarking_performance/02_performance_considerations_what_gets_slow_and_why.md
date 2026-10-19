@@ -68,12 +68,18 @@ Three things that are commonly assumed to cost per frame, and do not:
   no fragment is ever produced for it. A heavily filtered view is therefore
   *cheaper* to navigate than the same dataset unfiltered, not more expensive.
 - **Standing still.** When nothing changes, the frame transfers no data to the
-  GPU at all. Holding a view steady does not accumulate cost.
-- **Shader quality, in 3D views.** `Full`, `Light` and `Ultra-light` measured the
-  same on the machine below, at every point size tested — see the next section.
-  In a **2D view with antialiasing on** it does matter: `Light` took about half
-  of `Full`'s frame time (1,000,000 cells: 17.0 against 30.6 ms), because a 2D
-  view draws without depth testing and shades every overlapping point.
+  GPU at all and nothing is redrawn. Holding a view steady does not accumulate
+  cost — with or without a highlighted selection, except in `Full` shader
+  quality, whose highlight ring pulses and so keeps drawing while anything is
+  highlighted.
+- **Shader quality.** `Full`, `Light` and `Ultra-light` measured the same on the
+  machine below in 3D views, at every point size tested — see the next section.
+  A **2D view** draws without depth testing and shades every overlapping point;
+  `Light` once took about half of `Full`'s antialiased frame there, because
+  only `Light` avoided a fragment `discard`. Since 0.9.2 every quality draws a
+  2D view without one, and on a dense 1,000,000-cell 2D embedding with
+  antialiasing on (device pixel ratio 1) the three measured within a few
+  percent of one another (Apple M1 Pro, interleaved runs).
 
 High-leverage knobs:
 - **Make the window smaller** while exploring (fewer pixels) — *usually the biggest immediate win*.
@@ -411,8 +417,8 @@ millions-of-tiny-dots case that most needs the frames.
 about 95% of fragments before they are shaded. A 2D embedding is drawn without
 depth: every overlapping point is shaded and blended in order, and under
 antialiasing that happens per sample. There, antialiasing costs about **10×**
-(1,000,000 cells: 33.8 ms on, 3.4 ms off) and `Shader quality: Light` about
-halves the antialiased frame. This is why automatic antialiasing uses a much
+(1,000,000 cells: 33.8 ms on, 3.4 ms off, measured before 0.9.2 with `Full`).
+This is why automatic antialiasing uses a much
 lower limit for 1D and 2D views (200,000 cells) than for 3D (5,000,000).
 
 What you give up, on the same frames: **18% of pixels change at point size

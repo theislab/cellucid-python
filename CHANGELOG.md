@@ -56,9 +56,9 @@ Version 0.9.2 is a patch release on 0.9.1.
   notifications stack above it.
 - **Web app, backgrounds**: two new viewer backgrounds, **Studio (light)** and
   **Studio (dark)** (neutral grey and charcoal): a 3D view stands on a floor
-  of constant-width hairlines that fades out before its edge, turns to dots
-  seen from above, and recedes edge-on or from below; 1D, 2D and Planar views
-  sit on dotted paper. The pattern rescales with zoom without popping, and
+  of constant-width hairlines that fades out before its edge and turns to dots
+  seen from above; seen nearly level or from below, and in 1D, 2D and Planar
+  views, the data sits in front of dotted paper. The pattern rescales with zoom without popping, and
   figure export reproduces it in SVG and PNG. **Studio (light) is the new
   default** (the sample datasets open on it too), and the Background menu is
   grouped into Light and Dark.
@@ -310,6 +310,27 @@ Version 0.9.2 is a patch release on 0.9.1.
   reaches the viewer (Cell info's hold, Select mode, the camera). Safari reads
   only `-webkit-user-select`, so every non-selectable control now declares it
   too.
+- **Web app, highlights**: a highlighted selection no longer keeps the whole
+  scene redrawing every frame in `Light` and `Ultra-light` shader quality,
+  where the ring does not animate; the view goes idle as it does without a
+  selection. `Full` still pulses its ring.
+- **Web app, fog**: points, highlight rings, connectivity edges, the orbit
+  anchor and the velocity overlay share one fog model, evaluated once per
+  point instead of per pixel, so every layer of a scene fades at the same rate.
+  Fog now thins a point toward whatever is behind it instead of tinting it
+  with a fixed fog colour, so fogged points fade correctly over a grid or a
+  vignette; over a plain background the picture is unchanged. With fog off a
+  dense 10M-cell view draws about 8% faster (Apple M1 Pro).
+- **Web app, 2D views**: point edges in 1D and 2D views are smooth (a
+  one-pixel antialiased rim) in `Full` and `Light`, instead of a jagged
+  staircase that the antialiasing setting could not smooth; `Full` draws 2D
+  views as cheaply as `Light`, and figure export draws them the same way.
+- **Web app, rendering**: connectivity edges take about a third less GPU time
+  (all 6.3M edges of the Suo sample: about 190 to 115–128 ms a frame) and the
+  volumetric smoke cloud about 15% less (17.2 to 14.5 ms), on an Apple M1 Pro.
+  Every shader now pins a vertex attribute to location 0, which Firefox
+  otherwise emulates per vertex. Projectiles no longer allocate new vertex
+  arrays every frame.
 - **Python sessions**: reading a session now requires each user-defined
   field's `normalizedDims` to name exactly the dimensions in its
   `centroidsByDim`, as the web app writes them.

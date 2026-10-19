@@ -194,10 +194,9 @@ GPU specifically, that is the tool — not the headline FPS.
 - If **Visible Points** stays high and FPS stays low, try LOD in Visualization —
   and lower `Force LOD level:` too when you need to go past `Auto`'s floor of
   `min(2,000,000, cells ÷ 8)` points,
-  a smaller window, a smaller point size, or turning antialiasing off. In a 2D
-  view with antialiasing on, `Shader quality: Light` also helps (about half the
-  frame); in 3D it did not change frame time on the hardware measured. The
-  reasons are in
+  a smaller window, a smaller point size, or turning antialiasing off. Shader
+  quality did not change frame time measurably on the hardware measured, in 2D
+  or 3D. The reasons are in
   {doc}`02_performance_considerations_what_gets_slow_and_why`.
 
 Related docs:

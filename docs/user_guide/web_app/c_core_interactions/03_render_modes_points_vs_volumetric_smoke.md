@@ -66,11 +66,12 @@ Its relevant controls are:
   count implies rather than at a fixed default — which is why the same slider
   position looks different on a 3,696-cell trajectory and on an atlas.
 - **Shader quality:** `Full (lighting + fog)`, `Light (circular, no lighting)`,
-  or `Ultra-light (square points)` — mostly a **look** choice: in 3D views the
-  three measured the same frame time at every point size tested, while in a 2D
-  view with antialiasing on `Light` takes about half of `Full`'s frame time. Note that
-  `Ultra-light` draws squares rather than round dots, so it also changes far
-  more pixels when antialiasing is off.
+  or `Ultra-light (square points)` — a **look** choice: in 3D views the three
+  measured the same frame time at every point size tested, and in 2D views
+  within a few percent of one another. In 1D and 2D views the round qualities
+  draw a smooth one-pixel edge, which antialiasing cannot give a point sprite.
+  Note that `Ultra-light` draws squares rather than round dots, so it also
+  changes far more pixels when antialiasing is off.
 - **Renderer settings:** `Level-of-Detail (LOD)` draws a coarser subset of the
   cells when you are zoomed out; `Frustum culling` skips cells the camera is not
   pointing at. Both are checkboxes and **both start off**. Ticking

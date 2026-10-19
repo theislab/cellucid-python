@@ -414,7 +414,7 @@ renderer call, any viewer input that changes something (a drag, free-look, a
 selection gesture, `Alt`, navigation keys outside text fields, releasing a held
 key), and any canvas resize marks the next frame for drawing — hovering or typing
 into a sidebar field draws nothing; held navigation keys, inertia, smooth zoom, a grid fade, smoke mode
-while it animates or is still waiting for its noise volumes, enabled overlays, visible highlights (their glow animates), and live projectiles
+while it animates or is still waiting for its noise volumes, enabled overlays, visible highlights in a quality whose highlight style animates (only `full`: its ring pulses and shimmers; every other quality draws a still ring, and a selection there costs nothing while the view is idle), and live projectiles
 keep frames drawing, and so does a camera motion still waiting for its
 `camera-settled` event. After the last such cause the viewer keeps drawing until
 both one second has passed and 12 frames have been drawn
@@ -483,12 +483,74 @@ the maintenance ledger rather than being folklore:
   size. These measurements are 3D: depth testing rejects hidden fragments
   before shading. **2D views are different** — they draw without depth, so every
   overlapping, fog-translucent fragment is shaded and blended in order, per
-  sample under MSAA. There, `full` and `light` now use a single `discard`, and
-  `light` has a no-depth variant (`HP_FS_LIGHT_NO_DEPTH`, picked by
-  `_pointProgramName()` for dimension ≤ 2) that writes a zero-alpha fragment
-  instead of discarding, which leaves the pixels byte-identical. At 1,000,000
-  cells in 2D with antialiasing, `light` went from 30.7 to 17.0 ms and `full`
-  from 33.8 to 30.6 ms.
+  sample under MSAA. There, `full` and `light` each have a no-depth variant
+  (`HP_FS_FULL_NO_DEPTH`, `HP_FS_LIGHT_NO_DEPTH`, picked by
+  `_pointProgramName()` for dimension ≤ `NO_DEPTH_MAX_DIMENSION` = 2, which the
+  figure export reads too) that writes a zero-alpha fragment where the depth
+  variant discards, which leaves the pixels byte-identical
+  (`tests/browser/point-shader-no-depth-parity.spec.mjs`). At 1,000,000 cells
+  in 2D with antialiasing, `light` went from 30.7 to 17.0 ms and `full` from
+  33.8 to 30.6 ms with the first of these.
+- **What 0.9.2 moved out of the per-vertex and per-fragment work anyway.** None
+  of it is measurable on the machine above, and all of it is work a smaller GPU
+  pays for: the model-view product, the point-size projection factor
+  (`u_pointScale`, which replaced `u_viewportHeight` and `u_fov`) and the Blinn
+  half vector (`u_halfDir`) are formed once per draw by `writePointShaderFrame`;
+  fog is evaluated once per point (below) instead of an `exp` per fragment; the
+  specular `pow` is five squarings; the point fragment shaders are `mediump`.
+  Depth is formed by the same two products in every quality, so the same point
+  wins a near-tie whichever quality is selected.
+- **The disc edge in 1D and 2D views is antialiased.** MSAA cannot smooth a
+  point sprite's edge: the fragment shader runs once per pixel, and a discard
+  or zero alpha removes every sample of it. The no-depth variants therefore
+  compute the disc's coverage of the pixel — a one-pixel ramp across the rim,
+  narrowing below a radius of four pixels so the smallest points stay crisp —
+  from the sprite radius the vertex shader passes (`v_radiusPx`; screen-space
+  derivatives are undefined along a sprite's edge). Depth passes keep the hard
+  edge: a partially covered rim fragment would still write depth, and in a
+  dense cloud every disc grew a ring of background colour where later points
+  behind it were rejected.
+- **Fog is one model, evaluated per vertex.** Points, highlight rings,
+  connectivity edges, the orbit anchor and the velocity overlay splice the same
+  GLSL (`FOG_GLSL`, `cellucid/assets/js/rendering/shaders/fog-shaders.js`) and
+  read the same two uniforms, `u_fogNear` and `u_fogScale`
+  (`log2(e) · density² · 0.6 / span`, derived per pane by `writeFogUniforms`;
+  zero when fog is off). Before, each layer restated the law inline with its
+  own terms (the anchor by eye depth, the velocity overlay squared, edges with
+  their own alpha floor), so the layers of one scene faded at different rates.
+  The transmittance is an `exp2` evaluated once per point or edge endpoint and
+  passed on as a varying. Fog **thins** a translucent layer —
+  `fogOpacity(T) = T·(0.1 + 0.9·T)` — instead of mixing its colour toward a
+  constant `u_fogColor`: over a backdrop of the fog colour that is exactly the
+  picture the colour-mixing law drew, and over anything else (a grid, a
+  vignette, the points further back) a fogged point fades into what is really
+  behind it instead of being tinted with a colour that is not. The figure
+  export's vector strategies apply the same opacity, so a circle fades into the
+  paper. With fog off a point is drawn at full opacity, and that measured
+  cheaper than before the change for dense views (10,000,000 points, device
+  pixel ratio 2: 2D 99.7 → 92.4 ms, 3D 87.8 → 80.4 ms a frame); with fog on the
+  frame is unchanged. A compile-time variant for fog off would remove one
+  `exp2` per vertex and was not added. The
+  fog parameters are two `uniform1f` calls per program per pane; a shared
+  uniform block would save microseconds a frame and add a buffer binding to
+  every program, so it was not adopted.
+- **Every vertex shader pins its inputs, one to location 0**
+  (`tests/vertex-attribute-location-contract.test.mjs`). A draw whose attribute
+  0 is not an enabled array makes Firefox on desktop OpenGL emulate it per
+  vertex; with locations left to the linker, the instanced edges drew that way
+  whenever no earlier pass had left location 0 enabled.
+- **Connectivity edges are a 4-vertex triangle strip per edge**, not two
+  6-vertex triangles. Every vertex repeats the edge's whole fetch-and-project
+  chain (six texel fetches, two projections), so this is a third less vertex
+  work: with all 6,279,148 edges of the Suo sample drawn, a frame went from
+  about 190 to 115–128 ms (median of three interleaved runs, Apple M1 Pro,
+  device pixel ratio 2).
+- **The smoke ray march does less arithmetic per sample**: the density-texture
+  coordinate map and the volume normalisation are formed once per pixel, the
+  three multiple-scattering octaves share one `exp` (the other two are its 4th
+  and 16th powers), and the blue-noise jitter is fetched once. Same pixels;
+  17.2 against 14.5 ms a frame on the 562,000-cell Suo sample (median of three
+  interleaved runs, Apple M1 Pro, device pixel ratio 2).
 - **A different primitive.** `GL_POINTS` beat instanced quads and both triangle
   arrangements by 1.41–2.12× at one sample and by up to 1.90× with MSAA enabled
   at 4 samples, with the quad arms' rasterised and shaded fragment counts matched to

@@ -199,7 +199,8 @@ the view it was drawn in:
 - floor rules are `<line>` elements stroked with a gradient sampled along each
   rule, because a rule fades with distance from the stage, with the viewing
   angle, and as its spacing family crossfades;
-- dots, of the dot surface or of a floor seen from straight above, are circles;
+- dots, of the dot surface (also the one a level 3D view sees behind the
+  data) or of a floor seen from straight above, are circles;
 - the soft glow at the centre of the view and the pool under the data are
   radial gradients. The glow lightens the viewer's own surface colour, so it is
   drawn only with **Background: Match viewer** (or a custom colour equal to
@@ -210,7 +211,9 @@ pixel: the gradient between a rule's 24 colour stops is interpolated linearly,
 a rule's width is the one it has where it is strongest, and the screen's
 sub-step dither is not drawn. After a dimension or navigation change the screen
 crossfades between floor and dots for 0.3 s; an export shows the settled
-surface.
+surface. The handover between floor and dot surface as a 3D view levels
+depends on the camera alone, so an export taken mid-handover matches the
+screen.
 
 **Reference grid** in the Annotations block turns the layer off when you want a
 figure without it. It is disabled when the viewer background draws none.

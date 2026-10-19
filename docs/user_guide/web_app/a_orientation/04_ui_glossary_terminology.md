@@ -107,11 +107,13 @@ what alpha means in practice for that mode.
     its edge and with a soft pool of shade (light) or light (dark) under the
     data. Seen from straight above, the rules turn into dots. A 1D or 2D view,
     and any view in Planar navigation, sits on a **dot surface** instead, like
-    dotted paper behind the cells. Rules and dots keep the same on-screen size
-    at every zoom and screen density, and their spacing steps by fives as you
-    zoom, crossfading so the pattern never crowds or empties; the floor fades
-    as the camera nears its edge-on angle and disappears when the camera goes
-    below it.
+    dotted paper behind the cells. A 3D view seen nearly level (less than
+    about 7° above the horizon) or from below the floor hands over from the
+    floor to the same dot surface, standing behind the data square to the
+    camera, so a level view is never left on a blank stage. Rules and dots
+    keep the same on-screen size at every zoom and screen density, and their
+    spacing steps by fives as you zoom, crossfading so the pattern never
+    crowds or empties.
 - The choice applies to every view of a grid compare, is remembered in the
   browser, and is saved in sessions. Figure export reproduces the grid box and
   the studio backdrop; see {doc}`../k_figure_export/06_edge_cases`.
