@@ -277,6 +277,11 @@ Version 0.9.2 is a patch release on 0.9.1.
 - **Web app, rendering**: switching to another window or tab no longer redraws
   the whole scene for a second; focus changes redraw only when they end a held
   key or a selection in progress.
+- **Web app, touch**: on an iPhone or iPad, pressing and holding the plot no
+  longer selects the whole page as text or opens the callout menu; the press
+  reaches the viewer (Cell info's hold, Select mode, the camera). Safari reads
+  only `-webkit-user-select`, so every non-selectable control now declares it
+  too.
 - **Python sessions**: reading a session now requires each user-defined
   field's `normalizedDims` to name exactly the dimensions in its
   `centroidsByDim`, as the web app writes them.
