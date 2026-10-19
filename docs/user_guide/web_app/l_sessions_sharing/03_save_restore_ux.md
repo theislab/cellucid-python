@@ -72,6 +72,13 @@ save time, so repeated saves never overwrite each other.
 4) Wait for the restore's progress notification to finish as **Loaded** with
    **Session fully restored.**
 
+If a dataset is still loading when you choose the file, a notification says
+the session is waiting for it, and the session is applied as soon as that
+dataset has loaded. Choosing another dataset in the meantime means the session
+is applied to that one instead, and refused with an explanation if it was saved
+from a different dataset. See
+{ref}`changing-dataset-while-loading`.
+
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-04-restore-confirmation.png
 :alt: The one notification a completed restore publishes: the restore's progress entry, now titled "Loaded" and reading "Session fully restored.".
 :width: 520px

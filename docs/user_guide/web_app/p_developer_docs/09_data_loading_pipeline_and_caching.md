@@ -89,14 +89,57 @@ At startup, `cellucid/assets/js/app/main.js`:
    - exactly one canonical `?exportsBaseUrl=...` may replace the configured
      demo exports base URL for that launch
    - `?dataset=...&source=...` selects a specific dataset from a registered source
-4) Chooses the active dataset and sets `EXPORT_BASE_URL` to the active `baseUrl`.
+4) Resolves the startup selection (source, dataset id, load method) without
+   loading it, publishes the empty runtime, and builds the interface, so every
+   data control is live before any dataset is fetched.
 
-Then the loader phase begins:
-- load obs manifest → attach obs field loader
-- optionally load var manifest → attach var field loader
-- load dataset identity + embeddings metadata
+Then the startup selection loads as the first ordinary dataset change (see
+{ref}`dataset-change-transactions`), and its loader phase begins:
+- load the dataset's metadata and `dataset_identity.json`
+- load the obs manifest → attach obs field loader
+- optionally load the var manifest → attach var field loader
 - load points positions (the default dimension's slot layout)
-- optionally load connectivity manifest + edges
+- optionally load the connectivity manifest (edges load when shown)
+
+(dataset-change-transactions)=
+## Dataset changes: the newest choice wins
+
+Every change of the displayed dataset is one transaction of the dataset-change
+coordinator (`createLatestDatasetReloadCoordinator` in
+`app/dataset-reload-outcome.js`): the startup selection, a sample, **None**, a
+local file or prepared folder, a connection that opens its only dataset, and
+the synthetic benchmark. The rules:
+
+- **A transaction begins when the user acts**, before any of that choice's own
+  work — before a file is read, before a sample's first request. Beginning one
+  aborts the previous transaction's signal, so the load in flight stops
+  fetching (its staged `DimensionManager` is retired, which aborts its
+  requests; a local candidate is disconnected, which aborts a prepared folder
+  mid-read) and can never publish over the newer choice.
+- **Ownership is checked against the newest transaction of all**, not only
+  the newest of one kind. The dataset controls own their presentation (the
+  select shows the pending choice, or an *Opening …* / *Loading …* stand-in
+  for one without a catalog option) only while their intent's transaction
+  `isLatest()`; an intent overtaken by the benchmark puts the select back
+  itself.
+- **A connection may or may not change the dataset**, which is known only once
+  the server answers. The click records `generation`; a one-dataset activation
+  then calls `beginIfLatest(generation)`, which supersedes loads that were
+  running at the click but never a choice made after it. A connection that
+  lost that race is kept as a catalog.
+- **A session file** chosen during a load waits on `whenSettled()` (the newest
+  transaction has called `finish()`) and is then restored onto whatever
+  dataset that produced.
+- **A published dataset's own continuations** (UI synchronization, the
+  published sample view) belong to its publication, not to the request: a
+  newer request that fails must not interrupt the dataset still on screen.
+- **Startup** loads its selection through `ui.loadStartupDataset`. Its network
+  awaits are deadline-bound startup steps; if it is superseded, startup
+  publishes `ready` without it; only a failure nothing superseded becomes the
+  terminal startup failure.
+
+A superseded load is silent: it dismisses its own progress, announces nothing,
+and leaves the outcome to the choice that replaced it.
 
 ---
 

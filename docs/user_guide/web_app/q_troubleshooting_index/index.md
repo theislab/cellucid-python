@@ -237,7 +237,10 @@ readers announce this, and each control is described by that line.
 
 So:
 
-- **Greyed out for a moment on a slow start** — expected. Wait.
+- **Greyed out for a moment on a slow start** — expected. Wait. They open as
+  soon as the dataset catalog has been read; they do not wait for the first
+  dataset to load, and anything you choose while it loads replaces it (see
+  {ref}`changing-dataset-while-loading`).
 - **A click that did nothing at all** — this should no longer be reproducible.
   If it happens, it is a bug worth reporting.
 - **Never becomes ready** — that is a startup failure. Look for the “Cellucid

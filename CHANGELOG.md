@@ -74,6 +74,18 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Fixed
 
+- **Web app, data loading**: a dataset chosen while another is still loading
+  now replaces it. At startup the data controls stayed disabled until the
+  startup dataset had downloaded, and **Load State** did nothing at all in
+  that window; afterwards, a file still being read published over a sample or
+  **None** chosen after it. Now the controls open once the dataset catalog has
+  been read, and every dataset change (the startup dataset, a sample, **None**,
+  a file or folder, a server or GitHub repository with one dataset, the
+  benchmark) supersedes the load in flight the moment you act: its downloads
+  are cancelled, it never appears late, and the dataset picker shows what is
+  loading. A connection that answers after a newer choice keeps its dataset in
+  the picker instead of replacing that choice, and a session chosen during a
+  load waits for that dataset, says so, and is then applied.
 - **Web app, rendering**: switching from **Grid (light)** to **Grid (dark)**
   no longer leaves the scene redrawing on every frame (the grid fade only
   moved upwards, so it never reached the lower target). With reduced motion

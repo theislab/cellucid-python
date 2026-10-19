@@ -249,7 +249,9 @@ not what was slow.
 ### Likely cause
 The data-source, renderer and benchmark controls ship disabled and are enabled
 only once the code that responds to them is wired up. During a slow start you
-can see them briefly inert.
+can see them briefly inert. They open once the dataset catalog has been read,
+before the first dataset has loaded, so a benchmark run can already replace
+that load.
 
 ### How to confirm
 - Look under the dataset picker. While the app is still starting it reads

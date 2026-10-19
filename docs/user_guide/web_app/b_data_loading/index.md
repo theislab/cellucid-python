@@ -67,6 +67,31 @@ elsewhere, or move focus outside to close it. See
 {doc}`../o_accessibility_privacy_security/01_accessibility`.
 :::
 
+(changing-dataset-while-loading)=
+### Changing your mind while a dataset loads
+
+Every dataset control is live while a dataset loads, including the dataset
+Cellucid opens when it starts. Whatever you choose last is what you get:
+
+- Choosing another sample, **None**, an H5AD or Zarr ZIP file, or a prepared
+  folder, or running the benchmark, stops the load in progress at once (its
+  downloads are cancelled) and loads your new choice instead. The dataset
+  picker shows what is loading; a file shows as *Opening <name>…* while it is
+  read.
+- Connecting to a server or GitHub repository that holds exactly one dataset
+  opens that dataset, unless you chose another dataset after clicking
+  **Connect**. Then your later choice stays, the connection is kept, and its
+  dataset is listed in the dataset picker.
+- **Load State** chosen while a dataset loads waits for it, says so in a
+  notification, and then applies the session to the dataset that loaded. A
+  session saved from a different dataset is refused with an explanation, as
+  always.
+
+A load you replaced never appears afterwards and reports nothing; only the
+outcome of your latest choice is reported. If the dataset Cellucid opens at
+startup fails and you had not chosen anything else, startup stops on the
+“Cellucid could not start” card.
+
 ---
 
 ## Getting Started

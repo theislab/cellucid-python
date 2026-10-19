@@ -70,22 +70,29 @@ The high-level startup flow is:
    (`app/optional-analytics.js`): it queues events while the analytics modules
    load by dynamic import, is never awaited, never throws, and stays inert when a
    privacy blocker refuses them. Then it sets up the `DataSourceManager`.
-5) The app decides what to load first:
+5) The app decides what to load first — it resolves the startup selection
+   (source, dataset id, load method) but loads nothing yet:
    - URL params (`?remote=…`, `?github=…`, `?dataset=…`) may override the default demo.
-   - Jupyter context (iframe) may register a Jupyter data source and auto-load.
-6) The app loads dataset metadata and core buffers:
-   - `obs_manifest.json` (field list + metadata)
-   - optional `var_manifest.json` (gene expression availability)
-   - points buffers (embedding positions, colors, outlier quantiles, etc.)
-   - optional connectivity (KNN graph edges)
-7) The app initializes the UI coordinator (`initUI`) which wires the sidebar modules to state/viewer.
-8) Only once their listeners exist are the deferred controls (data sources,
+   - Jupyter context (iframe) may register a Jupyter data source and select its dataset.
+6) The app publishes the empty runtime and initializes the UI coordinator
+   (`initUI`), which wires the sidebar modules to state/viewer.
+7) Only once their listeners exist are the deferred controls (data sources,
    renderer toggles, benchmark) enabled, and the live-region line under the
    dataset picker switches from *“Starting Cellucid…”* to *“Data sources are
-   ready…”*.
+   ready…”*. The render loop starts.
+8) The startup selection loads as the first ordinary dataset change
+   (`ui.loadStartupDataset` → `reloadActiveDatasetInPlace`), under the same
+   transaction owner as every later change, so any choice the user makes while
+   it loads replaces it:
+   - dataset metadata, `dataset_identity.json`, `obs_manifest.json`, optional
+     `var_manifest.json` and the connectivity manifest
+   - points buffers (embedding positions, colors, outlier quantiles, etc.)
+   - the published sample view, when the catalog advertises one
+   A failure of this load that nothing superseded is the terminal startup
+   failure; otherwise startup publishes `ready` when it settles.
 
 :::{important}
-Step 8 is an invariant, not a nicety. Any control whose handler is wired after
+Step 7 is an invariant, not a nicety. Any control whose handler is wired after
 an `await` in this bootstrap must be authored `disabled` in `index.html` and
 registered with `ui/core/deferred-control-readiness.js`. A control that is
 clickable before its listener exists silently discards the click, which is
