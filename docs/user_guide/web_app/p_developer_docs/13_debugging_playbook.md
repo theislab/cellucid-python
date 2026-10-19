@@ -299,7 +299,7 @@ How to confirm:
    texture uploads and bytes, draw calls, sync stalls, and `getError` /
    `finish` / `flush` / `readPixels` calls.
 3) Hold the camera still. Every upload counter should be **zero**. A non-zero
-   count while idle is the bug. About a second (and at least two frames) after
+   count while idle is the bug. Two frames after
    the last change a static scene stops drawing entirely, so draw calls fall to zero as well; if they do
    not, something keeps invalidating the frame or reports an animation (see the
    frame gate in {doc}`07_rendering_pipeline_webgl_and_performance_notes`).

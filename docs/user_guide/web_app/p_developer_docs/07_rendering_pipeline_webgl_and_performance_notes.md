@@ -426,11 +426,12 @@ keep frames drawing, and so does a camera motion still waiting for its
 `camera-settled` event and an adaptive LOD still stepping toward the level its
 camera distance asks for (hysteresis moves one level per drawn frame; the
 renderer reports it per view with `isViewLodConverging`). After the last such
-cause the viewer keeps drawing until both one second has passed and two frames
-have been drawn (`FRAME_SETTLE_MS`, `FRAME_SETTLE_MIN_FRAMES`), and then stops
-until something changes. Every multi-frame convergence is a cause of its own,
-so the frame floor only covers the frame that shows a change: where a frame
-takes seconds (a software renderer), a change costs two frames, not a dozen. A frame that throws marks the next
+cause the viewer draws two more frames (`FRAME_SETTLE_MIN_FRAMES`) and then
+stops until something changes. Every multi-frame convergence is a cause of its
+own, so the floor only covers the frame that shows a change. There is no
+wall-clock window on top: one kept a fast display drawing 60–120 identical
+frames after every change, and a renderer that takes seconds per frame now
+spends two frames on a change, not a dozen. A frame that throws marks the next
 frame for drawing, so a partial frame is redrawn. The drawing buffer is preserved,
 so the canvas keeps showing — and reading back — the last drawn frame.
 

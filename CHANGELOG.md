@@ -357,10 +357,11 @@ Version 0.9.2 is a patch release on 0.9.1.
   falling through. A projectile that had come to rest against a cell no longer
   falls through the grid's floor either.
 - **Web app, rendering**: after a change the viewer draws two more frames
-  instead of twelve before it goes idle; an adaptive LOD still stepping
-  toward its level keeps the scene drawing on its own account, so nothing is
-  cut short. Where a frame takes seconds (a software renderer), every click
-  and change now costs seconds less.
+  and goes idle, instead of at least twelve frames and a full second; an
+  adaptive LOD still stepping toward its level keeps the scene drawing on its
+  own account, so nothing is cut short. A fast display no longer draws 60–120
+  identical frames after every click, and where a frame takes seconds (a
+  software renderer) every change costs seconds less.
 - **Web app, smoke**: generating the cloud's noise volumes no longer queues
   GPU work faster than the GPU finishes it. Each batch of slices waits for the
   previous one and shrinks while the GPU lags, so on a slow or software
