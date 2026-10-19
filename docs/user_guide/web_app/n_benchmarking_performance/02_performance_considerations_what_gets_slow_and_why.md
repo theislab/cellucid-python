@@ -241,6 +241,16 @@ number of genes times the request round trip divided by **Network
 parallelism**. With a local folder there is no network, and decoding and
 statistics set the pace instead.
 
+Per-page statistics are linear in the number of cells: medians, quartiles and
+ranks (Quick, Detailed summaries and tests, Spearman correlation, Kruskal–Wallis,
+high-cardinality Wilcoxon) come from linear-time radix ordering, never from a
+comparison sort. At one million cells a Detailed summary and its tests take
+tens of milliseconds; at ten million they take a few hundred. Plots of large
+pages compute their box statistics, violin densities and density curves on the
+analysis workers, and a histogram hands the plot a few values per bin, so a
+plot's main-thread work is mostly drawing. Gene signature scoring yields to the
+interface between genes.
+
 Practical workflow:
 - define groups carefully (avoid “everything vs everything” when you don’t need it),
 - keep analysis scope small while iterating,

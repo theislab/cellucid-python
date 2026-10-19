@@ -95,7 +95,7 @@ For each gene and group, Cellucid computes (conceptually):
 - `adjustedPValue` via Benjamini–Hochberg (computed per group across genes)
 - `percentInGroup`, `percentOutGroup` = percent of cells with expression `> 0`
 
-Wilcoxon always uses exact, tie-aware ranks. For low-cardinality values (including quantized prepared data), Cellucid aggregates exact counts per distinct value; high-cardinality values use an exact index sort. Its p-value is exact only when both comparison groups contain fewer than 50 finite values and there are no ties; otherwise inference uses the exact U statistic with a tie- and continuity-corrected asymptotic reference distribution. See {doc}`01_analysis_mental_model` for analysis-wide scope and assumptions.
+Wilcoxon always uses exact, tie-aware ranks. For low-cardinality values (including quantized prepared data), Cellucid aggregates exact counts per distinct value; high-cardinality values are ranked through an exact linear-time radix ordering of the measured cells. Its p-value is exact only when both comparison groups contain fewer than 50 finite values and there are no ties; otherwise inference uses the exact U statistic with a tie- and continuity-corrected asymptotic reference distribution. See {doc}`01_analysis_mental_model` for analysis-wide scope and assumptions.
 
 Markers are filtered by thresholds (typically controlled in the expanded view):
 - p-value/FDR threshold (default ~0.05)

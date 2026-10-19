@@ -76,6 +76,23 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Fixed
 
+- **Web app, analysis performance**: analysis no longer freezes the page on
+  large selections, and every result is the same number it was. Medians,
+  quartiles, ranks and sorted copies (Quick, Detailed summaries and tests, CSV
+  export, Spearman correlation, Kruskal–Wallis, high-cardinality Wilcoxon in
+  differential expression and Marker Genes, gene signatures) come from
+  linear-time radix ordering instead of comparison sorts; correlation pairs its
+  colour field by merging sorted cell indices instead of a per-cell map; box,
+  violin and density plots of large pages compute their statistics on the
+  analysis workers; a histogram hands the plot a few values per bin instead of
+  every value; and a box plot draws at most 16 copies of an identical outlier
+  (all on one spot) instead of one SVG element per cell. At one million cells:
+  box plot of a zero-inflated gene 1.1 s → 0.12 s (longest main-thread task
+  70 ms), histogram 0.17 s → 0.06 s, Detailed summary 0.10 s → 0.03 s,
+  three-page Kruskal–Wallis 0.67 s → 0.09 s, Spearman 0.86 s → 0.14 s,
+  high-cardinality marker statistics 0.33 s → 0.06 s per gene. The Plotly
+  notification watcher no longer runs a subtree query for every element any
+  plot inserts.
 - **Web app, data loading**: a dataset chosen while another is still loading
   now replaces it. At startup the data controls stayed disabled until the
   startup dataset had downloaded, and **Load State** did nothing at all in

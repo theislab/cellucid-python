@@ -149,6 +149,23 @@ If you need gene-level answers, switch the variable type to **Gene expression** 
 - **Violin/Box plot**: best for continuous distributions; violin shows shape, box shows summary.
 - **Histogram/Density**: useful for multi-modal distributions and QC gating.
 
+:::{note}
+**How large pages are drawn.** Every plot shows exactly what it would draw from
+every cell; nothing is sampled. For a page of tens of thousands of cells or
+more, the box statistics, the violin density and the density curve are computed
+on the analysis workers before the plot is drawn, so the page stays responsive
+while they run. A histogram bins the values itself and hands the plot a few
+values per bin, so its bars and hover ranges are the same however many cells
+the page has.
+
+Box-plot outliers are drawn on the box's axis line without jitter, so copies of
+one value land on the same spot. A zero-inflated gene whose quartiles are all
+zero makes every expressing cell an outlier; the box plot draws at most 16
+copies of each identical outlier value, which already looks fully stacked, and
+every distinct value, the minimum, the maximum and the hover text are those of
+the full set. **All** points (jittered) are always drawn one per cell.
+:::
+
 ### Reading statistical tests responsibly
 
 Treat the tests as:
