@@ -105,12 +105,13 @@ what alpha means in practice for that mode.
     charcoal. A 3D view in Orbit or Free-fly stands on a **floor**: one plane
     just under the lowest cell, ruled with hairlines that fade out long before
     its edge and with a soft pool of shade (light) or light (dark) under the
-    data. Seen from straight above, the rules turn into dots. A 1D or 2D view,
-    and any view in Planar navigation, sits on a **dot surface** instead, like
-    dotted paper behind the cells. A 3D view seen nearly level (less than
-    about 7° above the horizon) or from below the floor hands over from the
-    floor to the same dot surface, standing behind the data square to the
-    camera, so a level view is never left on a blank stage. Rules and dots
+    data. It stays a floor whatever the camera's angle: seen from below, it
+    shows through from beneath, and only seen almost exactly edge-on does it
+    fade. Seen from straight above or below, the rules turn into dots. A 1D or
+    2D view, and any view in Planar navigation, sits on a **dot surface**
+    instead, like dotted paper behind the cells. Which of the two a view shows
+    follows its embedding's dimension and its navigation mode, never the
+    camera angle, so rotating a view never swaps them. Rules and dots
     keep the same on-screen size at every zoom and screen density, and their
     spacing steps by fives as you zoom, crossfading so the pattern never
     crowds or empties.

@@ -56,9 +56,11 @@ Version 0.9.2 is a patch release on 0.9.1.
   notifications stack above it.
 - **Web app, backgrounds**: two new viewer backgrounds, **Studio (light)** and
   **Studio (dark)** (neutral grey and charcoal): a 3D view stands on a floor
-  of constant-width hairlines that fades out before its edge and turns to dots
-  seen from above; seen nearly level or from below, and in 1D, 2D and Planar
-  views, the data sits in front of dotted paper. The pattern rescales with zoom without popping, and
+  of constant-width hairlines, seen from any angle, that fades out before its
+  edge and turns to dots seen from straight above or below; 1D, 2D and Planar
+  views sit in front of dotted paper. Which one a view shows follows its
+  dimension and navigation mode, never the camera angle, so rotating a 3D
+  view never swaps it to dots. The pattern rescales with zoom without popping, and
   figure export reproduces it in SVG and PNG. **Studio (light) is the new
   default** (the sample datasets open on it too), and the Background menu is
   grouped into Light and Dark.
