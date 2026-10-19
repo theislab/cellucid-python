@@ -925,17 +925,25 @@ def test_standard_pancreas_sample_contract_is_documented_exactly() -> None:
         "`S_score`",
         "`G2M_score`",
         "33,476 exact weighted connectivity edges",
-        "`velocity_umap`",
+        "one vector field, `velocity`, bound to the three UMAP embeddings",
+        "| `X_umap_1d` | UMAP | 1D | derived | yes |",
+        "| `X_pca` | PCA | 2D | source, first two components | no |",
+        "| `X_umap` | UMAP | 2D | source | yes |",
+        "| `X_umap_3d` | UMAP | 3D | derived | yes |",
+        "selector reports `velocity`",
         "f6cad69fd509be44c8453205309f4c3c3c37ba34",
         "27,998 ordered genes",
-        "SHA-256 generation digest covering all 3,774 exported files",
+        "SHA-256 generation digest covering all 3,775 exported files",
         "recorded in `sources/pancreas.json` rather than repeated here",
         "GSE132188",
         "10.1242/dev.173849",
     ):
         assert exact_value in normalized
 
-    assert "Suo remains the catalog default" in page
+    # The v3 sample catalog names no default dataset, and the Pancreas vector
+    # field is `velocity`; `velocity_umap` is only the AnnData-mode field id.
+    assert "catalog default" not in page
+    assert "velocity_umap" not in page
     assert "compact Session statistics round both counts to **4K**" in normalized
     assert "**Showing all 3,696 points**" in normalized
     assert "default 3D embedding with **Orbit**" in normalized

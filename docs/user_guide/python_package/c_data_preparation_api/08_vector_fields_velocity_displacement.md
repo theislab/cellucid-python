@@ -51,12 +51,12 @@ UI docs (highly recommended if you’re exporting vectors for others):
 - {doc}`../../web_app/i_vector_field_velocity/index`
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/overlay-controls.png
-:alt: The real Pancreatic endocrinogenesis sample in its 2D Planar view with the velocity_umap particle overlay and controls visible.
+:alt: The real Pancreatic endocrinogenesis sample in its 2D Planar view with the velocity particle overlay and controls visible.
 :width: 1440px
 
 The real 3,696-cell Pancreas sample in Build 2026-07-27.1, rendered in 2D
-Planar mode with `velocity_umap`; the field, density, speed, trail, size,
-opacity, palette, and LOD controls are visible.
+Planar mode with its exported `velocity` field; the field, density, speed,
+trail, size, opacity, palette, and LOD controls are visible.
 ```
 
 ### Binding a field to embeddings

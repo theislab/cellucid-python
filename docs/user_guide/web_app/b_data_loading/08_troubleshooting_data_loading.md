@@ -276,7 +276,7 @@ An `obs` column or gene name that starts or ends with whitespace, or that
 contains a control or zero-width character (`U+200B`, `U+2060`, `U+FEFF`), is
 not a name Cellucid can show exactly. Both writers refuse it, and an `.h5ad` or
 Zarr opened directly is refused when it loads, with a message such as
-`Invalid compact_v1 obs manifest: field name "cell_type " cannot be displayed
+`Invalid compact_v2 obs manifest: field name "cell_type " cannot be displayed
 exactly: Field name cannot have leading/trailing whitespace`. Rename the column
 (for example `adata.obs.columns = adata.obs.columns.str.strip()`) and open the
 file again.

@@ -263,9 +263,8 @@ whereas `0` is a real measurement and will be coloured as one.
 - Try a longer, more specific substring. Matching ignores letter case, so
   `gata3` finds `GATA3`.
 - If results show `...and N more`, you’re matching too many.
-- Open the field selector and read a few gene names directly. Every gene has
-  exactly one name in an export, and search matches that one name — there is no
-  second identifier to search instead, and no alias mapping.
+- Open the field selector and read a few gene names directly. Search matches
+  the gene names the dataset lists, and there is no alias mapping.
 - Compare the count in the empty-state message (“This dataset publishes *N* gene
   names…”) against the gene count you expect from the source. A large gap means
   preparation published a subset.

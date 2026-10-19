@@ -6,12 +6,14 @@ real export of a published study, and each names its upstream study, that
 study's URL, and the citation to use in its own
 `exports/<id>/dataset_identity.json`, under `source`.
 
-They do not all carry the same reproducibility guarantee. One is rebuilt by a
-pinned script that verifies its source, its environment, the exporter's own
-code, and everything it writes. The other four are published artifacts whose
-exact bytes are recorded but whose build is not pinned, and which cannot be
-rebuilt without source data this project does not distribute. This page says
-which is which, so you do not have to infer it.
+All five carry the same reproducibility guarantee. Each is rebuilt by a pinned
+build script that verifies its source file, its environment, the exporter's own
+code, and everything it writes, and that stops rather than publishes when a
+rebuild differs anywhere. What differs between them is where the source comes
+from: Pancreas downloads a commit-pinned public file, while the four human
+atlases are built from integration outputs the dataset repository does not
+hold and may not redistribute. This page says exactly what is pinned and what
+that does and does not let you do.
 
 ## The catalog
 
@@ -23,9 +25,18 @@ which is which, so you do not have to infer it.
 | Developing human heart (Kanemaru) | `kanemaru` | 131,636 | 3,691 | [E-MTAB-12916](https://www.ebi.ac.uk/biostudies/arrayexpress/studies/E-MTAB-12916) |
 | Pancreatic endocrinogenesis (scVelo) | `pancreas` | 3,696 | 3,753 | [GSE132188](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE132188) |
 
-`suo` is the catalog default. The counts are the `stats.n_cells` and
-`stats.n_genes` values each generation publishes in its own
-`dataset_identity.json`.
+`exports/datasets.json` lists the five in this order and names no default
+dataset. The counts are the `stats.n_cells` and `stats.n_genes` values each
+generation publishes in its own `dataset_identity.json`.
+
+Each generation also declares its embeddings there, under `embeddings`. The
+four human atlases each carry a 1D, 2D, and 3D UMAP computed from one shared
+neighbour graph (`X_umap_1d`, `X_umap_2d`, `X_umap_3d`) and a 2D view of the
+unintegrated PCA (`X_pca`, labelled **PCA (unintegrated)**); Garcia, He, and
+Kanemaru also carry the 2D UMAP shipped in their source files (`X_umap`,
+labelled **UMAP (source file)**). For each of the four, the declared defaults
+are `X_umap_1d`, `X_umap_2d`, and `X_umap_3d`, and the default dimension is 3D.
+Pancreas declares its own set; see {doc}`10_standard_pancreas_dataset`.
 
 The gene count above is the whole gene axis the viewer can search, and in every
 case it is smaller than the upstream study's. The four human samples publish only
@@ -36,98 +47,85 @@ recoverable in the viewer, so if you are looking for a specific gene, read
 {doc}`../d_fields_coloring_legends/07_genes_in_the_built_in_samples` before
 concluding it is absent from the study.
 
-## Pancreas is pinned
+## How each sample is built
 
-`pancreas` is produced by `cellucid-datasets/scripts/build_pancreas.py`, and
-[`sources/pancreas.json`](https://github.com/theislab/cellucid-datasets/blob/main/sources/pancreas.json)
-is that script's build contract rather than a description of it. It pins:
+Two build scripts in `cellucid-datasets/scripts/` produce the five
+generations, and both delegate everything that does not depend on the dataset
+to one shared module, `pinned_build.py`:
 
-- **the source** — repository, commit, URL, SHA-256, and byte size, verified
-  against the actual file before the export runs;
-- **the environment** — interpreter version and platform, a hashed
-  `requirements-pancreas.lock` whose every pin must match what is installed,
-  the OpenBLAS build and its single-thread setting, and the fixed seeds;
-- **the producer** — a SHA-256 over each of the 20 `cellucid` modules the
-  export path executes, plus a check at build time that the export path reached
-  no module the list omits, so the pin cannot quietly stop covering the
-  exporter;
-- **the inputs** — cell and gene counts, category levels, and digests of the
-  source expression, embedding, and connectivity matrices; and
-- **the output** — the file count, the total byte size, and a SHA-256
-  generation digest over the whole exported directory.
+- `build_pancreas.py` builds `pancreas`. It downloads the commit-pinned scVelo
+  source file, or reads a local copy passed with `--source`.
+- `build_atlas.py --dataset <id>` builds `suo`, `garcia`, `he`, and `kanemaru`
+  with one recipe: it reads the integration output, applies the published cell
+  subset (Suo only), curates `obs`, computes one neighbour graph on the
+  integrated latent space with its 1D, 2D, and 3D UMAPs, single-threaded and
+  seeded, names the genes, and exports. Its parameters are the ones the
+  preparation notebooks in `cellucid-datasets/notebooks/` recorded; the script
+  is their deterministic transcription. It reads its inputs from
+  `--source-dir`, which defaults to `$CELLUCID_ANNDATA_DIR` and otherwise to a
+  `.anndatas/` directory beside the repository.
 
-The environment and producer checks run before the build touches the network or
-the output directory, the source is verified by digest before the export runs,
-and the finished directory is measured against the recorded generation digest
-before it is published. A rebuild that differed anywhere stops instead of
-publishing. The dataset repository's contract suite re-measures the published
-directory against that same digest, so a generation that changes under the
-repository fails there too.
+Each sample has one build record, `sources/<id>.json`, which is the build's
+contract rather than a description of it. The environment every sample is built
+in is recorded once, in `sources/build-environment.json`, together with
+`requirements-build.lock`.
 
-Two things the pin does not claim. It does not make the upstream file
-immutable: the build downloads that URL unless it is handed a local copy of the
-file, and it is the recorded digest, not the URL, that turns a changed or
-unavailable upstream into a failure rather than a silent difference. And it is
-not a claim that the build runs anywhere: it refuses to start on a different
-interpreter version, platform, BLAS build, or installed package set, rather
-than publishing something different under the same name.
+## What the pins cover
 
-For what this dataset contains and how to load it, see
-{doc}`10_standard_pancreas_dataset`.
+- **The environment** — the interpreter implementation and version, the platform
+  and machine, the zlib runtime version, the OpenBLAS build with a single
+  thread, and the fixed hash seed and random seed, all from
+  `sources/build-environment.json`. `requirements-build.lock` is itself pinned
+  by SHA-256, every package it lists must be installed at exactly that version,
+  and the installed distributions must be exactly that set plus `cellucid`.
+- **The producer** — a SHA-256 over each of the 23 `cellucid` source files the
+  export path executes, combined into one manifest digest, plus a check at build
+  time that the export path reached no module the list omits, so the pin cannot
+  quietly stop covering the exporter. The installed `cellucid` version must
+  equal the recorded producer version, which must equal the
+  `cellucid_data_version` the generation declares.
+- **The input** — the source file's byte size and SHA-256, verified against the
+  actual file before it is read, and digests of every array the build reads from
+  it. The four atlases also pin, by size and SHA-256, the upstream gene
+  identifier list and the Ensembl-to-symbol table their gene names come from.
+- **The analysis** — the parameters and digests of everything the build
+  derives: the neighbour graph and the embeddings, the gene-naming census of the
+  four atlases, and the velocity projections of Pancreas.
+- **The output** — the identity, the manifests, a digest of every coordinate and
+  vector payload, and the file count, total byte size, and a SHA-256 generation
+  digest over the whole exported directory.
 
-## The other four are recorded, not pinned
+The environment and producer checks run before the build reads a source,
+touches the network, or writes output. The new generation is written into a
+staging directory beside `exports/<id>/`, validated against everything
+`sources/<id>.json` pins, and only then swapped into place. A rebuild that
+differed anywhere stops instead of publishing. The dataset repository's
+contract suite re-measures every published directory against the same
+generation digest, so a generation that changes under the repository fails
+there too.
 
-`suo`, `garcia`, `he`, and `kanemaru` are produced by the notebook pairs in
-`cellucid-datasets/notebooks/`: one notebook computes the shared neighbour
-graph and the 1D, 2D, and 3D embeddings and writes an intermediate `.h5ad`, and
-one exports that intermediate. What is known about the four published
-generations is recorded in
-[`sources/unpinned-generations.json`](https://github.com/theislab/cellucid-datasets/blob/main/sources/unpinned-generations.json),
-which is explicit that it describes artifacts rather than pinning a build.
+The generation digest covers every file in `exports/<id>/` except the two
+publication sidecars, `default.cellucid-session` and `state-snapshots.json`.
+Those advertise and hold the reviewed starting view
+({doc}`../l_sessions_sharing/04_official_sample_states`); the session file's
+bytes are pinned by the catalog entry's own `state_sha256` instead, so the view
+can be republished without moving a generation pin.
 
-Recorded, and re-checked by the dataset repository's contract suite:
+## What the pins do not claim
 
-- the SHA-256 generation digest, file count, and total byte size of each
-  published directory, measured exactly the way the Pancreas generation is
-  measured;
-- the producer version each export states about itself in its
-  `dataset_identity.json`; and
-- the file count printed by the committed output of the export notebook, which
-  ties each published directory to one committed notebook run.
-
-Not established:
-
-- that re-running the notebooks would produce these bytes again — nothing there
-  is a build contract;
-- that the recorded producer version is true; it is the export's own statement
-  about itself, with nothing outside the export corroborating it;
-- which bytes each export was built from. The preparation notebooks record the
-  source file's size, never a checksum, and a matching size is not a matching
-  file; and
-- that the named notebooks produced these exact directories. The file-count
-  agreement is evidence, not identity — two runs differing only in coordinate
-  values would agree on it.
-
-Not recoverable:
-
-- a checksum of any source `.h5ad`. None was taken while these generations were
-  built, and none can be reconstructed now, because the export format stores no
-  cell barcodes;
-- a pinned interpreter, library set, BLAS configuration, or thread count. The
-  preparation notebooks write the `anndata`, `scanpy`, and `numpy` versions into
-  the intermediate `.h5ad`, which is not part of the repository, and nothing
-  records `umap-learn`, which governs the embeddings;
-- bit-exact embeddings. The notebooks fix `random_state=0`, but scanpy's
-  neighbour search is approximate above 4,096 cells and no thread count is
-  pinned, so equal inputs need not give equal coordinates; and
-- the sources themselves. The notebooks read from a workspace-level
-  `.anndatas/` directory that this project does not distribute, so these four
-  can be rebuilt only with access to that data.
-
-These four remain complete, published exports of named studies, with fixed
-bytes you can check against the recorded digests. What differs is the sense in
-which they are reproducible: you can confirm you hold exactly the published
-artifact, but you cannot regenerate it from a recipe in the repository.
+- **That the upstream file is immutable.** The Pancreas build downloads its URL
+  unless it is handed a local copy. It is the recorded digest, not the URL, that
+  turns a changed or unavailable upstream into a failure rather than a silent
+  difference.
+- **That anyone can rebuild the four atlases.** Their sources are outputs of an
+  scVI/scANVI integration pipeline — derivatives of the ArrayExpress studies
+  above, not archive downloads — and are not redistributable. The repository
+  never holds them; `sources/<id>.json` records exactly which bytes rebuild each
+  one, and the build refuses any others. Without those exact files you can verify
+  a published generation but not regenerate it.
+- **That the build runs anywhere.** It refuses to start on a different
+  interpreter version, platform, BLAS build, or installed package set, rather
+  than publishing something different under the same name.
 
 ## What to do with this
 
@@ -136,12 +134,13 @@ artifact, but you cannot regenerate it from a recipe in the repository.
   study name, its URL, and the citation text under `source`. To cite Cellucid
   itself, see {doc}`/citing`.
 - **Confirming you hold the published generation.** Compare the directory you
-  have against the recorded generation digest: `sources/pancreas.json` for
-  `pancreas`, `sources/unpinned-generations.json` for the other four. Both
-  files hold the current values; they change whenever a dataset is regenerated,
-  so read them rather than copying a digest out of documentation.
-- **Rebuilding.** Only `pancreas` can be rebuilt from the dataset repository
-  alone, and only in the environment its build contract pins.
+  have against `export_contract` in `sources/<id>.json`: `generation_sha256`,
+  `expected_file_count`, and `expected_total_bytes`. These values change
+  whenever a dataset is regenerated, so read them from the file rather than
+  copying a digest out of documentation.
+- **Rebuilding.** `pancreas` can be rebuilt from the dataset repository alone;
+  the four atlases also need their pinned source files. Every rebuild needs the
+  environment `sources/build-environment.json` pins.
 - **Needing a pinned build of your own.** Export from the upstream study
   yourself with {doc}`../../python_package/c_data_preparation_api/index`, and
   record the source digest and the environment beside the result as described

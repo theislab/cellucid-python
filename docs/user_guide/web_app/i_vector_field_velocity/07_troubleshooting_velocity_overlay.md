@@ -120,7 +120,10 @@ If you’re stuck, do this first:
   - `velocity_umap_2d`, `velocity_umap_3d`, `T_fwd_umap_2d`, etc.
 - If you’re loading an export folder, check for:
   - `dataset_identity.json` containing a `vector_fields` block
-  - a `vectors/` directory with files like `velocity_umap_2d.bin` (or `.bin.gz`)
+  - a `vectors/` directory with the files that block lists under
+    `vector_fields.fields.<field>.files`, one per bound embedding and named by
+    index, such as `vectors/0_2.bin.gz` (or `.bin` when the export is
+    uncompressed)
 
 ### Fix
 

@@ -154,7 +154,8 @@ def test_velocity_docs_use_real_pancreas_captures_and_current_controls() -> None
     assert captures.count(":width: 1440px") == 3
     assert "3,696 cells" in captures
     assert "2D **Planar**" in captures
-    assert "3D `velocity_umap`" in captures
+    assert "3D `velocity` payload" in captures
+    assert "velocity_umap" not in captures
 
 
 def test_every_reused_velocity_capture_keeps_real_pancreas_provenance() -> None:

@@ -59,8 +59,8 @@ In the UI, var fields appear as:
 Cellucid treats gene expression as **continuous**: selecting a gene always creates a continuous-style legend (colorbar + sliders).
 :::
 
-The var axis is whatever the export published — one name per gene, decided when
-the dataset was prepared. It is not necessarily every gene the study measured,
+The var axis is whatever the export published — the genes and their names,
+decided when the dataset was prepared. It is not necessarily every gene the study measured,
 and Cellucid neither knows nor can recover what was left out. For the built-in
 samples this is documented: see {doc}`07_genes_in_the_built_in_samples`.
 

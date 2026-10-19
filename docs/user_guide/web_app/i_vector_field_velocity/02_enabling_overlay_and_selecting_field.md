@@ -125,6 +125,6 @@ does not contain the vector arrays or dataset. See
 
 ## Verified interface
 
-{doc}`08_screenshots` shows the real Pancreas `velocity_umap` field in 2D
+{doc}`08_screenshots` shows the real Pancreas `velocity` field in 2D
 **Planar**, the expanded advanced controls, and the independent 3D field in
 **Orbit**.

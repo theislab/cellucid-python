@@ -26,7 +26,7 @@ is unchecked, and no vector data has been downloaded yet.
 ```
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/02-embedding-with-overlay.png
-:alt: The same Pancreas 2D planar embedding with Show overlay checked: bright particle trails stream across the embedding, the points are dimmed underneath, and the expanded overlay controls show velocity_umap at 15K particles and 3.0x flow speed.
+:alt: The same Pancreas 2D planar embedding with Show overlay checked: bright particle trails stream across the embedding, the points are dimmed underneath, and the expanded overlay controls show the velocity field at 15K particles and 3.0x flow speed.
 :width: 1440px
 
 **On.** The same cells, same camera. Checking `Show overlay` fetches the vector
@@ -53,7 +53,7 @@ Think of each cell as having a tiny “push” in a certain direction on the emb
 - “Do two conditions have different directional trends?”
 
 For example, in the standard Pancreas sample you can color by `clusters`, show
-`velocity_umap` in 2D **Planar**, and then inspect its independent 3D field in
+`velocity` in 2D **Planar**, and then inspect its independent 3D field in
 **Orbit**. Treat agreement as a useful visual check, not as proof of endocrine
 lineage or kinetic time.
 

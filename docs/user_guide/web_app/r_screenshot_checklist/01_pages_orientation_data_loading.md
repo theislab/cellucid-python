@@ -120,7 +120,8 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
   exports: `corrupt-payload`, `mismatched-manifest`, `missing-payload`,
   `truncated-catalog`, `wrong-format-catalog`, and mixed variants).
 - Catalog sample ids confirmed in `cellucid-datasets/exports/datasets.json`:
-  `suo` (default), `garcia`, `he`, `kanemaru`, `pancreas`.
+  `suo`, `garcia`, `he`, `kanemaru`, `pancreas`, in that order. The catalog
+  names no default dataset.
 
 ---
 
@@ -807,7 +808,7 @@ terminal and Jupyter captures:
 
 - **explains** — What the `pancreas` sample is (3,696 cells, 3,753 genes, the
   scVelo vignette dataset), how to load it from the sample picker, which
-  categorical/continuous fields, genes, edges, embeddings and the `velocity_umap`
+  categorical/continuous fields, genes, edges, embeddings and the `velocity`
   vector field it exposes, what is source-owned versus derived, and its pinned
   build contract.
 - **has** — line 47 `vector_field_velocity/pancreas-velocity-3d.png`
@@ -834,9 +835,8 @@ terminal and Jupyter captures:
   sample in Build 2026-07-27.1"; the app ships `2026-07-27.24`. Cross-cutting
   note 3. Every numeric claim I could check against
   `cellucid-datasets` holds: `pancreas` is present in
-  `cellucid-datasets/exports/datasets.json` with `suo` as `default`, matching
-  line 7 ("The catalog id is exactly `pancreas`; Suo remains the catalog
-  default").
+  `cellucid-datasets/exports/datasets.json`, which names no default dataset,
+  matching line 7 ("The catalog id is exactly `pancreas`").
 
 ## user_guide/web_app/b_data_loading/11_custom_dataset_repository.md
 
@@ -868,7 +868,7 @@ terminal and Jupyter captures:
   4. **One loaded synthetic dataset per geometry**, to substantiate line 54
      ("Planar in 1D and 2D, Orbit in 3D") — a claim about navigation defaults
      that the reader is asked to take on faith. `synthetic-development-3d` in
-     Orbit with its 3D `velocity_umap` overlay on is the most persuasive single
+     Orbit with its `velocity` overlay on is the most persuasive single
      frame. `_static/screenshots/data_loading/github-synthetic-development-3d.png`.
   5. **Terminal: the local catalog validation** from "2. Test the complete
      catalog through the local server" (line 226). Plain terminal running
@@ -888,17 +888,19 @@ terminal and Jupyter captures:
   `datasets.json` plus `synthetic-cell-types-2d/`, `synthetic-development-3d/`,
   and `synthetic-trajectory-1d/` — matching the table at line 48. The
   `synthetic-cell-types-2d` fixture has `connectivity/`, `obs/` (4 fields),
-  `var/` (8 genes), and `points_2d.bin.gz`, consistent with "72 cells, 8 genes,
-  four `obs` fields, a 2D embedding". Good — the fixtures make every capture in
+  `var/` (8 genes), and `embeddings/0_2d.bin.gz` and `embeddings/1_2d.bin.gz`,
+  consistent with "72 cells, 8 genes, four `obs` fields, two 2D embeddings". Good — the fixtures make every capture in
   this list scriptable offline, without depending on GitHub availability at
   capture time.
 
 ## user_guide/web_app/b_data_loading/12_sample_dataset_provenance.md
 
-- **explains** — Which of the five built-in samples can be rebuilt from a pinned
-  recipe (only `pancreas`) and which four are recorded artefacts; exactly what
-  the Pancreas build contract pins; and for the other four, what is recorded,
-  what is not established, and what is not recoverable.
+- **explains** — That all five built-in samples are rebuilt by pinned build
+  scripts (`build_pancreas.py` for `pancreas`, `build_atlas.py` for the four
+  human atlases) against `sources/<id>.json` and
+  `sources/build-environment.json`; exactly what those pins cover; and what they
+  do not claim, including that the four atlases' integration outputs are not
+  redistributed.
 - **has** — none.
 - **verdict** — ADD (minimal)
 - **needs**
@@ -912,10 +914,7 @@ terminal and Jupyter captures:
   2. Nothing else. The page's substance is a reproducibility argument about
      digests, environments, and what is *not* knowable; there is no screen that
      shows any of it, and inventing one would misrepresent the page.
-- **notes** — This is the most carefully-hedged page in my four sections and I
-  found no claim I could contradict. The "Not established" and "Not recoverable"
-  lists (lines 98–125) are the kind of writing the rest of the docs should
-  imitate. One small opportunity: line 34 says the four human samples "publish
+- **notes** — One small opportunity: line 34 says the four human samples "publish
   only the genes whose Ensembl accession resolved to a symbol, out of files that
   had already been reduced to 8,192 features upstream" and points at
   ``d_fields_coloring_legends/07_genes_in_the_built_in_samples``; a reader hunting

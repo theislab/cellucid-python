@@ -105,8 +105,8 @@ Important distinctions:
 - Dataset folder name and dataset id are different concepts:
   - folder name: `pbmc_demo/` (path on disk / in repo)
   - dataset id: `dataset_identity.json["id"]` (identity inside Cellucid)
-- The catalog's only top-level keys are `version`, `default`, and `datasets`.
-  Version is exactly `1`, and `default` names an exact listed ID.
+- The catalog's only top-level keys are `version` and `datasets`. Version is
+  exactly `1`, and the catalog names no default dataset.
 - Each dataset entry requires unique `id` and `path` fields. `path` is a safe
   relative directory ending in `/`.
 - An entry may also contain `name`, `description`, `n_cells`, and `n_genes`;

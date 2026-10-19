@@ -14,8 +14,8 @@ The overlay is primarily a **qualitative** visualization of directionality. Alwa
 
 ## Start with a biological question
 
-For the standard Pancreas dataset, select `velocity_umap`, begin in the 2D
-**Planar** view, and ask whether the displayed endocrine-state flow is coherent
+For the standard Pancreas dataset, select `velocity`, begin in the 2D
+**Planar** view of its `X_umap` embedding, and ask whether the displayed endocrine-state flow is coherent
 with the annotated populations. Then inspect the independent 3D field in
 **Orbit**. Agreement across views can make a projected pattern easier to
 inspect; it does not by itself validate lineage, transition probability, or

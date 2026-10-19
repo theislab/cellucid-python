@@ -62,9 +62,9 @@ tell a live connection from a path you merely typed.
 
 | Exact dataset ID | Contents | A useful first question |
 |---|---|---|
-| `synthetic-cell-types-2d` | 72 cells, 8 genes, four `obs` fields, a 2D embedding, and 144 weighted edges | Do the three `cell_type` categories agree with their marker-gene patterns? |
-| `synthetic-development-3d` | 96 cells, 10 genes, five `obs` fields, a 3D embedding, 187 weighted edges, and 3D `velocity_umap` vectors | Does the vector field follow both developmental branches when you orbit the view? |
-| `synthetic-trajectory-1d` | 48 cells, 6 genes, four `obs` fields, a 1D embedding, 93 weighted edges, and 1D `velocity_umap` vectors | How do `pseudotime` and gene activity change along the line? |
+| `synthetic-cell-types-2d` | 72 cells, 8 genes, four `obs` fields, two 2D embeddings (`islands`, the default, and `marker_scores`), and 144 weighted edges | Do the three `cell_type` categories agree with their marker-gene patterns? |
+| `synthetic-development-3d` | 96 cells, 10 genes, five `obs` fields, a 3D embedding (`branches`), 187 weighted edges, and a `velocity` vector field bound to it | Does the vector field follow both developmental branches when you orbit the view? |
+| `synthetic-trajectory-1d` | 48 cells, 6 genes, four `obs` fields, a 1D embedding (`trajectory`), 93 weighted edges, and a `velocity` vector field bound to it | How do `pseudotime` and gene activity change along the line? |
 
 Each dataset uses the navigation mode expected for its geometry: Planar in 1D
 and 2D, Orbit in 3D.
