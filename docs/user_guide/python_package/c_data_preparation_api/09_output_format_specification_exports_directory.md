@@ -296,7 +296,7 @@ It provides:
 
 The reader validates this object against an exact key set, so a key that is not
 listed here makes the dataset fail to load. In this example
-`cellucid_data_version` is `0.9.3`. <!-- CELLUCID_VERSION -->
+`cellucid_data_version` is `0.9.2`. <!-- CELLUCID_VERSION -->
 
 ```json
 {
@@ -305,7 +305,7 @@ listed here makes the dataset fail to load. In this example
   "name": "PBMC demo",
   "description": "",
   "created_at": "2026-01-01T00:00:00Z",
-  "cellucid_data_version": "0.9.3",
+  "cellucid_data_version": "0.9.2",
   "stats": {
     "n_cells": 10000,
     "n_genes": 2000,

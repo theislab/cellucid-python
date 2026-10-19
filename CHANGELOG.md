@@ -5,119 +5,8 @@ All notable changes to Cellucid will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.9.3]
+## [0.9.2]
 <!-- CELLUCID_VERSION -->
-
-Version 0.9.3 changes the export format to **version 3**, so that one export can
-carry several embeddings per dimension and several sets of gene names, and
-carries the web app changes made since 0.9.2. It is a clean break: exports in
-the earlier format are not read, and format-3 exports need a viewer release that
-reads format 3. Re-export with `prepare()` (or `cellucid_prepare()` from the
-matching R release, which writes the same bytes).
-
-### Added
-
-- `var_gene_name_columns=` on `prepare()`: further `var` columns offered as
-  alternative gene names (for example symbols beside an Ensembl index).
-- `embedding_keys=` (`--embedding-1d/2d/3d KEY[:c0,c1]`), `expression_source=`
-  (`--expression X|raw|layer:NAME`) and `--gene-id-column` for serving AnnData.
-- `cellucid.data_mapping`: the data-mapping model shared with the web app and
-  the R package, with a conformance fixture
-  (`tests/fixtures/data_mapping_conformance.json`) and a cross-writer byte
-  parity fixture (`tests/fixtures/writer_parity_v3.json`).
-- A sixth reconciled surface, **Embedding**: the writer proves `embeddings/`
-  holds exactly the files `dataset_identity.json` declares.
-
-- **Web app**: cells can be highlighted on a touch screen. Every selection tool
-  started only from an `Alt` press, which a phone or tablet does not have, so touch
-  users could not select at all. A **Select mode** switch in the Highlighting panel
-  now stands in for a held `Alt`: while it is on, a one-finger tap or drag runs the
-  active tool through the same path an `Alt` press takes, and its Intersect / Add /
-  Subtract buttons stand in for `Shift` and `Ctrl`. Two fingers always pinch to zoom
-  and, newly, drag to pan; a second finger landing mid-selection abandons that
-  gesture rather than committing it. `Esc` with nothing in progress leaves the mode.
-  Mouse and keyboard behaviour is unchanged while it is off.
-
-- **Web app**: a **selection bar** at the bottom of the plot carries Select mode's
-  controls, so a selection can be made, combined, confirmed, cancelled and cleared
-  without opening the menu, which covers the whole screen on a phone. It shows the
-  same switch and Intersect / Add / Subtract choice as the panel, the active
-  tool's cell count with its Undo, Cancel and Confirm while a selection is in
-  progress, the active page's highlighted count with Clear, and a one-line note
-  when a tap on empty plot changed nothing. Every control on it is the panel's
-  control shown again, so the two always agree. It is always shown on touch
-  screens (just the switch while the mode is off), shown to a mouse while the
-  mode is on, centred in the part of the plot the sidebar leaves uncovered, and
-  notifications stack above it.
-
-### Changed
-
-- **Export format v3** (`dataset_identity.json` `version: 3`).
-  `embeddings` is now `{default_dimension, defaults, items}`: every exported
-  embedding is an item with a `label`, a `dimension`, the exact payload `file`
-  `embeddings/{index}_{dimension}d.bin(.gz)` and its `source` (`key` and the
-  0-based `columns` it was read from). Items are ordered by dimension, then id;
-  `defaults` names the item each dimension shows first. The `points_*d.bin`
-  files at the export root are gone.
-- **Vector fields bind to embedding ids.** A field's `files` are keyed by
-  embedding id, `vectors/{fieldIndex}_{embeddingIndex}.bin(.gz)`, scaled by that
-  embedding's normalization factor. `basis`, `available_dimensions` and the
-  per-field `default_dimension` are removed; `label` is the field id.
-- **Manifests are `compact_v2`.** A categorical field's element `[5]` is
-  `centroidsByEmbedding`, keyed by embedding id. `var_manifest.json` replaces
-  `var_gene_id_column` with `gene_name_sets`: the default set (from
-  `var_gene_id_column` or the var index) and any alternative sets, stored as
-  metadata only, so a reader can switch gene names without reading expression
-  again.
-- **`prepare()` API:** `X_umap_1d`, `X_umap_2d` and `X_umap_3d` are replaced by
-  `embeddings={id: array or Embedding}` (required) and `embedding_defaults`
-  (required for every dimension with more than one embedding). The new
-  `cellucid.Embedding(values, columns=None, label=None, source_key=None)` reads
-  chosen 0-based columns of a wide array, such as `X_pca` columns `[0, 1]`.
-  `vector_fields` is now `{field: {embedding id: array}}`.
-- **Gene names are made unique instead of refused.** Repeated names become
-  `MATR3`, `MATR3-1`, ... by the rule anndata's `var_names_make_unique()` uses,
-  and an empty name takes its row's var index name. The same rule runs in the
-  Python writer, the R writer and the AnnData server, and what changed is
-  printed and recorded in `var_manifest.json`. `gene_identifiers` matches the
-  unique names.
-- **`cellucid serve` / `serve_anndata()` / `show_anndata()` for AnnData** serve
-  identity v3. `serve_connectivity` and `--connectivity` are replaced by
-  `knn_key` and `--knn KEY`: the named `obsp` matrix is read and checked when it
-  is named, and one that is not symmetric (such as `distances`) is refused with
-  that reason instead of being symmetrized.
-- When an object has no `X_umap_1d`/`X_umap_2d`/`X_umap_3d` and no 1- to
-  3-column `X_umap`, the server no longer stops with rename hints. It makes a
-  deterministic best guess from the other `obsm` arrays (t-SNE, force-directed
-  layouts, PHATE, spatial coordinates and diffusion maps are preferred over
-  latent spaces such as `X_pca`) and reports it; when nothing can be plotted it
-  says what `obsm` holds and why each entry was not used.
-- Sessions: `datasetFingerprint` must carry `cellOrder` (now naming the
-  `embedding` its digest was taken on) and the new `dataMapping`. User-defined
-  categorical fields no longer store `centroidsByDim` or `normalizedDims`.
-  `apply_cellucid_session_to_anndata()` checks the mapping against the AnnData,
-  compares `varCount` on the mapped gene axis, and resolves var-sourced fields
-  through the mapped gene names and expression matrix.
-
-#### Added
-
-- `var_gene_name_columns=` on `prepare()`: further `var` columns offered as
-  alternative gene names (for example symbols beside an Ensembl index).
-- `embedding_keys=` (`--embedding-1d/2d/3d KEY[:c0,c1]`), `expression_source=`
-  (`--expression X|raw|layer:NAME`) and `--gene-id-column` for serving AnnData.
-- `cellucid.data_mapping`: the data-mapping model shared with the web app and
-  the R package, with a conformance fixture
-  (`tests/fixtures/data_mapping_conformance.json`) and a cross-writer byte
-  parity fixture (`tests/fixtures/writer_parity_v3.json`).
-- A sixth reconciled surface, **Embedding**: the writer proves `embeddings/`
-  holds exactly the files `dataset_identity.json` declares.
-
-#### Removed
-
-- `vector_fields.missing_embedding_message()`, `resolve_embedding_keys()`,
-  `embedding_declaration_hints()` and the other helpers of the one-UMAP-per-
-  dimension rule, together with `AnnDataAdapter.get_points_binary()`.
-
 
 Version 0.9.2 is a patch release on 0.9.1.
 
@@ -191,6 +80,75 @@ Version 0.9.2 is a patch release on 0.9.1.
   background showing through nearer cells; highlighted cells get the same 3D
   ring as `Full`, held still. It costs about what `Full` does (3–5% more in
   3D views on an Apple M1 Pro, the same in 2D). `Full` stays the default.
+- `var_gene_name_columns=` on `prepare()`: further `var` columns offered as
+  alternative gene names (for example symbols beside an Ensembl index).
+- `embedding_keys=` (`--embedding-1d/2d/3d KEY[:c0,c1]`), `expression_source=`
+  (`--expression X|raw|layer:NAME`) and `--gene-id-column` for serving AnnData.
+- `cellucid.data_mapping`: the data-mapping model shared with the web app and
+  the R package, with a conformance fixture
+  (`tests/fixtures/data_mapping_conformance.json`) and a cross-writer byte
+  parity fixture (`tests/fixtures/writer_parity_v3.json`).
+- A sixth reconciled surface, **Embedding**: the writer proves `embeddings/`
+  holds exactly the files `dataset_identity.json` declares.
+
+### Changed
+
+- **Export format version 3.** One export can now carry several embeddings per
+  dimension and several sets of gene names. This is a clean break: exports in
+  the earlier format are not read, and format-3 exports need a web app that
+  reads format 3. Re-export with `prepare()` (or `cellucid_prepare()` from the
+  matching R release, which writes the same bytes). `dataset_identity.json`
+  has `version: 3`, and `embeddings` is now `{default_dimension, defaults, items}`: every exported
+  embedding is an item with a `label`, a `dimension`, the exact payload `file`
+  `embeddings/{index}_{dimension}d.bin(.gz)` and its `source` (`key` and the
+  0-based `columns` it was read from). Items are ordered by dimension, then id;
+  `defaults` names the item each dimension shows first. The `points_*d.bin`
+  files at the export root are gone.
+- **Vector fields bind to embedding ids.** A field's `files` are keyed by
+  embedding id, `vectors/{fieldIndex}_{embeddingIndex}.bin(.gz)`, scaled by that
+  embedding's normalization factor. `basis`, `available_dimensions` and the
+  per-field `default_dimension` are removed; `label` is the field id.
+- **Manifests are `compact_v2`.** A categorical field's element `[5]` is
+  `centroidsByEmbedding`, keyed by embedding id. `var_manifest.json` replaces
+  `var_gene_id_column` with `gene_name_sets`: the default set (from
+  `var_gene_id_column` or the var index) and any alternative sets, stored as
+  metadata only, so a reader can switch gene names without reading expression
+  again.
+- **`prepare()` API:** `X_umap_1d`, `X_umap_2d` and `X_umap_3d` are replaced by
+  `embeddings={id: array or Embedding}` (required) and `embedding_defaults`
+  (required for every dimension with more than one embedding). The new
+  `cellucid.Embedding(values, columns=None, label=None, source_key=None)` reads
+  chosen 0-based columns of a wide array, such as `X_pca` columns `[0, 1]`.
+  `vector_fields` is now `{field: {embedding id: array}}`.
+- **Gene names are made unique instead of refused.** Repeated names become
+  `MATR3`, `MATR3-1`, ... by the rule anndata's `var_names_make_unique()` uses,
+  and an empty name takes its row's var index name. The same rule runs in the
+  Python writer, the R writer and the AnnData server, and what changed is
+  printed and recorded in `var_manifest.json`. `gene_identifiers` matches the
+  unique names.
+- **`cellucid serve` / `serve_anndata()` / `show_anndata()` for AnnData** serve
+  identity v3. `serve_connectivity` and `--connectivity` are replaced by
+  `knn_key` and `--knn KEY`: the named `obsp` matrix is read and checked when it
+  is named, and one that is not symmetric (such as `distances`) is refused with
+  that reason instead of being symmetrized.
+- When an object has no `X_umap_1d`/`X_umap_2d`/`X_umap_3d` and no 1- to
+  3-column `X_umap`, the server no longer stops with rename hints. It makes a
+  deterministic best guess from the other `obsm` arrays (t-SNE, force-directed
+  layouts, PHATE, spatial coordinates and diffusion maps are preferred over
+  latent spaces such as `X_pca`) and reports it; when nothing can be plotted it
+  says what `obsm` holds and why each entry was not used.
+- Sessions: `datasetFingerprint` must carry `cellOrder` (now naming the
+  `embedding` its digest was taken on) and the new `dataMapping`. User-defined
+  categorical fields no longer store `centroidsByDim` or `normalizedDims`.
+  `apply_cellucid_session_to_anndata()` checks the mapping against the AnnData,
+  compares `varCount` on the mapped gene axis, and resolves var-sourced fields
+  through the mapped gene names and expression matrix.
+
+### Removed
+
+- `vector_fields.missing_embedding_message()`, `resolve_embedding_keys()`,
+  `embedding_declaration_hints()` and the other helpers of the one-UMAP-per-
+  dimension rule, together with `AnnDataAdapter.get_points_binary()`.
 
 ### Fixed
 
@@ -753,7 +711,6 @@ declared `0.0.9`. Release 0.9.1 restores one exact version across both systems.
   - Jupyter integration (`show()`, `show_anndata()`)
 - Export functionality for web deployment
 
-[0.9.3]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.3
 [0.9.2]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.2
 [0.9.1]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.1
 [0.0.9]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.0
