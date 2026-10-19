@@ -160,9 +160,11 @@ legends in {doc}`../k_figure_export/02_export_ui_walkthrough`.
 
 ### `Keep view` is disabled
 
-Set **Visualization → Render mode:** to `Points`. If the button is enabled but
-snapshot creation reports `Keep view failed`, preserve the current live view,
-remove an unneeded snapshot if three already exist, and retry.
+Set **Visualization → Render mode:** to `Points`. With **Sample dataset** set
+to `None` there are no cells to keep: load a dataset first (the button's
+tooltip names the reason). If the button is enabled but snapshot creation
+reports `Keep view failed`, preserve the current live view, remove an unneeded
+snapshot if three already exist, and retry.
 
 ### A change affected the wrong panel
 

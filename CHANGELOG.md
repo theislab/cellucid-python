@@ -72,6 +72,12 @@ Version 0.9.2 is a patch release on 0.9.1.
 - **Web app, rendering**: connectivity edges declare their per-vertex
   attribute at location 0. Left to the linker, Firefox on macOS could draw
   them without an enabled attribute 0 and emulate one per vertex.
+- **Web app, no dataset**: after choosing **None**, Keep view, figure Export,
+  Save and Connect repo are unavailable and say why instead of throwing;
+  Differential expression, Gene signature and Marker genes show `Requires gene
+  expression data.` (as on a dataset without genes) instead of a page error;
+  Analyze performance and Copy situation report ask for data; and Load says no
+  dataset is open instead of quoting `0 cells and 0 genes`.
 - **Web app, interface**: one calmer design. One font (Inter) in sentence case
   with a small type scale; soft borders; compact spacing. Every panel has
   short headings, and every explanation moved from the panel into an (i) tip
