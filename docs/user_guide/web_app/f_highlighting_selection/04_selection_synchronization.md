@@ -86,12 +86,16 @@ embedding does not mark them in the plots under **Analysis**.
 - The preview highlight is global, but rendered per view (visible cells only).
 - The gesture you perform is tied to the specific panel you start it in (especially for lasso).
 
+**Annotation based in multi-view grid**
+- The click or drag is read on the field of the panel you press, not on the focused view's, and selects only the cells that panel shows. View focus stays where it was.
+- So with the focused view colored by a continuous field and another panel by `cell_type`, an `Alt+click` in that other panel selects the clicked cell's `cell_type` category.
+
 **Lasso in multi-view grid**
 - Lasso selection is anchored to the panel you started drawing in.
 - Keep the lasso path inside one panel to avoid “wrong panel” confusion.
 
 **Proximity/KNN in multi-view**
-- The seed click happens in one panel, but the resulting selected indices are global.
+- The seed click happens in one panel and is read with that panel's filters; view focus stays where it was. The resulting selected indices are global.
 - Filters in the target panel can affect which cells are selectable (filtered-out cells are excluded).
 
 ### The two reasons a panel does not draw a highlight
@@ -147,7 +151,7 @@ This is why the highlight count can show:
 ### Color-by and selection/highlighting
 Changing the active color-by field:
 - does not change group membership,
-- can change which selection tool behaviors are available for **annotation-based** selection (because that tool depends on the active field’s kind: categorical vs continuous),
+- can change which selection tool behaviors are available for **annotation-based** selection (because that tool depends on the kind of the field of the view you click in: categorical vs continuous),
 - can change how easy it is to visually judge the correctness of your selection.
 
 ---

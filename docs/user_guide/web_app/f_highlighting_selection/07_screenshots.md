@@ -127,7 +127,7 @@ filtering out is not highlighted there. See
 ## What the app says when a gesture fails
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/read-missed-click-notice.png
-:alt: A proximity Alt+click on empty space: the pointer is pressed above the embedding where no cell is drawn, and the ringed line in the Highlighting panel adds "That click did not land on a cell, so there is nothing to select. Zoom in to make cells easier to hit: only the cells the viewer is currently drawing can be clicked." under the Proximity drag help text.
+:alt: A proximity Alt+click on empty space: the pointer is pressed above the embedding where no cell is drawn, and the ringed line in the Highlighting panel adds "That click did not land on a cell, so there is nothing to select. Zoom in or raise Point size to make cells easier to hit: only the cells the viewer is currently drawing can be clicked." under the Proximity drag help text.
 :width: 1440px
 
 A click that hits nothing says so, in one line, under the **Highlight mode**

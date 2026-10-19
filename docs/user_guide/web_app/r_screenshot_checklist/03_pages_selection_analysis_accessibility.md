@@ -290,7 +290,7 @@ element five times and stack them into a single labelled composite:
 | --- | --- | --- |
 | `That click did not land on a cell…` | Proximity drag, zoom far out with LOD on, `Alt+click` empty space, no candidate set | suo |
 | `That gesture ended outside the view…` | Lasso, `Alt+drag`, release the mouse over the sidebar | pancreas |
-| `That cell has no value on the active field…` | Annotation based on a field with a missing-code sentinel, `Alt+click` a sentinel cell | he |
+| `That cell has no value on that panel's field…` | Annotation based on a field with a missing-code sentinel, `Alt+click` a sentinel cell | he |
 | `That gesture did not change the selection.` | Lasso the identical polygon twice with `Alt` | pancreas |
 | `Annotation selection needs an active field…` | Annotation based with colour-by set to None | pancreas |
 

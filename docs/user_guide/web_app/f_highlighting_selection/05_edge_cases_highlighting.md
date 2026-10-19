@@ -43,7 +43,7 @@ If you’re actively stuck, use {doc}`06_troubleshooting_highlighting` (it’s o
 
 **What changes**
 - The *look* of the plot changes (because color-by changed).
-- Annotation-based selection behavior can change (because it depends on the active field’s kind: categorical vs continuous).
+- Annotation-based selection behavior can change (because it depends on the kind of the field of the view you click in: categorical vs continuous).
 
 **What does not change**
 - Highlight pages and highlight groups (membership) do not change when you switch fields.
@@ -151,11 +151,12 @@ Highlight groups store explicit arrays of indices, and highlight recomputation s
 - Switch to a simpler color-by (e.g., a single color) just to visually validate highlights.
 - Change background mode to increase contrast.
 
-:::{warning}
-**Point size** changes only what is *drawn*. It has no effect on what can be
-*clicked*: picking uses a fixed radius in data space and never reads the drawn
-size. If an `Alt+click` is missing cells, zoom in — do not reach for the point
-size slider. See {doc}`06_troubleshooting_highlighting`.
+:::{note}
+What you can click is what is drawn. A click picks the dot under the pointer at
+the size it is drawn (plus a few pixels of slack), and where dots overlap the
+front-most one wins. Cells that are filtered out, or that the current level of
+detail does not draw, are never picked. If an `Alt+click` keeps missing, zoom in
+or raise **Point size**. See {doc}`06_troubleshooting_highlighting`.
 :::
 
 ---

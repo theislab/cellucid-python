@@ -59,15 +59,16 @@ Two rules hold for every message in the table below:
 
 | What you see | What happened | What to do |
 |---|---|---|
-| “That click did not land on a cell, so there is nothing to select. Zoom in to make cells easier to hit: only the cells the viewer is currently drawing can be clicked.” | `Alt+click` hit no point. Points draw about a pixel wide when zoomed out, so this is ordinary rather than exceptional. | Zoom in, then click again. **Point size** does not help: picking uses a fixed radius in data space and never reads the drawn size. |
+| “That click did not land on a cell, so there is nothing to select. Zoom in or raise Point size to make cells easier to hit: only the cells the viewer is currently drawing can be clicked.” | `Alt+click` hit no point. Points draw about a pixel wide when zoomed out, so this is ordinary rather than exceptional. | Zoom in or raise **Point size**, then click again. A click hits the dot drawn under the pointer, at the size it is drawn, so a bigger dot is a bigger target. |
 | “That gesture ended outside the view, so nothing was selected.” | You released the mouse somewhere other than the plot. The gesture was abandoned deliberately — see the symptom below. | Repeat the gesture and release over the plot. |
 | “That gesture was interrupted before it ended, by a second finger or by the browser, so nothing was selected.” | Select mode: a second finger landed while a one-finger selection was still being drawn (two fingers always zoom and pan), or the browser took the touch over. | Draw with one finger only, and lift it before pinching or panning. |
-| “That cell has no value on the active field, so there is nothing to select.” | Annotation based: the clicked cell is missing a value on the active field, so the rule resolves to no cells. | Click a cell that has a value, or switch to a field that covers it. |
+| “That cell has no value on that panel's field, so there is nothing to select.” | Annotation based: the clicked cell is missing a value on the field of the panel you pressed, so the rule resolves to no cells. | Click a cell that has a value, or color that panel by a field that covers it. |
+| “That panel is not colored by a field, so there is nothing to select.” | Annotation based, in a grid of views: the panel you pressed is colored by no field, although the focused view is. The gesture is read on the panel you press. | Color that panel by a field, or select in a panel that has one. |
 | “That gesture did not change the selection.” | The gesture resolved to exactly the set you already had. | Nothing is wrong. Draw elsewhere, or change the modifier key. |
 | “Annotation selection needs an active field. Choose a Categorical obs or Continuous obs field under Coloring & Filtering, then Alt+click a cell (or tap it in Select mode).” | Annotation based is selected but no field is coloured, so the viewer never starts the gesture at all. | Choose a categorical or continuous field first. |
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/read-missed-click-notice.png
-:alt: A proximity Alt+click on empty space: the pointer is pressed above the embedding where no cell is drawn, and the ringed line in the Highlighting panel adds "That click did not land on a cell, so there is nothing to select. Zoom in to make cells easier to hit: only the cells the viewer is currently drawing can be clicked." under the Proximity drag help text.
+:alt: A proximity Alt+click on empty space: the pointer is pressed above the embedding where no cell is drawn, and the ringed line in the Highlighting panel adds "That click did not land on a cell, so there is nothing to select. Zoom in or raise Point size to make cells easier to hit: only the cells the viewer is currently drawing can be clicked." under the Proximity drag help text.
 :width: 1440px
 
 Where to look. The pointer was pressed in empty space above the embedding;
@@ -349,12 +350,13 @@ on the selection.
    says so in place of the usual invitation, and the viewer never starts the
    gesture.
 2) Filters are hiding part of the category/range (selection only considers visible cells).
-3) You are selecting on a different active field than you think.
+3) You are selecting on a different field than you think. In a grid of views
+   the gesture reads the field of the panel you press, not the focused view's.
 4) The field has missing values or extreme distribution (continuous).
 5) You expected “Alt = intersect” but on categorical fields it behaves like “replace”.
 
 ### How to confirm
-- Confirm the active field in the UI (legend/field selector).
+- Confirm the field of the view you click in (its legend; focus that view to see it in the field selector).
 - Temporarily disable filters and repeat the selection.
 - Try a known categorical field with obvious labels (e.g., `cell_type`) to validate semantics.
 - If **nothing at all** is selected, read the line under the **Highlight mode**
@@ -363,7 +365,7 @@ on the selection.
     `Alt+click` invitation whenever no field is coloured. The viewer never
     starts the gesture in that state, so there is nothing to debug beyond
     choosing a field.
-  - *“That cell has no value on the active field, so there is nothing to
+  - *“That cell has no value on that panel's field, so there is nothing to
     select.”* means the field is fine but the cell you clicked is missing a
     value on it. Click a different cell.
 

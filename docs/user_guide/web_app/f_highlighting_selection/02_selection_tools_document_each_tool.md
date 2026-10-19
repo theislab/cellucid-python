@@ -101,7 +101,8 @@ outside the view, so nothing was selected.”*
 ### Rule 5: a gesture the app cannot serve says so
 Every gesture the app consumes but cannot turn into a step writes one line under
 the **Highlight mode** buttons — a click that hit no cell, a cell with no value
-on the active field, a gesture that resolved to the selection you already had.
+on the field of the panel you pressed, a panel colored by no field, a gesture
+that resolved to the selection you already had.
 That line is the first thing to read when a tool “does nothing”; the full list
 is in {doc}`06_troubleshooting_highlighting`.
 
@@ -122,7 +123,7 @@ The candidate set can persist across tool switches, but per-tool undo/redo histo
 
 | Tool | Best for | Space | 2D vs 3D | Requires extra data | Common gotcha |
 |---|---|---|---|---|---|
-| **Annotation based** | “Select all cells like this one” (category) or “cells in this value range” (continuous) | Field space | Works in both; depends on active field | Active field must be categorical/continuous | Selects only *visible* cells in that category/range |
+| **Annotation based** | “Select all cells like this one” (category) or “cells in this value range” (continuous) | Field space | Works in both; reads the field of the view you click in | A categorical or continuous color-by field | Selects only *visible* cells in that category/range |
 | **Lasso** | Drawing around a region in the plot | Screen-space polygon (projection) | In 3D it selects by projection | None | In 3D it can include points “behind” your intended region |
 | **Proximity drag** | Selecting a local blob by distance | Embedding-space radius | In 2D it behaves like a disk; in 3D like a sphere | None | If you miss-click, center may be wrong (or nothing happens) |
 | **KNN drag** | Selecting along the neighbor graph (manifold-aware) | Graph distance (degree) | Independent of camera; still view-filtered | Connectivity/edges must be loaded | A press before the graph has loaded only starts the load; with no graph at all, “No neighbor graph available for this dataset” |
@@ -131,17 +132,22 @@ The candidate set can persist across tool switches, but per-tool undo/redo histo
 
 ## Tool 1 — Annotation-based selection (Alt+click / Alt+drag)
 
-This is the “select cells similar to this one” tool. It depends on the **active field**.
+This is the “select cells similar to this one” tool. It reads the field the
+view you click in is colored by.
 
 ### Where it gets its meaning
-The active field is whatever the UI is currently using for:
-- coloring / legends, and/or
-- field selection
+The field is the view's color-by field, the one its legend shows. In a grid of
+views it is the field of the panel you press, which need not be the focused
+view's: a selection gesture never moves view focus, so the gesture is read on
+the panel it lands in — its field and the cells it shows — while focus stays
+where it was. See [Multi-view behavior](#multi-view-behavior).
 
-If there is no active field, annotation-based selection has nothing to operate on.
+If the focused view is colored by no field, the tool does not start a gesture
+at all, and the panel asks you to color by a field first. A gesture in another
+panel that is colored by no field selects nothing and says so.
 
 ### Categorical field behavior (Alt = replace)
-If the active field is **categorical**:
+If that field is **categorical**:
 - `Alt+click` selects **all visible cells in the clicked cell’s category**.
 - `Shift+Alt+click` unions that category into the candidate set.
 - `Ctrl/Cmd+Alt+click` subtracts that category from the candidate set.
@@ -154,7 +160,7 @@ If you want to select *all* cells in a category (ignoring current filters), temp
 :::
 
 ### Continuous field behavior (Alt = intersect)
-If the active field is **continuous**:
+If that field is **continuous**:
 - `Alt+click` selects a small range around the clicked value (a “default window”).
 - `Alt+drag` (vertical drag) expands/contracts a range anchored at the clicked value.
 - `Shift+Alt` unions the range results into the candidate set.
@@ -237,7 +243,13 @@ To approximate a “3D volume selection”:
 4) Repeat until the result is tight.
 
 ### Multi-view behavior
-In grid multi-view, lasso applies to the specific panel you started the gesture in.
+In grid multi-view, a selection gesture is read on the panel you press, and
+view focus stays where it was: `Alt+click`, `Alt+drag` and a Select mode tap
+never make that panel the active view. **Annotation based** selection uses the
+field that panel is colored by and only the cells that panel shows, even when
+the focused view is colored by a different field; the range label of a
+continuous drag is that panel's range. Lasso applies to the specific panel you
+started the gesture in.
 Only cells that panel actually shows can be selected: the part of a path that
 strays into a neighbouring panel (or under the sidebar) selects nothing there.
 Proximity and KNN likewise grow from the cell under the pointer in the panel

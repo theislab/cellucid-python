@@ -68,6 +68,33 @@ Version 0.9.2 is a patch release on 0.9.1.
   touches its swatch.
 - **Web app, rendering**: a hover lookup and any click on the page no longer
   redraw the scene for a second.
+- **Web app, picking**: hovering and clicking now pick the dot drawn under the
+  pointer, at the size it is drawn, instead of the first cell near the view
+  ray, which could be a nearer cell beside the pointer. Where dots overlap the
+  front-most wins; filtered-out cells and cells the current level of detail
+  does not draw are never picked. Cell info, Alt+click selection, proximity
+  and KNN all use it, each in the pane under the pointer.
+- **Web app, selection**: in a grid of views, Alt+click and Alt+drag in a
+  pane other than the focused one now select by that pane's field. They used
+  the focused view's field, so a click in a pane colored by `cell_type`
+  beside a focused view colored by a continuous field selected a value range
+  of the wrong field. The category, the value range, the drag preview and its
+  range label now all come from the pressed pane, among the cells it shows;
+  view focus still does not move. A pane colored by no field now says so.
+- **Web app, cell info**: the card no longer disappears for good. A key whose
+  release the page never saw (a Cmd shortcut such as the macOS screenshot
+  keys, or a key held while the window lost focus) read as camera motion
+  forever, and so did a drag released outside the page; the card waits for
+  the camera to settle, so it never came back. Held keys are now only the
+  navigation keys, are dropped on blur, and Shift alone no longer counts as
+  motion. The card no longer repeats the pane's name in a grid of views.
+- **Web app, benchmark**: the presets are now 500K, 1M, 5M, 10M, 20M and 40M.
+- **Web app, welcome**: the welcome dialog opens with no choice pre-selected;
+  focus rests on the dialog and the first Tab reaches **Choose a dataset**.
+  The sidebar footer links GitHub next to Docs and Cite.
+- **Web app, pointer**: hover, click and selection read the camera as it is,
+  not as the last frame drew it, so a pointer read right after the camera
+  moved no longer lands on the previous picture.
 
 - **Web app**: automatic antialiasing now accounts for the view's dimension.
   A 1D or 2D view has no depth test, so every point is shaded and antialiasing

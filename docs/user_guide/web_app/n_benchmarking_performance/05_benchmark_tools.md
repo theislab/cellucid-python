@@ -21,7 +21,7 @@ Open:
 - Left sidebar → **Performance Benchmark** accordion
 
 It includes:
-- six quick presets: 100K, 500K, 1M, 5M, 10M, 20M points,
+- six quick presets: 500K, 1M, 5M, 10M, 20M, 40M points,
 - a custom point count input accepting any whole number from 1 to 250,000,000,
 - eight synthetic **data patterns**,
 - a **Load Synthetic Data** button,
@@ -30,7 +30,7 @@ It includes:
 - and an **Analyze Performance** tool that suggests what to change.
 
 ```{figure} ../../../_static/screenshots/benchmarking_performance/benchmark-panel-controls.png
-:alt: The Performance Benchmark panel before any run, showing the six point-count presets from 100K to 20M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons; the live performance readout is omitted.
+:alt: The Performance Benchmark panel before any run, showing the six point-count presets from 500K to 40M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons; the live performance readout is omitted.
 :width: 516px
 
 The panel before its first run. The live metric readout that sits between
@@ -267,7 +267,7 @@ analysis no longer changes your shader quality as a side effect.
 ## Safety notes and footguns
 
 - Synthetic benchmark data is not your real dataset. Reload the page to restore your original data.
-- Don’t start with 20M points on a laptop. Ramp up: 100K → 500K → 1M → 5M.
+- Don’t start with 20M or 40M points on a laptop. Ramp up: 500K → 1M → 5M → 10M.
 - If you hit “WebGL context lost”, reduce point count and/or reduce GPU load (smaller window, no snapshots, no smoke).
 - The custom point count is capped at 250,000,000, and that ceiling is the
   hardware's rather than an arbitrary refusal. The renderer's interaction-state

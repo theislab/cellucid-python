@@ -277,7 +277,7 @@ export const SCENARIOS = Object.freeze([
     name: 'benchmark-panel-controls',
     describes:
       'The Performance Benchmark panel before any run, showing the six ' +
-      'point-count presets from 100K to 20M, the custom point count field, ' +
+      'point-count presets from 500K to 40M, the custom point count field, ' +
       'the data pattern dropdown, and the Load Synthetic Data, Copy ' +
       'Situation Report and Analyze Performance buttons; the live ' +
       'performance readout is omitted.',
@@ -3280,8 +3280,9 @@ function buildHighlightingScenarios() {
         'A proximity Alt+click on empty space: the pointer is pressed above the '
         + 'embedding where no cell is drawn, and the ringed line in the '
         + 'Highlighting panel adds "That click did not land on a cell, so there '
-        + 'is nothing to select. Zoom in to make cells easier to hit: only the '
-        + 'cells the viewer is currently drawing can be clicked." under the '
+        + 'is nothing to select. Zoom in or raise Point size to make cells easier '
+        + 'to hit: only the cells the viewer is currently drawing can be '
+        + 'clicked." under the '
         + 'Proximity drag help text.',
       dataset: 'pancreas',
       setup: pinHighlightGlow,
