@@ -74,8 +74,13 @@ mutates nothing on your object.
 
 ### The data mapping it serves
 
-`adapter.get_data_mapping()` returns the data mapping the adapter serves: the
-embedding of each dimension slot (`obsm` key and 0-based columns), `knn`,
+`adapter.get_data_mapping()` returns the data mapping the adapter serves. Its
+`embeddings` are `{"enabled": [...], "defaults": {"1d", "2d", "3d"}}`: the
+served slots are the defaults, and every other usable `obsm` array 1 to 3
+columns wide is enabled beside them at all of its columns (not vector fields,
+the latent key or arrays the best guess refused; see
+`cellucid.data_mapping.default_enabled_embeddings`), each as an `obsm` key and
+0-based columns. Then come `knn`,
 `geneNames` (`"index"`, or `"column:<name>"` for `gene_id_column`),
 `expression` (`"X"`, `"raw"`, `"layer:<name>"`, or `None` without expression),
 `latent`, and the served vector bindings. It is the shape a session fingerprint

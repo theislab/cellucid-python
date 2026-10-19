@@ -1,6 +1,6 @@
 # Core Interactions (Viewer Basics)
 
-These pages explain how to *drive the viewer* confidently: navigation, camera, render modes, multiview, and dimension switching.
+These pages explain how to *drive the viewer* confidently: navigation, camera, render modes, multiview, and switching embeddings.
 
 **Audience:** everyone (novices get click-by-click; power users get exact controls + edge cases)  
 **Time:** 15–30 minutes for full coverage
@@ -17,9 +17,9 @@ These pages explain how to *drive the viewer* confidently: navigation, camera, r
 
 ## Where these controls live
 
-Everything in this section is in two sidebar accordions, **Visualization** and
-**Compare Views**. Inside **Compare Views**, the **Navigation** block is the one
-you will use most, and it changes shape with the mode you pick:
+Everything in this section is in three sidebar accordions: **Visualization**,
+**Navigation** and **Compare views**. **Navigation** is the one you will use
+most; it edits the selected view, and it changes shape with the mode you pick:
 
 ```{figure} ../../../_static/screenshots/web_app/navigation-controls-orbit.png
 :alt: A panel headed NAVIGATION with a small circled i button, a MODE dropdown reading Orbit with the mouse pointer pressing it, and a bordered box below holding a KEYBOARD SPEED slider reading 0.40x, a ticked GOOGLE EARTH-STYLE DRAG checkbox and a ticked SHOW ORBIT ANCHOR checkbox.
@@ -57,14 +57,14 @@ Points vs volumetric smoke, including performance knobs and failure modes.
 :link: 04_view_layout_live_snapshots_small_multiples
 :link-type: doc
 
-Keep view, grid compare, camera locking, badges, and per‑view state.
+Keep view, grid compare, the view rows, linked cameras, and per‑view state.
 :::
 
-:::{grid-item-card} {octicon}`versions;1.5em;sd-mr-1` Dimension Switching
+:::{grid-item-card} {octicon}`versions;1.5em;sd-mr-1` Switching Embeddings
 :link: 05_dimension_switching_1d_2d_3d
 :link-type: doc
 
-How 1D/2D/3D switching works (per view), what changes, and what doesn’t.
+Which embedding each view shows, keys 1/2/3, what changes, and what doesn’t.
 :::
 
 :::{grid-item-card} {octicon}`bug;1.5em;sd-mr-1` Troubleshooting

@@ -37,8 +37,8 @@ SpatialData, OME-TIFF and OME-Zarr, among other formats
 - **Very large datasets on ordinary hardware.** Points are drawn on the GPU
   with WebGL2, with optional level of detail and frustum culling; see
   {doc}`../n_benchmarking_performance/01_performance_mental_model`.
-- **1D, 2D and 3D layouts**, switchable per view, with orbit, planar and
-  free-fly navigation; see
+- **Any number of 1D, 2D and 3D embeddings**, one per view and any mix side
+  by side, with orbit, planar and free-fly navigation per view; see
   {doc}`../c_core_interactions/05_dimension_switching_1d_2d_3d`.
 - **No server needed to share.** A prepared export is a folder of static files:
   host it on GitHub and anyone opens it from a link

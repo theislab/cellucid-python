@@ -98,7 +98,9 @@ Then the startup selection loads as the first ordinary dataset change (see
 - load the dataset's metadata and `dataset_identity.json`
 - load the obs manifest → attach obs field loader
 - optionally load the var manifest → attach var field loader
-- load points positions (the default dimension's slot layout)
+- load the positions of the embedding the dataset opens on (the default of
+  its opening dimension, `dimensionManager.getDefaultLayoutKey()`); every other
+  enabled embedding is read when a view first shows it
 - optionally load the connectivity manifest (edges load when shown)
 
 (dataset-change-transactions)=

@@ -43,9 +43,16 @@ The root has exactly `createdAt`, `datasetFingerprint`, and `chunks`:
     "dataMapping": {
       "kind": "export",
       "embeddings": {
-        "1d": null,
-        "2d": { "key": "X_umap", "columns": null },
-        "3d": { "key": "X_umap_3d", "columns": null }
+        "enabled": [
+          { "key": "X_pca", "columns": null },
+          { "key": "X_umap", "columns": null },
+          { "key": "X_umap_3d", "columns": null }
+        ],
+        "defaults": {
+          "1d": null,
+          "2d": { "key": "X_umap", "columns": null },
+          "3d": { "key": "X_umap_3d", "columns": null }
+        }
       },
       "geneNames": "index",
       "vectorFields": []
@@ -65,8 +72,11 @@ The root has exactly `createdAt`, `datasetFingerprint`, and `chunks`:
   `2`, or `3`. `digest` is 16 lowercase hexadecimal characters computed over
   every cell coordinate of that embedding in dataset row order.
 - `dataMapping` records the arrays the dataset was shown with. Of `kind`
-  `"export"` it has exactly `kind`, `embeddings` (the `1d`/`2d`/`3d` slots, each
-  an embedding reference or null), `geneNames` (`"index"` or `"column:<name>"`),
+  `"export"` it has exactly `kind`, `embeddings` (`enabled`: the embedding
+  references that are turned on, at least one, sorted by key then columns
+  without repeats; and `defaults`: the `1d`/`2d`/`3d` default, each an enabled
+  reference or null, at least one named), `geneNames` (`"index"` or
+  `"column:<name>"`),
   and `vectorFields` (`{"field", "embedding"}` bindings in use); of `kind`
   `"anndata"` it adds `knn` (an `obsp` key or null), `expression` (`"X"`,
   `"raw"`, `"layer:<name>"`, or null), and `latent` (an `obsm` key or null), and
@@ -140,7 +150,7 @@ including explicit empty camera-path and analysis-cache inventories:
 | Chunk id | Priority | Dataset dependent | Contains |
 |---|---:|---:|---|
 | `core/field-overlays` | eager | yes | field rename/delete registries and user-defined field metadata |
-| `core/state` | eager | yes | camera, navigation, dimension and per-view embedding, filters, active fields, and multiview |
+| `core/state` | eager | yes | camera, navigation, each view's embedding (`liveEmbedding` and each kept view's `embedding`), filters, active fields, and multiview (link state and every view's camera) |
 | `ui/dockable-layout` | eager | no | non-analysis floating-panel state and geometry |
 | `analysis/windows` | eager | yes | analysis window state and geometry |
 | `highlights/meta` | eager | yes | highlight pages and group metadata |

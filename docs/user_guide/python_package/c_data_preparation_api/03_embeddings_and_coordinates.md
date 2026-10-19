@@ -125,17 +125,22 @@ Practical implications:
 ### Default dimension and UI switching
 
 The export records every embedding with its dimension, the default embedding of
-each dimension, and the highest dimension as the one shown first. In the web app,
-users can switch between the available dimensions.
+each dimension, and the highest dimension as the one shown first. In the web app
+every embedding of the export is turned on, so each view can show any of them —
+two 2D embeddings side by side, or a 3D one beside a 2D one — and the default of
+a dimension is what keys `1`, `2` and `3` show first.
 
 Related UI docs:
-- Dimension switching: {doc}`../../web_app/c_core_interactions/05_dimension_switching_1d_2d_3d`
+- Switching embeddings: {doc}`../../web_app/c_core_interactions/05_dimension_switching_1d_2d_3d`
+- Turning embeddings on and off: {doc}`../../web_app/b_data_loading/13_data_mapping`
 
 ```{figure} ../../../_static/screenshots/web_app/dimension-navigation-controls-2d.png
-:alt: Cellucid Compare Views controls showing 2D dimension and Planar navigation selected.
+:alt: Cellucid Compare Views controls (earlier interface) showing 2D dimension and Planar navigation selected.
 :width: 246px
 
-For a 2D embedding, Cellucid selects 2D with Planar navigation; both settings remain explicit if the user chooses another valid configuration.
+For a 2D embedding, Cellucid selects Planar navigation (earlier interface: the
+Dimension dropdown is now the embedding picker); a mode the user chooses for a
+view stays explicit.
 ```
 
 ### What you can export
@@ -245,13 +250,16 @@ How to confirm:
 Fix:
 - Filter/recompute embedding; re-export with `force=True` (or to a new directory).
 
-### Symptom: dimension switch control missing
+### Symptom: the `Shows` picker is greyed out
 
 Meaning:
-- Only one dimension was exported.
+- Only one embedding was exported (or only one is turned on under
+  **Session › Data mapping**); its hover text reads "This dataset shows one
+  embedding. Turn more on in Session › Data mapping."
 
 Fix:
-- Export embeddings of more than one dimension, for example a 2D and a 3D UMAP.
+- Export more than one embedding, for example a 2D and a 3D UMAP, or a 2D
+  t-SNE beside the 2D UMAP, and turn them on in **Session › Data mapping**.
 
 ---
 

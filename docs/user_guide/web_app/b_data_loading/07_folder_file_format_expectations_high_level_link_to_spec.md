@@ -146,8 +146,8 @@ Which array each dimension shows by default:
   columns of a wide array such as `X_pca`). See {doc}`13_data_mapping`.
 
 This holds for every AnnData mode: the browser file picker, `cellucid serve`,
-and the notebook viewers. In the browser any other array can then be chosen
-under **Session › Dataset › Data mapping**; `cellucid serve` takes
+and the notebook viewers. In the browser any other array can then be turned
+on under **Session › Data mapping** and shown in any view; `cellucid serve` takes
 `--embedding-1d/--embedding-2d/--embedding-3d KEY[:c0,c1]`.
 
 ### Optional (but commonly expected)

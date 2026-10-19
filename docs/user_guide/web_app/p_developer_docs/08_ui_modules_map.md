@@ -109,6 +109,7 @@ The `ui/` layer also has directories this page does not otherwise cover:
 | Dataset controls | `ui/modules/dataset-controls.js` | dataset dropdown + dataset info block |
 | Dataset connections | `ui/modules/dataset-connections.js` | local-user picker, remote server connect, GitHub connect |
 | Session controls | `ui/modules/session-controls.js` | save/load `.cellucid-session` buttons |
+| Data mapping controls | `ui/modules/data-mapping-controls.js` | Session › Data mapping: the Embeddings checklist (on/off, defaults, column selections), Apply/Revert, Read from file |
 
 ### Field/filter/highlight modules
 
@@ -125,11 +126,12 @@ The `ui/` layer also has directories this page does not otherwise cover:
 
 | Module | File | Owns |
 |---|---|---|
-| View controls | `ui/modules/view-controls.js` | multiview (“Keep view”), layout mode, camera lock, badges |
-| Dimension controls | `ui/modules/dimension-controls.js` | dimension dropdown + per-view dim cycling |
+| View controls | `ui/modules/view-controls.js` | multiview (“Keep view”), layout mode, **Link cameras**, one row per view (what it shows, field, navigation mode, linked), the Navigation “Applies to” row |
+| Representation controls | `ui/modules/representation-controls.js` | the `View N shows` picker (`#view-representation-select`) + keys 1/2/3 (default, then cycle) |
 | Render controls | `ui/modules/render-controls.js` | points vs smoke, smoke sliders, connectivity toggles |
 | Velocity overlay controls | `ui/modules/velocity-overlay-controls.js` | vector field overlay settings + field selection |
-| Camera controls | `ui/modules/camera-controls.js` | navigation mode + camera settings panels |
+| Camera controls | `ui/modules/camera-controls.js` | the Navigation accordion: mode select of the focused view, pointer capture, projectiles |
+| Navigation settings | `ui/modules/navigation-settings.js` | per-mode settings boxes, speed sliders and option checkboxes |
 
 ### “Large feature” modules
 

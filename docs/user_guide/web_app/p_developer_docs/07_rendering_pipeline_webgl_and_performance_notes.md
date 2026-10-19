@@ -58,8 +58,7 @@ Full detail is drawn from two `ARRAY_BUFFER`s bound into one VAO:
 | 1 `a_color` | `buffers.colors` | RGBA8, normalized | 4 | `DYNAMIC_DRAW` |
 
 Positions are never padded to XYZ. Every view's positions — `DataState`, the
-viewer's per-view cache, the renderer, the spatial index, the LOD compact
-store, snapshot geometry and the edge position texture — hold exactly as many
+viewer's per-view cache, the renderer, the spatial index, snapshot geometry and the edge position texture — hold exactly as many
 components per cell as the embedding has, and that count is the view's
 dimension level (`rendering/position-layout.js`). The shaders keep a `vec3`
 `a_position`; the attribute is bound with 1, 2 or 3 components and WebGL
@@ -76,39 +75,65 @@ Alpha is not taken from the color stream while a dataset is loaded: it lives in
 a separate R8 texture (one texel per point), so a visibility change touches
 neither stream.
 
-Each full-detail store is allocated straight from the published typed array
-(`bufferData(positions)`, `bufferData(colors)`), so nothing is repacked and the
-renderer holds no client copy of either. A recolor is one in-place
-`bufferSubData` of the RGBA array; the positions are not re-sent.
+**Draw order.** A geometry's points are stored on the GPU in the draw order of
+the spatial tree over them (`SpatialIndex#drawOrder`, built by
+`_publishDrawOrder`): grouped by LOD band, then by tree leaf, then by
+ascending cell index. Band `b` holds the cells the hierarchical order first
+admits at LOD level `b`; the last band holds the full-detail remainder. So:
 
-Level of detail keeps one **compact prefix** for the live geometry (the live
-positions have one dimension, so there is exactly one): the largest reduced
-level's points in hierarchical order, held as the same two streams (a compact
-position store with the live dimension's components and a compact color
-store, one VAO), plus one R32UI index texture, shared by every reduced level,
-that maps a compact rank back to its cell for the alpha lookup. That is the
-whole LOD generation; there is no element buffer. The
-compact stores are gathered through one fixed 65,536-point staging block
-(`GATHER_CHUNK_POINTS`), positions and colors in separate passes, colors one
-32-bit word at a time — which is why color arrays handed to the renderer must
-start on a 4-byte boundary. A recolor rewrites only that compact color store,
-in place, the next time the live dimension renders.
+- a reduced LOD level is one `drawArrays` **prefix** of the stored points;
+- full detail is `drawArrays` over all of them;
+- frustum culling collects the runs of consecutive tree leaves inside the
+  frustum (a subtree wholly inside is one run, read from its node) and draws
+  each run as one contiguous range per band. Runs are merged across their
+  smallest gaps until runs × bands fit `MAX_CULLED_DRAW_RANGES` (256), and the
+  ranges go out as one `multiDrawArraysWEBGL` call, or one `drawArrays` per
+  range where `WEBGL_multi_draw` is missing (Firefox). No per-point index is
+  ever written or uploaded after the order is built, and a camera that does not
+  move re-culls nothing.
 
-A kept (snapshot) view of the live geometry draws its reduced levels from the
-same compact positions, with its own compact color store: 4 bytes per
-maximum-prefix point, gathered from its published colors when they or the
-live owner change, and retired with the view. A kept view with its own
-geometry draws its own tree through a per-view element buffer.
+Neighbouring points are neighbours in memory and on screen, which is also what
+makes the stored order faster at full detail: 10,000,000 points drew in 18 ms
+against 68 ms in source order on Chromium (15 against 57 on WebKit, 14 against
+57 on Firefox), a reduced level of 8,000,000 points in 15 ms against 14 ms for
+the compact copy it replaced, and a zoomed-in culled frame in 7–8 ms against
+21–31 ms for the per-point index buffer it replaced (Apple M1 Pro; standalone
+WebGL2 harness on the real draw order, translucent 2-px points, all cases in
+one run on a loaded machine).
 
-The compact copy is deliberate. Drawing reduced levels through an original-ID
-element buffer straight from the full-detail streams would remove the copy and
-its recolor cost, but it turns sequential vertex fetch into a gather, and that
-measured 2.0–2.4× slower per reduced-level frame at 5M points (Chromium, Apple
-M1 Pro, ANGLE Metal). Kept views drew that way until they got their own compact
-color stores: 12.0 ms against the live pane's 3.8 ms for the same
-1,333,334-point level of a 10,000,000-point embedding. Splitting the streams did not cost vertex throughput:
-the split full-detail draw measured within noise of the old 16-byte
-interleaved record at 5M points.
+Positions are per geometry, so each geometry carries its order; colours are
+per view, and each view's colour store is gathered into the order of the
+geometry it shows. Alpha stays in source order in its R8 texture, read through
+the order's R32UI permutation texture (`u_useLodIndexTex`: texel `k` is the
+cell stored in slot `k`), so a visibility change still touches neither stream.
+Picking, highlights, overlays, analysis and export all read source-order CPU
+arrays; nothing but the point draw reads the stored order.
+
+Before a tree exists a geometry is stored in source order (straight from the
+published arrays, no client copy) and draws at full detail only. A tree built
+before the upload (`loadData`/`updatePositions` with LOD or culling on) gathers
+the streams into its order once, through the fixed 65,536-point staging block
+(`GATHER_CHUNK_POINTS`); colours move one 32-bit word at a time, which is why
+colour arrays handed to the renderer must start on a 4-byte boundary. A tree
+that arrives later (the hover index built in a worker, or LOD turned on) is
+adopted without a stall (`_advanceDrawOrderAdoption`): positions and every
+view's colours are gathered into staging buffers 8 ms a frame while the views
+keep drawing full detail from the store as it is, then the permutation is
+uploaded and each stream is copied into place on the GPU between two frames.
+At 10M points the whole re-order is about 340 ms of CPU work.
+
+A recolour rewrites the view's colour store in place, gathered into its order.
+A view that switches to another representation keeps the colour store it
+leaves (keyed by that order); switching back while the colours are unchanged
+draws from it again with no upload. Kept colour stores count against the
+retention budget with retained geometry and are evicted first.
+
+The 2D overlap order of translucent points therefore follows the spatial tree
+(within a leaf, the later cell is drawn on top), and it is the same in the live
+view, kept views, every LOD level, culled frames and figure export (which draws
+in `getViewDrawOrder`). Nothing in Cellucid sets a draw order on purpose (no
+"high values on top" or "bring to front" option exists), so no feature depends
+on source order.
 
 - **Smoke / volumetric density**
   - Backend: `SmokeRenderer` (`cellucid/assets/js/rendering/smoke-cloud/`)
@@ -238,24 +263,29 @@ The viewer exposes a small API surface used by `DataState` and `main.js`.
 ### Incremental updates (critical for performance)
 
 - `viewer.updateColors(colors)`
-  - Rewrites the 4-byte-per-point color stream in place on the next frame, plus
-    4 bytes per compact LOD point when the live dimension, which owns the LOD
-    resources, next renders. Positions, the alpha texture and the LOD topology
-    are not touched.
+  - Rewrites the 4-byte-per-point color stream in place on the next frame,
+    gathered into the live geometry's draw order when it has one, and drops the
+    colour stores kept for other orders. Positions and the alpha texture are not
+    touched.
 
 - `viewer.updateTransparency(alphaArray)` (a `Uint8Array` of 0/1; a Float32 or out-of-range array is rejected)
   - Updates alpha/visibility texture/buffer.
   - Also triggers highlight/overlay rebuild hooks (e.g., selection needs the new visibility mask).
 
 - `viewer.updatePositions(positions, dimensionLevel)`
-  - Used for dimension switching (same point count, different embedding).
+  - Shows another representation in the live view (same point count, another
+    embedding, of any dimension); it is the only way the live view changes
+    dimension.
   - Must preserve the same indices; `positions` must hold exactly
     `pointCount * dimensionLevel` values, and other lengths are rejected.
-  - It is a new data publication: both streams are re-allocated straight from
-    their arrays (4 bytes per embedding axis + 4 bytes a point, nothing
-    repacked), the alpha texture is
-    republished, and spatial indices are rebuilt when LOD or frustum culling
-    needs them. With LOD on, the spatial-index build dominates its cost.
+  - It replaces only the positions: colours, transparency and the alpha
+    texture are per cell, not per representation, and are kept. The position
+    stream and spatial tree come from that representation's pooled geometry
+    when a kept view shows it or it was shown lately (no upload, no tree
+    build); otherwise the positions are uploaded once (4 bytes per embedding
+    axis a point, nothing repacked) and spatial indices are rebuilt when LOD
+    or frustum culling needs them. With LOD on, the spatial-index build
+    dominates its cost. A failure restores the previous publication exactly.
 
 Design rule:
 - Prefer incremental updates (`updateColors`, `updateTransparency`, `updatePositions`) over full `setData` reloads.
@@ -271,14 +301,25 @@ Cellucid can render:
   `RangeError`)
 
 Key idea:
-- A snapshot view is not “a second dataset”; it is a second **view context** with its own camera/dimension/filter/field choices, rendered from the same underlying point identity index space.
+- A snapshot view is not “a second dataset”; it is a second **view context** with its own camera/representation/filter/field choices, rendered from the same underlying point identity index space.
 
 The viewer:
 - tracks each view's layout key (`viewer.setViewEmbedding(viewId, { dimension, layoutKey })`, called from state); a layout change invalidates that view's LOD, frustum, picking and vector state
-- shares positions with snapshot views: a snapshot of the live geometry borrows
-  the live positions array and GPU position store, with no copy, and a snapshot
-  with its own geometry adopts the array it was published with. A published
-  positions array is never written afterwards.
+- shares geometry by representation: geometry is looked up by its positions
+  array (`_findPooledGeometry(positions, dimension)`; there is one array per
+  representation), so two views of one embedding share one GPU position
+  stream and one spatial tree, and two embeddings of one dimension never do. A
+  snapshot of the live geometry borrows the live positions array and GPU
+  position store, with no copy. A published positions array is never written
+  afterwards.
+- retains geometry no view shows any more, so showing it again costs no
+  upload and no tree build: within a budget of twice the largest geometry a
+  view shows, between 64 MiB and 768 MiB, least recently used first
+  (`evictRetainedGeometry`), and never at the cost of a new allocation
+- links cameras by representation: with **Link cameras** on, the views that
+  show the same embedding share one camera and navigation mode
+  (`viewer.setCamerasLocked()`, `viewer.getCameraLinkGroups()`); views of
+  different embeddings always keep their own
 - uses optimized paths for alpha/transparency sharing so it does not re-upload N full buffers per view
 
 ### The presented layout: one source of truth for where views are
@@ -380,7 +421,8 @@ quadruple fill cost and make four views genuinely four times a single view.
 Vector field overlays are conceptually simple (“animate particles along vectors”), but interact with:
 - dimension and embedding switching (vectors are bound to one embedding),
 - filtering (particles should respect visibility),
-- multiview (each view has its own dimension level and visibility),
+- multiview (each view has its own representation and visibility; a field is
+  drawn in every view showing an embedding it is bound to),
 - performance (particle systems can be expensive).
 
 Implementation notes:
@@ -403,19 +445,20 @@ render()  (self-rescheduling rAF; draws only when something can have changed)
   │
   ├─ frame gate ── invalidated, animating, or resized? ── no, settled ─▶ (no draw)
   │                                    │ yes
-  ├─ dirty-flag gate ── buffer dirty? LOD dimension dirty? ─── no ──┐
+  ├─ dirty-flag gate ── colours dirty or in another order? ── no ──┐
   │                                    │ yes                        │
-  │                                    └─▶ flushBufferUpdates()     │
+  │                                    └─▶ gather + bufferSubData   │
   │                                                                 │
   ├─ frustum cache ── MVP + dimension + bounds unchanged? ─ yes ─────┤ (no work)
   │                                    │ no                         │
-  │                                    └─▶ re-extract planes        │
+  │                                    └─▶ re-extract planes,       │
+  │                                        collect leaf runs        │
   │                                                                 │
-  ├─ index publication ── admitted leaf set unchanged? ──── yes ─────┤ (reuse EBO)
+  ├─ draw ranges ── same runs and LOD band? ─────────────── yes ─────┤ (reuse)
   │                                    │ no                         │
-  │                                    └─▶ upload element buffer    │
+  │                                    └─▶ write ≤ 256 ranges (CPU) │
   │                                                                 │
-  └─ useProgram · uniforms · bind alpha texture · drawArrays ◀───────┘
+  └─ useProgram · uniforms · bind alpha + permutation · draw ◀───────┘
 ```
 
 The frame gate decides whether a frame is drawn at all. Any mutating viewer or
@@ -442,31 +485,25 @@ so the canvas keeps showing — and reading back — the last drawn frame.
 Inside a drawn frame, three independent gates keep the work proportional to what
 changed, each cheap to check:
 
-1. **Buffer dirty flags** — set by colour updates, cleared on flush.
+1. **Buffer dirty flags** — set by colour updates, cleared on flush. A colour
+   store also follows its geometry's draw order, from a kept store when one
+   holds the current colours.
 2. **Frustum cache** — an exact element-wise comparison of the model-view-projection
    matrix, the dimension and the bounds. An idle camera re-extracts nothing.
-3. **Index publication watermark** — a camera move that changes the matrix but
-   not the *ordered set of admitted spatial nodes* reuses the published element
-   buffer. Even the post-upload error check is gated on the allocation
-   watermark, because running it every frame was measured in milliseconds.
-   Highlight buffers follow the same rule: `gl.getError()` runs on the first
+3. **Draw ranges** — a camera move collects the leaf runs inside the frustum
+   (a walk of the tree's nodes, not of its points) and writes at most 256
+   ranges; a level change with the same runs only rewrites the ranges. Nothing
+   is uploaded: the ranges are offsets into the stored points.
+   Highlight buffers follow their own rule: `gl.getError()` runs on the first
    allocation and when the store grows past the size already verified, not on
    every republication.
 
-The culled full-detail element buffer lists the visible points in **ascending
-index order**, not leaf by leaf. Every spatial leaf spans the whole point-ID
-range, so leaf order made the GPU fetch both vertex streams scattered across
-memory: at 5,000,000 points with everything in view, a culled static frame took
-30.0 ms against 9.4 ms unculled (Chromium, Apple M1 Pro, ANGLE Metal). In
-ascending order it takes 9.7 ms. Storage order is also the unculled draw order,
-so a culled frame blends translucent points exactly like an unculled one, which
-`tests/browser/frustum-culling-parity.spec.mjs` checks pixel for pixel. A small
-visible set is sorted directly; a large one is marked in a one-byte-per-point
-array and read back with one linear scan (`_writeAscendingVisibleIndices`).
-Reduced LOD levels were already emitted in compact-rank order. Do not go back to
-concatenating leaf index arrays.
+A culled frame draws a subsequence of the stored points in storage order, so
+it blends translucent points exactly like an unculled frame, which
+`tests/browser/frustum-culling-parity.spec.mjs` checks pixel for pixel.
 
-Binding the alpha texture is a bind and two uniform writes; it never uploads.
+Binding the alpha and permutation textures is two binds and a few uniform
+writes; it never uploads.
 
 The practical rule: **if you add work to the draw path, it must sit behind a gate
 of its own.** “It is only a few microseconds” is how the idle frame stops being
@@ -585,7 +622,7 @@ from the dataset's cell count and the active view's dimension — against
 `AUTOMATIC_ANTIALIAS_CELL_LIMIT = 5_000_000` in 3D and
 `AUTOMATIC_ANTIALIAS_CELL_LIMIT_FLAT = 200_000` in 1D/2D, where nothing is
 depth-rejected — re-decided on every dataset publication and on every
-`dimension:changed` of the active view.
+`view:representation-changed` of the active view.
 
 **Shader quality selects shading, never geometry.** All three point vertex
 shaders — and the copy `HP_VS_HIGHLIGHT` keeps of the formula — clamp
@@ -776,7 +813,7 @@ How to confirm:
 Fix:
 - Ensure filter logic updates transparency correctly and recomputes counts.
 
-### Symptom: “Dimension switch breaks rendering”
+### Symptom: “Switching a view's embedding breaks rendering”
 
 Likely causes:
 - `updatePositions` received the wrong length (`pointCount * dimensionLevel`

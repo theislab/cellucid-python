@@ -115,7 +115,7 @@ See:
 
 Likely causes (ordered):
 1) Visibility mask was not applied consistently (filters/outliers).
-2) Projection mismatch (dimension switch or view mismatch).
+2) Projection mismatch (the view shows another embedding, or the wrong view was exported).
 3) Large dataset reduction produced an unexpected downsample.
 
 How to confirm:

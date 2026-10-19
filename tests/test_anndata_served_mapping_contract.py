@@ -75,10 +75,19 @@ def test_the_default_served_mapping_names_what_is_served() -> None:
         assert mapping == validate_data_mapping(mapping)
         assert mapping == {
             "kind": "anndata",
+            # The served slots are the defaults; every other narrow obsm array
+            # is enabled beside them. X_pca (5 columns) fills no slot and the
+            # vector field is not a representation, so neither is enabled.
             "embeddings": {
-                "1d": None,
-                "2d": {"key": "X_umap_2d", "columns": [0, 1]},
-                "3d": {"key": "X_umap_3d", "columns": [0, 1, 2]},
+                "enabled": [
+                    {"key": "X_umap_2d", "columns": [0, 1]},
+                    {"key": "X_umap_3d", "columns": [0, 1, 2]},
+                ],
+                "defaults": {
+                    "1d": None,
+                    "2d": {"key": "X_umap_2d", "columns": [0, 1]},
+                    "3d": {"key": "X_umap_3d", "columns": [0, 1, 2]},
+                },
             },
             "knn": None,
             "geneNames": "index",
@@ -104,13 +113,21 @@ def test_the_served_mapping_follows_every_serving_choice() -> None:
     )
     try:
         mapping = adapter.get_data_mapping()
-        assert mapping["embeddings"]["2d"] == {"key": "X_pca", "columns": [3, 1]}
+        assert mapping["embeddings"]["defaults"]["2d"] == {"key": "X_pca", "columns": [3, 1]}
+        # The served selection of a wide array is enabled, and so is every
+        # narrow array beside it; the wide array is not enabled at its first
+        # columns, which nothing serves.
+        assert mapping["embeddings"]["enabled"] == [
+            {"key": "X_pca", "columns": [3, 1]},
+            {"key": "X_umap_2d", "columns": [0, 1]},
+            {"key": "X_umap_3d", "columns": [0, 1, 2]},
+        ]
         assert mapping["knn"] == "connectivities"
         assert mapping["geneNames"] == "column:symbol"
         assert mapping["expression"] == "layer:counts"
         identity = adapter.get_dataset_identity()
         defaults = identity["embeddings"]["defaults"]
-        for slot, ref in mapping["embeddings"].items():
+        for slot, ref in mapping["embeddings"]["defaults"].items():
             if ref is None:
                 assert slot not in defaults
             else:

@@ -287,13 +287,13 @@ If large datasets are unusable, triage in this order:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
-:alt: The whole window in Grid compare with the sidebar open: two equal panels fill the area to the right of the sidebar and show the Pancreas 3D embedding from the same locked camera — the left panel, the live view, coloured by cell_type, and the right panel, the kept snapshot, recoloured by S_score on a Viridis scale — each under a title chip naming its field. The sidebar, scrolled to Compare Views, lists badge 1 cell_type and the selected badge 2 S_score above the Layout select set to Grid compare, and Coloring & Filtering shows S_score in the Continuous obs select.
+:alt: The whole window in Grid compare with the sidebar open: two equal panels fill the area to the right of the sidebar and show the Pancreas 3D embedding from one linked camera — the left panel, the live view, coloured by cell_type, and the right panel, the kept view, recoloured by S_score on a Viridis scale — each under a title chip naming its field. The sidebar, scrolled to Compare Views in an earlier interface, lists badge 1 cell_type and the selected badge 2 S_score above the Layout select set to Grid compare, and Coloring & Filtering shows S_score in the Continuous obs select.
 :width: 1440px
 
 Two kept views support side-by-side comparison while retaining one dataset
 identity. Both panels are the full canvas height and split the width to the
 right of the sidebar equally: this row layout keeps points at full size, which
-is why it is the costliest arrangement per panel.
+is why it is the costliest arrangement per panel (earlier interface).
 ```
 
 ---

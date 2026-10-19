@@ -89,7 +89,7 @@ Cellucid has **state at different scopes**:
   - some registries (renames/deletes, user-defined field definitions).
 - **Per-view state** (live view and each snapshot has its own):
   - camera and navigation mode,
-  - which dimension (1D/2D/3D) is active,
+  - which embedding it shows (its dimension follows),
   - which field is active (obs vs var),
   - which filters are active,
   - view layout settings.

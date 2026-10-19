@@ -18,7 +18,9 @@
 | **Planar** | 2D embeddings | “Pan/zoom a flat map” | Expecting 3D rotation |
 | **Free-fly** | Immersive movement / demos | “First-person camera” | Using touch-only devices / pointer lock confusion |
 
-Switch modes in **Compare Views → Navigation → Mode** (or use shortcuts `O`/`P`/`G`).
+Switch modes in **Navigation → Mode** (or use shortcuts `O`/`P`/`G`). The mode
+belongs to the focused view; see
+[Each view navigates on its own](#each-view-navigates-on-its-own).
 
 ---
 
@@ -26,7 +28,7 @@ Switch modes in **Compare Views → Navigation → Mode** (or use shortcuts `O`/
 
 Navigation mode controls are in the left sidebar:
 
-- **Compare Views** accordion → **Navigation** section → **Mode** dropdown
+- **Navigation** accordion → **Mode** dropdown
 
 The mode options are:
 
@@ -40,10 +42,11 @@ Keyboard shortcuts (global, unless you’re typing in an input):
 - `P` → Planar
 - `G` → Free-fly
 
-You do not have to set the mode at all: the view's dimension picks one for you —
-**Orbit** in 3D, **Planar** in 1D and 2D — and keeps doing so every time the
-dimension changes. Choosing a mode that differs from that takes the control over
-for that view. See {doc}`05_dimension_switching_1d_2d_3d`.
+You do not have to set the mode at all: the dimension of the embedding a view
+shows picks one for it — **Orbit** in 3D, **Planar** in 1D and 2D — every time
+the view switches to another dimension. A mode you choose yourself is
+remembered for that view and that dimension. See
+{doc}`05_dimension_switching_1d_2d_3d`.
 
 The **Mode** dropdown is followed by a box of options that belong to the chosen
 mode only, so the panel looks different in each of the three. A still cannot
@@ -118,7 +121,7 @@ selection in progress stays on the bar, with its **Confirm** and **Cancel**.
 
 ### Orbit options (UI)
 
-In **Compare Views → Navigation → Orbit**:
+In **Navigation → Orbit**:
 
 - **Keyboard speed**: scales keyboard rotation/zoom speed.
 - **Google Earth-style drag** (default on): flips the horizontal drag sign (matches “grab-and-rotate” muscle memory for many users).
@@ -160,7 +163,7 @@ fingers.
 
 ### Planar options (UI)
 
-In **Compare Views → Navigation → Planar**:
+In **Navigation → Planar**:
 
 - **Keyboard speed**: scales keyboard pan/zoom speed.
 - **Zoom to cursor (pinch-style)** (default on): zoom around cursor.
@@ -194,7 +197,7 @@ Free-fly has no touch navigation: a finger neither looks around nor moves the ca
 
 ### Free-fly options (UI)
 
-In **Compare Views → Navigation → Free-fly**:
+In **Navigation → Free-fly**:
 
 - **Look sensitivity**: how fast the view rotates per mouse movement
 - **Move speed**: movement speed in “scene units per second”
@@ -223,24 +226,32 @@ Practical implications:
 
 - Scrolling (wheel zoom) over a panel focuses that panel and zooms it; with **Zoom to cursor** the point under the cursor in that panel stays put.
 - If you drag and “the wrong panel moves”, click inside the panel you intend to control.
-- When **cameras are unlocked**, each view can store its own camera state; clicking a different panel can switch you to its saved camera.
+- Focusing a panel loads its own camera and navigation mode, so the **Mode** dropdown changes to that view's mode.
 
 ---
 
-## Per-view vs global navigation mode (camera lock matters)
+## Each view navigates on its own
 
-### Cameras locked
+Every view keeps its own camera and its own navigation mode:
 
-- All views share the same camera and navigation mode.
-- The navigation dropdown changes behavior globally.
+- A view showing a 3D embedding starts in **Orbit**; a view showing a 1D or 2D
+  embedding starts in **Planar**. A 3D view beside a 2D view keeps orbiting
+  while the 2D view pans.
+- When a view switches to an embedding of another dimension, it takes that
+  dimension's mode — unless you chose a mode for that view in that dimension
+  before, which it takes instead. A view you set to **Free-fly** in 3D flies
+  again whenever it shows a 3D embedding, and pans whenever it shows a 2D one.
+- The **Mode** dropdown, its options and the `O`, `P` and `G` keys edit the
+  focused view. With several views open, the **Applies to** row above the
+  dropdown names it.
+- With **Link cameras** on, views that show the same embedding share one camera
+  and one mode, so a change reaches all of them, and **Applies to** names them
+  ("with view 2"). Views of different embeddings are never linked. See
+  {doc}`04_view_layout_live_snapshots_small_multiples`.
+- Each view's row in **Compare views** shows its mode (`Orbit`, `Pan` or
+  `Fly`); press it to switch that view's mode without focusing it.
 
-### Cameras unlocked
-
-- Each view stores its own camera *and* navigation mode.
-- View badges show a small navigation indicator (Orb / Pan / Fly).
-- Clicking the nav indicator cycles a view’s nav mode.
-
-This is powerful for comparisons (e.g., one view in planar 2D, another in orbit 3D), but it’s also a common source of confusion—use the badges to verify what mode each view is in.
+A session saves every view's camera and mode.
 
 ---
 

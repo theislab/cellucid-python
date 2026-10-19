@@ -45,18 +45,20 @@ exactly 1, 2, or 3. The embedding is part of the record because every embedding
 is a separate payload normalized on its own, so a digest only means anything
 within one of them.
 
-`dataMapping` names the embedding each dimension shows and the vector-field
-bindings in use, and for an AnnData source also the neighbour graph, the gene
-names, the expression matrix, and the latent space. For a prepared export these
-are fixed when the export is written, except which of its embeddings each
-dimension shows; for an `.h5ad` or Zarr file opened in the browser they start
-at the viewer's defaults (or its best guess) and the embeddings can be changed
-under **Session › Dataset › Data mapping**; for an object served by the Python
-package they are what the server serves.
+`dataMapping` names the embeddings that are turned on and each dimension's
+default, the vector-field bindings in use, and for an AnnData source also the
+neighbour graph, the gene names, the expression matrix, and the latent space.
+For a prepared export these are fixed when the export is written, except which
+of its embeddings are turned on and which is each dimension's default; for an
+`.h5ad` or Zarr file opened in the browser they start at the viewer's defaults
+(or its best guess) and the embeddings can be changed under **Session › Data
+mapping**; for an object served by the Python package they are what the server
+serves.
 
 The four scalars and `cellOrder` must equal the currently loaded dataset. The
-data mapping must too, with one exception: the embedding of each dimension. A
-session that names other embeddings than the ones on screen restores them,
+data mapping must too, with one exception: its embeddings. A session that turns
+on other embeddings, or names other defaults, than the ones on screen restores
+them,
 before its views, provided this dataset can show them; otherwise it is refused
 and names the embedding. This means the same files
 loaded through a GitHub repository and through a local folder are intentionally
@@ -82,8 +84,8 @@ shown.
 |---|---|
 | Current bundle, exact fingerprint, complete valid chunks | eager and lazy schedules finish, the transaction commits, then Cellucid reports **Session fully restored** |
 | Different source type, id, cell count, or variable count | complete rejection; the message names the saved and current cell and gene counts and asks you to open the dataset the session was saved on |
-| The session names another embedding in a dimension, one this dataset can show | the embedding is restored, then the session |
-| The session names an embedding in a dimension that this dataset does not have (or cannot plot) | complete rejection; the message names it, for example "This session uses obsm['X_tsne'] columns [0, 1] in 2D, which this dataset does not have" |
+| The session turns on other embeddings, or names other defaults, that this dataset can show | the embeddings are turned on, then the views are restored, then the session's data mapping is applied |
+| The session turns on an embedding that this dataset does not have (or cannot plot) | complete rejection; the message names it, for example "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have." |
 | The session was saved with another graph, gene names, expression matrix, latent space, or vector bindings | complete rejection; the message names the group and the array on each side |
 | The embedding the session recorded its cell order on does not exist in this dataset | complete rejection; the message names the embedding |
 | Same id and same cell and gene counts, but the dataset stores its cells in a different order | complete rejection; the message says the coordinates differ from the ones the session was saved against, names both causes a digest cannot tell apart — a different order, or the same cells re-exported from a re-computed embedding — and asks you to load the version the session was saved on, or re-create the selections here |

@@ -17,8 +17,9 @@
 ## Quick summary (read this if you only have 60 seconds)
 
 Saved/restored (typical):
-- camera + navigation mode
-- view layout (live + snapshots)
+- every view's camera + navigation mode, and whether cameras are linked
+- every view's embedding
+- view layout (live + kept views)
 - active fields (obs/var) per view
 - filter state per view (category visibility, continuous ranges, outliers)
 - highlight pages/groups and their exact memberships
@@ -69,19 +70,19 @@ not silently omit that feature.
 Restored early so you see the correct view quickly:
 
 - **Camera state**
-  - camera position/orbit target/navigation mode
-  - locked cameras (shared camera) vs unlocked cameras (per view)
+  - every view's camera position/orbit target and navigation mode
+  - whether **Link cameras** is on (views of one embedding share a camera)
   - Camera Path keyframes, timing, interpolation, navigation interaction
     controls, Loop playback, and Autoplay for the matching dataset
   - restored Camera Paths remain stopped unless their saved Autoplay setting
     is enabled; enabled autoplay begins only after the complete restore commits
-- **Dimension levels and embeddings**
-  - which dimension (1D/2D/3D) is active per view
-  - per view, the embedding it shows when that is not its dimension's default
-    (chosen under **Compare Views → Embedding**)
-  - the data mapping: the default embedding of each dimension, as set under
-    **Session › Dataset › Data mapping** (restored before the views; see
-    {doc}`../b_data_loading/13_data_mapping`)
+- **Embeddings**
+  - the embedding each view shows, as an embedding reference (an export's
+    embedding id, or an `obsm` key with its columns); a view's dimension is
+    that embedding's
+  - the data mapping: the embeddings that are turned on and the default of
+    each dimension, as set under **Session › Data mapping** (turned on before
+    the views are restored; see {doc}`../b_data_loading/13_data_mapping`)
 - **Views / snapshots**
   - layout mode (single vs grid)
   - active view selection

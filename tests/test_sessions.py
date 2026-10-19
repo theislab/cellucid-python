@@ -21,7 +21,10 @@ def _mapping_fingerprint_keys() -> dict:
         },
         "dataMapping": {
             "kind": "export",
-            "embeddings": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None},
+            "embeddings": {
+                "enabled": [{"key": "X_umap", "columns": None}],
+                "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None},
+            },
             "geneNames": "index",
             "vectorFields": [],
         },

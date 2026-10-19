@@ -190,7 +190,7 @@ control label.
 | `h` | Toggle sidebar visibility |
 | `f` | Toggle fullscreen |
 | `r` | Reset the camera |
-| `1` / `2` / `3` | Switch dimension (only when that dimension exists and is enabled) |
+| `1` / `2` / `3` | Show that dimension's default embedding in the selected view; pressed again, its next embedding (a notice names it, e.g. `2D · t-SNE (2 of 3)`) |
 | `o` | Switch navigation mode to Orbit |
 | `p` | Switch navigation mode to Planar |
 | `g` | Switch navigation mode to Free-fly |
@@ -253,7 +253,8 @@ mode-specific groups, then the keyboard rows of Highlighting — `X` and the two
 is in progress*. The four pointer gestures in that last group
 (`Alt`+click, `Alt`+drag, `Shift`+`Alt`+click and `Ctrl`+`Alt`+click) are
 deliberately not restated here — they need a pointer, which is the subject of
-the next section.
+the next section. (Earlier interface: the `1`/`2`/`3` row now reads *1D, 2D,
+3D embedding · again: next*.)
 ```
 
 ### What keyboard cannot do (yet)
@@ -273,7 +274,9 @@ The genuine gap is **selection**, not navigation:
 
 If you need a keyboard-only workflow:
 
-- navigation, dimension switching, field selection, filtering, page/highlight
+- navigation, switching embeddings (the **View N shows** picker and keys
+  `1`/`2`/`3`), selecting a view (each row in **Compare views** is a button),
+  field selection, filtering, page/highlight
   management, docking and the analysis panels are all operable from the
   keyboard, so “set state → export figure” works end to end;
 - but use Python/R notebooks for anything that requires selecting cells by

@@ -113,7 +113,13 @@ def _adata() -> ad.AnnData:
 def _anndata_mapping(**changes: Any) -> dict[str, Any]:
     mapping: dict[str, Any] = {
         "kind": "anndata",
-        "embeddings": {"1d": None, "2d": {"key": "X_pca", "columns": [3, 1]}, "3d": None},
+        "embeddings": {
+            "enabled": [
+                {"key": "X_pca", "columns": [3, 1]},
+                {"key": "X_umap", "columns": [0, 1]},
+            ],
+            "defaults": {"1d": None, "2d": {"key": "X_pca", "columns": [3, 1]}, "3d": None},
+        },
         "knn": "connectivities",
         "geneNames": "index",
         "expression": "X",
@@ -126,11 +132,15 @@ def _anndata_mapping(**changes: Any) -> dict[str, Any]:
     return mapping
 
 
+def _embeddings(enabled: list[dict[str, Any]], default_2d: dict[str, Any]) -> dict[str, Any]:
+    """An embeddings group enabling `enabled` with `default_2d` as the 2D default."""
+    return {"enabled": enabled, "defaults": {"1d": None, "2d": default_2d, "3d": None}}
+
+
 def _fingerprint(mapping: dict[str, Any], *, var_count: int = 3) -> dict[str, Any]:
-    embedding = next(ref for ref in mapping["embeddings"].values() if ref is not None)
-    dimension = 1 if mapping["embeddings"]["1d"] is embedding else 2
-    if mapping["embeddings"]["3d"] is embedding:
-        dimension = 3
+    defaults = mapping["embeddings"]["defaults"]
+    slot, embedding = next((slot, ref) for slot, ref in defaults.items() if ref is not None)
+    dimension = int(slot[0])
     return {
         "sourceType": "anndata",
         "datasetId": "exact",
@@ -180,7 +190,10 @@ def test_a_matching_anndata_mapping_is_applied_and_recorded() -> None:
 def test_an_export_mapping_checks_only_its_gene_name_column() -> None:
     mapping = {
         "kind": "export",
-        "embeddings": {"1d": None, "2d": {"key": "exported_id", "columns": None}, "3d": None},
+        "embeddings": _embeddings(
+            [{"key": "exported_id", "columns": None}],
+            {"key": "exported_id", "columns": None},
+        ),
         "geneNames": "column:gene_symbols",
         "vectorFields": [],
     }
@@ -196,12 +209,37 @@ def test_an_export_mapping_checks_only_its_gene_name_column() -> None:
     ("changes", "message"),
     [
         (
-            {"embeddings": {"1d": None, "2d": {"key": "X_tsne", "columns": [0, 1]}, "3d": None}},
-            r"embeddings\.2d uses obsm\['X_tsne'\], which this dataset does not have",
+            {
+                "embeddings": _embeddings(
+                    [{"key": "X_tsne", "columns": [0, 1]}, {"key": "X_umap", "columns": [0, 1]}],
+                    {"key": "X_tsne", "columns": [0, 1]},
+                )
+            },
+            r"embeddings\.enabled\[0\] uses obsm\['X_tsne'\], which this dataset does not have",
         ),
         (
-            {"embeddings": {"1d": None, "2d": {"key": "X_pca", "columns": [4, 1]}, "3d": None}},
-            r"embeddings\.2d uses obsm\['X_pca'\]: Embedding column 4 does not exist",
+            {
+                "embeddings": _embeddings(
+                    [{"key": "X_pca", "columns": [4, 1]}, {"key": "X_umap", "columns": [0, 1]}],
+                    {"key": "X_pca", "columns": [4, 1]},
+                )
+            },
+            r"embeddings\.enabled\[0\] uses obsm\['X_pca'\]: Embedding column 4 does not exist",
+        ),
+        (
+            # An enabled representation that is no dimension's default is
+            # checked like a default: a view may show it.
+            {
+                "embeddings": _embeddings(
+                    [
+                        {"key": "X_pca", "columns": [3, 1]},
+                        {"key": "X_phate", "columns": [0, 1]},
+                        {"key": "X_umap", "columns": [0, 1]},
+                    ],
+                    {"key": "X_pca", "columns": [3, 1]},
+                )
+            },
+            r"embeddings\.enabled\[1\] uses obsm\['X_phate'\], which this dataset does not have",
         ),
         ({"knn": "distances"}, r"knn uses obsp\['distances'\]"),
         ({"latent": "X_scvi"}, r"latent uses obsm\['X_scvi'\]"),

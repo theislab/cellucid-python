@@ -159,9 +159,10 @@ computed on, and is drawn only in a view that shows that embedding.
 - a 3D vector field can be shown only in a view showing its 3D embedding
 
 If your dataset only contains a 2D field and you switch the view to 3D, or show
-another 2D embedding in it (under **Compare Views → Embedding** or **Session ›
-Data mapping**), the overlay is expected to become unavailable (or
-auto-disable).
+another 2D embedding in it (in **View N shows** under **Compare views**, or
+with keys `1`, `2` and `3`), the overlay is expected to become unavailable in
+that view (or auto-disable). Other views that still show the bound embedding
+keep drawing it.
 
 ### How to tell whether your dataset contains vector fields
 

@@ -76,7 +76,7 @@ Use the symptom list to choose your debugging path:
 | Field selector empty / wrong colors | Fields + legends | “Fields/legend issues” |
 | Filters don’t behave / count wrong | Filters + visibility | “Filtering issues” |
 | Selection/highlights wrong | Highlights + tools | “Highlight issues” |
-| Dimension switch breaks | Dimension manager + viewer positions | “Dimension issues” |
+| Switching a view's embedding breaks | Dimension manager + viewer positions | “Embedding switching issues” |
 | WebGL context lost / slow | Rendering/GPU | “Rendering issues” |
 | Session save/load wrong | Session serializer | “Session issues” |
 | Analysis panel broken | Analysis module | “Analysis issues” |
@@ -245,18 +245,19 @@ How to confirm:
 
 ---
 
-## Dimension issues
+## Embedding switching issues
 
-### Symptom: “Dimension switch changes UI but not the embedding”
+### Symptom: “The picker or key 1/2/3 changes, but not the embedding”
 
 Likely causes (ordered):
-1) Embedding missing for that dimension.
-2) Fetch failed (network/CORS).
+1) The embedding is not turned on (Session › Data mapping), or the dimension has none.
+2) Fetch failed (network/CORS), or its values were refused (NaN, Infinity, no variation).
 3) Positions buffer length mismatch caused viewer to reject it.
+4) Another view was selected: the picker and keys edit the selected view.
 
 How to confirm:
 - Network tab: embedding fetches.
-- Console: look for `[Viewer] updatePositions: position count mismatch`.
+- Console: look for `HighPerfRenderer updatePositions expected … floats, received …`.
 
 Fix:
 - Verify dataset identity + embeddings metadata.

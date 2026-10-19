@@ -1,10 +1,11 @@
 """
 The data mapping: which stored arrays Cellucid plots and reads.
 
-A *data mapping* names, for one dataset, the embedding that fills each
-dimension slot, the vector fields bound to those embeddings, and -- for an
-AnnData source -- the neighbour graph, the gene-name set, the expression matrix
-and the latent space. The same JSON shape is written into session fingerprints,
+A *data mapping* names, for one dataset, the embeddings it can be shown with
+(any number, of any mix of 1D, 2D and 3D: the *enabled* representations), the
+default representation of each dimension, the vector fields bound to those
+embeddings, and -- for an AnnData source -- the neighbour graph, the gene-name
+set, the expression matrix and the latent space. The same JSON shape is written into session fingerprints,
 sent over the Jupyter wire and derived from URLs, so it is defined once, here,
 and mirrored by the web app's ``assets/js/data/data-mapping.js``.
 
@@ -49,6 +50,7 @@ _ANNDATA_MAPPING_KEYS = frozenset(
     {"kind", "embeddings", "knn", "geneNames", "expression", "latent", "vectorFields"}
 )
 _EMBEDDING_REF_KEYS = frozenset({"key", "columns"})
+_EMBEDDINGS_GROUP_KEYS = frozenset({"enabled", "defaults"})
 _EXPORT_VECTOR_BINDING_KEYS = frozenset({"field", "embedding"})
 _ANNDATA_VECTOR_BINDING_KEYS = frozenset({"key", "embedding"})
 
@@ -480,6 +482,67 @@ def _optional_mapping_string(value: object, *, label: str) -> str | None:
     return _require_mapping_string(value, label=label)
 
 
+def embedding_ref_sort_key(ref: Mapping[str, Any]) -> tuple[Any, ...]:
+    """The canonical order of embedding references.
+
+    By ``key`` in code-point order, then ``columns``: an export's ``null``
+    first, then lists compared element by element.
+    """
+    columns = ref["columns"]
+    return (ref["key"], 0 if columns is None else 1, tuple(columns or ()))
+
+
+def _validate_embeddings_group(value: object, *, kind: str, label: str) -> dict[str, Any]:
+    """Validate the ``embeddings`` group: ``{"enabled": [...], "defaults": {...}}``.
+
+    ``enabled`` lists every representation the dataset can be shown with: at
+    least one, in canonical order (:func:`embedding_ref_sort_key`), without
+    repeats. ``defaults`` names at most one enabled representation per
+    dimension slot, and at least one in all.
+    """
+    group = _require_exact_keys(value, _EMBEDDINGS_GROUP_KEYS, label=label)
+    raw_enabled = group["enabled"]
+    if not isinstance(raw_enabled, list):
+        raise DataMappingError("not_list", f"{label}.enabled must be a list.")
+    if not raw_enabled:
+        raise DataMappingError("no_embedding", f"{label}.enabled must list at least one embedding.")
+    enabled = [
+        validate_embedding_ref(ref, kind=kind, dimension=None, label=f"{label}.enabled[{position}]")
+        for position, ref in enumerate(raw_enabled)
+    ]
+    order = [embedding_ref_sort_key(ref) for ref in enabled]
+    if order != sorted(order):
+        raise DataMappingError(
+            "embedding_order",
+            f"{label}.enabled must be sorted by embedding key, then columns.",
+        )
+    if len(set(order)) != len(order):
+        raise DataMappingError("embedding_duplicate", f"{label}.enabled repeats an embedding.")
+    slots = _require_exact_keys(group["defaults"], frozenset(DIMENSION_SLOTS), label=f"{label}.defaults")
+    defaults: dict[str, dict[str, Any] | None] = {}
+    enabled_keys = set(order)
+    for slot in DIMENSION_SLOTS:
+        ref = slots[slot]
+        if ref is None:
+            defaults[slot] = None
+            continue
+        valid = validate_embedding_ref(
+            ref,
+            kind=kind,
+            dimension=slot_dimension(slot),
+            label=f"{label}.defaults.{slot}",
+        )
+        if embedding_ref_sort_key(valid) not in enabled_keys:
+            raise DataMappingError(
+                "default_not_enabled",
+                f"{label}.defaults.{slot} must be one of the enabled embeddings.",
+            )
+        defaults[slot] = valid
+    if all(ref is None for ref in defaults.values()):
+        raise DataMappingError("no_embedding", f"{label}.defaults must name at least one default.")
+    return {"enabled": enabled, "defaults": defaults}
+
+
 def _binding_sort_key(binding: Mapping[str, Any], name_key: str) -> tuple[Any, ...]:
     embedding = binding["embedding"]
     columns = embedding["columns"]
@@ -495,8 +558,10 @@ def validate_data_mapping(value: object, *, label: str = "dataMapping") -> dict[
     """Validate one DataMapping and return a canonical deep copy.
 
     The mapping is a closed shape per ``kind``: an unknown or missing key is a
-    mapping this version does not understand. At least one embedding slot must
-    be filled, since a mapping that plots nothing describes no session.
+    mapping this version does not understand. At least one embedding must be
+    enabled and at least one default named, since a mapping that plots nothing
+    describes no session; every vector binding is bound to an enabled
+    embedding.
 
     ``vectorFields`` must already be in canonical order -- by the bound
     embedding's ``key``, then its ``columns`` (an export's ``null`` first), then
@@ -517,26 +582,7 @@ def validate_data_mapping(value: object, *, label: str = "dataMapping") -> dict[
         raise DataMappingError("kind", f"{label}.kind must be \"export\" or \"anndata\".")
     mapping = _require_exact_keys(value, expected, label=label)
 
-    slots = _require_exact_keys(
-        mapping["embeddings"],
-        frozenset(DIMENSION_SLOTS),
-        label=f"{label}.embeddings",
-    )
-    embeddings: dict[str, dict[str, Any] | None] = {}
-    for slot in DIMENSION_SLOTS:
-        ref = slots[slot]
-        embeddings[slot] = (
-            None
-            if ref is None
-            else validate_embedding_ref(
-                ref,
-                kind=kind,
-                dimension=slot_dimension(slot),
-                label=f"{label}.embeddings.{slot}",
-            )
-        )
-    if all(ref is None for ref in embeddings.values()):
-        raise DataMappingError("no_embedding", f"{label}.embeddings must fill at least one slot.")
+    embeddings = _validate_embeddings_group(mapping["embeddings"], kind=kind, label=f"{label}.embeddings")
 
     raw_bindings = mapping["vectorFields"]
     if not isinstance(raw_bindings, list):
@@ -568,6 +614,13 @@ def validate_data_mapping(value: object, *, label: str = "dataMapping") -> dict[
         )
     if len(set(sort_keys)) != len(sort_keys):
         raise DataMappingError("vector_duplicate", f"{label}.vectorFields repeats a binding.")
+    enabled_keys = {embedding_ref_sort_key(ref) for ref in embeddings["enabled"]}
+    for position, binding in enumerate(bindings):
+        if embedding_ref_sort_key(binding["embedding"]) not in enabled_keys:
+            raise DataMappingError(
+                "vector_not_enabled",
+                f"{label}.vectorFields[{position}] is bound to an embedding that is not enabled.",
+            )
 
     canonical: dict[str, Any] = {"kind": kind, "embeddings": embeddings}
     if kind == ANNDATA_KIND:
@@ -584,6 +637,45 @@ def validate_data_mapping(value: object, *, label: str = "dataMapping") -> dict[
         )
     canonical["vectorFields"] = bindings
     return copy.deepcopy(canonical)
+
+
+def export_data_mapping(identity: Mapping[str, Any], *, gene_name_source: str | None) -> dict[str, Any]:
+    """The data mapping a prepared export is shown with when it opens.
+
+    Every declared embedding is enabled, in canonical order; the defaults are
+    the identity's ``embeddings.defaults``; genes are named by the default
+    gene-name set (``gene_name_source`` is its ``var`` column, None for the
+    index); every declared vector-field file is bound to its embedding. The
+    same rule holds for exports written by the Python and the R package, which
+    declare embeddings identically. Mirrors the web app's
+    ``resolveExportDataMapping``.
+    """
+    embeddings = identity["embeddings"]
+    defaults = embeddings["defaults"]
+    bindings = [
+        {"field": field, "embedding": {"key": embedding_id, "columns": None}}
+        for field, entry in identity.get("vector_fields", {}).get("fields", {}).items()
+        for embedding_id in entry["files"]
+    ]
+    bindings.sort(key=lambda binding: _binding_sort_key(binding, "field"))
+    return validate_data_mapping(
+        {
+            "kind": EXPORT_KIND,
+            "embeddings": {
+                "enabled": [
+                    {"key": embedding_id, "columns": None}
+                    for embedding_id in sorted(embeddings["items"])
+                ],
+                "defaults": {
+                    slot: ({"key": defaults[slot], "columns": None} if slot in defaults else None)
+                    for slot in DIMENSION_SLOTS
+                },
+            },
+            "geneNames": "index" if gene_name_source is None else f"{_GENE_NAMES_COLUMN_PREFIX}{gene_name_source}",
+            "vectorFields": bindings,
+        },
+        label="Export data mapping",
+    )
 
 
 def gene_names_column(gene_names: str) -> str | None:
@@ -756,6 +848,43 @@ def resolve_embedding_slots(
     if any(ref is not None for ref in slots.values()):
         return EmbeddingGuess(slots=slots, guessed=[], rejected=[])
     return best_guess_embedding_slots(entries, latent_key=latent_key, load_check=load_check)
+
+
+def default_enabled_embeddings(
+    entries: Sequence[ObsmEntry],
+    slots: Mapping[str, Mapping[str, Any] | None],
+    *,
+    latent_key: str | None,
+    rejected: Iterable[str] = (),
+) -> list[dict[str, Any]]:
+    """The representations an AnnData object is shown with when it opens.
+
+    Every filled slot, plus every other usable ``obsm`` array that is 1 to 3
+    columns wide, read at all of its columns -- minus vector-field keys
+    (``<field>_umap_<d>d``), the latent key and the ``rejected`` keys (arrays
+    the best guess found unloadable). A wider array is enabled only when it
+    fills a slot; the user can enable other column selections. Enabling reads
+    nothing: an array is read only when a view shows it. The result is in
+    canonical order (:func:`embedding_ref_sort_key`).
+    """
+    skipped = set(rejected)
+    refs: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for ref in slots.values():
+        if ref is not None:
+            copy_ref = {"key": ref["key"], "columns": list(ref["columns"])}
+            refs[embedding_ref_sort_key(copy_ref)] = copy_ref
+    for entry in entries:
+        if (
+            entry.usable
+            and entry.width in (1, 2, 3)
+            and not is_vector_field_key(entry.key)
+            and entry.key != latent_key
+            and entry.key not in skipped
+        ):
+            assert entry.width is not None
+            ref = {"key": entry.key, "columns": default_columns(entry.width)}
+            refs.setdefault(embedding_ref_sort_key(ref), ref)
+    return [refs[order] for order in sorted(refs)]
 
 
 def default_vector_bindings(
@@ -1087,7 +1216,15 @@ def build_anndata_candidates(
 
     defaults: dict[str, Any] = {
         "kind": ANNDATA_KIND,
-        "embeddings": slots,
+        "embeddings": {
+            "enabled": default_enabled_embeddings(
+                entries,
+                slots,
+                latent_key=latent_key,
+                rejected=(key for key, _ in guess.rejected),
+            ),
+            "defaults": slots,
+        },
         "knn": knn_key,
         "geneNames": "index",
         "expression": expression,
@@ -1202,9 +1339,8 @@ def require_mapping_matches_anndata(adata: Any, mapping: Mapping[str, Any]) -> N
         n_obs = int(adata.n_obs)
         described = {item["key"]: item for item in describe_obsm(adata.obsm, n_obs=n_obs)}
         refs: list[tuple[str, Mapping[str, Any]]] = [
-            (f"embeddings.{slot}", ref)
-            for slot, ref in mapping["embeddings"].items()
-            if ref is not None
+            (f"embeddings.enabled[{position}]", ref)
+            for position, ref in enumerate(mapping["embeddings"]["enabled"])
         ]
         refs.extend(
             (f"vectorFields embedding of {binding['key']!r}", binding["embedding"])

@@ -14,7 +14,7 @@
 
 All navigation/camera controls are in:
 
-- **Compare Views** accordion → **Navigation** section
+- **Navigation** accordion
 - **Camera Path** accordion → saved positions, timing, and interpolation
 
 The controls shown depend on the current navigation **Mode**:

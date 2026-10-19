@@ -4,7 +4,8 @@
 cellucid-python, cellucid-r and the web app, and each repository pins the same
 SHA-256. The rules it pins -- making names unique, the best-guess ranking, the
 embedding-column checks, canonical embedding ids, the default expression and
-vector bindings, the "nothing to plot" text, and DataMapping validation -- are
+vector bindings, the representations enabled when a dataset opens, the "nothing
+to plot" text, the export mapping, and DataMapping validation -- are
 the ones every reader and writer must apply identically, so a change to any of
 them changes the fixture, the pin, and the other two implementations together.
 """
@@ -24,7 +25,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "data_mapping_conformance.json"
 
 #: The same digest is pinned in cellucid-r (tests/testthat/test-data-mapping-
 #: conformance.R) and in the web app. Update all three together.
-FIXTURE_SHA256 = "b5b35f7d86f4472d4fc8117c49ada6341aaf9834998bff778ef8d4a07bc4fb43"
+FIXTURE_SHA256 = "dd08f84297c179b37e21a09dd820781cbfa21bf33f063bd79f925ec44a026660"
 
 
 def _fixture() -> dict[str, Any]:
@@ -38,7 +39,7 @@ def _cases(section: str) -> list[dict[str, Any]]:
 def test_the_fixture_is_the_pinned_shared_copy() -> None:
     assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == FIXTURE_SHA256
     fixture = _fixture()
-    assert fixture["version"] == 1
+    assert fixture["version"] == 2
     assert list(fixture) == [
         "_about",
         "version",
@@ -46,12 +47,14 @@ def test_the_fixture_is_the_pinned_shared_copy() -> None:
         "uniqueNamesNote",
         "bestGuessTier",
         "embeddingSlots",
+        "enabledEmbeddings",
         "embeddingColumns",
         "canonicalEmbeddingId",
         "defaultExpression",
         "defaultVectorBindings",
         "nothingPlottable",
         "dataMapping",
+        "exportDataMapping",
     ]
     assert all(fixture[section] for section in list(fixture)[2:])
 
@@ -134,6 +137,32 @@ def test_embedding_slots(case: dict[str, Any]) -> None:
     # A candidate is load-checked at most once, so the guess is bounded by the
     # candidate count.
     assert len({key for key, _ in checked}) == len(checked)
+
+
+@pytest.mark.parametrize("case", _cases("enabledEmbeddings"), ids=lambda case: case["name"])
+def test_enabled_embeddings(case: dict[str, Any]) -> None:
+    entries = [
+        dm.ObsmEntry(key=entry["key"], width=entry["width"], usable=entry["usable"])
+        for entry in case["obsm"]
+    ]
+    failures = case["loadFailures"]
+    guess = dm.resolve_embedding_slots(
+        entries,
+        latent_key=case["latentKey"],
+        load_check=lambda key, columns: failures.get(key),
+    )
+    enabled = dm.default_enabled_embeddings(
+        entries,
+        guess.slots,
+        latent_key=case["latentKey"],
+        rejected=[key for key, _ in guess.rejected],
+    )
+    assert enabled == case["expected"]
+
+
+@pytest.mark.parametrize("case", _cases("exportDataMapping"), ids=lambda case: case["name"])
+def test_export_data_mapping(case: dict[str, Any]) -> None:
+    assert dm.export_data_mapping(case["identity"], gene_name_source=case["geneNameSource"]) == case["expected"]
 
 
 @pytest.mark.parametrize("case", _cases("embeddingColumns"))

@@ -437,7 +437,7 @@ Two things to plan for when you size a grid:
   own instead — never no legend at all.
 
 :::{tip}
-If you want all panels to be directly comparable, lock cameras across views (see {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`). Matching fields, filters, and hidden categories is also what buys you a single shared legend instead of one legend per panel.
+If you want all panels to be directly comparable, show the same embedding in them and keep **Link cameras** on, so they share one camera (see {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`). Matching fields, filters, and hidden categories is also what buys you a single shared legend instead of one legend per panel.
 :::
 
 ---

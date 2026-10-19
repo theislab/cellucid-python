@@ -63,7 +63,7 @@ Read the message beneath the controls:
   means no field is bound to the embedding the selected view shows. The list
   names every embedding some field is bound to (by its label), so it tells you
   which embedding to show — another dimension, or another embedding of the same
-  dimension under **Compare Views → Embedding**.
+  dimension in **View N shows** under **Compare views**.
 - `Available on X_umap, X_umap_3d. Select a vector field before enabling the overlay.`
   means matching fields exist, but none is selected.
 

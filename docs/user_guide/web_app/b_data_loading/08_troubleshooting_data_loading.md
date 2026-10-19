@@ -212,8 +212,9 @@ was not used: `X_df (table)`, `X_sparse (sparse 10,000 × 5)`,
 
 **Fix**
 - Compute an embedding (for example `sc.tl.umap(adata)`), fix the array the message names, or re-export with embeddings.
-- If the file opens but shows the wrong embedding, choose another under
-  **Session › Dataset › Data mapping** ({doc}`13_data_mapping`).
+- If the file opens but shows the wrong embedding, turn the one you want on
+  (and make it the default) under **Session › Data mapping**
+  ({doc}`13_data_mapping`), or show it in a view with **View N shows**.
 - Prefer exports for the smoothest experience.
 
 ---

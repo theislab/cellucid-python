@@ -58,8 +58,12 @@ The container is:
 
 The manifest has exactly `createdAt`, `datasetFingerprint`, and `chunks`.
 `datasetFingerprint` has exactly `sourceType`, `datasetId`, `cellCount`,
-`varCount`, and `cellOrder`. `cellOrder` has exactly `dimension` (the integer
-1, 2, or 3) and `digest` (16 lowercase hexadecimal characters). Each chunk has
+`varCount`, `cellOrder`, and `dataMapping`. `cellOrder` has exactly `embedding`
+(the embedding reference of the layout the live view shows), `dimension` (that
+layout's dimension, the integer 1, 2, or 3) and `digest` (16 lowercase
+hexadecimal characters). `dataMapping` is the dataset's canonical data mapping
+(`data/data-mapping.js`): its embeddings are `{enabled, defaults}`, the
+embeddings that are turned on and each dimension's default. Each chunk has
 exactly:
 
 - `id`
@@ -194,8 +198,10 @@ written into the manifest at save and re-derived from live state at restore:
 | `datasetId` | `dataSourceManager.getCurrentDatasetId()` | same nullability |
 | `cellCount` | `state.pointCount` | |
 | `varCount` | the dataset's own var fields in `state.varData.fields` | user-defined fields (for example a duplicated gene) are not counted, so a session that added one still matches the freshly loaded dataset |
+| `cellOrder.embedding` | `state.getViewLayoutKey('live')`, named under the data mapping | an export's embedding id with `columns: null`, or an `obsm` key with its 0-based columns |
 | `cellOrder.dimension` | `state.getViewDimensionLevel('live')` | exactly 1, 2, or 3 |
 | `cellOrder.digest` | `digestCellOrder(state.positionsArray, cellOrder.dimension)` | 16 lowercase hex characters |
+| `dataMapping` | `state.getDataMapping()` | a canonical data mapping |
 
 `getDatasetFingerprint()` throws unless `state.positionsArray` is a
 `Float32Array` of exactly `cellCount * cellOrder.dimension` values, so a
@@ -228,38 +234,51 @@ coordinate array itself; that array is replaced, never rewritten, when the
 dataset or the displayed embedding changes, so the per-contributor re-derivations
 during a capture cost 0.06 ms in total.
 
-`cellOrder.dimension` is part of the record because the 1D, 2D, and 3D
-embeddings are separate exported files, normalized independently. A digest is
-therefore only comparable within one of them, and the dimension is what lets a
-mismatch be attributed to the view on screen instead of to the data.
+`cellOrder.embedding` is part of the record because every embedding is a
+separate payload, normalized on its own, so a digest is comparable only within
+one of them. A restore verifies the digest against the very layout the session
+names, loading it (pinned, without touching any view) whichever embedding is on
+screen, so a session saved on the 2D t-SNE opens while a 3D UMAP is shown.
 
 ### Validation and comparison
 
 `assertDatasetFingerprint(value, context)` validates one record from untrusted
-input: exact five-key set, nullable strings for the source identity, safe
-integers for the counts, and `cellOrder` with exactly `dimension` in 1–3 and a
-`/^[0-9a-f]{16}$/` digest. It runs one check before the schema check: a record
-whose key set is exactly the four pre-`cellOrder` keys is a session file written
-before the record existed, and is refused with
-`SESSION_WITHOUT_CELL_IDENTITY_MESSAGE` rather than reported as a schema
-violation. `session-serializer.js` calls it from `validateManifest()`, so this
+input: exact six-key set, nullable strings for the source identity, safe
+integers for the counts, a `dataMapping` that is valid and already canonical,
+and `cellOrder` with exactly an embedding reference of that mapping's kind,
+`dimension` in 1–3 and a `/^[0-9a-f]{16}$/` digest. It runs two checks before
+the schema check: a record whose key set is exactly the four pre-`cellOrder`
+keys is refused with `SESSION_WITHOUT_CELL_IDENTITY_MESSAGE`, and a record with
+`cellOrder` but no `dataMapping` with `SESSION_WITHOUT_DATA_MAPPING_MESSAGE`,
+rather than either being reported as a schema violation. `session-serializer.js` calls it from `validateManifest()`, so this
 refusal happens before any contributor is consulted.
 
-`datasetFingerprintMatches(a, b)` validates both records and then compares all
-six scalars. `describeDatasetFingerprintMismatch(saved, current)` returns `null`
-when they match and otherwise the sentence the session controls surface
-verbatim. `_restoreFromBundleSource()` throws that string as a `RangeError`.
+`datasetFingerprintMatches(a, b)` validates both records and then compares
+every field. `verifySessionFingerprint(ctx, saved)` returns `null` when the
+saved record can be restored here and otherwise the sentence the session
+controls surface verbatim; `_restoreFromBundleSource()` throws that string as a
+`RangeError`.
 
-Four refusals are distinguished, and attributing one to the wrong cause would be
-its own integrity failure — telling a user their data was re-ordered when they
-merely switched the view would make them distrust a sound dataset:
+Every refusal is distinguished, and attributing one to the wrong cause would be
+its own integrity failure — telling a user their data was re-ordered when the
+session only named another embedding would make them distrust a sound dataset:
 
 | Cause | Detected by | Message |
 |---|---|---|
 | A session file written before `cellOrder` existed | `assertDatasetFingerprint` during manifest validation | says the file predates cell-content recording, so its selections can never be confirmed, and asks for the selections to be re-created and saved again |
-| A different dataset | any of the four scalars differs | names the saved and current cell and gene counts and asks for the dataset the session was saved on |
-| A different embedding on screen | `cellOrder.dimension` differs | names both dimensions, explains that the check reads the coordinates on screen, and asks for a switch back to the saved dimension |
-| A re-ordered dataset | `cellOrder.digest` differs, everything else matches | says the dataset has the same name and the same cell and gene counts but stores its cells in a different order, so every saved selection would mark the wrong cells |
+| A session file with `cellOrder` but no `dataMapping` | `assertDatasetFingerprint` during manifest validation | says the file was saved by an earlier release, and asks for the view to be re-created and saved again |
+| A different dataset | the counts differ, or the counts agree but the source or dataset id differs | names the saved and current cell and gene counts, or both identities, and asks for the dataset the session was saved on |
+| An embedding this dataset cannot show | an enabled embedding of the saved mapping is neither enabled now nor one the dataset can show | "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have." (or the reason it cannot be plotted) |
+| A different neighbour graph, gene names, expression matrix, latent space or vector fields | that group of `dataMapping` differs | names the group and both values |
+| An embedding that is gone | `cellOrder.embedding` names no layout of this dataset, or cannot be loaded | names the embedding |
+| A re-ordered dataset | `cellOrder.digest` differs, everything else matches | says the dataset has the same name and the same cell and gene counts but its cell coordinates differ, so every saved selection could mark the wrong cells |
+
+A session whose enabled embeddings or defaults differ from the open dataset's,
+but which the dataset can show, is not refused: `restoreSessionDataMapping()`
+turns its embeddings on beside the current ones, with its defaults, before any
+chunk restores a view, and applies the session's mapping exactly at commit,
+once the restored views no longer show the extras; its rollback restores the
+previous mapping.
 
 None of these messages carry identifiers or internal vocabulary.
 
@@ -272,8 +291,8 @@ dockable-layout owner, but it does not authorize layout-only salvage from a
 mismatched bundle. The entire operation rejects and rolls back. This applies to
 `restorePublishedDefaultState()` too: the published-default profile shares
 `validateManifest()` and the same fingerprint comparison, so an advertised
-`default.cellucid-session` must carry `cellOrder` and must have been saved on
-the dimension the dataset publishes as its default.
+`default.cellucid-session` must carry `cellOrder` and `dataMapping`, and its
+`cellOrder` must name an embedding the dataset has.
 
 The fingerprint is still not a content hash: the digest covers coordinates, not
 expression or metadata. Dataset publishers must assign a new identity when

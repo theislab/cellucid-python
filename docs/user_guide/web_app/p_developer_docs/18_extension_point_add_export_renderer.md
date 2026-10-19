@@ -79,7 +79,7 @@ Export must reflect:
 - current visibility (filters/outliers)
 - current colors and legends
 - current view id (live vs snapshot)
-- current dimension level
+- the embedding each view shows (and so its dimension level)
 
 If any of these are wrong, users will lose trust in exports.
 

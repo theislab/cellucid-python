@@ -146,7 +146,8 @@ It also exposes dev-friendly globals:
 - filters and visibility state,
 - highlights and highlight pages,
 - per-view contexts (live view + snapshot views),
-- dimension switching and vector-field overlay availability.
+- the embedding each view shows, the data mapping, and vector-field overlay
+  availability.
 
 The public API is assembled from manager mixins (see `app/state/managers/*`).
 
@@ -178,7 +179,11 @@ These show up everywhere (state, UI, analysis, sessions):
 - **Visibility**: what points are currently shown after filters/outliers.
 - **Highlight**: annotation overlay on top of visibility (can exist even for filtered-out points).
 - **Highlight page**: independent collection of highlight groups; switching pages changes overlay state.
-- **Dimension level**: 1D/2D/3D embedding selection for a view.
+- **Representation**: one embedding (an export's embedding id, or an `obsm`
+  key at 1 to 3 of its columns) a view can show, identified by its
+  `layoutKey`. The data mapping turns any number on and names each
+  dimension's default; a view's **dimension level** (1D/2D/3D) is that of the
+  representation it shows.
 
 ---
 

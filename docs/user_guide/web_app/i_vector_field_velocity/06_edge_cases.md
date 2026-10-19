@@ -20,7 +20,7 @@ Each entry below follows: **what you see → why → how to confirm → what to 
 ### 2) Vector fields exist, but not for the embedding this view shows
 
 - **What you see:** the overlay block exists, but `Show overlay` is disabled and you see a hint like “Vector fields are bound to X_umap, X_umap_3d. Show one of them in this view to enable.”
-- **Why:** a vector field is bound to the embedding it was computed on. The view shows another one: another dimension (only 2D vectors, viewing 3D), or another embedding of the same dimension (a t-SNE chosen under **Compare Views → Embedding** or **Session › Data mapping**).
+- **Why:** a vector field is bound to the embedding it was computed on. The view shows another one: another dimension (only 2D vectors, viewing 3D), or another embedding of the same dimension (a t-SNE chosen in **View N shows** under **Compare views**, or with keys `1`, `2` and `3`).
 - **Confirm:** the hint names the embeddings that have a field; show one of them and watch the toggle enable.
 - **What to do:** show a named embedding, or export the vector field for the embedding you want.
 

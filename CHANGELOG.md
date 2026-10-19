@@ -96,26 +96,57 @@ Version 0.9.2 is a patch release on 0.9.1.
   read from metadata only), and `AnnDataAdapter` gains `get_data_mapping()` and
   `get_mapping_candidates()`. The web app reads it to record the mapping a
   session was saved with.
-- **Web app, data mapping**: a **Data mapping** section under Session ›
-  Dataset shows which stored arrays the dataset is drawn from. For an `.h5ad`
-  or Zarr ZIP opened in the browser, any numeric `obsm` array can fill any
-  dimension, with a column for each axis when the array is wider than the
-  dimension (`X_pca` columns 2 and 3 in 2D); a prepared dataset can switch
-  between the embeddings it was exported with. Choices are staged and applied
-  as one step that loads and checks the array first; views that follow the
-  dimension's default switch together, and the neighbour graph, gene names,
-  expression matrix, latent space and vector fields are listed read-only.
-- **Web app, per-view embeddings**: **Compare views › Dimension** gains an
-  **Embedding** menu, so each view can show its own embedding of its dimension
-  (t-SNE beside UMAP in a grid); the view badge names it (`2D · X_tsne`) and
-  changing the view's dimension returns it to the default.
+- **Web app, data mapping**: a **Data mapping** group at the bottom of the
+  Session panel lists every embedding the dataset can be shown with as a
+  checklist: turn any number on, of any mix of 1D, 2D and 3D, and mark one per
+  dimension as its **Default**. For an `.h5ad` or Zarr ZIP opened in the
+  browser every numeric `obsm` array is listed, a wider one at any selection
+  of 1 to 3 of its columns (`X_pca` columns 2 and 3 as `PCA 3,4`), as many
+  selections as you like; a prepared dataset lists the embeddings it was
+  exported with, all on. Turning an embedding on loads nothing until a view
+  shows it. Choices are staged and applied as one step that loads and checks
+  every embedding a view must switch to first; the neighbour graph, gene
+  names, expression matrix, latent space and vector fields are listed
+  read-only. The data mapping's embeddings are now `{enabled, defaults}`, in
+  the web app, `cellucid.data_mapping` and the R package's conformance fixture.
+- **Web app, several embeddings at once**: every view shows one of the
+  embeddings that are on, of any dimension — two 3D embeddings side by side, a
+  3D one beside a 2D one, a t-SNE beside a UMAP — chosen in **View N shows**
+  under **Compare views**, grouped by dimension with the default first. Keys
+  `1`, `2` and `3` show that dimension's default in the selected view and,
+  pressed again, its next embedding ("2D · t-SNE (2 of 3)"). Each view row
+  names what its view shows (`UMAP · 3D`), its field, its navigation mode, and
+  whether its camera is linked. Views of one embedding share its coordinates
+  and GPU buffers; coordinates no view shows are kept in a cache bounded by a
+  quarter of the device memory (512 MiB to 2 GiB) and released least recently
+  shown first. Up to four views (the live view and three kept views).
+- **Web app, per-view cameras**: each view owns its camera and navigation
+  mode. **Navigation** is its own accordion and edits the selected view; its
+  **Applies to** row names that view and the views linked to it. **Link
+  cameras** (on by default) links only views that show the same embedding, and
+  is off and disabled while no two views do.
+- **Web app, rendering**: points are stored on the GPU in the draw order of
+  their spatial tree (by LOD band, then tree leaf, then cell). A reduced level
+  of detail draws a prefix of the stored points, frustum culling draws whole
+  tree-node ranges (one multi-draw call, at most 256 ranges, with no per-point
+  index upload), and full detail draws faster because neighbouring points are
+  neighbours in memory: 10M points 18 ms against 68 ms (Chromium), 15 against
+  57 (WebKit), 14 against 57 (Firefox); a zoomed-in culled frame 7-8 ms against
+  21-31 ms. LOD no longer keeps a second copy of the positions: about 200 MB
+  of GPU memory at 10M points instead of 315. The order is adopted a few
+  milliseconds a frame when a tree arrives, so it never stalls a frame, and a
+  view switched back to a representation it showed keeps its colours without
+  an upload. Translucent points in 2D overlap in tree order, the same in every
+  view, every level of detail and figure export.
 - **Web app**: a notification can carry one action button; the best-guess
   notification uses it (**Show**) to open the Data mapping section.
 - **Web app, usage analytics**: `data_load` reports how the embeddings were
   chosen (`mapping_origin`: `default` or `best_guess`) and how many the
   dataset could show (`embedding_candidates`: `1`, `2-3`, `4-9`, `10+`);
-  `feature_used` counts `data_mapping` (`embedding`, `embedding_columns`,
-  `view_embedding`). No key or embedding name is ever sent.
+  how many it opened with turned on (`enabled_representations`); `feature_used`
+  counts `data_mapping` (`embedding`, `embedding_columns`, `default`) and
+  `dimension` when the picker switches a view to another dimension. No key or
+  embedding name is ever sent.
 
 ### Changed
 
@@ -194,15 +225,17 @@ Version 0.9.2 is a patch release on 0.9.1.
   shows, not by its dimension: a field is drawn only in views showing the
   embedding it is bound to, and the info line names those embeddings
   ("Vector fields are bound to … Show one of them in this view to enable.").
-- **Web app, sessions**: a session records its data mapping and the embedding
-  its cell order was taken on, and every view's embedding when it is not its
-  dimension's default. Loading checks the dataset, its data mapping and the
-  cell order of the embedding the session names before anything changes on
-  screen, loading that embedding if another is shown — so a session saved in
-  2D now opens while 3D is shown, instead of asking you to switch back. A
-  session that names other embeddings than the ones shown restores them before
-  its views when the dataset can show them, and is refused naming the
-  embedding when it cannot. A
+- **Web app, sessions**: a session records its data mapping (the embeddings
+  that are on and each dimension's default), the embedding its cell order was
+  taken on, the embedding every view shows, every view's camera and navigation
+  mode, and whether cameras are linked. Loading checks the dataset, its data
+  mapping and the cell order of the embedding the session names before
+  anything changes on screen, loading that embedding if another is shown — so
+  a session saved in 2D now opens while 3D is shown, instead of asking you to
+  switch back. A session whose embeddings this dataset can show turns them on
+  before its views are restored, and one naming an embedding the dataset does
+  not have is refused naming it ("This session shows obsm['X_tsne'] columns
+  [0, 1], which this dataset does not have."). A
   session saved by an earlier release is refused with a message saying so.
   User-defined categorical fields no longer store their centroids; they are
   recomputed from the codes.

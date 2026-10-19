@@ -376,12 +376,14 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 
 **Likely cause**
 - The file has no UMAP, so Cellucid opened it on a best guess (marked
-  *guessed* in **Session › Dataset › Data mapping**).
+  *guessed* in **Session › Data mapping**).
 - Or the file has a UMAP and you wanted another array.
 
 **Fix**
-- Choose the array, and for a wide array its columns, in **Session › Dataset ›
-  Data mapping**, then press **Apply**. See {doc}`13_data_mapping`.
+- Turn the array on, and for a wide array choose its columns, in **Session ›
+  Data mapping**, mark it **Default** if every new view should show it, and
+  press **Apply**. A view shows it once you choose it in **View N shows**
+  (or it is the default). See {doc}`13_data_mapping`.
 
 ---
 

@@ -84,11 +84,13 @@ Run these steps on at least one small dataset (fast) and optionally one larger d
 2) Create a second highlight page; switch between pages.
 3) Confirm highlight overlay and counts update correctly.
 
-### E) Multiview + dimension
+### E) Multiview + embeddings
 
-1) Click “Keep view” to create a snapshot view.
+1) Click “Keep view” to create a kept view.
 2) Switch view layout (grid/single) if available.
-3) Change dimension (1D/2D/3D) on the live view and (if supported) on a snapshot view.
+3) In `View 2 shows`, choose another embedding; press 1, 2 and 3 on each view
+   (the default, then the next embedding of that dimension).
+4) Confirm **Link cameras** links only views that show the same embedding.
 
 ### F) Sessions
 

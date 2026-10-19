@@ -127,20 +127,21 @@ what alpha means in practice for that mode.
 - **Dataset**: the loaded data bundle (points + metadata + optional gene expression + optional connectivities/vector fields).
 - **Cell / point**: one row/observation rendered as a point. (The UI often says “points” because the viewer is generic.)
 - **Gene / feature**: one variable/feature; used for gene expression coloring and some analyses.
-- **Embedding**: coordinates for points in 1D/2D/3D (UMAP/tSNE/PCA/etc). A
-  dataset may carry several embeddings of one dimension (the Pancreas sample has
-  a 2D UMAP and a 2D PCA view); each dimension has one **default embedding**,
-  which is what a view of that dimension shows unless the view has its own.
-- **Data mapping**: which stored arrays the dataset is drawn from — the default
-  embedding of each dimension, and read-only the neighbour graph, gene names,
-  expression matrix, latent space and vector fields. Set under **Session ›
-  Dataset › Data mapping** ({doc}`../b_data_loading/13_data_mapping`).
-- **Best guess**: the embeddings a file without a UMAP opens on, marked
-  *guessed* in the Data mapping panel.
-- **View embedding**: the embedding one view shows instead of its dimension's
-  default, chosen under **Compare Views → Embedding**; the view badge then
-  reads e.g. `2D · X_tsne`.
-- **Dimension (1D / 2D / 3D)**: which embedding dimensionality you are currently viewing for a given view.
+- **Embedding** (also *representation*): coordinates for points in 1D/2D/3D
+  (UMAP/tSNE/PCA/etc). A dataset may carry several embeddings of one dimension
+  (the Pancreas sample has a 2D UMAP and a 2D PCA view); each view shows one of
+  them, and each dimension has one **default embedding**, which keys `1`, `2`
+  and `3` show first.
+- **Data mapping**: which stored arrays the dataset is drawn from — the
+  embeddings that are turned on, the default of each dimension, and read-only
+  the neighbour graph, gene names, expression matrix, latent space and vector
+  fields. Set under **Session › Data mapping**
+  ({doc}`../b_data_loading/13_data_mapping`).
+- **Best guess**: the default embeddings a file without a UMAP opens on, marked
+  *guessed* in the Data mapping checklist.
+- **View embedding**: the embedding one view shows, chosen under **Compare
+  views → View N shows**; the view's row then reads e.g. `t-SNE · 2D`.
+- **Dimension (1D / 2D / 3D)**: the dimension of the embedding a view shows.
 - **Connectivity**: a neighbor graph (edges). When enabled, edges are drawn between visible points only.
 - **Vector field / velocity overlay**: an optional overlay that visualizes per-cell vectors, bound to the embeddings it was computed on.
 
@@ -238,22 +239,21 @@ Scope note:
 
 These terms are the most important for understanding Cellucid.
 
-- **View**: one panel that renders the dataset with its own state (camera, dimension, embedding, coloring, filters, highlights).
-- **Live view**: your default working view (often labeled “All cells” in the view badges).
+- **View**: one panel that renders the dataset with its own state (embedding, camera, navigation mode, coloring, filters); highlights belong to cells and show in every view.
+- **Live view**: your default working view (often labeled “All cells” in the view rows).
 - **Snapshot view** (also “kept view”): a view created by clicking **Keep view**; used to compare multiple states side-by-side.
 - **Multiview**: the overall feature of having multiple views/snapshots.
 - **View layout**
   - **Grid compare**: shows all views in a grid.
   - **Edit selected view**: shows only the active view so you can edit it precisely.
-- **Active view**: the view you are editing/configuring (the one selected in the view badges).
+- **Active view**: the view you are editing/configuring (the row selected in **Compare views**).
 - **Focused view**: in grid mode, the view under your last click; this determines which view the camera controls target.
-- **View badge**: the clickable pill/row representing a view (with indicators like `3D`, `Orb/Pan/Fly`).
-- **Cameras locked**: all views share one camera (navigation is synchronized).
-- **Cameras unlocked**: each view has its own camera and navigation mode; badges show per-view navigation indicators.
+- **View row**: the row representing a view in **Compare views**: its number, what it shows (`UMAP · 3D`), its field, `linked`, its navigation mode (`Orbit`/`Pan`/`Fly`) and `×`.
+- **Link cameras**: views that show the same embedding share one camera and navigation mode; views of different embeddings always keep their own.
 
 Scope note:
 
-- When cameras are unlocked, Cellucid stores camera state **per view** and switches it when you focus a different view.
+- Cellucid stores camera state and navigation mode **per view** and switches to them when you focus a different view.
 
 ---
 
@@ -265,8 +265,9 @@ Scope note:
 - **Pointer lock / Capture pointer**: a browser feature that hides the cursor and reports raw mouse movement (needed for FPS-style looking).
 - **Orbit anchor**: a visual compass/anchor indicator shown in orbit mode (optional).
 - **Reset Camera**: returns the camera to a default framing (and can reset related UI controls depending on how you trigger it).
-- **Dimension-specific navigation default**: 1D and 2D start in Planar; 3D
-  starts in Orbit. An explicit user change takes precedence.
+- **Dimension-specific navigation default**: a view showing a 1D or 2D
+  embedding starts in Planar; a 3D one in Orbit. A mode chosen for a view is
+  remembered for that view in that dimension and takes precedence.
 - **Camera Path**: a collapsed-at-start panel for user-created keyframes. Its
   transport appears only after two valid keyframes. Playback is stopped by
   default; explicit **Autoplay** starts a ready path immediately and after a

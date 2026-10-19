@@ -7,7 +7,7 @@ If you are changing anything that affects:
 - filters/visibility/outliers,
 - highlights or highlight pages,
 - multiview snapshots,
-- dimension switching (1D/2D/3D),
+- the embedding each view shows (and so its dimension, 1D/2D/3D),
 - vector-field overlays,
 
 …you should read this page before implementing changes.
@@ -44,7 +44,8 @@ Code:
 - `pointCount`: number of points/cells
 - `positionsArray`: the live view's normalized positions, with exactly
   `positionsDimension` components per cell (x, xy or xyz — never padded to
-  XYZ); both are updated together on live dimension switches and read by smoke
+  XYZ); both are updated together whenever the live view shows another
+  embedding, and read by smoke
   density and the session fingerprint
 - `colorsArray`: RGBA color buffer (uint8 packed); smoke density reads it too,
   so the cloud carries the active field's colours
@@ -84,8 +85,11 @@ that treats the snapshot count as unbounded.
 `DataState` maintains a `viewContexts` map (`viewId → context`) so each view can have:
 - independent active field selections (obs/var)
 - independent filters/outlier settings
-- independent dimension level (embedding)
-- synchronized or independent camera (camera sync is viewer-side; state tracks view id)
+- the embedding it shows, and whether it follows its dimension's default
+  (`followsDefault`); its dimension is that embedding's
+- its own camera and navigation mode; **Link cameras** shares one camera
+  between views that show the same embedding (viewer-side:
+  `viewer.setCamerasLocked()`, `viewer.getCameraLinkGroups()`)
 
 Per-cell arrays (colors, category transparency, the visibility mask, outlier
 quantiles) are owned, not copied, as views change. The **active** view's context
@@ -129,21 +133,33 @@ Highlights are modeled as:
 The key point:
 - **highlights are layered on top of visibility** (filtered-out points can still “be in a highlight group”).
 
-### Dimension switching + vector fields
+### Representations + vector fields
 
-Cellucid supports multi-dimensional embeddings via:
+A view shows one *representation*: one embedding, at its columns, of any
+dimension. Cellucid tracks them via:
 - `dimensionManager` (from the data layer): the layout registry. Every
-  position layout has a `layoutKey`; each dimension has one slot layout
-  (`getSlotLayout(dim)`), and positions, normalization and cache eviction are
-  all keyed by layout (`loadLayout`, `getPositions`, `getNormTransform`).
-- `activeDimensionLevel` (live view)
-- per-view dimension plus `embeddingOverride` (stored in view contexts); the
-  layout a view presents is `dimensionManager.getViewLayout(viewId)`
+  position layout has a `layoutKey`; positions, normalization and cache
+  eviction are all keyed by layout (`loadLayout`, `getPositions`,
+  `getNormTransform`). The data mapping publishes which layouts are *enabled*
+  — any number, of any mix of dimensions — and at most one *default* per
+  dimension (`setRepresentations`, `getEnabledLayoutsForDimension`,
+  `getDefaultLayout`). The layout a view shows is
+  `dimensionManager.getViewLayout(viewId)`; nothing stores a view's dimension
+  beside it (`state.getViewDimensionLevel(viewId)` reads the layout's).
+- `state.getEnabledRepresentations()` lists what the picker offers, and
+  `state.getDataMapping()` / `state.applyDataMapping()`
+  (`state/managers/mapping-manager.js`) read and change the mapping.
+
+Coordinates of an enabled layout are read the first time a view shows it and
+kept while a view shows it; afterwards they stay in a cache whose budget is a
+quarter of `navigator.deviceMemory` (between 512 MiB and 2 GiB), released least
+recently shown first, and entirely under memory pressure.
 
 Vector fields (velocity/drift overlays) are optional and use:
 - `vectorFieldManager` (from the data layer): lists available fields and loads
-  vectors per layout (`loadField(fieldId, layoutKey)`), bound to each declared
-  dimension's slot layout
+  vectors per layout (`loadField(fieldId, layoutKey)`); each field is bound to
+  the embeddings it was computed on (`hasFieldLayout(fieldId, layoutKey)`), and
+  is drawn in every view that shows one of them
 
 ---
 
@@ -187,7 +203,9 @@ Events are the main way UI modules stay decoupled from state internals.
 | `field:changed` | `{ source, fieldIndex, changeType, detail }` | Field metadata/state changed (rename/delete/load/filter/color changes) |
 | `highlight:changed` | none | Highlight groups changed (membership/colors/enabled) |
 | `page:changed` | none | Highlight page set changed (add/remove/rename/switch) |
-| `dimension:changed` | `level` (number) | Active view dimension changed |
+| `view:representation-changed` | `{ viewId, layoutKey, dimension, previousLayoutKey }` | The representation a view shows changed (any view, active or not), or focus moved to a view showing another one |
+| `mapping:changed` | `{ mapping, cause }` | The data mapping was applied (Session › Data mapping, or a session restore) |
+| `representations:changed` | `{ enabled }` | The enabled representations changed (fires with `mapping:changed`) |
 | `vectorFields:changed` | list of available fields | Vector-field availability changed (dataset load / manager attached) |
 
 Code pointers:
@@ -195,8 +213,10 @@ Code pointers:
   - `cellucid/assets/js/app/state/managers/view-context-viewer-sync.js`
 - Highlight/page events:
   - `cellucid/assets/js/app/state/managers/highlight-manager.js`
-- Dimension + vectorFields events:
+- Representation + vectorFields events:
   - `cellucid/assets/js/app/state/managers/view-manager.js`
+- Mapping events:
+  - `cellucid/assets/js/app/state/managers/mapping-manager.js`
 
 ### Event ordering and “why did this fire twice?”
 
@@ -271,18 +291,23 @@ Two consequences for contributors:
    the cost the comparison exists to avoid.
 :::
 
-- Dimension changes (`setDimensionLevel` is a thin call into
-  `setViewEmbedding(viewId, { dimension, embeddingOverride })`):
-  - resolves the view's layout and returns early only when the layout key is
-    unchanged (two layouts of one dimension are different layouts)
-  - loads that layout's positions, pinned while the change is staged, with
-    rollback for every owner on failure
+- Representation changes all go through
+  `setViewRepresentation(viewId, layoutKey, { followsDefault })`. The callers
+  are `setViewEmbedding(viewId, ref)` (an explicit choice: the picker, the
+  API), `restoreViewEmbedding(viewId, ref)` (a session: the view follows the
+  default again when it shows it), `showDefaultRepresentation(viewId, level)`
+  and `cycleRepresentation(viewId, level)` (keys 1, 2 and 3). It:
+  - refuses a layout that is not enabled; a request for the layout the view
+    already shows only records `followsDefault`
+  - loads that layout's positions, pinned while the change is staged, and
+    stages its centroids, with rollback for every owner on failure
   - updates `positionsArray` and `positionsDimension` (live view)
   - calls `viewer.updatePositions(newPositions, dimensionLevel)` (or
     `viewer.setViewPositions` for a kept view), then
+    `dimensionManager.setViewLayout(viewId, layoutKey)` and
     `viewer.setViewEmbedding(viewId, { dimension, layoutKey })`, which drops
     that view's LOD, frustum, picking and vector state for the old layout
-  - triggers `dimension:changed`
+  - triggers `view:representation-changed`
 
 The bulk of this wiring lives under:
 - `cellucid/assets/js/app/state/managers/view-context-*`
@@ -339,10 +364,10 @@ Make sure new code handles:
 - `pointCount === 0`
 - missing manifests (e.g. no `var_manifest.json`)
 
-### Async dimension switching
+### Async representation changes
 
-Dimension changes are async (may involve fetching embeddings).
-If you add code that awaits during a dimension change, watch for:
+Representation changes are async (may involve fetching embeddings).
+If you add code that awaits during one, watch for:
 - “cross-await state corruption” (the active view changed while awaiting)
 
 The code uses a `_dimensionChangeLock` to serialize changes; preserve that property when refactoring.
@@ -372,15 +397,16 @@ Fix:
 - Ensure state methods (not UI code) own the viewer sync calls.
 - Use the view-context-aware APIs when operating on snapshot views.
 
-### Symptom: “Dimension selector changes, but embedding does not”
+### Symptom: “The picker changes, but the embedding does not”
 
 Likely causes:
-- embedding for the target dimension is missing
-- async load failed (network / manifest mismatch)
-- viewer positions cache not updated for the active view
+- the representation is not enabled (`dimensionManager.isEnabled(layoutKey)`)
+- async load failed (network / manifest mismatch / values refused)
+- the change targeted another view than the one on screen
 
 Fix:
-- Confirm dimension metadata in `dimensionManager` and the dataset identity.
+- Confirm `state.getEnabledRepresentations()` and
+  `state.getViewLayoutKey(viewId)` for the view you expect.
 - Check Network tab for embedding fetch failures.
 
 ---

@@ -80,7 +80,7 @@ sequence is a single scripted Playwright run producing 14 captures. Steps 6 and
 |---|---|---|
 | Viewport | 1440 × 900 CSS px, `deviceScaleFactor: 2` | Floating panels are clamped to the viewport on restore ({doc}`/user_guide/web_app/l_sessions_sharing/09_edge_cases`), so a BEFORE/AFTER pair captured at different sizes is not a valid comparison. |
 | Dataset | `#dataset-select` → option value `dataset:local-demo:pancreas` | 3,696 cells / 3,753 genes — loads in seconds; publishes 1D + 2D + 3D embeddings with `default_dimension: 3`; recognisable endocrinogenesis trajectory for a wet-lab reader. Verified in `cellucid-datasets/exports/pancreas/dataset_identity.json`. |
-| Dimension | 3D throughout | The session fingerprint records `cellOrder.dimension`; saving in 3D and restoring in 3D is the success path. Deviating provokes the recoverable error captured separately in `07`. |
+| Embedding | the 3D UMAP throughout | The session records the embedding each view shows and verifies its cell order against the embedding `cellOrder.embedding` names, whichever one is on screen, so the success path does not depend on it; keeping one embedding keeps the BEFORE/AFTER frames comparable. |
 | Theme / background | app defaults (light / Studio (light)) | Matches the reviewed official starting state, so the reset in step 10 is visually unambiguous. |
 | Welcome modal | dismissed with `Escape` (`#welcome-modal`) — see `tests/browser/helpers/welcome.mjs` | Otherwise it covers the sidebar in every frame. |
 | Build stamp | `#web-build-version` inside `#copyright` must read the same value in steps 6 and 13 | The docs tell readers to compare footer builds; the proof pair must be self-consistent. |
@@ -298,12 +298,14 @@ does not mistake it for a failure:**
     the prose in {doc}`/user_guide/web_app/l_sessions_sharing/03_save_restore_ux` and
     {doc}`/user_guide/web_app/l_sessions_sharing/10_troubleshooting_sessions` was corrected with them.
 
-### Optional step 15 — the same file, refused
+### Optional step 15 — the same file, another embedding on screen
 
-Run once more without reloading: switch `#dimension-select` to 2D, then
-`#load-state-btn` → the same file. This yields the recoverable rejection and is
-the single most useful image for a wet-lab reader in the whole section. Details
-under {doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_and_dataset_identity` below.
+Run once more without reloading: in `View 1 shows`
+(`#view-representation-select`) choose the 2D UMAP, then `#load-state-btn` →
+the same file. The session opens and the view shows the 3D UMAP again: a
+session names the embedding each view shows, so switching embeddings is no
+longer a reason to refuse it. Details under
+{doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_and_dataset_identity` below.
 
 ---
 
@@ -532,7 +534,7 @@ under {doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_a
   | # | Error | How to provoke it (scriptable) | Worth capturing? |
   |---|---|---|---|
   | 1 | **Different dataset** — names both cell and gene counts | Save a session on `pancreas` (3,696 / 3,753). Reload, load `dataset:local-demo:garcia` (219,731 / 5,754). Load State the pancreas file. (`he` and `kanemaru` are unusable here: their published sample views currently fail to apply in headless Chromium and add two unrelated errors to the crop.) | **Yes — highest value.** The commonest real-world mistake, and the message names four concrete numbers. |
-  | 2 | **Different dimension** — the recoverable one | Save on `pancreas` in 3D. Without reloading, set `#dimension-select` to 2D. Load State the same file. | **Yes — second highest.** This is the only failure that is *not* a data problem, and the page says so. Showing it prevents a user from concluding their dataset is corrupt. |
+  | 2 | **An embedding this dataset does not have** — "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have." | Open an `.h5ad` with an `X_tsne`, show it in a view, save. Open the same file without `X_tsne` (or an export without it), Load State. | **Yes — second highest.** It names the one array to restore, so a user does not conclude the dataset is corrupt. (A session saved while another embedding was on screen is no longer refused; see step 15.) |
   | 3 | **Coordinates differ** (re-ordered rows *or* re-computed embedding) | Needs a second export with the same id and sizes but permuted rows. Clone `cellucid/tests/browser/fixtures/exports/current-ui-prepared` (120 cells, 6 genes, 2D only, 52 KB) into a scratch fixture, apply the same row permutation to `embeddings/0_2d.bin` and every `obs/` column, keep `dataset_identity.json` byte-identical. Save a session against the original, load the permuted clone, Load State. | **Yes**, but as the *third* image — it is rarer and its message is long. Note the fixture is 2D-only, so error #2 cannot be provoked on it. |
   | 4 | **Pre-`cellOrder` file** (`SESSION_WITHOUT_CELL_IDENTITY_MESSAGE` in `session-context.js`) | Cannot be produced by the current app. Hand-write a bundle whose `datasetFingerprint` has exactly the four keys `sourceType`, `datasetId`, `cellCount`, `varCount`. Framing is documented in {doc}`/user_guide/web_app/l_sessions_sharing/12_reference` and implemented in `session/bundle/format.js`. | **Optional.** Capture only if a fixture author is willing to maintain a hand-built bundle. The message is self-explanatory in prose. |
 
@@ -540,13 +542,10 @@ under {doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_a
   - Crop for all four: `#notification-center`, the single red toast, full text
     visible and not truncated — the messages are long, so allow the crop to run
     to ~520 px wide, `:width: 520px`.
-  - Cursor: **no** on the toast itself. For image #2 add a second frame with the
-    cursor on `#dimension-select` showing the value the message asks you to
-    switch back to — that pairs the diagnosis with the fix in one glance.
+  - Cursor: **no** on the toast itself.
   - Files: `session-error-different-dataset.png`,
-    `session-error-different-dimension.png`,
-    `session-error-cell-order.png`, `session-error-no-cell-order.png`,
-    `session-fix-dimension-select.png`.
+    `session-error-missing-embedding.png`,
+    `session-error-cell-order.png`, `session-error-no-cell-order.png`.
   - Also **ADD** the identity crop from `01` (`session-identity-dataset-info.png`)
     here under "Exact fingerprint".
 - **notes** —

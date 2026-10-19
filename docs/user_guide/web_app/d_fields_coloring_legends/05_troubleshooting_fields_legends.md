@@ -556,7 +556,7 @@ section is about.
 
 ### How to confirm
 
-- Click a different panel; observe the view badges (active view indicator) and the legend updating.
+- Click a different panel; observe the selected row in **Compare views** and the legend updating.
 
 ### Fix
 
@@ -565,7 +565,7 @@ section is about.
 
 ### Prevention
 
-- Keep cameras locked until you’re comfortable; it reduces “which panel am I editing?” confusion.
+- Check the label of the embedding picker (`View 2 shows`): it names the view the sidebar is editing.
 
 ---
 

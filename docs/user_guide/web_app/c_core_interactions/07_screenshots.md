@@ -53,28 +53,32 @@ frame stops changing and the capture is reproducible. Scenario
 `core-window-smoke-cloud`.
 ```
 
-## Dimension switching
+## Switching embeddings (earlier interface)
+
+These captures show the earlier **Dimension** dropdown, which is now the
+**View N shows** picker in **Compare views**; the coordinates and the
+navigation mode change the same way.
 
 ```{figure} ../../../_static/screenshots/web_app/window-dimension-3d.png
 :alt: The whole application window with a three-dimensional coloured point cloud inside a light grid box, a DIMENSION dropdown reading 3D and a MODE dropdown reading Orbit.
 :width: 1440px
 
-**3D**, the Pancreas default. Scenario `core-window-dimension-3d`.
+**3D**, the Pancreas default (earlier interface). Scenario `core-window-dimension-3d`.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/window-dimension-2d.png
 :alt: The same window after choosing 2D; the cells lie on one plane seen face-on, the DIMENSION dropdown reads 2D and the MODE dropdown reads Planar with the planar options beneath it, with the mouse pointer pressing the dimension dropdown.
 :width: 1440px
 
-**2D.** The coordinates changed and the navigation mode followed them to
-`Planar`. Scenario `core-window-dimension-2d`.
+**2D** (earlier interface). The coordinates changed and the navigation mode
+followed them to `Planar`. Scenario `core-window-dimension-2d`.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/window-dimension-1d.png
 :alt: The same window after choosing 1D; the cells form a single straight line of coloured segments across the grid box, the DIMENSION dropdown reads 1D and the MODE dropdown reads Planar with the planar options beneath it.
 :width: 1440px
 
-**1D**, also driven with `Planar`. Scenario `core-window-dimension-1d`.
+**1D**, also driven with `Planar` (earlier interface). Scenario `core-window-dimension-1d`.
 ```
 
 ## The older 2D captures
@@ -83,9 +87,10 @@ frame stops changing and the capture is reproducible. Scenario
 :alt: A Compare Views control column showing a Dimension dropdown set to 2D above a Navigation Mode dropdown set to Planar with planar options beneath it.
 :width: 246px
 
-Both controls set for a 2D embedding: `2D` and `Planar`. Unless you have picked
-a mode yourself, choosing the dimension is what puts `Planar` there — see
-{doc}`05_dimension_switching_1d_2d_3d`.
+Both controls set for a 2D embedding: `2D` and `Planar` (earlier interface:
+the Dimension dropdown is now the embedding picker). Unless you have picked a
+mode for the view yourself, showing a 2D embedding is what puts `Planar` there
+— see {doc}`05_dimension_switching_1d_2d_3d`.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/dimension-2d-planar-default.png
@@ -99,12 +104,13 @@ seen face-on as a flat, screen-aligned surface.
 ## Comparing views
 
 ```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
-:alt: The whole window in Grid compare with the sidebar open: two equal panels fill the area to the right of the sidebar and show the Pancreas 3D embedding from the same locked camera — the left panel, the live view, coloured by cell_type, and the right panel, the kept snapshot, recoloured by S_score on a Viridis scale — each under a title chip naming its field. The sidebar, scrolled to Compare Views, lists badge 1 cell_type and the selected badge 2 S_score above the Layout select set to Grid compare, and Coloring & Filtering shows S_score in the Continuous obs select.
+:alt: The whole window in Grid compare with the sidebar open: two equal panels fill the area to the right of the sidebar and show the Pancreas 3D embedding from one shared camera — the left panel, the live view, coloured by cell_type, and the right panel, a kept view, recoloured by S_score on a Viridis scale — each under a title chip naming its field. The sidebar, scrolled to Compare Views in an earlier interface, lists badge 1 cell_type and the selected badge 2 S_score above the Layout select set to Grid compare, and Coloring & Filtering shows S_score in the Continuous obs select.
 :width: 1440px
 
-Two kept views compare one dataset side by side. The panels split the area to
-the right of the sidebar equally, and each keeps its own coloring: the live
-view by cell_type, the selected snapshot by S_score.
+Two views compare one dataset side by side (earlier interface: the rows now
+also name the embedding each view shows). The panels split the area to the
+right of the sidebar equally, and each keeps its own coloring: the live view by
+cell_type, the selected kept view by S_score.
 ```
 
 ## Connectivity edges
@@ -118,11 +124,11 @@ opacity, line width, and the maximum rendered edge count.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/connectivity-multiview.png
-:alt: Two equal panels filling the whole window with the sidebar closed, both showing the Pancreas 3D embedding coloured by cell_type from the same locked camera, and in both the KNN connectivity edges, drawn at line width 2.0, form a grey web between the cells.
+:alt: Two equal panels filling the whole window with the sidebar closed, both showing the Pancreas 3D embedding coloured by cell_type from one shared camera, and in both the KNN connectivity edges, drawn at line width 2.0, form a grey web between the cells.
 :width: 1440px
 
 Connectivity settings apply to every panel: the edges were switched on, and
-widened to 2.0, while the kept snapshot was the selected view, and the live
+widened to 2.0, while the kept view was the selected view, and the live
 panel draws them too. With the sidebar closed the two panels split the whole
 window.
 ```

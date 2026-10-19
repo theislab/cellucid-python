@@ -87,6 +87,11 @@ lists what `obsm` holds and why each entry was not used:
 Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,696) and at least one numeric column. obsm holds: X_df (table), spatial (3,696 × 2, NaN at cell 17).
 ```
 
+Those are the embeddings each dimension shows first, its *defaults*. The data
+mapping the server publishes (`adapter.get_data_mapping()`) also *enables*
+every other usable `obsm` array 1 to 3 columns wide beside them; see
+{doc}`../../web_app/b_data_loading/13_data_mapping`.
+
 The complete rules are in the section on which `obsm` keys are read, below.
 
 ### 2) (Optional but common) Gene expression in `adata.X`

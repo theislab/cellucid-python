@@ -78,6 +78,7 @@ Usage:
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import math
@@ -130,6 +131,7 @@ from .data_mapping import (
     canonical_embedding_id,
     default_columns,
     default_embedding_slots,
+    default_enabled_embeddings,
     default_vector_bindings,
     describe_obsm,
     describe_obsm_entry,
@@ -692,6 +694,7 @@ class AnnDataAdapter:
         self._embeddings: list[ServedEmbedding] = []
         self._embedding_defaults: dict[str, str] = {}
         self._guessed_slots: list[str] = []
+        self._enabled_embeddings: list[dict[str, Any]] = []
         # The data-mapping catalog, built on first request and then frozen.
         # The server is threaded, so building it is guarded by a lock.
         self._mapping_candidates: dict[str, Any] | None = None
@@ -1118,6 +1121,7 @@ class AnnDataAdapter:
             slots[slot] = {"key": key, "columns": resolved_columns}
 
         guessed: list[str] = []
+        rejected_keys: list[str] = []
         if all(ref is None for ref in slots.values()):
             guess = best_guess_embedding_slots(
                 entries,
@@ -1126,6 +1130,7 @@ class AnnDataAdapter:
             )
             slots = guess.slots
             guessed = guess.guessed
+            rejected_keys = [key for key, _ in guess.rejected]
             if all(ref is None for ref in slots.values()):
                 rejected = dict(guess.rejected)
                 descriptions = [
@@ -1199,6 +1204,12 @@ class AnnDataAdapter:
             f"{item.dimension}d": item.id for item in self._embeddings
         }
         self._guessed_slots = guessed
+        self._enabled_embeddings = default_enabled_embeddings(
+            entries,
+            slots,
+            latent_key=self.latent_key,
+            rejected=rejected_keys,
+        )
 
     @property
     def embeddings(self) -> list[ServedEmbedding]:
@@ -1218,7 +1229,9 @@ class AnnDataAdapter:
     def get_data_mapping(self) -> dict[str, Any]:
         """The data mapping this adapter serves, as a canonical DataMapping.
 
-        The embeddings are the served slots; the graph, gene names, expression
+        The defaults are the served slots, and every narrow ``obsm`` array is
+        enabled beside them (:func:`~cellucid.data_mapping.default_enabled_embeddings`);
+        the graph, gene names, expression
         matrix and latent space are the ones this adapter was configured with;
         the vector bindings are the ``obsm`` keys it serves, each bound to its
         embedding's ``obsm`` key and columns.
@@ -1227,6 +1240,7 @@ class AnnDataAdapter:
         slots: dict[str, dict[str, Any] | None] = dict.fromkeys(DIMENSION_SLOTS)
         for item in self._embeddings:
             slots[f"{item.dimension}d"] = {"key": item.key, "columns": list(item.columns)}
+        enabled = copy.deepcopy(self._enabled_embeddings)
         by_id = {item.id: item for item in self._embeddings}
         served = sorted(
             (
@@ -1242,7 +1256,7 @@ class AnnDataAdapter:
         return validate_data_mapping(
             {
                 "kind": "anndata",
-                "embeddings": slots,
+                "embeddings": {"enabled": enabled, "defaults": slots},
                 "knn": self.knn_key,
                 "geneNames": "index"
                 if self.gene_id_column is None

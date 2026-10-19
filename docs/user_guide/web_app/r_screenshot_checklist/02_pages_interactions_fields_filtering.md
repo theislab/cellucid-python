@@ -107,9 +107,19 @@ Confirmed against the tree, not inherited from the original audit.
 
 ### Resolved since the audit
 
-- **Dimension switching and navigation mode** — `c_/05` now documents that a
-  mode you chose yourself survives a dimension change, matching
-  `viewer-contracts.js:27 getDefaultNavigationMode`.
+- **Dimension switching and navigation mode** — `c_/01` and `c_/05` now
+  document that each view owns its camera and mode, that a mode you chose is
+  remembered per view and dimension, and that the default follows the
+  dimension of the embedding the view shows
+  (`viewer-contracts.js getDefaultNavigationMode`).
+- **Multi-representation interface** — the Dimension dropdown and the
+  `Compare views › Embedding` menu are gone: each view shows one embedding,
+  chosen in `View N shows` (`#view-representation-select`), and keys 1, 2 and 3
+  show a dimension's default, then cycle. Every frame captured before that
+  (`window-dimension-1d/-2d/-3d`, `multiview-two-panels`,
+  `connectivity-multiview`, `dimension-2d-planar-default`,
+  `dimension-navigation-controls-2d`, `dark-theme-multiview`) shows the
+  earlier interface; their captions say so until they are recaptured.
 - **`(restored)` suffix** — both `d_/02:221` and `d_/05:392` now state plainly
   that no such suffix exists, matching `overlay-public.js`.
 - **`Use log scale`** — corrected to the app's actual label `Log color scale`
@@ -146,8 +156,8 @@ All forty confirmed present in `cellucid/index.html`:
 `#smoke-controls` · `#points-controls` · `#connectivity-controls` ·
 `#compare-views-section` · `#split-view-controls` · `#split-keep-view-btn` ·
 `#camera-lock-btn` · `#split-view-badges-box` · `#split-view-badges-list` ·
-`#view-layout-mode` · `#split-clear-btn` · `#dimension-controls` ·
-`#dimension-select` · `#navigation-controls` · `#navigation-mode` ·
+`#view-layout-mode` · `#split-clear-btn` · `#representation-controls` ·
+`#view-representation-select` · `#navigation-controls` · `#navigation-mode` ·
 `#orbit-controls` · `#planar-controls` · `#freefly-controls` · `#reset-camera-btn` ·
 `#coloring-filtering-section` · `#categorical-field-row` · `#continuous-field-row` ·
 `#gene-expression-row` · `#gene-expression-dropdown` · `#display-options-container` ·

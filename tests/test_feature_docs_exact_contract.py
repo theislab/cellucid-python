@@ -103,14 +103,15 @@ def test_smoke_and_multiview_docs_publish_current_exact_limits() -> None:
     assert "A `.cellucid-session` saves `Render mode:`" in smoke
 
     for exact in (
-        "at most **three** kept snapshots",
+        "at most **three** kept views",
         "`Keep view`",
-        "`Locked Cam`",
-        "`Unlocked Cam`",
+        "`View 2 shows`",
+        "`Link cameras`",
         "`Layout: Grid compare`",
         "`Layout: Edit selected view`",
-        "`Orb`, `Pan`, or `Fly`",
-        "starts multiview with linked cameras",
+        "`Orbit`, `Pan` or `Fly`",
+        "**Link cameras** is on by default",
+        "Views that show different embeddings always keep their\nown cameras",
     ):
         assert exact in multiview
     assert "Highlight pages are a separate feature" in " ".join(multiview.split())
@@ -451,12 +452,13 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
     for exact in (
         "The session stores six fields",
         "The four scalars and `cellOrder` must equal the currently loaded dataset",
-        "The data mapping must too, with one exception: the embedding of each dimension",
+        "The data mapping must too, with one exception: its embeddings",
         "`cellOrder`: a record of *which ordering*",
         "`dataMapping`: which stored arrays the dataset was shown with",
         "exactly 1, 2, or 3",
         "Restoring is *verify, then apply*",
-        "The session names another embedding in a dimension, one this dataset can show",
+        "The session turns on other embeddings, or names other defaults, that this dataset can show",
+        "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have.",
         "The session was saved with another graph, gene names, expression matrix, latent space, or vector bindings",
         "stores its cells in a different order",
         "A session file saved before Cellucid recorded cell order",

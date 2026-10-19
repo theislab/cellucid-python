@@ -280,7 +280,7 @@ followed by these exact keyword-only parameters:
 - `normalize_embeddings`: normalize coordinates to `[-1, 1]` (default: True)
 - `centroid_outlier_quantile`: quantile used for categorical centroids
 - `centroid_min_points`: minimum category size used for categorical centroids
-- `embedding_keys`: the `obsm` array of a dimension slot, such as
+- `embedding_keys`: the `obsm` array a dimension shows by default, such as
   `{"2d": "X_tsne"}` or `{"2d": ("X_pca", [0, 1])}` with 0-based columns
   (default: `None`, which uses `X_umap_1d`/`X_umap_2d`/`X_umap_3d` or a bare
   `X_umap`, then a deterministic best guess)

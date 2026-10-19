@@ -38,7 +38,7 @@ main.js (orchestrator)
   └─ admits deferred controls once their listeners exist
 
 DataState (state coordinator)
-  ├─ emits events: visibility/field/highlight/page/dimension/vectorFields changes
+  ├─ emits events: visibility/field/highlight/page/view-representation/mapping/vectorFields changes
   ├─ owns: typed arrays + per-view contexts
   └─ calls viewer: updateColors/updateTransparency/updatePositions/etc
 
@@ -132,7 +132,8 @@ Cellucid has *many* interacting features. The app treats state as first-class:
 - field registries (rename/delete/user-defined)
 - highlight pages/groups and per-point highlight overlay arrays
 - per-view contexts (live view + snapshot views)
-- dimension switching state and vector-field availability
+- the representation (embedding) each view shows, the data mapping, and
+  vector-field availability
 - loaded obs/var field data, released least recently used past 512 MiB of inactive fields (`field/residency.js`)
 
 `DataState` emits events so UI/analysis modules can stay decoupled:
@@ -140,7 +141,8 @@ Cellucid has *many* interacting features. The app treats state as first-class:
 - `field:changed`
 - `highlight:changed`
 - `page:changed`
-- `dimension:changed`
+- `view:representation-changed`
+- `mapping:changed` / `representations:changed`
 - `vectorFields:changed`
 
 Deep dive: {doc}`06_state_datastate_and_events`.

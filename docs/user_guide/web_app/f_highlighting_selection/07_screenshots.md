@@ -66,7 +66,7 @@ same count, and **Clear** has appeared.
 :width: 1440px
 
 **Step 4 — the result.** The group survives everything that is not a filter:
-change the coloured field, move the camera, switch dimension, and these 842
+change the coloured field, move the camera, switch embedding, and these 842
 cells stay members.
 ```
 

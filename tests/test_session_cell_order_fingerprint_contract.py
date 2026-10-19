@@ -22,9 +22,16 @@ from cellucid.session_bundle import _validate_fingerprint
 _EXPORT_MAPPING: dict[str, Any] = {
     "kind": "export",
     "embeddings": {
-        "1d": None,
-        "2d": {"key": "X_tsne", "columns": None},
-        "3d": {"key": "X_umap_3d", "columns": None},
+        "enabled": [
+            {"key": "X_tsne", "columns": None},
+            {"key": "X_umap", "columns": None},
+            {"key": "X_umap_3d", "columns": None},
+        ],
+        "defaults": {
+            "1d": None,
+            "2d": {"key": "X_tsne", "columns": None},
+            "3d": {"key": "X_umap_3d", "columns": None},
+        },
     },
     "geneNames": "index",
     "vectorFields": [],
@@ -32,7 +39,10 @@ _EXPORT_MAPPING: dict[str, Any] = {
 
 _ANNDATA_MAPPING: dict[str, Any] = {
     "kind": "anndata",
-    "embeddings": {"1d": None, "2d": {"key": "X_pca", "columns": [3, 1]}, "3d": None},
+    "embeddings": {
+        "enabled": [{"key": "X_pca", "columns": [3, 1]}],
+        "defaults": {"1d": None, "2d": {"key": "X_pca", "columns": [3, 1]}, "3d": None},
+    },
     "knn": None,
     "geneNames": "column:gene_symbols",
     "expression": "X",
@@ -89,8 +99,9 @@ def test_every_embedding_dimension_is_accepted(dimension: int) -> None:
     )
 
 
-def test_the_cell_order_embedding_need_not_be_a_slot_default() -> None:
-    # A session saved while a view showed another layout digests that layout.
+def test_the_cell_order_embedding_need_not_be_a_dimension_default() -> None:
+    # A session saved while the live view showed another enabled representation
+    # digests that representation.
     _validate_fingerprint(
         _fingerprint(
             cellOrder={
@@ -191,8 +202,39 @@ def test_an_unknown_fingerprint_field_is_still_rejected() -> None:
         ({"knn": None}, "dataMapping fields: unknown knn"),
         ({"geneNames": "symbols"}, "dataMapping.geneNames must be"),
         (
-            {"embeddings": {"1d": None, "2d": None, "3d": None}},
-            "dataMapping.embeddings must fill at least one slot",
+            {
+                "embeddings": {
+                    "enabled": [{"key": "X_tsne", "columns": None}],
+                    "defaults": {"1d": None, "2d": None, "3d": None},
+                }
+            },
+            "dataMapping.embeddings.defaults must name at least one default",
+        ),
+        (
+            {
+                "embeddings": {
+                    "enabled": [],
+                    "defaults": {"1d": None, "2d": {"key": "X_tsne", "columns": None}, "3d": None},
+                }
+            },
+            "dataMapping.embeddings.enabled must list at least one embedding",
+        ),
+        (
+            {
+                "embeddings": {
+                    "enabled": [{"key": "X_tsne", "columns": None}],
+                    "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None},
+                }
+            },
+            r"dataMapping.embeddings.defaults.2d must be one of the enabled embeddings",
+        ),
+        (
+            {"embeddings": {"1d": None, "2d": {"key": "X_tsne", "columns": None}, "3d": None}},
+            "dataMapping.embeddings fields: missing defaults, enabled; unknown 1d, 2d, 3d",
+        ),
+        (
+            {"vectorFields": [{"field": "velocity", "embedding": {"key": "X_draw_graph_fa", "columns": None}}]},
+            r"dataMapping.vectorFields\[0\] is bound to an embedding that is not enabled",
         ),
         (
             {"vectorFields": [{"field": "velocity", "embedding": {"key": "X_tsne", "columns": None}}] * 2},
@@ -210,5 +252,7 @@ def test_a_malformed_data_mapping_is_rejected(change: dict[str, Any], message: s
 def test_the_returned_fingerprint_is_a_copy() -> None:
     fingerprint = _fingerprint()
     validated = _validate_fingerprint(fingerprint)
-    validated["dataMapping"]["embeddings"]["2d"]["key"] = "changed"
-    assert fingerprint["dataMapping"]["embeddings"]["2d"]["key"] == "X_tsne"
+    validated["dataMapping"]["embeddings"]["defaults"]["2d"]["key"] = "changed"
+    validated["dataMapping"]["embeddings"]["enabled"][0]["key"] = "changed"
+    assert fingerprint["dataMapping"]["embeddings"]["defaults"]["2d"]["key"] == "X_tsne"
+    assert fingerprint["dataMapping"]["embeddings"]["enabled"][0]["key"] == "X_tsne"

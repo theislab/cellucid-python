@@ -165,7 +165,8 @@ survive a re-export of the same dataset from re-sorted input, and index-based
 selections would then silently denote different cells.
 
 `dataMapping` records which stored arrays the session was showing. Its `kind`
-is `"export"` — exactly `kind`, `embeddings` (the `1d`/`2d`/`3d` slots),
+is `"export"` — exactly `kind`, `embeddings` (`enabled`, the embeddings that are turned on, and
+`defaults`, the `1d`/`2d`/`3d` default of each dimension),
 `geneNames` (`"index"` or `"column:<name>"`), and `vectorFields` — or
 `"anndata"`, which adds `knn`, `expression` (`"X"`, `"raw"`, `"layer:<name>"`,
 or null), and `latent`.

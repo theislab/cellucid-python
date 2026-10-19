@@ -71,7 +71,7 @@ predict what changes when you click.
 - **Dataset**: the loaded data bundle (points + metadata + optional gene expression).
 - **Embedding / dimension (1D/2D/3D)**: where points live in space (UMAP/tSNE/etc).
 - **Field**: something you can color by (categorical/continuous metadata or gene expression).
-- **View**: a panel showing the dataset with a specific dimension, camera, fields, filters, and highlights.
+- **View**: a panel showing the dataset with one embedding, its own camera, fields and filters; highlights are shared by every view.
 - **Live view vs snapshot view**: live is your “working” view; snapshots are “kept” panels for comparison.
 - **Artifacts**: exports (figures) and saved sessions (`.cellucid-session`) for sharing/reproducibility.
 
@@ -99,7 +99,7 @@ Most non-demo workflows look like this:
 
 1) **Prepare** a dataset in Python (usually an AnnData): export embeddings + fields + gene expression into a folder layout.
 2) **Load** that folder (or a server that hosts it) in the Cellucid web app.
-3) **Explore**: switch dimensions, color by fields, filter, highlight.
+3) **Explore**: switch embeddings, color by fields, filter, highlight.
 4) **Save / export**:
    - figures for papers,
    - a `.cellucid-session` bundle for reproducibility and sharing.

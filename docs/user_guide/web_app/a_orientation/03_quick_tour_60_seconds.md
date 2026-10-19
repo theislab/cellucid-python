@@ -95,8 +95,8 @@ ZIP) or from a **Remote server**, but those workflows are documented in
 
 ### 2) Move the camera
 
-1) Open **Compare Views** → **Navigation**.
-2) Check the dimension-specific default:
+1) Open the **Navigation** accordion.
+2) Check the dimension-specific default (each view keeps its own mode):
    - 1D or 2D starts in **Planar**;
    - 3D starts in **Orbit**.
 3) In Planar, drag to pan and use the wheel or trackpad to zoom.

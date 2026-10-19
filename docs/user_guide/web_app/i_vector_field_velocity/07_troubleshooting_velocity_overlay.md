@@ -17,7 +17,7 @@ Each entry follows the same structure:
 If you’re stuck, do this first:
 
 1) Confirm **Visualization → Render mode:** is `Points`.  
-2) Confirm the view shows an embedding that actually has vector fields (the right dimension, and under **Compare Views → Embedding** the embedding the vectors were computed on).  
+2) Confirm the selected view shows an embedding that actually has vector fields: under **Compare views → View N shows**, the embedding the vectors were computed on.  
 3) Enable `Show overlay`, then temporarily set:
    - `Particle density:` 5K
    - `Trail length:` 3.0s
@@ -58,7 +58,7 @@ If you’re stuck, do this first:
 
 ### Likely causes (ordered)
 
-1) Vector fields exist, but **not for the embedding this view shows**: only 2D vectors exist and you are in 3D, or the view shows another embedding of the same dimension (a t-SNE chosen under **Compare Views → Embedding** or **Session › Data mapping**).  
+1) Vector fields exist, but **not for the embedding the selected view shows**: only 2D vectors exist and the view shows a 3D embedding, or it shows another embedding of the same dimension (a t-SNE chosen under **Compare views → View N shows**).  
 2) The dataset only contains vector fields for a different basis/dimension than you expect.  
 
 ### How to confirm
@@ -68,12 +68,12 @@ If you’re stuck, do this first:
 
 ### Fix
 
-1) Show one of the named embeddings in the view (its dimension, and its embedding under **Compare Views → Embedding**).
+1) Show one of the named embeddings in the view (**Compare views → View N shows**). The overlay is drawn in every view that shows an embedding the field is bound to; other views stay without it.
 2) If you need vectors on another embedding, export/generate a vector field for it and reload the dataset.
 
 ### Prevention
 
-- Export both `*_umap_2d` and `*_umap_3d` vector fields when you expect users to switch dimensions.
+- Export both `*_umap_2d` and `*_umap_3d` vector fields when you expect users to show both dimensions.
 
 ---
 
@@ -115,7 +115,7 @@ If you’re stuck, do this first:
 
 ### How to confirm
 
-- Switch dimension or embedding and see if entries appear; the info line names the embeddings that have a field.
+- Switch the view's embedding and see if entries appear; the info line names the embeddings that have a field.
 - If you’re loading an AnnData, inspect `adata.obsm.keys()` in Python and look for:
   - `velocity_umap_2d`, `velocity_umap_3d`, `T_fwd_umap_2d`, etc.
 - If you’re loading an export folder, check for:
@@ -355,7 +355,7 @@ returns without touching the overlay. See {doc}`06_edge_cases`.
 
 ### How to confirm
 
-- Switch dimension and see whether the dropdown changes.
+- Show the other dimension's embedding in the view and see whether the dropdown changes.
 - Check your export folder or AnnData `obsm` keys for `*_2d` and `*_3d` variants.
 
 ### Fix
@@ -451,7 +451,7 @@ When reporting an overlay bug, include:
 
 - Dataset loading path: file picker / server / Jupyter / GitHub-hosted exports
 - Browser + OS + GPU (e.g., Chrome 121, macOS 14.2, Apple M2)
-- Dataset size: `n_cells`, and which dimension and embedding you were viewing (the view badge, e.g. `2D · X_tsne`)
+- Dataset size: `n_cells`, and which embedding each view showed (its row in **Compare views**, e.g. `t-SNE · 2D`)
 - Selected `Vector field:` label and a screenshot of the overlay settings panel
 - Any toast/notification error text (copy/paste)
 - Browser console logs around the failure (copy/paste)

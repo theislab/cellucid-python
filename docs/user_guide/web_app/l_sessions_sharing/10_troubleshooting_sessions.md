@@ -115,9 +115,9 @@ Read the message before changing anything — each cause has its own:
   served copy of an export the catalog also publishes. The counts are no help
   here, which is why this message names the two identities instead of repeating
   the same two numbers. Open the dataset the state was captured on.
-- **"This session uses … in 2D, which this dataset does not have"**: the
-  session shows an embedding in that dimension that this dataset lacks (or one
-  it cannot plot, with the reason). A session whose embeddings this dataset
+- **"This session shows …, which this dataset does not have"**: the
+  session turns on an embedding this dataset lacks (or one it cannot plot,
+  with the reason). A session whose embeddings this dataset
   *does* have is not refused: they are restored. Open the dataset version the
   session was saved on.
 - **"This session was saved with … as its neighbour graph"** (or gene names,
@@ -218,7 +218,7 @@ First require terminal success. Then compare:
 1. app build shown in the footer;
 2. dataset route, id, cell count, and variable count;
 3. live/snapshot layout and active view;
-4. camera, dimension, and navigation mode;
+4. every view's embedding, camera, and navigation mode, and whether cameras are linked;
 5. active obs/var field and category legend;
 6. Active filters, including latent-space outlier filtering;
 7. highlight pages, group names, counts, and visibility;
