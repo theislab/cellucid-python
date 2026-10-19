@@ -107,6 +107,20 @@ reads, so it cannot announce a capability the notebook would then reject.
 Implementation:
 - `_protocol_capability_document` in `src/cellucid/jupyter/_wire.py`
 
+(python-mapping-embeddings-endpoint)=
+### `GET /_cellucid/mapping/embeddings/{obsm}/{c0-c1-c2}.bin` (AnnData servers only)
+
+One `obsm` array of the candidate catalog, read at 1 to 3 zero-based columns
+(`{obsm}` is its index in the catalog's `obsm` list, the columns are joined by
+`-`, for example `3/0-1.bin`). The served mapping turns on every narrow `obsm`
+array beside the served defaults, but `dataset_identity.json` lists only the
+defaults, so this is where the viewer reads the others when a view first shows
+one. The array is checked (finite, float32-representable, non-zero range) and
+normalized exactly as a served embedding is; the same key at the same columns
+as a served embedding returns the same bytes. A route that names no usable
+dense array at valid columns answers 404; an array that fails the check
+answers 422 with the reason.
+
 (python-mapping-candidates-endpoint)=
 ### `GET /_cellucid/mapping/candidates.json` (AnnData servers only)
 

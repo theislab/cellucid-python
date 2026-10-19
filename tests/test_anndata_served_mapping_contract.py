@@ -224,3 +224,66 @@ def test_the_catalog_route_serves_the_mapping_document(method: str) -> None:
                 assert body == b""
         finally:
             connection.close()
+
+
+def _obsm_index(adapter: AnnDataAdapter, key: str) -> int:
+    keys = [entry["key"] for entry in adapter.get_mapping_candidates()["obsm"]]
+    return keys.index(key)
+
+
+def test_every_enabled_embedding_is_served_on_request() -> None:
+    # Every narrow obsm array is enabled, though the identity lists only the
+    # served defaults; the viewer reads each one through the mapping route
+    # when a view first shows it.
+    adata = _adata()
+    adata.obsm["X_tsne"] = np.random.default_rng(3).random((adata.n_obs, 2)).astype(np.float32)
+    adapter = AnnDataAdapter(adata, dataset_name="Served mapping", dataset_id="served-mapping", quiet=True)
+    try:
+        enabled = adapter.get_data_mapping()["embeddings"]["enabled"]
+        served = {(item.key, item.columns) for item in adapter.embeddings}
+        extra = [ref for ref in enabled if (ref["key"], tuple(ref["columns"])) not in served]
+        assert extra, "the fixture must enable an embedding the identity does not list"
+        for ref in enabled:
+            columns = "-".join(str(column) for column in ref["columns"])
+            route = f"{_obsm_index(adapter, ref['key'])}/{columns}.bin"
+            data = adapter.get_mapping_embedding_binary(route)
+            assert data is not None
+            values = np.frombuffer(data, dtype="<f4").reshape(adapter.n_cells, len(ref["columns"]))
+            assert np.isfinite(values).all()
+        # A served embedding read through the route is the same bytes.
+        item = adapter.embeddings[0]
+        route = f"{_obsm_index(adapter, item.key)}/{'-'.join(map(str, item.columns))}.bin"
+        assert adapter.get_mapping_embedding_binary(route) == adapter.get_embedding_binary(item.id)
+        # Columns of a wider array, chosen per axis.
+        pca = _obsm_index(adapter, "X_pca")
+        assert len(adapter.get_mapping_embedding_binary(f"{pca}/4-0.bin") or b"") == adapter.n_cells * 8
+        # Routes that name nothing plottable.
+        for bad in [f"{pca}/5.bin", f"{pca}/0-0.bin", f"{pca}/0-1-2-3.bin", "99/0.bin", "x/0.bin", f"{pca}/01.bin"]:
+            assert adapter.get_mapping_embedding_binary(bad) is None, bad
+    finally:
+        adapter.close()
+
+
+@pytest.mark.parametrize("method", ["GET", "HEAD"])
+def test_the_mapping_embedding_route_serves_an_enabled_array(method: str) -> None:
+    with _running_server() as (host, port):
+        connection = http.client.HTTPConnection(host, port, timeout=5)
+        try:
+            connection.request("GET", f"/{MAPPING_CANDIDATES_PATH}")
+            catalog = json.loads(connection.getresponse().read())
+            index = [entry["key"] for entry in catalog["obsm"]].index("X_pca")
+            connection.request(method, f"/_cellucid/mapping/embeddings/{index}/2-1.bin")
+            response = connection.getresponse()
+            body = response.read()
+            assert response.status == 200
+            assert response.getheader("Content-Type") == "application/octet-stream"
+            assert int(response.getheader("Content-Length")) == 6 * 2 * 4
+            assert body == (b"" if method == "HEAD" else body)
+            if method == "GET":
+                assert len(body) == 6 * 2 * 4
+            connection.request("GET", f"/_cellucid/mapping/embeddings/{index}/9.bin")
+            missing = connection.getresponse()
+            missing.read()
+            assert missing.status == 404
+        finally:
+            connection.close()

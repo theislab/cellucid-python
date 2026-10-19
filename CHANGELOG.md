@@ -95,7 +95,12 @@ Version 0.9.2 is a patch release on 0.9.1.
   `defaults`, beside every candidate `obsm`, `obsp`, layer and `var` column,
   read from metadata only), and `AnnDataAdapter` gains `get_data_mapping()` and
   `get_mapping_candidates()`. The web app reads it to record the mapping a
-  session was saved with.
+  session was saved with. Every other narrow `obsm` array is turned on beside
+  the served defaults and served on request at
+  `/_cellucid/mapping/embeddings/{obsm}/{columns}.bin`
+  (`AnnDataAdapter.get_mapping_embedding_binary()`), so a served file shows
+  any of its embeddings and its checklist works as for a file read in the
+  browser.
 - **Web app, data mapping**: a **Data mapping** group at the bottom of the
   Session panel lists every embedding the dataset can be shown with as a
   checklist: turn any number on, of any mix of 1D, 2D and 3D, and mark one per

@@ -25,9 +25,12 @@ lists the rest.
 
 | What you opened | What you can change |
 |---|---|
-| An `.h5ad` file or a Zarr ZIP, in the browser | Turn any numeric `obsm` array on or off, at any 1 to 3 of its columns, as many column selections as you like |
+| An `.h5ad` file or a Zarr ZIP, read in the browser or served from Python (a notebook or the command-line server) | Turn any numeric `obsm` array on or off, at any 1 to 3 of its columns, as many column selections as you like |
 | A prepared dataset (sample, folder, GitHub, self-hosted) | Turn the embeddings it was exported with on or off, and choose each dimension's default |
-| A file served by `cellucid serve` or a notebook | Nothing in the checklist; start the server with `--embedding-1d/-2d/-3d` |
+
+A served file opens with the server's defaults (`--embedding-1d/-2d/-3d`, or
+its best guess) and every other narrow `obsm` array turned on; the server reads
+any array the checklist turns on when a view first shows it.
 
 Turning an embedding on loads nothing. Its coordinates are read the first time
 a view shows it.

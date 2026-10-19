@@ -88,6 +88,10 @@ records as `dataMapping`. `adapter.get_mapping_candidates()` returns the catalog
 the server publishes at `/_cellucid/mapping/candidates.json`: that mapping as
 `defaults`, plus every `obsm`, `obsp`, layer and `var` column with its shape,
 dtype and usability, read from metadata only.
+`adapter.get_mapping_embedding_binary("{obsm}/{c0-c1}.bin")` returns one of
+those `obsm` arrays at the given columns, normalized like a served embedding:
+the payload behind `/_cellucid/mapping/embeddings/...`, which the viewer reads
+for an enabled embedding the identity does not list.
 
 ## Connectivity is asked for, not assumed
 

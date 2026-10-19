@@ -178,6 +178,9 @@ These endpoints are useful for “is the server alive” and “what does it thi
 - `/_cellucid/protocol`
 - `/_cellucid/mapping/candidates.json` (AnnData servers only: the data mapping
   being served, and every candidate array)
+- `/_cellucid/mapping/embeddings/{obsm}/{c0-c1-c2}.bin` (AnnData servers only:
+  one candidate `obsm` array at the given 0-based columns, normalized like a
+  served embedding)
 
 ### Example: health probe
 

@@ -167,6 +167,9 @@ logger = logging.getLogger("cellucid.anndata_adapter")
 #: The route, relative to a served dataset, of the data-mapping catalog: the
 #: mapping the server serves (``defaults``) and every candidate array.
 MAPPING_CANDIDATES_PATH = "_cellucid/mapping/candidates.json"
+# Route prefix of an enabled ``obsm`` array served on request:
+# ``_cellucid/mapping/embeddings/{obsm index}/{c0-c1-c2}.bin``.
+MAPPING_EMBEDDINGS_PREFIX = "_cellucid/mapping/embeddings/"
 
 
 def _is_empty_gene_name(value: object) -> bool:
@@ -655,6 +658,9 @@ class AnnDataAdapter:
 
         # Caches for computed data, keyed by served embedding id.
         self._embedding_cache: dict[str, np.ndarray] = {}
+        # Normalized coordinates of obsm arrays read on request through the
+        # mapping route, by (key, columns).
+        self._mapping_embedding_cache: dict[tuple[str, tuple[int, ...]], np.ndarray] = {}
         # Per-embedding normalization info (center + scale_factor). Used to
         # scale vector fields into the same normalized space as the points.
         self._embedding_norm: dict[str, dict[str, Any]] = {}
@@ -1433,6 +1439,81 @@ class AnnDataAdapter:
             }
 
         self._embedding_cache[item.id] = raw
+        return raw
+
+    def get_mapping_embedding_binary(self, component: str, compress: bool = False) -> bytes | None:
+        """One ``obsm`` array of the candidate catalog, read at the given columns.
+
+        ``component`` is the route below :data:`MAPPING_EMBEDDINGS_PREFIX`:
+        ``{obsm index}/{c0-c1-c2}.bin``, the index into the catalog's ``obsm``
+        list (:meth:`get_mapping_candidates`) and 1 to 3 zero-based columns.
+        This is how a viewer shows an enabled embedding the served identity
+        does not list: every narrow ``obsm`` array is enabled
+        (:func:`~cellucid.data_mapping.default_enabled_embeddings`), and the
+        viewer reads each one when a view first shows it. The coordinates are
+        checked and normalized exactly as a served embedding's are.
+
+        Returns None for a route that names no usable array at valid columns.
+        """
+        self._check_closed()
+        compress = _require_native_boolean(compress, label="compress")
+        match = re.fullmatch(
+            r"(0|[1-9][0-9]*)/((?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*)){0,2})\.bin",
+            component,
+        )
+        if match is None:
+            return None
+        index = int(match.group(1))
+        columns = [int(column) for column in match.group(2).split("-")]
+        obsm = self.get_mapping_candidates()["obsm"]
+        if not 0 <= index < len(obsm):
+            return None
+        entry = obsm[index]
+        if (
+            not entry.get("usable")
+            or entry.get("storage") != "dense"
+            or entry["key"] not in self.adata.obsm
+        ):
+            return None
+        shape = entry.get("shape") or []
+        width = 1 if len(shape) == 1 else (int(shape[1]) if len(shape) == 2 else None)
+        if width is None:
+            return None
+        try:
+            columns = list(
+                validate_embedding_columns(columns, dimension=len(columns), width=width)
+            )
+        except DataMappingError:
+            return None
+        key = str(entry["key"])
+        defect = self._embedding_load_defect(key, columns)
+        if defect is not None:
+            raise ValueError(f"Embedding {key!r} cannot be plotted: {defect}.")
+        coordinates = self._mapped_embedding(key, tuple(columns))
+        data = little_endian_payload_bytes(coordinates.astype(np.float32))
+        if compress:
+            return deterministic_gzip_compress(data, compresslevel=6)
+        return data
+
+    def _mapped_embedding(self, key: str, columns: tuple[int, ...]) -> np.ndarray:
+        """Normalized coordinates of one ``obsm`` array at ``columns``.
+
+        A served embedding with the same key and columns is the same
+        coordinates; any other is read, checked and normalized once.
+        """
+        for item in self._embeddings:
+            if item.key == key and item.columns == columns:
+                return self.get_embedding(item.id)
+        cache_key = (key, columns)
+        if cache_key in self._mapping_embedding_cache:
+            return self._mapping_embedding_cache[cache_key]
+        raw = self._obsm_source(key, columns)
+        if self.normalize_embeddings:
+            raw, _center, _scale_factor, _max_range = _normalize_finite_float32_embedding(
+                raw,
+                label=f"Embedding {key!r}",
+            )
+        self._mapping_embedding_cache[cache_key] = raw
         return raw
 
     def get_embedding_binary(self, embedding_id: str, compress: bool = False) -> bytes:
@@ -2335,6 +2416,7 @@ class AnnDataAdapter:
 
         # Clear all caches to free memory
         self._embedding_cache.clear()
+        self._mapping_embedding_cache.clear()
         self._embedding_norm.clear()
         self._expression_matrix = None
         self._vector_field_cache.clear()

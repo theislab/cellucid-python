@@ -72,7 +72,12 @@ from ._server_base import (
 from ._server_base import (
     CellucidHTTPServer as HTTPServer,
 )
-from .anndata_adapter import MAPPING_CANDIDATES_PATH, AnnDataAdapter, _classify_anndata_path
+from .anndata_adapter import (
+    MAPPING_CANDIDATES_PATH,
+    MAPPING_EMBEDDINGS_PREFIX,
+    AnnDataAdapter,
+    _classify_anndata_path,
+)
 from .connectivity_contract import build_connectivity_manifest
 from .continuous_payload_diagnosis import NonFinitePayloadError
 from .data_mapping import EmbeddingKeySpec, is_vector_field_key
@@ -165,6 +170,8 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         /_cellucid/protocol - Viewer wire capabilities this installation accepts
         /_cellucid/mapping/candidates.json - The served data mapping and every
             candidate array, from metadata
+        /_cellucid/mapping/embeddings/{obsm}/{c0-c1}.bin - One enabled obsm
+            array at the given columns, read and normalized on request
         /_cellucid/events - POST endpoint for frontend events (hooks)
     """
 
@@ -254,6 +261,8 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
                 self.send_json(_protocol_capability_document(), head_only)
             elif path == MAPPING_CANDIDATES_PATH:
                 self.send_json(self.adapter.get_mapping_candidates(), head_only)
+            elif path.startswith(MAPPING_EMBEDDINGS_PREFIX):
+                self._handle_mapping_embedding(path, head_only, supports_gzip)
             elif path == "connectivity_manifest.json":
                 self.send_error_response(404, "No connectivity data")
             elif head_only and path in self.payload_lengths:
@@ -298,6 +307,26 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/octet-stream")
         self.send_header("Content-Length", str(content_length))
         self.end_headers()
+
+    def _handle_mapping_embedding(self, path: str, head_only: bool, supports_gzip: bool):
+        """Handle _cellucid/mapping/embeddings/{obsm}/{cols}.bin requests."""
+        try:
+            compress = supports_gzip
+            data = self.adapter.get_mapping_embedding_binary(
+                path.removeprefix(MAPPING_EMBEDDINGS_PREFIX), compress=compress
+            )
+        except ValueError as error:
+            self.send_error_response(422, str(error))
+            return
+        if data is None:
+            self.send_error_response(404, f"Invalid embedding path: {path}")
+            return
+        self.send_binary(
+            data,
+            head_only=head_only,
+            compressed=compress,
+            vary_accept_encoding=True,
+        )
 
     def _handle_embedding(self, path: str, head_only: bool, supports_gzip: bool):
         """Handle embeddings/{index}_{dim}d.bin requests."""

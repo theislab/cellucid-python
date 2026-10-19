@@ -163,6 +163,9 @@ A wildcard bind prints the loopback origin plus the machine's own name; see {doc
   - `/_cellucid/protocol` (which wire capabilities this `cellucid` accepts)
   - `/_cellucid/mapping/candidates.json` (AnnData servers: the data mapping
     being served, which the viewer records in sessions, and every candidate array)
+  - `/_cellucid/mapping/embeddings/{obsm}/{c0-c1-c2}.bin` (AnnData servers: one
+    `obsm` array of that catalog at 1 to 3 zero-based columns, normalized like a
+    served embedding, read when a view first shows it)
 
 ### Viewer UI hosting and source requirements
 
