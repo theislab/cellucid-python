@@ -150,24 +150,28 @@ Practical consequences:
 Changing what the points are colored by recomputes one RGBA color per cell on
 the CPU and then uploads only colors: positions and colors are separate GPU
 streams, so a recolor sends 4 bytes per cell and never touches the positions.
-With Level-of-Detail built, the shared reduced copy of each dimension is
-recolored too, 4 bytes per reduced point, when that dimension next draws; each
-kept view that draws a reduced level re-gathers its own 4 bytes per reduced
-point when its colors change.
+When a view's points are stored in their spatial tree's order (any 3D view
+with a tree, or LOD or culling on), the GPU gathers the uploaded colors into
+that order in one pass; the CPU does no per-cell work for it, and Level of
+Detail adds nothing, because every level draws from the same store. Each kept
+view recolors its own store the same way when its colors change.
 
 Measured renderer cost of one recolor (upload issued and completed), Chromium on
-an Apple M1 Pro through ANGLE Metal, synthetic data; the color computation
-itself is not included:
+an Apple M1 Pro through ANGLE Metal, synthetic 3D clusters, median of seven,
+with LOD off or on; the color computation itself is not included:
 
-| Cells | LOD | Bytes sent | Recolor |
-| --- | --- | --- | --- |
-| 1,000,000 | off | 4 MB | 1.5 ms |
-| 1,000,000 | on | 7.2 MB | 3.8 ms |
-| 5,000,000 | off | 20 MB | 2.3 ms |
-| 5,000,000 | on | 36 MB | 33 ms |
+| Cells | Bytes sent | Recolor |
+| --- | --- | --- |
+| 1,000,000 | 4 MB | 1.0–1.3 ms |
+| 10,000,000 | 40 MB | 5–8 ms |
 
-With LOD on, most of that time is gathering the reduced copy's colors in its
-spatial order, not the upload.
+At 10,000,000 cells about 5 ms of that is the upload into the transient
+source texture the gather reads (the same bytes as a plain buffer upload,
+which takes about 2.5 ms) and about 1.5 ms the gather pass. That is the known
+trade-off of the stored order: a 3D view is kept in tree order even with LOD
+and culling off, because it then draws a full-detail frame about four times
+faster (10,000,000 points in about 8 ms of GPU time instead of 39), and each
+recolor pays a few milliseconds once for it.
 
 ---
 

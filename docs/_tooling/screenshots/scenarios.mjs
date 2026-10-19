@@ -412,6 +412,33 @@ function buildFilteringScenarios() {
     { waitForText: '#stats', text: 'Field: clusters (category)' },
     { waitFor: '#legend' },
   ];
+  /**
+   * Navigation and Compare Views open, the sidebar scrolled so Navigation's
+   * Mode select and the Shows picker below it are both in the window.
+   */
+  const SHOWS_PICKER_IN_VIEW = [
+    { openSection: '#navigation-section' },
+    { openSection: '#compare-views-section' },
+    { waitFor: '#representation-controls:not([hidden])' },
+    {
+      run: page => page.locator('#navigation-section').evaluate(
+        element => element.scrollIntoView({ block: 'start' })
+      ),
+    },
+  ];
+  /**
+   * Show one representation in the selected view with the Shows picker, and
+   * wait for the view's navigation mode to follow it.
+   */
+  const show = (label, mode) => [
+    { waitForStable: '#view-representation-select' },
+    { select: '#view-representation-select', label },
+    { run: page => page.waitForFunction(
+      expected => document.querySelector('#navigation-mode')?.value === expected,
+      mode,
+    ) },
+    { wait: 2000 },
+  ];
   const sScore = [
     { waitForStable: '#continuous-field' },
     { select: '#continuous-field', label: 'S_score' },
@@ -1071,10 +1098,10 @@ function buildFilteringScenarios() {
       name: 'window-dimension-3d',
       describes:
         'The whole window showing the Pancreas 3D embedding inside its grid box, '
-        + 'with the Dimension select reading 3D and the Navigation Mode select '
-        + 'reading Orbit.',
+        + 'with the Navigation Mode select reading Orbit and, under Compare '
+        + 'Views, the Shows picker reading UMAP · 3D.',
       dataset: 'pancreas',
-      steps: [READY, ...clusters, { scrollIntoView: '#dimension-controls' }, NOTIFICATIONS_DRAINED],
+      steps: [READY, ...clusters, ...SHOWS_PICKER_IN_VIEW, NOTIFICATIONS_DRAINED],
       shot: { mode: 'window' },
       settle,
     },
@@ -1083,21 +1110,20 @@ function buildFilteringScenarios() {
       topic: 'web_app',
       name: 'window-dimension-2d',
       describes:
-        'The same window after choosing 2D: the cells now lie on a plane seen '
-        + 'face-on, the Dimension select reads 2D, and the Navigation Mode '
-        + 'select has followed it to Planar.',
+        'The same window after choosing UMAP · 2D in the Shows picker: the '
+        + 'cells now lie on a plane seen face-on, and the Navigation Mode '
+        + 'select has followed the view to Planar.',
       dataset: 'pancreas',
       steps: [
         READY,
         ...clusters,
-        { scrollIntoView: '#dimension-controls' },
-        { select: '#dimension-select', value: '2' },
-        { wait: 2000 },
-        { scrollIntoView: '#dimension-controls' },
+        ...SHOWS_PICKER_IN_VIEW,
+        ...show('UMAP · 2D', 'planar'),
+        ...SHOWS_PICKER_IN_VIEW,
         NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
-      cursor: { on: '#dimension-select', at: 'right', dx: -18, state: 'press' },
+      cursor: { on: '#view-representation-select', at: 'right', dx: -18, state: 'press' },
       settle,
     },
     {
@@ -1105,17 +1131,16 @@ function buildFilteringScenarios() {
       topic: 'web_app',
       name: 'window-dimension-1d',
       describes:
-        'The same window after choosing 1D: the cells are spread along one '
-        + 'axis, the Dimension select reads 1D, and the Navigation Mode select '
-        + 'has followed it to Planar.',
+        'The same window after choosing UMAP · 1D in the Shows picker: the '
+        + 'cells are spread along one axis, and the Navigation Mode select '
+        + 'has followed the view to Planar.',
       dataset: 'pancreas',
       steps: [
         READY,
         ...clusters,
-        { scrollIntoView: '#dimension-controls' },
-        { select: '#dimension-select', value: '1' },
-        { wait: 2000 },
-        { scrollIntoView: '#dimension-controls' },
+        ...SHOWS_PICKER_IN_VIEW,
+        ...show('UMAP · 1D', 'planar'),
+        ...SHOWS_PICKER_IN_VIEW,
         NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
@@ -1979,13 +2004,14 @@ function buildAnnotationAndSessionScenarios() {
           // Every claim the caption makes, checked against the running app
           // rather than against the prose that describes the published state.
           const applied = await page.evaluate(() => ({
-            dimension: document.querySelector('#dimension-select')?.value ?? null,
+            shows: document.querySelector('#view-representation-select')
+              ?.selectedOptions[0]?.textContent ?? null,
             navigation: document.querySelector('#navigation-mode')?.value ?? null,
             theme: document.querySelector('#theme-select')?.value ?? null,
             background: document.querySelector('#background-select')?.value ?? null,
           }));
           const expected = {
-            dimension: '3', navigation: 'orbit', theme: 'light', background: 'grid',
+            shows: 'UMAP · 3D', navigation: 'orbit', theme: 'light', background: 'grid',
           };
           for (const [key, value] of Object.entries(expected)) {
             if (applied[key] !== value) {
@@ -2973,9 +2999,9 @@ function buildHighlightingScenarios() {
   /**
    * Pancreas, flat 2D view in Planar navigation, the given colouring, and
    * every other open section collapsed so Highlighting sits whole in the
-   * window. The 2D switch announces itself; waiting for that notice and then
-   * for the notification center to drain is what makes the view final before
-   * the first coordinate is used.
+   * window. Showing UMAP · 2D moves the view to Planar; waiting for that
+   * and then for the notification center to drain is what makes the view
+   * final before the first coordinate is used.
    */
   const ready2d = field => [
     PANCREAS_READY,
@@ -2985,8 +3011,12 @@ function buildHighlightingScenarios() {
       waitForText: '#stats',
       text: field === 'None' ? 'Field: None' : `Field: ${field} (category)`,
     },
-    { select: '#dimension-select', value: '2' },
-    { waitForText: '#notification-center', text: 'Switched to 2D embedding' },
+    { openSection: '#compare-views-section' },
+    { waitForStable: '#view-representation-select' },
+    { select: '#view-representation-select', label: 'UMAP · 2D' },
+    { run: page => page.waitForFunction(
+      () => document.querySelector('#navigation-mode')?.value === 'planar'
+    ) },
     ...NON_HIGHLIGHT_SECTIONS.map(selector => ({ closeSection: selector })),
     NOTIFICATIONS_DRAINED,
   ];

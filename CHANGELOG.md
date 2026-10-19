@@ -141,8 +141,12 @@ Version 0.9.2 is a patch release on 0.9.1.
   of GPU memory at 10M points instead of 315. The order is adopted a few
   milliseconds a frame when a tree arrives, so it never stalls a frame, and a
   view switched back to a representation it showed keeps its colours without
-  an upload. Translucent points in 2D overlap in tree order, the same in every
-  view, every level of detail and figure export.
+  an upload. Colours are gathered into the stored order on the GPU, so a
+  recolour costs one upload of 4 bytes a point and one GPU pass whether LOD is
+  on or off: 5-8 ms at 10M points (Chromium), where a recolour with LOD on
+  used to take about 68 ms gathering the reduced copy's colours. Translucent
+  points in 2D overlap in tree order, the same in every view, every level of
+  detail and figure export.
 - **Web app**: a notification can carry one action button; the best-guess
   notification uses it (**Show**) to open the Data mapping section.
 - **Web app, usage analytics**: `data_load` reports how the embeddings were

@@ -112,17 +112,24 @@ arrays; nothing but the point draw reads the stored order.
 Before a tree exists a geometry is stored in source order (straight from the
 published arrays, no client copy) and draws at full detail only. A tree built
 before the upload (`loadData`/`updatePositions` with LOD or culling on) gathers
-the streams into its order once, through the fixed 65,536-point staging block
-(`GATHER_CHUNK_POINTS`); colours move one 32-bit word at a time, which is why
-colour arrays handed to the renderer must start on a 4-byte boundary. A tree
-that arrives later (the hover index built in a worker, or LOD turned on) is
-adopted without a stall (`_advanceDrawOrderAdoption`): positions and every
-view's colours are gathered into staging buffers 8 ms a frame while the views
-keep drawing full detail from the store as it is, then the permutation is
-uploaded and each stream is copied into place on the GPU between two frames.
-At 10M points the whole re-order is about 340 ms of CPU work.
+the positions into its order once, through the fixed 65,536-point staging
+block (`GATHER_CHUNK_POINTS`). Colours are never gathered on the CPU: the
+source-order colours go up as a transient R32UI texture, one texel a point
+(the same bytes a source-order store uploads), and one transform-feedback
+pass (`GpuColorPermuter`, `high-perf/gpu-color-permute.js`) writes each stored
+slot's colour, fetched through the order's permutation texture, straight into
+the colour store; a kept view's packed RGB store is written the same way, four
+points a vertex. Colours are copied as 32-bit words, which is why colour arrays
+handed to the renderer must start on a 4-byte boundary. A tree that arrives
+later (the hover index built in a worker, or LOD turned on) is adopted without
+a stall (`_advanceDrawOrderAdoption`): the permutation is uploaded first and
+the positions are gathered into a staging buffer 8 ms a frame, while the views
+keep drawing full detail from the store as it is; then, between two frames,
+the GPU pass gathers the colours every view shows at that moment into staging
+buffers, and every stream is copied into place on the GPU together.
 
-A recolour rewrites the view's colour store in place, gathered into its order.
+A recolour rewrites the view's colour store in place: one upload of 4 bytes a
+point and one GPU pass, whether or not the store is in a draw order.
 A view that switches to another representation keeps the colour store it
 leaves (keyed by that order); switching back while the colours are unchanged
 draws from it again with no upload. Kept colour stores count against the
@@ -264,7 +271,7 @@ The viewer exposes a small API surface used by `DataState` and `main.js`.
 
 - `viewer.updateColors(colors)`
   - Rewrites the 4-byte-per-point color stream in place on the next frame,
-    gathered into the live geometry's draw order when it has one, and drops the
+    gathered on the GPU into the live geometry's draw order when it has one, and drops the
     colour stores kept for other orders. Positions and the alpha texture are not
     touched.
 
@@ -447,7 +454,7 @@ render()  (self-rescheduling rAF; draws only when something can have changed)
   │                                    │ yes
   ├─ dirty-flag gate ── colours dirty or in another order? ── no ──┐
   │                                    │ yes                        │
-  │                                    └─▶ gather + bufferSubData   │
+  │                                    └─▶ upload + GPU gather      │
   │                                                                 │
   ├─ frustum cache ── MVP + dimension + bounds unchanged? ─ yes ─────┤ (no work)
   │                                    │ no                         │

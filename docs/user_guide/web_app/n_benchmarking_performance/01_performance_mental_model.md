@@ -69,9 +69,9 @@ At a high level:
 - A recolor (switching the colored field or gene) uploads 4 bytes per point —
   only the color stream; positions live in a separate stream and are not
   re-sent. Once a view's points are stored in their tree's order (LOD or
-  culling on, or any 3D view with a spatial index), the colors are gathered
-  into that order on the way, which costs a pass over every point on the CPU.
-  Level of detail keeps no second copy of anything.
+  culling on, or any 3D view with a spatial index), the GPU gathers the
+  uploaded colors into that order in one pass; the CPU does no per-point work
+  for it. Level of detail keeps no second copy of anything.
 - Positions cost 4 bytes per embedding axis per point, on the CPU and on the
   GPU: a 2D UMAP or t-SNE is held as x and y only (8 bytes a point), never
   padded to XYZ, so it takes a third less position memory than a 3D
