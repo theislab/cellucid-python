@@ -12,6 +12,18 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Added
 
+- **Web app, cell info**: a **Show cell info** switch (Coloring & filtering →
+  Legend) shows a card for the cell under the pointer: its value on the active
+  field, where that sits on the colour scale, its other loaded categories and
+  its index, in every view of a grid; press and hold on a touch screen. A
+  lookup never loads a field or redraws the plot (1M cells: 1.4 ms mean).
+- **Web app, citing and sharing**: a **Cite** dialog (APA and BibTeX, read
+  from `CITATION.cff`, with a placeholder note until the preprint has a DOI),
+  and a **Share** dialog for datasets that can be opened from a link: the
+  link, an "Open in Cellucid" README badge and an embed snippet.
+- **Docs**: new pages on cell info, share links, badges and embeds, how to
+  visualize single-cell data interactively, and how Cellucid relates to other
+  viewers.
 - **Citation**: a placeholder citation for the forthcoming Cellucid bioRxiv
   preprint, the same in every repository. It is written once, as the
   `preferred-citation` of `theislab/cellucid`'s `CITATION.cff`, and copied from
@@ -42,6 +54,18 @@ Version 0.9.2 is a patch release on 0.9.1.
   notifications stack above it.
 
 ### Fixed
+
+- **Web app, interface**: one calmer design. One font (Inter) in sentence case
+  with a small type scale; soft borders; compact spacing. Every panel has
+  short headings, and every explanation moved from the panel into an (i) tip
+  that links to the exact docs page. Navigation is its own panel and shows
+  which view it drives when several are open; the benchmark panel is called
+  Benchmark; Visualization, Navigation and Compare views start collapsed; the
+  Outlier filter sits under Legend; the logo follows the theme. Slider thumbs
+  no longer overhang the rows around them, and the legend tick no longer
+  touches its swatch.
+- **Web app, rendering**: a hover lookup and any click on the page no longer
+  redraw the scene for a second.
 
 - **Web app**: automatic antialiasing now accounts for the view's dimension.
   A 1D or 2D view has no depth test, so every point is shaded and antialiasing
