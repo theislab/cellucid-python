@@ -142,9 +142,16 @@ view's: a selection gesture never moves view focus, so the gesture is read on
 the panel it lands in — its field and the cells it shows — while focus stays
 where it was. See [Multi-view behavior](#multi-view-behavior).
 
-If the focused view is colored by no field, the tool does not start a gesture
-at all, and the panel asks you to color by a field first. A gesture in another
-panel that is colored by no field selects nothing and says so.
+Whether a press can select at all is the pressed panel's question too: an
+`Alt+click` in a panel colored by a field works even while the focused view is
+colored by none, and a press in a panel colored by no field selects nothing and
+says so. The panel asks you to color by a field first only when no panel on
+screen has one.
+
+While `Alt` is held (or Select mode is on), the cursor shows what a press in the
+panel under it would do: a cell cursor over a categorical panel, a vertical
+resize cursor over a continuous one, and a not-allowed cursor over a panel with
+no field.
 
 ### Categorical field behavior (Alt = replace)
 If that field is **categorical**:
@@ -186,12 +193,11 @@ it is still true, because nothing has been confirmed.
 ### Common pitfalls
 - “It selected fewer than expected”: filters are hiding some category members.
 - “It selected way too many”: your continuous range is too wide; reduce drag distance or intersect with a lasso.
-- “Nothing happens, and the panel says annotation selection needs an active
-  field”: no field is coloured at all — choose one under **Coloring &
-  Filtering**. That sentence replaces the `Alt+click` invitation exactly while
-  the precondition is missing, so the panel and the viewer never disagree about
-  whether a gesture can start. More symptoms:
-  {doc}`06_troubleshooting_highlighting`.
+- “Nothing happens, and the panel says *Color by a field first*”: no panel on
+  screen is colored by a field — choose one under **Coloring & Filtering**.
+  That sentence replaces the `Alt+click` invitation exactly while no press
+  could select anything, so the panel and the viewer never disagree. More
+  symptoms: {doc}`06_troubleshooting_highlighting`.
 
 ---
 

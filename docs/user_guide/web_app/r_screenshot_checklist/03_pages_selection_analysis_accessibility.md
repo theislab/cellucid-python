@@ -292,7 +292,7 @@ element five times and stack them into a single labelled composite:
 | `That gesture ended outside the view…` | Lasso, `Alt+drag`, release the mouse over the sidebar | pancreas |
 | `That cell has no value on that panel's field…` | Annotation based on a field with a missing-code sentinel, `Alt+click` a sentinel cell | he |
 | `That gesture did not change the selection.` | Lasso the identical polygon twice with `Alt` | pancreas |
-| `Annotation selection needs an active field…` | Annotation based with colour-by set to None | pancreas |
+| `Color by a field first…` | Annotation based with colour-by set to None | pancreas |
 
 Crop each to `#highlight-mode-description` (plus the `Step N:` line above it where
 present, since the doc says the readout distinguishes the two cases). Assemble into one

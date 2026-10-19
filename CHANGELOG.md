@@ -81,6 +81,10 @@ Version 0.9.2 is a patch release on 0.9.1.
   of the wrong field. The category, the value range, the drag preview and its
   range label now all come from the pressed pane, among the cells it shows;
   view focus still does not move. A pane colored by no field now says so.
+- **Web app, selection**: whether an Alt press can start, and the armed
+  cursor, now follow the pane under the pointer instead of the focused view,
+  so Alt+click works in a colored pane while the focused view has no field,
+  and the panel asks for a field only when no pane on screen has one.
 - **Web app, cell info**: the card no longer disappears for good. A key whose
   release the page never saw (a Cmd shortcut such as the macOS screenshot
   keys, or a key held while the window lost focus) read as camera motion

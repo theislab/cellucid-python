@@ -56,17 +56,24 @@ If you’re actively stuck, use {doc}`06_troubleshooting_highlighting` (it’s o
 
 ## Annotation based with no field at all
 
-Set both **Categorical obs** and **Continuous obs** to `None` and the tool has
-nothing to work from. It says so rather than failing silently:
+Set both **Categorical obs** and **Continuous obs** to `None` in every panel
+on screen and the tool has nothing to work from. It says so rather than failing
+silently:
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/read-no-active-field-notice.png
 :alt: The Highlighting panel in Annotation based mode with no coloured field, with the ringed line "Annotation selection needs an active field. Choose a Categorical obs or Continuous obs field under Coloring & Filtering, then Alt+click a cell (or tap it in Select mode)." in place of the usual help text.
 :width: 516px
 
 With no coloured field the usual `Alt+click` invitation is replaced by an
-instruction. In this state the viewer never starts the gesture, so there is
-nothing to debug beyond choosing a field.
+instruction. In this state no press can select anything, so there is nothing to
+debug beyond choosing a field.
 ```
+
+In a grid of views the instruction appears only when no panel has a field. One
+field-less panel beside a colored one keeps the invitation: a press in the
+colored panel selects, even when the field-less one has focus, and a press in
+the field-less one answers *“That panel is not colored by a field, so there is
+nothing to select.”*
 
 The other three tools are unaffected: lasso, proximity and KNN are geometric or
 graph-based and do not read the coloured field at all.

@@ -137,10 +137,10 @@ Several of these messages print the ceiling as a raw byte count —
 |---|---|---|
 | “That click did not land on a cell, so there is nothing to select. Zoom in or raise Point size to make cells easier to hit: only the cells the viewer is currently drawing can be clicked.” | A click hits the dot drawn under the pointer, at its drawn size, plus a few pixels of slack. Zooming in, raising **Point size**, or turning off level of detail all make cells easier to hit | {doc}`../f_highlighting_selection/06_troubleshooting_highlighting` |
 | “That cell has no value on that panel's field, so there is nothing to select.” | The cell is real but missing on the field the panel you pressed is coloured by | {doc}`../d_fields_coloring_legends/03_color_by_behavior` |
-| “That panel is not colored by a field, so there is nothing to select.” | In a grid of views, the panel you pressed has no colour-by field; an annotation gesture reads the pressed panel's field, not the focused view's | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
+| “That panel is not colored by a field, so there is nothing to select.” | The panel you pressed has no colour-by field; an annotation gesture reads the pressed panel's field, not the focused view's | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
 | “That gesture ended outside the view, so nothing was selected.” | The drag was released off the panel | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
 | “That gesture did not change the selection.” | The gesture worked; it just selected what was already selected | — |
-| “Annotation selection needs an active field.” | Choose a categorical or continuous obs field first | {doc}`../d_fields_coloring_legends/02_field_selector_ux` |
+| “Color by a field first (Coloring & filtering), then Alt+click a cell.” | No panel on screen is colored by a field; choose a categorical or continuous obs field first | {doc}`../d_fields_coloring_legends/02_field_selector_ux` |
 
 :::{warning}
 If you find advice anywhere telling you to **raise Point size so clicks land**,
