@@ -1109,7 +1109,7 @@ The Python package includes a helper to generate `datasets.json`:
 ```python
 from cellucid.prepare_data import generate_datasets_manifest
 
-generate_datasets_manifest("./exports_root", default_dataset="dataset_a")
+generate_datasets_manifest("./exports_root")
 ```
 
 Web app docs:

@@ -90,6 +90,12 @@ Version 0.9.2 is a patch release on 0.9.1.
   parity fixture (`tests/fixtures/writer_parity_v3.json`).
 - A sixth reconciled surface, **Embedding**: the writer proves `embeddings/`
   holds exactly the files `dataset_identity.json` declares.
+- `cellucid serve`, `serve_anndata()` and `show_anndata()` with AnnData publish
+  the data mapping they serve at `/_cellucid/mapping/candidates.json` (as
+  `defaults`, beside every candidate `obsm`, `obsp`, layer and `var` column,
+  read from metadata only), and `AnnDataAdapter` gains `get_data_mapping()` and
+  `get_mapping_candidates()`. The web app reads it to record the mapping a
+  session was saved with.
 
 ### Changed
 
@@ -143,6 +149,24 @@ Version 0.9.2 is a patch release on 0.9.1.
   `apply_cellucid_session_to_anndata()` checks the mapping against the AnnData,
   compares `varCount` on the mapped gene axis, and resolves var-sourced fields
   through the mapped gene names and expression matrix.
+
+- **Web app, data**: the viewer reads export format 3 and only format 3 — from a
+  prepared folder, the sample datasets, GitHub, a server, and the notebook —
+  and opens `.h5ad` and Zarr files as the same format. Every embedding an
+  export carries is loaded only when a view shows it; each dimension opens on
+  the embedding `defaults` names. An `.h5ad` or Zarr file's vector field now
+  reports its id as its label (`velocity_umap`, not `Velocity (UMAP)`), as the
+  format requires, and the reader now refuses any export whose vector-field
+  label is not its id, from every source.
+- **Web app, sessions**: a session records its data mapping and the embedding
+  its cell order was taken on, and every view's embedding when it is not its
+  dimension's default. Loading checks the dataset, its data mapping and the
+  cell order of the embedding the session names before anything changes on
+  screen, loading that embedding if another is shown — so a session saved in
+  2D now opens while 3D is shown, instead of asking you to switch back. A
+  session saved by an earlier release is refused with a message saying so.
+  User-defined categorical fields no longer store their centroids; they are
+  recomputed from the codes.
 
 ### Removed
 

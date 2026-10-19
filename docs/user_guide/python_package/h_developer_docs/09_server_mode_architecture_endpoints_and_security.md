@@ -107,6 +107,34 @@ reads, so it cannot announce a capability the notebook would then reject.
 Implementation:
 - `_protocol_capability_document` in `src/cellucid/jupyter/_wire.py`
 
+(python-mapping-candidates-endpoint)=
+### `GET /_cellucid/mapping/candidates.json` (AnnData servers only)
+
+The data mapping an AnnData server serves, and every array it could serve:
+
+```bash
+curl -s http://127.0.0.1:8765/_cellucid/mapping/candidates.json | python -m json.tool
+```
+
+`defaults` is the data mapping this server serves — the embedding of each
+dimension (`obsm` key and 0-based columns), the neighbour graph (`knn`), the
+gene names, the expression matrix, the latent space and the vector bindings —
+in the exact shape a session fingerprint records it. The viewer reads it when it
+opens a dataset served from AnnData, because the graph and the expression matrix
+the server chose are not visible in `dataset_identity.json`, and writes it into
+every session it saves. `obsm`, `obsp`, `var`, `X`, `layers` and `raw` list every
+candidate array with its shape, dtype and whether it can be used; `guessed` names
+the embedding slots the server best-guessed. A server that serves prepared
+exports has no such route.
+
+The document is built from metadata alone — shapes and dtypes, never array
+values — on the first request, and then frozen.
+
+Implementation:
+- `AnnDataAdapter.get_mapping_candidates()` and `get_data_mapping()` in
+  `src/cellucid/anndata_adapter.py`; the catalog itself is
+  `build_anndata_candidates` in `src/cellucid/data_mapping.py`.
+
 ### `POST /_cellucid/events`
 
 Frontend → Python hooks/events channel:

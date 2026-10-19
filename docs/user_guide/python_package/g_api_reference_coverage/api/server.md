@@ -161,6 +161,8 @@ A wildcard bind prints the loopback origin plus the machine's own name; see {doc
   - `/_cellucid/info`
   - `/_cellucid/datasets`
   - `/_cellucid/protocol` (which wire capabilities this `cellucid` accepts)
+  - `/_cellucid/mapping/candidates.json` (AnnData servers: the data mapping
+    being served, which the viewer records in sessions, and every candidate array)
 
 ### Viewer UI hosting and source requirements
 

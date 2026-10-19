@@ -83,6 +83,7 @@ import logging
 import math
 import re
 import sys
+import threading
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -125,6 +126,7 @@ from .data_mapping import (
     ObsmEntry,
     UniqueNames,
     best_guess_embedding_slots,
+    build_anndata_candidates,
     canonical_embedding_id,
     default_columns,
     default_embedding_slots,
@@ -138,6 +140,7 @@ from .data_mapping import (
     obsm_entry_defect,
     slot_dimension,
     unique_names_note,
+    validate_data_mapping,
     validate_embedding_columns,
 )
 from .prepare_data._arrays import (
@@ -158,6 +161,10 @@ if TYPE_CHECKING:
     import anndata
 
 logger = logging.getLogger("cellucid.anndata_adapter")
+
+#: The route, relative to a served dataset, of the data-mapping catalog: the
+#: mapping the server serves (``defaults``) and every candidate array.
+MAPPING_CANDIDATES_PATH = "_cellucid/mapping/candidates.json"
 
 
 def _is_empty_gene_name(value: object) -> bool:
@@ -685,6 +692,10 @@ class AnnDataAdapter:
         self._embeddings: list[ServedEmbedding] = []
         self._embedding_defaults: dict[str, str] = {}
         self._guessed_slots: list[str] = []
+        # The data-mapping catalog, built on first request and then frozen.
+        # The server is threaded, so building it is guarded by a lock.
+        self._mapping_candidates: dict[str, Any] | None = None
+        self._mapping_candidates_lock = threading.Lock()
         # Track if adapter has been closed
         self._closed: bool = False
         self._close_complete: bool = False
@@ -1203,6 +1214,69 @@ class AnnDataAdapter:
         raise ValueError(
             f"Embedding {embedding_id!r} is not served. Served: {[item.id for item in self._embeddings]}."
         )
+
+    def get_data_mapping(self) -> dict[str, Any]:
+        """The data mapping this adapter serves, as a canonical DataMapping.
+
+        The embeddings are the served slots; the graph, gene names, expression
+        matrix and latent space are the ones this adapter was configured with;
+        the vector bindings are the ``obsm`` keys it serves, each bound to its
+        embedding's ``obsm`` key and columns.
+        """
+        self._check_closed()
+        slots: dict[str, dict[str, Any] | None] = dict.fromkeys(DIMENSION_SLOTS)
+        for item in self._embeddings:
+            slots[f"{item.dimension}d"] = {"key": item.key, "columns": list(item.columns)}
+        by_id = {item.id: item for item in self._embeddings}
+        served = sorted(
+            (
+                (by_id[embedding_id].key, tuple(by_id[embedding_id].columns), obsm_key)
+                for field_bindings in self._vector_field_obsm_keys.values()
+                for embedding_id, obsm_key in field_bindings.items()
+            ),
+        )
+        bindings = [
+            {"key": obsm_key, "embedding": {"key": key, "columns": list(columns)}}
+            for key, columns, obsm_key in served
+        ]
+        return validate_data_mapping(
+            {
+                "kind": "anndata",
+                "embeddings": slots,
+                "knn": self.knn_key,
+                "geneNames": "index"
+                if self.gene_id_column is None
+                else f"column:{self.gene_id_column}",
+                "expression": None
+                if self._expression_matrix is None
+                else self.expression_source,
+                "latent": self.latent_key,
+                "vectorFields": bindings,
+            },
+            label="served data mapping",
+        )
+
+    def get_mapping_candidates(self) -> dict[str, Any]:
+        """The data-mapping catalog of the served object.
+
+        Every ``obsm``, ``obsp``, layer and ``var`` column, with shapes, dtypes
+        and whether each can be used, read from metadata alone; ``defaults`` is
+        the mapping this adapter serves (:meth:`get_data_mapping`), and
+        ``guessed`` names the slots that were best-guessed. The catalog is built
+        once and then frozen; this returns a copy.
+        """
+        self._check_closed()
+        with self._mapping_candidates_lock:
+            if self._mapping_candidates is None:
+                catalog = build_anndata_candidates(
+                    self.adata,
+                    latent_key=self.latent_key,
+                    knn_key=self.knn_key,
+                )
+                catalog["defaults"] = self.get_data_mapping()
+                catalog["guessed"] = list(self._guessed_slots)
+                self._mapping_candidates = catalog
+            return cast(dict[str, Any], json.loads(json.dumps(self._mapping_candidates)))
 
     def get_embedding_id_for_payload(self, component: str) -> str | None:
         """Resolve one ``{index}_{dimension}d.bin`` route to its served embedding id."""

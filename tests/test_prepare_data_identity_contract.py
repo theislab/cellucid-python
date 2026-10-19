@@ -456,36 +456,6 @@ def test_dataset_manifest_rejects_malformed_identity_without_filename_fabricatio
     )
 
     with pytest.raises((TypeError, ValueError), match=invalid_field):
-        generate_datasets_manifest(tmp_path, default_dataset="declared-id")
-
-    assert not (tmp_path / "datasets.json").exists()
-
-
-@pytest.mark.parametrize(
-    "default_dataset",
-    ["data/set", " padded ", "CON", "trailing.", "ümlaut"],
-)
-def test_dataset_manifest_rejects_nonportable_default_without_mutation(
-    tmp_path,
-    default_dataset,
-):
-    dataset_dir = tmp_path / "declared-id"
-    dataset_dir.mkdir()
-    (dataset_dir / "dataset_identity.json").write_text(
-        json.dumps(
-            {
-                "version": 3,
-                "id": "declared-id",
-                "name": "Declared name",
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(ValueError, match="default_dataset"):
-        generate_datasets_manifest(
-            tmp_path,
-            default_dataset=default_dataset,
-        )
+        generate_datasets_manifest(tmp_path)
 
     assert not (tmp_path / "datasets.json").exists()

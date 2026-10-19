@@ -908,7 +908,7 @@ terminal and Jupyter captures:
      `kanemaru`, `pancreas` with their cell counts. Cursor: no.
      `_static/screenshots/data_loading/sample-catalog-five-entries.png`.
      Verified against `cellucid-datasets/exports/datasets.json`, which lists
-     exactly those five with `"default": "suo"`.
+     exactly those five.
   2. Nothing else. The page's substance is a reproducibility argument about
      digests, environments, and what is *not* knowable; there is no screen that
      shows any of it, and inventing one would misrepresent the page.

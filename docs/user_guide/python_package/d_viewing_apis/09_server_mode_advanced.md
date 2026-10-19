@@ -176,6 +176,8 @@ These endpoints are useful for “is the server alive” and “what does it thi
 - `/_cellucid/info`
 - `/_cellucid/datasets`
 - `/_cellucid/protocol`
+- `/_cellucid/mapping/candidates.json` (AnnData servers only: the data mapping
+  being served, and every candidate array)
 
 ### Example: health probe
 

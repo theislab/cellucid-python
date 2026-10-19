@@ -35,7 +35,21 @@ The root has exactly `createdAt`, `datasetFingerprint`, and `chunks`:
     "datasetId": "suo",
     "cellCount": 1000,
     "varCount": 2000,
-    "cellOrder": { "dimension": 2, "digest": "9f2c41a0b7d3e185" }
+    "cellOrder": {
+      "embedding": { "key": "X_umap", "columns": null },
+      "dimension": 2,
+      "digest": "9f2c41a0b7d3e185"
+    },
+    "dataMapping": {
+      "kind": "export",
+      "embeddings": {
+        "1d": null,
+        "2d": { "key": "X_umap", "columns": null },
+        "3d": { "key": "X_umap_3d", "columns": null }
+      },
+      "geneNames": "index",
+      "vectorFields": []
+    }
   },
   "chunks": []
 }
@@ -43,26 +57,23 @@ The root has exactly `createdAt`, `datasetFingerprint`, and `chunks`:
 
 - `createdAt` is a canonical ISO timestamp.
 - `datasetFingerprint` has exactly `sourceType`, `datasetId`, `cellCount`,
-  `varCount`, and `cellOrder`.
-- `cellOrder` has exactly `dimension` and `digest`. `dimension` is the embedding
-  dimension that was on screen when the session was saved, exactly `1`, `2`, or
-  `3`. `digest` is 16 lowercase hexadecimal characters computed over every cell
-  coordinate of that embedding in dataset row order.
-
-```{note}
-The extended session format that accompanies export format 3 extends this
-fingerprint:
-`cellOrder` gains an `embedding` member — `{"key", "columns"}`, an exported
-embedding id with `columns: null` or an AnnData `obsm` key with its 0-based
-columns — naming the embedding the digest was taken over, and a sixth required
-field, `dataMapping`, records the arrays the session was showing. A
-`dataMapping` of `kind` `"export"` has exactly `kind`, `embeddings` (the
-`1d`/`2d`/`3d` slots), `geneNames` (`"index"` or `"column:<name>"`), and
-`vectorFields`; `kind` `"anndata"` adds `knn`, `expression` (`"X"`, `"raw"`,
-`"layer:<name>"`, or null), and `latent`. The current Python package reads
-only that format; see
-{doc}`../../python_package/e_jupyter_hooks/11_session_bundles_apply_session_to_anndata`.
-```
+  `varCount`, `cellOrder`, and `dataMapping`.
+- `cellOrder` has exactly `embedding`, `dimension`, and `digest`. `embedding` is
+  `{"key", "columns"}`: an exported embedding id with `columns: null`, or an
+  AnnData `obsm` key with its 0-based columns — the embedding the live view
+  showed when the session was saved. `dimension` is its dimension, exactly `1`,
+  `2`, or `3`. `digest` is 16 lowercase hexadecimal characters computed over
+  every cell coordinate of that embedding in dataset row order.
+- `dataMapping` records the arrays the dataset was shown with. Of `kind`
+  `"export"` it has exactly `kind`, `embeddings` (the `1d`/`2d`/`3d` slots, each
+  an embedding reference or null), `geneNames` (`"index"` or `"column:<name>"`),
+  and `vectorFields` (`{"field", "embedding"}` bindings in use); of `kind`
+  `"anndata"` it adds `knn` (an `obsp` key or null), `expression` (`"X"`,
+  `"raw"`, `"layer:<name>"`, or null), and `latent` (an `obsm` key or null), and
+  its vector bindings name `obsm` keys (`{"key", "embedding"}`). Bindings are
+  sorted by embedding key, columns, then name. The Python package reads the
+  same shape; see
+  {doc}`../../python_package/e_jupyter_hooks/11_session_bundles_apply_session_to_anndata`.
 - `chunks` is the ordered inventory.
 
 Every chunk entry has exactly these nine keys:
@@ -92,18 +103,22 @@ have validated, applied, and committed.
 
 ## Exact dataset identity
 
-All five fingerprint fields must match the currently loaded dataset. Because
-`cellOrder` is a record with two members, that is six compared values: a
-different source route, dataset id, cell count, variable count, cell-order
-dimension, or cell-order digest rejects the whole restore. Cellucid does not
+All six fingerprint fields must match the currently loaded dataset: a
+different source route, dataset id, cell count, variable count, data mapping,
+cell-order embedding, or cell-order digest rejects the whole restore. The digest
+is checked on the embedding `cellOrder.embedding` names, which is loaded for the
+check whichever embedding is on screen, and every check runs before anything is
+applied. Cellucid does not
 apply a layout-only subset and does not skip dataset-dependent chunks.
 
 A fingerprint whose key set is exactly the four pre-`cellOrder` keys is a
 session file written before Cellucid recorded which cells a selection contains.
 It is refused during manifest validation with its own message rather than a
 schema error: such a file records selections as bare row numbers with nothing
-tying them to cell content, so it can never be confirmed. Any other departure
-from the five-key shape is an ordinary schema violation.
+tying them to cell content, so it can never be confirmed. A fingerprint with
+`cellOrder` but no `dataMapping` was written by a release before export format 3
+and is refused with its own message too. Any other departure from the six-key
+shape is an ordinary schema violation.
 
 This strict equality prevents a session's cell-indexed filters, categorical
 codes, highlights, or cached analysis values from being attached to a different

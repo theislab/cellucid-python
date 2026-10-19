@@ -72,6 +72,18 @@ mutates nothing on your object.
   `Cellucid found nothing to plot…`, listing every `obsm` entry and why it was
   not used.
 
+### The data mapping it serves
+
+`adapter.get_data_mapping()` returns the data mapping the adapter serves: the
+embedding of each dimension slot (`obsm` key and 0-based columns), `knn`,
+`geneNames` (`"index"`, or `"column:<name>"` for `gene_id_column`),
+`expression` (`"X"`, `"raw"`, `"layer:<name>"`, or `None` without expression),
+`latent`, and the served vector bindings. It is the shape a session fingerprint
+records as `dataMapping`. `adapter.get_mapping_candidates()` returns the catalog
+the server publishes at `/_cellucid/mapping/candidates.json`: that mapping as
+`defaults`, plus every `obsm`, `obsp`, layer and `var` column with its shape,
+dtype and usability, read from metadata only.
+
 ## Connectivity is asked for, not assumed
 
 `knn_key` is keyword-only and `None` by default, on

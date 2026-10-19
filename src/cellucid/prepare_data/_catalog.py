@@ -26,8 +26,6 @@ from ._manifest import _require_manifest_reads_back
 
 def generate_datasets_manifest(
     exports_dir: str | Path = "./exports",
-    *,
-    default_dataset: str,
 ) -> Path:
     """
     Validate an exports directory and atomically publish its datasets.json manifest.
@@ -41,8 +39,6 @@ def generate_datasets_manifest(
         Directory containing dataset subdirectories. Defaults to ``./exports``,
         resolved against the current working directory at call time. A leading
         ``~`` is expanded to the user's home directory.
-    default_dataset : str
-        Exact ID of the dataset selected by default.
 
     Returns
     -------
@@ -52,17 +48,13 @@ def generate_datasets_manifest(
     Example
     -------
     >>> from cellucid.prepare_data import generate_datasets_manifest
-    >>> generate_datasets_manifest("./exports", default_dataset="my_dataset")
+    >>> generate_datasets_manifest("./exports")
     """
     exports_dir = Path(exports_dir).expanduser()
     if not exports_dir.exists():
         raise FileNotFoundError(f"Exports directory not found: {exports_dir}")
     if not exports_dir.is_dir():
         raise NotADirectoryError(f"Exports path must be a directory: {exports_dir}")
-    default_dataset = _require_dataset_id(
-        default_dataset,
-        label="default_dataset",
-    )
 
     console_print(f"Scanning {exports_dir} for datasets...")
 
@@ -151,12 +143,9 @@ def generate_datasets_manifest(
 
     if not datasets:
         raise ValueError(f"Exports directory contains no datasets: {exports_dir}")
-    if default_dataset not in dataset_ids:
-        raise ValueError(
-            f"default_dataset {default_dataset!r} is missing from the validated datasets."
-        )
-
-    manifest = {"version": 1, "default": default_dataset, "datasets": datasets}
+    # The catalog lists datasets and selects none: the viewer opens a dataset
+    # only when someone chooses one.
+    manifest = {"version": 1, "datasets": datasets}
     manifest_bytes = json.dumps(manifest, indent=2).encode("utf-8")
     manifest_path = exports_dir / "datasets.json"
 
@@ -183,6 +172,5 @@ def generate_datasets_manifest(
         raise
 
     console_print(f"✓ Wrote datasets manifest with {len(datasets)} datasets to {manifest_path}")
-    console_print(f"  Default dataset: {default_dataset}")
 
     return manifest_path

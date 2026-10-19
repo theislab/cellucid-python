@@ -93,11 +93,13 @@ The fingerprint has exactly:
 - `sourceType`;
 - `datasetId`;
 - `cellCount`;
-- `varCount`; and
-- `cellOrder`, itself exactly a `dimension` (1, 2, or 3) and a 16-character
-  hexadecimal `digest` of the coordinates the session was saved against.
+- `varCount`;
+- `cellOrder`, itself exactly the `embedding` the digest was taken over, its
+  `dimension` (1, 2, or 3), and a 16-character hexadecimal `digest` of that
+  embedding's coordinates; and
+- `dataMapping`, the stored embeddings and arrays the dataset was shown with.
 
-All five must match. A GitHub load and a local folder load are different even
+All six must match. A GitHub load and a local folder load are different even
 when their files look identical. Fix the route or publication identity, then
 retry the unchanged bundle. Cellucid does not restore floating layout alone or
 skip filters/highlights.
@@ -112,9 +114,13 @@ Read the message before changing anything — each cause has its own:
   served copy of an export the catalog also publishes. The counts are no help
   here, which is why this message names the two identities instead of repeating
   the same two numbers. Open the dataset the state was captured on.
-- **"saved while the *N*D view was shown"**: only the cell-order dimension
-  differs. Nothing is wrong with the data or the file. Switch back to the
-  dimension the message names and load again.
+- **"This session uses … and this dataset shows …"** (or "was saved with … as
+  its neighbour graph", and so on): the session was saved with a different data
+  mapping — another embedding in a dimension, another graph, gene names,
+  expression matrix, latent space, or vector bindings. The message names the
+  array on each side. Open the dataset version the session was saved on.
+- **"recorded its cell order on … which this dataset does not have"**: the
+  embedding the session was saved in is not part of this dataset.
 - **"the same name and the same number of cells and genes, but the cell
   coordinates differ"**: the digest no longer matches. A one-way digest cannot
   say *why*, so the message offers both causes it could be — the cells are
@@ -125,6 +131,10 @@ Read the message before changing anything — each cause has its own:
   contains"**: the file predates the cell-order record, so its selections can
   never be confirmed. Re-create them and save a new session file. This one is
   not repairable by editing the file.
+- **"saved by an earlier Cellucid release, before sessions recorded which
+  stored embeddings and arrays a dataset is shown with"**: the file predates
+  export format 3. Re-create the view on the current dataset and save a new
+  session file.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/refusal-01-different-dataset.png
 :alt: A notification titled "Loading failed" reporting that the session was saved on a different dataset than the one open now, naming 3,696 cells and 3,753 genes when it was saved and 219,731 cells and 5,754 genes now, and advising to open the dataset the session was saved on.

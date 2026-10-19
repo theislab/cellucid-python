@@ -400,13 +400,14 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
 
     for exact in (
         "`createdAt`, `datasetFingerprint`, and `chunks`",
-        # The fingerprint carries five fields, not four: the viewer records a
-        # `cellOrder` digest so a dataset republished re-sorted under an
-        # unchanged identity cannot silently re-point saved selections.
-        "`sourceType`, `datasetId`, `cellCount`, `varCount`, and `cellOrder`",
-        "`cellOrder` has exactly `dimension` and `digest`",
+        # The fingerprint carries six fields: the viewer records a `cellOrder`
+        # digest so a dataset republished re-sorted under an unchanged identity
+        # cannot silently re-point saved selections, and the data mapping the
+        # dataset was shown with.
+        "`sourceType`, `datasetId`, `cellCount`, `varCount`, `cellOrder`, and `dataMapping`",
+        "`cellOrder` has exactly `embedding`, `dimension`, and `digest`",
         "16 lowercase hexadecimal characters",
-        "All five fingerprint fields must match",
+        "All six fingerprint fields must match",
         "`analysis/cache-inventory`",
         "`cinematic/camera`",
         "one for every categorical user-defined field",
@@ -447,23 +448,31 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
         sources["l_sessions_sharing/10_troubleshooting_sessions.md"].split()
     )
     for exact in (
-        "The session stores five fields",
-        "All five must equal the currently loaded dataset",
+        "The session stores six fields",
+        "All six must equal the currently loaded dataset",
         "`cellOrder`: a record of *which ordering*",
+        "`dataMapping`: which stored arrays the dataset was shown with",
         "exactly 1, 2, or 3",
-        "A different embedding dimension is on screen",
+        "Restoring is *verify, then apply*",
+        "The session was saved with a different data mapping",
         "stores its cells in a different order",
         "A session file saved before Cellucid recorded cell order",
-        # The Python reader requires the extended fingerprint and never
-        # verifies the digest; the page must say both.
-        "A file without them is refused",
+        "a fingerprint with `cellOrder` but no `dataMapping`",
+        # The Python reader requires the same fingerprint and never verifies
+        # the digest; the page must say both.
+        "a file without `cellOrder.embedding` or `dataMapping` is refused",
         "Python validates `cellOrder`'s shape and never its digest",
     ):
         assert exact in identity
-    assert "accepts a fingerprint **with or without** `cellOrder`" not in identity
+    for retired in (
+        "accepts a fingerprint **with or without** `cellOrder`",
+        "A different embedding dimension is on screen",
+        "The session stores five fields",
+    ):
+        assert retired not in identity
     for exact in (
-        "All five must match",
-        "`cellOrder`, itself exactly a `dimension` (1, 2, or 3)",
+        "All six must match",
+        "`cellOrder`, itself exactly the `embedding` the digest was taken over",
     ):
         assert exact in troubleshooting
 

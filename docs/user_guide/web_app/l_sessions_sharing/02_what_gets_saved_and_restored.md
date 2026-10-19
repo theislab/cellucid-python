@@ -75,8 +75,10 @@ Restored early so you see the correct view quickly:
     controls, Loop playback, and Autoplay for the matching dataset
   - restored Camera Paths remain stopped unless their saved Autoplay setting
     is enabled; enabled autoplay begins only after the complete restore commits
-- **Dimension levels**
+- **Dimension levels and embeddings**
   - which dimension (1D/2D/3D) is active per view
+  - per view, the embedding it shows when that is not its dimension's default
+    (an export can carry several embeddings per dimension)
 - **Views / snapshots**
   - layout mode (single vs grid)
   - active view selection
@@ -187,9 +189,9 @@ Sessions persist “field overlays” that affect what fields exist and how they
   - permanently purged fields (non-restorable)
 - **User-defined fields (metadata)**
   - definitions/provenance for derived fields (but not necessarily the heavy codes yet)
-  - each categorical field's category centroids, per embedding dimension, in
-    the normalized coordinates the viewer draws, so its labels come back
-    exactly where they were
+  - a categorical field's category centroids are not stored: they are derived
+    from its codes and the coordinates of each embedding, and recomputed when
+    the codes are restored, so its labels come back exactly where they were
 
 This is one reason sessions can restore an experience even if you created derived fields in the UI.
 

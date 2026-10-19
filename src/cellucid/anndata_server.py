@@ -72,7 +72,7 @@ from ._server_base import (
 from ._server_base import (
     CellucidHTTPServer as HTTPServer,
 )
-from .anndata_adapter import AnnDataAdapter, _classify_anndata_path
+from .anndata_adapter import MAPPING_CANDIDATES_PATH, AnnDataAdapter, _classify_anndata_path
 from .connectivity_contract import build_connectivity_manifest
 from .continuous_payload_diagnosis import NonFinitePayloadError
 from .data_mapping import EmbeddingKeySpec, is_vector_field_key
@@ -163,6 +163,8 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         /_cellucid/health - Health check
         /_cellucid/info - Server info
         /_cellucid/protocol - Viewer wire capabilities this installation accepts
+        /_cellucid/mapping/candidates.json - The served data mapping and every
+            candidate array, from metadata
         /_cellucid/events - POST endpoint for frontend events (hooks)
     """
 
@@ -250,6 +252,8 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
                 self.send_json(self.server_info, head_only)
             elif path == "_cellucid/protocol":
                 self.send_json(_protocol_capability_document(), head_only)
+            elif path == MAPPING_CANDIDATES_PATH:
+                self.send_json(self.adapter.get_mapping_candidates(), head_only)
             elif path == "connectivity_manifest.json":
                 self.send_error_response(404, "No connectivity data")
             elif head_only and path in self.payload_lengths:

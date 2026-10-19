@@ -181,7 +181,7 @@ from cellucid.prepare_data import generate_datasets_manifest
 
 # This scans ./exports/*/dataset_identity.json
 # and writes ./exports/datasets.json
-generate_datasets_manifest("./exports", default_dataset="pbmc_demo")
+generate_datasets_manifest("./exports")
 ```
 
 ## Step 3 — Validate Locally (Before You Upload)
@@ -330,13 +330,10 @@ URL to test by hand.
 ```
 
 **Fix**
-- Regenerate `datasets.json` with an explicit catalog default:
+- Regenerate `datasets.json`:
 
   ```python
-  generate_datasets_manifest(
-      "./exports",
-      default_dataset="pbmc_demo",
-  )
+  generate_datasets_manifest("./exports")
   ```
 
 - Ensure the file is at the exports root you are pointing Cellucid at.
