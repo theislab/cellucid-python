@@ -274,6 +274,9 @@ Version 0.9.2 is a patch release on 0.9.1.
 - **Web app, camera**: at a low frame rate (a large dataset with level of
   detail off) inertia, zoom and the grid fade now run in real time instead of
   slowing down below 20 fps; only a stall over a quarter second is cut short.
+- **Web app, rendering**: switching to another window or tab no longer redraws
+  the whole scene for a second; focus changes redraw only when they end a held
+  key or a selection in progress.
 - **Python sessions**: reading a session now requires each user-defined
   field's `normalizedDims` to name exactly the dimensions in its
   `centroidsByDim`, as the web app writes them.
