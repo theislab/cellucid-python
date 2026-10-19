@@ -12,11 +12,13 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Added
 
-- **Web app, cell info**: a **Show cell info** switch (Coloring & filtering →
-  Legend) shows a card for the cell under the pointer: its value on the active
-  field, where that sits on the colour scale, its other loaded categories and
-  its index, in every view of a grid; press and hold on a touch screen. A
-  lookup never loads a field or redraws the plot (1M cells: 1.4 ms mean).
+- **Web app, cell info**: **Show cell info** (Coloring & filtering, on by
+  default) shows a card for the cell under the pointer: its value on the
+  field the view is coloured by, where that sits on the colour scale, and for
+  a category how many of its cells are visible in that view (what selecting it
+  would pick); **Other categories** adds the cell's labels in other loaded
+  fields. It works in every view of a grid; press and hold on a touch screen.
+  A lookup never loads a field or redraws the plot (1M cells: 1.4 ms mean).
 - **Web app, citing and sharing**: a **Cite** dialog (APA and BibTeX, read
   from `CITATION.cff`, with a placeholder note until the preprint has a DOI),
   and a **Share** dialog for datasets that can be opened from a link: the
