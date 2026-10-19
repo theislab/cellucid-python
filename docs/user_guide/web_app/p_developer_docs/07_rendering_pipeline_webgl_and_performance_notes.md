@@ -265,7 +265,7 @@ Key idea:
 - A snapshot view is not “a second dataset”; it is a second **view context** with its own camera/dimension/filter/field choices, rendered from the same underlying point identity index space.
 
 The viewer:
-- tracks per-view dimension levels (`viewer.setViewDimension(...)` is called from state when available)
+- tracks each view's layout key (`viewer.setViewEmbedding(viewId, { dimension, layoutKey })`, called from state); a layout change invalidates that view's LOD, frustum, picking and vector state
 - shares positions with snapshot views: a snapshot of the live geometry borrows
   the live positions array and GPU position store, with no copy, and a snapshot
   with its own geometry adopts the array it was published with. A published

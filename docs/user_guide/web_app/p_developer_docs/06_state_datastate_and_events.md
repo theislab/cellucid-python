@@ -132,12 +132,18 @@ The key point:
 ### Dimension switching + vector fields
 
 Cellucid supports multi-dimensional embeddings via:
-- `dimensionManager` (from the data layer): knows which embeddings exist and how to load them
+- `dimensionManager` (from the data layer): the layout registry. Every
+  position layout has a `layoutKey`; each dimension has one slot layout
+  (`getSlotLayout(dim)`), and positions, normalization and cache eviction are
+  all keyed by layout (`loadLayout`, `getPositions`, `getNormTransform`).
 - `activeDimensionLevel` (live view)
-- per-view dimension levels (stored in view contexts)
+- per-view dimension plus `embeddingOverride` (stored in view contexts); the
+  layout a view presents is `dimensionManager.getViewLayout(viewId)`
 
 Vector fields (velocity/drift overlays) are optional and use:
-- `vectorFieldManager` (from the data layer): lists available fields and loads vectors per dimension
+- `vectorFieldManager` (from the data layer): lists available fields and loads
+  vectors per layout (`loadField(fieldId, layoutKey)`), bound to each declared
+  dimension's slot layout
 
 ---
 
@@ -265,12 +271,17 @@ Two consequences for contributors:
    the cost the comparison exists to avoid.
 :::
 
-- Dimension changes:
-  - loads new positions for the requested dimension
+- Dimension changes (`setDimensionLevel` is a thin call into
+  `setViewEmbedding(viewId, { dimension, embeddingOverride })`):
+  - resolves the view's layout and returns early only when the layout key is
+    unchanged (two layouts of one dimension are different layouts)
+  - loads that layout's positions, pinned while the change is staged, with
+    rollback for every owner on failure
   - updates `positionsArray` and `positionsDimension` (live view)
   - calls `viewer.updatePositions(newPositions, dimensionLevel)` (or
-    `viewer.setViewPositions` for a kept view) before
-    `viewer.setViewDimension`: a view's dimension is its position layout
+    `viewer.setViewPositions` for a kept view), then
+    `viewer.setViewEmbedding(viewId, { dimension, layoutKey })`, which drops
+    that view's LOD, frustum, picking and vector state for the old layout
   - triggers `dimension:changed`
 
 The bulk of this wiring lives under:

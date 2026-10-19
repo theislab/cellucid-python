@@ -95,7 +95,7 @@ Then the loader phase begins:
 - load obs manifest → attach obs field loader
 - optionally load var manifest → attach var field loader
 - load dataset identity + embeddings metadata
-- load points positions (for the active dimension)
+- load points positions (the default dimension's slot layout)
 - optionally load connectivity manifest + edges
 
 ---
