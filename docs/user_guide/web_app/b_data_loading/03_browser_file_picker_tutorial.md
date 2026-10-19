@@ -40,6 +40,8 @@ If your dataset is large or you want maximum reliability/performance, use **Serv
    - **H5AD** — one current-schema `.h5ad`, no larger than 512 MiB
    - **Zarr ZIP** — one `.zarr.zip` or `.zip` archive
    - **Prepared** — a folder created by `prepare()`
+   Or drag the file or folder from your file manager and drop it onto the
+   viewer; see {ref}`drop-to-open`.
 4) Wait for the dataset to load.
 5) Confirm success:
    - you see points rendered in the canvas

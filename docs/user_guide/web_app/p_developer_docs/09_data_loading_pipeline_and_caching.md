@@ -123,13 +123,29 @@ the synthetic benchmark. The rules:
   `isLatest()`; an intent overtaken by the benchmark puts the select back
   itself.
 - **A connection may or may not change the dataset**, which is known only once
-  the server answers. The click records `generation`; a one-dataset activation
-  then calls `beginIfLatest(generation)`, which supersedes loads that were
-  running at the click but never a choice made after it. A connection that
-  lost that race is kept as a catalog.
+  the server answers. Every user action that decides the dataset advances
+  `actionSequence`: each transaction begun, and each session file applied
+  (`recordAction()`, which begins no transaction and aborts nothing). The
+  Connect click reads `actionSequence`; a one-dataset activation then calls
+  `beginIfNoActionSince(sequence)`, which supersedes loads that were running at
+  the click but never a choice made or a session applied after it. A
+  connection that lost that race is kept as a catalog.
 - **A session file** chosen during a load waits on `whenSettled()` (the newest
   transaction has called `finish()`) and is then restored onto whatever
   dataset that produced.
+- **A lost remote connection** clears only its own dataset, and only once
+  `settled` is true: a newer choice still loading replaces the lost dataset
+  itself, and recovery clears it only if that choice failed and the lost
+  dataset is still active. The manager's `getCurrentBaseUrl()` is the base URL
+  the selection committed, never re-derived from a transport that may have
+  closed.
+- **A drop onto the viewer** (`ui/modules/dataset-drop.js`) is classified
+  inside the `drop` event — one `.h5ad`, one `.zip`, or one directory entry
+  from `webkitGetAsEntry()`, listed with each file's `webkitRelativePath` set —
+  and handed to the same local reader and intent as the file inputs. The
+  classic script `ui/core/file-drop-guard.js` cancels every file drag at the
+  document from the first paint, so a drop never navigates, and offers it as
+  `none` until the drop target sets `data-dataset-drop="ready"` on the root.
 - **A published dataset's own continuations** (UI synchronization, the
   published sample view) belong to its publication, not to the request: a
   newer request that fails must not interrupt the dataset still on screen.

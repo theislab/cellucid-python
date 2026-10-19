@@ -79,18 +79,42 @@ Cellucid opens when it starts. Whatever you choose last is what you get:
   picker shows what is loading; a file shows as *Opening <name>…* while it is
   read.
 - Connecting to a server or GitHub repository that holds exactly one dataset
-  opens that dataset, unless you chose another dataset after clicking
-  **Connect**. Then your later choice stays, the connection is kept, and its
-  dataset is listed in the dataset picker.
+  opens that dataset, unless you chose another dataset, or applied a session
+  with **Load State**, after clicking **Connect**. Then what you did later
+  stays, the connection is kept, and its dataset is listed in the dataset
+  picker.
 - **Load State** chosen while a dataset loads waits for it, says so in a
   notification, and then applies the session to the dataset that loaded. A
   session saved from a different dataset is refused with an explanation, as
   always.
 
+- If the connection to a server is lost, Cellucid clears only the dataset that
+  came from it. When you have already chosen another dataset that is still
+  loading, that choice is left to finish; the server's dataset is cleared
+  afterwards only if your choice fails and it is still on screen.
+
 A load you replaced never appears afterwards and reports nothing; only the
 outcome of your latest choice is reported. If the dataset Cellucid opens at
 startup fails and you had not chosen anything else, startup stops on the
 “Cellucid could not start” card.
+
+(drop-to-open)=
+### Dropping a file or folder onto the viewer
+
+Instead of a button, you can drag one `.h5ad` file, one `.zarr.zip` archive,
+or one prepared export folder from your file manager and drop it anywhere on
+the viewer. While you drag, an outline and a *Drop to open* card cover the
+viewer. A drop is read exactly as the matching **H5AD**, **Zarr ZIP** or
+**Prepared** button would read it, and it replaces any load in progress like
+any other choice.
+
+Anything else is refused with a notification that says what can be dropped:
+several items at once (drop the export's folder, not the files inside it), a
+`.zarr` directory (zip it first, or use a server), or any other file. A file
+dropped onto the page never makes the browser leave Cellucid, including while
+it is still starting; until the data controls are ready, the pointer shows the
+drop as not allowed. The buttons remain the way to open data from the keyboard
+or with a screen reader.
 
 ---
 

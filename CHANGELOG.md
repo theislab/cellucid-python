@@ -12,6 +12,13 @@ Version 0.9.2 is a patch release on 0.9.1.
 
 ### Added
 
+- **Web app, data loading**: drop one `.h5ad` file, one `.zarr.zip` archive or
+  one prepared export folder onto the viewer to open it. An outline and a
+  *Drop to open* card cover the viewer while you drag; the drop is read like
+  the matching button and replaces any load in progress. Anything else is
+  refused with a message saying what can be dropped, and a file dropped
+  anywhere on the page, even while Cellucid is starting, never makes the
+  browser leave it.
 - **Web app, cell info**: **Show cell info** (Coloring & filtering, on by
   default) shows a card for the cell under the pointer: its value on the
   field the view is coloured by, where that sits on the colour scale, and for
@@ -93,6 +100,15 @@ Version 0.9.2 is a patch release on 0.9.1.
   high-cardinality marker statistics 0.33 s → 0.06 s per gene. The Plotly
   notification watcher no longer runs a subtree query for every element any
   plot inserts.
+- **Web app, data loading**: when the connection to a server is lost, Cellucid
+  clears only the dataset that came from it, and not while another dataset you
+  chose is still loading; it used to clear over that choice. Recovering from a
+  lost connection while its dataset was on screen also failed outright
+  ("Remote dataset URL requires an active connection"), because the open
+  dataset's address was re-read from the closed connection; it is now the
+  address the dataset was loaded from. A server with one dataset that answers
+  **Connect** after you applied a session no longer replaces that dataset and
+  session; its dataset is listed in the picker instead.
 - **Web app, data loading**: a dataset chosen while another is still loading
   now replaces it. At startup the data controls stayed disabled until the
   startup dataset had downloaded, and **Load State** did nothing at all in
