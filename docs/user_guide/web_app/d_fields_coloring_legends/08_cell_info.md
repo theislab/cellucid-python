@@ -11,8 +11,8 @@
 
 ## Turning it on
 
-Open the **Navigation** panel and switch on **Cell info**, just above
-**Reset camera**. It is off by default. A saved session remembers the switch.
+In **Coloring & filtering**, tick **Show cell info** at the top of **Legend**,
+above **Show centroids**. It is off by default. A saved session remembers it.
 
 With it on, rest the pointer on a cell and a card appears beside it. Move to
 another cell and the card follows. Move off the cells, or start moving the
@@ -58,7 +58,7 @@ The card is designed to cost nothing you can see, even on millions of cells:
   navigation key, inertia or a zoom that is still easing, there is no lookup
   and no card. It returns when the camera settles.
 - **The index is built up front.** On a large view the lookup walks a spatial
-  index. Switching Cell info on builds it in idle time, so the first hover does
+  index. Turning Cell info on builds it in idle time, so the first hover does
   not pause. On tens of millions of cells that build takes a moment once; level
   of detail and frustum culling use the same index, so if either is already on
   there is nothing left to build.
