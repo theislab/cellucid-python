@@ -370,6 +370,11 @@ Version 0.9.2 is a patch release on 0.9.1.
 - **Web app, selection tools**: while a lasso, proximity or KNN selection is
   drawn, a pointer move that leaves the previewed cells unchanged no longer
   re-uploads the highlight or redraws the scene; only a change does.
+- **Web app, sessions**: a session saved while a view was coloured by a
+  continuous field could not be loaded ("Session UI control … does not
+  exist"): it recorded the legend's range sliders, whose ids are made afresh
+  on every page. Controls with page-made ids are no longer recorded; the
+  colour range and filter they show are saved with the field, as before.
 - **Python sessions**: reading a session now requires each user-defined
   field's `normalizedDims` to name exactly the dimensions in its
   `centroidsByDim`, as the web app writes them.
