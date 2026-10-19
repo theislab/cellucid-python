@@ -106,11 +106,12 @@ own data repository may use a notebook or another preparation workflow
 instead; Cellucid itself only reads the `exports/` tree.
 
 `datasets.json` is the exact catalog. Its top-level object contains only
-`version` and `datasets`:
+`version`, `default`, and `datasets`:
 
 ```json
 {
   "version": 1,
+  "default": "study-a",
   "datasets": [
     {
       "id": "study-a",
@@ -131,6 +132,7 @@ instead; Cellucid itself only reads the `exports/` tree.
 The rules are deliberately strict:
 
 - `version` is exactly `1`.
+- `default` is a non-empty exact dataset ID present in `datasets`.
 - `datasets` is a non-empty array.
 - Every entry has exactly one unique `id` and one unique, safe relative
   directory `path`.
@@ -189,12 +191,15 @@ After all dataset directories exist, generate the catalog:
 ```python
 from cellucid.prepare_data import generate_datasets_manifest
 
-generate_datasets_manifest("./exports")
+generate_datasets_manifest(
+    "./exports",
+    default_dataset="study-a",
+)
 ```
 
 The helper validates every candidate directory before atomically replacing
-`datasets.json`. The catalog selects no dataset: Cellucid opens one only when
-someone chooses it from the list.
+`datasets.json`. `default_dataset` is required; this prevents an accidental
+directory order from becoming public behavior.
 
 ### From R
 
@@ -374,7 +379,7 @@ branch, or your network.
 | Symptom | Check first |
 |---|---|
 | `datasets.json not found` | The value must point at the exports root, not one dataset directory; open the raw catalog URL from the notification. |
-| `Invalid datasets.json` | Remove unsupported keys (including a `default` from an earlier release), end each `path` in `/`, and make IDs and paths unique. |
+| `Invalid datasets.json` | Remove unsupported keys, require `default`, end each `path` in `/`, and make IDs and paths unique. |
 | A dataset is reported invalid | Open its `dataset_identity.json`; confirm the catalog's optional name, description, and counts match it exactly. |
 | The catalog connects but no dataset opens from a link | Add `dataset=<exact-dataset-id>` for a catalog with multiple entries. |
 | A binary request returns tiny text | Check whether Git LFS stored a pointer instead of the prepared bytes. |

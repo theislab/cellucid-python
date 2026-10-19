@@ -25,9 +25,9 @@ that does and does not let you do.
 | Developing human heart (Kanemaru) | `kanemaru` | 131,636 | 3,691 | [E-MTAB-12916](https://www.ebi.ac.uk/biostudies/arrayexpress/studies/E-MTAB-12916) |
 | Pancreatic endocrinogenesis (scVelo) | `pancreas` | 3,696 | 3,753 | [GSE132188](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE132188) |
 
-`exports/datasets.json` lists the five in this order and names no default
-dataset. The counts are the `stats.n_cells` and `stats.n_genes` values each
-generation publishes in its own `dataset_identity.json`.
+`suo` is the catalog default. The counts are the `stats.n_cells` and
+`stats.n_genes` values each generation publishes in its own
+`dataset_identity.json`.
 
 Each generation also declares its embeddings there, under `embeddings`. The
 four human atlases each carry a 1D, 2D, and 3D UMAP computed from one shared

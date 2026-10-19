@@ -299,7 +299,7 @@ def test_datasets_manifest_rejects_an_undisplayable_published_description(tmp_pa
     )
 
     with pytest.raises(ValueError) as failure:
-        generate_datasets_manifest(exports_dir=exports)
+        generate_datasets_manifest(exports_dir=exports, default_dataset="study")
 
     assert "description is displayed verbatim" in str(failure.value)
     assert "ends with U+0020 SPACE" in str(failure.value)

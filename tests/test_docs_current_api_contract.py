@@ -940,9 +940,9 @@ def test_standard_pancreas_sample_contract_is_documented_exactly() -> None:
     ):
         assert exact_value in normalized
 
-    # The v3 sample catalog names no default dataset, and the Pancreas vector
-    # field is `velocity`; `velocity_umap` is only the AnnData-mode field id.
-    assert "catalog default" not in page
+    assert "Suo remains the catalog default" in page
+    # The Pancreas vector field is `velocity`; `velocity_umap` is only the
+    # AnnData-mode field id.
     assert "velocity_umap" not in page
     assert "compact Session statistics round both counts to **4K**" in normalized
     assert "**Showing all 3,696 points**" in normalized

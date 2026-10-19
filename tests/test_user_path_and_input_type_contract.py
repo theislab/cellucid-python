@@ -113,7 +113,7 @@ def test_generate_datasets_manifest_default_follows_the_call_time_directory(
 
     with _working_directory(call_time_cwd):
         prepare(**_prepare_kwargs(out_dir=Path("exports") / "path-contract"))
-        manifest_path = generate_datasets_manifest()
+        manifest_path = generate_datasets_manifest(default_dataset="path-contract")
         resolved_manifest = manifest_path.resolve()
 
     assert not manifest_path.is_absolute()
@@ -157,7 +157,10 @@ def test_generate_datasets_manifest_expands_the_home_directory(
 
     with _working_directory(workdir):
         prepare(**_prepare_kwargs(out_dir=home / "exports" / "path-contract"))
-        manifest_path = generate_datasets_manifest("~/exports")
+        manifest_path = generate_datasets_manifest(
+            "~/exports",
+            default_dataset="path-contract",
+        )
 
     assert manifest_path == home / "exports" / "datasets.json"
     assert not (workdir / "~").exists()

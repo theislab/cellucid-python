@@ -91,7 +91,7 @@ def test_custom_repository_guide_publishes_the_exact_current_catalog_contract() 
         assert f"?github={REFERENCE_VALUE}&dataset={dataset_id}" in guide
 
     for exact_catalog_rule in (
-        "`version` and `datasets`",
+        "`version`, `default`, and `datasets`",
         "`version` is exactly `1`",
         "unique `id`",
         "safe relative",
@@ -103,8 +103,7 @@ def test_custom_repository_guide_publishes_the_exact_current_catalog_contract() 
     ):
         assert exact_catalog_rule in normalized
 
-    assert 'generate_datasets_manifest("./exports")' in guide
-    assert "default_dataset" not in guide
+    assert 'generate_datasets_manifest(\n    "./exports",\n    default_dataset="study-a",' in guide
     assert "cellucid serve ./exports --no-browser" in guide
     assert "/?source=remote" in guide
     assert (
@@ -119,8 +118,7 @@ def test_loading_guides_do_not_reintroduce_stale_branch_or_server_routes() -> No
         "try common defaults",
         "owner/repo/gh-pages/exports",
         "http://127.0.0.1:8765/health",
-        "default_dataset=",
-        '"default":',
+        'generate_datasets_manifest("./exports")',
         "Dataset Connections",
         "Browse local data",
     ):

@@ -57,6 +57,7 @@ Format (version 1):
 ```json
 {
   "version": 1,
+  "default": "pbmc_demo",
   "datasets": [
     {"id": "pbmc_demo", "path": "pbmc_demo/", "name": "PBMC demo", "n_cells": 10000, "n_genes": 2000}
   ]
@@ -69,6 +70,7 @@ Format (version 1):
 library(jsonlite)
 
 exports_root <- file.path(getwd(), "exports")
+default_id <- "pbmc_demo"
 
 if (!dir.exists(exports_root)) {
   stop("exports/ does not exist")
@@ -106,8 +108,11 @@ dataset_ids <- vapply(datasets, `[[`, character(1), "id")
 dataset_paths <- vapply(datasets, `[[`, character(1), "path")
 if (anyDuplicated(dataset_ids)) stop("Dataset ids must be unique")
 if (anyDuplicated(dataset_paths)) stop("Dataset paths must be unique")
+if (!default_id %in% dataset_ids) {
+  stop("default_id must exactly match one catalog dataset id")
+}
 
-manifest <- list(version = 1, datasets = datasets)
+manifest <- list(version = 1, default = default_id, datasets = datasets)
 jsonlite::write_json(
   manifest,
   file.path(exports_root, "datasets.json"),
@@ -120,7 +125,7 @@ jsonlite::write_json(
 
 ```python
 from cellucid.prepare_data import generate_datasets_manifest
-generate_datasets_manifest("./exports")
+generate_datasets_manifest("./exports", default_dataset="pbmc_demo")
 ```
 
 The Python helper is documented in:

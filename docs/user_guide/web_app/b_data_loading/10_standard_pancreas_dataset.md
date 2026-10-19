@@ -4,7 +4,7 @@ Cellucid's public sample catalog includes the pancreas dataset used by the
 [scVelo pancreas vignette](https://scvelo.readthedocs.io/en/stable/vignettes/Pancreas.html).
 It is a complete known-good example for dimensional navigation, categorical and
 continuous metadata, gene coloring, connectivity, and RNA-velocity rendering.
-The catalog id is exactly `pancreas`.
+The catalog id is exactly `pancreas`; Suo remains the catalog default.
 Its published identity contains exactly 3,696 cells and 3,753 genes.
 
 ## Load it
@@ -117,7 +117,7 @@ here, because they change whenever the dataset is regenerated. Read them from
 that file if you are verifying a build.
 
 The environment — the exact Python and scientific-package set in
-`requirements-build.lock` — and the Cellucid 0.9.2 producer-source digest, over
+`requirements-build.lock` — and the exact Cellucid 0.9.2 producer-source digest, over
 the modules the export path executes, are pinned once for all five samples in
 `sources/build-environment.json`.
 

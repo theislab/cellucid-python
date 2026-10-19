@@ -302,12 +302,10 @@ def test_anndata_file_loader_rejects_undeclared_formats_before_reader_dispatch(
     assert calls == []
 
 
-def test_dataset_manifest_selects_no_dataset_and_has_no_repair_modes(tmp_path: Path) -> None:
+def test_dataset_manifest_has_one_required_default_and_no_repair_modes() -> None:
     parameters = inspect.signature(generate_datasets_manifest).parameters
-    assert list(parameters) == ["exports_dir"]
-    _write_identity(tmp_path / "valid", _identity("valid"))
-    manifest = json.loads(generate_datasets_manifest(tmp_path).read_text(encoding="utf-8"))
-    assert list(manifest) == ["version", "datasets"]
+    assert "output_filename" not in parameters
+    assert parameters["default_dataset"].default is inspect.Parameter.empty
 
 
 def test_dataset_manifest_rejects_orphan_directories_atomically(
@@ -320,8 +318,18 @@ def test_dataset_manifest_rejects_orphan_directories_atomically(
     manifest_path.write_bytes(original)
 
     with pytest.raises(ValueError, match="orphan.*dataset_identity"):
-        generate_datasets_manifest(tmp_path)
+        generate_datasets_manifest(tmp_path, default_dataset="valid")
     assert manifest_path.read_bytes() == original
+
+
+def test_dataset_manifest_rejects_missing_or_unknown_default(
+    tmp_path: Path,
+) -> None:
+    _write_identity(tmp_path / "valid", _identity("valid"))
+
+    with pytest.raises(ValueError, match="default_dataset.*missing"):
+        generate_datasets_manifest(tmp_path, default_dataset="missing")
+    assert not (tmp_path / "datasets.json").exists()
 
 
 def test_dataset_manifest_rejects_duplicate_dataset_ids(
@@ -331,5 +339,5 @@ def test_dataset_manifest_rejects_duplicate_dataset_ids(
     _write_identity(tmp_path / "second", _identity("duplicate", "Second"))
 
     with pytest.raises(ValueError, match="duplicate dataset id"):
-        generate_datasets_manifest(tmp_path)
+        generate_datasets_manifest(tmp_path, default_dataset="duplicate")
     assert not (tmp_path / "datasets.json").exists()
