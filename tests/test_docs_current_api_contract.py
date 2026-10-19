@@ -886,7 +886,7 @@ def test_current_startup_screenshots_and_documented_defaults_are_exact() -> None
     assert "Suo dataset remains the sample\ncatalog default" in quick_tour
     assert "1D or 2D starts in **Planar**" in quick_tour
     assert "3D starts in **Orbit**" in quick_tour
-    assert "default light grid" in quick_tour
+    assert "default light studio floor" in quick_tour
     # The sidebar footer's build identity bumps on every web release — seven
     # times in the five days after ``2026-07-27.1``. Pinning a literal here made
     # the assertion enforce staleness: it kept passing while both pages, and the

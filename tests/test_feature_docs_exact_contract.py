@@ -324,7 +324,7 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
         "automatically applies the verified static starting view",
         "`cell_type` observation field",
         "3-D **Orbit** camera",
-        "light theme and grid background",
+        "light theme and the **Studio (light)** background",
         "no `cinematic/camera` chunk",
         "**Loop playback**, or **Autoplay**",
         "moving-camera playback remains off",
