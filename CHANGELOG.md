@@ -377,6 +377,13 @@ Version 0.9.2 is a patch release on 0.9.1.
   exist"): it recorded the legend's range sliders, whose ids are made afresh
   on every page. Controls with page-made ids are no longer recorded; the
   colour range and filter they show are saved with the field, as before.
+- **Web app, shader quality**: `Full` shading is a little brighter on the
+  side of each cell away from the light (ambient 0.5, was 0.4); the lit side
+  still shows the colour itself. Highlight rings and centroid markers use the
+  same lighting.
+- **Web app, Studio backgrounds**: the floor's rules and the dots are lighter
+  and finer (major rules no thicker than minor ones), so the stage reads as a
+  calm, clean surface behind the data.
 - **Python sessions**: reading a session now requires each user-defined
   field's `normalizedDims` to name exactly the dimensions in its
   `centroidsByDim`, as the web app writes them.
