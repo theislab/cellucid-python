@@ -180,23 +180,44 @@ A blocker is something that would change what the figure appears to *say*.
 ### Reference grid
 
 The viewer's **Background** control decides two things at once: the colour the
-canvas is cleared to, and whether the matplotlib-style reference grid box is
-drawn behind the data. `Grid (light)` — the default — and `Grid (dark)` draw
-one; `White` and `Black` do not.
+canvas is cleared to, and which reference layer is drawn behind the data: the
+matplotlib-style grid box (`Grid (light)` and `Grid (dark)`), the studio floor
+and dot surface (`Studio (light)` — the default — and `Studio (dark)`), or
+nothing (`White` and `Black`).
 
-Exports reproduce that grid. It is drawn as **vector rules** in SVG (editable
-`<line>` elements you can recolour or delete in Illustrator or Inkscape) and as
-the same geometry on the canvas in PNG, so both formats carry the identical
-grid. The rules take their colour, spacing, line weight, and per-plane fade
-from the viewer's active background, so a light-grid view exports a light grid
-and a dark-grid view exports a dark one.
+Exports reproduce that layer. The grid box is drawn as **vector rules** in SVG
+(editable `<line>` elements you can recolour or delete in Illustrator or
+Inkscape) and as the same geometry on the canvas in PNG, so both formats carry
+the identical grid. The rules take their colour, spacing, line weight, and
+per-plane fade from the viewer's active background, so a light-grid view
+exports a light grid and a dark-grid view exports a dark one.
 
-**Reference grid** in the Annotations block turns it off when you want a
-grid-free figure. It is disabled when the viewer background draws no grid.
+The studio backdrop is reproduced from the same constants and functions its
+shader is built from, with the floor height, stage centre and screen density of
+the view it was drawn in:
+
+- floor rules are `<line>` elements stroked with a gradient sampled along each
+  rule, because a rule fades with distance from the stage, with the viewing
+  angle, and as its spacing family crossfades;
+- dots, of the dot surface or of a floor seen from straight above, are circles;
+- the soft glow at the centre of the view and the pool under the data are
+  radial gradients. The glow lightens the viewer's own surface colour, so it is
+  drawn only with **Background: Match viewer** (or a custom colour equal to
+  it); the pool is drawn over any background.
+
+The known differences are below one 8-bit colour step or a quarter of a CSS
+pixel: the gradient between a rule's 24 colour stops is interpolated linearly,
+a rule's width is the one it has where it is strongest, and the screen's
+sub-step dither is not drawn. After a dimension or navigation change the screen
+crossfades between floor and dots for 0.3 s; an export shows the settled
+surface.
+
+**Reference grid** in the Annotations block turns the layer off when you want a
+figure without it. It is disabled when the viewer background draws none.
 
 If the background control cannot be read at all, export is blocked with
 **Active viewer background unavailable**: an export that cannot tell whether
-the viewer draws a grid can neither include nor omit it honestly.
+the viewer draws a reference layer can neither include nor omit it honestly.
 
 ### 3D shader-accurate points and SVG limitations
 

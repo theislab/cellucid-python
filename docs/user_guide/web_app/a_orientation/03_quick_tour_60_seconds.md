@@ -82,7 +82,7 @@ counts for every built-in sample are listed in
 
 **What success looks like**
 
-- The canvas shows points on the default light grid.
+- The canvas shows points on the default light studio floor.
 - The dataset info panel shows non‑zero counts.
 
 :::{note}

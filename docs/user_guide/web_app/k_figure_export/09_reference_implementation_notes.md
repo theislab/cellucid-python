@@ -45,8 +45,10 @@ Key utilities/components:
 - Panel letters (`A`…`Z`, `AA`…) shared by the drawn label and the metadata: `cellucid/assets/js/app/ui/modules/figure-export/utils/panel-label.js`
 - `n = N selected` badge, counted per panel: `cellucid/assets/js/app/ui/modules/figure-export/utils/selection-badge.js`
 - Render-mode fidelity gate: `cellucid/assets/js/app/ui/modules/figure-export/utils/render-mode.js`
-- Viewer-background reader and reference-grid appearance (mirrors `viewer.setBackground()`): `cellucid/assets/js/app/ui/modules/figure-export/utils/viewer-background.js`
-- Reference-grid geometry, shared by SVG rules and Canvas strokes: `cellucid/assets/js/app/ui/modules/figure-export/components/reference-grid.js`
+- Viewer-background reader and reference-layer appearance (mirrors `viewer.setBackground()`; the background enum itself is `cellucid/assets/js/rendering/viewer-backgrounds.js`): `cellucid/assets/js/app/ui/modules/figure-export/utils/viewer-background.js`
+- Reference-grid geometry, shared by SVG rules and Canvas strokes, and the entry point for either reference layer: `cellucid/assets/js/app/ui/modules/figure-export/components/reference-grid.js`
+- Studio backdrop as vectors, from the constants and functions its shader is built from (`cellucid/assets/js/rendering/studio-backdrop.js`): `cellucid/assets/js/app/ui/modules/figure-export/components/studio-backdrop-export.js`
+- Model-to-plot projection shared by both reference layers: `cellucid/assets/js/app/ui/modules/figure-export/utils/plot-projection.js`
 - Data-overlay fidelity gates (connectivity, velocity) and the disclosed viewer chrome: `cellucid/assets/js/app/ui/modules/figure-export/utils/overlay-fidelity.js`
 - Atmospheric fog for the vector strategies: `cellucid/assets/js/app/ui/modules/figure-export/utils/fog.js`
 - Background-derived annotation ink: `cellucid/assets/js/app/ui/modules/figure-export/utils/figure-ink.js`

@@ -81,7 +81,7 @@ sequence is a single scripted Playwright run producing 14 captures. Steps 6 and
 | Viewport | 1440 × 900 CSS px, `deviceScaleFactor: 2` | Floating panels are clamped to the viewport on restore ({doc}`/user_guide/web_app/l_sessions_sharing/09_edge_cases`), so a BEFORE/AFTER pair captured at different sizes is not a valid comparison. |
 | Dataset | `#dataset-select` → option value `dataset:local-demo:pancreas` | 3,696 cells / 3,753 genes — loads in seconds; publishes 1D + 2D + 3D embeddings with `default_dimension: 3`; recognisable endocrinogenesis trajectory for a wet-lab reader. Verified in `cellucid-datasets/exports/pancreas/dataset_identity.json`. |
 | Dimension | 3D throughout | The session fingerprint records `cellOrder.dimension`; saving in 3D and restoring in 3D is the success path. Deviating provokes the recoverable error captured separately in `07`. |
-| Theme / background | app defaults (light / grid) | Matches the reviewed official starting state, so the reset in step 10 is visually unambiguous. |
+| Theme / background | app defaults (light / Studio (light)) | Matches the reviewed official starting state, so the reset in step 10 is visually unambiguous. |
 | Welcome modal | dismissed with `Escape` (`#welcome-modal`) — see `tests/browser/helpers/welcome.mjs` | Otherwise it covers the sidebar in every frame. |
 | Build stamp | `#web-build-version` inside `#copyright` must read the same value in steps 6 and 13 | The docs tell readers to compare footer builds; the proof pair must be self-consistent. |
 

@@ -40,8 +40,8 @@ Filtering* telling you how many of the dataset's cells are currently drawn.
   links skip it because they already declare a data source.
 - **Suo**: the sample catalog default. It may finish loading behind the welcome
   overlay before you choose another source.
-- **Default background**: light grid in a fresh browser profile. A user-selected
-  background remains an explicit preference.
+- **Default background**: **Studio (light)** in a fresh browser profile. A user-selected
+  background remains an explicit preference (see [Background](#background)).
 - **Build**: the web build identity printed in the sidebar footer. Include this
   exact value in bug reports so maintainers can identify the HTML, JavaScript,
   CSS, and asset inventory you exercised. It is not the Python or R package
@@ -91,6 +91,30 @@ keyboard and screen-reader behavior.
 
 See {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` for
 what alpha means in practice for that mode.
+
+## Background
+
+- **`Background`**: the **Visualization** dropdown that sets what is drawn
+  behind the cells. Its six options sit in two groups, **Light** (`White`,
+  `Grid (light)`, `Studio (light)`) and **Dark** (`Black`, `Grid (dark)`,
+  `Studio (dark)`):
+  - `White` and `Black`: a plain colour, nothing drawn.
+  - `Grid (light)` and `Grid (dark)`: a matplotlib-style grid box
+    of ruled walls around the data.
+  - `Studio (light)` (the default) and `Studio (dark)`: a calm stage on a neutral grey or
+    charcoal. A 3D view in Orbit or Free-fly stands on a **floor**: one plane
+    just under the lowest cell, ruled with hairlines that fade out long before
+    its edge and with a soft pool of shade (light) or light (dark) under the
+    data. Seen from straight above, the rules turn into dots. A 1D or 2D view,
+    and any view in Planar navigation, sits on a **dot surface** instead, like
+    dotted paper behind the cells. Rules and dots keep the same on-screen size
+    at every zoom and screen density, and their spacing steps by fives as you
+    zoom, crossfading so the pattern never crowds or empties; the floor fades
+    as the camera nears its edge-on angle and disappears when the camera goes
+    below it.
+- The choice applies to every view of a grid compare, is remembered in the
+  browser, and is saved in sessions. Figure export reproduces the grid box and
+  the studio backdrop; see {doc}`../k_figure_export/06_edge_cases`.
 
 ---
 

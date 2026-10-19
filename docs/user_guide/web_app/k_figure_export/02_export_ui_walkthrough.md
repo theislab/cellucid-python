@@ -216,16 +216,18 @@ How to interpret axes:
 
 ### Reference grid
 
-- **Reference grid** is enabled by default and exports the viewer's grid box —
-  the matplotlib-style walls drawn behind the data by the **Grid (light)** and
-  **Grid (dark)** backgrounds.
-- It follows the viewer: a light-grid view exports a light grid, a dark-grid
-  view exports a dark one. Nothing is hard-coded.
-- In SVG the grid arrives as ordinary vector `<line>` elements, so you can
-  recolour, thin, or delete it in Illustrator or Inkscape. PNG carries the
-  identical geometry.
+- **Reference grid** is enabled by default and exports the reference layer the
+  viewer background draws: the matplotlib-style grid box of **Grid (light)**
+  and **Grid (dark)**, or the floor and dot surface of **Studio (light)** and
+  **Studio (dark)**.
+- It follows the viewer: a light-grid view exports a light grid, a dark-studio
+  view exports a dark floor. Nothing is hard-coded.
+- In SVG the layer arrives as ordinary vector elements — `<line>` rules (the
+  studio floor's with gradient strokes), `<circle>` dots and gradient fills —
+  so you can recolour, thin, or delete it in Illustrator or Inkscape. PNG
+  carries the identical geometry.
 - The checkbox is disabled when the viewer background (**White** or **Black**)
-  draws no grid.
+  draws no reference layer.
 
 ### 3D orientation + depth sort
 

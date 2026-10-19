@@ -108,7 +108,7 @@ Each official state:
 
 - activates the `cell_type` observation field;
 - restores a modest, static close-up in the 3-D **Orbit** camera;
-- uses the light theme and grid background; and
+- uses the light theme and the **Studio (light)** background; and
 - starts without active filters or kept snapshots.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/official-01-sample-state-applied.png
@@ -117,12 +117,12 @@ Each official state:
 
 The Pancreas sample moments after it was chosen. Nothing was clicked beyond
 picking the sample: the dataset published first, then its verified starting
-state put the view into 3-D **Orbit** on the light grid background with
+state put the view into 3-D **Orbit** on the light studio background with
 `cell_type` active. **Save State** and **Load State** were not involved.
 ```
 
 You can confirm each of those four from the sidebar in the figure: the
-**Visualization** accordion shows `Light` theme, `Grid (light)` background and
+**Visualization** accordion shows `Light` theme, `Studio (light)` background and
 `Points` render mode, and the dataset opens on its 3-D embedding with the
 navigation mode set to orbit.
 
