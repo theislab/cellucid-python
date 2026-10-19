@@ -733,8 +733,10 @@ terminal and Jupyter captures:
      `#github-repo-url` to a repo path with no catalog.
      `_static/screenshots/data_loading/error-datasets-json-not-found.png`.
      (Shared with ``02_local_demo_tutorial`` item 2d — capture once, use twice.)
-  2. "No embedding / no UMAP" (line 110) — reproduce with an H5AD lacking every
-     `X_umap_*d` key. `_static/screenshots/data_loading/error-no-embedding.png`.
+  2. "Cellucid found nothing to plot" — reproduce with an H5AD whose `obsm`
+     holds only a DataFrame and a sparse array (a file without a UMAP but with
+     any drawable array opens on a best guess instead).
+     `_static/screenshots/data_loading/error-nothing-to-plot.png`.
   3. "Dataset loads, but I see no points (blank canvas)" (line 131) — shared
      with ``a_orientation/02_system_requirements`` item 3.
   4. **The broken-export refusals.** `cellucid/tests/browser/fixtures/broken-exports/`

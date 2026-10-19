@@ -88,9 +88,9 @@ Important nuance:
 Vector fields are optional per-cell vectors (e.g. RNA velocity, drift/displacement) that Cellucid can render as an animated overlay on top of your embedding.
 
 Important rules:
-- Vector fields are **dimension-specific**: you need 2D vectors for a 2D embedding, 3D vectors for 3D, etc.
+- Vector fields are **embedding-specific**: each is bound to the embedding it was computed on (2D vectors for a 2D embedding, 3D for 3D).
 - Vector fields must match the **same row order** as your points/cells.
-- The overlay only shows fields available for the **current dimension**.
+- The overlay only shows fields bound to the embedding the view **shows**.
 
 Where vector fields come from depends on your loading format:
 
@@ -306,10 +306,13 @@ because the notebook supplies the address.
 ## Edge Cases (Read This If Something Feels “Weird”)
 
 ### Data edge cases
-- **No UMAP / embedding keys**: your AnnData is missing `X_umap_1d`,
-  `X_umap_2d`, or `X_umap_3d` in `obsm`.
-- **NaN/Inf in embeddings**: current readers reject the dataset before it can
-  replace the active dataset.
+- **No UMAP**: an AnnData without `X_umap_1d`, `X_umap_2d`, `X_umap_3d` or
+  `X_umap` opens on a best guess from its other `obsm` arrays
+  ({doc}`13_data_mapping`); only a file with nothing drawable is refused.
+- **NaN/Inf in embeddings**: an embedding holding one is refused, naming the
+  cell, before it can replace what is shown. A UMAP the file carries is never
+  replaced silently: its NaN refuses the file; a guessed candidate with one is
+  skipped for the next.
 - **Duplicate variable names**: direct AnnData readers reject them because a
   gene request must identify exactly one column.
 - **Huge categorical fields** (e.g., 100k unique categories): legends and color assignment become unusable.
@@ -347,15 +350,18 @@ This is a compact troubleshooting index. Each follow-up notebook contains a **mu
 
 ---
 
-### Symptom: “I don’t see any embedding / it says no UMAP”
+### Symptom: “It says Cellucid found nothing to plot”
 **Likely causes**
-- AnnData missing `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` in `obsm`
+- AnnData has no drawable `obsm` array: only tables, sparse arrays, or arrays
+  holding missing or infinite values (the message lists each entry and why).
+  A file without a UMAP but with another drawable array opens on a best guess.
 
 **How to confirm**
 - In Python: `print(adata.obsm.keys())`
 
 **Fix**
-- Compute UMAP and store it in `obsm` before viewing
+- Compute an embedding (for example `sc.tl.umap(adata)`) before viewing, or
+  fix the array the message names. See {doc}`13_data_mapping`.
 
 ---
 

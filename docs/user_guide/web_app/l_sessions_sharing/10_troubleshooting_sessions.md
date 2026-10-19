@@ -99,7 +99,8 @@ The fingerprint has exactly:
   embedding's coordinates; and
 - `dataMapping`, the stored embeddings and arrays the dataset was shown with.
 
-All six must match. A GitHub load and a local folder load are different even
+All six must match, except that the data mapping's embeddings may differ when
+this dataset can show the ones the session names: they are restored. A GitHub load and a local folder load are different even
 when their files look identical. Fix the route or publication identity, then
 retry the unchanged bundle. Cellucid does not restore floating layout alone or
 skip filters/highlights.
@@ -114,11 +115,15 @@ Read the message before changing anything — each cause has its own:
   served copy of an export the catalog also publishes. The counts are no help
   here, which is why this message names the two identities instead of repeating
   the same two numbers. Open the dataset the state was captured on.
-- **"This session uses … and this dataset shows …"** (or "was saved with … as
-  its neighbour graph", and so on): the session was saved with a different data
-  mapping — another embedding in a dimension, another graph, gene names,
-  expression matrix, latent space, or vector bindings. The message names the
-  array on each side. Open the dataset version the session was saved on.
+- **"This session uses … in 2D, which this dataset does not have"**: the
+  session shows an embedding in that dimension that this dataset lacks (or one
+  it cannot plot, with the reason). A session whose embeddings this dataset
+  *does* have is not refused: they are restored. Open the dataset version the
+  session was saved on.
+- **"This session was saved with … as its neighbour graph"** (or gene names,
+  expression matrix, latent space, vector fields): the session was saved with
+  another of the arrays the viewer cannot change. The message names the array
+  on each side. Open the dataset version the session was saved on.
 - **"recorded its cell order on … which this dataset does not have"**: the
   embedding the session was saved in is not part of this dataset.
 - **"the same name and the same number of cells and genes, but the cell

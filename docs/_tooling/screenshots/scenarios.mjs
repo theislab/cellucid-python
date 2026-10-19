@@ -2753,16 +2753,18 @@ function buildDataLoadingRefusalScenarios() {
       settle: REFUSAL_SETTLE,
     },
 
-    // ------------------------------------- a valid `.h5ad` with no embedding
+    // ------------------------------------------ a valid `.h5ad` with no UMAP
+    // The file opens on a best guess. The notification stays until it is
+    // dismissed, so it is photographed on its own, Show button included.
     {
-      id: 'loading-refusal-missing-umap-embedding',
+      id: 'loading-best-guess-notification',
       topic: 'data_loading',
-      name: 'fail-missing-umap-embedding',
+      name: 'best-guess-notification',
       describes:
-        'A Cellucid notification reading "No UMAP embedding this viewer can '
-        + 'read was found in obsm. Expected one or more of X_umap_1d, '
-        + 'X_umap_2d, or X_umap_3d, or a plain X_umap of 1, 2, or 3 columns. '
-        + 'Available obsm keys: X_pca.", with a dismiss button at its right.',
+        'A Cellucid notification reading "This file has no default UMAP '
+        + '(X_umap_2d, X_umap_3d or X_umap). Showing \'X_pca\' as 2D. Change '
+        + 'it under Session › Data mapping.", with a Show button under the '
+        + 'text and a dismiss button at its right.',
       dataset: 'pancreas',
       steps: [
         ...AT_LOCAL_CONTROLS,
@@ -2776,10 +2778,14 @@ function buildDataLoadingRefusalScenarios() {
               'pca-only.h5ad'
             );
           },
-          'No UMAP embedding this viewer can read was found in obsm'
+          'This file has no default UMAP'
         ),
       ],
-      shot: { mode: 'element', selector: '#notification-center', padding: 10 },
+      shot: {
+        mode: 'element',
+        selector: '#notification-center .notification:has(.notification-action)',
+        padding: 10,
+      },
       settle: REFUSAL_SETTLE,
     },
   ];

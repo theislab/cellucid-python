@@ -130,7 +130,16 @@ what alpha means in practice for that mode.
 - **Embedding**: coordinates for points in 1D/2D/3D (UMAP/tSNE/PCA/etc). A
   dataset may carry several embeddings of one dimension (the Pancreas sample has
   a 2D UMAP and a 2D PCA view); each dimension has one **default embedding**,
-  which is what a view of that dimension shows.
+  which is what a view of that dimension shows unless the view has its own.
+- **Data mapping**: which stored arrays the dataset is drawn from — the default
+  embedding of each dimension, and read-only the neighbour graph, gene names,
+  expression matrix, latent space and vector fields. Set under **Session ›
+  Dataset › Data mapping** ({doc}`../b_data_loading/13_data_mapping`).
+- **Best guess**: the embeddings a file without a UMAP opens on, marked
+  *guessed* in the Data mapping panel.
+- **View embedding**: the embedding one view shows instead of its dimension's
+  default, chosen under **Compare Views → Embedding**; the view badge then
+  reads e.g. `2D · X_tsne`.
 - **Dimension (1D / 2D / 3D)**: which embedding dimensionality you are currently viewing for a given view.
 - **Connectivity**: a neighbor graph (edges). When enabled, edges are drawn between visible points only.
 - **Vector field / velocity overlay**: an optional overlay that visualizes per-cell vectors, bound to the embeddings it was computed on.
@@ -229,7 +238,7 @@ Scope note:
 
 These terms are the most important for understanding Cellucid.
 
-- **View**: one panel that renders the dataset with its own state (camera, dimension, coloring, filters, highlights).
+- **View**: one panel that renders the dataset with its own state (camera, dimension, embedding, coloring, filters, highlights).
 - **Live view**: your default working view (often labeled “All cells” in the view badges).
 - **Snapshot view** (also “kept view”): a view created by clicking **Keep view**; used to compare multiple states side-by-side.
 - **Multiview**: the overall feature of having multiple views/snapshots.

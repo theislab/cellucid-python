@@ -95,6 +95,7 @@ URL, or an error message — and an event that does not fit is dropped whole.
   | outcome and duration | `success`, `3812` ms, `3-10s` |
   | cell and gene count **ranges** | `10k-100k`, `1M-10M` — never the exact counts |
   | obs field count, embedding dimensions | `14`, `2+3` |
+  | how its embeddings were chosen, and how many it could show (a **range**) | `default` or `best_guess`; `1`, `2-3`, `4-9`, `10+` |
   | connectivity / vector field present | yes/no |
   | writer version of the export | `0.9.2` |
   | dataset id | **only for the deployment's own public sample datasets** |
@@ -102,9 +103,11 @@ URL, or an error message — and an event that does not fit is dropped whole.
 
 - **`feature_used`** — the first use, per page load, of a feature you started
   yourself, from a fixed list (for example `render_mode` / `smoke`,
-  `figure_export`, `highlight_tool` / `lasso`). The feature's name is a fixed
+  `figure_export`, `highlight_tool` / `lasso`, `data_mapping` / `embedding`,
+  `embedding_columns` or `view_embedding`). The feature's name is a fixed
   identifier the developers assigned; nothing is read from what a control says,
-  so category names or page names you typed are never sent.
+  so category names, page names you typed and the `obsm` keys or embedding
+  names you chose are never sent.
 - **`web_vital`** — page-speed measurements, once each per page load: LCP, CLS,
   INP, FCP, TTFB and the long-task total and maximum, rounded, with a
   good / needs-improvement / poor rating.
@@ -116,8 +119,9 @@ URL, or an error message — and an event that does not fit is dropped whole.
 :::{note}
 **Loading a local file sends no name.** Its values never leave the browser, and
 on the public site only the descriptors in the table do: the loading method,
-outcome, duration, count ranges, dimensions and writer version. Its name, its id
-and the text of any error stay in the browser.
+outcome, duration, count ranges, dimensions, whether its embeddings were a
+best guess, and writer version. Its name, its id, its `obsm` keys and the text
+of any error stay in the browser.
 :::
 
 ### How to avoid it entirely

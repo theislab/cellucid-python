@@ -78,7 +78,10 @@ Restored early so you see the correct view quickly:
 - **Dimension levels and embeddings**
   - which dimension (1D/2D/3D) is active per view
   - per view, the embedding it shows when that is not its dimension's default
-    (an export can carry several embeddings per dimension)
+    (chosen under **Compare Views → Embedding**)
+  - the data mapping: the default embedding of each dimension, as set under
+    **Session › Dataset › Data mapping** (restored before the views; see
+    {doc}`../b_data_loading/13_data_mapping`)
 - **Views / snapshots**
   - layout mode (single vs grid)
   - active view selection

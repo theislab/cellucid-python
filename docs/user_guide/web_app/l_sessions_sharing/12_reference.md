@@ -104,8 +104,12 @@ have validated, applied, and committed.
 ## Exact dataset identity
 
 All six fingerprint fields must match the currently loaded dataset: a
-different source route, dataset id, cell count, variable count, data mapping,
-cell-order embedding, or cell-order digest rejects the whole restore. The digest
+different source route, dataset id, cell count, variable count, cell-order
+embedding, or cell-order digest rejects the whole restore, and so does a data
+mapping that differs in anything but its slot embeddings. A session whose slot
+embeddings differ is restored onto those embeddings when the dataset can show
+them (they are applied before the first chunk, and rolled back with the rest),
+and refused, naming the embedding, when it cannot. The digest
 is checked on the embedding `cellOrder.embedding` names, which is loaded for the
 check whichever embedding is on screen, and every check runs before anything is
 applied. Cellucid does not
@@ -136,7 +140,7 @@ including explicit empty camera-path and analysis-cache inventories:
 | Chunk id | Priority | Dataset dependent | Contains |
 |---|---:|---:|---|
 | `core/field-overlays` | eager | yes | field rename/delete registries and user-defined field metadata |
-| `core/state` | eager | yes | camera, navigation, dimension, filters, active fields, and multiview |
+| `core/state` | eager | yes | camera, navigation, dimension and per-view embedding, filters, active fields, and multiview |
 | `ui/dockable-layout` | eager | no | non-analysis floating-panel state and geometry |
 | `analysis/windows` | eager | yes | analysis window state and geometry |
 | `highlights/meta` | eager | yes | highlight pages and group metadata |
@@ -194,8 +198,8 @@ starting view, then use **Save State**.
 
 Only the chunk profile differs. The published default is read through the same
 manifest validation and the same fingerprint comparison as any other bundle, so
-it too must carry `cellOrder`, and it must have been saved on the dimension the
-dataset publishes as its default.
+it too must carry `cellOrder`, and its cell-order embedding must be one the
+dataset publishes.
 
 ## Implementation pointers
 

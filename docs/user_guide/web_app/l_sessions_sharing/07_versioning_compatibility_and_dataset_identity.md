@@ -48,11 +48,17 @@ within one of them.
 `dataMapping` names the embedding each dimension shows and the vector-field
 bindings in use, and for an AnnData source also the neighbour graph, the gene
 names, the expression matrix, and the latent space. For a prepared export these
-are fixed when the export is written; for an `.h5ad` or Zarr file opened in the
-browser they are the viewer's defaults; for an object served by the Python
+are fixed when the export is written, except which of its embeddings each
+dimension shows; for an `.h5ad` or Zarr file opened in the browser they start
+at the viewer's defaults (or its best guess) and the embeddings can be changed
+under **Session › Dataset › Data mapping**; for an object served by the Python
 package they are what the server serves.
 
-All six must equal the currently loaded dataset. This means the same files
+The four scalars and `cellOrder` must equal the currently loaded dataset. The
+data mapping must too, with one exception: the embedding of each dimension. A
+session that names other embeddings than the ones on screen restores them,
+before its views, provided this dataset can show them; otherwise it is refused
+and names the embedding. This means the same files
 loaded through a GitHub repository and through a local folder are intentionally
 different identities. Likewise, moving a remote dataset to a different
 published identifier requires a newly saved session.
@@ -76,7 +82,9 @@ shown.
 |---|---|
 | Current bundle, exact fingerprint, complete valid chunks | eager and lazy schedules finish, the transaction commits, then Cellucid reports **Session fully restored** |
 | Different source type, id, cell count, or variable count | complete rejection; the message names the saved and current cell and gene counts and asks you to open the dataset the session was saved on |
-| The session was saved with a different data mapping — another embedding in a dimension, another graph, gene names, expression matrix, latent space, or vector bindings | complete rejection; the message names the first group that differs and the array on each side, for example "This session uses embedding 'X_tsne' in 2D, and this dataset shows embedding 'X_umap' there" |
+| The session names another embedding in a dimension, one this dataset can show | the embedding is restored, then the session |
+| The session names an embedding in a dimension that this dataset does not have (or cannot plot) | complete rejection; the message names it, for example "This session uses obsm['X_tsne'] columns [0, 1] in 2D, which this dataset does not have" |
+| The session was saved with another graph, gene names, expression matrix, latent space, or vector bindings | complete rejection; the message names the group and the array on each side |
 | The embedding the session recorded its cell order on does not exist in this dataset | complete rejection; the message names the embedding |
 | Same id and same cell and gene counts, but the dataset stores its cells in a different order | complete rejection; the message says the coordinates differ from the ones the session was saved against, names both causes a digest cannot tell apart — a different order, or the same cells re-exported from a re-computed embedding — and asks you to load the version the session was saved on, or re-create the selections here |
 | A session file saved before Cellucid recorded cell order — a fingerprint with only the four scalars | complete rejection with its own message: such a file can never be confirmed, so re-create the selections and save a new session file |

@@ -378,7 +378,7 @@ quadruple fill cost and make four views genuinely four times a single view.
 ## Overlays (vector fields) and why they’re tricky
 
 Vector field overlays are conceptually simple (“animate particles along vectors”), but interact with:
-- dimension switching (vectors are dimension-specific),
+- dimension and embedding switching (vectors are bound to one embedding),
 - filtering (particles should respect visibility),
 - multiview (each view has its own dimension level and visibility),
 - performance (particle systems can be expensive).

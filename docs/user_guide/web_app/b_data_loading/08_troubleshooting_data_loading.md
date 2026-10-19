@@ -104,7 +104,7 @@ evidence anyone has. Quote it if you report the problem.
 
 Local file failures use neither shape. They quote the specific defect instead —
 for example `The selected file is not a valid HDF5/H5AD file…` or
-`No UMAP embedding this viewer can read was found in obsm…`.
+`Cellucid found nothing to plot. It needs an obsm array with one row per cell…`.
 
 ---
 
@@ -179,43 +179,26 @@ once decompressed — or one of the network causes below.
 
 ---
 
-### Symptom: “No embedding / it says no UMAP”
+### Symptom: “It says Cellucid found nothing to plot”
 
-The two browser readers word this differently, and only one of them tells you
-what your file actually contains.
-
-A **browser-selected `.h5ad`** reports:
-
-```text
-No UMAP embedding this viewer can read was found in obsm. Expected one or more
-of X_umap_1d, X_umap_2d, or X_umap_3d, or a plain X_umap of 1, 2, or 3 columns.
-Available obsm keys: <what your file has>.
-```
-
-A file with an empty `obsm` reads `Available obsm keys: (none).`
-
-A **browser-selected Zarr ZIP** reports the same requirement without the key
-list:
+A browser-selected `.h5ad` or Zarr ZIP without a UMAP is not refused: it opens
+on a best guess (see {doc}`13_data_mapping`). Only a file with no drawable
+`obsm` array at all is refused, with the same message from both readers:
 
 ```text
-AnnData Zarr requires a UMAP embedding in obsm: X_umap_1d, X_umap_2d, or
-X_umap_3d, or a plain X_umap of 1, 2, or 3 columns
+Cellucid found nothing to plot. It needs an obsm array with one row per cell
+(<n_cells>) and at least one numeric column. obsm holds: <each entry>.
 ```
 
-So for a Zarr ZIP, list the keys yourself in Python (`print(adata.obsm.keys())`)
-rather than looking for them in the message.
-
-```{figure} ../../../_static/screenshots/data_loading/fail-missing-umap-embedding.png
-:alt: A Cellucid notification listing the expected X_umap_1d, X_umap_2d and X_umap_3d keys or a plain X_umap of 1, 2, or 3 columns, and then the single obsm key the selected file actually contained, X_pca.
-:width: 760px
-
-The trailing list is the useful half: it names the `obsm` keys your file does
-have, so you can see immediately whether the embedding is missing or merely
-named differently.
-```
+The list names every `obsm` entry with its shape and, for a dense array, why it
+was not used: `X_df (table)`, `X_sparse (sparse 10,000 × 5)`,
+`spatial (10,000 × 2, NaN at cell 17)`. A file with an empty `obsm` reads
+`obsm holds: nothing.`
 
 **Likely causes**
-- AnnData is missing required `obsm` keys.
+- AnnData has no dense numeric `obsm` array with one row per cell, or every
+  such array holds a NaN, an infinity, a value too large for 32-bit floats, or
+  the same coordinates for every cell.
 - Export folder is missing its embedding files (`embeddings/` in a format-3 export).
 
 **How to confirm**
@@ -228,7 +211,9 @@ named differently.
 - Exports: check that every file `dataset_identity.json["embeddings"]` declares exists in the export folder.
 
 **Fix**
-- Compute UMAP and store it in `obsm` under a supported key, or re-export with embeddings.
+- Compute an embedding (for example `sc.tl.umap(adata)`), fix the array the message names, or re-export with embeddings.
+- If the file opens but shows the wrong embedding, choose another under
+  **Session › Dataset › Data mapping** ({doc}`13_data_mapping`).
 - Prefer exports for the smoothest experience.
 
 ---

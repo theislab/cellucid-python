@@ -96,6 +96,26 @@ Version 0.9.2 is a patch release on 0.9.1.
   read from metadata only), and `AnnDataAdapter` gains `get_data_mapping()` and
   `get_mapping_candidates()`. The web app reads it to record the mapping a
   session was saved with.
+- **Web app, data mapping**: a **Data mapping** section under Session ›
+  Dataset shows which stored arrays the dataset is drawn from. For an `.h5ad`
+  or Zarr ZIP opened in the browser, any numeric `obsm` array can fill any
+  dimension, with a column for each axis when the array is wider than the
+  dimension (`X_pca` columns 2 and 3 in 2D); a prepared dataset can switch
+  between the embeddings it was exported with. Choices are staged and applied
+  as one step that loads and checks the array first; views that follow the
+  dimension's default switch together, and the neighbour graph, gene names,
+  expression matrix, latent space and vector fields are listed read-only.
+- **Web app, per-view embeddings**: **Compare views › Dimension** gains an
+  **Embedding** menu, so each view can show its own embedding of its dimension
+  (t-SNE beside UMAP in a grid); the view badge names it (`2D · X_tsne`) and
+  changing the view's dimension returns it to the default.
+- **Web app**: a notification can carry one action button; the best-guess
+  notification uses it (**Show**) to open the Data mapping section.
+- **Web app, usage analytics**: `data_load` reports how the embeddings were
+  chosen (`mapping_origin`: `default` or `best_guess`) and how many the
+  dataset could show (`embedding_candidates`: `1`, `2-3`, `4-9`, `10+`);
+  `feature_used` counts `data_mapping` (`embedding`, `embedding_columns`,
+  `view_embedding`). No key or embedding name is ever sent.
 
 ### Changed
 
@@ -158,12 +178,31 @@ Version 0.9.2 is a patch release on 0.9.1.
   reports its id as its label (`velocity_umap`, not `Velocity (UMAP)`), as the
   format requires, and the reader now refuses any export whose vector-field
   label is not its id, from every source.
+- **Web app, data**: an `.h5ad` or Zarr ZIP without a UMAP is no longer
+  refused. It opens on the same deterministic best guess `cellucid serve`
+  makes (t-SNE, force-directed layouts, PHATE, spatial coordinates, …, and last
+  the first two columns of a wide array such as `X_pca`), marked *guessed*,
+  with a notification naming what is shown. Only a file with nothing drawable
+  is refused, with the message `cellucid serve` prints: "Cellucid found
+  nothing to plot…", listing what `obsm` holds and why each entry was not used
+  (the error code is `NO_PLOTTABLE_EMBEDDING`). Every embedding is checked
+  before it is drawn — NaN, infinity, a value outside 32-bit float range, or
+  no coordinate variation is refused naming the first cell — so a one-cell
+  file can no longer be opened. A one-dimensional `obsm` array is read as one
+  column, and a wide array is read only around the columns a view needs.
+- **Web app, vector fields**: the overlay is offered by the embedding a view
+  shows, not by its dimension: a field is drawn only in views showing the
+  embedding it is bound to, and the info line names those embeddings
+  ("Vector fields are bound to … Show one of them in this view to enable.").
 - **Web app, sessions**: a session records its data mapping and the embedding
   its cell order was taken on, and every view's embedding when it is not its
   dimension's default. Loading checks the dataset, its data mapping and the
   cell order of the embedding the session names before anything changes on
   screen, loading that embedding if another is shown — so a session saved in
   2D now opens while 3D is shown, instead of asking you to switch back. A
+  session that names other embeddings than the ones shown restores them before
+  its views when the dataset can show them, and is refused naming the
+  embedding when it cannot. A
   session saved by an earlier release is refused with a message saying so.
   User-defined categorical fields no longer store their centroids; they are
   recomputed from the codes.

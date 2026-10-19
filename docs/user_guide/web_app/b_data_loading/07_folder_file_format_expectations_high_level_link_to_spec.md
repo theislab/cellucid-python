@@ -130,18 +130,25 @@ eagerly with `anndata.read_zarr`.
 
 ### Minimum requirements (all AnnData modes)
 
-You must have at least one embedding in `obsm`:
-- `obsm["X_umap_1d"]` with shape `(n_cells, 1)`
-- `obsm["X_umap_2d"]` with shape `(n_cells, 2)`
-- `obsm["X_umap_3d"]` with shape `(n_cells, 3)`
+You must have at least one `obsm` array Cellucid can draw: dense, numeric, one
+row per cell, at least one column (a one-dimensional array is one column), with
+finite values that fit in 32-bit floats and not the same coordinates for every
+cell.
 
-A suffixed key and its column count must agree exactly, and a key that names its
-dimension always decides that dimension. When a file declares none of the three
-and carries the plain `X_umap` that `sc.tl.umap()` writes, that array is read at
-the dimension its own column count states — 1, 2, or 3 columns — so an ordinary
-Scanpy object loads as written. Any other width is refused. This holds for every
-AnnData mode: the browser file picker, `cellucid serve`, and the notebook
-viewers.
+Which array each dimension shows by default:
+- `obsm["X_umap_1d"]`, `obsm["X_umap_2d"]` and `obsm["X_umap_3d"]` fill their
+  own dimensions; a suffixed key and its column count must agree exactly.
+- When a file declares none of the three and carries the plain `X_umap` that
+  `sc.tl.umap()` writes, that array fills the dimension of its width (1, 2 or 3
+  columns), so an ordinary Scanpy object loads as written.
+- When the file has no UMAP at all, a deterministic **best guess** fills the
+  dimensions instead (t-SNE, force layouts, spatial, …, and last the first two
+  columns of a wide array such as `X_pca`). See {doc}`13_data_mapping`.
+
+This holds for every AnnData mode: the browser file picker, `cellucid serve`,
+and the notebook viewers. In the browser any other array can then be chosen
+under **Session › Dataset › Data mapping**; `cellucid serve` takes
+`--embedding-1d/--embedding-2d/--embedding-3d KEY[:c0,c1]`.
 
 ### Optional (but commonly expected)
 
@@ -174,8 +181,11 @@ Examples:
 - `drift_umap_3d`
 
 Notes:
-- Keys starting with `X_` are reserved for embeddings and ignored as vector fields.
-- The overlay dropdown shows fields available for the **current** dimension only.
+- `X_umap_1d`, `X_umap_2d` and `X_umap_3d` are embeddings, never vector fields.
+- A field `<field>_umap_<d>d` is bound to the embedding in the `d`-dimensional
+  slot, and only when that slot shows `X_umap_<d>d` or `X_umap`.
+- The overlay dropdown shows the fields bound to the embedding the view
+  **shows**; a view showing another embedding (for example a t-SNE) has none.
 
 #### Export format (`vectors/` + `dataset_identity.json`)
 
@@ -226,13 +236,17 @@ Naming and schema details:
 
 ## Common “format mismatch” problems (and what they mean)
 
-### “No embedding / no UMAP”
+### “Cellucid found nothing to plot”
 
 Meaning:
-- Cellucid could not find a supported embedding key in `obsm`, or the shape is wrong.
+- No `obsm` array can be drawn: every entry is a table, a sparse array, has
+  another row count, or holds a value that cannot be drawn. The message lists
+  each entry and why.
 
 Fix:
-- Ensure you have one of the supported keys and it has shape `(n_cells, 2)` or `(n_cells, 3)`.
+- Add an embedding (for example `sc.tl.umap(adata)`) or fix the array the
+  message names. A file without a UMAP but with any drawable array opens on a
+  best guess ({doc}`13_data_mapping`).
 
 ### “Fields list is empty”
 

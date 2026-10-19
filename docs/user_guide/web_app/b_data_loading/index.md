@@ -208,6 +208,14 @@ Visualize AnnData objects directly within Jupyter notebooks with embedded intera
 What makes a dataset “the same dataset” in Cellucid, and why it matters for sessions, sharing, and community annotation.
 :::
 
+:::{grid-item-card} {octicon}`git-compare;1.5em;sd-mr-1` Data Mapping
+:link: 13_data_mapping
+:link-type: doc
+
+Choose which `obsm` array or prepared embedding each dimension and each view
+shows, and what happens when a file has no UMAP.
+:::
+
 :::{grid-item-card} {octicon}`file;1.5em;sd-mr-1` Format Expectations
 :link: 07_folder_file_format_expectations_high_level_link_to_spec
 :link-type: doc
@@ -234,7 +242,7 @@ acceptance captures.
 :link: ../i_vector_field_velocity/index
 :link-type: doc
 
-If your dataset includes vector fields (e.g. RNA velocity), enable the overlay after loading and pick a field for the current dimension.
+If your dataset includes vector fields (e.g. RNA velocity), enable the overlay after loading and pick a field bound to the embedding the view shows.
 :::
 
 ::::

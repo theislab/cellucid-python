@@ -119,15 +119,6 @@ An `.h5ad` above the 512 MiB browser ceiling, refused before any byte is read.
 A CSV renamed to `.h5ad`. The leading bytes are checked, not the extension.
 ```
 
-```{figure} ../../../_static/screenshots/data_loading/fail-missing-umap-embedding.png
-:alt: A notification listing the expected X_umap_1d, X_umap_2d and X_umap_3d keys or a plain X_umap of 1, 2, or 3 columns, and then naming X_pca as the only obsm key present in the selected file.
-:width: 760px
-
-A valid `.h5ad` with no supported embedding. The message ends by listing the
-`obsm` keys the file does contain. The exact text is quoted in
-{doc}`03_browser_file_picker_tutorial`.
-```
-
 ```{figure} ../../../_static/screenshots/data_loading/fail-remote-server-unreachable.png
 :alt: A notification stating that the remote server could not be reached because nothing readable came back, naming both a failed connection and a wrong address as possibilities.
 :width: 776px

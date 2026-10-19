@@ -4,7 +4,7 @@ This section documents Cellucid’s **GPU particle overlay** for visualizing **p
 
 **Audience:** wet lab / non-technical, computational users, power users  
 **Time:** 10–30 minutes (depending on depth)  
-**Prerequisites:** a dataset with at least one vector field for the current dimension (1D/2D/3D)
+**Prerequisites:** a dataset with at least one vector field, and a view showing the embedding it is bound to
 
 :::{important}
 The overlay is primarily a **qualitative** visualization of directionality. Always cross-check interpretation with your underlying velocity/drift methodology and uncertainty diagnostics.

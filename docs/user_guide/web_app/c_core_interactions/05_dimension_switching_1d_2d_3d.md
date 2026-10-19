@@ -17,7 +17,12 @@ In Cellucid, “dimension” refers to which embedding dimensionality is active 
 - **2D**: a 2D embedding (UMAP/tSNE/etc)
 - **3D**: a 3D embedding (UMAP3D/etc)
 
-Datasets can provide any subset of these. If only one dimension exists, the UI hides dimension controls.
+Datasets can provide any subset of these, and more than one embedding per
+dimension (for example a UMAP and a t-SNE in 2D). Each dimension has one
+**dataset default**, set under **Session › Dataset › Data mapping**
+({doc}`../b_data_loading/13_data_mapping`); a view can show another embedding of
+its dimension (see [One embedding per view](#one-embedding-per-view)). If only
+one dimension and one embedding exist, the UI hides these controls.
 
 ---
 
@@ -25,9 +30,24 @@ Datasets can provide any subset of these. If only one dimension exists, the UI h
 
 Dimension controls live under:
 
-- **Compare Views** accordion → **Dimension** → `1D / 2D / 3D` dropdown
+- **Compare Views** accordion → **Dimension** → `1D / 2D / 3D` dropdown, and
+  under it the **Embedding** dropdown
 
-The dropdown appears only when multiple dimensions are available for the current dataset.
+The group appears when the dataset has more than one dimension, or more than one
+embedding in the selected view's dimension. With a single dimension the
+dimension dropdown is shown but disabled; the **Embedding** dropdown appears
+only when the view's dimension has more than one embedding.
+
+---
+
+## One embedding per view
+
+When the selected view's dimension has more than one embedding, **Embedding**
+lists them: first the dataset default (`UMAP (dataset default)`), then every
+other embedding of that dimension. Choosing one changes that view only, so a
+grid can show t-SNE beside UMAP. Choosing the default again makes the view
+follow **Session › Data mapping** once more. Sessions keep each view's choice.
+See {doc}`../b_data_loading/13_data_mapping`.
 
 ---
 
@@ -42,6 +62,8 @@ Use the **Dimension** dropdown to select `1D`, `2D`, or `3D` for the currently a
 In multiview, each view badge may show a dimension badge (e.g. `3D`).
 
 - Clicking the dimension badge cycles through available dimensions.
+- A view showing its own embedding names it in the badge, e.g. `2D · X_tsne`
+  (the full label is in its tooltip).
 
 This is the fastest way to set different views to different dimensions.
 
@@ -63,6 +85,9 @@ Dimension is **per view**, not strictly global:
 - a snapshot can be in 2D,
 - another snapshot can be in 1D.
 
+Changing a view's dimension — with the dropdown, the badge or a shortcut —
+returns it to that dimension's dataset default embedding.
+
 What the dropdown targets depends on your multiview context:
 
 - In **Edit selected view**, it targets the selected view.
@@ -77,7 +102,7 @@ What the dropdown targets depends on your multiview context:
 - **Point positions** change to the coordinates of the new embedding.
 - **The navigation mode**, unless you have chosen one yourself: 3D selects
   **Orbit**, 1D and 2D select **Planar** — see below.
-- Any **dimension-specific overlays** update (e.g., vector fields/velocity overlays).
+- Any **embedding-specific overlays** update (e.g., vector fields/velocity overlays, which are bound to one embedding).
 - Some derived rendering structures (centroids, spatial indices) may rebuild; large datasets can take a moment.
 
 ### Usually does not change

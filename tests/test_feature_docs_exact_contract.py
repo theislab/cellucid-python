@@ -450,12 +450,14 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
     )
     for exact in (
         "The session stores six fields",
-        "All six must equal the currently loaded dataset",
+        "The four scalars and `cellOrder` must equal the currently loaded dataset",
+        "The data mapping must too, with one exception: the embedding of each dimension",
         "`cellOrder`: a record of *which ordering*",
         "`dataMapping`: which stored arrays the dataset was shown with",
         "exactly 1, 2, or 3",
         "Restoring is *verify, then apply*",
-        "The session was saved with a different data mapping",
+        "The session names another embedding in a dimension, one this dataset can show",
+        "The session was saved with another graph, gene names, expression matrix, latent space, or vector bindings",
         "stores its cells in a different order",
         "A session file saved before Cellucid recorded cell order",
         "a fingerprint with `cellOrder` but no `dataMapping`",
@@ -469,6 +471,7 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
         "accepts a fingerprint **with or without** `cellOrder`",
         "A different embedding dimension is on screen",
         "The session stores five fields",
+        "All six must equal the currently loaded dataset",
     ):
         assert retired not in identity
     for exact in (

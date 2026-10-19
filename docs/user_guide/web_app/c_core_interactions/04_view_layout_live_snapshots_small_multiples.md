@@ -39,13 +39,15 @@ forces the live, single-view layout; see
 
 ## Create a reliable comparison
 
-1. In the live view, choose the dimension, navigation mode, coloring, category
-   transparency, and filters you want to preserve.
+1. In the live view, choose the dimension (and, where it has several, the
+   embedding), navigation mode, coloring, category transparency, and filters
+   you want to preserve.
 2. Frame the cells of interest.
 3. Click `Keep view`.
 4. Leave `Locked Cam` on for the same-framing comparison.
 5. Select the live or kept badge, choose `Edit selected view`, and change that
-   panel's field or filters.
+   panel's field, filters or **Embedding** (for example t-SNE in one panel and
+   UMAP in the other).
 6. Return to `Grid compare`.
 
 After step 3, the new snapshot is active and the layout is `Grid compare`.
@@ -59,7 +61,8 @@ A snapshot captures the selected view's:
 - active categorical or continuous field and its rendered colors;
 - category transparency and filter-derived visibility;
 - continuous/outlier filter state and filter summary;
-- dimension and dimension-specific positions;
+- dimension, the embedding it shows (the dataset default or its own, see
+  {doc}`../b_data_loading/13_data_mapping`) and that embedding's positions;
 - camera state and navigation mode;
 - centroid render state associated with that view.
 
@@ -119,7 +122,8 @@ Each badge contains:
 - a `⌖` indicator for the currently focused camera when cameras are unlocked;
 - a view label;
 - a clickable `1D`, `2D`, or `3D` badge when another dataset dimension is
-  available;
+  available; a view showing its own embedding names it there, e.g.
+  `2D · X_tsne`;
 - a clickable `Orb`, `Pan`, or `Fly` badge when cameras are unlocked; it cycles
   **Orbit → Planar → Free-fly**;
 - `×` when that view can be removed.
@@ -146,7 +150,8 @@ A matching-dataset `.cellucid-session` saves and restores:
 - `Grid compare` versus `Edit selected view`;
 - active view and whether live is hidden;
 - camera-lock state plus live/per-snapshot cameras;
-- every snapshot's field, filters, dimension, label, and navigation state.
+- every snapshot's field, filters, dimension, embedding, label, and navigation
+  state.
 
 Restoration recreates the snapshot graph rather than storing GPU buffers. The
 dataset itself is never embedded in the session. See
