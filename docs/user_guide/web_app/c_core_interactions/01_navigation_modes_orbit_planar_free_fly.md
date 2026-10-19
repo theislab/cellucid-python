@@ -200,6 +200,9 @@ In **Compare Views → Navigation → Free-fly**:
 - **Move speed**: movement speed in “scene units per second”
 - **Invert look axes**: flips mouse look direction
 - **Projectile shooting** (optional demo feature): enables click/hold-to-charge projectiles
+  that bounce off cells and off the backdrop: the walls of the **Grid**
+  background, or the floor of a **Studio** background under a 3D view. With
+  neither, or past the edge of the Studio floor, they fall away.
 - **Capture pointer**: a checkbox, not a button. Ticking it asks the browser for
   pointer lock straight away; if the browser wants a gesture on the canvas
   first, clicking the canvas asks again. Press `Esc` to release.

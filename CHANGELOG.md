@@ -340,6 +340,10 @@ Version 0.9.2 is a patch release on 0.9.1.
   Every shader now pins a vertex attribute to location 0, which Firefox
   otherwise emulates per vertex. Projectiles no longer allocate new vertex
   arrays every frame.
+- **Web app, projectiles**: projectiles bounce off the **Studio** floor under a
+  3D view, as they bounce off the grid's walls, and land on it instead of
+  falling through. A projectile that had come to rest against a cell no longer
+  falls through the grid's floor either.
 - **Python sessions**: reading a session now requires each user-defined
   field's `normalizedDims` to name exactly the dimensions in its
   `centroidsByDim`, as the web app writes them.
