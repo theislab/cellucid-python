@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from _repository_source import repository_source_environment
 
 import cellucid
 
@@ -65,6 +66,7 @@ def _run_mypy_on_consumer(source: str, tmp_path: Path) -> str:
         capture_output=True,
         text=True,
         cwd=consumer_dir,
+        env=repository_source_environment(),
         check=False,
     )
     return completed.stdout + completed.stderr
@@ -117,6 +119,7 @@ def test_importing_cellucid_stays_lazy() -> None:
     )
     completed = subprocess.run(
         [sys.executable, "-c", probe],
+        env=repository_source_environment(),
         capture_output=True,
         text=True,
         check=True,

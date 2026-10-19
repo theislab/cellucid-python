@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 import pytest
+from _repository_source import repository_source_environment
 
 from cellucid.cli import _detect_data_format
 from cellucid.prepare_data import prepare
@@ -87,7 +88,7 @@ def _live_export_lock(target: Path) -> Iterator[None]:
             ),
             str(target),
         ],
-        env=os.environ.copy(),
+        env=repository_source_environment(),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -156,7 +157,7 @@ def _attempt_prepare_in_subprocess(target: Path) -> subprocess.CompletedProcess[
             ),
             str(target),
         ],
-        env=os.environ.copy(),
+        env=repository_source_environment(),
         capture_output=True,
         text=True,
         timeout=10,
@@ -183,7 +184,7 @@ def _attempt_lock_in_subprocess(target: Path) -> subprocess.CompletedProcess[str
             ),
             str(target),
         ],
-        env=os.environ.copy(),
+        env=repository_source_environment(),
         capture_output=True,
         text=True,
         timeout=10,
@@ -206,7 +207,7 @@ def _leave_dead_export_lock(target: Path) -> None:
             ),
             str(target),
         ],
-        env=os.environ.copy(),
+        env=repository_source_environment(),
         capture_output=True,
         text=True,
         check=False,
@@ -215,8 +216,7 @@ def _leave_dead_export_lock(target: Path) -> None:
 
 
 def _crash_export_at_rename(target: Path, phase: str) -> None:
-    environment = os.environ.copy()
-    environment["PYTHONIOENCODING"] = "cp1252"
+    environment = repository_source_environment(PYTHONIOENCODING="cp1252")
     completed = subprocess.run(
         [
             sys.executable,

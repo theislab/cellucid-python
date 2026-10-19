@@ -123,6 +123,8 @@ known-first-party = ["cellucid"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Tests import this checkout's cellucid, never another installed copy.
+pythonpath = ["src"]
 addopts = "-v --tb=short"
 
 [tool.mypy]

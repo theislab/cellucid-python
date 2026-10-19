@@ -5,10 +5,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _repository_source import repository_source_environment
+
 
 def _run_with_cp1252(script: str, *arguments: str) -> subprocess.CompletedProcess[bytes]:
-    environment = os.environ.copy()
-    environment["PYTHONIOENCODING"] = "cp1252:strict"
+    environment = repository_source_environment(PYTHONIOENCODING="cp1252:strict")
     return subprocess.run(
         [sys.executable, "-c", script, *arguments],
         env=environment,

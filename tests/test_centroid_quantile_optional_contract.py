@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from _repository_source import repository_source_environment
 
 from cellucid.prepare_data import prepare
 from cellucid.prepare_data._generation import _prepare_generation
@@ -131,6 +132,7 @@ def test_a_consumer_type_checks_the_documented_none_call(tmp_path: Path) -> None
         capture_output=True,
         text=True,
         cwd=consumer_dir,
+        env=repository_source_environment(),
         check=False,
     )
     output = completed.stdout + completed.stderr
