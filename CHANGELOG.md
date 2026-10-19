@@ -99,6 +99,10 @@ Version 0.9.2 is a patch release on 0.9.1.
 - **Web app, onboarding**: closing the welcome dialog, by any path, no longer
   focuses the **Sample dataset** dropdown; **Choose a dataset** opens the
   **Session** panel, and from the keyboard moves focus to its heading.
+- **Web app, data loading**: dataset catalogs, identities and manifests are
+  revalidated on every load, so for a few minutes after a dataset is updated
+  a stale cached copy can no longer clash with the new files (for example a
+  sample view failing with a missing control).
 - **Web app, pointer**: hover, click and selection read the camera as it is,
   not as the last frame drew it, so a pointer read right after the camera
   moved no longer lands on the previous picture.
