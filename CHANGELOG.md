@@ -16,7 +16,7 @@ Version 0.9.2 is a patch release on 0.9.1.
   default) shows a card for the cell under the pointer: its value on the
   field the view is coloured by, where that sits on the colour scale, and for
   a category how many of its cells are visible in that view (what selecting it
-  would pick); **Other categories** adds the cell's labels in other loaded
+  would pick); **Show recent fields** adds the cell's labels in other loaded
   fields. It works in every view of a grid; press and hold on a touch screen.
   A lookup never loads a field or redraws the plot (1M cells: 1.4 ms mean).
 - **Web app, citing and sharing**: a **Cite** dialog (APA and BibTeX, read

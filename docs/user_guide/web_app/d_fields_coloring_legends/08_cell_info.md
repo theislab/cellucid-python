@@ -37,7 +37,7 @@ From top to bottom:
   categorical field: exactly the cells that selecting the category there would
   pick, so filters, hidden categories and the outlier filter are all taken into
   account. In a grid of views, the name of the view the pointer is over.
-- **The cell's other categories**, only when **Other categories** (under
+- **The cell's other categories**, only when **Show recent fields** (under
   **Show cell info**) is ticked: up to four other categorical fields that are
   already loaded, each with its colour dot. A cell with no value for a field
   shows *missing*.
@@ -55,21 +55,26 @@ The card is designed to cost nothing you can see, even on millions of cells:
   memory. A field that is not loaded is not shown, rather than fetched.
 - **It never redraws the plot.** The card is a page element moved over the
   canvas; the scene is not rendered again for it.
-- **At most one lookup per frame.** Moving the pointer only records where it
-  is. The cell under it is looked up once per animation frame, and not again
-  until the pointer has moved by a couple of pixels.
+- **A lookup only when the pointer rests.** Moving the pointer only records
+  where it is; the cell is looked up once the pointer has been still for about
+  60 ms, like a tooltip. Sweeping across the plot does no work at all, so frame
+  times while moving are the same with the card on or off.
 - **Nothing while the camera moves.** During a drag, a touch gesture, a held
   navigation key, inertia or a zoom that is still easing, there is no lookup
   and no card. It returns when the camera settles.
-- **The index is built up front where that is cheap.** On a large view the
-  lookup walks a spatial index. Up to two million cells it is built in idle
-  time (about 0.1 s at one million), so the first hover does not pause. Above
-  that, building it blocks for a moment (about 1.5 s at ten million), so it is
-  built by the first hover instead of slowing every load. Level of detail and
-  frustum culling use the same index, so if either is already on there is
-  nothing left to build.
-- **Counts are made once.** The per-category count is one pass over the view's
-  cells, kept until that view's colouring or visibility changes.
+- **The index is built in the background.** On a view of 250,000 cells or
+  more the lookup walks a spatial index. It is built in a worker, off the main
+  thread, so the page never pauses for it (on ten million cells the first hover
+  answers in about a millisecond and the card appears once the index is ready).
+  Level of detail, frustum culling and the selection tools use the same index.
+  The worker needs its own copy of the positions, so above 256 MB of positions
+  (about 21 million cells in 3D, 32 million in 2D) no background build is made
+  and the card appears on that view only once one of those features has built
+  the index.
+- **Counts are made in idle time.** The per-category count is one pass over the
+  view's cells (about 25 ms at ten million), run when the page is idle rather
+  than on a hover, and kept until that view's colouring or visibility changes.
+  The number appears on the card a moment after the card itself.
 
 See {doc}`../n_benchmarking_performance/02_performance_considerations_what_gets_slow_and_why`
 for what does make a large view slow.
