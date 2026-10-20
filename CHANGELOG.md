@@ -5,10 +5,25 @@ All notable changes to Cellucid will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.9.2]
+## [0.9.3]
 <!-- CELLUCID_VERSION -->
 
-Version 0.9.2 is a patch release on 0.9.1.
+Version 0.9.3 is a patch release on 0.9.2. It introduces export format 3, so
+exports written by 0.9.2 or earlier must be prepared again: a viewer reads
+exactly one format. The main changes are:
+
+- **Export format 3**: any number of embeddings per dimension, each with a
+  label and its source columns; several gene-name sets; vector fields bound to
+  an embedding id; centroids keyed by embedding.
+- **Data mapping**: choose, per dataset, which embeddings are on and which one
+  each dimension opens on, the neighbour graph, the gene names and expression
+  matrix, the latent space for outlier filters, and the vector-field bindings,
+  in the browser, from `cellucid serve` and from a notebook.
+- **Several representations at once**: every view shows one of the enabled
+  embeddings of any dimension, with its own camera and navigation mode.
+- **Rendering**: points are stored in the draw order of their spatial tree,
+  built in a worker; levels of detail draw a prefix, culling draws tree-node
+  ranges, and colours are gathered on the GPU.
 
 ### Added
 
@@ -726,9 +741,12 @@ Version 0.9.2 is a patch release on 0.9.1.
   width (a plot beside the sidebar is often half a pixel wider), and the
   browser then rescaled every frame by a fraction of a pixel, which softened
   one-pixel lines and dots.
-- **Python sessions**: reading a session now requires each user-defined
-  field's `normalizedDims` to name exactly the dimensions in its
-  `centroidsByDim`, as the web app writes them.
+
+## [0.9.2] - 2026-10-17
+
+Version 0.9.2 is a patch release on 0.9.1.
+
+### Fixed
 
 - A refused upload or event now reaches the client as the status the server sent.
   Every early refusal of a POST -- an expired or unknown session-bundle request, bad
@@ -946,6 +964,7 @@ declared `0.0.9`. Release 0.9.1 restores one exact version across both systems.
   - Jupyter integration (`show()`, `show_anndata()`)
 - Export functionality for web deployment
 
+[0.9.3]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.3
 [0.9.2]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.2
 [0.9.1]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.1
 [0.0.9]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.0

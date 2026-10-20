@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cellucid"
-version = "0.9.2"  # CELLUCID_VERSION
+version = "0.9.3"  # CELLUCID_VERSION
 description = "Interactive Single-Cell Data Visualization"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"

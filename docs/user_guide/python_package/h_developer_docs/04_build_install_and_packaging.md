@@ -18,7 +18,7 @@ Key sections:
 
 - `[project]`
   - `name = "cellucid"`
-  - `version = "0.9.2"` (beta) <!-- CELLUCID_VERSION -->
+  - `version = "0.9.3"` (beta) <!-- CELLUCID_VERSION -->
   - runtime dependencies (`numpy`, `pandas`, `scipy`, `anndata`, `ipython`, `jupyter-server-proxy`)
 - `[project.optional-dependencies]`
   - `dev`: `pytest`, `ruff`, `mypy`, `pre-commit`

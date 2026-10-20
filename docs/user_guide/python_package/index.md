@@ -4,12 +4,12 @@ This guide documents the **`cellucid` Python package**: how to prepare datasets,
 
 If you’re looking for the end-user web UI docs (loading data, filtering, analysis, annotation), start with {doc}`../web_app/index`.
 
-:::{admonition} Active package version — 0.9.2
+:::{admonition} Active package version — 0.9.3
 :class: note
 <!-- CELLUCID_VERSION -->
 
-Version **0.9.2** is the current Cellucid Python source and documentation <!-- CELLUCID_VERSION -->
-version and the current PyPI release. The
+Version **0.9.3** is the current Cellucid Python source and documentation <!-- CELLUCID_VERSION -->
+version. The
 [PyPI package page](https://pypi.org/project/cellucid/) is authoritative for
 registry availability. Check an installed environment with
 `python -c "import cellucid; print(cellucid.__version__)"`; the
