@@ -133,7 +133,7 @@ respectively.
 
 :::{note}
 Every published count above is the `stats.n_genes` value in that sample’s own
-`exports/<id>/dataset_identity.json`, which is also the number of entries in its
+`exports-v3/<id>/dataset_identity.json`, which is also the number of entries in its
 `var_manifest.json` and the number of payload files in its `var/` directory. The
 full breakdown is recorded as `gene_naming.census` in each sample’s
 `sources/<id>.json` in

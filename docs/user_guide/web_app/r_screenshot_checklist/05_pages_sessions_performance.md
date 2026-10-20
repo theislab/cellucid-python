@@ -619,7 +619,7 @@ longer a reason to refuse it. Details under
      when you can see that nothing was published.
      `session-cancel-dismissed.png` · `:width: 400px`.
   2. **Official default rejected** (final section): download
-     `exports/pancreas/default.cellucid-session`, choose Load State, supply it.
+     `exports-v3/pancreas/default.cellucid-session`, choose Load State, supply it.
      Crop the red toast in `#notification-center`. Cursor: no. The property that
      makes it get refused is the five-chunk profile the manifest names
      `published-default` (`PUBLISHED_DEFAULT_STATIC_CHUNK_PROFILE` in the
@@ -1064,7 +1064,7 @@ that instruction and none of them shows it.
    comment about why claiming otherwise would be an integrity failure of its own.
 
 5. ~~**A stale SHA-256 ships in {doc}`/user_guide/web_app/l_sessions_sharing/04_official_sample_states`.**~~ **Done** —
-   the page shows the field's shape and points at `exports/datasets.json`. The
+   the page shows the field's shape and points at `exports-v3/datasets.json`. The
    general rule this settled: **do not copy a regenerated value into prose.**
    Digests, preset byte sizes, and source line numbers all live somewhere that
    is rebuilt without the docs being touched; cite the file, the symbol, or the

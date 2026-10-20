@@ -117,7 +117,7 @@ here, because they change whenever the dataset is regenerated. Read them from
 that file if you are verifying a build.
 
 The environment — the exact Python and scientific-package set in
-`requirements-build.lock` — and the exact Cellucid 0.9.2 producer-source digest, over
+`requirements-build.lock` — and the exact Cellucid 0.9.3 producer-source digest, over
 the modules the export path executes, are pinned once for all five samples in
 `sources/build-environment.json`.
 

@@ -5,8 +5,8 @@
 **Goal:** install `cellucid`, verify the CLI, and avoid the most common environment pitfalls
 
 :::{note}
-**Active package version: 0.9.3.** Version 0.9.3 is the release these pages <!-- CELLUCID_VERSION -->
-document. If the [PyPI package page](https://pypi.org/project/cellucid/) lists
+**Active package version: 0.9.3.** Version 0.9.3 is the current PyPI <!-- CELLUCID_VERSION -->
+release. If the [PyPI package page](https://pypi.org/project/cellucid/) lists
 0.9.3, the normal install and pin commands below retrieve it. Until then, they <!-- CELLUCID_VERSION -->
 resolve only to versions available from PyPI; install the active source
 straight from the official GitHub repository (see **From the official source

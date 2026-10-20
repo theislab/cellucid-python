@@ -9,7 +9,7 @@ If you’re looking for the end-user web UI docs (loading data, filtering, analy
 <!-- CELLUCID_VERSION -->
 
 Version **0.9.3** is the current Cellucid Python source and documentation <!-- CELLUCID_VERSION -->
-version. The
+version and the current PyPI release. The
 [PyPI package page](https://pypi.org/project/cellucid/) is authoritative for
 registry availability. Check an installed environment with
 `python -c "import cellucid; print(cellucid.__version__)"`; the

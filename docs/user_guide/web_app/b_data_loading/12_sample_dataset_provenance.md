@@ -4,7 +4,7 @@ Cellucid's built-in sample picker offers five prepared datasets, published in
 [`cellucid-datasets`](https://github.com/theislab/cellucid-datasets). Each is a
 real export of a published study, and each names its upstream study, that
 study's URL, and the citation to use in its own
-`exports/<id>/dataset_identity.json`, under `source`.
+`exports-v3/<id>/dataset_identity.json`, under `source`.
 
 All five carry the same reproducibility guarantee. Each is rebuilt by a pinned
 build script that verifies its source file, its environment, the exporter's own
@@ -97,14 +97,14 @@ in is recorded once, in `sources/build-environment.json`, together with
 
 The environment and producer checks run before the build reads a source,
 touches the network, or writes output. The new generation is written into a
-staging directory beside `exports/<id>/`, validated against everything
+staging directory beside `exports-v3/<id>/`, validated against everything
 `sources/<id>.json` pins, and only then swapped into place. A rebuild that
 differed anywhere stops instead of publishing. The dataset repository's
 contract suite re-measures every published directory against the same
 generation digest, so a generation that changes under the repository fails
 there too.
 
-The generation digest covers every file in `exports/<id>/` except the two
+The generation digest covers every file in `exports-v3/<id>/` except the two
 publication sidecars, `default.cellucid-session` and `state-snapshots.json`.
 Those advertise and hold the reviewed starting view
 ({doc}`../l_sessions_sharing/04_official_sample_states`); the session file's
@@ -130,7 +130,7 @@ can be republished without moving a generation pin.
 ## What to do with this
 
 - **Citing a sample.** Cite the upstream study, not Cellucid and not the
-  dataset repository. Each `exports/<id>/dataset_identity.json` carries the
+  dataset repository. Each `exports-v3/<id>/dataset_identity.json` carries the
   study name, its URL, and the citation text under `source`. To cite Cellucid
   itself, see {doc}`/citing`.
 - **Confirming you hold the published generation.** Compare the directory you
