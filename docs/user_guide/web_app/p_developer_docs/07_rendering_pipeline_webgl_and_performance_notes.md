@@ -151,11 +151,15 @@ interleaved record at 5M points.
     of 0.25–1.00× the canvas, never more than 2560×1440 pixels
     (`MAX_SMOKE_TARGET_PIXELS`), and upsamples it with an alpha-gated
     bilateral composite. The noise volumes are 32³–128³, generated on the GPU
-    a few slices per scheduling turn (`gpu-noise-generator.js`). Each slice
-    batch ends with a fence and the next waits for it, and the batch halves
-    whenever the GPU has not finished one within a turn (doubling back, up to
-    its caps, when it has), so a slow or software renderer never has seconds
-    of noise work queued in front of the frames and input that follow. The ray-start jitter
+    over a few scheduling turns (`gpu-noise-generator.js`). A turn runs every
+    cheap setup step that fits its time budget and stops at a program still
+    compiling; each slice batch is a turn of its own, ending with a fence the
+    next waits for. The batch doubles back (up to its caps) when the GPU
+    finished it by the next turn, keeps its size when it was one turn late
+    (the renderer's latency, whatever the batch), and halves only when it
+    outlasted two turns, so a slow or software renderer never has seconds of
+    noise work queued in front of the frames and input that follow, and is
+    not left drawing one slice per two frames. The ray-start jitter
     is a fixed blue-noise tile, so a still camera with `Animation speed` 0
     produces identical frames, and `SmokeRenderer.needsContinuousFrames()`
     then lets the viewer stop drawing.
