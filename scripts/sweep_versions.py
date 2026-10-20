@@ -352,8 +352,8 @@ DECLARATIONS: tuple[Declaration, ...] = (
         rf"the exact Cellucid {VERSION} producer-source digest",
         ARTIFACT,
         "describes the exporter release recorded in "
-        "cellucid-datasets/sources/pancreas.json; it changes when the Pancreas "
-        "export is rebuilt, not at a bump",
+        "cellucid-datasets/sources/build-environment.json; it changes when the "
+        "sample generations are rebuilt, not at a bump",
     ),
     # -- cellucid-r ----------------------------------------------------------
     Declaration(
@@ -390,10 +390,10 @@ DECLARATIONS: tuple[Declaration, ...] = (
     # -- cellucid-datasets ---------------------------------------------------
     Declaration(
         "cellucid-datasets",
-        "sources/pancreas.json",
+        "sources/build-environment.json",
         r'(?s)"cellucid_producer": \{.*?"version": "([^"]+)"',
         ARTIFACT,
-        "exporter release recorded in the Pancreas build provenance",
+        "exporter release every sample generation is built with",
     ),
     Declaration(
         "cellucid-datasets",
