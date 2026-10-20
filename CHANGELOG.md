@@ -417,6 +417,11 @@ Version 0.9.2 is a patch release on 0.9.1.
 - **Web app, Studio backgrounds**: the floor's rules and the dots are lighter
   and finer (major rules no thicker than minor ones), so the stage reads as a
   calm, clean surface behind the data.
+- **Web app, rendering**: the plot is drawn at exactly the screen pixels it
+  covers. Its drawing buffer used to be rounded down from a fractional layout
+  width (a plot beside the sidebar is often half a pixel wider), and the
+  browser then rescaled every frame by a fraction of a pixel, which softened
+  one-pixel lines and dots.
 - **Python sessions**: reading a session now requires each user-defined
   field's `normalizedDims` to name exactly the dimensions in its
   `centroidsByDim`, as the web app writes them.
