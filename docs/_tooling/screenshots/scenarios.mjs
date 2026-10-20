@@ -12,7 +12,7 @@
 //   name        File stem. The emitted file is `<topic>/<name>.png`.
 //   describes   One sentence. Becomes the `:alt:` text, so it must describe
 //               what is visible, not what the reader should conclude.
-//   dataset     Dataset id in `cellucid-datasets/exports/datasets.json`.
+//   dataset     Dataset id in `cellucid-datasets/exports-v3/datasets.json`.
 //   query       Extra launch parameters, merged into the URL.
 //   keepWelcome Leave the first-run overlay up (default: dismiss it).
 //   steps       Ordered actions. See `applyStep` in `capture.mjs` for the

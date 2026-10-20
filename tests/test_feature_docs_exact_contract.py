@@ -315,8 +315,8 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
     # watching a view appear and finding nothing that documents it, so the page
     # has to name all five and this loop has to cover all five.
     for dataset_id in ("suo", "garcia", "he", "kanemaru", "pancreas"):
-        assert f"exports/{dataset_id}/default.cellucid-session" in presets
-        assert f"exports/{dataset_id}/state-snapshots.json" in presets
+        assert f"exports-v3/{dataset_id}/default.cellucid-session" in presets
+        assert f"exports-v3/{dataset_id}/state-snapshots.json" in presets
 
     for exact in (
         '{ "states": ["default.cellucid-session"] }',
@@ -346,7 +346,7 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
         # stale silently. The page has to send readers to the catalog instead.
         "Read the current value out of the catalog",
         "all five generation directories",
-        "| Kanemaru | `exports/kanemaru/default.cellucid-session`",
+        "| Kanemaru | `exports-v3/kanemaru/default.cellucid-session`",
     ):
         assert exact in normalized
 
@@ -363,7 +363,7 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
         # The published presets are regenerated with the reviewed view and the
         # session format, so each digest the page has ever quoted is dead the
         # moment the next generation is published. These are the ones it has
-        # carried; the example must track `exports/datasets.json`, never a
+        # carried; the example must track `exports-v3/datasets.json`, never a
         # value copied out of an earlier revision of this page.
         "5581569118eaa992",
         "20769ea20075a212",

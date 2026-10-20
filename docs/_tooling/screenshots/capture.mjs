@@ -896,7 +896,7 @@ async function main() {
   const ports = await resolvePorts();
   const { chromium } = require('playwright');
 
-  const exportsRoot = path.join(DATASETS_REPO, 'exports');
+  const exportsRoot = path.join(DATASETS_REPO, 'exports-v3');
   const exportsServer = await startExportsServer(exportsRoot, ports.exportsPort);
   const appServer = await startApplicationServer(ports);
   const browser = await chromium.launch();

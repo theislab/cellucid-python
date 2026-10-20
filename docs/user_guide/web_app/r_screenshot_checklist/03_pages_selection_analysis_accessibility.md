@@ -40,7 +40,7 @@ Read-only pass; the only file written is this one.
    IDs (`ENSG00000158488.16`, `ENSG00000017483.16`). No published sample dataset
    contains a single `ENSG` name any more — `suo`, `garcia`, `he`, `kanemaru` publish
    HGNC symbols and `pancreas` publishes MGI symbols (verified against
-   `cellucid-datasets/exports/*/var_manifest.json`; ENSG count = 0 in all five).
+   `cellucid-datasets/exports-v3/*/var_manifest.json`; ENSG count = 0 in all five).
    Both shots predate the gene-symbol switch.
 3. **{doc}`/user_guide/web_app/h_analysis/06_analysis_mode_differential_expression_de` has no figure at all** — confirmed,
    the file contains zero `{figure}` directives. DE is the flagship statistical feature,

@@ -168,7 +168,7 @@ All forty confirmed present in `cellucid/index.html`:
 
 ### Dataset facts
 
-Read from `cellucid-datasets/exports/*/dataset_identity.json`:
+Read from `cellucid-datasets/exports-v3/*/dataset_identity.json`:
 
 | Sample id | Cells | Genes | Dimensions | Default | Connectivity | Useful fields |
 | --- | ---: | ---: | --- | ---: | --- | --- |

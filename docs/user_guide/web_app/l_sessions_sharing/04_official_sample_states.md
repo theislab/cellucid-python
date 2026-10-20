@@ -61,11 +61,11 @@ Every official export generation contains both sidecars:
 
 | Built-in sample | State bundle | Manifest |
 | --- | --- | --- |
-| Suo | `exports/suo/default.cellucid-session` | `exports/suo/state-snapshots.json` |
-| Garcia | `exports/garcia/default.cellucid-session` | `exports/garcia/state-snapshots.json` |
-| He | `exports/he/default.cellucid-session` | `exports/he/state-snapshots.json` |
-| Kanemaru | `exports/kanemaru/default.cellucid-session` | `exports/kanemaru/state-snapshots.json` |
-| Pancreas | `exports/pancreas/default.cellucid-session` | `exports/pancreas/state-snapshots.json` |
+| Suo | `exports-v3/suo/default.cellucid-session` | `exports-v3/suo/state-snapshots.json` |
+| Garcia | `exports-v3/garcia/default.cellucid-session` | `exports-v3/garcia/state-snapshots.json` |
+| He | `exports-v3/he/default.cellucid-session` | `exports-v3/he/state-snapshots.json` |
+| Kanemaru | `exports-v3/kanemaru/default.cellucid-session` | `exports-v3/kanemaru/state-snapshots.json` |
+| Pancreas | `exports-v3/pancreas/default.cellucid-session` | `exports-v3/pancreas/state-snapshots.json` |
 
 The manifest has one exact root, `states`, and one exact entry:
 
@@ -74,7 +74,7 @@ The manifest has one exact root, `states`, and one exact entry:
 ```
 
 The matching entry in
-[`exports/datasets.json`](https://github.com/theislab/cellucid-datasets/blob/main/exports/datasets.json)
+[`exports-v3/datasets.json`](https://github.com/theislab/cellucid-datasets/blob/main/exports-v3/datasets.json)
 advertises `state_manifest` and `state_sha256` as a pair. Each entry has this
 shape:
 
@@ -98,7 +98,7 @@ prose is correct only until the next generation is published, and it then
 becomes a value a reader can check against and be misled by.
 
 You can inspect all five generation directories in the
-[`cellucid-datasets` exports](https://github.com/theislab/cellucid-datasets/tree/main/exports).
+[`cellucid-datasets` exports](https://github.com/theislab/cellucid-datasets/tree/main/exports-v3).
 For what each generation is an export of, what to cite, and how far its build is
 pinned, see {doc}`../b_data_loading/12_sample_dataset_provenance`.
 

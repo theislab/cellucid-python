@@ -404,7 +404,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
     ),
     Declaration(
         "cellucid-datasets",
-        "exports/*/dataset_identity.json",
+        "exports-v3/*/dataset_identity.json",
         r'"cellucid_data_version": "([^"]+)"',
         ARTIFACT,
         "stamped when the export was built; older exports keep older values",
@@ -456,7 +456,7 @@ def tracked_files(root: Path) -> frozenset[str] | None:
     """Repository-relative paths in ``root``'s Git index, or None if unreadable.
 
     The sweep reads only these. A working-tree walk would also pick up ignored
-    scratch directories — `cellucid-datasets/exports/_*/` is ignored precisely
+    scratch directories — `cellucid-datasets/exports-v3/_*/` is ignored precisely
     so local experiments stay local — and a release verdict that depends on
     uncommitted files is not reproducible from a clean checkout.
     """

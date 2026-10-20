@@ -119,7 +119,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
   `synthetic-trajectory-1d`), and `broken-exports/` (9 deliberately invalid
   exports: `corrupt-payload`, `mismatched-manifest`, `missing-payload`,
   `truncated-catalog`, `wrong-format-catalog`, and mixed variants).
-- Catalog sample ids confirmed in `cellucid-datasets/exports/datasets.json`:
+- Catalog sample ids confirmed in `cellucid-datasets/exports-v3/datasets.json`:
   `suo` (default), `garcia`, `he`, `kanemaru`, `pancreas`.
 
 ---
@@ -836,7 +836,7 @@ terminal and Jupyter captures:
   sample in Build 2026-07-27.1"; the app ships `2026-07-27.24`. Cross-cutting
   note 3. Every numeric claim I could check against
   `cellucid-datasets` holds: `pancreas` is present in
-  `cellucid-datasets/exports/datasets.json` with `suo` as `default`, matching
+  `cellucid-datasets/exports-v3/datasets.json` with `suo` as `default`, matching
   line 7 ("The catalog id is exactly `pancreas`; Suo remains the catalog
   default").
 
@@ -911,7 +911,7 @@ terminal and Jupyter captures:
      Crop to `#dataset-select` expanded showing `suo`, `garcia`, `he`,
      `kanemaru`, `pancreas` with their cell counts. Cursor: no.
      `_static/screenshots/data_loading/sample-catalog-five-entries.png`.
-     Verified against `cellucid-datasets/exports/datasets.json`, which lists
+     Verified against `cellucid-datasets/exports-v3/datasets.json`, which lists
      exactly those five with `"default": "suo"`.
   2. Nothing else. The page's substance is a reproducibility argument about
      digests, environments, and what is *not* knowable; there is no screen that

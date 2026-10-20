@@ -2,7 +2,7 @@
 
 Audited read-only against `cellucid/assets/js` (session subsystem, notification
 center, `index.html` markup), `cellucid/tests/browser`, and
-`cellucid-datasets/exports`. The app was **not** launched and no benchmark was
+`cellucid-datasets/exports-v3`. The app was **not** launched and no benchmark was
 run (a sibling unit holds the rendering-measurement lock). Every DOM id, button
 label, accordion title, and user-visible string quoted below was read out of the
 source, not inferred.
@@ -79,7 +79,7 @@ sequence is a single scripted Playwright run producing 14 captures. Steps 6 and
 | Parameter | Value | Why it is fixed |
 |---|---|---|
 | Viewport | 1440 × 900 CSS px, `deviceScaleFactor: 2` | Floating panels are clamped to the viewport on restore ({doc}`/user_guide/web_app/l_sessions_sharing/09_edge_cases`), so a BEFORE/AFTER pair captured at different sizes is not a valid comparison. |
-| Dataset | `#dataset-select` → option value `dataset:local-demo:pancreas` | 3,696 cells / 3,753 genes — loads in seconds; publishes 1D + 2D + 3D embeddings with `default_dimension: 3`; recognisable endocrinogenesis trajectory for a wet-lab reader. Verified in `cellucid-datasets/exports/pancreas/dataset_identity.json`. |
+| Dataset | `#dataset-select` → option value `dataset:local-demo:pancreas` | 3,696 cells / 3,753 genes — loads in seconds; publishes 1D + 2D + 3D embeddings with `default_dimension: 3`; recognisable endocrinogenesis trajectory for a wet-lab reader. Verified in `cellucid-datasets/exports-v3/pancreas/dataset_identity.json`. |
 | Embedding | the 3D UMAP throughout | The session records the embedding each view shows and verifies its cell order against the embedding `cellOrder.embedding` names, whichever one is on screen, so the success path does not depend on it; keeping one embedding keeps the BEFORE/AFTER frames comparable. |
 | Theme / background | app defaults (light / Studio (light)) | Matches the reviewed official starting state, so the reset in step 10 is visually unambiguous. |
 | Welcome modal | dismissed with `Escape` (`#welcome-modal`) — see `tests/browser/helpers/welcome.mjs` | Otherwise it covers the sidebar in every frame. |
@@ -457,7 +457,7 @@ longer a reason to refuse it. Details under
   that no longer matches the catalog.~~ **Done** — the page now shows the
   field's *shape*, `"state_sha256": "<64 lowercase hexadecimal characters>"`,
   and tells the reader to read the current value out of
-  `cellucid-datasets/exports/datasets.json`. **This record quotes no digest
+  `cellucid-datasets/exports-v3/datasets.json`. **This record quotes no digest
   either, deliberately:** while the finding stood open the catalog was
   regenerated again, so the "current" value written down here went stale on its
   own. A published state is rebuilt whenever the reviewed view or the session
@@ -483,7 +483,7 @@ longer a reason to refuse it. Details under
 - **needs** — Three images, each answering one of the page's three artifact
   types:
   1. **Link:** crop the GitHub row — `#github-repo-url` pre-filled with a public
-     path (use `theislab/cellucid-datasets/exports`) plus `#github-connect-btn`.
+     path (use `theislab/cellucid-datasets/exports-v3`) plus `#github-connect-btn`.
      Cursor on `#github-connect-btn`.
      `share-link-github-input.png` · `:width: 246px`.
   2. **Bundle:** reuse `session-lifecycle-09-artifact-terminal.png` — the `ls`
@@ -626,7 +626,7 @@ longer a reason to refuse it. Details under
      session serializer), not its size — **do not pin a byte count here.** The
      preset is regenerated
      whenever the session inventory changes, so the only current value is the
-     file itself in `cellucid-datasets/exports/pancreas/`.
+     file itself in `cellucid-datasets/exports-v3/pancreas/`.
      `session-error-official-default-rejected.png` · `:width: 520px`. This is a
      mistake a curious user will genuinely make — the file is publicly
      downloadable from the datasets repo.
