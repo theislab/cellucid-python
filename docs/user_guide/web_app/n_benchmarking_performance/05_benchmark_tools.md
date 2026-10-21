@@ -21,20 +21,23 @@ Open:
 - Left sidebar → **Performance Benchmark** accordion
 
 It includes:
-- six quick presets: 100K, 500K, 1M, 5M, 10M, 20M points,
-- a custom point count input accepting any whole number from 1 to 50,000,000,
+- six quick presets: 500K, 1M, 5M, 10M, 20M, 40M points,
+- a custom point count input accepting any whole number from 1 to 250,000,000,
 - eight synthetic **data patterns**,
 - a **Load Synthetic Data** button,
-- a metric grid that stays hidden until the first run finishes,
+- a live metric readout that appears as soon as the panel is open,
 - a **Copy Situation Report** button,
 - and an **Analyze Performance** tool that suggests what to change.
 
 ```{figure} ../../../_static/screenshots/benchmarking_performance/benchmark-panel-controls.png
-:alt: The Performance Benchmark panel before any run, showing the six point-count presets from 100K to 20M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons.
+:alt: The Performance Benchmark panel before any run, showing the six point-count presets from 500K to 40M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons; the live performance readout is omitted.
 :width: 516px
 
-The panel before its first run. Everything above **Load Synthetic Data** is
-input; everything below it appears only once a run has produced numbers.
+The panel before its first run. The live metric readout that sits between
+**Load Synthetic Data** and **Copy Situation Report** is left out of this
+picture on purpose: it would show the frame rate of the machine that took the
+screenshot. Its fields are listed in the table under *What the panel reports*
+below.
 ```
 
 :::{important}
@@ -90,8 +93,9 @@ If you want a copy/paste summary for a bug report, click **Copy Situation Report
 If you’re comparing two builds or changes, make the benchmark comparable:
 
 1) Fix window size (pixels matter).
-2) Fix the layout (single view only; clear snapshots). A two-view row and a 2×2
-   grid are different workloads, not “more of the same one”.
+2) Fix the layout (single view only; clear snapshots). Each view draws every
+   point again, and a two-view row and a 2×2 grid also differ in point size, so
+   they are different workloads, not “more of the same one”.
 3) Start in points mode (smoke mode is a different workload).
 4) Use the same preset count and the same pattern.
 5) Let FPS stabilize for ~5–10 seconds, then record the metric.
@@ -134,14 +138,16 @@ while a large set is built.
 
 ## What the panel reports (every field, and its unit)
 
-After a run, the grid shows six headline tiles, then a timing breakdown, then
-the generation time.
+The grid appears as soon as the panel is opened and measures whatever is
+loaded — your own dataset until a synthetic run replaces it. It shows six
+headline tiles, then a timing breakdown, and after a synthetic run the
+generation time.
 
 | Field | Unit / format | What it means |
 |---|---|---|
 | **Points** | count | How many synthetic points were published |
 | **FPS** | whole frames per second | Derived from recent frame times |
-| **Frame Time** | `X.XX ms`, sometimes with a `(render Y.YY ms)` suffix | Wall time for a frame |
+| **Frame Time** | `X.XX ms`, sometimes with a `CPU Y.YY ms` line under it | Wall time for a frame; the second line is the main-thread time spent issuing the last frame's draw calls (not GPU time), shown only when the browser's coarse timer resolves it above zero |
 | **GPU Memory** | `N.N MB`, or `~N.N MB (estimate)` | Reported where the browser exposes it; otherwise estimated from the point count |
 | **LOD Level** | `Full`, or `Level N` | Which level of detail the renderer settled on |
 | **Visible Points** | count | How many points survived LOD and culling |
@@ -188,9 +194,9 @@ GPU specifically, that is the tool — not the headline FPS.
 - If **Visible Points** stays high and FPS stays low, try LOD in Visualization —
   and lower `Force LOD level:` too when you need to go past `Auto`'s floor of
   `min(2,000,000, cells ÷ 8)` points,
-  a smaller window, a smaller point size, or turning antialiasing off. Lowering
-  `Shader quality:` is *not* on that list — it did not change frame time on the
-  hardware this was measured on, and the reason is in
+  a smaller window, a smaller point size, or turning antialiasing off. Shader
+  quality did not change frame time measurably on the hardware measured, in 2D
+  or 3D. The reasons are in
   {doc}`02_performance_considerations_what_gets_slow_and_why`.
 
 Related docs:
@@ -260,13 +266,24 @@ analysis no longer changes your shader quality as a side effect.
 ## Safety notes and footguns
 
 - Synthetic benchmark data is not your real dataset. Reload the page to restore your original data.
-- Don’t start with 20M points on a laptop. Ramp up: 100K → 500K → 1M → 5M.
+- Don’t start with 20M or 40M points on a laptop. Ramp up: 500K → 1M → 5M → 10M.
 - If you hit “WebGL context lost”, reduce point count and/or reduce GPU load (smaller window, no snapshots, no smoke).
-- The custom point count is capped at 50,000,000. That is a deliberate refusal,
-  not a hardware limit: the position and colour arrays for that many points
-  already run to hundreds of megabytes before anything reaches the GPU. A value
-  outside 1–50,000,000 is rejected with a **Point count out of range** notice
-  rather than attempted.
+- The custom point count is capped at 250,000,000. A value outside
+  1–250,000,000 is rejected with a **Point count out of range** notice rather
+  than attempted. Below it, no texture size limits the count: per-point
+  textures are stacked in layers of `MAX_TEXTURE_SIZE` rows, so a GPU that
+  reports 8,192 (Firefox) holds as many points as one that reports 16,384, and
+  every draw is split into calls of at most 16,777,216 points, below the
+  30,000,000 vertices Firefox accepts in one call. The engine's own ceiling is
+  the size of one GPU buffer: a 3D position stream of 12 bytes a point stops
+  at about 178 million points on Chromium and Firefox.
+- What you will meet before that ceiling is memory: about 41 bytes per point
+  for a 3D pattern and 31.5 for the 2D `flatumap` pattern, tab memory and GPU
+  memory together — about 2 GB at 50,000,000 3D points and 10 GB at
+  250,000,000. On a machine that cannot
+  allocate it the request fails as an allocation error, which is the honest
+  outcome — the limit that binds is your machine's memory, and the control does
+  not pretend to know what that is.
 - The controls in this panel start out disabled and become usable once the app
   has finished wiring them. If a preset looks greyed out for a moment during a
   slow start, that is the intended behaviour — see

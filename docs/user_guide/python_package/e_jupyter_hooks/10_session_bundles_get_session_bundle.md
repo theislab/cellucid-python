@@ -81,8 +81,10 @@ When you call `viewer.get_session_bundle()`:
 
 ## Limits and performance
 
-- Hard size cap: **512MB** per upload (guards against zip bombs and memory pressure).
-- Upload is streamed to disk in chunks (keeps memory bounded).
+- No fixed size cap: the upload is streamed to disk in chunks (memory stays
+  bounded), so the only limit is the free space of the temporary directory; a
+  bundle larger than that is refused with HTTP 413. Each chunk inside the
+  bundle is bounded by its own declared size when it is read.
 - The request is TTL-bound; if you wait too long, the server may reject it as “no pending request”.
 
 ## Edge cases
@@ -92,7 +94,8 @@ When you call `viewer.get_session_bundle()`:
 - **Viewer generation unavailable**: viewer construction/startup raises, so no
   session request is issued.
 - **Stale iframe after kernel restart**: viewerId mismatch; re-run the viewer cell.
-- **Very large sessions**: you can hit the 512MB cap; reduce stored state (fewer highlight groups, etc.).
+- **Very large sessions**: the upload needs as much free space in the temporary
+  directory as the bundle holds.
 
 ## Troubleshooting
 

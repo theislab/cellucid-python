@@ -127,13 +127,15 @@ You need:
 
 ### If you already have a UMAP embedding
 
-Look for one of the exact keys:
-- `X_umap_1d`
-- `X_umap_2d`
-- `X_umap_3d`
+The viewer opens on a UMAP without being told which one:
+- `X_umap`, the key `sc.tl.umap()` writes, at the dimension its column count
+  states (2 or 3 columns);
+- or `X_umap_1d`, `X_umap_2d`, `X_umap_3d`, which each fill their own dimension.
 
-If one of those keys exists with its declared number of columns, you can
-proceed.
+If one of those keys exists, you can proceed. Any other embedding in `obsm`
+(`X_tsne`, `X_draw_graph_fa`, two columns of `X_pca`) can be picked after
+opening, under **Session › Data mapping**, or named up front with
+`embedding_keys=`.
 
 ### If you do NOT have UMAP (compute it with Scanpy)
 
@@ -154,7 +156,6 @@ adata = adata[:, adata.var["highly_variable"]].copy()
 sc.pp.pca(adata)
 sc.pp.neighbors(adata)
 sc.tl.umap(adata)
-adata.obsm["X_umap_2d"] = adata.obsm.pop("X_umap")
 ```
 
 Now you should have:
@@ -163,7 +164,7 @@ Now you should have:
 list(adata.obsm.keys())
 ```
 
-and `X_umap_2d` should appear.
+and `X_umap` should appear.
 
 ---
 

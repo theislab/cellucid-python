@@ -128,6 +128,7 @@ There are three common ways to stop a filter from affecting visibility:
 3) **Remove** (× in Active filters)
    - does the reset for you (full range / show all / outlier=100%)
    - also re-enables the filter (it becomes a “no-op” and typically disappears from the list)
+   - the legend redraws to match: range sliders return to the ends, the category checkboxes are ticked again, and the outlier slider returns to `100%`
 
 :::{tip}
 When debugging, prefer **disable** first (safe and reversible). Use **remove** once you understand the cause.

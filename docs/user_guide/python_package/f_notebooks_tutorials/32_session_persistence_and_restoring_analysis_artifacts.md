@@ -184,9 +184,9 @@ selected
 
 ## Exact dataset identity (read this!)
 
-A bundle's `datasetFingerprint` carries `sourceType`, `datasetId`, `cellCount`,
-and `varCount`, and — for any session saved by a current viewer — a `cellOrder`
-record:
+A bundle's `datasetFingerprint` carries exactly `sourceType`, `datasetId`,
+`cellCount`, `varCount`, a `cellOrder` record, and a `dataMapping` record — the
+current session fingerprint:
 
 ```python
 bundle.dataset_fingerprint
@@ -197,13 +197,30 @@ bundle.dataset_fingerprint
  'datasetId': 'my-study-v1',
  'cellCount': 3696,
  'varCount': 3753,
- 'cellOrder': {'dimension': 2, 'digest': '9f2c41a0b7d3e185'}}
+ 'cellOrder': {'embedding': {'key': 'X_umap', 'columns': [0, 1]},
+               'dimension': 2,
+               'digest': '9f2c41a0b7d3e185'},
+ 'dataMapping': {'kind': 'anndata',
+                 'embeddings': {'enabled': [{'key': 'X_umap', 'columns': [0, 1]}],
+                                'defaults': {'1d': None,
+                                             '2d': {'key': 'X_umap', 'columns': [0, 1]},
+                                             '3d': None}},
+                 'knn': None,
+                 'geneNames': 'index',
+                 'expression': 'X',
+                 'latent': None,
+                 'vectorFields': []}}
 ```
 
-`expected_dataset_id` is required. If the ID, cell count, or variable count
-does not match, application raises before mutating the target.
+`expected_dataset_id` is required. If the ID or the cell count does not match,
+if the `dataMapping` names an `obsm`, `obsp`, layer, `raw`, or `var` column the
+target does not have, or if `varCount` disagrees with the gene axis that mapping
+reads (`adata.raw.n_vars` for `expression: "raw"`), application raises before
+mutating the target. A gene-sourced user-defined field is copied from that same
+axis: the gene is found among the mapping's gene names, made unique with the
+shared rule, and read from the mapping's expression matrix.
 
-### What `cellOrder` is, and why Python does not check it
+### What `cellOrder` is, and why Python does not check its digest
 
 Everything a session records about your cells is a **row number**. That is safe
 only for as long as row 417 keeps meaning the same cell. Re-export a dataset
@@ -211,16 +228,18 @@ from a re-sorted `AnnData` and the id, the cell count, and the gene count are
 all still identical, while every stored row number now denotes something else.
 
 `cellOrder` closes that hole in the viewer. It is a digest of the coordinates
-the session was saved against, plus the embedding dimension (1, 2, or 3) it was
-taken in — the 1D, 2D, and 3D embeddings are exported and normalized as separate
-files, so a digest only means anything within one of them.
+of one embedding — the one `cellOrder.embedding` names, an `obsm` key with its
+0-based columns or an exported embedding id — plus that embedding's dimension.
+Every embedding is normalized on its own, so a digest only means anything for
+the embedding it was taken over.
 
-Python accepts a fingerprint with or without `cellOrder`, validates its shape
-strictly when it is there (`dimension` exactly 1, 2, or 3; `digest` exactly 16
-lowercase hex characters), and never checks its value. There is nothing here to
-check it against: the digest covers exported coordinates, which your `AnnData`
-need not contain, and you — not Cellucid — chose the row order of the object you
-are applying the session to. Verifying cell-order identity is the viewer's job.
+Python requires `cellOrder`, validates its shape strictly (`embedding` a
+`{key, columns}` record that fits the mapping's kind, `dimension` exactly 1, 2,
+or 3, `digest` exactly 16 lowercase hex characters), and never checks the digest
+value. There is nothing here to check it against: the digest covers coordinates
+the viewer normalized and drew, and you — not Cellucid — chose the row order of
+the object you are applying the session to. Verifying cell-order identity is the
+viewer's job.
 
 The practical consequence: **apply a session only to the `AnnData` that produced
 it, in the same row order.** In the notebook that is your responsibility, and
@@ -235,18 +254,18 @@ adata2 = viewer.apply_session_to_anndata(adata, inplace=False)
 resorted = adata[adata.obs.sort_values("cell_type").index].copy()
 ```
 
-With `store_uns=True` the whole fingerprint, `cellOrder` included, is written to
-`adata.uns["cellucid"]["session"]["dataset_fingerprint"]`, so the applied result
-carries a record of the ordering the session was saved on even though Python did
-not act on it.
+With `store_uns=True` the whole fingerprint, `cellOrder` and `dataMapping`
+included, is written to `adata.uns["cellucid"]["session"]["dataset_fingerprint"]`,
+so the applied result carries a record of the ordering and arrays the session
+was saved on.
 
 ---
 
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/highlighting-selected-page.png
-:alt: Highlighting panel showing a named page with highlighted cells.
-:width: 246px
+:alt: The Highlighting panel with one page renamed "Left lobe" carrying 842 cells, the summary "842 cells highlighted", and one group row labelled "Lasso (842 cells) (842)".
+:width: 516px
 
 Highlighted cells are stored on a named page that can be used by analysis and session workflows.
 ```
@@ -294,28 +313,30 @@ column explicitly before applying.
 
 ### Symptom: Python applies a bundle the web app refuses to open
 
-The two readers are not symmetric. The web app **requires** `cellOrder` and
-refuses a session file saved before that record existed; Python accepts such a
-file, because it could not verify the record anyway.
+The two readers are not symmetric: only the web app compares the `cellOrder`
+digest against the coordinates it loads, so a re-ordered dataset is caught there
+and not here.
 
 How to confirm:
 ```python
-"cellOrder" in bundle.dataset_fingerprint
+bundle.dataset_fingerprint["cellOrder"]
 ```
 
-Fix: re-create the state in the viewer and save a new session file. There is no
-way to add the record to an existing file — a digest is only meaningful if it
-was taken at the moment the state was captured.
+Fix: open the dataset generation the session was saved on, or re-create the
+state in the viewer and save a new session file. A digest is only meaningful if
+it was taken at the moment the state was captured.
 
-### Symptom: the web app reports a dimension mismatch
+### Symptom: applying raises that the data mapping does not match
 
-The saved `cellOrder.dimension` is not the dimension currently on screen. This
-is not a data problem: switch the viewer back to the dimension named in the
-message and load the session again.
+The session was saved while the viewer showed an array — an embedding, a graph,
+a layer, or a gene-name column — that this `AnnData` does not have. The message
+names each one.
 
 ```python
-bundle.dataset_fingerprint["cellOrder"]["dimension"]
+bundle.dataset_fingerprint["dataMapping"]
 ```
+
+Fix: apply the session to the object it was saved on.
 
 ---
 

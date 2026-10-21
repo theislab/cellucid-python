@@ -89,7 +89,7 @@ Cellucid has **state at different scopes**:
   - some registries (renames/deletes, user-defined field definitions).
 - **Per-view state** (live view and each snapshot has its own):
   - camera and navigation mode,
-  - which dimension (1D/2D/3D) is active,
+  - which embedding it shows (its dimension follows),
   - which field is active (obs vs var),
   - which filters are active,
   - view layout settings.
@@ -116,36 +116,36 @@ restore aborts the older operation without publishing false success.
 
 ### Dataset identity (the first restore check)
 
-Each session carries a **dataset fingerprint** with five parts: source type,
-dataset id, cell count, variable count, and a **cell-order record**.
+Each session carries a **dataset fingerprint** with six parts: source type,
+dataset id, cell count, variable count, a **cell-order record**, and the
+**data mapping** — which stored embeddings and arrays the dataset was shown
+with.
 
 The first four say *which* dataset. The cell-order record says *which ordering
 of its cells*, which the first four cannot: a session stores your selections as
 row numbers, and a dataset republished under the same name with the same number
 of cells and genes but its rows in a different order matches all four scalars
 while every row number now points at a different cell. The record is a short
-digest of the coordinates the session was saved against, plus the dimension
-(1D, 2D, or 3D) the digest was taken in — the three embeddings are separate
-files, so a digest only means anything within one of them.
+digest of the coordinates the session was saved against, plus the embedding
+(and its dimension) the digest was taken over — every embedding is a separate
+payload, so a digest only means anything within one of them. Cellucid checks
+the digest on that embedding whichever one is on screen when you load.
 
 If any part of the fingerprint does not match the currently loaded dataset:
 - Cellucid rejects the complete restore;
 - no layout-only subset is accepted; and
 - the existing app state remains intact or is recovered by rollback.
 
-You will see one of five messages, each naming what actually happened:
+You will see one of these messages, each naming what actually happened:
 
 | What you see | What it means | What to do |
 |---|---|---|
 | The session was saved on a different dataset (with both cell and gene counts named) | it is not this dataset | open the dataset the session was saved on |
 | The session was saved on a different copy of this dataset (with both identities named) | the sizes agree exactly and the publication identity does not — one dataset reached two ways, such as a locally served copy of a published export | open the dataset the session was saved on |
-| The session was saved while a different dimension was shown | the check reads the coordinates on screen, and 2D and 3D coordinates differ | switch back to the dimension named in the message, then load again |
+| The session uses an embedding (or graph, gene names, expression matrix, latent space, or vector field) this dataset does not have or cannot use, naming it | it was saved on another version of the dataset; a choice this dataset has is restored instead | open the dataset version the session was saved on |
 | The dataset has the same name and counts but its cell coordinates differ | either the cells are stored in a different order, or the same cells were exported again from a re-computed embedding — a one-way digest cannot say which | load the version the session was saved on, or re-create the selections here |
 | The file was saved before Cellucid started recording which cells a selection contains | it is a session file older than this check | re-create the selections and save a new session file |
-
-The dimension message is the recoverable one. It is not a report of damaged
-data — it means only that the view on screen is not the view the session was
-saved in, and switching back resolves it.
+| The file was saved by an earlier Cellucid release, before sessions recorded the data mapping | it is a session file older than export format 3 | re-create the view on the current dataset and save a new session file |
 
 The last case is a deliberate refusal, not a limitation. Such a file records
 selections as bare row numbers with nothing tying them to cell content, so

@@ -31,6 +31,7 @@ A small local HTTP server started by `viewer`. It serves:
   - `/_cellucid/health`
   - `/_cellucid/info`
   - `/_cellucid/events` (viewer → Python hooks)
+  - `/_cellucid/selection` (viewer → Python selections, binary cell indices)
   - `/_cellucid/session_bundle` (session bundle uploads)
 
 ### Iframe

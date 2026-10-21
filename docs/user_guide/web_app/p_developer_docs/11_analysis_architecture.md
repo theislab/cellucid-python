@@ -5,7 +5,7 @@ This page documents the Cellucid **Page Analysis** subsystem: how analysis UIs a
 It is written for contributors adding:
 - a new analysis mode,
 - a new plot type,
-- a new compute operation/transform,
+- a new compute operation,
 - or changes that affect analysis ↔ highlights ↔ sessions interactions.
 
 ## At a glance
@@ -69,18 +69,16 @@ This is why highlight pages are treated as first-class state: they are analysis 
 Analysis lives under:
 - `cellucid/assets/js/app/analysis/`
 
-Key entry points:
-
-- `analysis/index.js`
-  - a “barrel” export that documents and re-exports core analysis building blocks (registries, compute, stats, plots).
+Key entry point:
 
 - `analysis/comparison-module.js`
-  - orchestrates the analysis UI and binds it to `DataState`.
+  - orchestrates the analysis UI and binds it to `DataState`. Modules import
+    each other directly; there is no barrel `index.js` for the analysis tree.
 
 Subdirectories (high-level):
-- `analysis/core/`: plugin contracts, validation, registries
-- `analysis/compute/`: compute operations and explicit GPU, Worker, and CPU backends
-- `analysis/data/`: data layer + query builder + transforms
+- `analysis/core/`: plot plugin contract, validation, the plot registry
+- `analysis/compute/`: compute operations and their Worker and CPU backends
+- `analysis/data/`: data layer and streaming gene loader
 - `analysis/stats/`: statistical tests, corrections, result formatting
 - `analysis/plots/`: plot infrastructure and types
 - `analysis/ui/`: UI manager, analysis-type UIs, floating windows, shared UI components
@@ -113,22 +111,98 @@ The analysis module needs a safe, consistent way to:
 This is handled by:
 - `cellucid/assets/js/app/analysis/data/data-layer.js`
 
-### 3) Compute backends (GPU / Worker / CPU)
+### 3) Compute backends (Worker / CPU)
 
-Compute is structured around “operations” with capability metadata:
-- which operations can run on GPU
-- which can run in a Worker
-- which must run on the main thread
+Compute is structured around “operations” with capability metadata: which
+operations can run in a Worker and which can run on the main thread. Every
+operation runs the same function on either backend, so where it runs never
+changes a number. The operations are:
+
+- correlation (`COMPUTE_CORRELATION`) and differential expression
+  (`COMPUTE_DIFFERENTIAL`);
+- kernel density (`COMPUTE_KERNEL_DENSITY`): a density-plot curve of more than
+  3,000,000 kernel terms is split by curve point across the worker pool, and
+  every point runs the same loop as the single-thread sum, so the curve is bit
+  identical; `COMPUTE_DENSITY_PLAN` filters a page of 200,000 values or more,
+  picks its bandwidth and returns the curve or the plan the sum is split by;
+- box statistics (`COMPUTE_BOX_STATISTICS`, pages of 100,000 values or more)
+  and violin density slices (`COMPUTE_VIOLIN_DENSITY`, pages of 20,000 or
+  more), which mirror Plotly's own calculation. For a violin the worker also
+  returns the calcdata entry Plotly's box calc would build, which the vendored
+  Plotly takes instead of building a point record per value (see the header of
+  `cellucid/assets/external/plotly.min.js`);
+- histogram bins and samples (`COMPUTE_HISTOGRAM_SAMPLES`, 200,000 values or
+  more over all pages);
+- the summary statistics and the statistical tests a Detailed or Gene signature
+  view shows (`COMPUTE_SUMMARY_STATISTICS`, `COMPUTE_STATISTICAL_TESTS`, 200,000
+  values or more over all pages);
+- order statistics (`COMPUTE_ORDER_STATISTICS`): the median and quartiles of
+  Quick Insights and the median of signature scores, for 500,000 finite values
+  or more.
+
+Below those sizes the main thread computes the result directly, because posting
+the values to a worker would cost more than the work. A payload posted without
+transfer is copied on the main thread, so the worker pool copies at most 96 MiB
+per task and posts the rest in tasks of their own
+(`DISPATCH_CLONE_BYTES_PER_TASK` in `compute/worker-pool.js`): no dispatch
+holds the interface for more than about 10 ms. A worker that scanned a
+page also reports its finite values, which the main thread adopts instead of
+scanning the page again, and categorical counts are taken once, as the data
+layer builds a page's values (`analysis/shared/category-counts.js`). Loops that
+must stay on the main thread (gathering a page, aligning two variables for a
+scatter plot, signature scoring) yield to the interface between 12 ms slices.
+Marker-gene discovery dispatches its own `MARKERS_*` messages to the same
+worker pool. There is no GPU analysis backend.
 
 Key files:
 - `cellucid/assets/js/app/analysis/compute/operations.js`
+- `cellucid/assets/js/app/analysis/compute/operation-handlers.js`
 - `cellucid/assets/js/app/analysis/compute/compute-manager.js`
-- `cellucid/assets/js/app/analysis/compute/gpu-compute.js`
 - `cellucid/assets/js/app/analysis/compute/worker-pool.js`
+- `cellucid/assets/js/app/analysis/compute/data-worker.js`
 
 Design goal:
 - select one declared, available backend before an operation starts; execution
   errors are reported directly and never switch to another backend.
+
+### 3b) Gene downloads
+
+Every gene and observation-field load goes through one download scheduler
+(`cellucid/assets/js/data/fetch-scheduler.js`), entered from
+`app/state/managers/field/loading.js`:
+
+- **Priorities.** A gene the user chose (`high`), an observation field or a
+  gene a view or a short analysis needs (`normal`), one of a long run's genes
+  (`bulk`) and a prefetch on intent (`low`). `high` and `normal` loads start at
+  once; while any is in flight, no new `bulk` or `low` download starts, so a
+  gene chosen during a 5,000-gene run does not share the connection with a
+  dozen of the run's downloads. The browser is told the same through the
+  fetch `priority` hint. A load joined by a more urgent caller (a prefetched
+  gene the user then chooses) is raised.
+- **Downloads kept per dataset load.** The var field loader of a dataset load
+  keeps the downloaded (still compressed) payloads in a byte-bounded cache
+  (`data/payload-transfer-cache.js`, 64 MiB), so a gene evicted from memory is
+  decoded again without a request, and a second run over the same genes makes
+  no requests. Concurrent requests for one payload share one download. The
+  cache holds exactly the export generation whose manifests describe it and is
+  dropped with the load.
+- **Downloads ahead.** `StreamingGeneLoader` (DE, markers, heatmaps) downloads
+  the payloads of the genes queued after its decode window into that cache
+  (`DataLayer.prefetchGenePayload`). The number in flight starts at 8,
+  doubles after each round that ran more than 10% faster than the last and
+  shrinks by a quarter after one that ran more than 10% slower, so it settles
+  where the round trips are covered and the link is full; it is at most 256
+  and never holds more than half the payload cache in downloaded-but-undecoded
+  genes. A gene already in memory is skipped; a local source (a file opened in
+  the browser, a served AnnData) has nothing to download ahead.
+- **Cancellation.** A finished or aborted run cancels its downloads still
+  waiting in the scheduler (they never start) and those under way; a shared
+  download is cancelled only when every caller has left. Each dataset load has
+  its own scheduler: replacing the dataset closes the previous one, which
+  aborts and rejects every download it still held, so a stalled read of the
+  old dataset never holds back the new dataset's downloads.
+- **Progress.** A gene the user waits for reports its download in its loading
+  notification, one step per whole percent.
 
 ### 4) Plot infrastructure (Plotly + custom helpers)
 
@@ -197,6 +271,42 @@ On dataset reload (especially “in-place” reloads for local-user), analysis m
 
 There are dev-only helpers to sanity check this:
 - see `window._comparisonModule` and local-user switch self-test wiring in `ui/modules/dataset-controls.js`.
+
+### 4) The per-gene streaming path
+
+Differential expression and marker discovery repeat the same steps once per
+gene, so anything in that loop is multiplied by the gene count. The loop keeps
+these properties, and each one is pinned by a test:
+
+- **Decoding happens in the decode worker.** A quantized gene payload is read on
+  the main thread as transferred (still gzip when the URL ends in `.gz`) and
+  handed to the quantization worker, which inflates it under the exact declared
+  length and dequantizes it. Both the worker and the main-thread backend decode
+  through one table-driven kernel, `decodeQuantizedToFloat32` in
+  `cellucid/assets/js/data/quantization-contract.js`, which is bit identical to
+  evaluating `minValue + code * scale` per cell.
+- **Each decode goes to the least-loaded worker** of the quantization pool (a
+  busy worker counts one, plus its queue), not round-robin, so a decode never
+  waits behind a busy worker while another is idle.
+- **Per-run work is done once per run.** `StreamingGeneLoader` validates both
+  group specifications when a run starts, not once per gene.
+- **Rank tests tabulate values without a `Map`.** Wilcoxon (DE and markers),
+  Spearman ranks and order statistics number distinct values through
+  `DistinctValueIndex` in `compute/math-utils.js` up to 4,096 distinct
+  values and sort natively above that. Results are bit identical to the
+  sort-based definition (`tests/analysis-engine-rank-kernel-identity.test.mjs`,
+  `tests/statistical-tests.test.mjs`).
+- **Page membership is recomputed only when the page changes.**
+  `DataLayer` keeps each page's membership and digest beside the structure it
+  came from (the page, its group list, each group, its `enabled` flag, its
+  `cellIndices` array and length) and reuses them while all of those are the
+  same objects. Highlight `cellIndices` arrays are therefore never edited in
+  place once published; replace the array instead.
+- **Yields are time-sliced.** Long loops hand the event loop back every 12 ms
+  through a posted message (`createSlicedYield` in
+  `shared/concurrency-utils.js`), not after a fixed item count through
+  `setTimeout(0)`, whose 4 ms clamp turned a 20,000-gene run into seconds of
+  idle waiting.
 
 ---
 

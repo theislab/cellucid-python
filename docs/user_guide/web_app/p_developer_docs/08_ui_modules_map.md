@@ -77,7 +77,14 @@ module* rather than by the coordinator:
 - `field-selector-gene-expression.js` ← initialized by `field-selector.js`
 - `field-selector-deleted-fields.js` ← initialized by `field-selector.js`
 
-If you are tracing why a control is inert, check which of the two paths owns it
+Two more are not initialized by the coordinator at all:
+`sidebar-controls.js` and `select-bar-placement.js` are wired by
+`ui/core/sidebar-layout.js`, which `main.js` calls right after the viewer is
+created. The sidebar toggle is painted with the first frame, and on a phone it
+is the only way out of the full-screen menu, so it must work before the first
+dataset has loaded, which is when the coordinator runs.
+
+If you are tracing why a control is inert, check which of these paths owns it
 before assuming the coordinator does.
 
 The `ui/` layer also has directories this page does not otherwise cover:
@@ -91,7 +98,8 @@ The `ui/` layer also has directories this page does not otherwise cover:
 
 | Module | File | Owns |
 |---|---|---|
-| Sidebar toggle/resize | `ui/modules/sidebar-controls.js` | sidebar visibility + `--sidebar-width` |
+| Sidebar toggle/resize | `ui/modules/sidebar-controls.js` | sidebar visibility (`inert` while hidden) + `--sidebar-width`; publishes the sidebar's left occlusion of the canvas, from which the viewer resolves the presented layout |
+| Selection bar placement | `ui/modules/select-bar-placement.js` | centres `#select-bar` in the viewer's presented area (`viewer.onPresentedLayoutChange`) |
 | Stats display | `ui/modules/stats-display.js` | top stats line (dataset/field/cell counts) |
 
 ### Dataset + session modules
@@ -101,6 +109,7 @@ The `ui/` layer also has directories this page does not otherwise cover:
 | Dataset controls | `ui/modules/dataset-controls.js` | dataset dropdown + dataset info block |
 | Dataset connections | `ui/modules/dataset-connections.js` | local-user picker, remote server connect, GitHub connect |
 | Session controls | `ui/modules/session-controls.js` | save/load `.cellucid-session` buttons |
+| Data mapping controls | `ui/modules/data-mapping-controls.js` | Session › Data mapping: the Embeddings checklist (on/off, defaults, column selections), Apply/Revert, Read from file |
 
 ### Field/filter/highlight modules
 
@@ -117,11 +126,12 @@ The `ui/` layer also has directories this page does not otherwise cover:
 
 | Module | File | Owns |
 |---|---|---|
-| View controls | `ui/modules/view-controls.js` | multiview (“Keep view”), layout mode, camera lock, badges |
-| Dimension controls | `ui/modules/dimension-controls.js` | dimension dropdown + per-view dim cycling |
+| View controls | `ui/modules/view-controls.js` | multiview (“Keep view”), layout mode, **Link cameras**, one row per view (what it shows, field, navigation mode, linked), the Navigation “Applies to” row |
+| Representation controls | `ui/modules/representation-controls.js` | the `View N shows` picker (`#view-representation-select`) + keys 1/2/3 (default, then cycle) |
 | Render controls | `ui/modules/render-controls.js` | points vs smoke, smoke sliders, connectivity toggles |
 | Velocity overlay controls | `ui/modules/velocity-overlay-controls.js` | vector field overlay settings + field selection |
-| Camera controls | `ui/modules/camera-controls.js` | navigation mode + camera settings panels |
+| Camera controls | `ui/modules/camera-controls.js` | the Navigation accordion: mode select of the focused view, pointer capture, projectiles |
+| Navigation settings | `ui/modules/navigation-settings.js` | per-mode settings boxes, speed sliders and option checkboxes |
 
 ### “Large feature” modules
 
@@ -183,6 +193,12 @@ Example: visibility changes
 The session system can capture/restore generic UI control values, but **some UI subtrees are intentionally excluded**.
 Exclusion uses a DOM attribute:
 - `data-state-serializer-skip="true"`
+
+A second attribute, `data-state-serializer-after-embedding="true"`, marks a
+subtree whose controls stay in the session but are restored only after the
+embeddings, kept views and active view are back, because their choices follow
+the embedding the active view shows (the vector-field block: a field is bound
+to one embedding). See `cellucid/assets/js/app/state-serializer/README.md`.
 
 Examples:
 - Figure export section is excluded (`cellucid/index.html` and the figure-export UI code).

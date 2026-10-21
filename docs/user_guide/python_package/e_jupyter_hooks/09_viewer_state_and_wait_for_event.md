@@ -72,11 +72,14 @@ If the viewer has already sent a `ready` event, this returns immediately using `
 
 ## How it works (short, accurate mental model)
 
-Internally the viewer stores a bounded ring buffer of recent events and a monotonic sequence counter.
+Internally each `wait_for_event(...)` call registers before it waits and is
+handed its event the moment the event is recorded, so a burst of other events
+(thousands of hovers) cannot make it miss the one it waits for.
 
 Implications:
 - `wait_for_event(...)` is reliable for “next event” workflows.
-- It is not a durable event log; old events can fall out of the buffer under heavy activity.
+- It is not an event log: it sees only events that arrive after the call
+  begins. (`viewer.debug_connection()` lists the most recent events.)
 
 ## Edge cases and footguns
 

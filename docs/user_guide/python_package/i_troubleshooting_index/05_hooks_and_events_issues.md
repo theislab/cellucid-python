@@ -4,7 +4,8 @@
 
 Confirm that the callback is registered on the same live viewer object shown in
 the notebook. Reproduce one event, then inspect requests to
-`/_cellucid/events`; preserve the first non-success response and its body.
+`/_cellucid/events` (for a selection hook, `/_cellucid/selection`); preserve
+the first non-success response and its body.
 
 ## A command targets the wrong viewer
 

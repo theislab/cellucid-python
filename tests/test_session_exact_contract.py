@@ -15,11 +15,30 @@ import pytest
 
 from cellucid.anndata_session import apply_cellucid_session_to_anndata
 from cellucid.session_bundle import (
-    DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES,
     SESSION_BUNDLE_MAGIC,
     CellucidSessionBundle,
 )
 from cellucid.session_codecs import decode_delta_uvarint, decode_user_defined_codes
+
+
+def _mapping_fingerprint_keys() -> dict:
+    """The cell-order record and data mapping every fingerprint carries."""
+    return {
+        "cellOrder": {
+            "embedding": {"key": "X_umap", "columns": None},
+            "dimension": 2,
+            "digest": "0123456789abcdef",
+        },
+        "dataMapping": {
+            "kind": "export",
+            "embeddings": {
+                "enabled": [{"key": "X_umap", "columns": None}],
+                "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None},
+            },
+            "geneNames": "index",
+            "vectorFields": [],
+        },
+    }
 
 
 def _uvarint(value: int) -> bytes:
@@ -102,6 +121,7 @@ def _write_bundle(
             "datasetId": "exact",
             "cellCount": 3,
             "varCount": 2,
+            **_mapping_fingerprint_keys(),
         },
         "chunks": [meta for meta, _payload in entries],
     }
@@ -172,6 +192,7 @@ class _MemoryBundle:
             "datasetId": "exact",
             "cellCount": 3,
             "varCount": 2,
+            **_mapping_fingerprint_keys(),
         }
         self.manifest = {
             "createdAt": "2026-07-25T00:00:00.000Z",
@@ -440,8 +461,6 @@ def _categorical_field(
         "isPurged": False,
         "codesLength": 3,
         "codesType": "Uint8Array",
-        "centroidsByDim": {},
-        "normalizedDims": [],
         "sourceField": None,
         "operation": None,
         "sourcePages": [],
@@ -505,6 +524,7 @@ def test_session_apply_rejects_dataset_mismatch_without_mutation() -> None:
             "datasetId": "other",
             "cellCount": 3,
             "varCount": 2,
+            **_mapping_fingerprint_keys(),
         },
     )
 
@@ -1451,55 +1471,61 @@ def test_on_disk_percent_encoded_analysis_inventory_applies_without_artifact_dec
     ]
 
 
+def _complete_fingerprint(**changes: Any) -> dict[str, Any]:
+    fingerprint: dict[str, Any] = {
+        "sourceType": "anndata",
+        "datasetId": "exact",
+        "cellCount": 3,
+        "varCount": 2,
+        **_mapping_fingerprint_keys(),
+    }
+    for key, value in changes.items():
+        if value is None:
+            fingerprint.pop(key)
+        else:
+            fingerprint[key] = value
+    return fingerprint
+
+
 @pytest.mark.parametrize(
-    "fingerprint",
+    ("fingerprint", "detail"),
     [
-        {
-            "sourceType": "anndata",
-            "datasetId": "exact",
-            "cellCount": 3,
-        },
-        {
-            "sourceType": "anndata",
-            "datasetId": "exact",
-            "cellCount": 3,
-            "varCount": 2,
-            "legacy": True,
-        },
+        (_complete_fingerprint(varCount=None), "missing varCount"),
+        (_complete_fingerprint(cellOrder=None), "missing cellOrder"),
+        (_complete_fingerprint(dataMapping=None), "missing dataMapping"),
+        (_complete_fingerprint(legacy=True), "unknown legacy"),
     ],
 )
-def test_bundle_requires_exact_four_key_dataset_fingerprint(
+def test_bundle_requires_exact_six_key_dataset_fingerprint(
     tmp_path: Path,
     fingerprint: dict[str, Any],
+    detail: str,
 ) -> None:
     path = _write_bundle(
         tmp_path / "fingerprint.cellucid-session",
         [],
         fingerprint=fingerprint,
     )
-    with pytest.raises(ValueError, match="datasetFingerprint fields"):
+    with pytest.raises(ValueError, match=f"datasetFingerprint fields: {detail}"):
         CellucidSessionBundle(path).list_chunk_ids()
 
 
 def test_bundle_accepts_exact_nullable_web_dataset_identity(
     tmp_path: Path,
 ) -> None:
-    path = _write_bundle(
-        tmp_path / "nullable-fingerprint.cellucid-session",
-        [],
-        fingerprint={
-            "sourceType": None,
-            "datasetId": None,
-            "cellCount": 0,
-            "varCount": 0,
-        },
-    )
-    assert CellucidSessionBundle(path).dataset_fingerprint == {
+    fingerprint = {
         "sourceType": None,
         "datasetId": None,
         "cellCount": 0,
         "varCount": 0,
+        **_mapping_fingerprint_keys(),
     }
+    path = _write_bundle(
+        tmp_path / "nullable-fingerprint.cellucid-session",
+        [],
+        fingerprint=fingerprint,
+    )
+    assert CellucidSessionBundle(path).dataset_fingerprint == fingerprint
 
 
 def test_bundle_rejects_removed_depends_on_chunk_metadata(
@@ -1545,33 +1571,22 @@ def test_bundle_requires_exact_stored_and_uncompressed_lengths(
         CellucidSessionBundle(compressed_path).decode_chunk("gzip")
 
 
-def test_bundle_rejects_oversized_gzip_before_decompression(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    compressed = gzip.compress(b"{}", mtime=0)
+def test_bundle_bounds_gzip_inflation_by_the_declared_size(tmp_path: Path) -> None:
+    # There is no fixed byte limit: the declared uncompressedBytes bounds the
+    # inflate, so a payload that inflates past what it declares is refused
+    # once it has produced one byte more, never allocated whole.
+    payload = b"[" + b"0," * 50_000 + b"0]"
+    compressed = gzip.compress(payload, mtime=0)
     meta = _chunk_meta(
         "gzip",
         compressed,
         kind="json",
         codec="gzip",
-        uncompressed_bytes=DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES + 1,
+        uncompressed_bytes=1_000,
     )
-    path = _write_bundle(
-        tmp_path / "oversized.cellucid-session",
-        [(meta, compressed)],
-    )
-
-    def forbidden_decompress(_payload: bytes) -> bytes:
-        raise AssertionError("gzip.decompress must not run")
-
-    monkeypatch.setattr(
-        "cellucid.session_bundle._decompress_gzip_exact",
-        forbidden_decompress,
-    )
-    with pytest.raises(ValueError, match="uncompressedBytes.*limit"):
+    path = _write_bundle(tmp_path / "understated.cellucid-session", [(meta, compressed)])
+    with pytest.raises(ValueError, match="uncompressedBytes"):
         CellucidSessionBundle(path).decode_chunk("gzip")
-
 
 def test_delta_codec_rejects_duplicates_and_trailing_bytes() -> None:
     with pytest.raises(ValueError, match="strictly increasing"):
@@ -1652,3 +1667,14 @@ def test_user_defined_codecs_preserve_current_rle_dtype(
         if expected_dtype == np.dtype(np.uint8)
         else [256, 256, 256, 1]
     )
+
+
+def test_bundle_manifest_length_is_bounded_by_the_file_not_a_fixed_cap(tmp_path: Path) -> None:
+    from cellucid.session_bundle import MAX_FRAME_BYTES, SESSION_BUNDLE_MAGIC
+
+    assert MAX_FRAME_BYTES == 0xFFFF_FFFF
+    # 64 MiB declared (above the former 16 MiB cap) in a file of a few bytes.
+    path = tmp_path / "truncated.cellucid-session"
+    path.write_bytes(SESSION_BUNDLE_MAGIC + (64 * 1024 * 1024).to_bytes(4, "little") + b"{")
+    with pytest.raises(ValueError, match="more than the session file holds"):
+        CellucidSessionBundle(path).decode_chunk("anything")

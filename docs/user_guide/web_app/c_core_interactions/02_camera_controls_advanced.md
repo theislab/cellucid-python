@@ -14,7 +14,7 @@
 
 All navigation/camera controls are in:
 
-- **Compare Views** accordion → **Navigation** section
+- **Navigation** accordion
 - **Camera Path** accordion → saved positions, timing, and interpolation
 
 The controls shown depend on the current navigation **Mode**:
@@ -135,6 +135,9 @@ There are two different “reset” concepts:
 
 2) **`R` keyboard shortcut**
    - Resets the camera framing only.
+   - Keeps the current navigation mode. In **Free-fly** the camera is placed
+     where the default Orbit camera sits, looking at the data, so the framing
+     is the same in every mode.
    - Does not necessarily reset all visualization sliders/checkboxes.
 
 Practical implication: if you want “start over visually”, use the **button**; if you just want to re-center quickly, use `R`.

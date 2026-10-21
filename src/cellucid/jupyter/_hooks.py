@@ -31,6 +31,7 @@ class HookRegistry:
         - click: User clicked on a cell
         - ready: Viewer finished initial load
         - command_error: A command sent from the notebook failed in the viewer
+        - data_mapping: The viewer's data mapping was resolved or changed
         - message: Raw message (catches all events)
 
     Example:
@@ -162,6 +163,7 @@ class ViewerState:
     hover: dict[str, Any] | None = None
     click: dict[str, Any] | None = None
     command_error: dict[str, Any] | None = None
+    data_mapping: dict[str, Any] | None = None
 
     last_event_type: str | None = None
     last_event: dict[str, Any] | None = None

@@ -152,6 +152,10 @@ Detailed uses a two-step variable selector:
 
 If gene expression is not available in the dataset, the selector will show an explicit “No gene expression data available” message.
 
+A gene that stays under the pointer, or highlighted with the arrow keys, in the
+gene list for 150 ms starts loading in the background, so choosing it usually
+needs no wait. Moving on cancels that load, and choosing the gene uses it.
+
 ### Correlation mode
 
 Correlation uses two selectors:

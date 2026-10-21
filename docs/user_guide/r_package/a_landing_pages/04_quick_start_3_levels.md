@@ -50,7 +50,7 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 cellucid_prepare(
   latent_space = latent,
   obs = obs,
-  X_umap_2d = umap2,
+  embeddings = list(X_umap = umap2),
   obs_categorical_dtype = "uint8",
   dataset_name = "Quick Start Toy",
   dataset_id = "cellucid_quickstart_toy",
@@ -101,7 +101,7 @@ Example:
 cellucid_prepare(
   latent_space = latent,
   obs = obs,
-  X_umap_2d = umap2,
+  embeddings = list(X_umap = umap2),
   obs_categorical_dtype = "uint8",
   dataset_name = "Quick Start Toy",
   dataset_id = "cellucid_quickstart_toy",
@@ -130,7 +130,7 @@ cellucid_prepare(
   obs = obs,
   var = var,
   gene_expression = expr,
-  X_umap_2d = umap2,
+  embeddings = list(X_umap = umap2),
   obs_categorical_dtype = "uint8",
   dataset_name = "Quick Start Toy",
   dataset_id = "cellucid_quickstart_toy",
@@ -154,7 +154,7 @@ connectivities[1, 3] <- 1
 cellucid_prepare(
   latent_space = latent,
   obs = obs,
-  X_umap_2d = umap2,
+  embeddings = list(X_umap = umap2),
   connectivities = connectivities,
   obs_categorical_dtype = "uint8",
   dataset_name = "Quick Start Toy",
@@ -171,16 +171,16 @@ Vector fields are per-cell vectors (1/2/3 components). They are exported as floa
 
 ```r
 vector_fields <- list(
-  velocity_umap_2d = matrix(c(0.2, 0,
+  velocity = list(X_umap = matrix(c(0.2, 0,
                               0.2, 0,
                               0.2, 0),
-                            ncol = 2, byrow = TRUE)
+                            ncol = 2, byrow = TRUE))
 )
 
 cellucid_prepare(
   latent_space = latent,
   obs = obs,
-  X_umap_2d = umap2,
+  embeddings = list(X_umap = umap2),
   vector_fields = vector_fields,
   obs_categorical_dtype = "uint8",
   dataset_name = "Quick Start Toy",

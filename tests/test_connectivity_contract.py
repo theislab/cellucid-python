@@ -39,7 +39,7 @@ def _prepare_kwargs(out_dir, connectivities):
             index=[f"cell-{index}" for index in range(5)],
         ),
         "connectivities": connectivities,
-        "X_umap_2d": np.arange(10, dtype=np.float32).reshape(5, 2),
+        "embeddings": {"X_umap": np.arange(10, dtype=np.float32).reshape(5, 2)},
         "out_dir": out_dir,
         "centroid_min_points": 1,
         "dataset_name": "Exact connectivity",
@@ -379,7 +379,7 @@ def test_direct_anndata_producer_uses_the_same_canonical_sequence() -> None:
         adata,
         dataset_name="Direct exact connectivity",
         dataset_id="direct-exact-connectivity",
-        serve_connectivity=True,
+        knn_key="connectivities",
     )
     (
         source_bytes,

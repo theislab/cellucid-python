@@ -7,7 +7,7 @@ If you are changing anything that affects:
 - filters/visibility/outliers,
 - highlights or highlight pages,
 - multiview snapshots,
-- dimension switching (1D/2D/3D),
+- the embedding each view shows (and so its dimension, 1D/2D/3D),
 - vector-field overlays,
 
 …you should read this page before implementing changes.
@@ -42,22 +42,36 @@ Code:
 `DataState` owns the arrays that back rendering and visibility:
 
 - `pointCount`: number of points/cells
-- `positionsArray`: normalized positions (used for smoke density; updated on dimension switches)
-- `colorsArray`: RGBA color buffer (uint8 packed)
-- `categoryTransparency`: per-point alpha (float32), used for filtering/visibility
-- `outlierQuantilesArray`: per-point outlier quantiles (float32), used by outlier filter logic
+- `positionsArray`: the live view's normalized positions, with exactly
+  `positionsDimension` components per cell (x, xy or xyz — never padded to
+  XYZ); both are updated together whenever the live view shows another
+  embedding, and read by smoke
+  density and the session fingerprint
+- `colorsArray`: RGBA color buffer (uint8 packed); smoke density reads it too,
+  so the cloud carries the active field's colours
+- `categoryTransparency`: per-point visibility, a `Uint8Array` holding exactly 0
+  or 1 (every filter keeps or drops a cell; highlight dimming and fog are done
+  in the shaders), validated by `requirePointTransparency`
+  (`rendering/alpha-visibility.js`)
+- outlier quantiles are not copied into the state: the outlier filter reads the
+  active field's own `outlierQuantiles` through `getActiveOutlierQuantiles()`
 
 Key invariant:
 - **indices are stable**: point `i` refers to the same cell across all arrays (positions/colors/alpha/highlights).
 
 ### Field data + caches
 
-Loaded field values are cached in bounded LRU caches to prevent unbounded memory growth:
-
-- `_fieldDataCache`: obs fields (defaults to max 50 entries)
-- `_varFieldDataCache`: gene-expression fields (defaults to max 20 entries)
-
-These caches are shared across views and are critical for performance on large datasets.
+Loaded field values live in `_fieldDataCache` (obs fields) and
+`_varFieldDataCache` (gene-expression fields), shared across views. They are
+bounded in **bytes**, not entries (`field/residency.js`): once inactive fields
+hold more than their budget, the least recently used are released. The budget
+is `residencyBudgetBytes('inactiveFields')` (`data/memory-budget.js`): a
+sixteenth of the device memory the browser reports, at least 128 MiB, and
+512 MiB where the browser reports none. The active field, any field with filter state, and fields still
+loading are always kept, and release runs only when the active field changes, so
+a session restore or an analysis that loads several fields cannot lose one.
+(An entry-count bound did not bound memory: browsing genes kept every one at
+4 bytes per cell.)
 
 ### Multi-view contexts (live + snapshots)
 
@@ -73,8 +87,43 @@ that treats the snapshot count as unbounded.
 `DataState` maintains a `viewContexts` map (`viewId → context`) so each view can have:
 - independent active field selections (obs/var)
 - independent filters/outlier settings
-- independent dimension level (embedding)
-- synchronized or independent camera (camera sync is viewer-side; state tracks view id)
+- the embedding it shows, and whether it follows its dimension's default
+  (`followsDefault`); its dimension is that embedding's
+- its own camera and navigation mode; **Link cameras** shares one camera
+  between views that show the same embedding (viewer-side:
+  `viewer.setCamerasLocked()`, `viewer.getCameraLinkGroups()`)
+
+Per-cell arrays (colors, category transparency, the visibility mask, outlier
+quantiles) are owned, not copied, as views change. The **active** view's context
+shares the arrays `DataState` itself holds, so syncing it after every coloring,
+filtering or centroid change costs nothing per cell. `setActiveView` moves the
+arrays: the outgoing context keeps the ones the state was using, and the state
+adopts the incoming context's. A new snapshot (“Keep view”) **shares** the
+transparency array and visibility mask with the view it was kept from, copy on
+write (`state/managers/per-cell-array-ownership.js`): every writer goes through
+`writableTransparency`, `writableCellVisibilityMask`, `writableColors` or
+`writableColorAlphaBytes`, which copy first if another view still holds the
+array. A kept view's colours are one copy that the viewer and renderer keep by
+reference; once published, an array is never written again. A context handed
+to `restoreContext` is copied, because its caller may still hold it. So never
+write a per-cell array directly — always take it through a `writable*` helper.
+A kept view now adds about 6–7.4 bytes per cell instead of 26.
+
+### Field switch cost
+
+Switching the colored field recolors every cell on the main thread, so its
+per-cell loops are kept to table reads. Category colors come from one RGBA word
+per category (`_writeCategoryColors`, shared by coloring and the color refresh
+after a filter edit); continuous colors sample the colormap without allocating.
+The value scans that only depend on a field's data are proved once per array:
+a continuous field's range and non-finite check (`scanContinuousValues`), and a
+categorical field's code-range check (`requireCategoryCodesInInventory`).
+Category counts resolve the active filters once per count instead of once per
+cell. Field arrays are never written in place once published — a changed
+field gets a new array — which is what makes those per-array proofs valid.
+At 5,000,000 cells (Chromium, Apple M1 Pro) a cached switch to a continuous
+field blocked the main thread for about 480 ms and now for about 140 ms; to a
+categorical field, about 400 ms and now about 180 ms.
 
 ### Highlights (multi-page highlight system)
 
@@ -86,15 +135,44 @@ Highlights are modeled as:
 The key point:
 - **highlights are layered on top of visibility** (filtered-out points can still “be in a highlight group”).
 
-### Dimension switching + vector fields
+Selections in progress (the annotation, lasso, KNN and proximity candidates)
+are `CellSet`s (`app/utils/cell-set.js`): one bit a cell, with word-wise union,
+intersection and difference. Never hold a set of cells in a JavaScript `Set`
+or `Map`: V8 refuses more than 16,777,216 entries, so a selection of a large
+cluster in a 30M-cell dataset would fail. Uniqueness checks on cell lists use
+`hasDuplicateCellIndex` for the same reason. `tests/cell-set-contract.test.mjs`
+enforces this in the selection modules.
 
-Cellucid supports multi-dimensional embeddings via:
-- `dimensionManager` (from the data layer): knows which embeddings exist and how to load them
-- `activeDimensionLevel` (live view)
-- per-view dimension levels (stored in view contexts)
+### Representations + vector fields
+
+A view shows one *representation*: one embedding, at its columns, of any
+dimension. Cellucid tracks them via:
+- `dimensionManager` (from the data layer): the layout registry. Every
+  position layout has a `layoutKey`; positions, normalization and cache
+  eviction are all keyed by layout (`loadLayout`, `getPositions`,
+  `getNormTransform`). The data mapping publishes which layouts are *enabled*
+  — any number, of any mix of dimensions — and at most one *default* per
+  dimension (`setRepresentations`, `getEnabledLayoutsForDimension`,
+  `getDefaultLayout`). The layout a view shows is
+  `dimensionManager.getViewLayout(viewId)`; nothing stores a view's dimension
+  beside it (`state.getViewDimensionLevel(viewId)` reads the layout's).
+- `state.getEnabledRepresentations()` lists what the picker offers, and
+  `state.getDataMapping()` / `state.applyDataMapping()`
+  (`state/managers/mapping-manager.js`) read and change the mapping.
+
+Coordinates of an enabled layout are read the first time a view shows it and
+kept while a view shows it; afterwards they stay in a cache whose budget is a
+quarter of the device memory the browser reports
+(`residencyBudgetBytes('positions')`, at least 512 MiB), released least
+recently shown first, and entirely under memory pressure. The budget never
+refuses what the views show: the layouts shown plus the one being shown are
+always admitted, even above it.
 
 Vector fields (velocity/drift overlays) are optional and use:
-- `vectorFieldManager` (from the data layer): lists available fields and loads vectors per dimension
+- `vectorFieldManager` (from the data layer): lists available fields and loads
+  vectors per layout (`loadField(fieldId, layoutKey)`); each field is bound to
+  the embeddings it was computed on (`hasFieldLayout(fieldId, layoutKey)`), and
+  is drawn in every view that shows one of them
 
 ---
 
@@ -138,7 +216,9 @@ Events are the main way UI modules stay decoupled from state internals.
 | `field:changed` | `{ source, fieldIndex, changeType, detail }` | Field metadata/state changed (rename/delete/load/filter/color changes) |
 | `highlight:changed` | none | Highlight groups changed (membership/colors/enabled) |
 | `page:changed` | none | Highlight page set changed (add/remove/rename/switch) |
-| `dimension:changed` | `level` (number) | Active view dimension changed |
+| `view:representation-changed` | `{ viewId, layoutKey, dimension, previousLayoutKey }` | The representation a view shows changed (any view, active or not), or focus moved to a view showing another one |
+| `mapping:changed` | `{ mapping, cause }` | The data mapping was applied (Session › Data mapping, or a session restore) |
+| `representations:changed` | `{ enabled }` | The enabled representations changed (fires with `mapping:changed`) |
 | `vectorFields:changed` | list of available fields | Vector-field availability changed (dataset load / manager attached) |
 
 Code pointers:
@@ -146,8 +226,10 @@ Code pointers:
   - `cellucid/assets/js/app/state/managers/view-context-viewer-sync.js`
 - Highlight/page events:
   - `cellucid/assets/js/app/state/managers/highlight-manager.js`
-- Dimension + vectorFields events:
+- Representation + vectorFields events:
   - `cellucid/assets/js/app/state/managers/view-manager.js`
+- Mapping events:
+  - `cellucid/assets/js/app/state/managers/mapping-manager.js`
 
 ### Event ordering and “why did this fire twice?”
 
@@ -222,11 +304,23 @@ Two consequences for contributors:
    the cost the comparison exists to avoid.
 :::
 
-- Dimension changes:
-  - loads new positions for the requested dimension
-  - updates `positionsArray`
-  - calls `viewer.updatePositions(newPositions)`
-  - triggers `dimension:changed`
+- Representation changes all go through
+  `setViewRepresentation(viewId, layoutKey, { followsDefault })`. The callers
+  are `setViewEmbedding(viewId, ref)` (an explicit choice: the picker, the
+  API), `restoreViewEmbedding(viewId, ref)` (a session: the view follows the
+  default again when it shows it), `showDefaultRepresentation(viewId, level)`
+  and `cycleRepresentation(viewId, level)` (keys 1, 2 and 3). It:
+  - refuses a layout that is not enabled; a request for the layout the view
+    already shows only records `followsDefault`
+  - loads that layout's positions, pinned while the change is staged, and
+    stages its centroids, with rollback for every owner on failure
+  - updates `positionsArray` and `positionsDimension` (live view)
+  - calls `viewer.updatePositions(newPositions, dimensionLevel)` (or
+    `viewer.setViewPositions` for a kept view), then
+    `dimensionManager.setViewLayout(viewId, layoutKey)` and
+    `viewer.setViewEmbedding(viewId, { dimension, layoutKey })`, which drops
+    that view's LOD, frustum, picking and vector state for the old layout
+  - triggers `view:representation-changed`
 
 The bulk of this wiring lives under:
 - `cellucid/assets/js/app/state/managers/view-context-*`
@@ -256,7 +350,7 @@ state.on('highlight:changed', () => console.log('highlight:changed'));
 ### 3) Confirm invariants
 
 Useful checks:
-- `state.pointCount` matches `state.colorsArray.length / 4` and `state.positionsArray.length / 3`.
+- `state.pointCount` matches `state.colorsArray.length / 4` and `state.positionsArray.length / state.positionsDimension`.
 - `state.getActiveViewId()` is what you think it is (live vs snapshot).
 
 If these invariants break, most UI behavior becomes misleading.
@@ -283,10 +377,10 @@ Make sure new code handles:
 - `pointCount === 0`
 - missing manifests (e.g. no `var_manifest.json`)
 
-### Async dimension switching
+### Async representation changes
 
-Dimension changes are async (may involve fetching embeddings).
-If you add code that awaits during a dimension change, watch for:
+Representation changes are async (may involve fetching embeddings).
+If you add code that awaits during one, watch for:
 - “cross-await state corruption” (the active view changed while awaiting)
 
 The code uses a `_dimensionChangeLock` to serialize changes; preserve that property when refactoring.
@@ -316,15 +410,16 @@ Fix:
 - Ensure state methods (not UI code) own the viewer sync calls.
 - Use the view-context-aware APIs when operating on snapshot views.
 
-### Symptom: “Dimension selector changes, but embedding does not”
+### Symptom: “The picker changes, but the embedding does not”
 
 Likely causes:
-- embedding for the target dimension is missing
-- async load failed (network / manifest mismatch)
-- viewer positions cache not updated for the active view
+- the representation is not enabled (`dimensionManager.isEnabled(layoutKey)`)
+- async load failed (network / manifest mismatch / values refused)
+- the change targeted another view than the one on screen
 
 Fix:
-- Confirm dimension metadata in `dimensionManager` and the dataset identity.
+- Confirm `state.getEnabledRepresentations()` and
+  `state.getViewLayoutKey(viewId)` for the view you expect.
 - Check Network tab for embedding fetch failures.
 
 ---

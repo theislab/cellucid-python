@@ -34,8 +34,12 @@ Minimum expected files:
 my_export/
 ├── dataset_identity.json          # required
 ├── obs_manifest.json              # required
-└── points_2d.bin(.gz)             # at least one non-empty 1d/2d/3d file
+├── obs/                           # required
+└── embeddings/                    # required: at least one file, e.g. 0_2d.bin(.gz)
 ```
+
+This is export format 3; such an export needs a viewer release that reads
+format 3.
 
 Typical full layout (recommended for most datasets):
 
@@ -45,9 +49,7 @@ my_export/
 ├── obs_manifest.json
 ├── var_manifest.json                 # optional (if gene expression exported)
 ├── connectivity_manifest.json        # optional (if connectivities exported)
-├── points_1d.bin(.gz)                # optional
-├── points_2d.bin(.gz)                # optional
-├── points_3d.bin(.gz)                # optional
+├── embeddings/                       # one file per embedding, any number per dimension
 ├── obs/
 ├── var/
 ├── connectivity/
@@ -56,7 +58,8 @@ my_export/
 
 Notes:
 - The `.gz` suffix appears when you export with compression enabled (gzip).
-- The viewer reads `dataset_identity.json` first; it describes what dimensions/files exist.
+- The viewer reads `dataset_identity.json` first; it lists every embedding, its
+  dimension and file, and which one each dimension shows first.
 - If you load a folder and Cellucid says “not a valid export”, it usually means `dataset_identity.json` is missing or malformed.
 - Payload files are named by an **integer index**, never by a field name. Read
   the paths out of the manifests rather than assembling them from a label.
@@ -127,18 +130,25 @@ eagerly with `anndata.read_zarr`.
 
 ### Minimum requirements (all AnnData modes)
 
-You must have at least one embedding in `obsm`:
-- `obsm["X_umap_1d"]` with shape `(n_cells, 1)`
-- `obsm["X_umap_2d"]` with shape `(n_cells, 2)`
-- `obsm["X_umap_3d"]` with shape `(n_cells, 3)`
+You must have at least one `obsm` array Cellucid can draw: dense, numeric, one
+row per cell, at least one column (a one-dimensional array is one column), with
+finite values that fit in 32-bit floats and not the same coordinates for every
+cell.
 
-A suffixed key and its column count must agree exactly, and a key that names its
-dimension always decides that dimension. When a file declares none of the three
-and carries the plain `X_umap` that `sc.tl.umap()` writes, that array is read at
-the dimension its own column count states — 1, 2, or 3 columns — so an ordinary
-Scanpy object loads as written. Any other width is refused. This holds for every
-AnnData mode: the browser file picker, `cellucid serve`, and the notebook
-viewers.
+Which array each dimension shows by default:
+- `obsm["X_umap_1d"]`, `obsm["X_umap_2d"]` and `obsm["X_umap_3d"]` fill their
+  own dimensions; a suffixed key and its column count must agree exactly.
+- When a file declares none of the three and carries the plain `X_umap` that
+  `sc.tl.umap()` writes, that array fills the dimension of its width (1, 2 or 3
+  columns), so an ordinary Scanpy object loads as written.
+- When the file has no UMAP at all, a deterministic **best guess** fills the
+  dimensions instead (t-SNE, force layouts, spatial, …, and last the first two
+  columns of a wide array such as `X_pca`). See {doc}`13_data_mapping`.
+
+This holds for every AnnData mode: the browser file picker, `cellucid serve`,
+and the notebook viewers. In the browser any other array can then be turned
+on under **Session › Data mapping** and shown in any view; `cellucid serve` takes
+`--embedding-1d/--embedding-2d/--embedding-3d KEY[:c0,c1]`.
 
 ### Optional (but commonly expected)
 
@@ -171,8 +181,11 @@ Examples:
 - `drift_umap_3d`
 
 Notes:
-- Keys starting with `X_` are reserved for embeddings and ignored as vector fields.
-- The overlay dropdown shows fields available for the **current** dimension only.
+- `X_umap_1d`, `X_umap_2d` and `X_umap_3d` are embeddings, never vector fields.
+- A field `<field>_umap_<d>d` is bound to the embedding in the `d`-dimensional
+  slot, and only when that slot shows `X_umap_<d>d` or `X_umap`.
+- The overlay dropdown shows the fields bound to the embedding the view
+  **shows**; a view showing another embedding (for example a t-SNE) has none.
 
 #### Export format (`vectors/` + `dataset_identity.json`)
 
@@ -181,11 +194,12 @@ Exports store vectors as binary files under `vectors/` and describe them in `dat
 Typical filenames:
 
 ```text
-vectors/<index>_<dim>d.bin
-vectors/<index>_<dim>d.bin.gz        # if export compression is enabled
+vectors/<field index>_<embedding index>.bin
+vectors/<field index>_<embedding index>.bin.gz        # if export compression is enabled
 ```
 
-`<index>` is the vector field's position, not its name. Payload files across
+The first index is the vector field's position and the second the position of the
+embedding it is drawn over; neither is a name. Payload files across
 the whole export are named by an integer index and never by a field name; the
 manifest beside them is what says which field an index belongs to. Always read
 the paths out of `dataset_identity.json["vector_fields"]` rather than assembling
@@ -196,13 +210,13 @@ Typical identity schema (high-level):
 ```json
 {
   "vector_fields": {
-    "default_field": "velocity_umap",
+    "default_field": "velocity",
     "fields": {
-      "velocity_umap": {
-        "available_dimensions": [2, 3],
+      "velocity": {
+        "label": "velocity",
         "files": {
-          "2d": "vectors/0_2d.bin.gz",
-          "3d": "vectors/0_3d.bin.gz"
+          "X_umap": "vectors/0_1.bin.gz",
+          "X_umap_3d": "vectors/0_2.bin.gz"
         }
       }
     }
@@ -222,13 +236,17 @@ Naming and schema details:
 
 ## Common “format mismatch” problems (and what they mean)
 
-### “No embedding / no UMAP”
+### “Cellucid found nothing to plot”
 
 Meaning:
-- Cellucid could not find a supported embedding key in `obsm`, or the shape is wrong.
+- No `obsm` array can be drawn: every entry is a table, a sparse array, has
+  another row count, or holds a value that cannot be drawn. The message lists
+  each entry and why.
 
 Fix:
-- Ensure you have one of the supported keys and it has shape `(n_cells, 2)` or `(n_cells, 3)`.
+- Add an embedding (for example `sc.tl.umap(adata)`) or fix the array the
+  message names. A file without a UMAP but with any drawable array opens on a
+  best guess ({doc}`13_data_mapping`).
 
 ### “Fields list is empty”
 
@@ -259,13 +277,13 @@ Fix:
   printable text is acceptable — but two genes sharing a name are
   indistinguishable in the field selector, the legend, and every exported
   figure.
-- **Huge categorical fields**: legends/palettes don’t scale to 50k–100k categories; consider filtering/aggregating.
-- **Browser byte ceilings**: the browser paths refuse anything that would need
-  more than **512 MiB** for a single working set — an `.h5ad` larger than that on
-  disk, a declared prepared payload larger than that, or a gzip stream that says
-  it decompresses to more. JSON metadata has a separate, smaller ceiling of
-  64 MiB. None of these apply to server mode or Jupyter, where Python holds the
-  data and the browser receives only what it asks for.
+- **Huge categorical fields**: any number of categories loads and the legend scrolls, but palettes cannot keep 50k–100k colours distinct; consider aggregating.
+- **Browser memory**: there is no fixed size ceiling, for a prepared export, a
+  direct `.h5ad` or Zarr file, or their JSON metadata. Each binary payload is
+  held to the exact size its manifest or array metadata declares, and one the
+  browser cannot allocate is refused as too large, naming the bytes. Server
+  mode and Jupyter hold the data in Python, so the browser receives only what
+  it asks for.
 - **Byte order**: never a compatibility problem. Prepared payloads are
   little-endian by contract; H5AD is byte-order-agnostic, because HDF5 converts
   to host order while reading; Zarr records its own byte order per array and the

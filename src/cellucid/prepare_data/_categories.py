@@ -14,7 +14,12 @@ from typing import NamedTuple
 
 import numpy as np
 
-from .._contracts import _WHITESPACE_RUN_PATTERN, JsonScalar, _display_text_defect
+from .._contracts import (
+    _WHITESPACE_RUN_PATTERN,
+    CATEGORICAL_CODE_WIDTHS,
+    JsonScalar,
+    _display_text_defect,
+)
 
 
 def _require_displayable_category_labels(
@@ -128,10 +133,39 @@ def _json_category_values(
 class _CategoricalCodesStorage(NamedTuple):
     """How one categorical field's codes are stored on disk."""
 
-    dtype: type[np.uint8] | type[np.uint16]
+    dtype: type[np.uint8] | type[np.uint16] | type[np.uint32]
     dtype_str: str
     missing_value: int
     codes_extension: str
+
+
+def _storage(dtype: type[np.uint8] | type[np.uint16] | type[np.uint32]) -> _CategoricalCodesStorage:
+    dtype_str = np.dtype(dtype).name
+    width = CATEGORICAL_CODE_WIDTHS[dtype_str]
+    return _CategoricalCodesStorage(dtype, dtype_str, width.missing, width.extension)
+
+
+_CATEGORICAL_CODES_STORAGE = {
+    storage.dtype_str: storage
+    for storage in (_storage(np.uint8), _storage(np.uint16), _storage(np.uint32))
+}
+CATEGORICAL_CODE_DTYPES = tuple(_CATEGORICAL_CODES_STORAGE)
+
+
+def _categorical_storage_for_count(n_categories: int) -> _CategoricalCodesStorage:
+    """The narrowest codes storage that carries ``n_categories`` categories.
+
+    Writers that choose the width themselves (``cellucid serve``,
+    ``show_anndata``) use this, so uint32 appears only for a field with more
+    than 65,535 categories and every narrower field keeps its narrower codes.
+    """
+    for storage in _CATEGORICAL_CODES_STORAGE.values():
+        if n_categories <= storage.missing_value:
+            return storage
+    raise ValueError(
+        f"A categorical field has {n_categories} categories; categorical codes "
+        "carry at most 4,294,967,295 (uint32)."
+    )
 
 
 def _declared_categorical_storage(
@@ -144,24 +178,20 @@ def _declared_categorical_storage(
 
     ``obs_categorical_dtype`` is the caller's choice rather than something
     derived from the data, so the only thing left to settle is whether a
-    field's categories fit the declared width. uint8 spends code 255 on the
-    missing marker and so carries 255 categories (0-254); uint16 spends 65,535
-    the same way and carries 65,535.
+    field's categories fit the declared width. Each width spends its largest
+    value on the missing marker: uint8 carries 255 categories, uint16 65,535
+    and uint32 4,294,967,295.
 
     The exporter resolves the storage here twice for each field -- once in the
     pass that records what will be written, once in the loop that writes it --
     so a field cannot be summarised as one width and then encoded as another.
     """
-    if obs_categorical_dtype == "uint8":
-        if n_categories > 255:
-            raise ValueError(
-                f"Field {field_key!r} has {n_categories} categories, "
-                "but uint8 supports at most 255."
-            )
-        return _CategoricalCodesStorage(np.uint8, "uint8", 255, "u8")
-    if n_categories > 65_535:
+    storage = _CATEGORICAL_CODES_STORAGE[obs_categorical_dtype]
+    if n_categories > storage.missing_value:
+        wider = _categorical_storage_for_count(n_categories).dtype_str
         raise ValueError(
-            f"Field {field_key!r} has {n_categories} categories, "
-            "but uint16 supports at most 65,535."
+            f"Field {field_key!r} has {n_categories:,} categories, but "
+            f"{storage.dtype_str} supports at most {storage.missing_value:,}. "
+            f"Pass obs_categorical_dtype={wider!r}."
         )
-    return _CategoricalCodesStorage(np.uint16, "uint16", 65535, "u16")
+    return storage

@@ -77,12 +77,14 @@ def test_anndata_adapter_emits_exact_current_compact_manifests() -> None:
         "_continuousFields",
         "_categoricalFields",
     ]
-    assert obs["_format"] == "compact_v1"
+    assert obs["_format"] == "compact_v2"
     assert obs["_continuousFields"] == [[0, "score"]]
     assert len(obs["_categoricalFields"]) == 1
     categorical = obs["_categoricalFields"][0]
     assert categorical[:5] == [1, "cluster", ["A", "B"], "uint8", 255]
+    # compact_v2 keys centroids by served embedding id, not by dimension.
     assert isinstance(categorical[5], dict)
+    assert list(categorical[5]) == ["X_umap_2d"]
     assert len(categorical) == 6
     assert obs["_obsSchemas"] == {
         "continuous": {
@@ -104,14 +106,16 @@ def test_anndata_adapter_emits_exact_current_compact_manifests() -> None:
     assert list(var) == [
         "_format",
         "n_points",
-        "var_gene_id_column",
         "compression",
         "quantization",
         "_varSchema",
         "fields",
+        "gene_name_sets",
     ]
-    assert var["_format"] == "compact_v1"
-    assert var["var_gene_id_column"] is None
+    assert var["_format"] == "compact_v2"
+    assert var["gene_name_sets"] == [
+        {"source": None, "filled_from_index": 0, "renamed": [], "names": None}
+    ]
     assert var["quantization"] is None
     assert var["_varSchema"] == {
         "kind": "continuous",
@@ -269,12 +273,20 @@ def test_python_producers_share_exact_categorical_storage_boundaries() -> None:
         "uint16",
         65_535,
     )
-    with pytest.raises(ValueError, match="at most 65,535"):
-        _categorical_storage(65_536, field_key="group")
+    # A field past uint16 (barcodes, free text) is served with uint32 codes
+    # instead of refusing the AnnData.
+    assert _categorical_storage(65_536, field_key="group") == (
+        np.uint32,
+        "uint32",
+        4_294_967_295,
+    )
+    with pytest.raises(ValueError, match="at most 4,294,967,295"):
+        _categorical_storage(4_294_967_296, field_key="group")
 
     # The exporter honours the width its caller declared instead of choosing
-    # one, but it enforces the same boundaries: 255 categories in uint8 and
-    # 65,535 in uint16, each spending its top code on the missing marker.
+    # one, but it enforces the same boundaries: 255 categories in uint8,
+    # 65,535 in uint16 and 4,294,967,295 in uint32, each spending its top code
+    # on the missing marker.
     assert _declared_categorical_storage("uint8", 255, field_key="group") == (
         np.uint8,
         "uint8",
@@ -289,8 +301,17 @@ def test_python_producers_share_exact_categorical_storage_boundaries() -> None:
     )
     with pytest.raises(ValueError, match="uint8 supports at most 255"):
         _declared_categorical_storage("uint8", 256, field_key="group")
-    with pytest.raises(ValueError, match="uint16 supports at most 65,535"):
+    with pytest.raises(
+        ValueError,
+        match=r"uint16 supports at most 65,535\. Pass obs_categorical_dtype='uint32'",
+    ):
         _declared_categorical_storage("uint16", 65_536, field_key="group")
+    assert _declared_categorical_storage("uint32", 65_536, field_key="group") == (
+        np.uint32,
+        "uint32",
+        4_294_967_295,
+        "u32",
+    )
 
 
 def test_prepare_producer_preserves_exact_json_category_identity() -> None:
@@ -576,7 +597,9 @@ def test_generic_umap_is_ignored_when_an_explicit_embedding_exists() -> None:
         dataset_name="Explicit UMAP",
         dataset_id="explicit-umap",
     )
-    assert adapter.get_dataset_identity()["embeddings"]["available_dimensions"] == [2]
+    embeddings = adapter.get_dataset_identity()["embeddings"]
+    assert list(embeddings["items"]) == ["X_umap_2d"]
+    assert embeddings["defaults"] == {"2d": "X_umap_2d"}
 
 
 @pytest.mark.parametrize("invalid_value", [np.nan, np.inf, -np.inf])
@@ -621,7 +644,7 @@ def test_extreme_finite_umap_normalizes_without_float32_range_overflow() -> None
         dataset_id="extreme-finite-umap",
     )
 
-    normalized = adapter.get_embedding(2)
+    normalized = adapter.get_embedding("X_umap_2d")
     assert np.isfinite(normalized).all()
     assert normalized.min() >= -1.0
     assert normalized.max() <= 1.0
@@ -637,22 +660,33 @@ def test_embedding_shape_mutation_after_initialization_is_rejected() -> None:
     adata.obsm["X_umap_2d"] = np.ones((adata.n_obs, 3), dtype=np.float32)
 
     with pytest.raises(ValueError, match=r"changed after adapter initialization"):
-        adapter.get_embedding(2)
+        adapter.get_embedding("X_umap_2d")
 
 
-def test_numeric_gene_identifier_column_is_not_string_coerced() -> None:
+def test_integer_gene_identifiers_are_their_digits_and_float_columns_are_refused() -> None:
+    # One gene-name rule on every path (data_mapping.column_gene_names, the
+    # web app's geneNameText): integers are their decimal digits, a float or
+    # boolean column cannot name genes, with the catalog's reason.
     adata = _adata_with_current_fields()
     adata.var["gene_id"] = [7, 8]
+    adapter = AnnDataAdapter(
+        adata,
+        gene_id_column="gene_id",
+        dataset_name="Numeric gene identifiers",
+        dataset_id="numeric-gene-identifiers",
+    )
+    assert adapter.get_gene_ids() == ["7", "8"]
 
+    adata.var["dispersion"] = [0.5, 1.5]
     with pytest.raises(
-        TypeError,
-        match=r"var column 'gene_id' identifier at position 0 must be a string",
+        ValueError,
+        match=r"var column 'dispersion': floating-point values cannot name genes",
     ):
         AnnDataAdapter(
             adata,
-            gene_id_column="gene_id",
-            dataset_name="Numeric gene identifiers",
-            dataset_id="numeric-gene-identifiers",
+            gene_id_column="dispersion",
+            dataset_name="Float gene identifiers",
+            dataset_id="float-gene-identifiers",
         )
 
 

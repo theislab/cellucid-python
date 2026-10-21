@@ -51,7 +51,7 @@ All paths below are relative to `cellucid-python/docs/` unless absolute.
 
 Verified from the existing browser specs, so the screenshot tool can reuse a proven path.
 
-**Real datasets.** `cellucid-datasets/exports/datasets.json` — `pancreas` is the **only bundled sample carrying `vector_fields`** (`suo`, `garcia`, `he`, `kanemaru` have none, so the entire velocity block is `display:none` on them). Pancreas = *Pancreatic endocrinogenesis (scVelo)*, 3696 cells, `default_field: "velocity_umap"`, dims `[1,2,3]`, `default_dimension: 3`. **The "3,696 cells / independent 1D, 2D, 3D" claim in `i/08` is verified correct.**
+**Real datasets.** `cellucid-datasets/exports-v3/datasets.json` — `pancreas` is the **only bundled sample carrying `vector_fields`** (`suo`, `garcia`, `he`, `kanemaru` have none, so the entire velocity block is `display:none` on them). Pancreas = *Pancreatic endocrinogenesis (scVelo)*, 3696 cells, `default_field: "velocity"`, bound to the embeddings `X_umap_1d`, `X_umap` (2D), and `X_umap_3d` (not to the 2D `X_pca`), `embeddings.default_dimension: 3`. **The "3,696 cells / independent 1D, 2D, 3D" claim in `i/08` is verified correct.**
 
 **Deterministic fixture.** `/?exportsBaseUrl=${ENCODED_EXPORTS_BASE_URL}&dataset=current-ui-prepared` → "Current UI prepared fixture", 120 points. `ENCODED_EXPORTS_BASE_URL` is from `cellucid/tests/browser/helpers/origins.mjs`; dismiss the welcome modal with `dismissWelcome(page)` from `cellucid/tests/browser/helpers/welcome.mjs` (asserts `#welcome-modal`, presses Escape). **This fixture is right for contract tests and wrong for documentation** — see `k/02`.
 
@@ -136,7 +136,7 @@ The overlay is animated, so ask per parameter *"does a frozen frame carry the in
 
 **needs**
 - Dataset: `pancreas` (the only bundled sample with velocity).
-- Interaction: load `?dataset=pancreas` → `dismissWelcome` → open `Visualization` accordion → `Compare Views → Dimension:` = `2D`, `Mode:` = `Planar` → check `#velocity-overlay-enabled` → wait for `#velocity-overlay-info` to read `Available for 1D, 2D, 3D.` and for the `Velocity overlay ready` toast → settle 120 frames.
+- Interaction: load `?dataset=pancreas` → `dismissWelcome` → open `Visualization` accordion → `Compare Views → Shows` (`#view-representation-select`) = `UMAP · 2D`, `Mode:` = `Planar` → check `#velocity-overlay-enabled` → wait for `#velocity-overlay-info` to read `Available on UMAP · X_umap_1d, UMAP · X_umap, UMAP · X_umap_3d.` and for the `Velocity overlay ready` toast → settle 120 frames.
 - Crop: full app viewport, 1440×900 logical, but **crop the right edge to where the data ends** — do not ship 300 px of empty grid (the current section images all do).
 - Cursor: no.
 - Filename: `vector_field_velocity/pancreas-2d-overview.png` at `:width: 1440px`.
@@ -172,13 +172,13 @@ The overlay is animated, so ask per parameter *"does a frozen frame carry the in
 **needs** — one ordered strip, all on `pancreas`, all cropped to `#velocity-overlay-controls`, `:width: 246px`:
 
 1. **Block present, overlay off.** State before: dataset loaded, `Visualization` open. Action: none. State after: `#velocity-overlay-enabled` unchecked, `#velocity-overlay-settings` hidden. Cursor: **yes, hovering `#velocity-overlay-enabled`** — this is the "step 6: Check Show overlay" instruction. → `vector_field_velocity/enable-01-off.png`
-2. **Disabled for the current dimension.** How to reach it without a bespoke dataset: use the `_test` export (`cellucid-datasets/exports/_test/`, field `T_fwd_umap`) or, cleanest, reuse the spec trick from `cellucid/tests/browser/velocity-multiview-lifecycle.spec.mjs` — `page.route()` rewrites `dataset_identity.json` to advertise `available_dimensions: [2]` only, then set the view to 3D. State after: checkbox **disabled**, `#velocity-overlay-info` reads `Vector fields available for 2D. Switch embedding dimension to enable.` Crop `#velocity-overlay-controls`. Cursor: no. → `vector_field_velocity/enable-02-wrong-dimension.png`
-3. **Loading.** Route-delay `vectors/0_2d.bin.gz` by ~2 s, check the box, capture while `#velocity-overlay-info` reads `Loading vector field…`. Cursor: no. → `vector_field_velocity/enable-03-loading.png`
-4. **Enabled.** `#velocity-overlay-settings` visible, `#velocity-overlay-info` = `Available for 1D, 2D, 3D.`, `Vector field:` = `velocity_umap`. Cursor: no. → `vector_field_velocity/enable-04-ready.png`
+2. **Disabled for the embedding this view shows.** No bespoke dataset needed: choose `PCA · 2D` in `Shows` (`#view-representation-select`) (the Pancreas `velocity` field is bound to its three UMAPs only). State after: checkbox **disabled**, `#velocity-overlay-info` reads `Vector fields are bound to UMAP. Show one of them in this view to enable.` (the three bound UMAPs share the label `UMAP`). Crop `#velocity-overlay-controls`. Cursor: no. → `vector_field_velocity/enable-02-wrong-embedding.png`
+3. **Loading.** Route-delay `vectors/0_2.bin.gz` (the `velocity` payload bound to `X_umap`) by ~2 s, check the box, capture while `#velocity-overlay-info` reads `Loading vector field…`. Cursor: no. → `vector_field_velocity/enable-03-loading.png`
+4. **Enabled.** `#velocity-overlay-settings` visible, `#velocity-overlay-info` = `Available on …` (each embedding the field is bound to, as `UMAP · X_umap`), `Vector field:` = `velocity`. Cursor: no. → `vector_field_velocity/enable-04-ready.png`
 
-Plus one small extra: the **info popover**. The page says "A small `i` button beside the heading explains that the animation uses dimension-specific per-cell velocity or drift vectors" — that popover has never been shown. Un-`hidden` `#vector-field-help-tooltip`, crop the header row + tooltip, cursor on `#vector-field-help-btn`. → `vector_field_velocity/overlay-info-popover.png`, `:width: 246px`.
+Plus one small extra: the **info popover**. The page says "A small `i` button beside the heading explains that the animation uses per-cell velocity or drift vectors, each exported for one embedding" — that popover has never been shown. Un-`hidden` `#vector-field-help-tooltip`, crop the header row + tooltip, cursor on `#vector-field-help-btn`. → `vector_field_velocity/overlay-info-popover.png`, `:width: 246px`.
 
-**notes** — The four literal status strings quoted in this page (`Vector fields available for …`, `Available for …. Select a vector field …`, `Loading vector field…`, `Failed to load vector field.`) all match the source exactly, including the U+2026 ellipsis. No staleness.
+**notes** — The four literal status strings quoted in this page (`Vector fields are bound to …. Show one of them in this view to enable.`, `Available on …. Select a vector field …`, `Loading vector field…`, `Failed to load vector field.`) match `velocity-overlay-controls.js` exactly, including the U+2026 ellipsis.
 
 ---
 
@@ -270,7 +270,7 @@ Plus one small extra: the **info popover**. The page says "A small `i` button be
 **verdict** — **ADD**, but **selective**. Most entries are correctly text-only; three are visual and currently unillustrated.
 
 **needs**
-1. *Edge case UI/state 3 — "Render mode = Volumetric smoke cloud"*: "**What you see:** you can't find the overlay controls." Capture `Visualization` with `Render mode:` = `Volumetric smoke cloud (alpha)`, showing that `#velocity-overlay-controls` is genuinely absent, next to the `Points` state where it is present. Cursor on the `Render mode:` select in the smoke capture. → `vector_field_velocity/render-mode-{smoke,points}.png`, `:width: 224px` each.
+1. *Edge case UI/state 3 — "Render mode = Volumetric smoke cloud"*: "**What you see:** you can't find the overlay controls." Capture `Visualization` with `Render mode:` = `Volumetric smoke cloud (beta)`, showing that `#velocity-overlay-controls` is genuinely absent, next to the `Points` state where it is present. Cursor on the `Render mode:` select in the smoke capture. → `vector_field_velocity/render-mode-{smoke,points}.png`, `:width: 224px` each.
 2. *Edge case UI/state 4 — "All cells filtered out"*: reachable exactly as `velocity-multiview-lifecycle.spec.mjs` does it — `#legend` → `Hide All` button, assert `#filter-count` = `Showing 0 of N points`. Capture the empty canvas plus the `Showing 0 of 3,696 points` counter in one crop. → `vector_field_velocity/all-cells-filtered.png`, `:width: 900px`.
 3. *Data edge case 4 — "All-zero or extremely small vectors"*: route-inject a zero-filled vector binary (the spec's `createVelocityBytes` pattern with `vx = vy = 0`) and capture the near-static overlay. This is the one data edge case with a distinct visual signature. → `vector_field_velocity/zero-magnitude-field.png`.
 
@@ -327,7 +327,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 - `pancreas-velocity-3d.png` — 3D Orbit. Note the orbit-anchor dot is visible mid-canvas; either turn `Show orbit anchor` off or mention it. Keep `:width: 1440px`.
 
 **notes**
-- The page's provenance claim — "3,696 cells with independent 1D, 2D, and 3D embeddings and dimension-matched `velocity_umap` vectors" — is **verified** against `cellucid-datasets/exports/pancreas/dataset_identity.json` (`available_dimensions [1,2,3]`, `default_dimension 3`, three `vectors/0_{1,2,3}d.bin.gz`).
+- The page's provenance claim — "3,696 cells with independent 1D, 2D, and 3D UMAP embeddings, a 2D PCA view, and one `velocity` field bound to each of the three UMAPs" — is **verified** against `cellucid-datasets/exports-v3/pancreas/dataset_identity.json` (embeddings `X_umap_1d`, `X_pca`, `X_umap`, `X_umap_3d`; `embeddings.default_dimension 3`; `vector_fields.fields.velocity.files` binds `vectors/0_0.bin.gz`, `vectors/0_2.bin.gz`, and `vectors/0_3.bin.gz` to the three UMAPs). `overlay-controls.png` and `pancreas-velocity-3d.png` still show the field's previous name, `velocity_umap`, in the **Vector field** selector; their re-shoots must show `velocity`.
 - The 3D caption says the view is "colored by `clusters`". `CATEGORICAL OBS: clusters` is indeed visible in the crop, but the particle layer at 60 % opacity almost completely occludes the point cloud, so the *claim* is not visible in the *image*. Either lower `Opacity:` to ~35 % for that capture or drop the colour claim from the caption.
 - This page is where the "skipped parameter pairs" decision from `i/04` should be recorded, and where the honest statement about `Flow speed:` being unrepresentable in a still belongs.
 
@@ -464,7 +464,7 @@ Then route `https://worker.example/**`. Exact fixture shapes, all verified from 
 
 | Route | Response |
 |---|---|
-| `GET /` (capability handshake, runs **first**) | `{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":1,"endpoints":["/auth/login","/auth/callback","/auth/user","/auth/installations","/auth/installation-repos","/cap/lookup-cells","/cap/search-datasets","/api/repos/*"]}` — **must match `WORKER_ENDPOINTS` element-by-element in order** or sign-in aborts before redirect |
+| `GET /` (capability handshake, runs **first**) | `{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":1,"endpoints":["/auth/login","/auth/callback","/auth/user","/auth/installations","/auth/installation-repos","/cap/lookup-cells","/api/repos/*"]}` — **must match `WORKER_ENDPOINTS` element-by-element in order** or sign-in aborts before redirect |
 | `GET /auth/user` | `{"id":4242,"login":"tester"}` |
 | `POST /auth/installations` | `{"installations":[{"id":71,"account":{"login":"team"}}]}` |
 | `POST /auth/installation-repos` (body `{installation_id}`) | `{"repositories":[{"id":1,"full_name":"team/labels","private":false}]}` |
@@ -877,7 +877,7 @@ The image also has a second, softer problem shared with the whole section: the `
 **verdict** — **ADD** (4 images), selectively.
 
 **needs**
-1. **The three blockers.** §"Volumetric smoke cloud render mode not exported", §"Connectivity overlay not exported", §"Velocity vector field not exported" each quote an exact blocker string. Capture the `.fidelity-warning-dialog` once per blocker (velocity is the cheapest — see `k/01`; smoke via `Render mode:` = `Volumetric smoke cloud (alpha)`; connectivity via the KNN connectivity overlay). → `figure_export/blocked-{velocity,smoke,connectivity}.png`, `:width: 560px` each. Reuse the velocity one from `01`.
+1. **The three blockers.** §"Volumetric smoke cloud render mode not exported", §"Connectivity overlay not exported", §"Velocity vector field not exported" each quote an exact blocker string. Capture the `.fidelity-warning-dialog` once per blocker (velocity is the cheapest — see `k/01`; smoke via `Render mode:` = `Volumetric smoke cloud (beta)`; connectivity via the KNN connectivity overlay). → `figure_export/blocked-{velocity,smoke,connectivity}.png`, `:width: 560px` each. Reuse the velocity one from `01`.
 2. **Reference grid on vs off.** §"Reference grid" explains that the viewer's `Background` control decides both the clear colour and whether the grid box is drawn, and that the checkbox is disabled for `White`/`Black`. Two exported figures — `Grid (light)` with `Reference grid` on, and the same view with it off — plus, ideally, a third crop showing the checkbox **disabled** under `Background: White`. → `figure_export/reference-grid-{on,off,disabled}.png`, `:width: 300px` each.
 3. **Dark-background ink.** §"Dark-background figures" claims titles/ticks/axis labels/frame/badge take their colour from the figure background. Export the same view under `Background: Match viewer` from `Grid (dark)` and from `Grid (light)`, side by side. → `figure_export/dark-vs-light-ink.png`, `:width: 700px`.
 4. **Category explosion.** §"Category explosion (legend overflow)" is about an unreadable figure; showing one is legitimate and instructive. Export a `clusters`-style field with many categories at `Legend: Right` vs `Legend: Bottom`. → `figure_export/legend-overflow-{right,bottom}.png`, `:width: 400px` each.

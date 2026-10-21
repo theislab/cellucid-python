@@ -2,7 +2,7 @@
 
 Audited read-only against `cellucid/assets/js` (session subsystem, notification
 center, `index.html` markup), `cellucid/tests/browser`, and
-`cellucid-datasets/exports`. The app was **not** launched and no benchmark was
+`cellucid-datasets/exports-v3`. The app was **not** launched and no benchmark was
 run (a sibling unit holds the rendering-measurement lock). Every DOM id, button
 label, accordion title, and user-visible string quoted below was read out of the
 source, not inferred.
@@ -79,9 +79,9 @@ sequence is a single scripted Playwright run producing 14 captures. Steps 6 and
 | Parameter | Value | Why it is fixed |
 |---|---|---|
 | Viewport | 1440 × 900 CSS px, `deviceScaleFactor: 2` | Floating panels are clamped to the viewport on restore ({doc}`/user_guide/web_app/l_sessions_sharing/09_edge_cases`), so a BEFORE/AFTER pair captured at different sizes is not a valid comparison. |
-| Dataset | `#dataset-select` → option value `dataset:local-demo:pancreas` | 3,696 cells / 3,753 genes — loads in seconds; publishes 1D + 2D + 3D embeddings with `default_dimension: 3`; recognisable endocrinogenesis trajectory for a wet-lab reader. Verified in `cellucid-datasets/exports/pancreas/dataset_identity.json`. |
-| Dimension | 3D throughout | The session fingerprint records `cellOrder.dimension`; saving in 3D and restoring in 3D is the success path. Deviating provokes the recoverable error captured separately in `07`. |
-| Theme / background | app defaults (light / grid) | Matches the reviewed official starting state, so the reset in step 10 is visually unambiguous. |
+| Dataset | `#dataset-select` → option value `dataset:local-demo:pancreas` | 3,696 cells / 3,753 genes — loads in seconds; publishes 1D + 2D + 3D embeddings with `default_dimension: 3`; recognisable endocrinogenesis trajectory for a wet-lab reader. Verified in `cellucid-datasets/exports-v3/pancreas/dataset_identity.json`. |
+| Embedding | the 3D UMAP throughout | The session records the embedding each view shows and verifies its cell order against the embedding `cellOrder.embedding` names, whichever one is on screen, so the success path does not depend on it; keeping one embedding keeps the BEFORE/AFTER frames comparable. |
+| Theme / background | app defaults (light / Studio (light)) | Matches the reviewed official starting state, so the reset in step 10 is visually unambiguous. |
 | Welcome modal | dismissed with `Escape` (`#welcome-modal`) — see `tests/browser/helpers/welcome.mjs` | Otherwise it covers the sidebar in every frame. |
 | Build stamp | `#web-build-version` inside `#copyright` must read the same value in steps 6 and 13 | The docs tell readers to compare footer builds; the proof pair must be self-consistent. |
 
@@ -240,7 +240,8 @@ are browser chrome — Playwright cannot capture them, and both would expose
 
 - **Interaction:** immediately after the file is supplied, capture the
   NotificationCenter download card while it is still progressing.
-- **Crop:** `#notification-center` — the card titled `Loading session`, its
+- **Crop:** `#notification-center` — the card titled `Loading` that names
+  `Session file`, its
   `.notification-progress-bar`, `.notification-progress-text`,
   `.notification-speed`, and the `×` button
   (`.notification-dismiss[data-role="cancel"]`, `aria-label="Cancel"`).
@@ -282,31 +283,29 @@ does not mistake it for a failure:**
 
 ### Step 14 — the terminal success message
 
-- **Crop:** `#notification-center` with both the completed download card and the
-  info toast.
+- **Crop:** `#notification-center` with the completed restore card — the only
+  notification a successful restore publishes.
 - **Cursor:** no.
 - **File:** `session-lifecycle-14-fully-restored.png` · `:width: 400px`
 - **Exact strings, from source:**
-  - `session-serializer.js`, `notifications.info(...)` at the end of the restore
-    — info toast: **`Session fully restored.`** (with a trailing period; the
-    docs write it without one).
-  - `session-serializer.js`, `notifications.completeDownload(...)` on the next
-    statement — the download card completes with the same text.
-  - `session-controls.js`, the `#load-state-btn` handler — a separate success
-    toast: **`Session loaded successfully`**.
-- **Correction this capture forces:** {doc}`/user_guide/web_app/l_sessions_sharing/03_save_restore_ux` (line 44) and
-  {doc}`/user_guide/web_app/l_sessions_sharing/10_troubleshooting_sessions` (line 36) say the **panel status** reports
-  `Session loaded successfully`. There is no status element inside
-  `#session-state-controls` — the markup contains only a label, an info button,
-  and the two buttons. Both strings are NotificationCenter toasts. The prose
-  must be corrected in the same change as the capture.
+  - `session-serializer.js`, `notifications.completeDownload(...)` at the end of
+    the restore — the download card titled **`Loaded`** completes with
+    **`Session fully restored.`** (with a trailing period; the docs write it
+    without one).
+  - Nothing else. The restore used to publish the same sentence a second time
+    as an info toast, and the `#load-state-btn` handler added a third success
+    toast, `Session loaded successfully`; both duplicates were removed, and
+    the prose in {doc}`/user_guide/web_app/l_sessions_sharing/03_save_restore_ux` and
+    {doc}`/user_guide/web_app/l_sessions_sharing/10_troubleshooting_sessions` was corrected with them.
 
-### Optional step 15 — the same file, refused
+### Optional step 15 — the same file, another embedding on screen
 
-Run once more without reloading: switch `#dimension-select` to 2D, then
-`#load-state-btn` → the same file. This yields the recoverable rejection and is
-the single most useful image for a wet-lab reader in the whole section. Details
-under {doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_and_dataset_identity` below.
+Run once more without reloading: in `View 1 shows`
+(`#view-representation-select`) choose the 2D UMAP, then `#load-state-btn` →
+the same file. The session opens and the view shows the 3D UMAP again: a
+session names the embedding each view shows, so switching embeddings is no
+longer a reason to refuse it. Details under
+{doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_and_dataset_identity` below.
 
 ---
 
@@ -458,7 +457,7 @@ under {doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_a
   that no longer matches the catalog.~~ **Done** — the page now shows the
   field's *shape*, `"state_sha256": "<64 lowercase hexadecimal characters>"`,
   and tells the reader to read the current value out of
-  `cellucid-datasets/exports/datasets.json`. **This record quotes no digest
+  `cellucid-datasets/exports-v3/datasets.json`. **This record quotes no digest
   either, deliberately:** while the finding stood open the catalog was
   regenerated again, so the "current" value written down here went stale on its
   own. A published state is rebuilt whenever the reviewed view or the session
@@ -478,15 +477,13 @@ under {doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_a
   needed.** Cellucid's "share a link" means *a link to the dataset* — a public
   URL or a GitHub `owner/repo/path` typed into `#github-repo-url` or the remote
   server field — **not** a shareable app URL that encodes state. There is no
-  session-in-URL feature: `restoreFromUrl()` exists in the serializer but is not
-  wired to any user-facing share control, and Save State is a plain file
-  download. Photographing the browser's URL bar would therefore illustrate
+  session-in-URL feature, and Save State is a plain file download. Photographing the browser's URL bar would therefore illustrate
   nothing on this page while risking a `localhost:PORT` or file path. Show the
   **in-app input fields** instead, which is where the link actually lives.
 - **needs** — Three images, each answering one of the page's three artifact
   types:
   1. **Link:** crop the GitHub row — `#github-repo-url` pre-filled with a public
-     path (use `theislab/cellucid-datasets/exports`) plus `#github-connect-btn`.
+     path (use `theislab/cellucid-datasets/exports-v3`) plus `#github-connect-btn`.
      Cursor on `#github-connect-btn`.
      `share-link-github-input.png` · `:width: 246px`.
   2. **Bundle:** reuse `session-lifecycle-09-artifact-terminal.png` — the `ls`
@@ -536,22 +533,19 @@ under {doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_a
 
   | # | Error | How to provoke it (scriptable) | Worth capturing? |
   |---|---|---|---|
-  | 1 | **Different dataset** — names both cell and gene counts | Save a session on `pancreas` (3,696 / 3,753). Reload, load `dataset:local-demo:he` (71,650 / 5,152). Load State the pancreas file. | **Yes — highest value.** The commonest real-world mistake, and the message names four concrete numbers. |
-  | 2 | **Different dimension** — the recoverable one | Save on `pancreas` in 3D. Without reloading, set `#dimension-select` to 2D. Load State the same file. | **Yes — second highest.** This is the only failure that is *not* a data problem, and the page says so. Showing it prevents a user from concluding their dataset is corrupt. |
-  | 3 | **Coordinates differ** (re-ordered rows *or* re-computed embedding) | Needs a second export with the same id and sizes but permuted rows. Clone `cellucid/tests/browser/fixtures/exports/current-ui-prepared` (120 cells, 6 genes, 2D only, 52 KB) into a scratch fixture, apply the same row permutation to `points_2d.bin` and every `obs/` column, keep `dataset_identity.json` byte-identical. Save a session against the original, load the permuted clone, Load State. | **Yes**, but as the *third* image — it is rarer and its message is long. Note the fixture is 2D-only, so error #2 cannot be provoked on it. |
+  | 1 | **Different dataset** — names both cell and gene counts | Save a session on `pancreas` (3,696 / 3,753). Reload, load `dataset:local-demo:garcia` (219,731 / 5,754). Load State the pancreas file. (`he` and `kanemaru` are unusable here: their published sample views currently fail to apply in headless Chromium and add two unrelated errors to the crop.) | **Yes — highest value.** The commonest real-world mistake, and the message names four concrete numbers. |
+  | 2 | **An embedding this dataset does not have** — "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have." | Open an `.h5ad` with an `X_tsne`, show it in a view, save. Open the same file without `X_tsne` (or an export without it), Load State. | **Yes — second highest.** It names the one array to restore, so a user does not conclude the dataset is corrupt. (A session saved while another embedding was on screen is no longer refused; see step 15.) |
+  | 3 | **Coordinates differ** (re-ordered rows *or* re-computed embedding) | Needs a second export with the same id and sizes but permuted rows. Clone `cellucid/tests/browser/fixtures/exports/current-ui-prepared` (120 cells, 6 genes, 2D only, 52 KB) into a scratch fixture, apply the same row permutation to `embeddings/0_2d.bin` and every `obs/` column, keep `dataset_identity.json` byte-identical. Save a session against the original, load the permuted clone, Load State. | **Yes**, but as the *third* image — it is rarer and its message is long. Note the fixture is 2D-only, so error #2 cannot be provoked on it. |
   | 4 | **Pre-`cellOrder` file** (`SESSION_WITHOUT_CELL_IDENTITY_MESSAGE` in `session-context.js`) | Cannot be produced by the current app. Hand-write a bundle whose `datasetFingerprint` has exactly the four keys `sourceType`, `datasetId`, `cellCount`, `varCount`. Framing is documented in {doc}`/user_guide/web_app/l_sessions_sharing/12_reference` and implemented in `session/bundle/format.js`. | **Optional.** Capture only if a fixture author is willing to maintain a hand-built bundle. The message is self-explanatory in prose. |
 
 - **needs** —
   - Crop for all four: `#notification-center`, the single red toast, full text
     visible and not truncated — the messages are long, so allow the crop to run
     to ~520 px wide, `:width: 520px`.
-  - Cursor: **no** on the toast itself. For image #2 add a second frame with the
-    cursor on `#dimension-select` showing the value the message asks you to
-    switch back to — that pairs the diagnosis with the fix in one glance.
+  - Cursor: **no** on the toast itself.
   - Files: `session-error-different-dataset.png`,
-    `session-error-different-dimension.png`,
-    `session-error-cell-order.png`, `session-error-no-cell-order.png`,
-    `session-fix-dimension-select.png`.
+    `session-error-missing-embedding.png`,
+    `session-error-cell-order.png`, `session-error-no-cell-order.png`.
   - Also **ADD** the identity crop from `01` (`session-identity-dataset-info.png`)
     here under "Exact fingerprint".
 - **notes** —
@@ -625,14 +619,14 @@ under {doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_a
      when you can see that nothing was published.
      `session-cancel-dismissed.png` · `:width: 400px`.
   2. **Official default rejected** (final section): download
-     `exports/pancreas/default.cellucid-session`, choose Load State, supply it.
+     `exports-v3/pancreas/default.cellucid-session`, choose Load State, supply it.
      Crop the red toast in `#notification-center`. Cursor: no. The property that
      makes it get refused is the five-chunk profile the manifest names
      `published-default` (`PUBLISHED_DEFAULT_STATIC_CHUNK_PROFILE` in the
      session serializer), not its size — **do not pin a byte count here.** The
      preset is regenerated
      whenever the session inventory changes, so the only current value is the
-     file itself in `cellucid-datasets/exports/pancreas/`.
+     file itself in `cellucid-datasets/exports-v3/pancreas/`.
      `session-error-official-default-rejected.png` · `:width: 520px`. This is a
      mistake a curious user will genuinely make — the file is publicly
      downloadable from the datasets repo.
@@ -673,8 +667,9 @@ under {doc}`/user_guide/web_app/l_sessions_sharing/07_versioning_compatibility_a
   - **Not capturable, and the page should say so:** "File picker never opens"
     and "You canceled the picker" are OS-dialog states. Keep them as prose.
 - **notes** —
-  - "The Session panel then reports **Session loaded successfully**" — it is a
-    toast, not a panel status.
+  - ~~"The Session panel then reports **Session loaded successfully**" — it is
+    a toast, not a panel status.~~ **Done** — that toast no longer exists; the
+    page names the restore's one progress entry instead.
   - "Check the panel status and browser Console for `Failed to save state`" —
     the console logs `Failed to save state:`; the visible toast reads
     `Failed to save session`. Give the reader both strings and say which appears
@@ -809,9 +804,10 @@ that instruction and none of them shows it.
   Keep the benchmark panel image on `08_screenshots.md`, where its acceptance
   caption belongs.
 - **notes** — The smoke-mode grid choices (32³, 48³, 64³, 96³, 128³, starting at
-  128³) were not re-verified in this pass — they belong to
-  `c_core_interactions` and the render-mode source, outside this section's
-  scope. Flagging as unverified, not as wrong.
+  128³), the 0.25x–1.00x render-resolution range and the 2560×1440 ray budget
+  were verified against `SMOKE_GRID_SIZES` in `smoke-density-contract.js`,
+  `smoke-control-scales.js`, and `MAX_SMOKE_TARGET_PIXELS` in
+  `smoke-renderer.js` (web `09f738bb6`).
 
 ## {doc}`/user_guide/web_app/n_benchmarking_performance/03_large_dataset_best_practices`
 
@@ -942,9 +938,9 @@ that instruction and none of them shows it.
      `perf-category-explosion-legend.png` · `:width: 246px`. Lower priority than
      the context-lost image — it needs a new fixture.
 - **notes** — "Grid changes are applied after the approximately 300 ms slider
-  debounce" (line 129) is a precise claim about the smoke-mode controls that was
-  not verified in this pass; it lives in the render-mode module outside this
-  section. Flagging as unverified.
+  debounce" is verified: `scheduleSliderSmokeRebuild()` in
+  `app/ui/modules/render-controls.js` waits 300 ms, and only the grid slider
+  schedules a rebuild (web `09f738bb6`).
 
 ## {doc}`/user_guide/web_app/n_benchmarking_performance/07_troubleshooting_performance`
 
@@ -994,6 +990,13 @@ that instruction and none of them shows it.
     `:width: 1440px` each. **Deferred** with the rest of section N.
   - Promote the five new benchmark-panel captures from `05` into this gallery so
     the section owns its images.
+- **recaptured** — Both multiview frames went stale when Grid compare moved its
+  panels into the area the sidebar leaves uncovered (equal panels starting at
+  the sidebar's right edge, where the left panel used to sit partly under the
+  sidebar). They were recaptured on `pancreas` at 1440 × 1000 by
+  `core-multiview-two-panels` and `performance-dark-theme-multiview` in
+  `docs/_tooling/screenshots/scenarios.mjs`, and both captions now state the
+  layout they show. The drop / re-caption decision above still stands.
 - **notes** — **Stale-risk by construction.** The caption for
   `benchmark-panel.png` states "Build 2026-07-26.4 … 17 FPS, a 57.67 ms frame
   sample, full LOD, all 10.0M points visible, generation in 1,592 ms", and the
@@ -1044,7 +1047,8 @@ that instruction and none of them shows it.
    panel status to say **Session loaded successfully**") and `10` ("The Session
    panel then reports…", "Check the panel status…") describe a panel status that
    does not exist; every one of those strings is a NotificationCenter toast.
-   **Still open.**
+   **Partly done** — `Session loaded successfully` is gone from the app and from
+   `03` and `10`; "Check the panel status…" for a failed save is still open.
 
 3. **{doc}`/user_guide/web_app/l_sessions_sharing/09_edge_cases` still describes the pre-`cellOrder` world.** Its "Same
    lightweight fingerprint, changed content" section says re-ordering cells
@@ -1060,7 +1064,7 @@ that instruction and none of them shows it.
    comment about why claiming otherwise would be an integrity failure of its own.
 
 5. ~~**A stale SHA-256 ships in {doc}`/user_guide/web_app/l_sessions_sharing/04_official_sample_states`.**~~ **Done** —
-   the page shows the field's shape and points at `exports/datasets.json`. The
+   the page shows the field's shape and points at `exports-v3/datasets.json`. The
    general rule this settled: **do not copy a regenerated value into prose.**
    Digests, preset byte sizes, and source line numbers all live somewhere that
    is rebuilt without the docs being touched; cite the file, the symbol, or the

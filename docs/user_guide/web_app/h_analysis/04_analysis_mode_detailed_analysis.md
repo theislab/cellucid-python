@@ -80,7 +80,7 @@ Examples:
 
 The summary table is meant to be “readable truth” even when plots are ambiguous:
 
-- For categorical variables: per-page category counts/percentages (limited to the most common categories in the table view)
+- For categorical variables: per-page category counts/percentages (limited to the most common categories in the table view). Cells with a missing category are left out of the plots, the table, the percentages and the tests, as for every analysis ({doc}`01_analysis_mental_model`).
 - For continuous variables: per-page count/mean/median/min/max/std
 
 ### C) Statistical annotations (tests)
@@ -148,6 +148,25 @@ If you need gene-level answers, switch the variable type to **Gene expression** 
 - **Bar plot**: best default for categorical; use “Percentages” for composition comparisons across different page sizes.
 - **Violin/Box plot**: best for continuous distributions; violin shows shape, box shows summary.
 - **Histogram/Density**: useful for multi-modal distributions and QC gating.
+
+:::{note}
+**How large pages are drawn.** Every plot shows exactly what it would draw from
+every cell; nothing is sampled. For a page of tens of thousands of cells or
+more, the box statistics, the violin's density and box statistics, the density
+curve, the histogram bins and the summary and tests below the plot are computed
+on the analysis workers before the view is drawn, so the page stays responsive
+while they run. A histogram bins the values itself and hands the plot a few
+values per bin, so its bars and hover ranges are the same however many cells
+the page has.
+
+Box and violin outliers are drawn on the axis line without jitter, so copies of
+one value land on the same spot. A zero-inflated gene whose quartiles are all
+zero makes every expressing cell an outlier; box and violin plots draw at most
+16 copies of each identical outlier value, which already looks fully stacked,
+and every distinct value, the minimum, the maximum and the hover text are those
+of the full set. **All** points (jittered) are always drawn one per cell, so on
+a page of millions of cells that mode is slow in any plot.
+:::
 
 ### Reading statistical tests responsibly
 
@@ -221,7 +240,7 @@ Fix:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/analysis/detailed-categorical.png
-:alt: The Detailed panel with Variable set to Categorical obs then cell_type, a Compare pages block with Page 1 and Rest of Page 1 both selected, a Plot Type select reading Bar Plot under a pointer, and a grouped bar plot of cell-type counts beneath it whose horizontal axis carries a single category name.
+:alt: The Detailed panel with Variable set to Categorical obs then cell_type, a Compare pages block with Page 1 and Rest of Page 1 both selected, a Plot Type select reading Bar Plot under a pointer, and a grouped bar plot of cell-type counts beneath it whose horizontal axis carries two category names, Ductal and Delta, at its two ends.
 :width: 488px
 
 Detailed with one variable (`cell_type`) across two pages. The plot-type choice
@@ -235,8 +254,8 @@ as many labels as its box can show without one name touching the next, and the
 ones it cannot show are dropped whole — every label you can see is a real
 category, spelled in full, and the two ends of the axis are kept where there is
 room for more than one. How many survive is a property of the drawn box, not of
-your data: eight cell types leave room for **one** name in the 224-pixel sidebar
-above and **five** in the expanded view below. The bars are all there either
+your data: eight cell types leave room for **two** names — the two ends — in the
+224-pixel sidebar above and **five** in the expanded view below. The bars are all there either
 way; it is the labels that are rationed. Read the shape in the sidebar, read the
 names in the full view, and read every name in the exported CSV.
 :::

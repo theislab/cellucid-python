@@ -17,8 +17,9 @@
 ## Quick summary (read this if you only have 60 seconds)
 
 Saved/restored (typical):
-- camera + navigation mode
-- view layout (live + snapshots)
+- every view's camera + navigation mode, and whether cameras are linked
+- every view's embedding
+- view layout (live + kept views)
 - active fields (obs/var) per view
 - filter state per view (category visibility, continuous ranges, outliers)
 - highlight pages/groups and their exact memberships
@@ -69,14 +70,19 @@ not silently omit that feature.
 Restored early so you see the correct view quickly:
 
 - **Camera state**
-  - camera position/orbit target/navigation mode
-  - locked cameras (shared camera) vs unlocked cameras (per view)
+  - every view's camera position/orbit target and navigation mode
+  - whether **Link cameras** is on (views of one embedding share a camera)
   - Camera Path keyframes, timing, interpolation, navigation interaction
     controls, Loop playback, and Autoplay for the matching dataset
   - restored Camera Paths remain stopped unless their saved Autoplay setting
     is enabled; enabled autoplay begins only after the complete restore commits
-- **Dimension levels**
-  - which dimension (1D/2D/3D) is active per view
+- **Embeddings**
+  - the embedding each view shows, as an embedding reference (an export's
+    embedding id, or an `obsm` key with its columns); a view's dimension is
+    that embedding's
+  - the data mapping: the embeddings that are turned on and the default of
+    each dimension, as set under **Session › Data mapping** (turned on before
+    the views are restored; see {doc}`../b_data_loading/13_data_mapping`)
 - **Views / snapshots**
   - layout mode (single vs grid)
   - active view selection
@@ -115,9 +121,11 @@ doing, and your choice is stored in this browser rather than in the file.
 
 And it has three states while a checkbox has two. The stored preference is
 `auto` — the default, and what no stored preference means — or `on`, or `off`.
-Under `auto`, Cellucid decides from the size of the dataset you have open: on
-below 5,000,000 cells, off at or above. It re-decides on every dataset
-publication, because datasets are switched in place. Clicking the box ends
+Under `auto`, Cellucid decides from the size of the dataset you have open and
+the dimension of the view you are working in: on below 5,000,000 cells in 3D and
+below 200,000 in a 1D or 2D view, off at or above. It re-decides on every
+dataset publication, because datasets are switched in place, and when the view
+switches between 2D and 3D. Clicking the box ends
 automatic selection permanently, in both directions. A captured tick could only
 ever replay as `on` or `off`, which would turn “let the dataset decide” into a
 choice you never made.
@@ -126,7 +134,7 @@ So a session you open — including the starting view every built-in sample
 publishes — keeps your choice, or the dataset's choice when you have not made
 one, rather than the setting whoever saved the file was using. The status line
 under the control tells you which you are on: it reads `Chosen automatically:
-<n> cells.` while the dataset is deciding, and nothing at all once you have
+<n> cells in <d>D.` while the dataset is deciding, and nothing at all once you have
 clicked the box. (It reads `This browser is not providing antialiasing for this
 view.` when the device cannot multisample.)
 
@@ -162,12 +170,16 @@ Common things that restore:
 - categorical category visibility toggles (legend checkboxes)
 - continuous filter ranges (Min/Max sliders)
 - continuous color ranges and log-scale toggles (when present)
-- outlier filter enable/threshold (when present)
+- outlier filter enable/threshold on categorical fields that carry latent outlier quantiles
 - “filter enabled/disabled” state for fields
 
 Because filtering is view-scoped, restore replays the correct filter state into:
 - the live view, and
 - each snapshot view.
+
+Each view is saved from its own state, whichever view is selected when you
+save: saving with a kept view selected still records the live view's own
+coloring field and filters as the live view's.
 
 ### 3) Field overlays and field registry state — eager
 
@@ -181,6 +193,9 @@ Sessions persist “field overlays” that affect what fields exist and how they
   - permanently purged fields (non-restorable)
 - **User-defined fields (metadata)**
   - definitions/provenance for derived fields (but not necessarily the heavy codes yet)
+  - a categorical field's category centroids are not stored: they are derived
+    from its codes and the coordinates of each embedding, and recomputed when
+    the codes are restored, so its labels come back exactly where they were
 
 This is one reason sessions can restore an experience even if you created derived fields in the UI.
 
@@ -226,7 +241,7 @@ target live or snapshot active field needs it, and lazy otherwise.
 ### 7) Analysis windows + caches — windows eager, caches lazy
 
 Sessions can persist:
-- **open floating analysis windows** (which analysis modes were open, their settings, and geometry) — eager
+- **open floating analysis windows** (which analysis modes were open, their settings, and geometry) — eager; the windows reopen only after the highlight pages and analysis caches they refer to have been restored, so a window comparing saved pages opens on those pages even in a fresh tab
 - **some analysis caches/artifacts** to speed up later analysis — lazy
 
 The eager `analysis/cache-inventory` chunk lists the exact ordered cache

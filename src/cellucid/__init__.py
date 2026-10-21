@@ -6,6 +6,7 @@ serving data locally or remotely, and integrating with Jupyter notebooks.
 
 Main exports:
     - prepare: Export data to cellucid format
+    - Embedding: One embedding to export, with the columns it is read from
     - serve: Serve a dataset directory via HTTP
     - CellucidServer: Server class for more control
     - CellucidViewer: Jupyter notebook integration
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
     from .anndata_server import AnnDataServer, serve_anndata
     from .anndata_session import apply_cellucid_session_to_anndata
     from .jupyter import AnnDataViewer, CellucidViewer, show, show_anndata
-    from .prepare_data import prepare
+    from .prepare_data import Embedding, prepare
     from .server import CellucidServer, serve
     from .session_bundle import CellucidSessionBundle
     from .vector_fields import add_transition_drift_to_obsm, compute_transition_drift
@@ -47,6 +48,10 @@ def __getattr__(name: str) -> Any:
         from .prepare_data import prepare
 
         return prepare
+    if name == "Embedding":
+        from .prepare_data import Embedding
+
+        return Embedding
 
     # Server for pre-exported data (lightweight, no heavy deps)
     if name == "serve":
@@ -126,6 +131,7 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     # Core export functionality
     "prepare",
+    "Embedding",
     # Serve pre-exported data
     "serve",
     "CellucidServer",

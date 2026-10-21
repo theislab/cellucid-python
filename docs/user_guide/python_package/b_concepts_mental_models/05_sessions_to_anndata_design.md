@@ -82,7 +82,9 @@ This is critical for:
 ### Frontend → Python events (hooks)
 
 The viewer sends UI events via:
-- `POST /_cellucid/events`
+- `POST /_cellucid/events` (JSON events: ready, hover, click, messages)
+- `POST /_cellucid/selection` (selections, as the selected cell indices in
+  binary: little-endian `uint32`, strictly ascending)
 
 The payload includes `viewerId` so the server can route events to the right viewer object.
 
@@ -145,41 +147,47 @@ This is why exact fingerprint rejection exists.
 ### Fingerprint rejection is exact
 
 The caller must supply `expected_dataset_id`. Python compares it with the
-bundle's `datasetId` and also compares `cellCount` and `varCount` with the
-target AnnData. Any mismatch raises `ValueError` before any mutation is
-published.
+bundle's `datasetId`, compares `cellCount` with the target AnnData, requires
+every key the `dataMapping` names to exist on it, and compares `varCount` with
+the gene count of the axis that mapping reads. Any mismatch raises `ValueError`
+before any mutation is published.
 
 This prevents the worst failure mode:
 > applying “correct-looking” highlights to the wrong biological cells.
 
-### `cellOrder`: recorded by the viewer, shape-checked here
+### `cellOrder` and `dataMapping`: recorded by the viewer, checked here
 
-The manifest fingerprint carries a fifth field beside those four scalars.
-`cellOrder` is exactly a `dimension` (1, 2, or 3) and a 16-character lowercase
-hexadecimal `digest` of the coordinates the session was saved against. It exists
-because the four scalars all survive a re-export of the same dataset from
-re-sorted input, and index-based selections would then silently denote different
-cells.
+The manifest fingerprint carries two records beside those four scalars, and both
+are required. `cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
+16-character lowercase hexadecimal `digest` of the coordinates of that
+embedding. `embedding` is `{"key", "columns"}`: an exported embedding id with
+`columns: null`, or an AnnData `obsm` key with the 0-based columns that were
+read, one per dimension. It exists because the four scalars all
+survive a re-export of the same dataset from re-sorted input, and index-based
+selections would then silently denote different cells.
 
-The two readers are deliberately asymmetric:
+`dataMapping` records which stored arrays the session was showing. Its `kind`
+is `"export"` — exactly `kind`, `embeddings` (`enabled`, the embeddings that are turned on, and
+`defaults`, the `1d`/`2d`/`3d` default of each dimension),
+`geneNames` (`"index"` or `"column:<name>"`), and `vectorFields` — or
+`"anndata"`, which adds `knn`, `expression` (`"X"`, `"raw"`, `"layer:<name>"`,
+or null), and `latent`.
+
+The two readers check them differently:
 
 | | web app | Python |
 |---|---|---|
-| `cellOrder` present | required | optional |
-| record shape | validated | validated |
-| digest value | compared against the loaded dataset | never checked |
+| `cellOrder` and `dataMapping` present | required | required |
+| record shapes | validated | validated |
+| `dataMapping` keys exist on the dataset | checked | checked against the `AnnData` |
+| `cellOrder` digest value | compared against the loaded embedding | never checked |
 
-Python cannot check the digest. It is taken over *exported* coordinates, while
-this API applies a session to an `AnnData` whose row order the caller controls
-and which need not contain those coordinates at all. Enforcing cell-order
-identity is the viewer's job; accepting both fingerprint shapes is what keeps
-already-written session files loadable here.
+Python cannot check the digest. It is taken over the normalized coordinates the
+viewer drew, while this API applies a session to an `AnnData` whose row order
+the caller controls. Enforcing cell-order identity is the viewer's job.
 
 So a bundle this reader accepts may still be refused by the web app. That
-direction is expected. The reverse is not: anything the web app accepts is
-valid input here.
-
----
+direction is expected.
 
 ## Troubleshooting (protocol-level)
 

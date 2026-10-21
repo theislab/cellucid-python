@@ -22,7 +22,7 @@ try:
 
     release = version = __version__
 except Exception:
-    release = version = "0.9.1"  # CELLUCID_VERSION
+    release = version = "0.9.4"  # CELLUCID_VERSION
 
 # -- General configuration ---------------------------------------------------
 extensions = [
@@ -35,6 +35,7 @@ extensions = [
     "sphinx_design",
     "myst_nb",
     "sphinx_copybutton",
+    "sphinx_sitemap",
 ]
 
 # -- MyST configuration ------------------------------------------------------
@@ -128,12 +129,26 @@ html_context = {
 }
 
 html_static_path = ["_static"]
+# Copied verbatim to the root of the HTML output. Read the Docs serves
+# `/robots.txt` from the root of the default version (`latest`), so the
+# `_extra/robots.txt` of the `latest` build is the one crawlers see.
+html_extra_path = ["_extra"]
 html_css_files = ["custom.css"]
 
 # Sidebar - show navigation on all pages
 html_sidebars = {
     "**": ["sidebar-nav-bs"],
 }
+
+# -- Canonical URL and sitemap ---------------------------------------------
+# The documentation is served from the custom domain docs.cellucid.com (Read
+# the Docs canonical domain). `html_baseurl` makes every page declare
+# <link rel="canonical"> on that host, and sphinx-sitemap writes the page list
+# to https://docs.cellucid.com/en/latest/sitemap.xml, which `_extra/robots.txt`
+# advertises.
+html_baseurl = "https://docs.cellucid.com/en/latest/"
+sitemap_url_scheme = "{link}"
+sitemap_excludes = ["search.html", "genindex.html", "py-modindex.html"]
 
 # -- Source configuration ----------------------------------------------------
 templates_path = ["_templates"]

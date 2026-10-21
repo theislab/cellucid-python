@@ -89,7 +89,7 @@ def test_none_selects_var_index_and_is_declared_in_the_manifest() -> None:
     )
 
     assert adapter.get_gene_ids() == ["Index-A", "Index-B"]
-    assert adapter.get_var_manifest()["var_gene_id_column"] is None
+    assert adapter.get_var_manifest()["gene_name_sets"][0]["source"] is None
 
 
 def test_index_string_is_one_literal_var_column_name() -> None:
@@ -101,7 +101,7 @@ def test_index_string_is_one_literal_var_column_name() -> None:
     )
 
     assert adapter.get_gene_ids() == ["Column-A", "Column-B"]
-    assert adapter.get_var_manifest()["var_gene_id_column"] == "index"
+    assert adapter.get_var_manifest()["gene_name_sets"][0]["source"] == "index"
 
 
 def test_index_string_is_rejected_when_that_exact_var_column_is_absent() -> None:

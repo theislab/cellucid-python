@@ -17,7 +17,8 @@ At minimum, your dataset folder should contain:
 - `dataset_identity.json`
 - `obs_manifest.json`
 - `obs/`
-- at least one `points_*d.bin` (or `.gz`)
+- `embeddings/`, holding every file `dataset_identity.json` declares under
+  `embeddings$items` (`<index>_<dim>d.bin`, or `.gz`)
 
 Quick inventory:
 
@@ -36,7 +37,8 @@ ident$stats
 
 Confirm:
 - `stats$n_cells` is correct
-- `embeddings$available_dimensions` matches what you exported (2D/3D)
+- `names(ident$embeddings$items)` lists every embedding you exported, and
+  `ident$embeddings$defaults` names the one each dimension shows first
 - `stats$n_genes` matches what you expect (0 if no expression)
 
 ## 3) Validate `obs_manifest.json`
@@ -62,11 +64,12 @@ stopifnot(identical(sort(indices), seq_along(indices) - 1))
 
 ## 4) Validate embedding binary length (quick check)
 
-If you exported 2D points without compression:
+If you exported a 2D embedding without compression:
 
 ```r
 n_cells <- ident$stats$n_cells
-path <- file.path(out_dir, "points_2d.bin")
+item <- ident$embeddings$items[[ident$embeddings$defaults[["2d"]]]]
+path <- file.path(out_dir, item$file)
 stopifnot(file.exists(path))
 
 con <- file(path, open = "rb")
@@ -76,7 +79,7 @@ vals <- readBin(con, what = "numeric", size = 4, endian = "little", n = n_cells 
 stopifnot(length(vals) == n_cells * 2)
 ```
 
-If you used compression, the path is `points_2d.bin.gz` and you should open with `gzfile(...)`.
+If you used compression, `item$file` ends in `.gz` and you should open it with `gzfile(...)`.
 
 ## 5) Validate gene expression export (if present)
 

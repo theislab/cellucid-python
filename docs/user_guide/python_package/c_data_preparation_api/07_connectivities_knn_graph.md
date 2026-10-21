@@ -13,20 +13,28 @@ In AnnData, this is typically:
 **`prepare()` and serving AnnData directly are two different paths. Both ask for
 the graph explicitly, but they ask in different places.**
 
-`prepare()` is unchanged: the graph is exported only when you pass
-`connectivities=` yourself, and omitting it exports everything else.
+`prepare()` exports one graph, and only when you pass `connectivities=`
+yourself; omitting it exports everything else. An export carries at most one
+neighbour graph, chosen at export time.
 
 Serving an AnnData object directly is opt-in in the same way, and off by
 default. {func}`~cellucid.serve_anndata`, {func}`~cellucid.show_anndata`,
 {class}`~cellucid.AnnDataViewer`, {class}`~cellucid.AnnDataServer`, and
-{class}`~cellucid.AnnDataAdapter` take `serve_connectivity=True`, and
-`cellucid serve` takes `--connectivity` (direct AnnData input only — like every
-other AnnData-only flag, it is rejected for a prepared export directory). Until
-you ask, `adata.obsp["connectivities"]` is never read at all: the served dataset
-reports no connectivity, and its manifest and edge routes are absent. Asking for
-it on an object whose `obsp` holds no `connectivities` matrix is an error, not
-silence. The serve-path details are in
+{class}`~cellucid.AnnDataAdapter` take `knn_key="connectivities"` (or any other
+`obsp` key), and `cellucid serve` takes `--knn KEY` (direct AnnData input only —
+like every other AnnData-only flag, it is rejected for a prepared export
+directory). Until you name a matrix, no `obsp` matrix is read at all: the served
+dataset reports no connectivity, and its manifest and edge routes are absent.
+Naming a matrix the object does not hold is an error, not silence, and a matrix
+that is not symmetric — Scanpy's `obsp['distances']` — is refused with that
+reason rather than symmetrized. The serve-path details are in
 {doc}`../d_viewing_apis/08_anndata_mode_show_anndata_and_serve_anndata`.
+
+Whatever the server starts with, the viewer can switch to any other `obsp`
+matrix while the dataset is open, under **Session › Data mapping › Neighbour
+graph** ({doc}`../../web_app/b_data_loading/13_data_mapping`); the server
+reads and checks that graph only then. A file opened in the browser offers the
+same choice and starts with `obsp['connectivities']` when it has one.
 
 Serving a **prepared export** is unaffected: that directory either holds the
 connectivity artifacts or it does not.
@@ -101,9 +109,10 @@ Edge indices are stored using the smallest integer dtype that fits `n_cells`:
   connectivity representation.
 
 The mathematical `uint32` ceiling does not imply that a browser can hold a
-graph of that size. Cellucid preflights the required working set and directs
-oversized interactive workloads to server-backed loading instead of attempting
-an unsafe allocation.
+graph of that size: the web app keeps the edge list in memory as written (about
+16 bytes an edge while it loads, 12 once loaded) and draws only the edges each
+panel shows, so the limit is the memory the browser grants. A graph it cannot
+allocate leaves the dataset loaded without edges.
 
 ### Output files
 

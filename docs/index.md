@@ -93,7 +93,7 @@ state with Python, and stop the local viewer cleanly.
 | What you have | Best first path | Why |
 |---|---|---|
 | A prepared Cellucid folder | {doc}`Browser Prepared picker <user_guide/web_app/b_data_loading/03_browser_file_picker_tutorial>` | Fast local exploration with no separate server |
-| An H5AD under 512 MiB, or a portable Zarr ZIP | {doc}`Browser file picker <user_guide/web_app/b_data_loading/03_browser_file_picker_tutorial>` | One direct local selection, no Python installed |
+| An H5AD of any size, or a portable Zarr ZIP | {doc}`Browser file picker <user_guide/web_app/b_data_loading/03_browser_file_picker_tutorial>` | One direct local selection, no Python installed |
 | A large H5AD, Zarr directory, or prepared catalog | {doc}`Python server <user_guide/web_app/b_data_loading/04_server_tutorial>` | Exact server-side validation and on-demand browser gene requests |
 | An in-memory `AnnData` object | {doc}`Jupyter integration <user_guide/web_app/b_data_loading/05_jupyter_tutorial>` | A tight analysis-to-visualization loop |
 | A public collection of prepared datasets | {doc}`Custom repository guide <user_guide/web_app/b_data_loading/11_custom_dataset_repository>` | No running server; exact catalog and share links |
@@ -154,6 +154,8 @@ Install the Python tools with `pip install cellucid`. For R installation and
 supported inputs, begin with the {doc}`R guide
 <user_guide/r_package/installation>`.
 
+If you use Cellucid in your work, see {doc}`citing` for how to cite it.
+
 ```{toctree}
 :maxdepth: 2
 :hidden:
@@ -164,4 +166,5 @@ Python <user_guide/python_package/index>
 R <user_guide/r_package/index>
 contributing
 changelog
+citing
 ```

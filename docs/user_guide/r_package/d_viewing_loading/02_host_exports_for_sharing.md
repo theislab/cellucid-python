@@ -22,7 +22,7 @@ exports/
   datasets.json
   my_dataset/
     dataset_identity.json
-    points_2d.bin.gz
+    embeddings/
     obs_manifest.json
     obs/
     ...

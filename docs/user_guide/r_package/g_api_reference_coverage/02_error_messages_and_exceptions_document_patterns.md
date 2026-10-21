@@ -24,42 +24,46 @@ When reporting a bug, always include:
 
 ## Common error families (and where to debug)
 
-### “At least one embedding must be provided: X_umap_1d, X_umap_2d, or X_umap_3d.”
+### “cellucid_prepare() is missing 1 required argument: embeddings …”
 
 Meaning:
-- you didn’t pass any of `X_umap_1d/2d/3d`
+- you didn’t pass `embeddings`
 
 Fix:
-- provide at least one embedding
+- provide at least one embedding: `embeddings = list(X_umap = umap2)`
 
 Docs:
 - {doc}`../c_data_preparation_api/03_embeddings_and_coordinates`
 
-### “X_umap_2d must have exactly 2 columns, got 3.”
+### “Embedding 'X_pca' has 10 columns, and an embedding plots 1, 2, or 3 of them. …”
 
 Meaning:
-- you passed an embedding with the wrong number of columns
-
-Vector fields report the related `Vector field '<name>' must have exactly 1, 2,
-or 3 components.` when the array has no usable width at all, and
-`Vector field '<name>' declares 2D but contains 1 components.` when its width
-disagrees with the dimension its key declares.
-
-Docs:
-- embeddings: {doc}`../c_data_preparation_api/03_embeddings_and_coordinates`
-- vector fields: {doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement`
-
-### “Vector field key 'velocity_umap' must exactly match …”
-
-Meaning:
-- a `vector_fields` list name is not a complete declaration. The full message
-  quotes the required pattern, `'<field>_umap_<1|2|3>d'`. The dimension is
-  declared by the key and never inferred, so an unsuffixed `velocity_umap` is
-  rejected rather than sized from the array.
+- you passed a wide reduction as a plain matrix
 
 Fix:
-- rename the list entry to `velocity_umap_2d` (or `_1d` / `_3d`) to match the
-  array you are passing. The Python package enforces the identical rule.
+- name the 1-based columns to plot: `cellucid_embedding(pca, columns = c(1, 2))`
+
+### “… so embedding_defaults must name the one shown first, …”
+
+Meaning:
+- two or more embeddings share a dimension and none was named the default
+
+Fix:
+- add `embedding_defaults = c("2d" = "X_umap")`
+
+Docs:
+- {doc}`../c_data_preparation_api/03_embeddings_and_coordinates`
+
+### “Vector field 'velocity' on embedding 'X_umap' must have exactly 2 columns, got 3.”
+
+Meaning:
+- a vector array's width is not the dimension of the embedding it is bound to
+
+Related messages: `Vector field 'velocity' must map embedding ids to arrays, …`
+when a field's value is not a named list of arrays, and
+`Vector field 'velocity' is bound to embedding 'X_tsne', which is not one of the exported embeddings: …`
+when a field names an embedding id that is not exported. The Python package
+reports the same cases in the same words.
 
 Docs:
 - {doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement`
@@ -125,15 +129,16 @@ Fix:
 Docs:
 - {doc}`../c_data_preparation_api/05_var_gene_metadata`
 
-### “obs_categorical_dtype must be exactly one of "uint8" or "uint16".”
+### “obs_categorical_dtype must be exactly one of "uint8", "uint16" or "uint32".”
 
 Meaning:
-- you passed a value that is not `"uint8"` or `"uint16"`. There is no automatic
+- you passed a value that is not `"uint8"`, `"uint16"` or `"uint32"`. There is no automatic
   width selection, so `"auto"` fails. Leaving the argument out is a different
   mistake and gets the missing-argument message below instead.
 
 Fix:
-- pass `"uint8"` for up to 255 categories per field, `"uint16"` for up to 65,535
+- pass `"uint8"` for up to 255 categories per field, `"uint16"` for up to
+  65,535, or `"uint32"` for more (up to 4,294,967,295)
 
 Docs:
 - {doc}`../c_data_preparation_api/04_obs_cell_metadata`
@@ -151,7 +156,7 @@ named in one message, in signature order, each with what a valid value is:
 
 ```text
 cellucid_prepare() is missing 3 required arguments:
-  - obs_categorical_dtype: exactly one of "uint8" or "uint16", the storage width of every categorical code.
+  - obs_categorical_dtype: exactly one of "uint8", "uint16" or "uint32", the storage width of every categorical code.
   - dataset_name: one non-empty name for the dataset, shown to the reader verbatim.
   - dataset_id: one portable identifier of 1-180 ASCII letters, numbers, '.', '_', or '-', beginning with a letter or number and not ending with '.'.
 ```
@@ -167,19 +172,20 @@ Docs:
 - {doc}`../c_data_preparation_api/04_obs_cell_metadata`
 - {doc}`../b_concepts_mental_models/03_dataset_identity_and_reproducibility`
 
-### “Gene key 'MS4A1' is duplicated.”
+### “Observation field key 'cluster' is duplicated.”
 
 Meaning:
-- an identifier names more than one row, so a lookup by that identifier
-  resolves nothing definite.
+- an identifier names more than one field, so a lookup by that identifier
+  resolves nothing definite. Gene names are the exception: a repeated gene name
+  is made unique (`MATR3`, `MATR3-1`) rather than refused.
 
 Every message of this family opens with the axis that raised it, so the first
 words tell you which input to go and fix:
 
 | Opening words | What was rejected |
 |---|---|
-| `Gene key` | a gene ID in `rownames(var)` or `var_gene_id_column`, or a gene name in a `compact_v1` var manifest |
-| `Observation field key` | a name you passed in `obs_keys`, or a key read out of a `compact_v1` obs manifest |
+| `Observation field key` | a name you passed in `obs_keys`, or a key read out of an obs manifest |
+| `Embedding key` | an `embeddings` id |
 | `Vector field key` | a `vector_fields` field id |
 
 The axis noun is singular because the message names exactly one key: the first
@@ -249,12 +255,12 @@ Meaning:
 - a payload directory and the manifest that describes it disagree. The message
   names both sides: `Declared but absent: …` and `Written but undeclared: …`.
 
-This runs on five surfaces before publication — the four payload directories
-`Observation`, `Gene`, `Connectivity`, and `Vector field`, and the `Export` root
-itself — so a stale file from an earlier generation cannot survive beside a
-current manifest, and the `points_<dim>d.bin(.gz)` payloads that
-`dataset_identity.json` declares are covered by the same rule as every other
-payload. A directory entry that is not a regular file gets its own message,
+This runs on six surfaces before publication — the five payload directories
+`Observation`, `Gene`, `Connectivity`, `Vector field`, and `Embedding`, and the
+`Export` root itself — so a stale file from an earlier generation cannot survive
+beside a current manifest, and the `embeddings/<index>_<dim>d.bin(.gz)` payloads
+that `dataset_identity.json` declares are covered by the same rule as every
+other payload. A directory entry that is not a regular file gets its own message,
 `Gene payload directory holds a non-file entry: …`; at the root the same message
 names any directory the export did not create.
 
@@ -370,7 +376,7 @@ had silently become zero.
 The same rule reaches you in two other wordings, from the two places a value can
 enter without passing the writer:
 
-- `X_umap_2d contains values outside the finite float32 range: …` — embedding
+- `Embedding 'X_umap' contains values outside the finite float32 range: …` — embedding
   and `latent_space` coordinates are centred and scaled into roughly `[-1, 1]`
   before anything is written, so the writer would see an in-range value and
   publish a number you never supplied. These are checked at the source instead.

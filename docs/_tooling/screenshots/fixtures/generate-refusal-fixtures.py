@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate the on-disk fixtures the data-loading refusal captures select.
+"""Regenerate the on-disk fixtures the data-loading notification captures select.
 
 Run from anywhere with the repository's own environment::
 
@@ -25,10 +25,9 @@ import numpy as np
 import pandas as pd
 
 # A current-schema AnnData whose ``obsm`` holds exactly one key, and that key is
-# not an embedding Cellucid accepts. This is the ordinary version of the
-# mistake: PCA was computed and UMAP was not, so the file looks finished and is
-# refused for the one thing it is missing. The refusal quotes the ``obsm`` keys
-# that *are* present, so ``X_pca`` is what the figure's caption names.
+# not a UMAP. This is the ordinary version of the mistake: PCA was computed and
+# UMAP was not. Cellucid opens it on a best guess, showing ``X_pca`` as 2D, and
+# the notification that says so is what the figure photographs.
 N_CELLS = 120
 N_GENES = 6
 SEED = 0

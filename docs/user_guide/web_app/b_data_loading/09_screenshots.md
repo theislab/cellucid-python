@@ -105,28 +105,11 @@ runs the supported browser projects on their available CI operating systems.
 Each capture below is the notification Cellucid actually raised for that exact
 input, taken from the running application.
 
-```{figure} ../../../_static/screenshots/data_loading/fail-h5ad-over-size-limit.png
-:alt: A notification stating that H5AD direct browser files must have a positive safe size no larger than 512 MiB and suggesting the Cellucid server or the prepared format.
-:width: 776px
-
-An `.h5ad` above the 512 MiB browser ceiling, refused before any byte is read.
-```
-
 ```{figure} ../../../_static/screenshots/data_loading/fail-h5ad-wrong-file.png
 :alt: A notification stating that the selected file is not a valid HDF5 or H5AD file and asking for an AnnData .h5ad file.
 :width: 760px
 
 A CSV renamed to `.h5ad`. The leading bytes are checked, not the extension.
-```
-
-```{figure} ../../../_static/screenshots/data_loading/fail-missing-umap-embedding.png
-:alt: A notification listing the expected X_umap_1d, X_umap_2d and X_umap_3d keys and then naming X_pca as the only obsm key present in the selected file.
-:width: 760px
-
-A valid `.h5ad` with no supported embedding. The message ends by listing the
-`obsm` keys the file does contain. This capture predates the current wording,
-which also names a plain `X_umap` among the keys it accepts; the exact text is
-quoted in {doc}`03_browser_file_picker_tutorial`.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/fail-remote-server-unreachable.png

@@ -1,6 +1,6 @@
 # Troubleshooting (core interactions)
 
-This page is a **symptom → diagnosis → fix** catalog for navigation, camera, render modes, multiview, and dimension switching.
+This page is a **symptom → diagnosis → fix** catalog for navigation, camera, render modes, multiview, and switching embeddings.
 
 If you are brand-new to the UI, it may be faster to skim {doc}`01_navigation_modes_orbit_planar_free_fly` first, then come back here.
 
@@ -14,7 +14,7 @@ When things feel broken, these are the safest global actions:
 2) Switch navigation mode to **Orbit** (`O`)
 3) Click the canvas once (restore focus)
 4) Click **Reset Camera**
-5) If multiview is confusing, lock cameras and/or clear snapshots
+5) If multiview is confusing, select the view you mean in **Compare views** and/or clear kept views
 
 If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/02_system_requirements`.
 
@@ -32,7 +32,7 @@ If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/0
 
 ### How to confirm
 
-- Look at **Compare Views → Navigation → Mode** (Orbit/Planar/Free-fly).
+- Look at **Navigation → Mode** (Orbit/Planar/Free-fly).
 - If the cursor is hidden and moving the mouse rotates the view, pointer lock is active.
 - Click once on the canvas and try again (tests focus).
 
@@ -96,49 +96,61 @@ If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/0
 ### Likely causes
 
 1) You are interacting with the **focused view** (last clicked), not the view you’re looking at.
-2) Cameras are unlocked, so each view has its own camera and switching focus swaps cameras.
+2) **Link cameras** is on and the panel that moved shows the same embedding as the focused one: linked views move together.
 
 ### How to confirm
 
 - Click inside the panel you want to control, then drag/scroll again.
-- Check whether cameras are locked (Locked Cam toggle).
+- In **Compare views**, rows marked `linked` share one camera.
 
 ### Fix
 
-- For simple comparisons, lock cameras.
-- For independent cameras, develop the habit: click inside a panel before navigating it.
+- Click inside a panel before navigating it.
+- Turn **Link cameras** off to give views of the same embedding their own cameras. Views of different embeddings never share a camera.
 
 ---
 
-## Symptom: “Navigation badges (Orb/Pan/Fly) don’t show on view badges”
+## Symptom: “A 3D view will not rotate next to a 2D view”
 
 ### Likely causes
 
-- Cameras are locked (nav badges only appear when cameras are unlocked).
+- The 3D view is not the focused view, or you chose **Planar** for it.
 
 ### How to confirm
 
-- Toggle **Locked Cam** off; badges should gain navigation indicators.
+- Select its row in **Compare views**: its navigation mode (`Orbit`, `Pan`, `Fly`) is shown on the row and in **Navigation → Mode**.
 
 ### Fix
 
-- Unlock cameras if you need per-view navigation modes.
+- Press its mode on the row, or focus it and press `O`. Every view keeps its own mode; the 2D view keeps panning.
 
 ---
 
-## Symptom: “Dimension dropdown is missing”
+## Symptom: “Link cameras is greyed out”
 
 ### Likely causes
 
-- The dataset provides only one embedding dimension (common for 3D-only exports).
-
-### How to confirm
-
-- If the view badge never shows `2D`/`1D` and the dropdown is hidden, the dataset likely lacks those embeddings.
+- No two open views show the same embedding. Cameras link only between views of one embedding.
 
 ### Fix
 
-- Use a dataset with multiple embeddings, or re-export with additional dimensions (data prep issue).
+- Show the same embedding in two views (`View N shows`), or keep a view of the one you want to compare.
+
+---
+
+## Symptom: “The embedding I want is not in the picker”
+
+### Likely causes
+
+- It is not turned on under **Session › Data mapping › Embeddings**, or the dataset does not have it.
+
+### How to confirm
+
+- Open the checklist: every embedding the dataset has is listed, with the reason when it cannot be drawn.
+
+### Fix
+
+- Turn it on and press **Apply**; it then appears in every view's picker. See {doc}`../b_data_loading/13_data_mapping`.
 
 ---
 
@@ -146,13 +158,14 @@ If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/0
 
 ### Likely causes (ordered)
 
-1) You are in **smoke render mode** (snapshots are points-only).
-2) An internal error prevented snapshot creation (rare; check console).
+1) You are in **smoke render mode** (kept views are points-only).
+2) Four views are already open (the limit).
+3) An internal error prevented the new view (rare; check console).
 
 ### How to confirm
 
 - Check **Visualization → Render mode**.
-- If it’s `Volumetric smoke cloud (alpha)`, snapshots are blocked.
+- If it’s `Volumetric smoke cloud (beta)`, kept views are blocked.
 
 ### Fix
 
@@ -197,22 +210,25 @@ If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/0
 
 ### Likely causes
 
-- Grid density too high for your GPU.
+- Render resolution too high for your GPU (it runs from 0.25× to 1.00×).
 - Ray quality too high.
-- Render resolution too high (close to 1.0× or above).
+- Grid density high, which lengthens every density build and adds samples to
+  every ray.
 
 ### How to confirm
 
 - Lower render resolution, then ray quality. If frame rate improves, the
-  steady-state ray-marching cost was dominant. If entering smoke or changing a
-  filter is the slow part, lower grid density instead.
+  steady-state ray-marching cost was dominant. If entering smoke, changing a
+  filter, or recolouring is the slow part, lower grid density instead.
 
 ### Fix (fastest wins)
 
 1) Lower **Render resolution**.
 2) Lower **Ray quality**.
-3) Lower **Grid density**.
-4) Lower **Noise detail**.
+3) Lower **Noise detail**.
+4) Lower **Grid density**.
+5) Set **Animation speed** to 0 (`Still`) if nothing needs to move: a settled
+   still view is not redrawn.
 
 ---
 
@@ -229,7 +245,7 @@ Full details and prevention: {doc}`../a_orientation/02_system_requirements` → 
 
 ---
 
-## Symptom: “After switching dimension, everything looks empty”
+## Symptom: “After switching embedding, everything looks empty”
 
 ### Likely causes
 
@@ -240,7 +256,7 @@ Full details and prevention: {doc}`../a_orientation/02_system_requirements` → 
 
 1) Click **Reset Camera**.
 2) Clear filters/outlier thresholds.
-3) Try a different navigation mode (Planar for 2D, Orbit for 3D).
+3) Check the view's navigation mode: Planar for 1D and 2D, Orbit for 3D. A mode you chose for that view in that dimension before is kept.
 
 ---
 
@@ -263,6 +279,6 @@ If you’re filing an issue or asking for help, include:
 - your browser + version,
 - your OS + GPU (from `chrome://gpu` or equivalent),
 - whether you were in points or smoke mode,
-- whether you had snapshots and whether cameras were locked,
+- how many views were open, what each showed (its row in **Compare views**), and whether **Link cameras** was on,
 - a screenshot of the relevant sidebar section (navigation/render/multiview),
 - any console error text (copy/paste).

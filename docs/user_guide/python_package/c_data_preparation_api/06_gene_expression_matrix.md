@@ -28,6 +28,7 @@ marker_genes = ["MS4A1", "CD3D", "LYZ", "NKG7"]
 
 prepare(
     ...,
+    embeddings={"X_umap": adata.obsm["X_umap"]},
     dataset_name="My study",
     dataset_id="my-study-v1",
     obs_categorical_dtype="uint16",

@@ -24,25 +24,39 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
 
+from .data_mapping import (
+    ANNDATA_KIND,
+    DataMappingError,
+    validate_data_mapping,
+    validate_embedding_ref,
+)
+
 SESSION_BUNDLE_MAGIC = b"CELLUCID_SESSION\n"
 U32_BYTES = 4
-MAX_MANIFEST_BYTES = 16 * 1024 * 1024
-DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES = 512 * 1024 * 1024
-MAX_STORED_CHUNK_BYTES = 512 * 1024 * 1024
+#: The most bytes one frame (the manifest, or one stored chunk) can hold: its
+#: length is a u32, so this is the format's limit, not a policy. Every inflate
+#: is bounded by the chunk's own declared ``uncompressedBytes``.
+MAX_FRAME_BYTES = 0xFFFF_FFFF
+#: The largest integer the web app reads exactly from JSON.
+MAX_SAFE_INTEGER = (1 << 53) - 1
 
 _MANIFEST_KEYS = {
     "createdAt",
     "datasetFingerprint",
     "chunks",
 }
-_FINGERPRINT_KEYS = {"sourceType", "datasetId", "cellCount", "varCount"}
-# The viewer records which cell ordering a session was saved against. This
-# reader accepts a bundle with or without it: it cannot verify the digest, which
-# is taken over exported coordinates, so enforcing identity is the viewer's job.
-# Accepting both forms is what lets the writer change without stranding the
-# session files that already exist.
-_FINGERPRINT_OPTIONAL_KEYS = {"cellOrder"}
-_CELL_ORDER_KEYS = {"dimension", "digest"}
+# The fingerprint ties a session to one dataset and to one data mapping. Every
+# key is required: the viewer refuses a session without its cell-order record,
+# and a reader that accepted one would apply selections the viewer would refuse.
+_FINGERPRINT_KEYS = {
+    "sourceType",
+    "datasetId",
+    "cellCount",
+    "varCount",
+    "cellOrder",
+    "dataMapping",
+}
+_CELL_ORDER_KEYS = {"embedding", "dimension", "digest"}
 _CELL_ORDER_DIGEST_RE = re.compile(r"\A[0-9a-f]{16}\Z")
 _CHUNK_REQUIRED_KEYS = {
     "id",
@@ -87,11 +101,19 @@ def _require_exact_nonnegative_int(value: Any, *, label: str, maximum: int) -> i
     return int(value)
 
 
-def _validate_fingerprint(value: Any) -> None:
+def _validate_fingerprint(value: Any) -> dict[str, Any]:
+    """Validate one dataset fingerprint and return it with a canonical mapping.
+
+    ``dataMapping`` names the embeddings, gene names and (for an AnnData
+    source) the graph, expression matrix and latent space the session was
+    saved with; ``cellOrder`` names the one embedding whose coordinates the
+    viewer digested. The digest itself cannot be re-derived here, because it is
+    taken over the normalized coordinates the viewer drew; its shape is.
+    """
     if not isinstance(value, dict):
         raise ValueError("Invalid session manifest (datasetFingerprint must be an object)")
     missing = _FINGERPRINT_KEYS - set(value)
-    unknown = set(value) - _FINGERPRINT_KEYS - _FINGERPRINT_OPTIONAL_KEYS
+    unknown = set(value) - _FINGERPRINT_KEYS
     if missing or unknown:
         details: list[str] = []
         if missing:
@@ -114,18 +136,27 @@ def _validate_fingerprint(value: Any) -> None:
             label=f"datasetFingerprint.{key}",
             maximum=(1 << 32) - 1,
         )
-    if "cellOrder" in value:
-        _validate_cell_order(value["cellOrder"])
+    try:
+        mapping = validate_data_mapping(value["dataMapping"], label="datasetFingerprint.dataMapping")
+    except DataMappingError as error:
+        raise ValueError(f"Invalid session manifest ({error})") from error
+    cell_order = _validate_cell_order(value["cellOrder"], kind=mapping["kind"])
+    canonical = dict(value)
+    canonical["cellOrder"] = cell_order
+    canonical["dataMapping"] = mapping
+    return canonical
 
 
-def _validate_cell_order(value: Any) -> None:
+def _validate_cell_order(value: Any, *, kind: str) -> dict[str, Any]:
     """Validate the cell-order record that ties a session to a cell ordering.
 
     The viewer records a digest of the coordinates a session was saved against,
     so a dataset republished with the same name and counts but a different row
     order cannot silently re-point every saved selection at different cells.
-    The digest is over one embedding, and the three embeddings are normalized
-    independently, so the dimension it was taken in is part of the record.
+    The digest is over one embedding, and every embedding is normalized on its
+    own, so the record names that embedding -- an exported embedding id with
+    ``columns: null``, or an AnnData ``obsm`` key with the 0-based columns read
+    -- and the dimension it was drawn in.
     """
     if not isinstance(value, dict):
         raise ValueError(
@@ -156,6 +187,16 @@ def _validate_cell_order(value: Any) -> None:
             "Invalid session manifest (datasetFingerprint.cellOrder.digest must be "
             "16 lowercase hexadecimal characters)"
         )
+    try:
+        embedding = validate_embedding_ref(
+            value["embedding"],
+            kind=kind,
+            dimension=dimension if kind == ANNDATA_KIND else None,
+            label="datasetFingerprint.cellOrder.embedding",
+        )
+    except DataMappingError as error:
+        raise ValueError(f"Invalid session manifest ({error})") from error
+    return {"embedding": embedding, "dimension": dimension, "digest": digest}
 
 
 def _validate_manifest(manifest: Any) -> list[dict[str, Any]]:
@@ -237,12 +278,12 @@ def _validate_manifest(manifest: Any) -> list[dict[str, Any]]:
         stored_bytes = _require_exact_nonnegative_int(
             raw["storedBytes"],
             label=f"chunk {chunk_id!r} storedBytes",
-            maximum=MAX_STORED_CHUNK_BYTES,
+            maximum=MAX_FRAME_BYTES,
         )
         uncompressed_bytes = _require_exact_nonnegative_int(
             raw["uncompressedBytes"],
             label=f"chunk {chunk_id!r} uncompressedBytes",
-            maximum=DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES,
+            maximum=MAX_SAFE_INTEGER,
         )
         if raw["codec"] == "none" and stored_bytes != uncompressed_bytes:
             raise ValueError(
@@ -411,8 +452,13 @@ class CellucidSessionBundle:
                 raise ValueError("Not a .cellucid-session file (invalid MAGIC header)")
 
             manifest_len = _read_u32_le(f)
-            if manifest_len <= 0 or manifest_len > MAX_MANIFEST_BYTES:
+            if manifest_len <= 0:
                 raise ValueError(f"Invalid session manifest length: {manifest_len}")
+            if f.tell() + manifest_len > self.path.stat().st_size:
+                raise ValueError(
+                    f"Invalid session manifest length: {manifest_len} bytes is more "
+                    "than the session file holds"
+                )
 
             manifest_bytes = _read_exact(f, manifest_len)
             try:
@@ -430,10 +476,6 @@ class CellucidSessionBundle:
                     raise ValueError(
                         f"Invalid session chunk {chunk_id!r}: storedBytes declares "
                         f"{meta['storedBytes']}, frame contains {stored_len}"
-                    )
-                if stored_len > MAX_STORED_CHUNK_BYTES:
-                    raise ValueError(
-                        f"Invalid session chunk {chunk_id!r}: storedBytes exceeds limit"
                     )
                 offset = f.tell()
                 if offset + stored_len > file_size:
@@ -457,8 +499,6 @@ class CellucidSessionBundle:
         expected_bytes = meta["uncompressedBytes"]
 
         if codec == "gzip":
-            if expected_bytes > DEFAULT_MAX_UNCOMPRESSED_CHUNK_BYTES:
-                raise ValueError("Session chunk uncompressedBytes exceeds the limit")
             uncompressed = _decompress_gzip_exact(stored, expected_bytes)
         else:
             if len(stored) != expected_bytes:

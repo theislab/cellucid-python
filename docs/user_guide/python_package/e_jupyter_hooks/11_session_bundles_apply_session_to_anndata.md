@@ -42,7 +42,7 @@ Session application is currently **index-based**:
 The session references cells by **row index** (0-based). Only apply a session to an `AnnData` whose row order matches the dataset that produced the session.
 
 Nothing in Python can verify that for you — see
-[`cellOrder`: recorded here, enforced in the viewer](#cellorder-recorded-here-enforced-in-the-viewer).
+the `cellOrder` section below.
 ```
 
 ## What gets applied (current behavior)
@@ -66,7 +66,10 @@ adata.obs["cellucid_highlight__highlight_12"]  # True/False per cell
 If the bundle contains user-defined fields:
 - categorical fields decode exact labels and cell-aligned codes;
 - continuous fields copy one exact cell-aligned source;
-- a field declared with source `var` copies that gene's values across cells.
+- a field declared with source `var` copies that gene's values across cells:
+  the gene is found by name among the gene names the session's `dataMapping`
+  shows (made unique with the shared rule), and its values are read from the
+  mapping's expression matrix — `X`, `raw.X`, or a layer.
 
 All materialized fields are cell-aligned `adata.obs` columns.
 
@@ -84,62 +87,59 @@ adata.uns["cellucid"]["session"]
 
 ## Exact dataset identity (avoid accidental corruption)
 
-A session bundle's `datasetFingerprint` has four required fields and one
-optional one:
+A session bundle's `datasetFingerprint` has exactly six required fields:
 
-| Field | Required | Checked by `apply_cellucid_session_to_anndata` |
-|---|---|---|
-| `sourceType` | yes | must be a non-empty string |
-| `datasetId` | yes | must equal `expected_dataset_id` |
-| `cellCount` | yes | must equal `adata.n_obs` |
-| `varCount` | yes | must equal `adata.n_vars` |
-| `cellOrder` | no | shape only, when present |
+| Field | Checked by `apply_cellucid_session_to_anndata` |
+|---|---|
+| `sourceType` | must be a non-empty string |
+| `datasetId` | must equal `expected_dataset_id` |
+| `cellCount` | must equal `adata.n_obs` |
+| `dataMapping` | every key it names must exist on `adata` |
+| `varCount` | must equal the gene count of the mapped axis: `adata.raw.n_vars` for `expression: "raw"`, `0` when the mapping reads no expression, else `adata.n_vars` |
+| `cellOrder` | shape only |
 
-Application requires `expected_dataset_id`. Cell/variable counts and the dataset
-ID must match exactly; a mismatch raises `ValueError` naming every field that
-differs, before the target is mutated.
+Application requires `expected_dataset_id`. Counts, the dataset ID, and the
+mapping must match exactly; a mismatch raises `ValueError` before the target is
+mutated.
 
 In practice, if you subset/shuffle your AnnData after the session was created, you will almost always have a mismatch.
 
-### `cellOrder`: recorded here, enforced in the viewer
+### `dataMapping`: which arrays the session showed
 
-`cellOrder` is the viewer's record of which cell ordering a session was saved
-against — a digest of the coordinates on screen at save time, plus the
-embedding dimension (`1`, `2`, or `3`) the digest was taken in. It is what stops
-a dataset republished under the same name with the same cell and gene counts but
-a different row order from silently re-pointing every saved selection at
-different cells.
+`dataMapping` records which stored arrays the session was showing. Its `kind`
+is `"export"` — exactly `kind`, `embeddings` (the `1d`/`2d`/`3d` slots),
+`geneNames` (`"index"` or `"column:<name>"`), and `vectorFields` — or
+`"anndata"`, which adds `knn`, `expression` (`"X"`, `"raw"`, `"layer:<name>"`,
+or null), and `latent`. For an AnnData mapping, Python requires each named `obsm`
+embedding to exist and be wide enough for its columns, and the named `obsp`
+graph, latent space, layer or `raw`, and gene-name column to exist. An export
+mapping names exported embedding ids, which an `AnnData` need not carry, so only
+its gene-name column is checked.
 
-This reader treats it asymmetrically, and the asymmetry is deliberate:
+### `cellOrder`: shape-checked here, enforced in the viewer
 
-- **It is accepted, not required.** A bundle validates with or without
-  `cellOrder`.
-- **Its shape is checked strictly whenever it is present.** Exactly `dimension`
-  and `digest`; `dimension` exactly the integer 1, 2, or 3; `digest` exactly 16
-  lowercase hexadecimal characters. Anything else raises before payload
-  decoding.
-- **Its value is never verified.** The digest is taken over exported
-  coordinates, which an `AnnData` need not contain, and
-  `apply_session_to_anndata` writes into an `AnnData` whose row order the caller
-  controls. There is nothing here to check it against.
+`cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
+16-character lowercase hexadecimal `digest` of the coordinates of that
+embedding. `embedding` is `{"key", "columns"}`: an exported embedding id with
+`columns: null`, or an AnnData `obsm` key with the 0-based columns that were
+read, one per dimension. It is what stops a dataset republished under the same
+name with the same cell and gene counts but a different row order from silently
+re-pointing every saved selection at different cells.
 
-Enforcing cell-order identity is therefore the viewer's job, not this reader's.
+- **It is required.** A bundle without it is refused.
+- **Its shape is checked strictly.** Anything other than the three keys above,
+  a `dimension` outside 1–3, a malformed `digest`, or an `embedding` whose
+  columns do not fit its kind raises before payload decoding.
+- **Its digest is never verified.** It is taken over the normalized coordinates
+  the viewer drew, and `apply_session_to_anndata` writes into an `AnnData` whose
+  row order the caller controls. There is nothing here to check it against.
 
-```{important}
-A bundle this reader accepts is not necessarily one the web app will open.
-
-The web app **requires** `cellOrder` and refuses a session file saved before the
-record existed, on the reasoning that a file recording selections as bare row
-indices can never be shown to still mark the same cells. If you hold a bundle
-without `cellOrder`, Python will still apply it — under the row-order assumption
-below, which is now yours alone to uphold — but the viewer will not load it.
-Re-create the state in the app and save a fresh session file.
-```
+Enforcing cell-order identity is therefore the viewer's job, not this reader's,
+so a bundle this reader accepts is not necessarily one the web app will open.
 
 When `store_uns=True`, the fingerprint is copied verbatim into
-`adata.uns["cellucid"]["session"]["dataset_fingerprint"]`, `cellOrder` included,
-so the provenance of an applied session survives even though this reader did not
-act on it.
+`adata.uns["cellucid"]["session"]["dataset_fingerprint"]`, `cellOrder` and
+`dataMapping` included.
 
 ## Column naming and conflicts
 

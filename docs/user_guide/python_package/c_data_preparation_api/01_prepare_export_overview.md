@@ -49,7 +49,10 @@ Ask a computational collaborator (or your pipeline) to create an export folder u
 What you should receive is a directory that contains at least:
 - `dataset_identity.json`
 - `obs_manifest.json`
-- `points_1d.bin`, `points_2d.bin`, or `points_3d.bin` (optionally with `.gz`)
+- an `embeddings/` folder holding at least one coordinate file, such as
+  `embeddings/0_2d.bin` (optionally with `.gz`)
+
+The export is in format 3, so it needs a viewer release that reads format 3.
 
 ### Step 2 — Load the folder in the Cellucid web app
 
@@ -101,8 +104,8 @@ Start here for non-export viewing paths:
 At minimum, you provide:
 - `latent_space`: `(n_cells, n_latent_dims)` (required)
 - `obs`: a DataFrame with `n_cells` rows (required)
-- at least one embedding: `X_umap_1d`, `X_umap_2d`, or `X_umap_3d`
-  (required)
+- `embeddings`: at least one embedding, keyed by id, such as
+  `embeddings={"X_umap": adata.obsm["X_umap"]}` (required)
 
 Optionally, you also provide:
 - `gene_expression` + `var` (for gene overlays/search)
@@ -116,36 +119,25 @@ And you always choose:
 ### A complete AnnData-based example (recommended)
 
 ```python
-from cellucid import prepare
+from cellucid import Embedding, prepare
 
-# Required: at least one embedding
-X_umap_1d = adata.obsm.get("X_umap_1d")
-X_umap_3d = adata.obsm.get("X_umap_3d")
-X_umap_2d = adata.obsm.get("X_umap_2d")
-embeddings = (X_umap_3d, X_umap_2d, X_umap_1d)
-if all(embedding is None for embedding in embeddings):
-    raise ValueError(
-        "Provide adata.obsm['X_umap_1d'], "
-        "adata.obsm['X_umap_2d'], or adata.obsm['X_umap_3d']."
-    )
+# Required: at least one embedding. Every one you pass is exported, keyed by
+# its id; a wide array is plotted at the columns you name.
+embeddings = {"X_umap": Embedding(adata.obsm["X_umap"], label="UMAP", source_key="X_umap")}
+if "X_tsne" in adata.obsm:
+    embeddings["X_tsne"] = Embedding(adata.obsm["X_tsne"], label="t-SNE", source_key="X_tsne")
+if "X_umap_3d" in adata.obsm:
+    embeddings["X_umap_3d"] = adata.obsm["X_umap_3d"]
 
-# Required: latent_space (used for outlier quantiles on categorical fields)
-latent = adata.obsm.get(
-    "X_pca",
-    next(embedding for embedding in embeddings if embedding is not None),
-)
-if latent is None:
-    raise ValueError("Provide adata.obsm['X_pca'] or an embedding to use as latent_space.")
-
-# Optional: vector fields (velocity/drift) in embedding space
-vector_fields = {
-    key: adata.obsm[key]
-    for key in ("velocity_umap_1d", "velocity_umap_2d", "velocity_umap_3d")
-    if key in adata.obsm
-}
+# Optional: vector fields (velocity/drift), keyed by field id and then by the
+# embedding each array is drawn over.
+vector_fields = {}
+if "velocity_umap" in adata.obsm:
+    vector_fields["velocity"] = {"X_umap": adata.obsm["velocity_umap"]}
 
 prepare(
-    latent_space=latent,
+    # Required: latent_space (used for outlier quantiles on categorical fields)
+    latent_space=adata.obsm["X_pca"],
     obs=adata.obs,
 
     # Optional but common (enables gene search/overlays)
@@ -154,12 +146,11 @@ prepare(
 
     # Optional
     connectivities=adata.obsp.get("connectivities"),
-    vector_fields=vector_fields,
+    vector_fields=vector_fields or None,
 
-    # Embeddings (provide any/all of 1D/2D/3D)
-    X_umap_1d=X_umap_1d,
-    X_umap_2d=X_umap_2d,
-    X_umap_3d=X_umap_3d,
+    # Embeddings, and the one shown first when a dimension has several
+    embeddings=embeddings,
+    embedding_defaults={"2d": "X_umap"},
 
     # Output + performance knobs
     out_dir="./exports/pbmc_demo",
@@ -186,7 +177,7 @@ out_dir/
 ├── dataset_identity.json
 ├── obs_manifest.json
 ├── obs/
-└── points_1d.bin(.gz)  or  points_2d.bin(.gz)  or  points_3d.bin(.gz)
+└── embeddings/                       # one file per embedding, e.g. 0_2d.bin(.gz)
 ```
 
 Typical full export:
@@ -197,9 +188,7 @@ out_dir/
 ├── obs_manifest.json
 ├── var_manifest.json                 # if gene expression exported
 ├── connectivity_manifest.json        # if connectivities exported
-├── points_1d.bin(.gz)                # if provided
-├── points_2d.bin(.gz)                # if provided
-├── points_3d.bin(.gz)                # if provided
+├── embeddings/                       # one file per embedding you provided
 ├── obs/                              # field binaries (continuous + categorical)
 ├── var/                              # gene expression binaries (one per gene)
 ├── connectivity/                     # edge binaries
@@ -211,7 +200,7 @@ Full spec: {doc}`09_output_format_specification_exports_directory`
 ### “What success looks like” (export-time)
 
 On a successful run, `prepare()` prints an “Export Settings” summary and then logs that it wrote:
-- `points_<dim>d.bin(.gz)` for each embedding you provided
+- `embeddings/<index>_<dim>d.bin(.gz)` for each embedding you provided
 - `obs_manifest.json` + `obs/` files
 - optional: `var_manifest.json` + `var/` files
 - optional: `connectivity_manifest.json` + `connectivity/` files
@@ -232,9 +221,9 @@ On a successful run, `prepare()` prints an “Export Settings” summary and the
 
 1) **Cell identity is row order.** There is no separate cell id table.
 2) **All cell-aligned inputs must match `n_cells`.**
-3) **Embeddings are normalized per-dimension** to a stable `[-1, 1]` coordinate range.
+3) **Each embedding is normalized on its own** to a stable `[-1, 1]` coordinate range.
 4) **Categorical fields produce two payloads**:
-   - category codes (uint8/uint16 with a reserved missing marker),
+   - category codes (uint8/uint16/uint32 with a reserved missing marker),
    - per-cell outlier quantiles (float32 or quantized) computed from `latent_space`.
 5) **Quantization is lossy** (by design) and meant for visualization performance.
 
@@ -254,8 +243,10 @@ Web app context:
 
 ### Versioning and compatibility
 
-- `dataset_identity.json["version"]` is the identity schema version (current exports write `2`).
-- `obs_manifest.json["_format"]` and `var_manifest.json["_format"]` are the manifest encoding versions (current exports write `compact_v1`).
+- `dataset_identity.json["version"]` is the identity schema version (current exports write `3`).
+- `obs_manifest.json["_format"]` and `var_manifest.json["_format"]` are the manifest encoding versions (current exports write `compact_v2`).
+- There is no compatibility path: an export written by an earlier release (any
+  other `version`) must be regenerated.
 - `dataset_identity.json["cellucid_data_version"]` records the `cellucid` Python package version used to export.
 
 ---
@@ -270,8 +261,8 @@ Web app context:
   replacement.
 - **Gene export explosion**: exporting many genes writes *one file per gene* and can create huge folders + slow file systems.
 - **Too many categories**: categorical fields with very large category counts are unusable in the UI and may exceed dtype limits.
-- **Vector dims don’t match**: the candidate is rejected; every declared
-  `<field>_umap_<dimension>d` vector requires the matching embedding dimension.
+- **Vector dims don’t match**: the candidate is rejected; every vector array
+  must have the dimension of the embedding it is bound to.
 
 ## Troubleshooting (overview)
 

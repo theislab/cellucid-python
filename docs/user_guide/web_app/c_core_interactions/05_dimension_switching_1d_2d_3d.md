@@ -1,95 +1,107 @@
-# Dimension switching (1D / 2D / 3D)
+# Switching embeddings (1D / 2D / 3D)
 
-**Audience:** everyone (dimension switching is foundational)  
+**Audience:** everyone (switching embeddings is foundational)  
 **Time:** 8–15 minutes  
 **What you’ll learn:**
-- What “dimension” means in Cellucid (it’s an embedding choice)
-- How to switch dimensions (dropdown, badges, shortcuts)
-- What changes (positions, overlays) vs what stays (most UI state)
+- What a view shows: one embedding, whose dimension is 1D, 2D or 3D
+- How to switch it (the picker, keys `1`, `2` and `3`)
+- What changes (positions, navigation mode, overlays) vs what stays
 
 ---
 
-## What “dimension” means
+## What a view shows
 
-In Cellucid, “dimension” refers to which embedding dimensionality is active for a view:
+Every view shows one **embedding**: a set of coordinates for the cells. Its
+dimension follows from the embedding:
 
-- **1D**: a 1D coordinate per cell (often a timeline or pseudotime-like axis)
-- **2D**: a 2D embedding (UMAP/tSNE/etc)
-- **3D**: a 3D embedding (UMAP3D/etc)
+- **1D**: one coordinate per cell (often a timeline or pseudotime-like axis)
+- **2D**: a 2D embedding (UMAP, t-SNE, a PCA plane, spatial coordinates)
+- **3D**: a 3D embedding (a 3D UMAP, three principal components)
 
-Datasets can provide any subset of these. If only one dimension exists, the UI hides dimension controls.
-
----
-
-## Where the dimension selector lives
-
-Dimension controls live under:
-
-- **Compare Views** accordion → **Dimension** → `1D / 2D / 3D` dropdown
-
-The dropdown appears only when multiple dimensions are available for the current dataset.
+A dataset can carry any number of embeddings of each dimension. The ones turned
+on under **Session › Data mapping** ({doc}`../b_data_loading/13_data_mapping`)
+are the ones views can show; one embedding per dimension is that dimension's
+**default**. Different views can show different embeddings, of the same or of
+different dimensions.
 
 ---
 
-## Three ways to switch dimensions
+## The picker
 
-### 1) Dropdown (most explicit)
+**Compare views › View N shows** (with a single view, **Shows**) lists every
+embedding that is turned on, grouped by dimension, as `UMAP · 3D`,
+`PCA (unintegrated) · 2D`. Each dimension's default comes first in its group;
+hover an entry to see whether it is the default and the label the dataset
+stores it under (for a file opened in the browser, the `obsm` key and its
+columns, such as `X_pca[0,1,2]`). Choosing one
+changes the selected view only. The picker is disabled, and says why, when the
+dataset shows a single embedding.
 
-Use the **Dimension** dropdown to select `1D`, `2D`, or `3D` for the currently active/focused view.
-
-### 2) View badge (fast, per view)
-
-In multiview, each view badge may show a dimension badge (e.g. `3D`).
-
-- Clicking the dimension badge cycles through available dimensions.
-
-This is the fastest way to set different views to different dimensions.
-
-### 3) Keyboard shortcuts (fastest)
-
-- `1` → switch to 1D (if available)
-- `2` → switch to 2D (if available)
-- `3` → switch to 3D (if available)
-
-These shortcuts are ignored while typing in inputs/selects.
+The selected view is the one highlighted in the **Views** list above the
+picker; its label names it. In **Grid compare**, clicking inside a panel
+selects it too.
 
 ---
 
-## Per-view behavior (important)
+## Keys 1, 2 and 3
 
-Dimension is **per view**, not strictly global:
+Pressing `1`, `2` or `3` (outside a text field) changes the selected view:
 
-- the live view can be in 3D,
-- a snapshot can be in 2D,
-- another snapshot can be in 1D.
+- If the view shows another dimension, it switches to that dimension's
+  default embedding.
+- If it already shows that dimension, it moves to the next embedding of that
+  dimension that is turned on, in the picker's order, and wraps around after
+  the last.
 
-What the dropdown targets depends on your multiview context:
-
-- In **Edit selected view**, it targets the selected view.
-- In **Grid compare**, click inside the panel you want to change first (focus rule), then switch.
+A short notice says what is shown now and its place in the cycle, for example
+`2D · t-SNE (2 of 3)`. When no embedding of that dimension is turned on, the
+notice says so — `No 1D embedding is on. Turn one on in Session › Data
+mapping.` — and nothing changes. The shortcut sheet (`?`) lists the keys as
+`1D, 2D, 3D embedding · again: next`.
 
 ---
 
-## What changes when you switch dimensions
+## Per view
+
+Each view keeps its own embedding:
+
+- the live view can show a 3D UMAP,
+- a kept view a 2D t-SNE,
+- another kept view three principal components in 3D.
+
+Cells, highlights and selections are shared; colouring, filters, camera,
+navigation mode, centroid labels and vector fields stay with each view.
+Sessions keep each view's embedding. See
+{doc}`04_view_layout_live_snapshots_small_multiples`.
+
+---
+
+## What changes when a view switches embedding
 
 ### Changes
 
 - **Point positions** change to the coordinates of the new embedding.
-- **The navigation mode**, unless you have chosen one yourself: 3D selects
-  **Orbit**, 1D and 2D select **Planar** — see below.
-- Any **dimension-specific overlays** update (e.g., vector fields/velocity overlays).
-- Some derived rendering structures (centroids, spatial indices) may rebuild; large datasets can take a moment.
+- **Centroid labels** move to the new embedding's category centres.
+- **The navigation mode**, when the dimension changes: 3D selects **Orbit**,
+  1D and 2D select **Planar** — unless you chose a mode for this view in that
+  dimension before; see below.
+- **Vector fields** follow: a field is drawn only in views that show the
+  embedding it is bound to.
+- Level of detail, picking and culling use the new embedding's spatial tree.
+  The first time an embedding is shown it is loaded (with a progress notice)
+  and its tree is built; switching back to an embedding shown before is
+  immediate, because its positions and GPU buffers are kept for a while.
 
-### Usually does not change
+### Does not change
 
-- Your dataset choice (obviously).
-- Most UI selections (fields, filters) unless a feature is inherently dimension-specific.
-- **A navigation mode you chose yourself.** Once the **Mode** dropdown differs
-  from the mode the current dimension implies, it is yours and dimension changes
-  leave it alone.
+- The dataset, the cells, highlights and selections.
+- The view's field, filters and colours.
+- The camera position: every embedding is scaled to the same box.
+- **A navigation mode you chose for this view.** A view you set to Free-fly in
+  3D flies again whenever it shows a 3D embedding.
 
 :::{tip}
-If switching to a new dimension leaves you “lost in space” (empty-looking view), click **Reset Camera**.
+If switching leaves you “lost in space” (empty-looking view), click **Reset Camera**.
 :::
 
 ---
@@ -97,21 +109,23 @@ If switching to a new dimension leaves you “lost in space” (empty-looking vi
 ## What switching actually looks like
 
 The three frames below are one session on the Pancreas sample (which publishes
-all three embeddings), changed only with the **Dimension** dropdown.
+1D, 2D and 3D embeddings). They were captured with the earlier **Dimension**
+dropdown, which the picker replaced; positions and navigation mode change the
+same way.
 
 ```{figure} ../../../_static/screenshots/web_app/window-dimension-3d.png
 :alt: The whole application window with a three-dimensional point cloud inside a light grid box, the sidebar showing a DIMENSION dropdown reading 3D and a MODE dropdown reading Orbit with orbit options beneath it.
 :width: 1440px
 
-**3D**, the Pancreas default. `Dimension: 3D`, `Mode: Orbit`.
+**3D**, the Pancreas default (earlier interface). `Dimension: 3D`, `Mode: Orbit`.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/window-dimension-2d.png
 :alt: The same window after choosing 2D; the cells now lie on a single plane seen face-on inside the grid box, the DIMENSION dropdown reads 2D, and the MODE dropdown has followed it to Planar with the planar options — KEYBOARD SPEED, ZOOM TO CURSOR, INVERT AXES — beneath it, with the mouse pointer pressing the dimension dropdown.
 :width: 1440px
 
-**2D.** The coordinates changed — the cells are now coplanar — and the camera
-followed. `Mode` moved to `Planar` on its own, so the embedding is seen
+**2D** (earlier interface). The coordinates changed — the cells are now
+coplanar — and the camera followed. `Mode` moved to `Planar` on its own, so the embedding is seen
 face-on rather than at an angle.
 ```
 
@@ -119,47 +133,50 @@ face-on rather than at an angle.
 :alt: The same window after choosing 1D; the cells are strung along a single straight line of colour segments crossing the grid box, the DIMENSION dropdown reads 1D, and the MODE dropdown reads Planar with the planar options beneath it.
 :width: 1440px
 
-**1D.** Every cell keeps its colour but has only one coordinate, so the whole
+**1D** (earlier interface). Every cell keeps its colour but has only one coordinate, so the whole
 dataset becomes a coloured line — an ordering, not a map. `Mode` is `Planar`
 here too: only a 3D embedding gets Orbit.
 ```
 
 :::{important}
-**Switching dimension switches navigation mode with it.** The app carries a rule
-that 3D uses **Orbit** and 1D/2D use **Planar**, and it re-applies that rule on
-every dimension change, as the frames above show.
+**Switching dimension switches navigation mode with it.** 3D uses **Orbit**
+and 1D/2D use **Planar**, view by view, every time a view switches to another
+dimension, as the frames above show.
 
-The rule stops applying to a view as soon as the **Mode** dropdown differs from
-what the current dimension implies — pick **Free-fly**, or **Orbit** while you
-are in 2D, and that choice is yours to keep across later dimension changes. Put
-**Mode** back to the dimension's own default and the rule takes over again.
+A mode you choose for a view — **Free-fly**, or **Orbit** while it shows 2D —
+is remembered for that view in that dimension, and it comes back whenever the
+view shows that dimension again. Choose the dimension's own mode again and the
+rule takes over.
 :::
 
 ---
 
 ## Edge cases
 
-- **You don’t see the dimension dropdown**: the dataset provides only one
-  embedding dimension. None of the five built-in samples do this — all five
-  publish 1D, 2D and 3D — so if you meet it, you are on your own export.
-- **Switching to 2D/1D does nothing**: that dimension may not exist for this dataset.
-- **Switch fails with an error**: the embedding data may be missing/corrupt; check the console and the data loading docs.
-- **The picture changed but the camera feels wrong**: you have chosen a
-  navigation mode at some point in this session, so the dimension rule no longer
-  touches this view. Set **Mode** back to the dimension's default — **Planar**
-  for 1D/2D, **Orbit** for 3D — and it resumes following the dimension.
+- **The picker is disabled**: the dataset shows one embedding. Turn more on
+  under **Session › Data mapping**, if it has more.
+- **A key does nothing**: no embedding of that dimension is turned on (the
+  notice says so), or a text field has focus.
+- **Switch fails with an error**: the embedding's values were refused (for
+  example a NaN); the notice names the cell, and the view keeps what it showed.
+  See {doc}`../b_data_loading/13_data_mapping`.
+- **The picture changed but the camera feels wrong**: you chose a navigation
+  mode for this view in this dimension before. Set **Mode** to the dimension's
+  default — **Planar** for 1D/2D, **Orbit** for 3D — and it follows the
+  dimension again.
 
 ---
 
-## Troubleshooting (dimension switching)
+## Troubleshooting (switching embeddings)
 
 For a full catalog, see {doc}`06_troubleshooting_core_interactions`.
 
-### Symptom: “I can’t find 2D / the dropdown is missing”
+### Symptom: “I can’t find 2D / the embedding is not in the picker”
 
-**Likely cause:** dataset has only one available dimension.
+**Likely cause:** it is not turned on, or the dataset does not have it.
 
-**Fix:** confirm the export includes the missing embedding (data prep issue) or use a dataset that provides it.
+**Fix:** turn it on under **Session › Data mapping › Embeddings**; if it is not
+listed there, the dataset does not carry it (a data preparation issue).
 
 ### Symptom: “After switching, the plot looks empty”
 

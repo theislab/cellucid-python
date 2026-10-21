@@ -56,11 +56,11 @@ Use messages that fit this shape:
 4) **Fix hint** (optional but recommended): what to change
 
 Example (shape mismatch):
-- “`X_umap_2d` must have exactly 2 columns, got 3. Shape is (10000, 3).”
+- “Vector field 'velocity' on embedding 'X_umap' must have exactly 2 columns, got 3.”
 
-Example (missing key):
-- “Declare one or more exact embedding keys in `obsm`: `X_umap_1d`,
-  `X_umap_2d`, or `X_umap_3d`.”
+Example (missing input):
+- “embeddings is required: map at least one embedding id to an array, for
+  example embeddings={'X_umap': adata.obsm['X_umap']}.”
 
 ---
 
@@ -69,9 +69,10 @@ Example (missing key):
 ### Export (`prepare`)
 
 Document these explicitly:
-- missing embeddings (`X_umap_1d/2d/3d`)
+- missing embeddings (an empty or absent `embeddings=` mapping)
 - mismatched `n_cells` across inputs (`obs`, embeddings, `gene_expression`, `latent_space`)
-- embedding keys whose suffix and column count disagree
+- an embedding wider than 3 columns without `Embedding(..., columns=[...])`, and
+  a dimension with several embeddings but no `embedding_defaults` entry
 - NaN/Inf handling in continuous quantization
 - text the viewer prints verbatim -- category labels, `dataset_name`,
   `dataset_description`, `source_name`, `source_url`, `source_citation` --

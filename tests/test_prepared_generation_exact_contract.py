@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 import pytest
+from _repository_source import repository_source_environment
 
 from cellucid.cli import _detect_data_format
 from cellucid.prepare_data import prepare
@@ -46,7 +47,7 @@ def _prepare_kwargs(out_dir: Path, *, dimensions: int) -> dict[str, object]:
     return {
         "latent_space": embedding.copy(),
         "obs": pd.DataFrame({"score": [0.25, 0.5, 0.75]}),
-        f"X_umap_{dimensions}d": embedding,
+        "embeddings": {f"X_umap_{dimensions}d": embedding},
         "out_dir": out_dir,
         "dataset_name": "Atomic generation",
         "dataset_id": "atomic-generation",
@@ -87,7 +88,7 @@ def _live_export_lock(target: Path) -> Iterator[None]:
             ),
             str(target),
         ],
-        env=os.environ.copy(),
+        env=repository_source_environment(),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -141,7 +142,7 @@ def _attempt_prepare_in_subprocess(target: Path) -> subprocess.CompletedProcess[
                 "    prepare(\n"
                 "        latent_space=embedding.copy(),\n"
                 "        obs=pd.DataFrame({'score': [0.25, 0.5, 0.75]}),\n"
-                "        X_umap_2d=embedding,\n"
+                "        embeddings={'X_umap_2d': embedding},\n"
                 "        out_dir=Path(sys.argv[1]),\n"
                 "        dataset_name='Atomic generation',\n"
                 "        dataset_id='atomic-generation',\n"
@@ -156,7 +157,7 @@ def _attempt_prepare_in_subprocess(target: Path) -> subprocess.CompletedProcess[
             ),
             str(target),
         ],
-        env=os.environ.copy(),
+        env=repository_source_environment(),
         capture_output=True,
         text=True,
         timeout=10,
@@ -183,7 +184,7 @@ def _attempt_lock_in_subprocess(target: Path) -> subprocess.CompletedProcess[str
             ),
             str(target),
         ],
-        env=os.environ.copy(),
+        env=repository_source_environment(),
         capture_output=True,
         text=True,
         timeout=10,
@@ -206,7 +207,7 @@ def _leave_dead_export_lock(target: Path) -> None:
             ),
             str(target),
         ],
-        env=os.environ.copy(),
+        env=repository_source_environment(),
         capture_output=True,
         text=True,
         check=False,
@@ -215,8 +216,7 @@ def _leave_dead_export_lock(target: Path) -> None:
 
 
 def _crash_export_at_rename(target: Path, phase: str) -> None:
-    environment = os.environ.copy()
-    environment["PYTHONIOENCODING"] = "cp1252"
+    environment = repository_source_environment(PYTHONIOENCODING="cp1252")
     completed = subprocess.run(
         [
             sys.executable,
@@ -260,7 +260,7 @@ def _crash_export_at_rename(target: Path, phase: str) -> None:
                 "module.prepare(\n"
                 "    latent_space=embedding.copy(),\n"
                 "    obs=pd.DataFrame({'score': [0.25, 0.5, 0.75]}),\n"
-                "    X_umap_2d=embedding,\n"
+                "    embeddings={'X_umap_2d': embedding},\n"
                 "    out_dir=target,\n"
                 "    dataset_name='Atomic generation',\n"
                 "    dataset_id='atomic-generation',\n"
@@ -288,7 +288,7 @@ def _write_exported_dataset(directory: Path, dataset_id: str) -> None:
     (directory / "dataset_identity.json").write_text(
         json.dumps(
             {
-                "version": 2,
+                "version": 3,
                 "id": dataset_id,
                 "name": dataset_id,
             }
@@ -296,7 +296,8 @@ def _write_exported_dataset(directory: Path, dataset_id: str) -> None:
         encoding="utf-8",
     )
     (directory / "obs_manifest.json").write_text("{}", encoding="utf-8")
-    (directory / "points_2d.bin").write_bytes(b"\x00" * 8)
+    (directory / "embeddings").mkdir()
+    (directory / "embeddings" / "0_2d.bin").write_bytes(b"\x00" * 8)
 
 
 def _write_zarr_v2_root(directory: Path) -> None:
@@ -331,14 +332,15 @@ def test_force_replacement_removes_every_stale_capability(tmp_path: Path) -> Non
     replacement["force"] = True
     prepare(**replacement)
 
-    assert (output / "points_2d.bin").is_file()
-    assert not (output / "points_3d.bin").exists()
+    assert (output / "embeddings" / "0_2d.bin").is_file()
+    assert sorted(path.name for path in (output / "embeddings").iterdir()) == ["0_2d.bin"]
     assert not (output / "var_manifest.json").exists()
     assert not (output / "var").exists()
     assert not (output / "connectivity_manifest.json").exists()
     assert not (output / "connectivity").exists()
     identity = json.loads((output / "dataset_identity.json").read_text(encoding="utf-8"))
-    assert identity["embeddings"]["available_dimensions"] == [2]
+    assert list(identity["embeddings"]["items"]) == ["X_umap_2d"]
+    assert identity["embeddings"]["defaults"] == {"2d": "X_umap_2d"}
     assert identity["stats"]["n_genes"] == 0
     assert identity["stats"]["has_connectivity"] is False
 
@@ -406,8 +408,8 @@ def test_concurrent_generation_for_the_same_target_is_rejected(
         assert _snapshot(output) == original
 
     prepare(**replacement)
-    assert (output / "points_2d.bin").is_file()
-    assert not (output / "points_3d.bin").exists()
+    assert (output / "embeddings" / "0_2d.bin").is_file()
+    assert sorted(path.name for path in (output / "embeddings").iterdir()) == ["0_2d.bin"]
 
 
 def test_dead_export_owner_does_not_block_the_next_generation(
@@ -418,7 +420,7 @@ def test_dead_export_owner_does_not_block_the_next_generation(
 
     prepare(**_prepare_kwargs(output, dimensions=2))
 
-    assert (output / "points_2d.bin").is_file()
+    assert (output / "embeddings" / "0_2d.bin").is_file()
     assert (
         json.loads((output / "dataset_identity.json").read_text(encoding="utf-8"))["id"]
         == "atomic-generation"
@@ -435,7 +437,7 @@ def test_legacy_pid_lock_file_does_not_claim_live_ownership(
 
     prepare(**_prepare_kwargs(output, dimensions=2))
 
-    assert (output / "points_2d.bin").is_file()
+    assert (output / "embeddings" / "0_2d.bin").is_file()
     assert lock_path.read_bytes() == legacy_contents
 
 

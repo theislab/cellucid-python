@@ -192,12 +192,17 @@ def test_source_distribution_normalization_rejects_case_aliases_atomically(
 
 def test_source_distribution_normalization_enforces_the_release_size_limit(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The limit is PyPI's 100 MB upload limit; a small stand-in keeps the test
+    # from writing 100 MB.
+    assert MAX_NORMALIZED_SDIST_BYTES == 100_000_000
+    monkeypatch.setattr("scripts.normalize_sdist.MAX_NORMALIZED_SDIST_BYTES", 4_096)
     path = tmp_path / "cellucid-large.tar.gz"
     _write_source_distribution(
         path,
         timestamp=1_700_000_000,
-        payload=b"x" * (MAX_NORMALIZED_SDIST_BYTES + 1),
+        payload=b"x" * 4_097,
     )
     original = path.read_bytes()
 
@@ -211,7 +216,7 @@ def test_checked_in_downstream_recipe_is_one_exact_current_contract() -> None:
     version = validate_release(tag=None)
     digest = validate_recipe(version)
 
-    assert version == "0.9.1"
+    assert version == "0.9.4"
     assert len(digest) == 64
     assert digest == digest.lower()
 

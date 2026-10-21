@@ -545,10 +545,10 @@ async function resolveClip(page, shot) {
  * the pair taken after it went away, and the image is recorded as `settled`.
  *
  * Two documentation images shipped that way — `data_loading/fail-h5ad-wrong-file`
- * and `data_loading/fail-missing-umap-embedding`, both crops of
- * `#notification-center` around a failure the notification center auto-dismisses
- * four seconds later. Each was 776 px of background scatter with no text in it,
- * carrying an `:alt:` describing a message that was never in the frame.
+ * and a since-retired refusal crop, both of `#notification-center` around a
+ * failure the notification center auto-dismisses four seconds later. Each was
+ * 776 px of background scatter with no text in it, carrying an `:alt:`
+ * describing a message that was never in the frame.
  *
  * Re-reading the rectangle afterwards is what closes that hole. It costs one
  * `boundingBox()` per crop and turns a plausible-looking wrong image into a
@@ -896,7 +896,7 @@ async function main() {
   const ports = await resolvePorts();
   const { chromium } = require('playwright');
 
-  const exportsRoot = path.join(DATASETS_REPO, 'exports');
+  const exportsRoot = path.join(DATASETS_REPO, 'exports-v3');
   const exportsServer = await startExportsServer(exportsRoot, ports.exportsPort);
   const appServer = await startApplicationServer(ports);
   const browser = await chromium.launch();

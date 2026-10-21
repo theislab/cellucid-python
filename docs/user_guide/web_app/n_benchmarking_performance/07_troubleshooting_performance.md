@@ -57,8 +57,8 @@ What to do earlier to avoid this next time.
    `Point size (log):` if points already overlap on screen.
 2) Turn off `Antialiasing (smooth point edges)` under **Visualization → Image
    quality**. It applies to the next frame, and it is worth most at large point
-   sizes. Check the box first: at 5,000,000 cells or more it is already clear
-   unless you ticked it yourself.
+   sizes. Check the box first: at 5,000,000 cells or more in 3D, or 200,000 or
+   more in a 2D view, it is already clear unless you ticked it yourself.
 3) Fix the **layout**: go back to one view. If you need the comparison, note
    that a four-view 2×2 grid is usually cheaper than a two- or three-view row
    — see {doc}`06_edge_cases_performance`.
@@ -113,13 +113,13 @@ Related docs:
 ## Symptom: “Loading a dataset freezes / takes forever / tab crashes”
 
 ### Likely causes (ordered)
-1) You are loading a large `.h5ad` directly in the browser (memory cliff; not truly lazy).
+1) A large cell-major (CSR) `.h5ad` opened in the browser is still being reorganised by gene (watch its progress notice).
 2) Disk/network I/O is slow (network drive, remote mount, throttled server).
 3) The dataset is too large for the current machine/GPU (VRAM pressure during initialization).
 4) Browser extensions or corporate policies interfere with file APIs or GPU acceleration.
 
 ### How to confirm
-- If it’s a `.h5ad` browser load: try the same file via Server Mode; if it works, the in-browser load path was the issue.
+- If it’s a `.h5ad` browser load: check the progress notice, or try the same file via Server Mode, which needs no reorganisation.
 - If it’s remote: open Network tab and look for long requests / timeouts.
 - Check Task Manager / Activity Monitor: if memory usage spikes rapidly, you’re hitting a memory cliff.
 
@@ -168,7 +168,7 @@ Related docs:
 ## Symptom: “WebGL context lost” or “the canvas goes blank”
 
 ### Likely causes (ordered)
-1) GPU out of memory (too many points/views, smoke grid too high, overlay too heavy).
+1) GPU out of memory or a frame past the GPU watchdog (too many points/views, smoke render resolution or ray quality too high, overlay too heavy).
 2) GPU driver crash/reset (unstable drivers, integrated GPUs under pressure).
 3) Corporate/managed environment disables/blocks hardware acceleration.
 
@@ -249,7 +249,9 @@ not what was slow.
 ### Likely cause
 The data-source, renderer and benchmark controls ship disabled and are enabled
 only once the code that responds to them is wired up. During a slow start you
-can see them briefly inert.
+can see them briefly inert. They open once the dataset catalog has been read,
+before the first dataset has loaded, so a benchmark run can already replace
+that load.
 
 ### How to confirm
 - Look under the dataset picker. While the app is still starting it reads

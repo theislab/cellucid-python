@@ -1,153 +1,48 @@
-"""Exact-current vector-field validation and transition-drift utilities."""
+"""Vector-field validation and transition-drift utilities.
+
+A vector field is a per-cell displacement drawn over one embedding. In an
+export it is bound to embedding *ids*: ``vector_fields={"velocity": {"X_umap":
+v2, "X_umap_3d": v3}}`` binds the field ``velocity`` to two items, and each
+array is ``(n_cells, dimension of that item)``. The AnnData server builds the
+same mapping from the ``<field>_umap_<d>d`` keys in ``obsm`` with the default
+binding rule in :mod:`cellucid.data_mapping`.
+"""
 
 from __future__ import annotations
 
 import math
-import re
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from numbers import Integral, Real
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 from scipy import sparse
 
 from .continuous_payload_diagnosis import describe_non_finite
+from .data_mapping import (
+    VECTOR_KEY_PATTERN,
+    default_embedding_slots,
+    describe_obsm,
+    obsm_entries,
+)
 
 if TYPE_CHECKING:
     import anndata
 
 
-_VECTOR_KEY_PATTERN = re.compile(r"^(?P<field>.+_umap)_(?P<dimension>[123])d$")
-
-SUPPORTED_EMBEDDING_KEYS: tuple[str, ...] = ("X_umap_1d", "X_umap_2d", "X_umap_3d")
-
-#: ``sc.tl.umap()`` writes this key, without a dimension in its name.
-UNSUFFIXED_EMBEDDING_KEY: str = "X_umap"
-
-
-def is_vector_field_declaration_key(value: object) -> bool:
-    """Return whether an AnnData ``obsm`` key exactly declares a vector field."""
-    return isinstance(value, str) and _VECTOR_KEY_PATTERN.fullmatch(value) is not None
-
-
-def _servable_column_count(array: object) -> int | None:
-    """Return an array's column count when Cellucid can serve that width."""
-    shape = getattr(array, "shape", None)
-    if not isinstance(shape, tuple):
-        return None
-    # AnnData stores a plain ``(n_cells,)`` vector as the single column it is.
-    if len(shape) == 1:
-        return 1
-    if len(shape) != 2:
-        return None
-    columns = int(shape[1])
-    return columns if columns in (1, 2, 3) else None
-
-
-def resolve_embedding_keys(obsm: Any) -> dict[int, str]:
-    """Return every servable ``{dimension: obsm key}`` this object declares.
-
-    A key that names its own dimension -- ``X_umap_1d``, ``X_umap_2d``,
-    ``X_umap_3d`` -- always decides that dimension. When an object declares
-    none of them, ``sc.tl.umap()``'s own ``X_umap`` resolves to the dimension
-    its column count states, so the ordinary Scanpy object is servable as
-    written. A dimensional key anywhere in ``obsm`` means the writer declared
-    dimensions deliberately, and ``X_umap`` is then left to the vector-field
-    and hint paths rather than silently joining a declared set.
-    """
-    declared = {
-        dimension: key
-        for dimension, key in ((dimension, f"X_umap_{dimension}d") for dimension in (1, 2, 3))
-        if key in obsm
-    }
-    if declared:
-        return declared
-    if UNSUFFIXED_EMBEDDING_KEY not in obsm:
-        return {}
-    columns = _servable_column_count(obsm[UNSUFFIXED_EMBEDDING_KEY])
-    if columns is None:
-        return {}
-    return {columns: UNSUFFIXED_EMBEDDING_KEY}
-
-
-def unservable_unsuffixed_embedding_shape(obsm: Any) -> tuple[int, ...] | None:
-    """Return ``X_umap``'s shape when its width is the reason nothing resolved.
-
-    A ten-column ``X_umap`` is a latent space someone named after a plot. It
-    produces no rename hint, because no rename makes ten columns servable, so
-    the error message has to name the shape itself.
-    """
-    if UNSUFFIXED_EMBEDDING_KEY not in obsm:
-        return None
-    if _servable_column_count(obsm[UNSUFFIXED_EMBEDDING_KEY]) is not None:
-        return None
-    shape = getattr(obsm[UNSUFFIXED_EMBEDDING_KEY], "shape", None)
-    if not isinstance(shape, tuple):
-        return None
-    return tuple(int(extent) for extent in shape)
-
-
-def embedding_declaration_hints(obsm: Any, *, n_cells: int) -> list[str]:
-    """Return one exact rename per undeclared obsm array that could be an embedding.
-
-    ``sc.tl.umap()`` writes ``adata.obsm['X_umap']`` without a dimensional
-    suffix, so the most common first failure is one declaration away from
-    working. Each hint is a complete, copy-pasteable statement.
-    """
-    hints: list[str] = []
-    for key in obsm:
-        if not isinstance(key, str):
-            continue
-        if key in SUPPORTED_EMBEDDING_KEYS or is_vector_field_declaration_key(key):
-            continue
-        shape = getattr(obsm[key], "shape", None)
-        if not isinstance(shape, tuple) or len(shape) != 2:
-            continue
-        rows, columns = shape
-        if int(rows) != n_cells or int(columns) not in (1, 2, 3):
-            continue
-        hints.append(
-            f'adata.obsm["X_umap_{int(columns)}d"] = adata.obsm[{key!r}]'
-            f"  # {key!r} has shape {(int(rows), int(columns))}"
-        )
-    # Scanpy's own key is the one a first-time user almost always means.
-    hints.sort(key=lambda hint: (0 if "'X_umap'" in hint else 1, hint))
-    return hints
-
-
-def missing_embedding_message(obsm: Any, *, n_cells: int, headline: str) -> str:
-    """Return one message naming the rule, the object, and the exact remedy."""
-    message = (
-        f"{headline} Cellucid reads the exact keys 'X_umap_1d', 'X_umap_2d', and "
-        "'X_umap_3d', and reads a bare 'X_umap' as the dimension its own column "
-        "count states. "
-        f"Available obsm keys: {list(obsm.keys())}."
-    )
-    unservable_shape = unservable_unsuffixed_embedding_shape(obsm)
-    if unservable_shape is not None:
-        message += (
-            f"\n  adata.obsm['X_umap'] has shape {unservable_shape}, and Cellucid "
-            "draws 1, 2, or 3 dimensions, so that array names a dimension no "
-            "viewer renders. Assign the columns you mean to draw under the key "
-            "for their own count."
-        )
-    hints = embedding_declaration_hints(obsm, n_cells=n_cells)
-    if hints:
-        joined = "\n".join(f"    {hint}" for hint in hints)
-        message += (
-            "\n  Fix: declare an existing array under the key for its column "
-            f"count, then re-run (re-save the file if you serve a path):\n{joined}"
-        )
-    return message
-
-
 @dataclass(frozen=True)
 class ValidatedVectorFields:
-    """Validated vector arrays and their exact source keys."""
+    """Validated vector arrays, keyed field id -> embedding id.
 
-    fields: dict[str, dict[int, np.ndarray]]
-    source_keys: dict[str, dict[int, str]]
+    Fields are in code-point order and each field's embeddings follow the
+    order of the ``embedding_dimensions`` mapping it was validated against, so
+    the payload indices derived from both orders are the ones every writer
+    uses. Arrays are float64; the one float32 rounding happens when they are
+    scaled.
+    """
+
+    fields: dict[str, dict[str, np.ndarray]]
     default_field: str | None
 
 
@@ -234,15 +129,26 @@ def _finite_float32_matrix(
 
 
 def validate_vector_fields(
-    values: Mapping[Any, Any] | None,
+    values: object,
     *,
     n_cells: int,
-    available_dimensions: Collection[int],
+    embedding_dimensions: Mapping[str, int],
     vector_field_default: object = None,
+    label_for: Callable[[str, str], str] | None = None,
 ) -> ValidatedVectorFields:
-    """Validate the complete mapping used by highest-dimension field metadata."""
-    if values is not None and not isinstance(values, Mapping):
-        raise TypeError("vector_fields must be a mapping of vector field keys to arrays.")
+    """Validate every field's bindings against the embeddings they name.
+
+    ``values`` maps a field id to ``{embedding id: array}``. Each array must be
+    ``(n_cells, d)`` for that embedding's dimension ``d`` (a plain vector is
+    accepted for a one-dimensional embedding) and hold finite values that are
+    representable as float32. ``vector_field_default`` is required when more
+    than one field is declared.
+    """
+    if values is not None and (isinstance(values, str | bytes) or not isinstance(values, Mapping)):
+        raise TypeError(
+            "vector_fields must map each field id to a mapping of embedding ids to arrays, "
+            "for example {'velocity': {'X_umap': velocity_2d}}."
+        )
 
     if vector_field_default is not None:
         declared_default = _require_nonempty_string(
@@ -255,56 +161,48 @@ def validate_vector_fields(
     if not values:
         if declared_default is not None:
             raise ValueError("vector_field_default was provided but no vector fields exist.")
-        return ValidatedVectorFields({}, {}, None)
+        return ValidatedVectorFields({}, None)
 
-    allowed_dimensions = set(available_dimensions)
-    fields: dict[str, dict[int, np.ndarray]] = {}
-    source_keys: dict[str, dict[int, str]] = {}
-
-    for raw_key, raw_values in values.items():
-        key = _require_nonempty_string(
-            raw_key,
-            label="vector field key",
-        )
-        match = _VECTOR_KEY_PATTERN.fullmatch(key)
-        if match is None:
-            raise ValueError(
-                f"vector field key {key!r} must exactly match '<field>_umap_<1|2|3>d'."
+    order = {embedding_id: position for position, embedding_id in enumerate(embedding_dimensions)}
+    fields: dict[str, dict[str, np.ndarray]] = {}
+    for raw_field, raw_bindings in values.items():
+        field_id = _require_nonempty_string(raw_field, label="vector field id")
+        if isinstance(raw_bindings, str | bytes) or not isinstance(raw_bindings, Mapping):
+            raise TypeError(
+                f"Vector field {field_id!r} must map embedding ids to arrays, for example "
+                f"{{{field_id!r}: {{'X_umap': vectors}}}}."
             )
-
-        field_id = match.group("field")
-        dimension_text = match.group("dimension")
-        declared_dimension = int(dimension_text)
-        array, dimension = _finite_float32_matrix(
-            raw_values,
-            label=f"Vector field {key!r}",
-            n_rows=n_cells,
-            declared_dimension=declared_dimension,
-        )
-
-        if dimension not in allowed_dimensions:
-            raise ValueError(f"Vector field {key!r} requires a matching {dimension}D embedding.")
-        if dimension in fields.setdefault(field_id, {}):
-            other_key = source_keys[field_id][dimension]
-            raise ValueError(
-                f"Vector field keys {other_key!r} and {key!r} both declare "
-                f"the same {dimension}D field {field_id!r}."
+        if not raw_bindings:
+            raise ValueError(f"Vector field {field_id!r} binds no embedding.")
+        bound: dict[str, np.ndarray] = {}
+        for raw_embedding, raw_values in raw_bindings.items():
+            embedding_id = _require_nonempty_string(
+                raw_embedding,
+                label=f"Vector field {field_id!r} embedding id",
             )
-        fields[field_id][dimension] = array
-        source_keys.setdefault(field_id, {})[dimension] = key
-
-    ordered_fields = {
-        field_id: {dimension: fields[field_id][dimension] for dimension in sorted(fields[field_id])}
-        for field_id in sorted(fields)
-    }
-    ordered_source_keys = {
-        field_id: {
-            dimension: source_keys[field_id][dimension]
-            for dimension in sorted(source_keys[field_id])
+            if embedding_id not in embedding_dimensions:
+                raise ValueError(
+                    f"Vector field {field_id!r} is bound to embedding {embedding_id!r}, "
+                    f"which is not one of the exported embeddings: {list(embedding_dimensions)}."
+                )
+            label = (
+                label_for(field_id, embedding_id)
+                if label_for is not None
+                else f"Vector field {field_id!r} on embedding {embedding_id!r}"
+            )
+            array, _dimension = _finite_float32_matrix(
+                raw_values,
+                label=label,
+                n_rows=n_cells,
+                declared_dimension=embedding_dimensions[embedding_id],
+            )
+            bound[embedding_id] = array
+        fields[field_id] = {
+            embedding_id: bound[embedding_id]
+            for embedding_id in sorted(bound, key=lambda embedding_id: order[embedding_id])
         }
-        for field_id in sorted(source_keys)
-    }
 
+    ordered_fields = {field_id: fields[field_id] for field_id in sorted(fields)}
     if declared_default is None:
         if len(ordered_fields) > 1:
             raise ValueError(
@@ -319,11 +217,7 @@ def validate_vector_fields(
             )
         default_field = declared_default
 
-    return ValidatedVectorFields(
-        fields=ordered_fields,
-        source_keys=ordered_source_keys,
-        default_field=default_field,
-    )
+    return ValidatedVectorFields(fields=ordered_fields, default_field=default_field)
 
 
 def scale_vector_field(
@@ -445,24 +339,34 @@ def compute_transition_drift(
 def _umap_embeddings(
     adata: anndata.AnnData,
 ) -> dict[int, tuple[str, np.ndarray]]:
-    embeddings: dict[int, tuple[str, np.ndarray]] = {}
+    """Return the UMAP embedding of every dimension the default rule resolves."""
     n_cells = int(adata.n_obs)
-    for dimension, key in sorted(resolve_embedding_keys(adata.obsm).items()):
+    slots = default_embedding_slots(obsm_entries(describe_obsm(adata.obsm, n_obs=n_cells)))
+    embeddings: dict[int, tuple[str, np.ndarray]] = {}
+    for slot, ref in slots.items():
+        if ref is None:
+            continue
+        dimension = int(slot[0])
+        source = np.asarray(
+            adata.obsm[ref["key"]].toarray()
+            if sparse.issparse(adata.obsm[ref["key"]])
+            else adata.obsm[ref["key"]]
+        )
+        if source.ndim == 1:
+            source = source.reshape(-1, 1)
         array, _resolved_dimension = _finite_float32_matrix(
-            adata.obsm[key],
-            label=f"Embedding {key!r}",
+            source[:, ref["columns"]] if source.ndim == 2 else source,
+            label=f"Embedding {ref['key']!r}",
             n_rows=n_cells,
             declared_dimension=dimension,
         )
-        embeddings[dimension] = (key, array)
+        embeddings[dimension] = (ref["key"], array)
 
     if not embeddings:
         raise ValueError(
-            missing_embedding_message(
-                adata.obsm,
-                n_cells=n_cells,
-                headline="AnnData must contain one UMAP embedding Cellucid can read.",
-            )
+            "AnnData must contain a UMAP embedding Cellucid can read: obsm['X_umap_1d'], "
+            "obsm['X_umap_2d'], obsm['X_umap_3d'], or a 1- to 3-column obsm['X_umap']. "
+            f"obsm holds: {list(adata.obsm.keys())}."
         )
     return embeddings
 
@@ -516,10 +420,9 @@ def add_transition_drift_to_obsm(
             f"adata.obsm already contains key {output_key!r}; set overwrite=True to replace it."
         )
 
-    validate_vector_fields(
-        {output_key: drift},
-        n_cells=int(adata.n_obs),
-        available_dimensions=embeddings,
-    )
+    # The key is the one the default binding rule reads back: it binds to the
+    # UMAP embedding of the same dimension when the dataset is served.
+    if VECTOR_KEY_PATTERN.fullmatch(output_key) is None:
+        raise ValueError(f"{output_key!r} is not a '<field>_umap_<1|2|3>d' vector key.")
     adata.obsm[output_key] = drift
     return output_key

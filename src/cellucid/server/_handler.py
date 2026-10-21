@@ -24,7 +24,13 @@ from urllib.parse import urlparse
 
 from .._server_base import WEB_ASSET_INVENTORY_FILENAME, CORSMixin
 from ._artifacts import _PreparedArtifact
-from ._datasets import _list_exported_datasets, _read_exported_dataset_entry
+from ._datasets import _DatasetEntry, _list_exported_datasets, _read_exported_dataset_entry
+
+# One read of a served artifact; the whole file is streamed in reads this size.
+_READ_CHUNK_BYTES = 1024 * 1024
+
+# One read of a served artifact; the whole file is streamed in reads this size.
+_READ_CHUNK_BYTES = 1024 * 1024
 
 logger = logging.getLogger("cellucid.server")
 
@@ -76,7 +82,7 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         *args,
         data_dir: Path,
         server_info: dict,
-        datasets: list[dict[str, str]],
+        datasets: list[_DatasetEntry],
         artifact_inventory: dict[str, _PreparedArtifact],
         serve_web_ui: bool,
         web_cache_dir: Path,
@@ -98,15 +104,6 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         """Add CORS headers to every response."""
         self.add_cors_headers()
         super().end_headers()
-
-    def do_POST(self):
-        """Handle POST requests (events from frontend)."""
-        if self.handle_event_post():
-            return
-        if self.handle_session_bundle_post():
-            return
-        # No other POST endpoints - return 404
-        self.send_error_response(404, f"POST not supported for path: {self.path}")
 
     def do_GET(self):
         """Serve one exact GET endpoint or prepared artifact."""
@@ -283,7 +280,7 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
                 os.lseek(descriptor, start, os.SEEK_SET)
                 remaining = content_length
                 while remaining:
-                    chunk = os.read(descriptor, min(1024 * 1024, remaining))
+                    chunk = os.read(descriptor, min(_READ_CHUNK_BYTES, remaining))
                     if not chunk:
                         raise OSError("Prepared artifact ended during response.")
                     self._response_writer().write(chunk)
@@ -302,7 +299,7 @@ class CORSRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         if self.command != "HEAD":
             self._response_writer().write(body)
 
-    def _list_datasets(self) -> list[dict]:
+    def _list_datasets(self) -> list[_DatasetEntry]:
         """Validate and return the prepared datasets under ``data_dir``."""
         return _list_exported_datasets(self.data_dir)
 

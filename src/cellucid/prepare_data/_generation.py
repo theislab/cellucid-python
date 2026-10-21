@@ -21,9 +21,11 @@ from scipy import sparse
 
 from .._console import console_print
 from .._contracts import (
+    IDENTITY_VERSION,
     JsonScalar,
     _require_dataset_id,
     _require_dataset_name,
+    _require_display_text,
     _require_field_identities,
     _require_string_identifiers,
     _require_unique_identifiers,
@@ -39,11 +41,15 @@ from ..continuous_payload_diagnosis import (
     NonFinitePayloadError,
     diagnose_continuous_payload,
 )
-from ..vector_fields import scale_vector_field, validate_vector_fields
+from ..data_mapping import (
+    DataMappingError,
+    UniqueNames,
+    column_gene_names,
+    make_unique_names,
+    unique_names_note,
+)
 from ._arrays import (
-    _normalize_finite_float32_embedding,
     _require_continuous_obs_values,
-    _require_finite_embedding_source,
     _require_finite_float32_array,
 )
 from ._binary_io import (
@@ -52,12 +58,23 @@ from ._binary_io import (
     _output_path_is_writable,
     _write_binary,
 )
-from ._categories import _declared_categorical_storage, _json_category_values
-from ._centroids import _compute_centroids_for_all_dimensions, _compute_latent_space_quantiles
+from ._categories import (
+    CATEGORICAL_CODE_DTYPES,
+    _declared_categorical_storage,
+    _json_category_values,
+)
+from ._centroids import _compute_centroids_for_all_embeddings, _compute_latent_space_quantiles
+from ._embeddings import (
+    EMBEDDINGS_DIRNAME,
+    VECTORS_DIRNAME,
+    _resolve_embeddings,
+    _resolve_vector_fields,
+)
 from ._manifest import (
     DEFAULT_OBS_DIRNAME,
     DEFAULT_VAR_DIRNAME,
     MANIFEST_FORMAT_VERSION,
+    _declared_embedding_payload_paths,
     _declared_obs_payload_paths,
     _declared_var_payload_paths,
     _gene_names_from_compact_manifest,
@@ -111,48 +128,132 @@ def _gene_expression_column(
     return values
 
 
-def _all_missing_outlier_defect(values: np.ndarray, *, centroid_min_points: int) -> str | None:
-    """Name why one generated outlier-quantile set has nothing to encode, or None.
+def _resolve_gene_name_set(var: pd.DataFrame, column: object, *, label: str) -> UniqueNames:
+    """Resolve one complete gene-name set over every var row.
 
-    A set whose every quantile is missing has no value anywhere -- not one
-    constant, none at all -- so there is no bound to publish and nothing for a
-    reader to decode. That is a ``centroid_min_points`` that no category
-    reaches, which is a setting the caller can change, and it is the only
-    remaining reason a continuous payload cannot be encoded.
+    ``column=None`` names genes by ``var.index``. A column's values are read
+    as every Cellucid reader reads them (integers as their digits; a
+    floating-point or true/false column is refused), its empty values take
+    that row's index name, and repeated names are made unique with the rule
+    anndata's ``var_names_make_unique()`` applies, shared by every Cellucid
+    reader and writer. Uniqueness is resolved over the whole var
+    rather than the exported subset, so a gene keeps its name however the
+    export is narrowed.
     """
-    if np.isnan(values).all():
-        return (
-            "no category holds at least centroid_min_points="
-            f"{centroid_min_points} cells, so every generated quantile is missing"
+    if column is None:
+        try:
+            return make_unique_names(var.index.tolist())
+        except DataMappingError as error:
+            if error.code == "name_not_string":
+                raise TypeError(f"var index: {error}") from error
+            raise ValueError(f"var index: {error}") from error
+    if type(column) is not str:
+        raise TypeError(
+            f"{label} must be a native non-empty string or None; got {type(column).__name__}."
         )
-    return None
+    if not column:
+        raise ValueError(f"{label} must be a native non-empty string or None.")
+    _require_display_text(column, label=label, allow_empty=False)
+    if column not in var.columns:
+        raise KeyError(
+            f"{label} {column!r} not found in var. Available columns: {list(var.columns)}"
+        )
+    # A column is read by the one rule every reader applies (column_gene_names):
+    # text and categories as they are, integers as their decimal digits; a
+    # floating-point or true/false column cannot name genes.
+    try:
+        return column_gene_names(var, column)
+    except DataMappingError as error:
+        if error.code in ("name_not_string", "gene_names_column"):
+            raise TypeError(str(error) if error.code == "gene_names_column" else f"var column {column!r}: {error}") from error
+        raise ValueError(f"var column {column!r}: {error}") from error
 
 
-def _require_encodable_outlier_quantiles(
+def _gene_name_set_record(
     *,
-    outlier_defects: list[tuple[str, str]],
-    obs_continuous_quantization: int | None,
-) -> None:
-    """Reject every unencodable outlier-quantile set at once, before any output.
+    source: str | None,
+    names: UniqueNames,
+    exported_positions: Sequence[int],
+    default_names: UniqueNames | None,
+) -> dict[str, Any]:
+    """Describe one gene-name set over the exported genes, in exported order.
 
-    The check is per field, so the export loop would otherwise fail on the
-    first offender, after the fields ahead of it were already written. One run
-    names every affected field instead of one run per field.
+    The default set's names are the manifest's field names, so its ``names``
+    is null. An alternative set lists one name per exported gene, with null
+    wherever it equals the default name, which keeps a column that mostly
+    agrees with the default nearly free.
     """
-    if not outlier_defects:
-        return
+    return {
+        "source": source,
+        "filled_from_index": int(sum(names.from_index[position] for position in exported_positions)),
+        "renamed": [
+            [names.filled[position], names.names[position]]
+            for position in exported_positions
+            if names.names[position] != names.filled[position]
+        ],
+        "names": None
+        if default_names is None
+        else [
+            None
+            if names.names[position] == default_names.names[position]
+            else names.names[position]
+            for position in exported_positions
+        ],
+    }
 
-    listing = "\n".join(f"    {name!r}: {reason}" for name, reason in outlier_defects)
-    raise ValueError(
-        f"{len(outlier_defects)} generated categorical outlier quantile set(s) cannot be "
-        "encoded: a set with no quantile at all has no value to publish.\n"
-        f"  {len(outlier_defects)} set(s) with "
-        f"obs_continuous_quantization={obs_continuous_quantization}:\n"
-        f"{listing}\n"
-        "  Fix: lower centroid_min_points so a category qualifies, drop the field "
-        "from obs_keys=, or pass obs_continuous_quantization=None to export the "
-        "generated quantiles as full-precision float32."
-    )
+
+def _gene_name_sets(
+    var: pd.DataFrame,
+    *,
+    default_source: str | None,
+    default_names: UniqueNames,
+    alternative_columns: object,
+    exported_positions: Sequence[int],
+) -> list[dict[str, Any]]:
+    """Resolve the default gene-name set and every alternative one."""
+    sets = [
+        _gene_name_set_record(
+            source=default_source,
+            names=default_names,
+            exported_positions=exported_positions,
+            default_names=None,
+        )
+    ]
+    if alternative_columns is None:
+        return sets
+    if isinstance(alternative_columns, str | bytes) or not isinstance(
+        alternative_columns, Sequence
+    ):
+        raise TypeError(
+            "var_gene_name_columns must be a sequence of var column names, not a string scalar."
+        )
+    columns = list(alternative_columns)
+    seen: set[str] = set()
+    for column in columns:
+        label = "var_gene_name_columns entry"
+        if column == default_source:
+            raise ValueError(
+                f"var_gene_name_columns lists {column!r}, which var_gene_id_column already "
+                "uses for the default gene names."
+            )
+        names = _resolve_gene_name_set(var, column, label=label)
+        column_name = cast(str, column)
+        if column_name in seen:
+            raise ValueError(f"var_gene_name_columns lists {column_name!r} more than once.")
+        seen.add(column_name)
+        _require_field_identities(
+            [names.names[position] for position in exported_positions],
+            label=f"var column {column_name!r} gene name",
+        )
+        sets.append(
+            _gene_name_set_record(
+                source=column_name,
+                names=names,
+                exported_positions=exported_positions,
+                default_names=default_names,
+            )
+        )
+    return sets
 
 
 def _validate_prepare_codec_options(
@@ -163,7 +264,7 @@ def _validate_prepare_codec_options(
     obs_categorical_dtype: object,
     centroid_outlier_quantile: float | None,
 ) -> None:
-    """Validate the sole current compact_v1 codec configuration."""
+    """Validate the sole current compact_v2 codec configuration."""
     if compression is not None and (type(compression) is not int or not 1 <= compression <= 9):
         raise ValueError("compression must be None or one integer from 1 to 9.")
 
@@ -174,11 +275,13 @@ def _validate_prepare_codec_options(
         if value is not None and (type(value) is not int or value not in (8, 16)):
             raise ValueError(f"{name} must be None, 8, or 16.")
 
-    if type(obs_categorical_dtype) is not str or obs_categorical_dtype not in (
-        "uint8",
-        "uint16",
+    if (
+        type(obs_categorical_dtype) is not str
+        or obs_categorical_dtype not in CATEGORICAL_CODE_DTYPES
     ):
-        raise ValueError("obs_categorical_dtype must be exactly 'uint8' or 'uint16'.")
+        raise ValueError(
+            "obs_categorical_dtype must be exactly 'uint8', 'uint16' or 'uint32'."
+        )
 
     if centroid_outlier_quantile is not None and (
         isinstance(centroid_outlier_quantile, bool)
@@ -212,7 +315,7 @@ def _prepare_generation(
     *,
     out_dir: Path,
     _published_out_dir: Path,
-    obs_categorical_dtype: Literal["uint8", "uint16"],
+    obs_categorical_dtype: Literal["uint8", "uint16", "uint32"],
     dataset_name: str,
     dataset_id: str,
     created_at: str,
@@ -220,14 +323,15 @@ def _prepare_generation(
     source_name: str | None = None,
     source_url: str | None = None,
     source_citation: str | None = None,
-    # Multi-dimensional embedding parameters (at least one required)
-    X_umap_1d: np.ndarray | None = None,
-    X_umap_2d: np.ndarray | None = None,
-    X_umap_3d: np.ndarray | None = None,
-    # Optional per-cell vector fields aligned to the embedding(s)
+    # The embeddings to export (at least one) and each dimension's default
+    embeddings: Any = None,
+    embedding_defaults: Any = None,
+    # Optional per-cell vector fields bound to exported embeddings
     # (e.g. scVelo velocity, CellRank drift vectors)
-    vector_fields: dict[str, np.ndarray | sparse.spmatrix] | None = None,
+    vector_fields: Any = None,
     vector_field_default: str | None = None,
+    # Additional gene-name sets, each read from one var column
+    var_gene_name_columns: Sequence[str] | None = None,
 ) -> None:
     """
     Export raw data arrays to files used by the WebGL viewer.
@@ -247,47 +351,40 @@ def _prepare_generation(
         It follows the same viewer-visible float32 domain as var quantization,
         including the constant-field encoding, and it also governs the
         generated categorical outlier quantiles.
-    obs_categorical_dtype : 'uint8' or 'uint16'
+    obs_categorical_dtype : 'uint8', 'uint16' or 'uint32'
+        The codes width of every categorical field; the largest value of each
+        width is the missing marker.
         - 'uint8': Store up to 255 categories
         - 'uint16': Store up to 65,535 categories
+        - 'uint32': Store up to 4,294,967,295 categories (for fields such as
+          barcodes or free text that have more than 65,535 distinct values)
     compression : int or None
         Gzip compression level (1-9). None disables compression.
         Level 6 is a good balance of speed and size. Files get .gz extension.
 
-    Multi-Dimensional Embeddings
-    ----------------------------
-    At least one dimensional embedding must be provided. The viewer supports
-    switching between different dimensionalities of the same data at runtime.
-    All embeddings must have the same number of cells (rows) but different
-    column counts matching their dimensionality.
+    Embeddings
+    ----------
+    embeddings : mapping of str to array or Embedding
+        Every embedding the export carries, keyed by its id. At least one is
+        required, and any number per dimension is allowed. A plain array of
+        width 1, 2, or 3 is plotted whole; a wider array is passed as
+        ``Embedding(values, columns=[...])`` naming the 0-based columns to plot.
+        Each embedding is normalized on its own into the viewer's [-1, 1] range
+        with one scale factor shared by its axes, so its aspect ratio survives.
+        Items are written to ``embeddings/{index}_{dimension}d.bin``, ordered
+        by (dimension, id).
+    embedding_defaults : mapping of str to str, optional
+        The embedding each dimension shows first, such as ``{"2d": "X_umap"}``.
+        Required for every dimension with more than one embedding; a dimension
+        with exactly one uses it. The highest dimension is shown initially.
 
-    IMPORTANT: Each embedding is normalized independently to fit within the
-    [-1, 1] coordinate range. Within each dimension, the same scale factor is
-    used for all axes to preserve aspect ratios. This ensures each dimension
-    fills the viewing area optimally without requiring manual zoom adjustment.
-
-    X_umap_1d : np.ndarray, optional
-        1D embedding coordinates, shape (n_cells, 1). A plain ``(n_cells,)``
-        vector is accepted as the single column it declares. Stored as
-        points_1d.bin.
-    X_umap_2d : np.ndarray, optional
-        2D embedding coordinates, shape (n_cells, 2). Stored as points_2d.bin.
-    X_umap_3d : np.ndarray, optional
-        3D embedding coordinates, shape (n_cells, 3). Stored as points_3d.bin.
-        This is the primary visualization and is used for centroid computation.
-
-    vector_fields : dict[str, np.ndarray] or None
-        Optional per-cell displacement vectors aligned to the embedding space.
-        Every key must use the exact dimension-suffixed AnnData ``obsm`` form
-        ``<field>_umap_<dim>d`` (for example, ``velocity_umap_2d`` or
-        ``T_fwd_umap_3d``).
-
-        Each value must be shaped exactly ``(n_cells, dim)`` and contain finite
-        real values representable as float32. A ``<field>_umap_1d`` key also
-        accepts a plain ``(n_cells,)`` vector as the single column it declares.
-        Vectors are scaled by the same per-dimension normalization scale as points.
-        A field's metadata ``default_dimension`` is exactly its highest available
-        vector dimension.
+    vector_fields : mapping of str to mapping of str to array, optional
+        Per-cell displacement vectors keyed by field id, then by the id of the
+        embedding each array is drawn over:
+        ``{"velocity": {"X_umap": v2, "X_umap_3d": v3}}``. Each array is
+        ``(n_cells, d)`` for that embedding's dimension ``d`` (a plain vector is
+        accepted for a 1D embedding) and holds finite values representable as
+        float32. Vectors are scaled by their embedding's normalization factor.
     vector_field_default : str or None
         Exact field id to select initially. Required when more than one vector
         field is declared; omitted for a single unambiguous field.
@@ -309,16 +406,23 @@ def _prepare_generation(
     gene_expression : np.ndarray or sparse matrix, optional
         Gene expression matrix, shape (n_cells, n_genes).
     var_gene_id_column : str or None
-        Exact non-empty column name in var containing string gene names. None
-        uses string names from var.index. Whatever this selects is recorded
+        Exact column name in var whose string values are the default gene
+        names. None uses var.index. Whatever this selects is recorded
         faithfully: Cellucid performs no symbol lookup and ships no mapping, so
-        the caller decides what a gene is called. Every identifier in the
-        selected axis must be a non-empty string and must be distinct, because
-        ``gene_identifiers`` addresses var rows by identifier and a repeated one
-        names no single row.
+        the caller decides what a gene is called. An empty value (``""``,
+        ``None`` or NaN) takes that row's var.index name, and repeated
+        names are made unique the way anndata's ``var_names_make_unique()``
+        does it: the second ``MATR3`` becomes ``MATR3-1``. What was filled and
+        renamed is printed and recorded in ``var_manifest.json``.
+    var_gene_name_columns : sequence of str, optional
+        Further var columns the viewer offers as alternative gene names, such
+        as ``["gene_symbols"]`` beside an Ensembl index. Each one is resolved
+        with the same empty-name and uniqueness rule and stored as metadata in
+        ``var_manifest.json``; no expression payload is duplicated.
     gene_identifiers : sequence of str, optional
-        Unique gene identifiers to export. Every identifier must be a non-empty
-        string present in var. If None, all genes are exported. Payload files
+        Unique gene identifiers to export, matched against the default gene
+        names after they were made unique. Every identifier must be a non-empty
+        string present among them. If None, all genes are exported. Payload files
         are named by integer index, so an identifier is never a path; the
         exported ones must additionally be text the viewer can draw exactly as
         stored, exactly as ``obs_keys`` narrows which observation keys are held
@@ -396,58 +500,15 @@ def _prepare_generation(
         return _published_out_dir / path.relative_to(out_dir)
 
     # =========================================================================
-    # MULTI-DIMENSIONAL EMBEDDING VALIDATION & PROCESSING
+    # EMBEDDINGS: VALIDATE EVERY ITEM AND DEFAULT, THEN NORMALIZE EACH ONE
     # =========================================================================
-    # Collect all provided embeddings
-    embeddings: dict[int, np.ndarray] = {}
-    if X_umap_1d is not None:
-        embeddings[1] = _require_finite_embedding_source(
-            X_umap_1d,
-            label="X_umap_1d",
-        )
-    if X_umap_2d is not None:
-        embeddings[2] = _require_finite_embedding_source(
-            X_umap_2d,
-            label="X_umap_2d",
-        )
-    if X_umap_3d is not None:
-        embeddings[3] = _require_finite_embedding_source(
-            X_umap_3d,
-            label="X_umap_3d",
-        )
-
-    if not embeddings:
-        raise ValueError(
-            "At least one dimensional embedding must be provided. "
-            "Use X_umap_1d, X_umap_2d, or X_umap_3d."
-        )
-
-    # Validate each embedding has correct dimensions
-    n_cells = None
-    for dim, arr in embeddings.items():
-        if arr.ndim == 1 and dim == 1:
-            # X_umap_1d declares one coordinate per cell, so a plain length-n
-            # vector already is the (n, 1) column it declares. AnnData performs
-            # exactly this reshape when such an array is put in obsm, so the
-            # AnnData path already accepts it.
-            arr = arr.reshape(-1, 1)
-            embeddings[dim] = arr
-        if arr.ndim != 2:
-            raise ValueError(f"X_umap_{dim}d must be a 2D array, got shape {arr.shape}.")
-        if arr.shape[1] != dim:
-            raise ValueError(
-                f"X_umap_{dim}d must have exactly {dim} columns, got {arr.shape[1]}. "
-                f"Shape is {arr.shape}."
-            )
-        if n_cells is None:
-            n_cells = arr.shape[0]
-        elif arr.shape[0] != n_cells:
-            raise ValueError(
-                f"All embeddings must have the same number of cells. "
-                f"First embedding has {n_cells} cells, but X_umap_{dim}d has {arr.shape[0]} cells."
-            )
-    if n_cells is None or n_cells <= 0:
-        raise ValueError("Embeddings must contain at least one cell.")
+    # Each item is normalized independently into [-1, 1], with one scale factor
+    # shared by its axes so its aspect ratio survives. Switching between two
+    # layouts therefore never needs a manual zoom.
+    resolved_embeddings = _resolve_embeddings(embeddings, embedding_defaults)
+    n_cells = resolved_embeddings.n_cells
+    embedding_items = resolved_embeddings.items
+    default_dimension = resolved_embeddings.default_dimension
 
     connectivity_edges: ConnectivityEdgePairs | None = None
     if connectivities is not None:
@@ -455,37 +516,6 @@ def _prepare_generation(
             connectivities,
             n_cells=n_cells,
         )
-
-    # =========================================================================
-    # NORMALIZE EACH EMBEDDING INDEPENDENTLY TO FIT WITHIN [-1, 1] RANGE
-    # =========================================================================
-    # Each dimensional embedding (1D, 2D, 3D) is normalized independently so that
-    # it fills the viewing area optimally. Within each dimension, we use the same
-    # scale factor for all axes to preserve aspect ratios.
-    #
-    # This ensures that switching between dimensions doesn't require manual zoom
-    # adjustments - each dimension will fill the view appropriately.
-
-    normalization_info = {}
-    for dim, arr in embeddings.items():
-        normalized, center, scale_factor, max_range = _normalize_finite_float32_embedding(
-            arr,
-            label=f"X_umap_{dim}d",
-        )
-        embeddings[dim] = normalized
-
-        # Store info for logging
-        normalization_info[dim] = {
-            "original_range": max_range,
-            "center": center.tolist(),
-            "scale_factor": scale_factor,
-        }
-
-    # Track available dimensions for metadata
-    available_dimensions = sorted(embeddings.keys())
-
-    # The highest declared dimension is the one exact initial dimension.
-    default_dimension = max(available_dimensions)
 
     # Print export settings summary
     console_print("=" * 60)
@@ -501,12 +531,16 @@ def _prepare_generation(
         f"  Obs continuous quantization: {str(obs_continuous_quantization) + '-bit' if obs_continuous_quantization else 'disabled (float32)'}"
     )
     console_print(f"  Obs categorical dtype: {obs_categorical_dtype}")
-    console_print(f"  Available dimensions: {available_dimensions}")
     console_print(f"  Default dimension: {default_dimension}D")
-    console_print("  Coordinate normalization (per-dimension, aspect-ratio preserved):")
-    for dim in sorted(normalization_info.keys()):
-        info = normalization_info[dim]
-        console_print(f"    {dim}D: range {info['original_range']:.2f} → [-1, 1]")
+    console_print("  Embeddings (each normalized on its own, aspect ratio preserved):")
+    for item in embedding_items:
+        default_marker = (
+            " (default)" if resolved_embeddings.defaults[f"{item.dimension}d"] == item.id else ""
+        )
+        console_print(
+            f"    {item.dimension}D {item.id!r}{default_marker}: "
+            f"range {item.original_range:.2f} → [-1, 1]"
+        )
     console_print("=" * 60)
 
     # Validate and convert latent space
@@ -639,6 +673,7 @@ def _prepare_generation(
     # Resolve every gene payload identity before any earlier dataset artifact can
     # be written.
     genes_to_export: list[str] = []
+    gene_name_sets: list[dict[str, Any]] = []
     gene_id_to_idx: dict[str, int] = {}
     gene_payload_index_by_id: dict[str, int] = {}
     gene_expr_is_sparse = False
@@ -671,35 +706,8 @@ def _prepare_generation(
         if len(var) != n_genes:
             raise ValueError(f"var has {len(var)} rows, but gene_expression has {n_genes} genes.")
 
-        if var_gene_id_column is None:
-            all_gene_ids = _require_string_identifiers(
-                var.index.tolist(),
-                label="var index",
-            )
-        else:
-            if type(var_gene_id_column) is not str:
-                raise TypeError(
-                    "var_gene_id_column must be a native non-empty string or None; "
-                    f"got {type(var_gene_id_column).__name__}."
-                )
-            if not var_gene_id_column:
-                raise ValueError("var_gene_id_column must be a native non-empty string or None.")
-            if var_gene_id_column not in var.columns:
-                raise KeyError(
-                    f"var_gene_id_column '{var_gene_id_column}' not found in var. "
-                    f"Available columns: {list(var.columns)}"
-                )
-            all_gene_ids = _require_string_identifiers(
-                var[var_gene_id_column].tolist(),
-                label=f"var column {var_gene_id_column!r}",
-            )
-        # Uniqueness over the whole var, display text over the exported subset.
-        # Every var row is addressable through gene_identifiers=, so a repeated
-        # identifier anywhere in var makes that lookup ambiguous and is rejected
-        # here. Being drawable is a property of a name the viewer shows, so it
-        # is checked on genes_to_export below: an unexported gene reaches no
-        # manifest, exactly as an obs column left out of obs_keys= does.
-        _require_unique_identifiers(all_gene_ids, label="Gene")
+        default_names = _resolve_gene_name_set(var, var_gene_id_column, label="var_gene_id_column")
+        all_gene_ids = default_names.names
         gene_id_to_idx = {gene_id: index for index, gene_id in enumerate(all_gene_ids)}
 
         if gene_identifiers is None:
@@ -719,7 +727,7 @@ def _prepare_generation(
             ]
             if missing_genes:
                 raise KeyError(
-                    f"gene_identifiers contain identifiers not present in var: {missing_genes}."
+                    f"gene_identifiers contain identifiers not present in var: {missing_genes}. Identifiers are matched against the default gene names after repeated names were made unique."
                 )
 
         genes_to_export = _require_field_identities(
@@ -729,76 +737,58 @@ def _prepare_generation(
         gene_payload_index_by_id = {
             gene_id: index for index, gene_id in enumerate(genes_to_export)
         }
+        exported_positions = [gene_id_to_idx[gene_id] for gene_id in genes_to_export]
+        gene_name_sets = _gene_name_sets(
+            var,
+            default_source=var_gene_id_column,
+            default_names=default_names,
+            alternative_columns=var_gene_name_columns,
+            exported_positions=exported_positions,
+        )
+    elif var_gene_name_columns is not None:
+        raise ValueError(
+            "var_gene_name_columns names alternative gene names, and no gene_expression "
+            "was supplied, so the export has no genes to name."
+        )
 
-    validated_vector_fields = validate_vector_fields(
+    resolved_vector_fields = _resolve_vector_fields(
         vector_fields,
-        n_cells=n_cells,
-        available_dimensions=available_dimensions,
+        embeddings=resolved_embeddings,
         vector_field_default=vector_field_default,
     )
-    scaled_vector_fields: dict[str, dict[int, np.ndarray]] = {}
-    vector_field_payload_index_by_id: dict[str, int] = {}
+    vector_field_payload_index_by_id = resolved_vector_fields.index_by_field()
+    gzip_suffix = _gzip_suffix(compression)
+    embedding_index_by_id = {item.id: item.index for item in embedding_items}
     vector_fields_identity: dict[str, object] | None = None
-    if validated_vector_fields.fields:
-        fields_metadata: dict[str, dict[str, object]] = {}
-        gzip_suffix = _gzip_suffix(compression)
-        vector_field_ids = _require_field_identities(
-            list(validated_vector_fields.fields),
-            label="Vector field",
-        )
-        vector_field_payload_index_by_id = {
-            field_id: index for index, field_id in enumerate(vector_field_ids)
-        }
-        for field_id, vectors_by_dimension in validated_vector_fields.fields.items():
-            dimensions = sorted(vectors_by_dimension)
-            payload_index = vector_field_payload_index_by_id[field_id]
-            scaled_vector_fields[field_id] = {}
-            for dimension, vectors in vectors_by_dimension.items():
-                scale_factor = normalization_info[dimension]["scale_factor"]
-                scaled_vector_fields[field_id][dimension] = scale_vector_field(
-                    vectors,
-                    scale_factor=scale_factor,
-                    label=f"Vector field {field_id!r} {dimension}D",
-                )
-
-            # Key order is the one the output format specification prints and
-            # the one cellucid-r emits, so both writers produce the same file.
-            fields_metadata[field_id] = {
-                "label": field_id,
-                "available_dimensions": dimensions,
-                "default_dimension": max(dimensions),
-                "files": {
-                    f"{dimension}d": (f"vectors/{payload_index}_{dimension}d.bin{gzip_suffix}")
-                    for dimension in dimensions
-                },
-                "basis": "umap",
-            }
-
+    if resolved_vector_fields.fields:
+        # Key order is the one the output format specification prints and the
+        # one cellucid-r emits, so both writers produce the same file. A file is
+        # named by the field's index and the bound embedding's index, never by
+        # either id.
         vector_fields_identity = {
-            "default_field": validated_vector_fields.default_field,
-            "fields": fields_metadata,
+            "default_field": resolved_vector_fields.default_field,
+            "fields": {
+                field_id: {
+                    "label": field_id,
+                    "files": {
+                        embedding_id: (
+                            f"{VECTORS_DIRNAME}/{vector_field_payload_index_by_id[field_id]}_"
+                            f"{embedding_index_by_id[embedding_id]}.bin{gzip_suffix}"
+                        )
+                        for embedding_id in by_embedding
+                    },
+                }
+                for field_id, by_embedding in resolved_vector_fields.fields.items()
+            },
         }
 
     # =========================================================================
     # ENCODABILITY PRE-FLIGHT
     # =========================================================================
-    # Every continuous payload is checked here, before the first output path
-    # exists, so one run reports every field that cannot be encoded instead of
-    # failing on each one in turn partway through the export. A constant field
-    # is not one of them: it has its own encoding (equal bounds, every code 0),
-    # so the only payload left with nothing to publish is a generated
-    # outlier-quantile set in which every quantile is missing.
-    outlier_range_defects: list[tuple[str, str]] = []
-
-    if obs_continuous_quantization is not None:
-        for key, quantiles in generated_outlier_quantiles.items():
-            defect = _all_missing_outlier_defect(
-                quantiles,
-                centroid_min_points=centroid_min_points,
-            )
-            if defect is not None:
-                outlier_range_defects.append((key, defect))
-
+    # Every gene column is checked here, before the first output path exists,
+    # so a non-finite value fails before anything is written. Generated
+    # outlier quantiles always encode: a field where no category reaches
+    # centroid_min_points publishes every quantile as missing.
     if gene_expression_for_export is not None:
         # Materializing every column here is what makes a non-finite value in
         # any gene fail before the first output path is created rather than
@@ -812,57 +802,52 @@ def _prepare_generation(
                 n_cells=n_cells,
             )
 
-    _require_encodable_outlier_quantiles(
-        outlier_defects=outlier_range_defects,
-        obs_continuous_quantization=obs_continuous_quantization,
-    )
-
     out_dir.mkdir(parents=True, exist_ok=True)
     obs_binary_dir.mkdir(parents=True, exist_ok=True)
 
     # The export root is reconciled against this register once the whole
     # generation exists, so every artifact created directly beneath it is named
-    # here as it is created. The point payloads are the one exception: they are
-    # declared by path in dataset_identity.json, and it is that declaration --
-    # not the name the write chose -- that has to match what is on disk.
+    # here as it is created. No payload lives at the root any more: every one
+    # sits in an axis directory that is reconciled against its own declaration.
     declared_root_files: set[str] = set()
     declared_root_directories: set[str] = {obs_binary_dirname}
 
     # =========================================================================
-    # SAVE DIMENSIONAL EMBEDDING FILES
+    # SAVE EMBEDDING ITEMS
     # =========================================================================
     # This cast is the one and only float32 rounding a coordinate gets.
-    for dim, arr in embeddings.items():
-        dim_filename = f"points_{dim}d.bin"
-        dim_path = out_dir / dim_filename
-        check_path = _final_binary_path(dim_path, compression)
+    embeddings_dir = out_dir / EMBEDDINGS_DIRNAME
+    embeddings_dir.mkdir(parents=True, exist_ok=True)
+    declared_root_directories.add(EMBEDDINGS_DIRNAME)
+    for item in embedding_items:
+        path = embeddings_dir / f"{item.index}_{item.dimension}d.bin"
+        check_path = _final_binary_path(path, compression)
         if _output_path_is_writable(check_path, check_path.name):
-            actual_path = _write_binary(dim_path, arr.astype(np.float32), compression)
+            actual_path = _write_binary(path, item.coordinates.astype(np.float32), compression)
             suffix = " (gzip)" if compression else ""
             console_print(
-                f"✓ Wrote {dim}D positions ({arr.shape[0]:,} cells × {dim} dims) "
-                f"to {published_path(actual_path)}{suffix}"
+                f"✓ Wrote {item.dimension}D embedding {item.id!r} ({n_cells:,} cells × "
+                f"{item.dimension} dims) to {published_path(actual_path)}{suffix}"
             )
 
     # =========================================================================
     # SAVE VECTOR FIELDS (OPTIONAL)
     # =========================================================================
-    if scaled_vector_fields:
-        vectors_dir = out_dir / "vectors"
+    if resolved_vector_fields.fields:
+        vectors_dir = out_dir / VECTORS_DIRNAME
         vectors_dir.mkdir(parents=True, exist_ok=True)
-        declared_root_directories.add("vectors")
-        for field_id, vectors_by_dimension in scaled_vector_fields.items():
+        declared_root_directories.add(VECTORS_DIRNAME)
+        for field_id, by_embedding in resolved_vector_fields.fields.items():
             payload_index = vector_field_payload_index_by_id[field_id]
-            for dimension, vectors in vectors_by_dimension.items():
-                filename = f"{payload_index}_{dimension}d.bin"
-                path = vectors_dir / filename
+            for embedding_id, vectors in by_embedding.items():
+                path = vectors_dir / f"{payload_index}_{embedding_index_by_id[embedding_id]}.bin"
                 check_path = _final_binary_path(path, compression)
                 if _output_path_is_writable(check_path, check_path.name):
                     actual_path = _write_binary(path, vectors, compression)
                     suffix = " (gzip)" if compression else ""
                     console_print(
-                        f"✓ Wrote vector field '{field_id}' {dimension}D "
-                        f"({vectors.shape[0]:,} cells × {dimension} comps) "
+                        f"✓ Wrote vector field '{field_id}' on {embedding_id!r} "
+                        f"({vectors.shape[0]:,} cells × {vectors.shape[1]} comps) "
                         f"to {published_path(actual_path)}{suffix}"
                     )
 
@@ -950,12 +935,14 @@ def _prepare_generation(
                 codes_path = obs_binary_dir / codes_fname
                 _write_binary(codes_path, codes_typed, compression)
 
-                # Compute centroids for all available dimensions
+                # One centroid list per exported embedding, keyed by its id.
                 if centroid_outlier_quantile is None:
-                    centroids_by_dim: dict[int, list[dict]] = {dim: [] for dim in embeddings}
+                    centroids_by_embedding: dict[str, list[dict]] = {
+                        item.id: [] for item in embedding_items
+                    }
                 else:
-                    centroids_by_dim = _compute_centroids_for_all_dimensions(
-                        embeddings,
+                    centroids_by_embedding = _compute_centroids_for_all_embeddings(
+                        {item.id: item.coordinates for item in embedding_items},
                         codes,
                         categories,
                         outlier_quantile=centroid_outlier_quantile,
@@ -983,11 +970,9 @@ def _prepare_generation(
                     _write_binary(outlier_path, oq_quantized, compression)
 
                     # Compact format: [index, key, categories, codesDtype,
-                    # codesMissingValue, centroidsByDim, outlierMinValue, outlierMaxValue]
-                    # centroidsByDim is a dict keyed by dimension: {"1": [...], "2": [...], "3": [...]}
-                    centroids_serializable = {
-                        str(dim): cents for dim, cents in centroids_by_dim.items()
-                    }
+                    # codesMissingValue, centroidsByEmbedding, outlierMinValue,
+                    # outlierMaxValue], centroidsByEmbedding keyed by embedding id
+                    # in item order.
                     obs_categorical_fields.append(
                         [
                             payload_index,
@@ -995,7 +980,7 @@ def _prepare_generation(
                             categories,
                             dtype_str,
                             int(missing_value),
-                            centroids_serializable,
+                            centroids_by_embedding,
                             oq_min,
                             oq_max,
                         ]
@@ -1011,11 +996,7 @@ def _prepare_generation(
                     _write_binary(outlier_path, outlier_quantiles.astype(np.float32), compression)
 
                     # Compact format: [index, key, categories, codesDtype,
-                    # codesMissingValue, centroidsByDim]
-                    # centroidsByDim is a dict keyed by dimension: {"1": [...], "2": [...], "3": [...]}
-                    centroids_serializable = {
-                        str(dim): cents for dim, cents in centroids_by_dim.items()
-                    }
+                    # codesMissingValue, centroidsByEmbedding]
                     obs_categorical_fields.append(
                         [
                             payload_index,
@@ -1023,7 +1004,7 @@ def _prepare_generation(
                             categories,
                             dtype_str,
                             int(missing_value),
-                            centroids_serializable,
+                            centroids_by_embedding,
                         ]
                     )
                     if not categorical_dtype_info:
@@ -1199,11 +1180,11 @@ def _prepare_generation(
             var_manifest_payload = {
                 "_format": MANIFEST_FORMAT_VERSION,
                 "n_points": int(n_cells),
-                "var_gene_id_column": var_gene_id_column,
                 "compression": compression if compression else None,
                 "quantization": var_quantization,
                 "_varSchema": var_schema,
                 "fields": var_manifest_fields,
+                "gene_name_sets": gene_name_sets,
             }
             _write_manifest(var_manifest_path, var_manifest_payload)
             declared_root_files.add(var_manifest_filename)
@@ -1224,10 +1205,26 @@ def _prepare_generation(
 
             compression_info = f", gzip level {compression}" if compression else ""
             quant_info = f", {var_quantization}-bit quantized" if var_quantization else ""
-            console_print(
-                f"✓ Wrote var manifest ({len(var_manifest_fields)} genes{quant_info}{compression_info}) "
-                f"to {published_path(var_manifest_path)}"
+            sets_info = (
+                f", {len(gene_name_sets)} gene-name sets" if len(gene_name_sets) > 1 else ""
             )
+            console_print(
+                f"✓ Wrote var manifest ({len(var_manifest_fields)} genes{quant_info}"
+                f"{compression_info}{sets_info}) to {published_path(var_manifest_path)}"
+            )
+            for name_set in gene_name_sets:
+                note = unique_names_note(
+                    filled_from_index=name_set["filled_from_index"],
+                    renamed=name_set["renamed"],
+                    source=name_set["source"],
+                )
+                if note is not None:
+                    source_label = (
+                        "var index"
+                        if name_set["source"] is None
+                        else f"var column {name_set['source']!r}"
+                    )
+                    console_print(f"  Gene names from {source_label}: {note}")
     else:
         console_print("INFO: Gene expression was not requested; no var artifact was emitted.")
 
@@ -1320,7 +1317,7 @@ def _prepare_generation(
         )
         _require_declared_payloads_on_disk(
             out_dir,
-            directory_name="vectors",
+            directory_name=VECTORS_DIRNAME,
             declared=declared_vector_paths,
             axis="Vector field",
         )
@@ -1359,19 +1356,25 @@ def _prepare_generation(
         "obs_categorical_dtype": obs_categorical_dtype,
     }
 
-    # Build embeddings metadata
-    gz_suffix = _gzip_suffix(compression)
+    # Build embeddings metadata: one item per exported embedding, in payload
+    # index order, each naming the exact file the format derives for it.
     embeddings_meta: dict[str, Any] = {
-        "available_dimensions": available_dimensions,
         "default_dimension": default_dimension,
-        "files": {},
+        "defaults": dict(resolved_embeddings.defaults),
+        "items": {
+            item.id: {
+                "label": item.label,
+                "dimension": item.dimension,
+                "file": item.file(gzip_suffix),
+                "source": {"key": item.source_key, "columns": list(item.columns)},
+            }
+            for item in embedding_items
+        },
     }
-    for dim in available_dimensions:
-        embeddings_meta["files"][f"{dim}d"] = f"points_{dim}d.bin{gz_suffix}"
 
     # Build identity payload
     identity_payload = {
-        "version": 2,  # Bumped version for multi-dimensional support
+        "version": IDENTITY_VERSION,
         "id": dataset_id,
         "name": dataset_name,
         "description": dataset_description if dataset_description is not None else "",
@@ -1401,23 +1404,27 @@ def _prepare_generation(
     declared_root_files.add(identity_path.name)
     console_print(f"✓ Wrote dataset identity to {published_path(identity_path)}")
 
-    # Each axis directory has now been reconciled against the manifest that
-    # declares it, but the point payloads sit at the export root and are
-    # declared in dataset_identity.json, so nothing above compared the
-    # coordinate files the viewer is told to fetch against the files that were
-    # written. The declared name and the written name are two expressions of
-    # the compression setting, and a generation whose points disagree publishes
-    # successfully and then fails in the browser with no coordinates. The root
-    # is the last surface where a declaration and a file can disagree, so it is
-    # reconciled whole: the manifests and the payload directories this call
-    # created are named here too, and anything else that reached the root is
-    # refused rather than published.
-    for dimension_key, declared_point_path in embeddings_meta["files"].items():
-        if not isinstance(declared_point_path, str) or not declared_point_path:
-            raise RuntimeError(
-                f"dataset_identity.json embeddings.files.{dimension_key} must be one payload path."
-            )
-        declared_root_files.add(declared_point_path)
+    # Every embedding item is declared by path in dataset_identity.json, so
+    # the embeddings directory is reconciled against that declaration -- the
+    # declared name and the written name are two expressions of one
+    # compression setting, and a generation whose coordinates disagree would
+    # publish and then fail in the browser with nothing to draw.
+    declared_embedding_paths = _declared_embedding_payload_paths(identity_payload)
+    _require_dense_payload_indices(
+        [item.index for item in embedding_items],
+        axis="Embedding",
+    )
+    _require_declared_payloads_on_disk(
+        out_dir,
+        directory_name=EMBEDDINGS_DIRNAME,
+        declared=declared_embedding_paths,
+        axis="Embedding",
+    )
+
+    # The root is the last surface where a declaration and a file can
+    # disagree, so it is reconciled whole: the manifests and the payload
+    # directories this call created are named, and anything else that reached
+    # the root is refused rather than published.
     _require_declared_payloads_on_disk(
         out_dir,
         directory_name=None,

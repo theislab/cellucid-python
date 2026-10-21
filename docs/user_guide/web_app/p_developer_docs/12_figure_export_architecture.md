@@ -70,6 +70,15 @@ PNG export uses Canvas2D for composition, but rasterizes points via WebGL2:
 - this preserves shader-accurate appearance (e.g. 3D sphere shading)
 - avoids maintaining two independent point renderers
 
+The point passes draw on WebGL2 contexts the export keeps for the page's
+lifetime (`webgl-point-rasterizer.js`): one per antialiasing setting, plus one
+for each pass that overlaps another. A pass leases a canvas and returns it
+with `releaseWebglRasterCanvas` once its pixels are copied; the canvas shrinks
+to one pixel and its context stays for the next pass. Creating and losing a
+context per pass cost a context and a shader compile every time, and made
+WebKitGTK/WPE abort the page on a GL call made without a current context
+during the teardown.
+
 The PNG exporter also embeds metadata via UTF-8 PNG `iTXt` chunks:
 - `Software`, `Website`, `Creation Time`, `Dataset`, `Dataset ID`, `Color Field`,
   `Source File`, `Description` and a compact JSON `Comment` blob.
@@ -115,7 +124,7 @@ See:
 
 Likely causes (ordered):
 1) Visibility mask was not applied consistently (filters/outliers).
-2) Projection mismatch (dimension switch or view mismatch).
+2) Projection mismatch (the view shows another embedding, or the wrong view was exported).
 3) Large dataset reduction produced an unexpected downsample.
 
 How to confirm:

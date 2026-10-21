@@ -41,7 +41,7 @@ adapter.close()
 The web viewer expects files like:
 - `dataset_identity.json`
 - `obs_manifest.json`
-- `points_2d.bin`, `points_3d.bin`
+- `embeddings/<index>_<dim>d.bin`, one per served embedding
 - `var/<index>.values.f32` (payload files are named by index, never by gene name)
 
 In AnnData mode, the adapter serves these as **virtual endpoints** computed from AnnData on demand.
@@ -55,32 +55,81 @@ In AnnData mode, the adapter serves these as **virtual endpoints** computed from
 
 ### Which `obsm` keys become embeddings
 
-`X_umap_1d`, `X_umap_2d`, and `X_umap_3d` each name their own dimension and
-always decide it.
+The adapter serves one embedding per dimension slot. `embedding_keys` names the
+array of a slot — `{"2d": "X_tsne"}`, or `{"2d": ("X_pca", [0, 1])}` with
+0-based columns. Every other slot follows the default rule: `X_umap_1d`,
+`X_umap_2d`, and `X_umap_3d` each fill their own slot, and an object that
+declares none of them but carries the bare `X_umap` that `sc.tl.umap()` writes
+has it fill the slot of its own column count (1, 2, or 3). When neither fills
+any slot, the adapter makes a deterministic best guess from the other `obsm`
+arrays and records which slots were guessed. The adapter renames nothing and
+mutates nothing on your object.
 
-An object that declares none of those three but carries the bare `X_umap` that
-`sc.tl.umap()` writes is read at the dimension its own column count states: a
-one-, two-, or three-column array is resolved by its own width and served as
-1D, 2D, or 3D. The adapter renames nothing and mutates nothing on your object.
+- `adapter.embeddings` lists the served embeddings, each with its canonical id
+  (`X_umap`, or `X_pca[0,1]` when only some columns are read), `obsm` key,
+  columns, dimension, and payload index.
+- When nothing can be plotted, construction raises
+  `Cellucid found nothing to plot…`, listing every `obsm` entry and why it was
+  not used.
 
-- A bare `X_umap` of any other width — a ten-column latent space named after a
-  plot, say — is refused, and the message names its shape.
-- One explicit dimensional key anywhere in `obsm` means the writer declared
-  dimensions deliberately, so the bare key never joins the resolved set.
+### The data mapping it serves
 
-The same resolution is used by {func}`~cellucid.serve_anndata`,
-{func}`~cellucid.show_anndata`, {class}`~cellucid.AnnDataViewer`, and
-`cellucid serve`, because all of them build this adapter.
+`adapter.get_data_mapping()` returns the data mapping the adapter serves. Its
+`embeddings` are `{"enabled": [...], "defaults": {"1d", "2d", "3d"}}`: the
+served slots are the defaults, and every other usable `obsm` array 1 to 3
+columns wide is enabled beside them at all of its columns (not vector fields,
+the latent key or arrays the best guess refused; see
+`cellucid.data_mapping.default_enabled_embeddings`), each as an `obsm` key and
+0-based columns. Then come `knn`,
+`geneNames` (`"index"`, or `"column:<name>"` for `gene_id_column`),
+`expression` (`"X"`, `"raw"`, `"layer:<name>"`, or `None` without expression),
+`latent`, and the served vector bindings. It is the shape a session fingerprint
+records as `dataMapping`. `adapter.get_mapping_candidates()` returns the catalog
+the server publishes at `/_cellucid/mapping/candidates.json`: that mapping as
+`defaults`, plus every `obsm`, `obsp`, layer and `var` column with its shape,
+dtype and usability, read from metadata only.
+`adapter.get_mapping_embedding_binary("{obsm}/{c0-c1}.bin")` returns one of
+those `obsm` arrays at the given columns, normalized like a served embedding:
+the payload behind `/_cellucid/mapping/embeddings/...`, which the viewer reads
+for an enabled embedding the identity does not list.
 
-### Connectivity is asked for, not assumed
+### Data mapping: every candidate array, on request
 
-`serve_connectivity` is keyword-only and `False` by default, on
+The `get_mapped_*` methods read one candidate of that catalog on request,
+addressed by its position in it:
+
+| Method | Returns |
+| --- | --- |
+| `get_mapped_embedding(i, columns)` | normalized float32 bytes of `obsm` entry `i` at 0-based `columns` |
+| `get_mapped_vectors(i, vector_columns, e, embedding_columns)` | a vector array bound to embedding `e`, scaled by its factor |
+| `get_mapped_connectivity(p)` / `get_mapped_connectivity_edges(p)` | the edge-pair manifest and edge payloads of `obsp` entry `p` |
+| `get_mapped_var_manifest(axis, names)` | the gene list of `"X"`, `"raw"` or `"layer-k"`, named by `"index"` or `"column-k"` |
+| `get_mapped_gene_values(axis, names, g)` | gene `g` of that axis as float32 bytes |
+| `get_mapped_outliers(i, f)` | outlier quantiles of categorical field `f` in latent space `i` |
+
+An unknown position raises `cellucid.anndata_mapping.MappingNotFound`; an entry
+whose values fail the load-time check raises `MappingLoadError`, whose `key`
+names the AnnData key it is about. Results are cached in one byte-bounded LRU
+behind a lock, so the server thread and the kernel can share one adapter.
+
+```{eval-rst}
+.. autoclass:: cellucid.anndata_mapping.AnnDataMapping
+   :members:
+
+.. autoexception:: cellucid.anndata_mapping.MappingNotFound
+
+.. autoexception:: cellucid.anndata_mapping.MappingLoadError
+```
+
+## Connectivity is asked for, not assumed
+
+`knn_key` is keyword-only and `None` by default, on
 {class}`~cellucid.AnnDataAdapter` and on `AnnDataAdapter.from_file` alike.
 
-| `serve_connectivity` | What the adapter does |
+| `knn_key` | What the adapter does |
 |---|---|
-| `False` (default) | `adata.obsp['connectivities']` is never read. `has_connectivity()` returns `False`, the dataset identity reports `has_connectivity: false` and `n_edges: null`, and there is no connectivity manifest to serve. |
-| `True` | The complete graph is read and validated during construction, before the adapter can be used, and its manifest declares the edge count and the neighbor maximum. |
+| `None` (default) | No `obsp` matrix is read. `has_connectivity()` returns `False`, the dataset identity reports `has_connectivity: false` and `n_edges: null`, and there is no connectivity manifest to serve. |
+| an `obsp` key, such as `"connectivities"` | That complete matrix is read and validated during construction, before the adapter can be used, and its manifest declares the edge count and the neighbor maximum. A matrix that is not symmetric is refused. |
 
 Off is the default because building the edge list is the single longest part of
 startup on a large object — a 50-neighbor graph over millions of cells is
@@ -89,9 +138,9 @@ graph. Validation is not deferred when you do ask for it: the manifest the
 viewer fetches first has to state the edge count, so the whole graph is read up
 front rather than on the first edge request.
 
-Asking for connectivity on an object whose `obsp` holds no `connectivities`
-matrix raises during construction. It is an explicit request, so an unmeetable
-one is an error rather than a quietly graph-less dataset.
+Naming an `obsp` key the object does not hold raises during construction. It is
+an explicit request, so an unmeetable one is an error rather than a quietly
+graph-less dataset.
 
 ```python
 from cellucid import AnnDataAdapter
@@ -100,7 +149,7 @@ adapter = AnnDataAdapter(
     adata,
     dataset_name="My study",
     dataset_id="my-study-v1",
-    serve_connectivity=True,
+    knn_key="connectivities",
 )
 print(adapter.has_connectivity())
 adapter.close()
@@ -129,10 +178,11 @@ happens. See {doc}`server` for the full startup report.
 
 ## Edge cases (do not skip)
 
-- If your embedding keys are missing or have unexpected shapes, the adapter cannot serve `points_*d.bin`.
-- Duplicate gene names, and names carrying characters with no glyph, are
-  rejected during adapter construction. Names are not routes, so nothing else
-  about them is constrained.
+- If no `obsm` array can be plotted, construction fails before any route exists.
+- Repeated gene names are made unique (`MATR3`, `MATR3-1`) and empty values in
+  `gene_id_column` take the row's index name. Names carrying characters with no
+  glyph are rejected during adapter construction. Names are not routes, so
+  nothing else about them is constrained.
 - If `adata.X` is CSR, the adapter may materialize a CSC copy for efficient column access (memory trade-off).
 
 ---
@@ -144,18 +194,16 @@ Fix:
 - Prefer a `.h5ad` path for read-only-backed access.
 - For repeated access, export with {func}`~cellucid.prepare` instead.
 
-### Symptom: “No embeddings detected”
+### Symptom: “Cellucid found nothing to plot”
 Fix:
-- Ensure `adata.obsm` holds either an explicitly dimensioned embedding
-  (`X_umap_1d`, `X_umap_2d`, or `X_umap_3d`) or a bare `X_umap` of 1, 2, or 3
-  columns, which is read at the dimension its column count states.
-- The error lists the `obsm` keys the object actually has, and when a bare
-  `X_umap` is present but too wide it names that array's shape as well.
+- The error lists every `obsm` entry and why it was not used. Repair the array
+  it names, compute an embedding, or pass `embedding_keys={"2d": "<key>"}`
+  naming a usable array.
 
-### Symptom: “Connectivity was asked for, and adata.obsp has no 'connectivities' matrix to serve”
+### Symptom: “knn_key names obsp['connectivities'], which this object does not have.”
 Fix:
 - Compute the neighbor graph first (`sc.pp.neighbors(adata)`), or
-- build the adapter without `serve_connectivity=True`, which is the default and
+- build the adapter without `knn_key="connectivities"`, which is the default and
   never touches `obsp` at all.
 
 ---

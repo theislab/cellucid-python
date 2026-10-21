@@ -129,7 +129,7 @@ The architecture is intentionally simple:
   This matters because browser security rules differ across Jupyter/VSCode/Colab.
 - Bidirectional communication:
   - **Python → frontend**: `postMessage` to the iframe (`viewer.send_message(...)` + convenience methods)
-  - **Frontend → Python**: HTTP `POST` to `/_cellucid/events` on the local server (hooks)
+  - **Frontend → Python**: HTTP `POST` to `/_cellucid/events` on the local server (hooks), and to `/_cellucid/selection` for selections (binary cell indices)
 
 If you maintain or extend `cellucid`, the “mental model” to keep in mind is:
 
@@ -139,7 +139,7 @@ If you maintain or extend `cellucid`, the “mental model” to keep in mind is:
 
 - **Export folder**: a directory of `.json` manifests + binary files that the web app loads.
 - **Dataset identity**: `dataset_identity.json` (name/id/metadata; helps reproducibility).
-- **Embedding**: `points_1d.bin`, `points_2d.bin`, or `points_3d.bin`.
+- **Embedding**: one `embeddings/<index>_<dim>d.bin` file per embedding, any number per dimension.
 - **`obs` fields**: per-cell metadata (categorical or continuous).
 - **`var` / gene expression**: per-gene metadata + expression values (optional).
 - **Viewer**: a notebook object that embeds the UI and exposes hooks/commands (`CellucidViewer` / `AnnDataViewer`).

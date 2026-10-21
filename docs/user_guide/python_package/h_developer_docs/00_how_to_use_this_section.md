@@ -37,7 +37,7 @@ Almost every developer confusion in Cellucid comes from mixing these up:
 ### 1) **Pre-exported dataset mode** (recommended for sharing + performance)
 
 - Python writes an export folder via `cellucid.prepare(...)`.
-- The viewer loads static files like `points_3d.bin(.gz)`, `obs_manifest.json`, `var_manifest.json`.
+- The viewer loads static files like `embeddings/<index>_<dim>d.bin(.gz)`, `obs_manifest.json`, `var_manifest.json`.
 - A lightweight HTTP server (`cellucid.server.CellucidServer`) serves those files.
 
 Start reading: {doc}`07_prepare_export_pipeline_architecture` → {doc}`08_export_format_spec_and_invariants` → {doc}`09_server_mode_architecture_endpoints_and_security`

@@ -33,11 +33,15 @@ If you haven’t read the mental model yet, start with {doc}`01_performance_ment
 
 **What tends to scale with bytes:**
 - initial dataset load (embeddings + metadata),
-- loading gene expression chunks on demand,
+- loading gene expression chunks on demand (for a dense `X` read directly from
+  Zarr or a chunked `.h5ad`, decoded chunks are kept in a cache of up to
+  256 MiB, so genes in the same chunk column strip reuse them; a matrix chunked
+  by rows, one strip spanning every gene, is still the slow case, since the
+  first gene decodes the whole strip),
 - remote server latency (each request has overhead even if data is small).
 
 **Big practical reality:**
-- loading a large `.h5ad` directly in the browser is not truly lazy and can freeze/crash.
+- a large cell-major (CSR) `.h5ad` opened directly in the browser answers its first genes only as its background reorganisation by gene reaches them; server mode answers them from Python.
 
 Best practices and alternatives:
 - {doc}`../b_data_loading/01_loading_options_overview`
@@ -64,10 +68,18 @@ Three things that are commonly assumed to cost per frame, and do not:
   no fragment is ever produced for it. A heavily filtered view is therefore
   *cheaper* to navigate than the same dataset unfiltered, not more expensive.
 - **Standing still.** When nothing changes, the frame transfers no data to the
-  GPU at all. Holding a view steady does not accumulate cost.
+  GPU at all and nothing is redrawn. Holding a view steady does not accumulate
+  cost — with or without a highlighted selection, except in `Full` shader
+  quality, whose highlight ring pulses and so keeps drawing while anything is
+  highlighted.
 - **Shader quality.** `Full`, `Light` and `Ultra-light` measured the same on the
-  machine below, at every point size tested. The setting changes what a point
-  looks like, not how fast the frame draws — see the next section.
+  machine below in 3D views, at every point size tested — see the next section.
+  A **2D view** draws without depth testing and shades every overlapping point;
+  `Light` once took about half of `Full`'s antialiased frame there, because
+  only `Light` avoided a fragment `discard`. Since 0.9.2 every quality draws a
+  2D view without one, and on a dense 1,000,000-cell 2D embedding with
+  antialiasing on (device pixel ratio 1) the three measured within a few
+  percent of one another (Apple M1 Pro, interleaved runs).
 
 High-leverage knobs:
 - **Make the window smaller** while exploring (fewer pixels) — *usually the biggest immediate win*.
@@ -88,9 +100,9 @@ High-leverage knobs:
 - **Turn off `Antialiasing (smooth point edges)`** under **Visualization →
   Image quality** — measured below, and the largest single lever left on the
   plain path once filtering and window size have been used. It applies to the
-  next frame. Check the box's state before reaching for it: on a dataset of
-  5,000,000 cells or more it is already clear unless you turned it on yourself,
-  so there is nothing left to win there.
+  next frame. Check the box's state before reaching for it: on a 3D view of
+  5,000,000 cells or more, or a 1D/2D view of 200,000 or more, it is already
+  clear unless you turned it on yourself, so there is nothing left to win there.
 - **Change the layout shape, not just the view count** — a two- or three-view
   row is the expensive arrangement; one view and the 2×2 four-view grid shade
   about the same number of pixels. See {doc}`01_performance_mental_model`.
@@ -109,17 +121,57 @@ Smoke mode is intentionally heavy and can dominate GPU time.
 Separate build cost from frame cost:
 
 - **Visible-cell count** scales density-build validation and GPU submission
-  approximately linearly.
-- **Grid density** scales density-build work and GPU memory steeply—roughly
-  with the cube of the selected grid width.
+  approximately linearly. A build runs on entering smoke and again after every
+  visibility, colour, or dimension change while smoke is active.
+- **Grid density** scales the build's splat and normalization work with the
+  cube of the grid width, but its memory is capped: 128³ is the largest grid on
+  every device, an 8 MiB volume, with under 50 MiB of temporary atlases during
+  the build. Through the voxel size it also sets how many samples each ray
+  takes.
 - **Render resolution** and **Ray quality** are the main steady-state
-  per-frame costs because they control rendered pixels and ray-march work.
+  per-frame costs: a frame costs about rays × samples per ray. Render
+  resolution runs from 0.25x to 1.00x of the canvas and a frame never marches
+  more than 2560×1440 rays; Ray quality is 0.5 to 2 samples per voxel.
+- **Animation speed** decides whether smoke costs anything while you are not
+  interacting: at 0 (`Still`) a settled view is not redrawn.
 
 Practical consequences:
 - The exact grid choices are 32³, 48³, 64³, 96³, and 128³; 128³ is the
   initial and maximum setting on every supported WebGL2 implementation.
 - Smoke can look “blank” if density is low or if few points are visible (filters/outliers).
-- Smoke can cause “context lost” if grid/quality are too high for your GPU.
+- Smoke can cause “context lost” when one frame runs past the GPU watchdog
+  (about two seconds): lower render resolution, then ray quality, then noise
+  detail. Grid size is not the memory problem it once was.
+
+---
+
+### Recoloring (switching the colored field or gene)
+
+Changing what the points are colored by recomputes one RGBA color per cell on
+the CPU and then uploads only colors: positions and colors are separate GPU
+streams, so a recolor sends 4 bytes per cell and never touches the positions.
+When a view's points are stored in their spatial tree's order (any view whose
+tree exists: the hover index counts), the GPU gathers the uploaded colors into
+that order in one pass; the CPU does no per-cell work for it, and Level of
+Detail adds nothing, because every level draws from the same store. Each kept
+view recolors its own store the same way when its colors change.
+
+Measured renderer cost of one recolor (upload issued and completed), Chromium on
+an Apple M1 Pro through ANGLE Metal, synthetic 3D clusters, median of seven,
+with LOD off or on; the color computation itself is not included:
+
+| Cells | Bytes sent | Recolor |
+| --- | --- | --- |
+| 1,000,000 | 4 MB | 1.0–1.3 ms |
+| 10,000,000 | 40 MB | 5–8 ms |
+
+At 10,000,000 cells about 5 ms of that is the upload into the transient
+source texture the gather reads (the same bytes as a plain buffer upload,
+which takes about 2.5 ms) and about 1.5 ms the gather pass. That is the known
+trade-off of the stored order: a view is kept in tree order even with LOD
+and culling off, because it then draws a full-detail frame about three times
+faster (10,000,000 points: 3D 10 ms against 30, 2D 21 ms against 67), and
+each recolor pays a few milliseconds once for it.
 
 ---
 
@@ -184,6 +236,61 @@ Analysis cost depends on the mode, but the big drivers are usually:
 - the number of features involved (e.g., genes),
 - repeated reruns caused by changing inputs frequently.
 
+Differential expression and Marker Genes stream one gene at a time, and each
+gene of a prepared export is one request. The gene is inflated and dequantized
+in a decode worker and its statistics run in the analysis worker pool, so the
+main thread only fetches and hands work over: the page stays responsive during
+a run. With an export served over the network, the downloads of the genes
+queued next run ahead of decoding, as many at once as the connection needs to
+stay full, so the run is bound by the connection's bandwidth rather than by one
+round trip per gene. The downloads are kept (compressed) for the dataset you
+opened, so a second run over the same genes makes no requests. A gene you
+choose while a run is downloading goes first. With a local folder there is no
+network, and decoding and statistics set the pace instead.
+
+Measured with Chromium against an HTTP/2 server shaped to typical links, over
+the prepared sample exports (Wilcoxon DE of two category pages, every gene):
+
+| Export, link | Genes, bytes | First run | Second run |
+| --- | --- | --- | --- |
+| Pancreatic endocrinogenesis (3,696 cells), 4G (9 Mbit/s, 170 ms RTT) | 3,753 genes, 1.9 MB | 4.6 s | 0.8 s, no requests |
+| Pancreatic endocrinogenesis, cable (5 Mbit/s, 28 ms RTT) | 3,753 genes, 1.9 MB | 3.3 s | 0.8 s, no requests |
+| Developing human lung (He; 71,650 cells), 4G | 5,146 genes, 12.3 MB | 12.0 s | 1.5 s, no requests |
+| Developing human immune system (Suo; 561,947 cells), cable | 5,097 genes, 58.8 MB | 94 s | 2.8 s, no requests |
+
+Before downloads ran ahead, the pancreatic run took about 58 s over 4G, bound by
+round trips rather than bytes, and a second run took as long, because every
+gene was requested again and answered "not modified". Suo over cable is bound
+by the link's bandwidth (58.8 MB at 5 Mbit/s is 94 s), so only fewer bytes
+can make that first run faster. A gene chosen in the sidebar during a first
+run over 4G arrives in about one round trip: 0.2 s for the pancreatic export,
+0.3 s for Suo, whose run fills the link.
+
+Per-page statistics are linear in the number of cells: medians, quartiles and
+ranks (Quick, Detailed summaries and tests, Spearman correlation, Kruskal–Wallis,
+high-cardinality Wilcoxon) come from linear-time radix ordering, never from a
+comparison sort. At one million cells a Detailed summary and its tests take
+tens of milliseconds; at ten million they take a few hundred. For large pages
+that work runs on the analysis workers rather than the thread that draws the
+interface: the Detailed and Gene signature summaries and tests, the Quick
+Insights median and quartiles, a histogram's bins, and the box statistics,
+violin densities and density curves of plots. A plot's main-thread work is
+therefore mostly drawing, and the loops that must stay on the main thread —
+gathering a page's values, aligning two variables for a scatter plot, scoring a
+gene signature, counting a Quick Insights composition — hand the interface back
+every few milliseconds. Measured in Chromium on a ten-million-cell page, no
+summary, test, histogram, density, violin, bar, pie or Quick Insights step
+holds the interface for more than 50 ms at a time (a violin used to hold it for
+1.5 s). Box plots are the exception: Plotly draws every outlier as its own SVG
+element, so a continuous page with tens of thousands of outliers still holds it
+for about a third of a second while they are drawn.
+
+A gene that is about to be chosen starts loading early: in a gene search list,
+the option kept under the pointer or highlighted with the arrow keys for
+150 ms is fetched and decoded in the background, so choosing it usually draws
+at once. Moving to another option cancels that load, and choosing the option
+joins it rather than starting another.
+
 Practical workflow:
 - define groups carefully (avoid “everything vs everything” when you don’t need it),
 - keep analysis scope small while iterating,
@@ -220,12 +327,12 @@ one rendering setting that moves it, and what antialiasing costs. It is here
 rather than inside the cost model because it is evidence for one item in that
 list, and reading it is optional.
 
-### Where the frame time actually goes, and why shader quality is not a lever
+### Where the frame time actually goes, and why shader quality is not a lever in 3D
 
 All the figures in this section and the next were measured on **one machine** —
 an Apple M1 Pro driving WebGL2 through ANGLE Metal, 1440×1000 at device pixel
-ratio 1, 10,000,000 synthetic points, LOD and frustum culling off, camera held
-fixed. Treat the absolute milliseconds as belonging to that machine. What
+ratio 1, 10,000,000 synthetic points in 3D, LOD and frustum culling off, camera held
+fixed. A 2D view behaves differently — see the end of this section. Treat the absolute milliseconds as belonging to that machine. What
 carries across hardware is the *shape*: which term scales with what.
 
 Split by GPU timer query, at point size 0.75. The shares are read against the
@@ -325,11 +432,13 @@ dataset until you tell it otherwise. It is not a cosmetic setting, so both
 halves of the trade are stated here.
 
 Until you click the checkbox, the choice is automatic and made from the cell
-count: **on below 5,000,000 cells, off at or above**. It is re-decided every time
-a dataset is published, because datasets are switched in place — so opening an
-atlas after a small dataset clears the box on its own. While the choice is
-automatic the line under the control says so, naming the count
-(`Chosen automatically: 18,142,044 cells.`). Clicking the checkbox ends automatic
+count and the active view's dimension: **in 3D, on below 5,000,000 cells; in a
+1D or 2D view, on below 200,000 cells; off at or above**. It is re-decided every
+time a dataset is published, because datasets are switched in place — so opening
+an atlas after a small dataset clears the box on its own — and whenever the
+active view switches between 2D and 3D. While the choice is automatic the line
+under the control says so, naming the count and the dimension
+(`Chosen automatically: 18,142,044 cells in 3D.`). Clicking the checkbox ends automatic
 selection permanently, in both directions: from then on the box holds your answer
 on every dataset, and the status line goes quiet. This is why the 10,000,000-point
 workload measured below is *not* the default configuration — at that size the
@@ -353,6 +462,20 @@ A GPU timer query over the same runs agreed within three points at every size
 and about a third at large ones**. Note that the saving *grows* with point size:
 antialiasing costs per pixel covered, so it is worth least in exactly the
 millions-of-tiny-dots case that most needs the frames.
+
+**2D views.** Everything above is a 3D measurement, where depth testing discards
+about 95% of fragments before they are shaded. A 2D embedding is drawn without
+depth: every overlapping point is shaded and blended in order, and under
+antialiasing that happens per sample. There, antialiasing costs about
+**twice** the GPU time of a frame: orbiting a 1,000,000-cell 2D embedding
+(Apple M1 Pro, ANGLE Metal, 1440×1000, 0.9.3 development build), the GPU timer
+totals were 25.5 ms on against 11.6 ms off with `Full` (2.2×) and 17.5 against
+9.9 ms with `Ultra-light` (1.8×). The timers of the passes overlap on that
+tile-based GPU, so read these as ratios; the frame rate dropped from 119 to
+109 frames a second at 120 Hz with `Full` and stayed at 119 with
+`Ultra-light`. That cost, against about a fifth to a third in 3D, is why
+automatic antialiasing uses a much lower limit for 1D and 2D views (200,000
+cells) than for 3D (5,000,000).
 
 What you give up, on the same frames: **18% of pixels change at point size
 0.75** and 32% with `Ultra-light (square points)`. Small dots are almost
@@ -399,9 +522,10 @@ When exploring:
 
 Why this works:
 - one view is unambiguously the cheapest state to iterate in, and it keeps the
-  comparison you eventually build deliberate rather than accidental. Cellucid
-  caps you at three snapshots beside the live view, so a snapshot is a scarce
-  slot, not a scratchpad.
+  comparison you eventually build deliberate rather than accidental. You can
+  keep any number of snapshots, but each one shown is drawn every frame and
+  holds about 5 bytes per cell of GPU memory (its colours and visibility;
+  positions are shared), so keep the ones you compare.
 
 ### 2) Stage expensive actions
 
@@ -436,7 +560,7 @@ This is especially important for smoke mode and vector overlays.
 
 Some problems are best solved upstream:
 
-- **Category explosion** (tens of thousands of categories) makes legends and palettes unusable.
+- **Category explosion** (tens of thousands of categories) loads and its legend scrolls, but one colour per category carries little information.
 - **Pathological filters** (dozens of stacked filters) means you’re doing data cleaning in the UI.
 - **Huge feature sets** (very large var/gene tables) can make gene search and loading heavy.
 
@@ -450,14 +574,15 @@ If you hit these repeatedly, treat it as a data preparation issue:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/benchmarking_performance/benchmark-panel-controls.png
-:alt: The Performance Benchmark panel before any run, showing the six point-count presets from 100K to 20M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons.
+:alt: The Performance Benchmark panel before any run, showing the six point-count presets from 500K to 40M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons; the live performance readout is omitted.
 :width: 516px
 
 Every knob in this section that produces a number lives in one place: the
 **Performance Benchmark** accordion in the left sidebar. Use it to find the
 shape of *your* machine’s limits — the answer is different on every GPU, so
-there is no number here to copy. {doc}`05_benchmark_tools` explains each
-control and what its readout means.
+there is no number here to copy, and the live readout is omitted from this
+picture for the same reason. {doc}`05_benchmark_tools` explains each control
+and lists every field of that readout.
 ```
 
 ---

@@ -193,7 +193,9 @@ Two things the exported legend spells out that the on-screen legend does not
 have to, because a figure travels without the app around it:
 
 - **Hidden categories keep their entry and are marked `(hidden)`**, with a
-  hollow gray outline instead of their color. The entry stays so a filtered
+  hollow gray outline instead of their color. This includes a ticked category
+  that other filters leave with no cells (the row the on-screen legend shows
+  disabled). The entry stays so a filtered
   figure cannot be mistaken for a complete one; the color goes so nobody hunts
   the plot for points that were never drawn.
 - **A logarithmic colorbar is labeled `Log10 color scale`** together with its
@@ -214,16 +216,20 @@ How to interpret axes:
 
 ### Reference grid
 
-- **Reference grid** is enabled by default and exports the viewer's grid box —
-  the matplotlib-style walls drawn behind the data by the **Grid (light)** and
-  **Grid (dark)** backgrounds.
-- It follows the viewer: a light-grid view exports a light grid, a dark-grid
-  view exports a dark one. Nothing is hard-coded.
-- In SVG the grid arrives as ordinary vector `<line>` elements, so you can
-  recolour, thin, or delete it in Illustrator or Inkscape. PNG carries the
-  identical geometry.
+- **Reference grid** is enabled by default and exports the reference layer the
+  viewer background draws: the matplotlib-style grid box of **Grid (light)**
+  and **Grid (dark)**, or the floor and dot surface of **Studio (light)** and
+  **Studio (dark)**. A painted look (**Atelier**, **Nebula**, **Abyss**,
+  **Aurora**) is redrawn as an image under the points when the figure's
+  background is **Match viewer**.
+- It follows the viewer: a light-grid view exports a light grid, a dark-studio
+  view exports a dark floor. Nothing is hard-coded.
+- In SVG the layer arrives as ordinary vector elements — `<line>` rules (the
+  studio floor's with gradient strokes), `<circle>` dots and gradient fills —
+  so you can recolour, thin, or delete it in Illustrator or Inkscape. PNG
+  carries the identical geometry.
 - The checkbox is disabled when the viewer background (**White** or **Black**)
-  draws no grid.
+  draws no reference layer.
 
 ### 3D orientation + depth sort
 
@@ -354,6 +360,17 @@ This is useful when:
 5) Click **Confirm** to apply the crop (the preview will switch to a framed preview).
 6) Export.
 
+When the frame's aspect differs from the plot's, the frame is fitted inside the plot without distortion (empty bands on two sides), identically in PNG, every SVG mode, and the preview. Use **Lock aspect** or **Fit plot** to make the frame fill the plot exactly.
+
+A frame is drawn at the export's full resolution, not enlarged from the
+whole view: its points are rasterized at the pixels they land on, so a
+framed PNG (or the point layer of an SVG in Hybrid mode) is as sharp as an
+unframed one of the same size, while every point keeps the size it has
+relative to the frame. The one exception is a frame so small that
+the GPU's largest point sprite cannot reach the size a point must have
+there: the points are then rasterized at that largest zoom and the frame is
+scaled the rest of the way.
+
 Useful actions:
 - **Reset** resets the crop to the full frame.
 - **Fit plot** adjusts your plot height to match the current crop aspect.
@@ -431,7 +448,7 @@ Two things to plan for when you size a grid:
   own instead — never no legend at all.
 
 :::{tip}
-If you want all panels to be directly comparable, lock cameras across views (see {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`). Matching fields, filters, and hidden categories is also what buys you a single shared legend instead of one legend per panel.
+If you want all panels to be directly comparable, show the same embedding in them and keep **Link cameras** on, so they share one camera (see {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`). Matching fields, filters, and hidden categories is also what buys you a single shared legend instead of one legend per panel.
 :::
 
 ---

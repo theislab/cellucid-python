@@ -469,7 +469,10 @@ def test_docs_do_not_reintroduce_removed_or_invented_runtime_contracts() -> None
         )
     ]
     assert "vector_field_default" in vector_page
-    assert "rejects duplicate gene names" in vector_page
+    assert "rejects duplicate gene names" not in vector_page
+    assert "var_names_make_unique()" in vector_page
+    assert "embedding_keys" in vector_page
+    assert "knn_key" in vector_page
     cli_page = text_by_path[
         Path("docs/user_guide/python_package/d_viewing_apis/04_cli_cellucid_serve_quickstart.md")
     ]
@@ -522,18 +525,24 @@ def test_documented_vector_declarations_require_dimension_suffixes() -> None:
     for location, tree in _python_examples():
         for node in ast.walk(tree):
             dictionaries: list[ast.Dict] = []
-            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
-                if any(
-                    isinstance(target, ast.Name) and target.id == "vector_fields"
-                    for target in node.targets
-                ):
-                    dictionaries.append(node.value)
-            elif isinstance(node, ast.Call):
+            if isinstance(node, ast.Call):
                 for keyword in node.keywords:
-                    if keyword.arg in {"obsm", "vector_fields"} and isinstance(
-                        keyword.value, ast.Dict
-                    ):
+                    if keyword.arg == "obsm" and isinstance(keyword.value, ast.Dict):
                         dictionaries.append(keyword.value)
+                    # prepare() binds each vector field to exported embedding
+                    # ids, so every value of its vector_fields= mapping is
+                    # itself a mapping of embedding id to array.
+                    if (
+                        _call_name(node) == "prepare"
+                        and keyword.arg == "vector_fields"
+                        and isinstance(keyword.value, ast.Dict)
+                    ):
+                        for value in keyword.value.values:
+                            if not isinstance(value, ast.Dict):
+                                failures.append(
+                                    f"{location}:{value.lineno}: prepare vector field is not "
+                                    "bound to embedding ids"
+                                )
 
             for dictionary in dictionaries:
                 for key in dictionary.keys:
@@ -598,10 +607,10 @@ def test_documented_multi_field_vector_defaults_use_exact_runtime_field_ids() ->
 def test_documented_embedding_requirements_use_exact_current_keys() -> None:
     """Two paths read embeddings, and each page must state its own rule.
 
-    ``prepare()`` takes arrays through its ``X_umap_<n>d=`` arguments and reads no
-    ``obsm`` key at all, so a preparation page that shows ``obsm['X_umap']`` as a
-    supported input is describing a contract that does not exist. The readers --
-    the Python serve path and the browser's own file picker -- do read that key,
+    ``prepare()`` takes every embedding as an array in ``embeddings={...}`` and
+    reads no ``obsm`` key, so a preparation page must show that argument and no
+    ``X_umap_<n>d=`` argument. The readers -- the Python serve path and the
+    browser's own file picker -- do read ``obsm`` keys, and a plain ``X_umap``
     at the dimension its column count states, so their pages must say so.
     """
     reader_pages = [
@@ -624,42 +633,39 @@ def test_documented_embedding_requirements_use_exact_current_keys() -> None:
         / "02_input_requirements_global.md",
         DOCS_ROOT / "user_guide" / "python_package" / "c_data_preparation_api" / "index.md",
     ]
-    requirement_pages = [*reader_pages, *preparation_pages]
-    exact_keys = ("X_umap_1d", "X_umap_2d", "X_umap_3d")
 
     failures: list[str] = []
-    for path in requirement_pages:
-        text = path.read_text(encoding="utf-8")
-        relative = path.relative_to(REPOSITORY_ROOT)
-        for key in exact_keys:
-            if key not in text:
-                failures.append(f"{relative}: omits current embedding key {key!r}")
-
     for path in preparation_pages:
         text = path.read_text(encoding="utf-8")
         relative = path.relative_to(REPOSITORY_ROOT)
-        for unsupported_access in ("obsm['X_umap']", 'obsm["X_umap"]'):
-            if unsupported_access in text:
-                failures.append(
-                    f"{relative}: presents unsupported embedding access {unsupported_access!r}"
-                )
+        if "embeddings=" not in text and "embeddings={" not in text:
+            failures.append(f"{relative}: omits the embeddings= argument")
+        if "Embedding" not in text:
+            failures.append(f"{relative}: omits the Embedding type")
+        for removed in ("X_umap_1d=", "X_umap_2d=", "X_umap_3d="):
+            if removed in text:
+                failures.append(f"{relative}: documents removed argument {removed!r}")
 
     for path in reader_pages:
         text = path.read_text(encoding="utf-8")
         relative = path.relative_to(REPOSITORY_ROOT)
+        for key in ("X_umap_1d", "X_umap_2d", "X_umap_3d"):
+            if key not in text:
+                failures.append(f"{relative}: omits current embedding key {key!r}")
         if "X_umap" not in text or "column count" not in text:
             failures.append(
                 f"{relative}: must state that a plain X_umap is read at the "
                 "dimension its column count states"
             )
 
-    overview = requirement_pages[1].read_text(encoding="utf-8")
+    overview = preparation_pages[0].read_text(encoding="utf-8")
     for required_minimum_artifact in (
-        "points_1d.bin(.gz)",
+        "embeddings/",
         "obs_manifest.json",
         "dataset_identity.json",
     ):
         assert required_minimum_artifact in overview
+    assert "points_1d.bin(.gz)" not in overview
 
     assert not failures, "\n".join(failures)
 
@@ -817,11 +823,12 @@ def test_docs_preserve_closed_jupyter_session_and_zarr_contracts() -> None:
         "debug_snapshot",
         "session_bundle",
         "command_error",
+        "data_mapping",
     ):
         assert f"### `{event_type}`" in event_page
     assert "Unknown event types" in event_page
     assert "rejected before any hook runs" in event_page
-    assert "one of eight closed event records" in event_page
+    assert "one of nine closed event records" in event_page
     assert "@viewer.on_command_error" in event_page
     # A command that failed must not read as one that applied.
     assert "did not take effect in the viewer" in event_page
@@ -886,7 +893,7 @@ def test_current_startup_screenshots_and_documented_defaults_are_exact() -> None
     assert "Suo dataset remains the sample\ncatalog default" in quick_tour
     assert "1D or 2D starts in **Planar**" in quick_tour
     assert "3D starts in **Orbit**" in quick_tour
-    assert "default light grid" in quick_tour
+    assert "default light studio floor" in quick_tour
     # The sidebar footer's build identity bumps on every web release — seven
     # times in the five days after ``2026-07-27.1``. Pinning a literal here made
     # the assertion enforce staleness: it kept passing while both pages, and the
@@ -919,10 +926,15 @@ def test_standard_pancreas_sample_contract_is_documented_exactly() -> None:
         "`S_score`",
         "`G2M_score`",
         "33,476 exact weighted connectivity edges",
-        "`velocity_umap`",
+        "one vector field, `velocity`, bound to the three UMAP embeddings",
+        "| `X_umap_1d` | UMAP | 1D | derived | yes |",
+        "| `X_pca` | PCA | 2D | source, first two components | no |",
+        "| `X_umap` | UMAP | 2D | source | yes |",
+        "| `X_umap_3d` | UMAP | 3D | derived | yes |",
+        "selector reports `velocity`",
         "f6cad69fd509be44c8453205309f4c3c3c37ba34",
         "27,998 ordered genes",
-        "SHA-256 generation digest covering all 3,774 exported files",
+        "SHA-256 generation digest covering all 3,775 exported files",
         "recorded in `sources/pancreas.json` rather than repeated here",
         "GSE132188",
         "10.1242/dev.173849",
@@ -930,6 +942,9 @@ def test_standard_pancreas_sample_contract_is_documented_exactly() -> None:
         assert exact_value in normalized
 
     assert "Suo remains the catalog default" in page
+    # The Pancreas vector field is `velocity`; `velocity_umap` is only the
+    # AnnData-mode field id.
+    assert "velocity_umap" not in page
     assert "compact Session statistics round both counts to **4K**" in normalized
     assert "**Showing all 3,696 points**" in normalized
     assert "default 3D embedding with **Orbit**" in normalized
@@ -1083,13 +1098,13 @@ def test_every_documented_screenshot_uses_its_intrinsic_responsive_width() -> No
 #
 # **This number may only go down.** It is a ratchet: it stops the backlog growing
 # while it is worked off, and reaching 0 is what closes the gap.
-UNPROVENANCED_SCREENSHOT_BUDGET = 86
+UNPROVENANCED_SCREENSHOT_BUDGET = 62
 
 # Records whose ``sha256`` does not describe the file they name, so the published
 # bytes have no provenance even though a record exists. Recapturing the scenario
 # is the fix; correcting the digest in place would be inventing provenance for an
 # image nobody can show came from that run.
-DIVERGENT_SCREENSHOT_RECORDS = frozenset({"annotation-lifecycle-03-install-app"})
+DIVERGENT_SCREENSHOT_RECORDS: frozenset[str] = frozenset()
 
 
 def test_screenshot_provenance_records_describe_the_published_images() -> None:
@@ -1171,6 +1186,7 @@ def test_every_documented_hook_list_matches_the_viewer_decorator_surface() -> No
         "on_click",
         "on_ready",
         "on_command_error",
+        "on_data_mapping",
         "on_message",
     }, hooks
 

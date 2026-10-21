@@ -76,7 +76,7 @@ Use the symptom list to choose your debugging path:
 | Field selector empty / wrong colors | Fields + legends | “Fields/legend issues” |
 | Filters don’t behave / count wrong | Filters + visibility | “Filtering issues” |
 | Selection/highlights wrong | Highlights + tools | “Highlight issues” |
-| Dimension switch breaks | Dimension manager + viewer positions | “Dimension issues” |
+| Switching a view's embedding breaks | Dimension manager + viewer positions | “Embedding switching issues” |
 | WebGL context lost / slow | Rendering/GPU | “Rendering issues” |
 | Session save/load wrong | Session serializer | “Session issues” |
 | Analysis panel broken | Analysis module | “Analysis issues” |
@@ -123,6 +123,18 @@ Likely causes (ordered):
 3) Very large file in browser file picker mode (no lazy loading).
 
 How to confirm:
+- Read `document.documentElement.dataset.startupPhase`. Startup publishes the
+  step it is in — `sign-in`, `health`, `catalog`, `ui`, `identity`,
+  `positions`, `session`, then `ready` — so a page that never finishes says
+  where it stopped. The interface (`ui`) is built before the startup dataset
+  loads; a dataset chosen in the data controls while it loads replaces it, and
+  startup then publishes `ready` without it.
+- The request/response steps (`sign-in`, `health`, `catalog`, `identity`, and
+  `session`, which reads a sample's published default session) each have a
+  60-second deadline. A server that never answers ends startup on the
+  startup-failure page, naming the step and the URL it was waiting on.
+  `positions` and `ui` have no deadline, because their time grows with the
+  dataset; a slow but progressing load is not a stall.
 - Network tab: which request is pending/blocked?
 - Console: enable `CELLUCID_DEBUG` and look for the last “loading…” log.
 
@@ -147,7 +159,7 @@ longer do, and the wording identifies the cause:
 | Message contains | Cause | Error code |
 |---|---|---|
 | “was cancelled” | An abort — re-thrown untouched, never relabelled | (the original `AbortError`) |
-| “is larger than the metadata size ceiling” | A bounded reader refused the payload | `VALIDATION_ERROR` |
+| “is longer than the longest text this browser can hold” | A metadata document exceeds the engine's longest string | `VALIDATION_ERROR` |
 | “response body transfer failed” | The connection dropped mid-body | `NETWORK_ERROR` |
 | “must contain valid JSON” | Genuinely malformed content | `INVALID_FORMAT` |
 
@@ -233,18 +245,19 @@ How to confirm:
 
 ---
 
-## Dimension issues
+## Embedding switching issues
 
-### Symptom: “Dimension switch changes UI but not the embedding”
+### Symptom: “The picker or key 1/2/3 changes, but not the embedding”
 
 Likely causes (ordered):
-1) Embedding missing for that dimension.
-2) Fetch failed (network/CORS).
+1) The embedding is not turned on (Session › Data mapping), or the dimension has none.
+2) Fetch failed (network/CORS), or its values were refused (NaN, Infinity, no variation).
 3) Positions buffer length mismatch caused viewer to reject it.
+4) Another view was selected: the picker and keys edit the selected view.
 
 How to confirm:
 - Network tab: embedding fetches.
-- Console: look for `[Viewer] updatePositions: position count mismatch`.
+- Console: look for `HighPerfRenderer updatePositions expected … floats, received …`.
 
 Fix:
 - Verify dataset identity + embeddings metadata.
@@ -287,7 +300,10 @@ How to confirm:
    texture uploads and bytes, draw calls, sync stalls, and `getError` /
    `finish` / `flush` / `readPixels` calls.
 3) Hold the camera still. Every upload counter should be **zero**. A non-zero
-   count while idle is the bug.
+   count while idle is the bug. Two frames after
+   the last change a static scene stops drawing entirely, so draw calls fall to zero as well; if they do
+   not, something keeps invalidating the frame or reports an animation (see the
+   frame gate in {doc}`07_rendering_pipeline_webgl_and_performance_notes`).
 4) Then move the camera. Element-buffer uploads should appear only when the
    admitted node set changes, not on every frame.
 

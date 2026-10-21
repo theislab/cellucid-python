@@ -4,7 +4,7 @@ Thanks for using Cellucid.
 
 ## Getting help
 
-- Documentation: https://cellucid.readthedocs.io
+- Documentation: https://docs.cellucid.com
 - For bugs and feature requests, open an issue in the most relevant repo (see
   `CONTRIBUTING.md` for routing):
   - Python/CLI/docs: https://github.com/theislab/cellucid-python/issues

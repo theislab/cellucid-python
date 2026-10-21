@@ -127,7 +127,7 @@ cellucid_prepare(
   var = var,
   gene_expression = expr_cxg,
   gene_identifiers = gene_panel,
-  X_umap_2d = umap2,
+  embeddings = list(X_umap = umap2),
   obs_categorical_dtype = "uint16",
   dataset_name = "Cellucid from Seurat",
   dataset_id = "cellucid_from_seurat",
@@ -150,7 +150,7 @@ list.files(out_dir, recursive = TRUE)
 
 You should see files like:
 - `dataset_identity.json`
-- `points_2d.bin.gz` (or `.bin` if you disabled compression)
+- `embeddings/0_2d.bin.gz` (or `.bin` if you disabled compression)
 - `obs_manifest.json`
 - `obs/`
 - `var_manifest.json`
@@ -212,7 +212,7 @@ cellucid_prepare(
   var = var,
   gene_expression = expr_cxg,
   gene_identifiers = gene_panel,
-  X_umap_2d = umap2,
+  embeddings = list(X_umap = umap2),
   obs_categorical_dtype = "uint16",
   dataset_name = "Cellucid from SCE",
   dataset_id = "cellucid_from_sce",

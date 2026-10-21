@@ -167,34 +167,55 @@ These are forwarded to the `AnnDataAdapter` and affect how your AnnData is inter
   as a `datetime64` collection date
 - `vector_field_default`: exact default field ID; required when direct AnnData
   declares more than one vector field
-- `serve_connectivity`: read, validate, and serve
-  `adata.obsp['connectivities']` (default `False`); see below
+- `embedding_keys`: the `obsm` array of a dimension slot, such as
+  `{"2d": "X_tsne"}` or `{"2d": ("X_pca", [0, 1])}` with 0-based columns
+  (default `None`: the default rule, then a best guess); see below
+- `knn_key`: the `obsp` matrix to read, validate, and serve as the neighbor
+  graph, such as `"connectivities"` (default `None`: no graph); see below
+- `gene_id_column`: the column of the gene axis that names genes (default
+  `None`: its index); empty values take the index name and repeated names are
+  made unique (`MATR3`, `MATR3-1`)
+- `expression_source`: `"X"`, `"raw"`, or `"layer:<name>"` (default `None`:
+  `X`, or without `X` the guess described in
+  {doc}`08_anndata_mode_show_anndata_and_serve_anndata`)
 
 All omitted optional values retain the signature defaults; identity is never
 derived, and a multi-field vector declaration has no implicit default.
 
 ### Which `obsm` key becomes the embedding
 
-`X_umap_1d` / `X_umap_2d` / `X_umap_3d` each decide their own dimension. With
-none of them present, a plain `X_umap` of 1, 2, or 3 columns is read at the
-dimension its column count states, so a Scanpy object serves as written.
-
-### Two capabilities are opt-in: `serve_connectivity=` and `serve_vector_fields=`
+A slot named in `embedding_keys` shows that array. Every other slot follows the
+default rule: `X_umap_1d` / `X_umap_2d` / `X_umap_3d` each fill their own
+dimension, and with none of them present, a plain `X_umap` of 1, 2, or 3 columns
+fills the slot of its own column count, so a Scanpy object serves as written.
+Only when neither fills any slot does Cellucid make a deterministic best guess
+from the other `obsm` arrays, reported as `(guessed)` during startup.
 
 ```python
 server = cellucid.serve_anndata(
     "data.h5ad",
     dataset_name="My study",
     dataset_id="my-study-v1",
-    serve_connectivity=True,
+    embedding_keys={"2d": ("X_pca", [0, 1])},
+)
+```
+
+### Two capabilities are opt-in: `knn_key=` and `serve_vector_fields=`
+
+```python
+server = cellucid.serve_anndata(
+    "data.h5ad",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    knn_key="connectivities",
 )
 ```
 
 `serve_vector_fields=True` does the same for the `<field>_umap_<n>d` overlay
 arrays. Both are off by default: each is read and validated in full before the
-server binds, and most sessions turn neither overlay on. Asking for a graph the
-object does not carry is an error; asking for vector fields it declares none of
-simply serves none.
+server binds, and most sessions turn neither overlay on. Naming a graph the
+object does not carry, or one that is not symmetric (such as `distances`), is an
+error; asking for vector fields it declares none of simply serves none.
 
 Both rules in full:
 {doc}`08_anndata_mode_show_anndata_and_serve_anndata`.

@@ -28,7 +28,7 @@ from html.parser import HTMLParser
 from http import HTTPStatus
 from http.server import HTTPServer as _StandardHTTPServer
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO, NoReturn, cast
+from typing import TYPE_CHECKING, Any, BinaryIO, NoReturn, TypeGuard, cast
 
 from ._console import console_print
 
@@ -87,7 +87,34 @@ class CellucidHTTPServer(_StandardHTTPServer):
 
 # Session bundle upload protocol (used for Jupyter "no download" capture).
 SESSION_BUNDLE_MAGIC = b"CELLUCID_SESSION\n"
-MAX_SESSION_BUNDLE_BYTES = 512 * 1024 * 1024  # 512MB hard cap (zip-bomb + memory guard)
+
+
+def _session_bundle_capacity() -> int:
+    """The largest session upload this machine can hold: the free space of the
+    temporary directory the upload streams into. The body is never held in
+    memory, and every chunk inside it is bounded by its declared size when it
+    is read, so free disk is the only limit on the bundle as a whole."""
+    return shutil.disk_usage(tempfile.gettempdir()).free
+
+# Selection delivery (``POST /_cellucid/selection``): the body is the selected
+# cell indices as little-endian uint32, strictly ascending, so no body can hold
+# more than every uint32 index once. That is the wire format's own bound, not a
+# size policy: any selection the viewer can make fits, and the server's memory
+# is the only other limit (a body it cannot hold is refused with 413).
+MAX_SELECTION_BODY_BYTES = 4 * 2**32
+#: Longest JSON event record the viewer posts to ``/_cellucid/events``. Every
+#: event there is a small record (hover, click, mapping change); selections and
+#: session bundles, the only large payloads, have their own routes.
+MAX_EVENT_BODY_BYTES = 1024 * 1024
+# Event types that only the server may build from a dedicated binary route.
+# ``POST /_cellucid/events`` refuses them, so the JSON endpoint can neither
+# forge one nor carry a selection past its 1 MiB body limit.
+_BINARY_ROUTED_EVENT_PATHS = {
+    "selection": "/_cellucid/selection",
+    "session_bundle": "/_cellucid/session_bundle",
+}
+# Longest a refused request's unread body is drained before the socket closes.
+_UNREAD_BODY_DISCARD_SECONDS = 5.0
 
 _WEB_BUILD_META_NAME = "cellucid-web-build-id"
 _WEB_BUILD_ID_MAX_LEN = 200
@@ -537,8 +564,56 @@ def _require_content_length(
     return value
 
 
-def _read_exact_request_body(reader: BinaryIO, content_length: int) -> bytes:
-    body = reader.read(content_length)
+def _require_viewer_credentials(viewer_id: str, viewer_token: str) -> None:
+    """Authenticate one viewer without delivering anything to it.
+
+    A route that accepts a large body checks the credentials first, so an
+    unauthenticated caller is refused before the server reads that body.
+    :func:`route_event` authenticates again when it delivers.
+    """
+    with _event_callbacks_lock:
+        _require_event_registration_locked(viewer_id, viewer_token)
+
+
+def _parse_exact_query(query: str, fields: frozenset[str], *, label: str) -> dict[str, str]:
+    """Parse one request query that may name only ``fields``, each at most once."""
+    from urllib.parse import parse_qsl
+
+    try:
+        pairs = parse_qsl(query, keep_blank_values=True, strict_parsing=True)
+    except ValueError as error:
+        raise _RequestContractError(
+            HTTPStatus.BAD_REQUEST,
+            f"{label} query is malformed",
+        ) from error
+    values: dict[str, str] = {}
+    for key, value in pairs:
+        if key not in fields or key in values:
+            raise _RequestContractError(
+                HTTPStatus.BAD_REQUEST,
+                f"{label} query must contain each declared field exactly once",
+            )
+        values[key] = value
+    return values
+
+
+def _is_exact_route_text(value: object) -> TypeGuard[str]:
+    return (
+        isinstance(value, str)
+        and bool(value)
+        and value == value.strip()
+        and not any(character.isspace() for character in value)
+    )
+
+
+def _read_exact_request_body(read: Callable[[int], bytes], content_length: int) -> bytes:
+    try:
+        body = read(content_length)
+    except MemoryError:
+        raise _RequestContractError(
+            HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
+            f"The server could not allocate {content_length} bytes for the request body",
+        ) from None
     if len(body) != content_length:
         raise _RequestContractError(
             HTTPStatus.BAD_REQUEST,
@@ -841,6 +916,9 @@ class CORSMixin:
     # Override in subclass: whether to allow caching
     allow_caching: bool = True
 
+    # Body bytes the current request's handler has consumed.
+    _request_body_bytes_read: int = 0
+
     if TYPE_CHECKING:
         allowed_hosts: frozenset[str]
         close_connection: bool
@@ -874,6 +952,7 @@ class CORSMixin:
         base = cast("BaseHTTPRequestHandler", super())
         if not base.parse_request():
             return False
+        self._request_body_bytes_read = 0
         if self._host_header_is_authorized():
             return True
         # Requests are otherwise logged at DEBUG, so a refusal would be silent.
@@ -883,12 +962,11 @@ class CORSMixin:
             "Refused a request whose Host header does not name this server: %r",
             self._request_headers().get_all("Host", []),
         )
-        # The body was never read, so this connection can no longer be framed.
-        self.close_connection = True
         self.send_error_response(
             HTTPStatus.MISDIRECTED_REQUEST,
             "Host header does not name this server",
         )
+        self._discard_unread_request_body()
         return False
 
     def _host_header_is_authorized(self) -> bool:
@@ -956,6 +1034,51 @@ class CORSMixin:
             BinaryIO,
             object.__getattribute__(self, "wfile"),
         )
+
+    def _read_request_body(self, size: int) -> bytes:
+        """Read up to ``size`` request-body bytes, counting what is consumed."""
+        chunk = self._request_reader().read(size)
+        self._request_body_bytes_read += len(chunk)
+        return chunk
+
+    def _discard_unread_request_body(self) -> None:
+        """Drain the body a refused request declared, so its socket closes cleanly.
+
+        A socket closed with received bytes still unread is reset rather than
+        shut down, and a client that has not yet read the response loses it:
+        Windows reports WinError 10053, POSIX a reset or a broken pipe while the
+        client is still sending. Every early POST refusal -- an expired session
+        request, bad credentials, a wrong Content-Type, an oversized body, an
+        unknown path, a foreign ``Host`` -- answers before reading the body, so
+        without this the client saw a dropped connection instead of the status
+        it was sent. Only a body framed by one valid ``Content-Length`` within
+        the largest accepted upload is drained, and for a bounded time.
+        """
+        self.close_connection = True
+        try:
+            declared = _require_content_length(
+                self._request_headers(),
+                maximum=_session_bundle_capacity(),
+            )
+        except _RequestContractError:
+            return
+        remaining = declared - self._request_body_bytes_read
+        deadline = time.monotonic() + _UNREAD_BODY_DISCARD_SECONDS
+        connection = cast(socket.socket, object.__getattribute__(self, "connection"))
+        try:
+            while remaining > 0:
+                time_left = deadline - time.monotonic()
+                if time_left <= 0:
+                    return
+                connection.settimeout(time_left)
+                chunk = self._read_request_body(min(64 * 1024, remaining))
+                if not chunk:
+                    return
+                remaining -= len(chunk)
+        except OSError:
+            # The client went away or stalled; the close that follows is all
+            # that is left to do.
+            return
 
     def _get_allowed_origin(self) -> str | None:
         # `BaseHTTPRequestHandler` only populates `.headers` after successfully
@@ -1103,6 +1226,21 @@ class CORSMixin:
             return False
         return True
 
+    def do_POST(self) -> None:
+        """Route a POST to its endpoint, then drain whatever body it left unread."""
+        try:
+            if not (
+                self.handle_event_post()
+                or self.handle_selection_post()
+                or self.handle_session_bundle_post()
+            ):
+                self.send_error_response(
+                    HTTPStatus.NOT_FOUND,
+                    f"POST not supported for path: {self.path}",
+                )
+        finally:
+            self._discard_unread_request_body()
+
     def handle_event_post(self) -> bool:
         """
         Handle POST request to /_cellucid/events endpoint.
@@ -1120,10 +1258,10 @@ class CORSMixin:
             _require_exact_content_type(headers, "application/json")
             content_length = _require_content_length(
                 headers,
-                maximum=1024 * 1024,
+                maximum=MAX_EVENT_BODY_BYTES,
             )
             body = _read_exact_request_body(
-                self._request_reader(),
+                self._read_request_body,
                 content_length,
             )
             try:
@@ -1160,6 +1298,13 @@ class CORSMixin:
                     HTTPStatus.BAD_REQUEST,
                     "type must be a non-empty string without whitespace",
                 )
+            binary_route = _BINARY_ROUTED_EVENT_PATHS.get(event_type)
+            if binary_route is not None:
+                raise _RequestContractError(
+                    HTTPStatus.BAD_REQUEST,
+                    f"{event_type} events are not accepted here; the viewer posts "
+                    f"them to {binary_route}",
+                )
             supplied_token = event.get("viewerToken")
             viewer_token = supplied_token if isinstance(supplied_token, str) else ""
             routed_event = {key: value for key, value in event.items() if key != "viewerToken"}
@@ -1181,6 +1326,120 @@ class CORSMixin:
             )
         except Exception:
             logger.exception("Viewer event callback failed")
+            self.send_error_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                "Viewer callback failed",
+            )
+        else:
+            self.send_json({"status": "ok", "delivered": True})
+
+        return True
+
+    def handle_selection_post(self) -> bool:
+        """
+        Handle POST request to /_cellucid/selection endpoint.
+
+        The viewer delivers a selection here rather than as a JSON event, so a
+        selection of any size the viewer can make is delivered (the body format
+        itself bounds it at every ``uint32`` index once,
+        :data:`MAX_SELECTION_BODY_BYTES`), not the event endpoint's 1 MiB:
+
+        - the query names ``viewerId``, ``viewerToken`` and ``source``, each once;
+        - the credentials are checked before the body is read;
+        - the body (``application/octet-stream``) is the selected cell indices as
+          little-endian ``uint32``, strictly ascending, one or more;
+        - the server routes one ``selection`` event whose ``cells`` field is
+          those bytes, and the viewer's validator decodes them into the
+          ``list[int]`` its hooks receive.
+
+        Returns True if the request was handled, False if path doesn't match.
+        """
+        from urllib.parse import urlsplit
+
+        parsed = urlsplit(self.path)
+        if parsed.path != "/_cellucid/selection":
+            return False
+
+        try:
+            values = _parse_exact_query(
+                parsed.query,
+                frozenset({"viewerId", "viewerToken", "source"}),
+                label="Selection delivery",
+            )
+            viewer_id = values.get("viewerId")
+            source = values.get("source")
+            if not _is_exact_route_text(viewer_id) or not _is_exact_route_text(source):
+                raise _RequestContractError(
+                    HTTPStatus.BAD_REQUEST,
+                    "viewerId and source must be non-empty strings without whitespace",
+                )
+            viewer_token = values.get("viewerToken", "")
+        except _RequestContractError as error:
+            self.send_error_response(error.status, str(error))
+            return True
+
+        try:
+            _require_viewer_credentials(viewer_id, viewer_token)
+        except _ViewerNotRegisteredError:
+            self.send_error_response(
+                HTTPStatus.NOT_FOUND,
+                "Viewer is not registered",
+            )
+            return True
+        except _ViewerAuthenticationError:
+            self.send_error_response(
+                HTTPStatus.FORBIDDEN,
+                "Invalid viewer credentials",
+            )
+            return True
+
+        # Deferred like every `_wire` import in the servers: reaching it
+        # initializes the `cellucid.jupyter` package. A registered viewer means
+        # that package is already loaded.
+        from .jupyter._wire import _require_selection_cell_array
+
+        try:
+            headers = self._request_headers()
+            _require_exact_content_type(headers, "application/octet-stream")
+            content_length = _require_content_length(
+                headers,
+                maximum=MAX_SELECTION_BODY_BYTES,
+            )
+            body = _read_exact_request_body(
+                self._read_request_body,
+                content_length,
+            )
+            try:
+                _require_selection_cell_array(body)
+            except ValueError as error:
+                raise _RequestContractError(HTTPStatus.BAD_REQUEST, str(error)) from error
+        except _RequestContractError as error:
+            self.send_error_response(error.status, str(error))
+            return True
+
+        try:
+            route_event(
+                viewer_id,
+                viewer_token,
+                {
+                    "type": "selection",
+                    "viewerId": viewer_id,
+                    "cells": body,
+                    "source": source,
+                },
+            )
+        except _ViewerNotRegisteredError:
+            self.send_error_response(
+                HTTPStatus.NOT_FOUND,
+                "Viewer is not registered",
+            )
+        except _ViewerAuthenticationError:
+            self.send_error_response(
+                HTTPStatus.FORBIDDEN,
+                "Invalid viewer credentials",
+            )
+        except Exception:
+            logger.exception("Viewer selection callback failed")
             self.send_error_response(
                 HTTPStatus.INTERNAL_SERVER_ERROR,
                 "Viewer callback failed",
@@ -1239,45 +1498,24 @@ class CORSMixin:
 
         Returns True if the request was handled, False if path doesn't match.
         """
-        from urllib.parse import parse_qsl, urlsplit
+        from urllib.parse import urlsplit
 
         parsed = urlsplit(self.path)
         if parsed.path != "/_cellucid/session_bundle":
             return False
 
         try:
-            pairs = parse_qsl(
+            values = _parse_exact_query(
                 parsed.query,
-                keep_blank_values=True,
-                strict_parsing=True,
+                frozenset({"viewerId", "viewerToken", "requestId"}),
+                label="Session upload",
             )
-        except ValueError:
-            self.send_error_response(
-                HTTPStatus.BAD_REQUEST,
-                "Session upload query is malformed",
-            )
+        except _RequestContractError as error:
+            self.send_error_response(error.status, str(error))
             return True
-        values: dict[str, str] = {}
-        for key, value in pairs:
-            if key not in {"viewerId", "viewerToken", "requestId"} or key in values:
-                self.send_error_response(
-                    HTTPStatus.BAD_REQUEST,
-                    "Session upload query must contain each declared field exactly once",
-                )
-                return True
-            values[key] = value
         viewer_id = values.get("viewerId")
         request_id = values.get("requestId")
-        if (
-            not isinstance(viewer_id, str)
-            or not viewer_id
-            or viewer_id != viewer_id.strip()
-            or any(character.isspace() for character in viewer_id)
-            or not isinstance(request_id, str)
-            or not request_id
-            or request_id != request_id.strip()
-            or any(character.isspace() for character in request_id)
-        ):
+        if not _is_exact_route_text(viewer_id) or not _is_exact_route_text(request_id):
             self.send_error_response(
                 HTTPStatus.BAD_REQUEST,
                 "viewerId and requestId must be non-empty strings without whitespace",
@@ -1312,7 +1550,7 @@ class CORSMixin:
             )
             content_length = _require_content_length(
                 headers,
-                maximum=MAX_SESSION_BUNDLE_BYTES,
+                maximum=_session_bundle_capacity(),
             )
         except _RequestContractError as error:
             self.send_error_response(error.status, str(error))
@@ -1329,7 +1567,7 @@ class CORSMixin:
                     "Session bundle is truncated before its MAGIC header",
                 )
             magic = _read_exact_request_body(
-                self._request_reader(),
+                self._read_request_body,
                 magic_length,
             )
             if magic != SESSION_BUNDLE_MAGIC:
@@ -1349,7 +1587,7 @@ class CORSMixin:
 
                 remaining = content_length - magic_length
                 while remaining > 0:
-                    chunk = self._request_reader().read(min(64 * 1024, remaining))
+                    chunk = self._read_request_body(min(64 * 1024, remaining))
                     if not chunk:
                         raise _RequestContractError(
                             HTTPStatus.BAD_REQUEST,

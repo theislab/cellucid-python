@@ -21,7 +21,7 @@ The function returns `NULL` (invisibly). It is called for side effects (writing 
 cellucid::cellucid_prepare(
   latent_space = latent,  # (n_cells, n_latent_dims)
   obs = obs,              # data.frame with n_cells rows
-  X_umap_2d = umap2,      # (n_cells, 2)
+  embeddings = list(X_umap = umap2),      # (n_cells, 2)
   obs_categorical_dtype = "uint16",
   dataset_name = "My dataset",
   dataset_id = "my_dataset",
@@ -36,8 +36,11 @@ cellucid::cellucid_prepare(
 
 - `latent_space` (matrix-like, `(n_cells, n_dims)`)
 - `obs` (data.frame with `n_cells` rows)
-- at least one embedding (`X_umap_1d` or `X_umap_2d` or `X_umap_3d`)
-- `obs_categorical_dtype` (`"uint8"` or `"uint16"`)
+- `embeddings`: a named list with at least one embedding — a coordinate matrix,
+  or `cellucid_embedding(values, columns = ...)` for chosen 1-based columns of a
+  wider one. Any number may share a dimension; `embedding_defaults` then names
+  the one shown first, as in `c("2d" = "X_umap")`
+- `obs_categorical_dtype` (`"uint8"`, `"uint16"` or `"uint32"`)
 - `dataset_name` and `dataset_id`
 
 `obs_categorical_dtype`, `dataset_name`, and `dataset_id` carry no default at
@@ -108,7 +111,7 @@ Details and mitigation strategies: {doc}`06_gene_expression_matrix` and {doc}`10
 ## What files are written?
 
 At minimum (obs + embeddings):
-- `points_*d.bin[.gz]`
+- `embeddings/<index>_<dim>d.bin[.gz]`, one per embedding
 - `obs_manifest.json`
 - `obs/*`
 - `dataset_identity.json`

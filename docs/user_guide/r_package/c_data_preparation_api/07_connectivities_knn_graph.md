@@ -31,6 +31,12 @@ In the Cellucid ecosystem, this is typically a KNN/SNN graph derived from:
 If you do not need connectivity features, skip this entirely. Exports load fine without it.
 ```
 
+An export carries one graph, chosen here. To compare several graphs, open an
+AnnData `.h5ad` that holds them, in the browser or served
+({doc}`../../web_app/b_data_loading/04_server_tutorial`): **Session › Data
+mapping › Neighbour graph** then switches between every `obsp` matrix, with
+the same checks ({doc}`../../web_app/b_data_loading/13_data_mapping`).
+
 ## Exact exported representation
 
 Cellucid validates the graph without changing it. It does not symmetrize,
@@ -79,8 +85,9 @@ Cell indices are stored using the smallest unsigned integer that fits:
 | larger | rejected; no current `uint64` graph format |
 
 R matrices have lower practical dimension and memory limits than the format's
-mathematical `uint32` ceiling. Prefer sparse matrices and use server-backed
-loading when a graph exceeds the browser working-set limit.
+mathematical `uint32` ceiling. Prefer sparse matrices. In the web app the
+browser's memory is the only limit on the graph (about 12 bytes an edge once
+loaded); a graph it cannot allocate leaves the dataset loaded without edges.
 
 ## Practical recipes (where to get a graph)
 

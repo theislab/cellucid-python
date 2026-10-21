@@ -254,7 +254,8 @@ whereas `0` is a real measurement and will be coloured as one.
 1) The gene is published under a different name than the one you typed.
 2) The gene is not in this export at all — preparation published only some of
    the source’s genes.
-3) The search is substring-based; a short query matches many genes and Enter picks the top one.
+3) The search is substring-based; a short query matches many genes, and Enter
+   picks the top match unless you first move the highlight with the arrow keys.
 4) The gene list is present but very large; your query is too broad.
 
 ### How to confirm
@@ -262,9 +263,8 @@ whereas `0` is a real measurement and will be coloured as one.
 - Try a longer, more specific substring. Matching ignores letter case, so
   `gata3` finds `GATA3`.
 - If results show `...and N more`, you’re matching too many.
-- Open the field selector and read a few gene names directly. Every gene has
-  exactly one name in an export, and search matches that one name — there is no
-  second identifier to search instead, and no alias mapping.
+- Open the field selector and read a few gene names directly. Search matches
+  the gene names the dataset lists, and there is no alias mapping.
 - Compare the count in the empty-state message (“This dataset publishes *N* gene
   names…”) against the gene count you expect from the source. A large gap means
   preparation published a subset.
@@ -280,7 +280,8 @@ counts, and what to do instead are in
 
 ### Fix
 
-1) Type a more specific query and click the correct gene explicitly (don’t rely on Enter).
+1) Type a more specific query, then click the correct gene, or move to it with
+   ArrowDown/ArrowUp and press Enter.
 2) If the name you expected is not there, it is either published under another
    name or not published at all:
    - check which `var` column the export named its genes from
@@ -555,7 +556,7 @@ section is about.
 
 ### How to confirm
 
-- Click a different panel; observe the view badges (active view indicator) and the legend updating.
+- Click a different panel; observe the selected row in **Compare views** and the legend updating.
 
 ### Fix
 
@@ -564,7 +565,7 @@ section is about.
 
 ### Prevention
 
-- Keep cameras locked until you’re comfortable; it reduces “which panel am I editing?” confusion.
+- Check the label of the embedding picker (`View 2 shows`): it names the view the sidebar is editing.
 
 ---
 

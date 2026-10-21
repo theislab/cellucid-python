@@ -119,7 +119,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
   `synthetic-trajectory-1d`), and `broken-exports/` (9 deliberately invalid
   exports: `corrupt-payload`, `mismatched-manifest`, `missing-payload`,
   `truncated-catalog`, `wrong-format-catalog`, and mixed variants).
-- Catalog sample ids confirmed in `cellucid-datasets/exports/datasets.json`:
+- Catalog sample ids confirmed in `cellucid-datasets/exports-v3/datasets.json`:
   `suo` (default), `garcia`, `he`, `kanemaru`, `pancreas`.
 
 ---
@@ -280,7 +280,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
      - Step 4 (line 105): after clicking `#split-keep-view-btn`, full window
        showing two panels and the new view badge, cursor on "Keep view".
        `_static/screenshots/web_app/tour-04-keep-view.png`. Note
-       `web_app/multiview-two-panels.png` already exists (1440x900) and is used
+       `web_app/multiview-two-panels.png` already exists (1440x1000) and is used
        in section C and N — check it before capturing a near-duplicate; if it
        shows the badge clearly, reuse it here and skip the capture.
      - Step 5 (line 113): `.highlight-mode-btn[data-mode="lasso"]` active, a
@@ -437,23 +437,17 @@ terminal and Jupyter captures:
      `pancreas` from the sample catalog, open DevTools Network, filter to the
      dataset origin, and search a gene in **Coloring & Filtering**; crop to the
      Network panel showing the single on-demand gene request arriving *after*
-     the initial load. Then the contrasting shot: select
-     `cellucid/tests/browser/fixtures/current-ui-smoke.h5ad` through
-     `#user-data-h5ad-btn` and capture the Network panel showing the whole file
-     fetched up front. Two images, side by side, make the "❌* Browser `.h5ad`
-     loading is **not truly lazy**" footnote at line 148 concrete. Cursor: no.
-     `_static/screenshots/data_loading/lazy-gene-request.png` and
-     `_static/screenshots/data_loading/h5ad-eager-whole-file.png`.
+     the initial load. A direct `.h5ad` is lazy too (read from disk in a worker,
+     so it shows no network request), so one image is enough. Cursor: no.
+     `_static/screenshots/data_loading/lazy-gene-request.png`.
   3. Keep the Session panel figure but move it **above** the matrix rather than
      leaving it at line 254 after the code blocks — options #1–#5 in the matrix
      are all clicks in that panel, and the reader meets the matrix 120 lines
      before they see what it refers to.
 - **notes** — The page title says "All 14 Options" and the matrix has exactly 14
-  rows — verified. The 512 MiB browser limit cited in the sibling page is real:
-  `cellucid/assets/js/data/h5ad.js:163` `MAX_H5AD_BROWSER_FILE_BYTES = 512 * 1024 * 1024`
-  and `data-source.js:237` `MAX_PREPARED_BROWSER_BYTES`. This page does not state
-  the limit anywhere in the matrix, though it is the deciding factor for rows
-  #4 and #5; consider adding it to the footnote at line 148.
+  rows — verified. A direct `.h5ad` has no size limit
+  (`cellucid/assets/js/data/h5ad-loader.js` reads it from disk on demand in a
+  worker), so rows #4 and #5 are not decided by file size.
 
 ## user_guide/web_app/b_data_loading/02_local_demo_tutorial.md
 
@@ -544,14 +538,10 @@ terminal and Jupyter captures:
      `#user-data-zarr-archive-btn` and
      `cellucid/tests/browser/fixtures/current-ui-smoke.zarr.zip`; the existing
      `data_loading/zarr-zip-loaded.png` should move here.
-  4. **The oversize-H5AD refusal.** The page states the 512 MiB ceiling at
-     line 41 of the sibling page and warns "large `.h5ad` files can freeze the
-     tab" (line 101). The app has an explicit refusal message —
-     `cellucid/assets/js/data/h5ad.js:192`: "H5AD direct browser files must have
-     a positive safe size no larger than 512 MiB; use the Cellucid server or
-     prepared format". Capture that error as rendered, cropped to the
-     notification. `_static/screenshots/data_loading/h5ad-too-large-refusal.png`.
-     This turns a scary-sounding warning into a recognisable, recoverable state.
+  4. **The CSR reorganisation progress notice.** A large cell-major `.h5ad`
+     shows a progress notice while its matrix is reorganised by gene after
+     opening. Capture it cropped to the notification.
+     `_static/screenshots/data_loading/h5ad-csr-index-progress.png`.
 - **notes** — The "Recommended alternative for larger `.h5ad`" block at line 104
   gives a terminal command and the resulting URL `http://127.0.0.1:8765/?anndata=true`.
   That URL is correct for direct AnnData and matches
@@ -733,8 +723,10 @@ terminal and Jupyter captures:
      `#github-repo-url` to a repo path with no catalog.
      `_static/screenshots/data_loading/error-datasets-json-not-found.png`.
      (Shared with ``02_local_demo_tutorial`` item 2d — capture once, use twice.)
-  2. "No embedding / no UMAP" (line 110) — reproduce with an H5AD lacking every
-     `X_umap_*d` key. `_static/screenshots/data_loading/error-no-embedding.png`.
+  2. "Cellucid found nothing to plot" — reproduce with an H5AD whose `obsm`
+     holds only a DataFrame and a sparse array (a file without a UMAP but with
+     any drawable array opens on a best guess instead).
+     `_static/screenshots/data_loading/error-nothing-to-plot.png`.
   3. "Dataset loads, but I see no points (blank canvas)" (line 131) — shared
      with ``a_orientation/02_system_requirements`` item 3.
   4. **The broken-export refusals.** `cellucid/tests/browser/fixtures/broken-exports/`
@@ -807,7 +799,7 @@ terminal and Jupyter captures:
 
 - **explains** — What the `pancreas` sample is (3,696 cells, 3,753 genes, the
   scVelo vignette dataset), how to load it from the sample picker, which
-  categorical/continuous fields, genes, edges, embeddings and the `velocity_umap`
+  categorical/continuous fields, genes, edges, embeddings and the `velocity`
   vector field it exposes, what is source-owned versus derived, and its pinned
   build contract.
 - **has** — line 47 `vector_field_velocity/pancreas-velocity-3d.png`
@@ -834,7 +826,7 @@ terminal and Jupyter captures:
   sample in Build 2026-07-27.1"; the app ships `2026-07-27.24`. Cross-cutting
   note 3. Every numeric claim I could check against
   `cellucid-datasets` holds: `pancreas` is present in
-  `cellucid-datasets/exports/datasets.json` with `suo` as `default`, matching
+  `cellucid-datasets/exports-v3/datasets.json` with `suo` as `default`, matching
   line 7 ("The catalog id is exactly `pancreas`; Suo remains the catalog
   default").
 
@@ -868,7 +860,7 @@ terminal and Jupyter captures:
   4. **One loaded synthetic dataset per geometry**, to substantiate line 54
      ("Planar in 1D and 2D, Orbit in 3D") — a claim about navigation defaults
      that the reader is asked to take on faith. `synthetic-development-3d` in
-     Orbit with its 3D `velocity_umap` overlay on is the most persuasive single
+     Orbit with its `velocity` overlay on is the most persuasive single
      frame. `_static/screenshots/data_loading/github-synthetic-development-3d.png`.
   5. **Terminal: the local catalog validation** from "2. Test the complete
      catalog through the local server" (line 226). Plain terminal running
@@ -888,17 +880,19 @@ terminal and Jupyter captures:
   `datasets.json` plus `synthetic-cell-types-2d/`, `synthetic-development-3d/`,
   and `synthetic-trajectory-1d/` — matching the table at line 48. The
   `synthetic-cell-types-2d` fixture has `connectivity/`, `obs/` (4 fields),
-  `var/` (8 genes), and `points_2d.bin.gz`, consistent with "72 cells, 8 genes,
-  four `obs` fields, a 2D embedding". Good — the fixtures make every capture in
+  `var/` (8 genes), and `embeddings/0_2d.bin.gz` and `embeddings/1_2d.bin.gz`,
+  consistent with "72 cells, 8 genes, four `obs` fields, two 2D embeddings". Good — the fixtures make every capture in
   this list scriptable offline, without depending on GitHub availability at
   capture time.
 
 ## user_guide/web_app/b_data_loading/12_sample_dataset_provenance.md
 
-- **explains** — Which of the five built-in samples can be rebuilt from a pinned
-  recipe (only `pancreas`) and which four are recorded artefacts; exactly what
-  the Pancreas build contract pins; and for the other four, what is recorded,
-  what is not established, and what is not recoverable.
+- **explains** — That all five built-in samples are rebuilt by pinned build
+  scripts (`build_pancreas.py` for `pancreas`, `build_atlas.py` for the four
+  human atlases) against `sources/<id>.json` and
+  `sources/build-environment.json`; exactly what those pins cover; and what they
+  do not claim, including that the four atlases' integration outputs are not
+  redistributed.
 - **has** — none.
 - **verdict** — ADD (minimal)
 - **needs**
@@ -907,15 +901,12 @@ terminal and Jupyter captures:
      Crop to `#dataset-select` expanded showing `suo`, `garcia`, `he`,
      `kanemaru`, `pancreas` with their cell counts. Cursor: no.
      `_static/screenshots/data_loading/sample-catalog-five-entries.png`.
-     Verified against `cellucid-datasets/exports/datasets.json`, which lists
+     Verified against `cellucid-datasets/exports-v3/datasets.json`, which lists
      exactly those five with `"default": "suo"`.
   2. Nothing else. The page's substance is a reproducibility argument about
      digests, environments, and what is *not* knowable; there is no screen that
      shows any of it, and inventing one would misrepresent the page.
-- **notes** — This is the most carefully-hedged page in my four sections and I
-  found no claim I could contradict. The "Not established" and "Not recoverable"
-  lists (lines 98–125) are the kind of writing the rest of the docs should
-  imitate. One small opportunity: line 34 says the four human samples "publish
+- **notes** — One small opportunity: line 34 says the four human samples "publish
   only the genes whose Ensembl accession resolved to a symbol, out of files that
   had already been reduced to 8,192 features upstream" and points at
   ``d_fields_coloring_legends/07_genes_in_the_built_in_samples``; a reader hunting
@@ -945,11 +936,11 @@ terminal and Jupyter captures:
      they survived the commit that deleted their contents and were never cleaned
      up locally.
   2. Optionally remove `cellucid/assets/js/app/ui/modules/cross-highlight/`
-     (contains only a zero-byte `.gitkeep`) and the orphan
-     `// Cross-highlighting` comment at
-     `cellucid/assets/js/app/analysis/ui/index.js:143`, which has no code under
-     it. Both are reservations for unbuilt work and are exactly the kind of
-     placeholder the repo's clean-break rule argues against keeping. This
+     (contains only a zero-byte `.gitkeep`). It is a reservation for unbuilt
+     work and exactly the kind of placeholder the repo's clean-break rule
+     argues against keeping. (The orphan `// Cross-highlighting` comment that
+     sat in the unused `analysis/ui/index.js` barrel went away with that
+     barrel.) This
      is a web-app change and is out of scope for a docs objective — flagging it,
      not proposing it here.
 - **notes** —
@@ -978,9 +969,6 @@ terminal and Jupyter captures:
   **The feature does not exist in the source.** Confirmed directly, not inferred:
   - `cellucid/assets/js/app/ui/modules/cross-highlight/` contains exactly one
     file, a **zero-byte `.gitkeep`**. `ls -la` output: `total 0`.
-  - `cellucid/assets/js/app/analysis/ui/index.js:143` is a bare
-    `// Cross-highlighting` comment with **no export or code beneath it** — the
-    next non-blank lines are the `DEFAULT EXPORT` banner comment.
   - Grep across `cellucid/assets/js` for `crossHighlight`, `cross_highlight`,
     `crossFilter`, `linkedSelection`, `propagateHighlight`, `sharedHighlight`
     returns **zero** hits. `syncHighlight` returns three hits, all
@@ -1025,7 +1013,7 @@ terminal and Jupyter captures:
   highlight groups, pages, and the "what you see is per view" rule.
   **That page is in section F, not mine** — but it is the page that would carry
   any screenshot a reader might come to `g_` looking for, and it is worth telling
-  whoever audits section F that `web_app/multiview-two-panels.png` (1440x900,
+  whoever audits section F that `web_app/multiview-two-panels.png` (1440x1000,
   already in the tree) and `highlighting_selection/highlighting-selected-page.png`
   already cover adjacent ground for it.
 

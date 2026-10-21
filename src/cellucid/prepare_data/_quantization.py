@@ -15,7 +15,7 @@ from ..continuous_payload_diagnosis import describe_non_finite
 _QUANTIZATION_ARITHMETIC_CHUNK_SIZE = 1_048_576
 
 def _is_constant_continuous_range(min_val: float, max_val: float) -> bool:
-    """Name compact_v1's constant-field case from one payload's bounds.
+    """Name compact_v2's constant-field case from one payload's bounds.
 
     A gene detected in no published cell, or an obs column a subset flattened,
     is ordinary scientific data, so the format encodes it rather than rejecting
@@ -127,13 +127,6 @@ def _quantize_nullable_outlier_quantiles(
             f"Outlier quantiles {field_name!r} must contain only finite values or NaN."
         )
 
-    missing_mask = np.isnan(values)
-    quantized_finite, min_val, max_val, scale = _quantize_continuous(
-        values[~missing_mask],
-        bits=bits,
-        field_name=field_name,
-    )
-
     if bits == 8:
         dtype: type[np.uint8] | type[np.uint16] = np.uint8
         missing_value = 255
@@ -141,6 +134,18 @@ def _quantize_nullable_outlier_quantiles(
         dtype = np.uint16
         missing_value = 65535
 
+    missing_mask = np.isnan(values)
     quantized = np.full(values.shape, missing_value, dtype=dtype)
+    if missing_mask.all():
+        # No category reached ``centroid_min_points``, so no cell has a
+        # quantile. Every code is the missing marker, and the bounds take the
+        # constant case (0, 0), which no code refers to: the payload decodes
+        # to all-missing, exactly as its float32 form does.
+        return quantized, 0.0, 0.0, 0.0
+    quantized_finite, min_val, max_val, scale = _quantize_continuous(
+        values[~missing_mask],
+        bits=bits,
+        field_name=field_name,
+    )
     quantized[~missing_mask] = quantized_finite
     return quantized, min_val, max_val, scale

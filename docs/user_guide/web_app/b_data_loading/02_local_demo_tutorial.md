@@ -60,8 +60,7 @@ exports/                     # "exports root" (this is what you point Cellucid a
 ├── datasets.json            # required
 ├── pbmc_demo/               # dataset folder (name can differ from dataset_id)
 │   ├── dataset_identity.json
-│   ├── points_2d.bin.gz
-│   ├── points_3d.bin.gz
+│   ├── embeddings/          # one coordinate file per embedding
 │   ├── obs_manifest.json
 │   ├── var_manifest.json
 │   ├── obs/
@@ -103,15 +102,18 @@ prepare(
     var=adata.var,
     gene_expression=adata.X,
     connectivities=adata.obsp["connectivities"],
-    X_umap_1d=adata.obsm["X_umap_1d"],
-    X_umap_2d=adata.obsm["X_umap_2d"],
-    X_umap_3d=adata.obsm["X_umap_3d"],
-    vector_fields={
-        "velocity_umap_1d": adata.obsm["velocity_umap_1d"],
-        "velocity_umap_2d": adata.obsm["velocity_umap_2d"],
-        "velocity_umap_3d": adata.obsm["velocity_umap_3d"],
+    embeddings={
+        "X_umap_1d": adata.obsm["X_umap_1d"],
+        "X_umap_2d": adata.obsm["X_umap_2d"],
+        "X_umap_3d": adata.obsm["X_umap_3d"],
     },
-    vector_field_default="velocity_umap",
+    vector_fields={
+        "velocity": {
+            "X_umap_1d": adata.obsm["velocity_umap_1d"],
+            "X_umap_2d": adata.obsm["velocity_umap_2d"],
+            "X_umap_3d": adata.obsm["velocity_umap_3d"],
+        },
+    },
     out_dir=export_dir,
     dataset_id="pbmc_demo",
     dataset_name="PBMC demo",
@@ -376,22 +378,26 @@ URL to test by hand.
 
 **Likely causes**
 1) You didn’t export any vector fields (common).
-2) Vector fields exist, but the naming convention is wrong (so they aren’t detected).
-3) You exported only 2D vectors but you are looking at a 3D embedding (or vice versa).
+2) The field is bound to other embeddings than the one the view shows (for
+   example only to the 2D UMAP while the view shows the 3D one).
+3) The `vectors/` files were not published with the rest of the export.
 
 **How to confirm**
-- Open `exports/<dataset>/dataset_identity.json` and check for a `vector_fields` block.
-- Confirm the repo contains a `vectors/` folder with files like:
+- Open `exports/<dataset>/dataset_identity.json` and check for a `vector_fields` block;
+  each field's `files` names the embedding ids it is bound to.
+- Confirm the repo contains a `vectors/` folder with exactly the files that block
+  lists, named by field and embedding position:
 
   ```text
-  vectors/<fieldId>_2d.bin.gz
-  vectors/<fieldId>_3d.bin.gz
+  vectors/0_1.bin.gz
+  vectors/0_2.bin.gz
   ```
 
 **Fix**
-- Re-export with `prepare(..., vector_fields={...})` using the `*_umap_2d` / `*_umap_3d` naming convention.
+- Re-export with `prepare(..., vector_fields={"velocity": {"X_umap": v2, "X_umap_3d": v3}})`,
+  binding the field to every embedding it should be drawn on.
 - Make sure you commit/publish the `vectors/` directory.
-- Switch the viewer to the dimension that actually has vectors.
+- Show an embedding the field is bound to; the overlay info line names them.
 
 For UI behavior and overlay-specific debugging, see:
 - {doc}`../i_vector_field_velocity/index`

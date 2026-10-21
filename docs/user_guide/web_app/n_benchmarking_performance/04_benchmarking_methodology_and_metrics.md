@@ -86,8 +86,9 @@ You typically care about:
 - or grows unbounded during normal use (suspicious).
 
 **GPU memory, roughly.** Before the renderer has published a measured figure,
-Cellucid's own reports estimate GPU memory at **28 bytes per point** — about
-27 MiB at one million points and 267 MiB at ten million. Read it as an order of
+Cellucid's own reports estimate GPU memory from what the points renderer stores
+per cell — 4 bytes per position axis, 4 of colour and 1 of alpha: **13 bytes per
+point in 2D and 17 in 3D**, about 12 and 16 MiB at one million points. Read it as an order of
 magnitude for whether a dataset will fit, not as a measurement: the report marks
 it `GPU Memory (estimate)` while it is one, and switches to `GPU Memory` once
 the renderer reports the real value. Highlights, snapshot views and overlays all
@@ -140,8 +141,9 @@ Before you measure:
 1) Close other heavy tabs/apps (especially video calls and other WebGL content).
 2) Keep the window size fixed for all runs (don’t benchmark full-screen once and small-window the next time).
 3) Keep the **layout** fixed, not just the view count. One view, a two-view row
-   and a 2×2 grid are three different workloads because point size follows pane
-   height; they are not points on one curve.
+   and a 2×2 grid are three different workloads: each view draws every point
+   again, and point size follows pane height, so they are not points on one
+   curve.
 4) Keep the filter state fixed. Hidden cells are rejected before rasterisation,
    so a run on a filtered view and a run on the full dataset measure different
    scenes.

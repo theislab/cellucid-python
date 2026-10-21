@@ -75,7 +75,8 @@ For each selected composition field:
 
 Interpretation notes:
 - The bar shows only the **top categories**; the long tail is not shown.
-- Missing values may appear as `(missing)` when present.
+- Cells with a missing category are left out: they are neither listed nor
+  counted in the denominator of the percentages.
 
 ### 2) Statistics (continuous obs)
 
@@ -90,12 +91,17 @@ These numbers are exact at any page size. Nothing here is sampled or estimated.
 **How the three numbers are computed, and one thing to watch.**
 
 Quick makes a single streaming pass over every cell in every selected page,
-accumulating the mean and the sum of squared deviations, then allocates a
-`Float32Array` holding *all* the finite values, sorts it, and reads the median
-out of the middle (averaging the two middle values for an even count). Cost is
-therefore O(n log n) in the number of selected cells, dominated by the sort — and
-the result is the exact median, not an approximation, no matter how large the
-selection is.
+accumulating the mean and the sum of squared deviations, then copies the finite
+values into a `Float32Array` and selects the middle of their ascending order
+(averaging the two middle values for an even count): values with at most
+4,096 distinct levels are counted per level, and larger samples of continuous
+values are selected by radix over the values' bits rather than sorted (below
+about 130,000 values the browser's own sort is quicker and is used). Cost is
+therefore linear in the number of selected cells — about 45 ms for a million
+continuous values, 0.3 s for ten million — and the result is the exact median a
+full sort gives, not an approximation, no matter how large the selection is.
+From half a million finite values the selection runs on an analysis worker, so
+the page stays responsive while it does.
 
 **Std is the population standard deviation** — it divides by *n*, not by *n − 1*.
 That matters if you are checking the number against pandas, whose

@@ -64,6 +64,15 @@ Most tools interpret modifiers like this:
 
 For the **annotation-based** tool on categorical fields, `Alt` behaves like **replace** (not intersect). Details below.
 
+On a touch screen, or anywhere without an `Alt` key, turn on **Select mode** in
+the Highlighting panel: a one-finger tap or drag then does what `Alt+click` or
+`Alt+drag` does in every tool below, and its **Intersect / Add / Subtract**
+buttons replace `Alt`, `Shift+Alt`, and `Ctrl/Cmd+Alt`. Two fingers still zoom
+and pan. The same switch and choice sit on the **selection bar** at the bottom
+of the plot, beside each tool's **Confirm**, **Undo** and **Cancel**, so on a
+phone a selection can be finished without reopening the menu. See
+{ref}`select-mode` and {ref}`selection-bar`.
+
 ### Rule 3: selections are multi-step (and undoable)
 Each gesture typically becomes a “step”.
 
@@ -71,6 +80,10 @@ Step controls (per tool) let you:
 - **Confirm**: commit the current candidate set into a new highlight group
 - **Undo / Redo**: roll back up to a few recent steps
 - **Cancel**: discard the current candidate set
+
+While a selection is in progress the **selection bar** on the plot shows its
+cell count with the same **Undo**, **Cancel** and **Confirm** (no Redo); they
+are the panel's buttons, pressed from the plot (see {ref}`selection-bar`).
 
 :::{note}
 Undo/redo history is intentionally short (to keep memory bounded). If you need a very long “edit history”, confirm intermediate groups and keep them (or save a session).
@@ -88,7 +101,8 @@ outside the view, so nothing was selected.”*
 ### Rule 5: a gesture the app cannot serve says so
 Every gesture the app consumes but cannot turn into a step writes one line under
 the **Highlight mode** buttons — a click that hit no cell, a cell with no value
-on the active field, a gesture that resolved to the selection you already had.
+on the field of the panel you pressed, a panel colored by no field, a gesture
+that resolved to the selection you already had.
 That line is the first thing to read when a tool “does nothing”; the full list
 is in {doc}`06_troubleshooting_highlighting`.
 
@@ -109,26 +123,38 @@ The candidate set can persist across tool switches, but per-tool undo/redo histo
 
 | Tool | Best for | Space | 2D vs 3D | Requires extra data | Common gotcha |
 |---|---|---|---|---|---|
-| **Annotation based** | “Select all cells like this one” (category) or “cells in this value range” (continuous) | Field space | Works in both; depends on active field | Active field must be categorical/continuous | Selects only *visible* cells in that category/range |
+| **Annotation based** | “Select all cells like this one” (category) or “cells in this value range” (continuous) | Field space | Works in both; reads the field of the view you click in | A categorical or continuous color-by field | Selects only *visible* cells in that category/range |
 | **Lasso** | Drawing around a region in the plot | Screen-space polygon (projection) | In 3D it selects by projection | None | In 3D it can include points “behind” your intended region |
 | **Proximity drag** | Selecting a local blob by distance | Embedding-space radius | In 2D it behaves like a disk; in 3D like a sphere | None | If you miss-click, center may be wrong (or nothing happens) |
-| **KNN drag** | Selecting along the neighbor graph (manifold-aware) | Graph distance (degree) | Independent of camera; still view-filtered | Connectivity/edges must be loaded | “Neighbor graph not available” until edges are loaded |
+| **KNN drag** | Selecting along the neighbor graph (manifold-aware) | Graph distance (degree) | Independent of camera; still view-filtered | Connectivity/edges must be loaded | A press before the graph has loaded only starts the load; with no graph at all, “No neighbor graph available for this dataset” |
 
 ---
 
 ## Tool 1 — Annotation-based selection (Alt+click / Alt+drag)
 
-This is the “select cells similar to this one” tool. It depends on the **active field**.
+This is the “select cells similar to this one” tool. It reads the field the
+view you click in is colored by.
 
 ### Where it gets its meaning
-The active field is whatever the UI is currently using for:
-- coloring / legends, and/or
-- field selection
+The field is the view's color-by field, the one its legend shows. In a grid of
+views it is the field of the panel you press, which need not be the focused
+view's: a selection gesture never moves view focus, so the gesture is read on
+the panel it lands in — its field and the cells it shows — while focus stays
+where it was. See [Multi-view behavior](#multi-view-behavior).
 
-If there is no active field, annotation-based selection has nothing to operate on.
+Whether a press can select at all is the pressed panel's question too: an
+`Alt+click` in a panel colored by a field works even while the focused view is
+colored by none, and a press in a panel colored by no field selects nothing and
+says so. The panel asks you to color by a field first only when no panel on
+screen has one.
+
+While `Alt` is held (or Select mode is on), the cursor shows what a press in the
+panel under it would do: a cell cursor over a categorical panel, a vertical
+resize cursor over a continuous one, and a not-allowed cursor over a panel with
+no field.
 
 ### Categorical field behavior (Alt = replace)
-If the active field is **categorical**:
+If that field is **categorical**:
 - `Alt+click` selects **all visible cells in the clicked cell’s category**.
 - `Shift+Alt+click` unions that category into the candidate set.
 - `Ctrl/Cmd+Alt+click` subtracts that category from the candidate set.
@@ -141,7 +167,7 @@ If you want to select *all* cells in a category (ignoring current filters), temp
 :::
 
 ### Continuous field behavior (Alt = intersect)
-If the active field is **continuous**:
+If that field is **continuous**:
 - `Alt+click` selects a small range around the clicked value (a “default window”).
 - `Alt+drag` (vertical drag) expands/contracts a range anchored at the clicked value.
 - `Shift+Alt` unions the range results into the candidate set.
@@ -150,7 +176,7 @@ If the active field is **continuous**:
 During `Alt+drag`, Cellucid shows a **range preview label** and preview-highlights what would be selected.
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/select-category-by-click.png
-:alt: Annotation based selection after Alt+click on a single cell: every visible cell of that cell_type category is drawn in the highlight colour across the embedding, and the panel reads "Step 1: 591 cells" with the help line "Alt to replace, Shift+Alt to add, Ctrl+Alt to subtract".
+:alt: Annotation based selection after Alt+click on one cell at the tip of the green Beta arm: all 591 Beta cells are drawn in the highlight colour, and the panel reads "Step 1: 591 cells" with the help line "Alt to replace, Shift+Alt to add, Ctrl+Alt to subtract" above the Confirm, undo, redo and Cancel controls.
 :width: 1440px
 
 One `Alt+click` on one cell, and every visible cell sharing its `cell_type`
@@ -167,12 +193,11 @@ it is still true, because nothing has been confirmed.
 ### Common pitfalls
 - “It selected fewer than expected”: filters are hiding some category members.
 - “It selected way too many”: your continuous range is too wide; reduce drag distance or intersect with a lasso.
-- “Nothing happens, and the panel says annotation selection needs an active
-  field”: no field is coloured at all — choose one under **Coloring &
-  Filtering**. That sentence replaces the `Alt+click` invitation exactly while
-  the precondition is missing, so the panel and the viewer never disagree about
-  whether a gesture can start. More symptoms:
-  {doc}`06_troubleshooting_highlighting`.
+- “Nothing happens, and the panel says *Color by a field first*”: no panel on
+  screen is colored by a field — choose one under **Coloring & Filtering**.
+  That sentence replaces the `Alt+click` invitation exactly while no press
+  could select anything, so the panel and the viewer never disagree. More
+  symptoms: {doc}`06_troubleshooting_highlighting`.
 
 ---
 
@@ -186,7 +211,7 @@ Lasso selects based on a polygon you draw on screen. In 3D, this is a **projecti
 3) Release mouse → that completes a step.
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/01-draw-lasso.png
-:alt: The 2D planar Pancreas embedding mid-lasso: Alt is held, the pointer is pressed, and a freehand path encloses the Ductal lobe on the left while the enclosed cells are already drawn in the highlight colour.
+:alt: The 2D planar Pancreas embedding mid-lasso: Alt is held, the pointer is pressed at the end of a dotted path drawn most of the way round the upper part of the left lobe, and the cells the path already encloses are drawn in the highlight colour while the step readout has not yet appeared.
 :width: 1440px
 
 Mid-draw. The path does not have to be closed by hand — releasing closes it. The
@@ -202,12 +227,13 @@ Modifiers during the draw:
 Releasing records a step and reveals the step controls:
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/02-review-lasso-step.png
-:alt: The Highlighting panel after the lasso was released, showing the step readout "Step 1: 870 cells" and the Confirm, undo, redo and Cancel step controls, with the pointer on Confirm.
+:alt: The Highlighting panel after the lasso was released, showing the step readout "Step 1: 842 cells" with the help line "Alt to intersect, Shift+Alt to add, Ctrl+Alt to subtract", and the ringed Confirm, undo, redo and Cancel step controls with the pointer on Confirm; the page tab still reads Page 1 (0) and the list still reads "No cells highlighted".
 :width: 516px
 
-`Step 1: 870 cells`, then **Confirm**, undo (`↩`), redo (`↪`) and **Cancel**.
-Undo history is bounded at five steps; redo is greyed out until you have used
-undo at least once.
+`Step 1: 842 cells`, then **Confirm**, undo (`↩`), redo (`↪`) and **Cancel**.
+Undo reaches every earlier step: the oldest steps are dropped only when the
+recorded selections together outgrow a share of the device's memory. Redo is
+greyed out until you have used undo at least once.
 ```
 
 ### How it works (2D vs 3D)
@@ -224,8 +250,17 @@ To approximate a “3D volume selection”:
 4) Repeat until the result is tight.
 
 ### Multi-view behavior
-In grid multi-view, lasso applies to the specific panel you started the gesture in.
-Try to keep the lasso path inside one panel to avoid ambiguity.
+In grid multi-view, a selection gesture is read on the panel you press, and
+view focus stays where it was: `Alt+click`, `Alt+drag` and a Select mode tap
+never make that panel the active view. **Annotation based** selection uses the
+field that panel is colored by and only the cells that panel shows, even when
+the focused view is colored by a different field; the range label of a
+continuous drag is that panel's range. Lasso applies to the specific panel you
+started the gesture in.
+Only cells that panel actually shows can be selected: the part of a path that
+strays into a neighbouring panel (or under the sidebar) selects nothing there.
+Proximity and KNN likewise grow from the cell under the pointer in the panel
+you pressed, and their circles are drawn clipped to that panel.
 
 ### Performance considerations
 Lasso preview can be expensive on very large datasets because it may need to evaluate many points repeatedly while you draw.
@@ -252,7 +287,7 @@ Modifiers:
 - `Ctrl/Cmd+Alt` = subtract (remove)
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/drag-proximity-radius.png
-:alt: Proximity drag mid-gesture, with a dashed circle drawn around the seed cell, the cells inside it in the highlight colour, and the pointer pressed on the circle's edge.
+:alt: Proximity drag mid-gesture on the 2D embedding: a dashed circle centred on a dot at the seed cell in the left lobe, the cells inside it drawn in the highlight colour, the pointer pressed on the circle's edge, and the panel still showing the Proximity drag help text.
 :width: 1440px
 
 Mid-drag. The dashed circle is the current radius and the dot at its centre is
@@ -296,9 +331,14 @@ KNN drag grows a selection outward along the neighbor graph (connectivities).
 ### Data requirement (non-negotiable)
 KNN selection requires a neighbor graph.
 
-Typical symptoms when it’s missing:
-- the UI indicates “neighbor graph not available”, or
-- KNN mode appears but selecting does nothing.
+What you see:
+- Choosing **KNN drag** loads the graph on demand, under a *“Loading neighbor
+  graph for KNN mode”* notification that turns into *“Neighbor graph ready
+  (N edges)”*. An `Alt+click` made before that finishes only starts the load
+  and selects nothing; seed the drag again once the graph is ready.
+- A dataset exported without connectivities raises one warning notification,
+  *“No neighbor graph available for this dataset”*, and KNN drag selects
+  nothing.
 
 Practical fix:
 - load connectivity/edges for your dataset (often via a “Show edges” toggle), or
@@ -316,11 +356,11 @@ Modifiers:
 - `Ctrl/Cmd+Alt` = subtract (remove)
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/drag-knn-degree.png
-:alt: KNN drag mid-gesture, with cells around the seed drawn in the highlight colour spreading along the neighbour graph rather than filling a circle, and the pointer pressed away from the seed.
+:alt: KNN drag mid-gesture from the same seed cell, dragged upward by the same distance: a small dashed circle labelled 3° around the seed, and the highlighted cells spreading through the left lobe along the neighbour graph rather than filling a disc, with the pointer pressed above the seed.
 :width: 1440px
 
-The same seed cell and a comparable drag distance as the proximity capture
-above, and a visibly different result: the selection follows the neighbour
+The same seed cell and the same drag distance as the proximity capture above,
+dragged upward, and a visibly different result: the selection follows the neighbour
 graph, so it grows along the manifold rather than filling a disc.
 ```
 
@@ -350,7 +390,7 @@ neighbors)`. As degree grows, selection can grow very quickly.
 3) A new highlight group appears in the list (on the active page).
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/03-confirm-lasso-group.png
-:alt: The Highlighting panel after Confirm, showing the page tab count 870, the summary "870 cells highlighted", a Clear button, and one group row labelled "Lasso (870 cells) (870)" with a checkbox and a remove control.
+:alt: The Highlighting panel after Confirm: the page tab reads Page 1 842, and the ringed group list shows the summary "842 cells highlighted", a Clear button, and one group row labelled "Lasso (842 cells) (842)" with a checkbox and a remove control.
 :width: 516px
 
 After **Confirm**. The group is named for the tool that made it and carries its

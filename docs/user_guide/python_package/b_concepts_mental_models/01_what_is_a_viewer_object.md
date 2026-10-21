@@ -63,7 +63,8 @@ In that mode you typically **don’t** have a “viewer object”; you just open
 When you create a viewer, Python starts a **local HTTP server** (by default on `127.0.0.1`):
 - it serves the dataset (export folder or AnnData-backed endpoints),
 - it serves one exact inventory-verified web generation,
-- it accepts event POSTs from the web app (`/_cellucid/events`),
+- it accepts event POSTs from the web app (`/_cellucid/events`, JSON) and
+  selections (`/_cellucid/selection`, binary cell indices),
 - and it can accept “session bundle” uploads (`/_cellucid/session_bundle`) for the no-download workflow.
 
 The viewer object also owns:
@@ -71,7 +72,7 @@ The viewer object also owns:
 - a **URL** you can open manually (`viewer.viewer_url`),
 - hook registries for `on_selection`, `on_hover`, `on_click`, `on_ready`,
   `on_command_error` (only the web build that emits `command_error` sends it),
-  and `on_message`,
+  `on_data_mapping`, and `on_message`,
 - a small, thread-safe **latest-event snapshot** (`viewer.state`),
 - lifecycle methods (`viewer.display()`, `viewer.stop()`).
 

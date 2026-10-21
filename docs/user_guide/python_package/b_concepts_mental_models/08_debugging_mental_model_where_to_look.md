@@ -199,13 +199,15 @@ def debug(event):
 ```
 
 If you see nothing when interacting in the UI:
-- the browser is not POSTing to `/_cellucid/events`, or
+- the browser is not POSTing to `/_cellucid/events` (selections:
+  `/_cellucid/selection`), or
 - the `viewerId` in the browser doesn’t match the viewer object that registered the hooks.
 
 ### Browser-side confirmation
 
 Open browser devtools → Network and look for:
-- `POST /_cellucid/events`
+- `POST /_cellucid/events` (JSON events)
+- `POST /_cellucid/selection` (a selection)
 
 If there are no POSTs:
 - the UI may not be wired to the server URL you think it is,
@@ -250,7 +252,10 @@ Common failure modes:
 ### Timeout waiting for bundle
 
 Likely causes:
-- viewer never reached ready,
+- viewer never reached ready (it reports ready once the notebook's own
+  dataset is on screen; a different dataset chosen in the viewer before that —
+  a file, a sample, **None** — replaces it, and that viewer then never reports
+  ready),
 - iframe not displayed,
 - browser can’t POST to `/_cellucid/session_bundle` due to proxy/mixed-content issues.
 
@@ -307,7 +312,7 @@ Fix:
 ### Symptom: “Viewer loads but hooks don’t work”
 
 Likely causes:
-- no POSTs to `/_cellucid/events`,
+- no POSTs to `/_cellucid/events` (or `/_cellucid/selection`, for selection hooks),
 - viewerId mismatch.
 
 Fix:

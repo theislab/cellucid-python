@@ -164,7 +164,7 @@ def test_the_convention_page_states_which_form_is_canonical_for_which_purpose() 
 
 def test_citation_files_point_at_a_reachable_canonical_landing_page() -> None:
     citation = (REPOSITORY_ROOT / "CITATION.cff").read_text(encoding="utf-8")
-    assert 'url: "https://cellucid.readthedocs.io"' in citation
+    assert 'url: "https://docs.cellucid.com"' in citation
     assert BARE_APEX not in citation
 
 
@@ -179,3 +179,52 @@ def test_the_release_version_marker_convention_is_applied_to_this_repository() -
         "CITATION.cff must carry the CELLUCID_VERSION marker so a bump sweep "
         "lists it, matching cellucid-r/CITATION.cff"
     )
+
+
+# -- Documentation host -------------------------------------------------------
+# The documentation is served from the Read the Docs canonical domain
+# docs.cellucid.com. The former `cellucid.readthedocs.io` host only redirects,
+# so no link may name it, and the Sphinx configuration must declare the new host
+# as the canonical base and publish a sitemap that robots.txt advertises.
+
+DOCS_ORIGIN = "https://docs.cellucid.com"
+DOCS_BASE_URL = f"{DOCS_ORIGIN}/en/latest/"
+DOCS_SITEMAP_URL = f"{DOCS_BASE_URL}sitemap.xml"
+RETIRED_DOCS_HOST = "cellucid.readthedocs.io"
+
+
+def test_no_link_names_the_retired_read_the_docs_host() -> None:
+    offenders = []
+    for path in sorted(REPOSITORY_ROOT.rglob("*")):
+        relative = path.relative_to(REPOSITORY_ROOT)
+        if not path.is_file() or EXCLUDED_PARTS.intersection(relative.parts):
+            continue
+        if relative.parts[0] in {".git", "build", ".tmp", "data"} or relative == Path(__file__).relative_to(REPOSITORY_ROOT):
+            continue
+        if path.suffix not in SWEPT_SUFFIXES | {".toml", ".yaml", ".yml", ".ipynb", ".R", ".Rmd"}:
+            continue
+        if RETIRED_DOCS_HOST in path.read_text(encoding="utf-8", errors="ignore"):
+            offenders.append(str(relative))
+    assert offenders == []
+
+
+def test_sphinx_declares_the_canonical_docs_host_and_publishes_a_sitemap() -> None:
+    conf = (DOCS_ROOT / "conf.py").read_text(encoding="utf-8")
+    assert f'html_baseurl = "{DOCS_BASE_URL}"' in conf
+    assert 'sitemap_url_scheme = "{link}"' in conf
+    assert '"sphinx_sitemap",' in conf
+    assert 'html_extra_path = ["_extra"]' in conf
+
+    pyproject = (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert re.search(r'"sphinx-sitemap==\d+\.\d+\.\d+",', pyproject)
+
+
+def test_docs_robots_txt_allows_crawling_and_advertises_the_sitemap() -> None:
+    robots = (DOCS_ROOT / "_extra" / "robots.txt").read_text(encoding="utf-8")
+    lines = [line.strip() for line in robots.splitlines() if line.strip()]
+    assert lines == ["User-agent: *", "Disallow:", f"Sitemap: {DOCS_SITEMAP_URL}"]
+
+
+def test_the_docs_landing_page_links_to_the_app() -> None:
+    index = (DOCS_ROOT / "index.md").read_text(encoding="utf-8")
+    assert f"{{button-link}} {CANONICAL_APP_ORIGIN}" in index

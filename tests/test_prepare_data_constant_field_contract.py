@@ -1,8 +1,8 @@
-"""compact_v1 has a case for a constant continuous field, and prepare() uses it.
+"""compact_v2 has a case for a constant continuous field, and prepare() uses it.
 
 A gene expressed at one level in every published cell -- very often zero, once
 an atlas is subset to one lineage -- is ordinary scientific data, and so is an
-obs column a subset flattened. compact_v1 publishes such a field as equal
+obs column a subset flattened. compact_v2 publishes such a field as equal
 bounds with every code ``0``, so dequantization returns the exact constant
 instead of an approximation, and nothing anywhere divides by
 ``maxValue - minValue``.
@@ -89,7 +89,7 @@ def _prepare_lineage_subset(out_dir, *, sparse_expression=False, obs=None, laten
         obs=resolved_obs,
         var=var,
         gene_expression=expression,
-        X_umap_2d=embedding,
+        embeddings={"X_umap_2d": embedding},
         out_dir=out_dir,
         obs_keys=list(resolved_obs.columns),
         dataset_id="lineage-subset",
@@ -287,7 +287,7 @@ def test_float64_variation_that_collapses_under_float32_is_published_as_a_consta
         obs=obs,
         var=var,
         gene_expression=expression,
-        X_umap_2d=embedding,
+        embeddings={"X_umap_2d": embedding},
         out_dir=out_dir,
         obs_keys=list(obs.columns),
         dataset_id="lineage-subset",
@@ -396,33 +396,42 @@ def test_constant_generated_outlier_quantiles_are_published(tmp_path):
     )
 
 
-def test_generated_outlier_quantiles_without_a_qualifying_category_are_reported(tmp_path):
-    """A set with no quantile at all has no value to publish, unlike a constant."""
+def test_generated_outlier_quantiles_without_a_qualifying_category_export_as_missing(tmp_path):
+    """No category reaches centroid_min_points: every quantile is published as missing.
+
+    The export used to be refused. The quantized payload is every code the
+    missing marker under the constant bounds (0, 0), which decodes to the same
+    all-missing set the float32 form holds.
+    """
+    out_dir = tmp_path / "lineage-subset"
     _, obs, _, _, _ = _subset_to_lineage()
     obs = obs.assign(cell_type=pd.Categorical([f"C{index // 2}" for index in range(LINEAGE_CELLS)]))
 
-    with pytest.raises(ValueError) as failure:
-        _prepare_lineage_subset(tmp_path / "lineage-subset", obs=obs)
+    _prepare_lineage_subset(out_dir, obs=obs)
 
-    message = str(failure.value)
-    assert "generated categorical outlier quantile set(s) cannot be encoded" in message
-    assert "'cell_type': no category holds at least centroid_min_points=10 cells" in message
-    assert "obs_continuous_quantization=None" in message
+    manifest = json.loads((out_dir / "obs_manifest.json").read_text(encoding="utf-8"))
+    schema = manifest["_obsSchemas"]["categorical"]
+    entry = manifest["_categoricalFields"][0]
+    assert entry[1] == "cell_type"
+    assert len(entry) == 8
+    assert entry[6] == entry[7] == 0.0
+    codes = np.frombuffer(
+        _read_payload(out_dir, schema["outlierPathPattern"], entry[0]),
+        dtype=np.uint8,
+    )
+    assert codes.tolist() == [255] * LINEAGE_CELLS
 
-
-def test_unencodable_outlier_quantiles_are_reported_before_any_file_is_written(
-    tmp_path, monkeypatch
-):
-    _, obs, _, _, _ = _subset_to_lineage()
-    obs = obs.assign(cell_type=pd.Categorical([f"C{index // 2}" for index in range(LINEAGE_CELLS)]))
-
-    def _forbidden_write(*args, **kwargs):
-        raise AssertionError("prepare() wrote an output payload before validating encodability")
-
-    monkeypatch.setattr(prepare_generation, "_write_binary", _forbidden_write)
-
-    with pytest.raises(ValueError, match="cannot be encoded"):
-        _prepare_lineage_subset(tmp_path / "lineage-subset", obs=obs)
+    float32_dir = tmp_path / "float32"
+    _prepare_lineage_subset(float32_dir, obs=obs, obs_continuous_quantization=None)
+    manifest = json.loads((float32_dir / "obs_manifest.json").read_text(encoding="utf-8"))
+    entry = manifest["_categoricalFields"][0]
+    quantiles = np.frombuffer(
+        _read_payload(
+            float32_dir, manifest["_obsSchemas"]["categorical"]["outlierPathPattern"], entry[0]
+        ),
+        dtype="<f4",
+    )
+    assert np.isnan(quantiles).all()
 
 
 # ---------------------------------------------------------------------------
@@ -449,7 +458,7 @@ def test_nonfinite_gene_values_are_rejected_before_any_file_is_written(tmp_path,
             obs=obs,
             var=var,
             gene_expression=expression,
-            X_umap_2d=embedding,
+            embeddings={"X_umap_2d": embedding},
             out_dir=tmp_path / "lineage-subset",
             obs_keys=list(obs.columns),
             dataset_id="lineage-subset",

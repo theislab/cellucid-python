@@ -6,7 +6,7 @@ Cellucid’s notebook integration is intentionally **simple and robust**:
 - The notebook displays the Cellucid **web app UI** in an **iframe**.
 - You get **two channels** for communication:
   1. **Python → viewer**: commands via **`postMessage`** (e.g., highlight, set color-by).
-  2. **Viewer → Python**: events via **HTTP POST** to `/_cellucid/events` (e.g., selection, hover, click).
+  2. **Viewer → Python**: events via **HTTP POST** to `/_cellucid/events` (e.g., hover, click), and selections to `/_cellucid/selection`.
 
 This design avoids “special Jupyter extensions” and works across notebook frontends (classic Jupyter, JupyterLab, VSCode notebooks, Colab) as long as the **browser can reach the server URL** the iframe is using.
 
@@ -44,7 +44,8 @@ Once you have a `viewer` (from `show_anndata(...)` or `show(...)`), you can:
   - `@viewer.on_click`: user clicks a cell
   - `@viewer.on_command_error`: a command you sent was rejected by the viewer
     (only the web build that emits `command_error` sends it)
-  - `@viewer.on_message`: one envelope stream for all eight current event types
+  - `@viewer.on_data_mapping`: the viewer resolved or changed its data mapping
+  - `@viewer.on_message`: one envelope stream for all nine current event types
 
 - **Pull durable state (session bundles)**
   - `bundle = viewer.get_session_bundle()` (no browser download required)

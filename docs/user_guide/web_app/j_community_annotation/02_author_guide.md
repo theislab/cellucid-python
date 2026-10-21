@@ -189,6 +189,7 @@ from cellucid import prepare
 
 prepare(
     # ... data args ...
+    embeddings={"X_umap": adata.obsm["X_umap"]},
     out_dir="./my_export",
     dataset_id="my_atlas_v1",  # keep this stable for the entire annotation round
     dataset_name="My Atlas (v1)",
@@ -380,7 +381,7 @@ For large groups, a dedicated branch reduces accidental changes to `main` and ma
 
 - `annotatableSettings[fieldKey]`
   - Per-field consensus rules.
-  - `minAnnotators` (integer 0–50): minimum unique voters required before a bucket can be anything other than “Pending”.
+  - `minAnnotators` (integer, 0 or more): minimum unique voters required before a bucket can be anything other than “Pending”.
   - `threshold` (number -1..1): minimum `confidence` to reach “Consensus”.
 
 - `closedFields`
@@ -433,12 +434,13 @@ If this fails, fix the file(s) it reports before inviting annotators.
 ### Pull bounds and atomic failure
 
 Each active annotation JSON document is limited to 1,000,000 decoded UTF-8
-bytes. One Pull accepts at most 10,000 active user files and 64,000,000
-aggregate decoded UTF-8 bytes across those user files. The browser preflights
-and then verifies those bounds while fetching.
+bytes, the most GitHub's Contents API returns as JSON. A Pull has no limit on
+how many user files there are or on their total size: changed files are
+fetched and cached a batch at a time, and the merged view is compiled by
+streaming the cache one file at a time.
 
 Any missing configured categorical field, invalid or oversized active
-document, count/byte limit violation, or incomplete fetch fails the complete
+document, or incomplete fetch fails the complete
 Pull without changing annotation state. Cellucid never publishes a partial
 merged view from an invalid repository. The configured-field check occurs
 before raw-cache scope selection or user/moderation downloads; repository
@@ -543,7 +545,6 @@ The Worker exposes the following ordered routes:
 - `/auth/installations`
 - `/auth/installation-repos`
 - `/cap/lookup-cells`
-- `/cap/search-datasets`
 - `/api/repos/*`
 
 Opening `/` must return the exact compatible service identity and ordered route
@@ -557,8 +558,9 @@ on a stale or incompatible Worker.
 
 The Worker requires exactly `ALLOWED_ORIGINS`, `GITHUB_CLIENT_ID`, and
 `GITHUB_CLIENT_SECRET`. It does not use an App id, private key, App JWT, or
-installation access token. Configure Cloudflare Workers Paid with the Standard
-usage model; the checked-in Worker requires its one-second CPU ceiling. Apply a
+installation access token. It deploys on the Cloudflare Workers Free plan,
+whose CPU budget of about 10 ms per request a very large repository document can
+exceed; the Worker setup guide explains when to move to Workers Paid. Apply a
 rate-limiting rule to `/cap/*` for a public deployment.
 
 Configure the GitHub App with user-to-server token expiration disabled,
@@ -732,7 +734,8 @@ As an author, you can merge duplicates so votes are combined:
 
 1) Open a category’s voting modal.
 2) Drag one suggestion card onto another.
-3) Confirm the merge and optionally write a merge note.
+3) Confirm the merge and optionally write a merge note. Like comment edits, a
+   merge-note edit in progress survives the modal refreshing around it.
 4) **Publish** (authors publish to `annotations/moderation/merges.json`).
 
 Merge behavior (what annotators experience):

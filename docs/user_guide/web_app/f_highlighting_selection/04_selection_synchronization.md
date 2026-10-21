@@ -32,6 +32,7 @@ Highlighting feels “simple” until you use multi-view snapshots, change filte
 |---|---|---|---|
 | **Filters / visibility mask** | Per view (live + each snapshot may differ) | Session (dataset-dependent) | Filters control which cells are selectable and drawn in that view. |
 | **Selection tool mode** (annotation / lasso / proximity / KNN) | Global UI choice | Session (dataset-dependent layout) | Affects how `Alt` gestures are interpreted. |
+| **Select mode** and its Intersect / Add / Subtract choice | Global input setting | Not saved | Stands in for holding `Alt` (and `Shift`/`Ctrl`) on a touch screen; like a held key, it is not part of a session. |
 | **Selection candidate set** (in-progress selection) | Global (shared across tools) | No | Temporary; can be confirmed into a group or canceled. |
 | **Preview highlight** (while selecting) | Global, rendered per view | No | Shown only for visible cells in each view. |
 | **Highlight pages** | Global (dataset-scoped) | Yes (session, dataset-dependent) | Pages are alternate “workspaces” of highlight groups. |
@@ -60,7 +61,7 @@ People typically expect:
 - Are still subject to visibility: each panel will only show highlights for cells that are visible in that panel (filters apply per view).
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/share-highlight-across-views.png
-:alt: Two 3D panels of the same dataset at different camera angles with the sidebar collapsed; the cells confirmed by one lasso are drawn in the highlight colour in both panels.
+:alt: Two 3D panels of the same dataset side by side with the sidebar collapsed: the left panel at the default close-up camera, the right panel zoomed out and rotated; the cells confirmed by one lasso drawn in the left panel are drawn in the highlight colour in both.
 :width: 1440px
 
 One lasso, drawn once in one panel, shown in two. The panels are looking at the
@@ -85,12 +86,16 @@ embedding does not mark them in the plots under **Analysis**.
 - The preview highlight is global, but rendered per view (visible cells only).
 - The gesture you perform is tied to the specific panel you start it in (especially for lasso).
 
+**Annotation based in multi-view grid**
+- The click or drag is read on the field of the panel you press, not on the focused view's, and selects only the cells that panel shows. View focus stays where it was.
+- So with the focused view colored by a continuous field and another panel by `cell_type`, an `Alt+click` in that other panel selects the clicked cell's `cell_type` category.
+
 **Lasso in multi-view grid**
 - Lasso selection is anchored to the panel you started drawing in.
 - Keep the lasso path inside one panel to avoid “wrong panel” confusion.
 
 **Proximity/KNN in multi-view**
-- The seed click happens in one panel, but the resulting selected indices are global.
+- The seed click happens in one panel and is read with that panel's filters; view focus stays where it was. The resulting selected indices are global.
 - Filters in the target panel can affect which cells are selectable (filtered-out cells are excluded).
 
 ### The two reasons a panel does not draw a highlight
@@ -146,7 +151,7 @@ This is why the highlight count can show:
 ### Color-by and selection/highlighting
 Changing the active color-by field:
 - does not change group membership,
-- can change which selection tool behaviors are available for **annotation-based** selection (because that tool depends on the active field’s kind: categorical vs continuous),
+- can change which selection tool behaviors are available for **annotation-based** selection (because that tool depends on the kind of the field of the view you click in: categorical vs continuous),
 - can change how easy it is to visually judge the correctness of your selection.
 
 ---
@@ -187,7 +192,7 @@ These commands identify cells by **cell index**. That means they only make sense
 - indices are aligned with your Python object (AnnData ordering).
 
 ### UI → Python (events / hooks)
-UI interactions POST events to the Python server (`/_cellucid/events`), so hooks like `@viewer.on_selection` can fire.
+UI interactions POST events to the Python server (`/_cellucid/events`), so hooks like `@viewer.on_hover` can fire. A confirmed selection is posted to `/_cellucid/selection` as binary cell indices (little-endian `uint32`, ascending), so `@viewer.on_selection` receives selections of any size.
 
 Important nuance for selection:
 - In notebooks, the **selection event is emitted when you confirm a selection** (i.e. when it becomes a real highlight group),

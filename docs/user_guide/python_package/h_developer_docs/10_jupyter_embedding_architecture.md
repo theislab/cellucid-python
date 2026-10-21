@@ -107,17 +107,21 @@ Developer note:
 ## Frontend → Python: HTTP POST event channel (hooks)
 
 The embedded viewer posts events to:
-- `POST /_cellucid/events`
+- `POST /_cellucid/events` (JSON events)
+- `POST /_cellucid/selection` (selections: binary little-endian `uint32` cell
+  indices, strictly ascending)
 
 The server routes events by `viewerId` to the correct viewer callback.
 
 In Python, `BaseViewer`:
 - records the event into `viewer.state` (latest snapshot),
-- stores recent events in an internal ring buffer,
+- hands each event to the `wait_for_event(...)` calls waiting for it, and keeps
+  the most recent events for `debug_connection()`,
 - triggers hook callbacks registered via:
   - `@viewer.on_selection`, `@viewer.on_hover`, `@viewer.on_click`,
     `@viewer.on_ready`, `@viewer.on_command_error` (sent only by the web build
-    that emits `command_error`), and `@viewer.on_message`
+    that emits `command_error`), `@viewer.on_data_mapping`, and
+    `@viewer.on_message`
 
 Protocol details are documented here:
 {doc}`11_hooks_events_protocol_and_schema`.

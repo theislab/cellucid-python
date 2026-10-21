@@ -17,19 +17,19 @@ Each entry below follows: **what you see → why → how to confirm → what to 
 - **Confirm:** no “Vector Field Overlay:” section appears under **Visualization**.
 - **What to do:** add/export vector fields (usually in Python) and reload the dataset.
 
-### 2) Vector fields exist, but not for the current dimension
+### 2) Vector fields exist, but not for the embedding this view shows
 
-- **What you see:** the overlay block exists, but `Show overlay` is disabled and you see a hint like “Vector fields available for 2D, 3D. Switch embedding dimension to enable.”
-- **Why:** vector fields are dimension-specific; the dataset might only have 2D vectors but you are viewing 3D.
-- **Confirm:** switch the view dimension and watch the toggle enable/disable.
-- **What to do:** switch to a supported dimension, or export the missing dimension’s vector field.
+- **What you see:** the overlay block exists, but `Show overlay` is disabled and you see a hint like “Vector fields are bound to X_umap, X_umap_3d. Show one of them in this view to enable.”
+- **Why:** a vector field is bound to the embedding it was computed on. The view shows another one: another dimension (only 2D vectors, viewing 3D), or another embedding of the same dimension (a t-SNE chosen in **View N shows** under **Compare views**, or with keys `1`, `2` and `3`).
+- **Confirm:** the hint names the embeddings that have a field; show one of them and watch the toggle enable.
+- **What to do:** show a named embedding, or export the vector field for the embedding you want.
 
 ### 3) You have a vector field, but it’s in a different basis than Cellucid expects
 
-- **What you see:** no fields appear (same as “no vector fields”), even though you computed velocity/drift.
-- **Why:** the current detection rules are UMAP-oriented (e.g., `velocity_umap_2d`). If your vectors are in a different basis (e.g., t-SNE), Cellucid won’t detect them automatically.
-- **Confirm:** check your AnnData `obsm` keys (or export metadata) for `*_umap*` field ids.
-- **What to do:** store/export vectors using Cellucid’s naming convention for the basis currently supported by your workflow (UMAP).
+- **What you see:** an AnnData file opens with no field bound, even though you computed velocity/drift (for example `velocity_tsne` for a t-SNE).
+- **Why:** only the *default* binding reads the key, and it is UMAP-oriented: `<field>_umap_<d>d` is bound to the UMAP of dimension `d`. A field in another basis is never bound by default.
+- **Confirm:** open **Session › Data mapping › Vector fields** and check whether your `obsm` array is listed but unchecked. For an export, look at `vector_fields.fields` in `dataset_identity.json`: every binding it has is listed there by embedding id.
+- **What to do:** bind it yourself under **Session › Data mapping › Vector fields** (AnnData), or export it bound to the embedding it was computed on, for example `prepare(..., vector_fields={"velocity": {"X_tsne": velocity_tsne}})`.
 
 ### 4) All-zero vectors (nothing draws at all)
 
@@ -121,14 +121,14 @@ Each entry below follows: **what you see → why → how to confirm → what to 
 - **Confirm:** the `Show overlay` checkbox is unchecked after a dataset swap.
 - **What to do:** re-enable the overlay for the new dataset.
 
-### 2) Switching dimensions while the overlay is enabled
+### 2) Switching dimension or embedding while the overlay is enabled
 
 - **What you see:** the overlay may briefly show “Loading vector field…” or auto-disable.
-- **Why:** the overlay must load the vector field for the new dimension (if available).
-- **Confirm:** the dropdown list changes between 2D and 3D (fields are filtered by dimension).
-- **What to do:** wait for the reload; if it disables, switch back to a dimension that has a field.
+- **Why:** the overlay must load the vector field bound to the newly shown embedding (if there is one).
+- **Confirm:** the dropdown list changes with the embedding (fields are filtered by the embedding they are bound to).
+- **What to do:** wait for the reload; if it disables, show an embedding that has a field again.
 
-### 3) Render mode = `Volumetric smoke cloud (alpha)`
+### 3) Render mode = `Volumetric smoke cloud (beta)`
 
 - **What you see:** you can’t find the overlay controls.
 - **Why:** the overlay controls currently live in the Points rendering controls area.

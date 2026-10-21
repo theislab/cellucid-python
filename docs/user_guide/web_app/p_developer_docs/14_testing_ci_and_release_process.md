@@ -20,6 +20,12 @@ The goal here is to make validation repeatable.
 - `npm run test:browser` runs the Playwright browser suite.
 - UI and state changes also require the manual smoke checks below.
 
+In CI, `npm test` runs on Ubuntu, macOS, and Windows across Node 20, 22, 24,
+and 26. Every push and pull request runs the browser suite in Chromium,
+Firefox, and WebKit on Ubuntu, plus WebKit on macOS; every engine on every
+operating system runs nightly and on manual dispatch. A failed browser job
+uploads its Playwright screenshots and error context as a workflow artifact.
+
 This page focuses on “what you can do today” to validate changes.
 
 ### Running two browser suites at once
@@ -78,11 +84,13 @@ Run these steps on at least one small dataset (fast) and optionally one larger d
 2) Create a second highlight page; switch between pages.
 3) Confirm highlight overlay and counts update correctly.
 
-### E) Multiview + dimension
+### E) Multiview + embeddings
 
-1) Click “Keep view” to create a snapshot view.
+1) Click “Keep view” to create a kept view.
 2) Switch view layout (grid/single) if available.
-3) Change dimension (1D/2D/3D) on the live view and (if supported) on a snapshot view.
+3) In `View 2 shows`, choose another embedding; press 1, 2 and 3 on each view
+   (the default, then the next embedding of that dimension).
+4) Confirm **Link cameras** links only views that show the same embedding.
 
 ### F) Sessions
 
@@ -120,15 +128,26 @@ Run these steps on at least one small dataset (fast) and optionally one larger d
 The browser matrix runs the density transaction in Chromium, Firefox, and
 WebKit. Its retained checks prove:
 
-- byte equality (within one R8 step) against the historical GPU pipeline,
-  including adversarial Float32 inputs;
+- byte equality of the density channel (red of the RGBA8 volume, within one
+  8-bit step) against the historical R8 GPU pipeline, including adversarial
+  Float32 inputs;
 - zero product `readPixels` calls;
-- a maximum 262,144-point staging upload and bounded draw submissions;
+- a maximum 262,144-cell staging upload (one position buffer and one RGBA8
+  colour buffer) and bounded draw submissions;
 - exact GL-state restoration, including samplers and separate blend equations;
 - complete resource cleanup after an injected mid-publication failure;
 - atomic renderer publication, prior-volume rollback, and no owned texture in
   the public return value; and
 - context-loss invalidation plus the viewer's reload-required contract.
+
+`smoke-volume-reconstruction.spec.mjs` checks what the ray march does with that
+volume: the smoke is drawn at the world positions the splat wrote, one density
+column reconstructs as a single monotone tent, the silhouette stays inside the
+voxels written, and empty-space skipping through the occupancy volume loses no
+smoke. In the Node suite, `smoke-control-scales.test.mjs` pins every smoke
+slider's shipped readout to its fixed scale, and `smoke-transaction.test.mjs`
+pins the per-frame ray budget, the 0.25x–1.00x resolution range, and that a
+still smoke view asks for no frames once its noise exists.
 
 Keep these checks cross-engine. Do not replace the historical GPU authority
 with a JavaScript voxel model: binary64 arithmetic does not reproduce GLSL

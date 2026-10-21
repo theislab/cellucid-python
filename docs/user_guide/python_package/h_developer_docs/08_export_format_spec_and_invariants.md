@@ -27,12 +27,16 @@ There is one level, not two. `_list_exported_datasets` admits a directory only
 when **all** of the following hold, and rejects the whole served root otherwise:
 
 - `dataset_identity.json` is present, readable UTF-8 JSON, an object, and
-  carries `"version": 2`;
+  carries `"version": 3` — an export with any other version is told to
+  re-export;
 - its `id` and `name` pass the same contracts the writer applied;
 - `obs_manifest.json` is present, readable UTF-8 JSON, and an object;
-- at least one `points_<dim>d.bin` or `points_<dim>d.bin.gz` is present and
-  non-empty;
-- no dimension has *both* a compressed and an uncompressed points file.
+- an `embeddings/` directory is present (not a symbolic link) and non-empty.
+
+Which files `embeddings/` must hold is decided by the declaration: the artifact
+inventory reads `embeddings.items[*].file` and serves exactly those paths. A
+directory is recognised as a dataset candidate at all by any of
+`dataset_identity.json`, `obs_manifest.json`, or `embeddings/`.
 
 `var_manifest.json`, `connectivity_manifest.json`, and `vectors/` are genuinely
 optional; `dataset_identity.json` is not. A hand-assembled export that omits it,
@@ -49,15 +53,15 @@ my_export/
   obs_manifest.json
   var_manifest.json                    # optional
   connectivity_manifest.json           # optional
-  points_1d.bin(.gz)                   # optional
-  points_2d.bin(.gz)                   # optional
-  points_3d.bin(.gz)                   # optional
+  embeddings/
+    <index>_<dim>d.bin(.gz)            # one per embedding item, any number per dimension
   obs/
     <index>.values.f32(.gz)            # continuous, not quantized
     <index>.values.u8(.gz)             # continuous, quantized 8-bit
     <index>.values.u16(.gz)            # continuous, quantized 16-bit
     <index>.codes.u8(.gz)              # categorical codes
     <index>.codes.u16(.gz)
+    <index>.codes.u32(.gz)
     <index>.outliers.f32(.gz)          # per-cell outlier quantiles (latent space)
     <index>.outliers.u8(.gz)           # quantized outliers (if enabled)
     <index>.outliers.u16(.gz)
@@ -70,9 +74,7 @@ my_export/
     edges.dst.bin(.gz)
     edges.weights.f64.bin(.gz)         # little-endian Float64 weights
   vectors/
-    <index>_1d.bin(.gz)
-    <index>_2d.bin(.gz)
-    <index>_3d.bin(.gz)
+    <field index>_<embedding index>.bin(.gz)
 ```
 
 Notes:
@@ -152,17 +154,20 @@ Unless stated otherwise:
   rather than as a load failure — see
   {doc}`../c_data_preparation_api/09_output_format_specification_exports_directory`
 
-### `points_<dim>d.bin`
+### `embeddings/<index>_<dim>d.bin`
 
 - dtype: `float32`
 - shape: `(n_cells, dim)`
-- value range: normalized to approximately `[-1, 1]`
+- value range: each item normalized on its own to approximately `[-1, 1]`
+- `<index>` is the item's position in `embeddings.items` (dimension ascending,
+  then id in code-point order), and the declared `file` must equal exactly that
+  path
 
-### `vectors/<index>_<dim>d.bin`
+### `vectors/<field index>_<embedding index>.bin`
 
 - dtype: `float32`
-- shape: `(n_cells, dim)`
-- scaled into the same normalized coordinate system as the points
+- shape: `(n_cells, dim)` of the bound embedding
+- scaled into the normalized coordinate system of the embedding it is bound to
 
 ### `obs/<index>.values.*`
 
@@ -186,10 +191,10 @@ Quantized encoding:
 ### `obs/<index>.codes.*`
 
 Categorical codes:
-- dtype: `uint8` or `uint16`
+- dtype: `uint8`, `uint16` or `uint32`
 - values:
   - `0..(n_categories-1)` are category indices
-  - missing marker is stored in the manifest (255 or 65535)
+  - missing marker is stored in the manifest (255, 65535 or 4294967295)
 
 ### `obs/<index>.outliers.*`
 
@@ -240,7 +245,7 @@ is rejected rather than read partially:
 | --- | ---: | --- |
 | `_continuousFields` | 2 | `[index, key]` — float32, unquantized |
 | `_continuousFields` | 4 | `[index, key, minValue, maxValue]` — quantized |
-| `_categoricalFields` | 6 | `[index, key, categories, codesDtype, codesMissingValue, centroidsByDim]` — outliers float32 |
+| `_categoricalFields` | 6 | `[index, key, categories, codesDtype, codesMissingValue, centroidsByEmbedding]` — outliers float32 |
 | `_categoricalFields` | 8 | the six above plus `outlierMinValue, outlierMaxValue` — outliers quantized |
 | `fields` (var) | 2 | `[index, name]` — float32, unquantized |
 | `fields` (var) | 4 | `[index, name, minValue, maxValue]` — quantized |
@@ -251,14 +256,17 @@ in the array: `obs` shares one index space across `_continuousFields` and
 `_categoricalFields` because both write into `obs/`, so neither list is dense on
 its own.
 
-`centroidsByDim` is an object keyed by dimension as a string, whose values are
-lists of `{category, position, n_points}` objects.
+`centroidsByEmbedding` is an object keyed by embedding id (every item, in item
+order), whose values are lists of `{category, position, n_points}` objects with
+one position coordinate per dimension of that embedding. Both compact manifests
+carry `"_format": "compact_v2"`; `var_manifest.json` additionally carries
+`gene_name_sets`, the metadata-only alternative gene names.
 
 ---
 
 ## Reading files in Python (quick examples)
 
-### Read `points_3d.bin(.gz)`
+### Read the default 3D embedding
 
 ```python
 import gzip
@@ -269,9 +277,11 @@ from pathlib import Path
 export_dir = Path("my_export")
 identity = json.loads((export_dir / "dataset_identity.json").read_text("utf-8"))
 n = identity["stats"]["n_cells"]
-path = export_dir / identity["embeddings"]["files"]["3d"]
+embeddings = identity["embeddings"]
+item = embeddings["items"][embeddings["defaults"]["3d"]]
+path = export_dir / item["file"]
 raw = gzip.open(path, "rb").read() if path.suffix == ".gz" else path.read_bytes()
-pts = np.frombuffer(raw, dtype=np.float32).reshape(n, 3)
+pts = np.frombuffer(raw, dtype=np.float32).reshape(n, item["dimension"])
 ```
 
 ### Read a categorical obs codes file
@@ -289,12 +299,12 @@ obs_manifest = json.loads((export_dir / "obs_manifest.json").read_text("utf-8"))
 field = obs_manifest["_categoricalFields"][0]
 payload_index = field[0]
 key = field[1]
-codes_dtype = field[3]  # "uint8" or "uint16"
-codes_ext = "u8" if codes_dtype == "uint8" else "u16"
+codes_dtype = field[3]  # "uint8", "uint16" or "uint32"
+codes_ext = {"uint8": "u8", "uint16": "u16", "uint32": "u32"}[codes_dtype]
 
 path = export_dir / "obs" / f"{payload_index}.codes.{codes_ext}"
 raw = gzip.open(str(path) + ".gz", "rb").read() if (path.with_suffix(path.suffix + ".gz")).exists() else path.read_bytes()
-codes = np.frombuffer(raw, dtype=np.uint8 if codes_ext == "u8" else np.uint16)
+codes = np.frombuffer(raw, dtype={"u8": "u1", "u16": "<u2", "u32": "<u4"}[codes_ext])
 ```
 
 ---

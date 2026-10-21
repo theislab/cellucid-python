@@ -216,7 +216,7 @@ High-level behavior:
 Notebook mode uses two channels:
 
 1) Python → frontend commands via `postMessage` (includes a per-viewer `viewerToken`)
-2) Frontend → Python events via `POST /_cellucid/events` (identified by `viewerId`)
+2) Frontend → Python events via `POST /_cellucid/events` and selections via `POST /_cellucid/selection` (identified by `viewerId`, authenticated by `viewerToken`)
 
 Practical guidance:
 - keep the server bound to localhost unless you have a strong reason,

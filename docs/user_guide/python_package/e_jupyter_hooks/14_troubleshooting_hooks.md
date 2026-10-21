@@ -89,10 +89,10 @@ browser cannot reach the kernel-side loopback URL.
 The viewer UI is interactive, but Python callbacks do not fire.
 
 ### Likely causes (ordered)
-1. The iframe cannot reach the server’s `/_cellucid/events` endpoint (proxy/mixed-content/firewall).
-2. Requests to `/_cellucid/events` are blocked by an ad blocker / corporate proxy.
+1. The iframe cannot reach the server’s `/_cellucid/events` or `/_cellucid/selection` endpoint (proxy/mixed-content/firewall).
+2. Requests to `/_cellucid/events` or `/_cellucid/selection` are blocked by an ad blocker / corporate proxy.
 3. You are interacting with a stale iframe (kernel restarted; viewerId no longer registered).
-4. The selection payload is too large (hits the 1MB request limit).
+4. The kernel's machine could not hold the selection (HTTP 413 from `/_cellucid/selection`). A selection costs 4 bytes a cell on the wire and about 36 bytes a cell as the `list[int]` hooks receive.
 
 ### How to confirm
 1. In Python, run:
@@ -100,7 +100,7 @@ The viewer UI is interactive, but Python callbacks do not fire.
    viewer.debug_connection()
    ```
 2. In browser devtools → Network:
-   - look for requests to `/_cellucid/events`
+   - look for requests to `/_cellucid/events` (and `/_cellucid/selection` for selections)
    - confirm status codes (should be 200 JSON)
 3. Confirm you are using the right viewer object:
    - print `viewer.viewer_url` and compare with the iframe URL (if visible).
@@ -224,7 +224,7 @@ Calling `viewer.highlight_cells(...)` / `viewer.set_color_by(...)` / `viewer.res
 ### Likely causes
 1. Iframe can’t reach `/_cellucid/session_bundle` (connectivity/proxy).
 2. Pending request expired; server responds “No pending session bundle request”.
-3. Bundle exceeds size cap (512MB).
+3. The temporary directory has less free space than the bundle (HTTP 413).
 
 ### How to confirm
 - Browser devtools → Network:

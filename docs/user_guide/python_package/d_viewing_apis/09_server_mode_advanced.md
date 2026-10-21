@@ -72,7 +72,7 @@ both the dimension and the key it came from. Full rule:
 
 ```text
       Connectivity: yes (74,771 edges)
-      Connectivity: not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)
+      Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)
       Connectivity: no
 ```
 
@@ -176,6 +176,11 @@ These endpoints are useful for “is the server alive” and “what does it thi
 - `/_cellucid/info`
 - `/_cellucid/datasets`
 - `/_cellucid/protocol`
+- `/_cellucid/mapping/candidates.json` (AnnData servers only: the data mapping
+  being served, and every candidate array)
+- `/_cellucid/mapping/embeddings/{obsm}/{c0-c1-c2}.bin` (AnnData servers only:
+  one candidate `obsm` array at the given 0-based columns, normalized like a
+  served embedding)
 
 ### Example: health probe
 
@@ -211,9 +216,9 @@ version of the protocol a running server speaks.
 ## Connectivity routes on the direct-AnnData server (opt-in)
 
 On the direct-AnnData server the neighbor graph is served only when you ask for
-it: `serve_connectivity=True` on `AnnDataAdapter`, `AnnDataAdapter.from_file`,
+it: `knn_key="connectivities"` on `AnnDataAdapter`, `AnnDataAdapter.from_file`,
 `AnnDataServer`, `serve_anndata`, `AnnDataViewer`, or `show_anndata`, or
-`--connectivity` on the command line. The default is off, because building the
+`--knn connectivities` on the command line. The default is off, because building the
 edge list is the single longest part of opening a large object — a 50-neighbor
 graph over millions of cells is hundreds of millions of stored neighbors — and
 most sessions never draw the graph.
@@ -253,6 +258,7 @@ curl -sI http://127.0.0.1:8765/connectivity_manifest.json | head -1
 Even in “server mode”, the server includes endpoints used by notebook integrations and hooks:
 
 - `POST /_cellucid/events` (frontend → Python events)
+- `POST /_cellucid/selection` (frontend → Python selections, as binary cell indices)
 - `POST /_cellucid/session_bundle` (frontend uploads session bundle bytes for notebook workflows)
 
 If you are not using notebook hooks, you can ignore these.
@@ -274,12 +280,12 @@ exports_root/
   dataset_a/
     dataset_identity.json
     obs_manifest.json
-    points_3d.bin.gz
+    embeddings/
     ...
   dataset_b/
     dataset_identity.json
     obs_manifest.json
-    points_2d.bin.gz
+    embeddings/
     ...
 ```
 

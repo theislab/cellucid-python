@@ -51,8 +51,8 @@ If you only do one thing from this page, do this list in order.
 
 - For large `.h5ad` and very large `.zarr`: **Server Mode** is the default recommendation.  
   See {doc}`../b_data_loading/04_server_tutorial`.
-- Loading a large `.h5ad` *directly in the browser* is usually a trap because it is not truly lazy.  
-  See {doc}`../b_data_loading/03_browser_file_picker_tutorial` → “Important performance limitation”.
+- A large `.h5ad` opens *directly in the browser* too, read from disk as each view needs it; a cell-major matrix is reorganised by gene in the background first.  
+  See {doc}`../b_data_loading/03_browser_file_picker_tutorial` → “How a direct `.h5ad` is read”.
 
 ### 2) Start in the lowest-risk render configuration
 
@@ -60,10 +60,10 @@ If you only do one thing from this page, do this list in order.
 - Keep the browser window modest (pixels matter; retina is expensive).
 - Close other GPU-heavy tabs (video calls + WebGL + Cellucid = sadness).
 - Two of the biggest levers have already been pulled for you, and are worth
-  checking rather than assuming: at or above five million cells `Antialiasing
-  (smooth point edges)` starts off, and the point size starts small, both chosen
-  from the cell count. Turning antialiasing off saved 19–34% of the frame in the
-  measurements on
+  checking rather than assuming: `Antialiasing (smooth point edges)` starts off
+  at or above five million cells in 3D, or 200,000 cells in a 1D or 2D view, and
+  the point size starts small, both chosen from the cell count. Turning antialiasing off saved 19–34% of the frame in 3D
+  and about 90% in a dense 2D view, in the measurements on
   {doc}`02_performance_considerations_what_gets_slow_and_why`; it applies to the
   next frame either way.
 - `Level-of-Detail (LOD)` starts off. Turn it on whenever the frame is slow while
@@ -76,7 +76,8 @@ If you only do one thing from this page, do this list in order.
 
 ### 3) Tune in one view, then choose a layout deliberately
 
-Cellucid gives you the live view plus at most three snapshots.
+Cellucid keeps the live view plus any number of snapshots; every view shown is
+drawn every frame.
 
 Workflow:
 1) Tune fields/filters in the live view — it is unambiguously the cheapest state
@@ -107,9 +108,9 @@ See {doc}`../i_vector_field_velocity/05_performance_and_quality`.
 ### 6) Be intentional about categories (avoid “category explosion”)
 
 If a categorical field has thousands–tens of thousands of unique values:
-- the legend becomes unusable,
-- color assignment and counts can become a performance cliff,
-- and the UI becomes cognitively overwhelming.
+- the legend still scrolls (only the rows in view are drawn),
+- but colours stop being distinguishable and counts take longer,
+- and the field is cognitively overwhelming as a colouring.
 
 If you see this, treat it as a **data preparation problem**, not a “tweak a knob” problem.
 
@@ -254,14 +255,16 @@ This is often more reproducible than doing many incremental heavy operations in 
 
 These are so common that it’s worth recognizing them immediately.
 
-- **The two-view row**: adding one snapshot doubles the pixels shaded, while
-  adding two more (reaching the 2×2 grid) usually does not.
+- **Multiview without Level-of-Detail**: every view draws every point again,
+  so on a large dataset each kept view adds about one view's frame time (four
+  views of 10,000,000 cells: 30 → 147 ms a frame). With Level-of-Detail on, the
+  same four views took 13.5 ms.
 - **High-DPI + large window**: smooth on an external monitor, choppy on a laptop retina display.
-- **Smoke mode on a laptop**: looks great, then crashes (context lost) when grid density is too high.
+- **Smoke mode on a laptop**: looks great, then crashes (context lost) when render resolution and ray quality push one frame past the GPU watchdog.
 - **Overlay across views**: overlays scale with pixels × views in every layout.
 - **Huge highlight groups**: highlighting costs GPU memory per highlighted cell
   per view, and it does not go away when you look elsewhere.
-- **Category explosion**: the UI becomes slow and unusable even if rendering is fine.
+- **Category explosion**: the field loads and scrolls, but colours stop being distinguishable.
 
 For a deeper list, see {doc}`06_edge_cases_performance`.
 
@@ -285,12 +288,13 @@ If large datasets are unusable, triage in this order:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
-:alt: Cellucid showing two side-by-side views of the same dataset.
+:alt: The whole window in Grid compare with the sidebar open: two equal panels fill the area to the right of the sidebar and show the Pancreas 3D embedding from one linked camera — the left panel, the live view, coloured by cell_type, and the right panel, the kept view, recoloured by S_score on a Viridis scale — each under a title chip naming its field. The sidebar, scrolled to Compare Views in an earlier interface, lists badge 1 cell_type and the selected badge 2 S_score above the Layout select set to Grid compare, and Coloring & Filtering shows S_score in the Continuous obs select.
 :width: 1440px
 
 Two kept views support side-by-side comparison while retaining one dataset
-identity. Note that both panes are full canvas height: this row layout keeps
-points at full size, which is why it is the costliest arrangement per pane.
+identity. Both panels are the full canvas height and split the width to the
+right of the sidebar equally: this row layout keeps points at full size, which
+is why it is the costliest arrangement per panel (earlier interface).
 ```
 
 ---

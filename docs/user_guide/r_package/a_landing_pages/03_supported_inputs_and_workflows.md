@@ -21,8 +21,10 @@ If you want server mode and notebook embedding, see {doc}`../../python_package/i
 
 `cellucid_prepare()` requires:
 
-- **At least one embedding**: one of `X_umap_1d`, `X_umap_2d`, `X_umap_3d`
-  - shape must be `(n_cells, 1/2/3)`
+- **At least one embedding**, in `embeddings`: a named list of coordinate
+  matrices or `cellucid_embedding()` values, any number per dimension
+  - a plain matrix has 1, 2, or 3 columns; a wider one is passed as
+    `cellucid_embedding(values, columns = c(1, 2))` with 1-based columns
 - **`latent_space`**:
   - numeric matrix-like, shape `(n_cells, n_dims)`
 - **`obs`**:
@@ -41,15 +43,17 @@ Why `latent_space` is required: it is used to compute **per-cell outlier quantil
   - can be dense `matrix` or sparse `Matrix` (recommended)
 - **Gene metadata (`var`)**:
   - `data.frame`, shape `(n_genes, n_var_columns)`; required when `gene_expression` is provided
+- **Alternative gene names (`var_gene_name_columns`)**:
+  - character vector of `var` columns offered as extra name sets in the viewer
 - **Subset genes (`gene_identifiers`)**:
   - character vector of gene IDs to export (reduces disk use)
 - **Connectivity (`connectivities`)**:
   - matrix or `Matrix::Matrix`, shape `(n_cells, n_cells)`
   - exported as unique undirected edge pairs
 - **Vector fields (`vector_fields`)**:
-  - named list of per-cell vectors (1D/2D/3D), used for velocity/displacement overlays
-  - every name must exactly match `<field>_umap_<1|2|3>d` (for example
-    `velocity_umap_2d`); the key declares the dimension
+  - named list of fields, each a named list binding arrays to exported
+    embedding ids, used for velocity/displacement overlays:
+    `list(velocity = list(X_umap = v2))`
 
 ## Accepted types (what “matrix-like” means)
 
@@ -78,7 +82,7 @@ Concretely:
 
 | Input | Expected shape |
 |---|---|
-| `X_umap_2d` | `(n_cells, 2)` |
+| a 2D embedding | `(n_cells, 2)` |
 | `latent_space` | `(n_cells, n_latent_dims)` |
 | `obs` | `n_cells` rows |
 | `gene_expression` | `(n_cells, n_genes)` |

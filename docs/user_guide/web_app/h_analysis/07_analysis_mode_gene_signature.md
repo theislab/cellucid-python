@@ -146,7 +146,7 @@ If you need per-cell mapping:
 ## Edge cases and pitfalls
 
 - **Unknown gene**: scoring terminates; correct the gene list before rerunning.
-- **Duplicate genes in the list**: duplicates effectively up-weight that gene (it is added multiple times).
+- **Duplicate genes in the list**: refused before scoring with `Gene "…" is listed more than once`; list each gene once (to weight a gene, compute the score in Python).
 - **Huge signatures (hundreds of genes)**: can be slow and may stress browser memory.
 - **Housekeeping-dominated signatures**: scores track library size/QC rather than biology.
 

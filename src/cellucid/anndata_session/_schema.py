@@ -15,8 +15,6 @@ import re
 from typing import cast
 
 _WIRE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,179}$")
-_FIELD_KEY_MAX_LENGTH = 256
-_CATEGORY_LABEL_MAX_LENGTH = 256
 
 _HIGHLIGHT_ROOT_KEYS = {"pages", "activePageId"}
 _HIGHLIGHT_PAGE_KEYS = {"id", "name", "color", "highlightedGroups"}
@@ -65,8 +63,6 @@ _CATEGORY_FIELD_KEYS = _FIELD_COMMON_KEYS | {
     "categories",
     "codesLength",
     "codesType",
-    "centroidsByDim",
-    "normalizedDims",
     "sourcePages",
     "overlapStrategy",
     "overlapLabel",

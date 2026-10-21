@@ -90,7 +90,7 @@ Quantized exports also record `min_val` and `max_val` in `obs_manifest.json` so 
 
 For a categorical field at payload index `1`:
 
-- codes: `obs/1.codes.u8` or `obs/1.codes.u16`
+- codes: `obs/1.codes.u8`, `obs/1.codes.u16` or `obs/1.codes.u32`
 - outlier quantiles: `obs/1.outliers.f32` (or `.u8/.u16` if quantized)
 
 The **categories list** (levels) is stored in `obs_manifest.json`.
@@ -101,6 +101,7 @@ Missing values are encoded as a reserved integer:
 |---|---|
 | `uint8` | `255` |
 | `uint16` | `65535` |
+| `uint32` | `4294967295` |
 
 (r_package-category-label-display-text)=
 #### Category labels must read as the value they store
@@ -213,15 +214,25 @@ off the per-cell outlier quantiles below — those are always written, and
 
 This is why `latent_space` is required.
 
+The computation is stated exactly, so `prepare()`, `cellucid_prepare()`,
+`cellucid serve` and the web app give the same bytes: the latent values are
+rounded to float32 and widened to float64, centroid sums are accumulated cell
+by cell in cell order, squared distances column by column, and the share of
+the category at that distance or closer is a float32. A shared conformance
+fixture pins those bytes in all three repositories.
+
+
 Cells in categories smaller than `centroid_min_points` get `NaN` outlier quantiles.
 
 ## Categorical dtype selection (`obs_categorical_dtype`)
 
-Categorical codes can be written as `uint8` or `uint16`.
+Categorical codes can be written as `uint8`, `uint16` or `uint32`.
 
-Choose `obs_categorical_dtype = "uint8"` or `"uint16"` explicitly for every
-export. `uint8` stores at most 255 categories; choose `uint16` for larger
-categorical fields.
+Choose `obs_categorical_dtype` explicitly for every export. `uint8` stores at
+most 255 categories, `uint16` at most 65,535, and `uint32` at most
+4,294,967,295, for a field such as a barcode column with more than 65,535
+distinct values. Every categorical field uses the declared width, and a field
+that does not fit is rejected with the width that would hold it.
 
 ## Naming
 

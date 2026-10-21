@@ -24,7 +24,7 @@ Cellucid itself is a **web app** (the viewer UI). `cellucid-python` and `celluci
 
 ### Practical path (computational users)
 `cellucid_prepare()` writes:
-- **Embeddings**: `points_1d.bin`, `points_2d.bin`, `points_3d.bin` (float32, row-major; optionally gzipped)
+- **Embeddings**: one `embeddings/<index>_<dim>d.bin` per embedding, any number per dimension (float32, row-major; optionally gzipped)
 - **Cell metadata (“obs”)**: `obs_manifest.json` + `obs/` binary files
 - **Gene expression (“var”)** (optional): `var_manifest.json` + `var/` binary files (one file per gene)
 - **Connectivity graph** (optional): `connectivity_manifest.json` + `connectivity/edges.*.bin`

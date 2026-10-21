@@ -43,8 +43,9 @@ If you just want to visualize something quickly (no export deep dive yet), start
 ## “What do I need to export?” (at a glance)
 
 Minimum viable export (fastest to produce):
-- `latent_space` + `obs` + at least one embedding (`X_umap_1d`,
-  `X_umap_2d`, or `X_umap_3d`) → interactive viewer with metadata fields.
+- `latent_space` + `obs` + at least one embedding in `embeddings={...}` (any
+  number per dimension, with {class}`~cellucid.Embedding` for a wide array) →
+  interactive viewer with metadata fields.
 
 Common “most useful” export:
 - add `gene_expression` + `var` → gene search + gene overlays.

@@ -14,7 +14,7 @@ Cellucid’s export format does not store separate cell IDs. Instead:
 
 This means you must keep a consistent row order across:
 
-- `X_umap_1d` / `X_umap_2d` / `X_umap_3d`
+- every embedding in `embeddings`
 - `latent_space`
 - `obs`
 - `gene_expression` rows (if provided)
@@ -35,13 +35,13 @@ Then reorder everything to match `cell_ids` **explicitly** before exporting.
 
 ## Rule 2: required shapes
 
-At least one embedding is required:
+At least one embedding is required, in `embeddings`:
 
-| Argument | Shape |
-|---|---|
-| `X_umap_1d` | `(n_cells, 1)` |
-| `X_umap_2d` | `(n_cells, 2)` |
-| `X_umap_3d` | `(n_cells, 3)` |
+| Value | Shape | Dimension |
+|---|---|---|
+| a matrix | `(n_cells, 1)`, `(n_cells, 2)`, or `(n_cells, 3)` | its column count |
+| a numeric vector | length `n_cells` | 1D |
+| `cellucid_embedding(values, columns = c(...))` | `(n_cells, width)`, any width | `length(columns)` (1–3) |
 
 And:
 
@@ -122,7 +122,10 @@ ASCII component — start with a letter or digit, otherwise only letters, digits
 Recommendation:
 - choose a stable, versioned `dataset_id` before export.
 - `cellucid-r` aborts the complete candidate on a duplicate or undrawable
-  identifier; it does not rewrite names.
+  observation key, embedding id, or vector-field id; it does not rewrite them.
+  Gene names are the one exception: an empty value takes the row name and a
+  repeated name is made unique (`MATR3`, `MATR3-1`), by the rule both writers
+  share — see {doc}`05_var_gene_metadata`.
 
 ## Quick “preflight” checks (copy/paste)
 

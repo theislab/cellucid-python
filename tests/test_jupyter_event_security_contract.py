@@ -36,7 +36,7 @@ def _known_inbound_events(viewer_id: str) -> list[tuple[str, dict[str, object], 
             {
                 "type": "selection",
                 "viewerId": viewer_id,
-                "cells": [0, 2],
+                "cells": struct.pack("<2I", 0, 2),
                 "source": "lasso",
             },
             {"cells": [0, 2], "source": "lasso"},
@@ -135,6 +135,31 @@ def _known_inbound_events(viewer_id: str) -> list[tuple[str, dict[str, object], 
             },
             {"command": "setColorBy", "reason": "Field CD8A is not loaded"},
         ),
+        (
+            "data_mapping",
+            {
+                "type": "data_mapping",
+                "viewerId": viewer_id,
+                "requestId": None,
+                "origin": "default",
+                "mapping": {
+                    "kind": "export",
+                    "embeddings": {"enabled": [{"key": "X_umap", "columns": None}], "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None}},
+                    "geneNames": "index",
+                    "vectorFields": [],
+                },
+            },
+            {
+                "requestId": None,
+                "origin": "default",
+                "mapping": {
+                    "kind": "export",
+                    "embeddings": {"enabled": [{"key": "X_umap", "columns": None}], "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None}},
+                    "geneNames": "index",
+                    "vectorFields": [],
+                },
+            },
+        ),
     ]
 
 
@@ -193,11 +218,11 @@ def _request(
         connection.close()
 
 
-def _event_body(*, viewer_token: str | None, event_type: str = "selection") -> bytes:
+def _event_body(*, viewer_token: str | None, event_type: str = "click") -> bytes:
     event: dict[str, object] = {
         "type": event_type,
         "viewerId": VIEWER_ID,
-        "cells": [0],
+        "cell": 0,
     }
     if viewer_token is not None:
         event["viewerToken"] = viewer_token
@@ -219,15 +244,34 @@ def _event_request(
     )
 
 
+# The exact current fingerprint shape: a session names the embedding its cell
+# order was digested over and the data mapping it was saved with.
+_FINGERPRINT = {
+    "sourceType": None,
+    "datasetId": None,
+    "cellCount": 0,
+    "varCount": 0,
+    "cellOrder": {
+        "embedding": {"key": "X_umap", "columns": None},
+        "dimension": 2,
+        "digest": "0123456789abcdef",
+    },
+    "dataMapping": {
+        "kind": "export",
+        "embeddings": {
+            "enabled": [{"key": "X_umap", "columns": None}],
+            "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None},
+        },
+        "geneNames": "index",
+        "vectorFields": [],
+    },
+}
+
+
 def _empty_session_bundle() -> bytes:
     manifest = {
         "createdAt": "2026-07-26T00:00:00.000Z",
-        "datasetFingerprint": {
-            "sourceType": None,
-            "datasetId": None,
-            "cellCount": 0,
-            "varCount": 0,
-        },
+        "datasetFingerprint": _FINGERPRINT,
         "chunks": [],
     }
     manifest_bytes = json.dumps(
@@ -243,12 +287,7 @@ def _corrupt_gzip_session_bundle() -> bytes:
     stored = b"not-a-gzip-stream"
     manifest = {
         "createdAt": "2026-07-26T00:00:00.000Z",
-        "datasetFingerprint": {
-            "sourceType": None,
-            "datasetId": None,
-            "cellCount": 0,
-            "varCount": 0,
-        },
+        "datasetFingerprint": _FINGERPRINT,
         "chunks": [
             {
                 "id": "corrupt",
@@ -465,9 +504,9 @@ def test_event_post_authenticates_with_compare_digest_and_delivers_once(
     assert response == {"status": "ok", "delivered": True}
     assert deliveries == [
         {
-            "type": "selection",
+            "type": "click",
             "viewerId": VIEWER_ID,
-            "cells": [0],
+            "cell": 0,
         }
     ]
     assert comparisons == [
@@ -522,7 +561,7 @@ def test_failed_viewer_hook_does_not_publish_partial_event_state() -> None:
             {
                 "type": "selection",
                 "viewerId": viewer._viewer_id,
-                "cells": [0],
+                "cells": struct.pack("<I", 0),
                 "source": "lasso",
             }
         )
@@ -578,13 +617,13 @@ def test_inbound_event_rejects_every_undeclared_property_before_callback_dispatc
         {
             "type": "selection",
             "viewerId": "replace-at-runtime",
-            "cells": [0],
+            "cells": struct.pack("<I", 0),
         },
         {
             "type": "selection",
             "viewerId": "replace-at-runtime",
             "viewerToken": "must-not-reach-the-viewer",
-            "cells": [0],
+            "cells": struct.pack("<I", 0),
             "source": "lasso",
         },
     ],
@@ -852,15 +891,17 @@ def test_command_error_arrives_through_the_authenticated_http_path() -> None:
 def test_event_http_path_rejects_undeclared_property_without_hook_delivery() -> None:
     viewer = jupyter.BaseViewer()
     delivered: list[dict[str, object]] = []
-    viewer.register_hook("selection", delivered.append)
+    viewer.register_hook("click", delivered.append)
     viewer._activate()
     body = json.dumps(
         {
-            "type": "selection",
+            "type": "click",
             "viewerId": viewer._viewer_id,
             "viewerToken": viewer._viewer_token,
-            "cells": [0],
-            "source": "lasso",
+            "cell": 0,
+            "button": 0,
+            "shift": False,
+            "ctrl": False,
             "undeclared": True,
         }
     ).encode("utf-8")
@@ -880,6 +921,196 @@ def test_event_http_path_rejects_undeclared_property_without_hook_delivery() -> 
         assert viewer.state.last_event is None
     finally:
         viewer.stop()
+
+
+def _selection_path(viewer: jupyter.BaseViewer, *, source: str = "lasso") -> str:
+    from urllib.parse import urlencode
+
+    query = urlencode(
+        {
+            "viewerId": viewer._viewer_id,
+            "viewerToken": viewer._viewer_token,
+            "source": source,
+        }
+    )
+    return f"/_cellucid/selection?{query}"
+
+
+def test_selection_route_delivers_a_large_selection_exactly() -> None:
+    # A selection is far larger than any JSON event: 1,000,000 cells is 4 MB as
+    # uint32 and several MB as a JSON array, beyond the event endpoint's 1 MiB
+    # limit and the browser's 64 KiB keepalive budget. The binary route takes
+    # it whole and every hook surface sees the exact ascending cell list.
+    viewer = jupyter.BaseViewer()
+    delivered: list[dict[str, object]] = []
+    viewer.register_hook("selection", delivered.append)
+    viewer._activate()
+    cells = np.arange(0, 3 * 1_000_000, 3, dtype="<u4")
+    cells[-1] = 2**32 - 1
+    body = cells.tobytes()
+    assert len(body) > 1024 * 1024
+
+    try:
+        with _running_server() as (host, port):
+            status, response = _request(
+                host,
+                port,
+                _selection_path(viewer, source="annotation"),
+                body=body,
+                headers={"Content-Type": "application/octet-stream"},
+            )
+        assert status == 200
+        assert response == {"status": "ok", "delivered": True}
+        assert len(delivered) == 1
+        assert delivered[0]["source"] == "annotation"
+        assert delivered[0]["cells"] == cells.tolist()
+        assert all(type(cell) is int for cell in delivered[0]["cells"])  # type: ignore[union-attr]
+        assert viewer.state.selection == delivered[0]
+    finally:
+        viewer.stop()
+
+
+@pytest.mark.parametrize(
+    ("body", "content_type", "expected_status", "expected_message"),
+    [
+        (b"", "application/octet-stream", 411, b"Content-Length must be greater than zero"),
+        (struct.pack("<I", 1), "application/json", 415, b"Content-Type must be exactly"),
+        (b"\x01\x00\x00", "application/octet-stream", 400, b"4 bytes each"),
+        (struct.pack("<2I", 2, 1), "application/octet-stream", 400, b"strictly ascending"),
+        (struct.pack("<2I", 1, 1), "application/octet-stream", 400, b"strictly ascending"),
+    ],
+)
+def test_selection_route_refuses_malformed_bodies_before_any_hook(
+    body: bytes,
+    content_type: str,
+    expected_status: int,
+    expected_message: bytes,
+) -> None:
+    viewer = jupyter.BaseViewer()
+    delivered: list[dict[str, object]] = []
+    viewer.register_hook("selection", delivered.append)
+    viewer._activate()
+    headers = {"Content-Type": content_type}
+    if not body:
+        headers["Content-Length"] = "0"
+    try:
+        with _running_server() as (host, port):
+            connection = http.client.HTTPConnection(host, port, timeout=5)
+            try:
+                connection.putrequest("POST", _selection_path(viewer))
+                for key, value in headers.items():
+                    connection.putheader(key, value)
+                if body:
+                    connection.putheader("Content-Length", str(len(body)))
+                connection.endheaders(body or None)
+                response = connection.getresponse()
+                status, response_body = response.status, response.read()
+            finally:
+                connection.close()
+        assert status == expected_status
+        assert expected_message in response_body
+        assert delivered == []
+        assert viewer.state.selection is None
+    finally:
+        viewer.stop()
+
+
+def test_selection_route_authenticates_before_reading_the_body() -> None:
+    viewer = jupyter.BaseViewer()
+    delivered: list[dict[str, object]] = []
+    viewer.register_hook("selection", delivered.append)
+    viewer._activate()
+    from urllib.parse import urlencode
+
+    wrong = "/_cellucid/selection?" + urlencode(
+        {"viewerId": viewer._viewer_id, "viewerToken": "wrong", "source": "lasso"}
+    )
+    absent = "/_cellucid/selection?" + urlencode(
+        {"viewerId": "absent-viewer", "viewerToken": "wrong", "source": "lasso"}
+    )
+    duplicated = _selection_path(viewer) + "&source=knn"
+    # Larger than any selection can be (every uint32 index once): a refusal
+    # before reading is the only way this request can be answered at all.
+    oversized = {
+        "Content-Type": "application/octet-stream",
+        "Content-Length": str(server_base.MAX_SELECTION_BODY_BYTES + 4),
+    }
+    try:
+        with _running_server() as (host, port):
+            for path, headers, expected in (
+                (wrong, {"Content-Type": "application/octet-stream"}, (403, b"Invalid viewer credentials")),
+                (absent, {"Content-Type": "application/octet-stream"}, (404, b"Viewer is not registered")),
+                (duplicated, {"Content-Type": "application/octet-stream"}, (400, b"Selection delivery query must contain each declared field exactly once")),
+            ):
+                assert _request(host, port, path, body=struct.pack("<I", 0), headers=headers) == expected
+            connection = http.client.HTTPConnection(host, port, timeout=5)
+            try:
+                connection.putrequest("POST", _selection_path(viewer))
+                for key, value in oversized.items():
+                    connection.putheader(key, value)
+                connection.endheaders()
+                response = connection.getresponse()
+                assert response.status == 413
+                assert response.read() == (
+                    f"Request body exceeds the {server_base.MAX_SELECTION_BODY_BYTES}-byte limit"
+                ).encode()
+            finally:
+                connection.close()
+        assert delivered == []
+    finally:
+        viewer.stop()
+
+
+@pytest.mark.parametrize("event_type", ["selection", "session_bundle"])
+def test_event_endpoint_refuses_events_only_a_binary_route_may_build(event_type: str) -> None:
+    viewer = jupyter.BaseViewer()
+    delivered: list[dict[str, object]] = []
+    viewer.register_hook("message", delivered.append)
+    viewer._activate()
+    body = json.dumps(
+        {
+            "type": event_type,
+            "viewerId": viewer._viewer_id,
+            "viewerToken": viewer._viewer_token,
+            "cells": [0],
+            "source": "lasso",
+        }
+    ).encode("utf-8")
+    try:
+        with _running_server() as (host, port):
+            status, response = _request(
+                host,
+                port,
+                "/_cellucid/events",
+                body=body,
+                headers={"Content-Type": "application/json"},
+            )
+        assert status == 400
+        assert response == (
+            f"{event_type} events are not accepted here; the viewer posts them to "
+            f"/_cellucid/{event_type}"
+        ).encode()
+        assert delivered == []
+    finally:
+        viewer.stop()
+
+
+@pytest.mark.parametrize(
+    "cells",
+    [[0, 2], b"", b"\x00\x00\x00", struct.pack("<2I", 3, 3), struct.pack("<2I", 3, 2)],
+)
+def test_selection_validator_reads_only_the_exact_binary_body(cells: object) -> None:
+    viewer = jupyter.BaseViewer()
+    with pytest.raises((TypeError, ValueError), match="selection cells"):
+        viewer._handle_frontend_message(
+            {
+                "type": "selection",
+                "viewerId": viewer._viewer_id,
+                "cells": cells,
+                "source": "lasso",
+            }
+        )
+    assert viewer.state.selection is None
 
 
 @pytest.mark.parametrize(
@@ -1103,6 +1334,57 @@ def test_session_callback_absence_or_failure_is_non_success_and_removes_temp_fil
     assert list(tmp_path.iterdir()) == []
 
 
+@pytest.mark.parametrize(
+    ("path", "headers", "expected_status", "expected_body"),
+    [
+        (
+            "/_cellucid/session_bundle?viewerId=absent&requestId=absent",
+            {"Content-Type": "application/octet-stream"},
+            404,
+            b"No pending session bundle request",
+        ),
+        (
+            "/_cellucid/events",
+            {"Content-Type": "text/plain"},
+            415,
+            b"Content-Type must be exactly application/json",
+        ),
+        (
+            "/_cellucid/events",
+            {"Content-Type": "application/json"},
+            413,
+            b"Request body exceeds the 1048576-byte limit",
+        ),
+        (
+            "/_cellucid/nowhere",
+            {"Content-Type": "application/json"},
+            404,
+            b"POST not supported for path: /_cellucid/nowhere",
+        ),
+        (
+            "/_cellucid/events",
+            {"Content-Type": "application/json", "Host": "attacker.example"},
+            421,
+            b"Host header does not name this server",
+        ),
+    ],
+)
+def test_early_post_refusal_reaches_client_despite_unread_body(
+    path: str,
+    headers: dict[str, str],
+    expected_status: int,
+    expected_body: bytes,
+) -> None:
+    # A refusal sent before the body is read used to be followed by a close
+    # with that body unread, which resets the socket; a body far larger than
+    # the socket buffers made the client lose the response every time.
+    body = b"x" * 2_000_000
+    with _running_server() as (host, port):
+        for _ in range(3):
+            status, response = _request(host, port, path, body=body, headers=headers)
+            assert (status, response) == (expected_status, expected_body)
+
+
 def _routing_snapshot() -> tuple[dict[str, object], set[object]]:
     return dict(server_base._event_callbacks), set(jupyter_base._active_viewers)
 
@@ -1220,3 +1502,46 @@ def test_display_failure_rolls_back_started_server_and_viewer_registries(
     assert len(instances) == 1
     assert instances[0].stop_calls == 1
     assert _routing_snapshot() == before
+
+
+def test_selection_bound_is_the_wire_format_and_memory_only() -> None:
+    # No size policy: the only fixed bound is every uint32 index once, which
+    # no real selection reaches; a body the server cannot hold is a 413.
+    assert server_base.MAX_SELECTION_BODY_BYTES == 4 * 2**32
+
+    def exhausted(_length: int) -> bytes:
+        raise MemoryError
+
+    with pytest.raises(server_base._RequestContractError) as refusal:
+        server_base._read_exact_request_body(exhausted, 64)
+    assert refusal.value.status == 413
+    assert "could not allocate 64 bytes" in str(refusal.value)
+
+
+def test_a_waited_for_event_survives_any_burst_of_later_events() -> None:
+    # The event is handed to the waiter as it is recorded, so the 10,000
+    # hover events behind it cannot push it out of a bounded log first.
+    viewer = jupyter.BaseViewer()
+    received: list[dict[str, Any]] = []
+
+    def wait() -> None:
+        received.append(viewer.wait_for_event("selection", timeout=10.0))
+
+    waiter = threading.Thread(target=wait)
+    waiter.start()
+    deadline = time.monotonic() + 5.0
+    while not viewer._waiters and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert viewer._waiters
+    # The waiter is not woken until the whole burst is recorded.
+    condition = viewer._event_cv
+    notify_all = condition.notify_all
+    condition.notify_all = lambda: None  # type: ignore[method-assign]
+    viewer._record_event("selection", {"cells": [3], "source": "lasso"})
+    for index in range(10_000):
+        viewer._record_event("hover", {"cell": index})
+    condition.notify_all = notify_all  # type: ignore[method-assign]
+    with condition:
+        condition.notify_all()
+    waiter.join(timeout=10.0)
+    assert received == [{"cells": [3], "source": "lasso"}]

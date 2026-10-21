@@ -76,18 +76,18 @@ Check that the directory contains:
 
 - `dataset_identity.json`
 - `obs_manifest.json`
-- at least one `points_*d.bin` or `points_*d.bin.gz`
+- an `embeddings/` folder holding every `embeddings.items[*].file` the identity declares
 
 Then probe:
 
 ```bash
 curl -I http://127.0.0.1:<port>/dataset_identity.json
 curl -I http://127.0.0.1:<port>/obs_manifest.json
-curl -I http://127.0.0.1:<port>/points_3d.bin
-curl -I http://127.0.0.1:<port>/points_3d.bin.gz
+curl -I http://127.0.0.1:<port>/embeddings/0_2d.bin.gz
 ```
 
-(One of the two points paths should exist depending on compression.)
+(Use the exact `file` path an item declares; it ends in `.gz` exactly when the
+export is compressed.)
 
 ### AnnData server mode
 
@@ -96,7 +96,7 @@ Probe:
 ```bash
 curl -I http://127.0.0.1:<port>/dataset_identity.json
 curl -I http://127.0.0.1:<port>/obs_manifest.json
-curl -I http://127.0.0.1:<port>/points_3d.bin
+curl -I http://127.0.0.1:<port>/embeddings/0_2d.bin
 ```
 
 To test a gene or obs endpoint, read the payload index out of the manifest

@@ -41,7 +41,7 @@ import logging
 import re
 import threading
 import webbrowser
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from functools import partial
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler
@@ -49,8 +49,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlparse
 
+from ._compression import deterministic_gzip_compress
 from ._console import console_print
-from ._contracts import _require_dataset_id, _require_dataset_name
+from ._contracts import CATEGORICAL_CODE_WIDTHS, _require_dataset_id, _require_dataset_name
 from ._server_base import (
     CELLUCID_WEB_URL,
     DEFAULT_HOST,
@@ -73,9 +74,15 @@ from ._server_base import (
     CellucidHTTPServer as HTTPServer,
 )
 from .anndata_adapter import AnnDataAdapter, _classify_anndata_path
+from .anndata_mapping import (
+    MAPPING_ROUTE_PREFIX,
+    MappingLoadError,
+    MappingNotFound,
+    parse_mapping_route,
+)
 from .connectivity_contract import build_connectivity_manifest
 from .continuous_payload_diagnosis import NonFinitePayloadError
-from .vector_fields import is_vector_field_declaration_key
+from .data_mapping import EmbeddingKeySpec, is_vector_field_key
 
 if TYPE_CHECKING:
     import anndata
@@ -151,8 +158,8 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         /obs_manifest.json - Cell metadata manifest
         /var_manifest.json - Gene expression manifest
         /connectivity_manifest.json - Connectivity manifest
-        /points_{dim}d.bin - Embedding coordinates
-        /vectors/{fieldId}_{dim}d.bin - Vector field displacement vectors
+        /embeddings/{index}_{dim}d.bin - Embedding coordinates
+        /vectors/{fieldIndex}_{embeddingIndex}.bin - Vector field displacement vectors
         /obs/{field}.values.f32 - Continuous obs field
         /obs/{field}.codes.{ext} - Categorical obs field codes
         /obs/{field}.outliers.f32 - Categorical outlier quantiles
@@ -163,7 +170,11 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         /_cellucid/health - Health check
         /_cellucid/info - Server info
         /_cellucid/protocol - Viewer wire capabilities this installation accepts
+        /_cellucid/mapping/candidates.json - The served data mapping and every
+            candidate array, from metadata
+        /_cellucid/mapping/... - Further data-mapping routes (see cellucid.anndata_mapping)
         /_cellucid/events - POST endpoint for frontend events (hooks)
+        /_cellucid/selection - POST endpoint for selections (binary uint32 cell indices)
     """
 
     allow_caching = False  # Data is dynamic, don't cache
@@ -198,15 +209,6 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         """Add CORS headers to every response."""
         self.add_cors_headers()
         super().end_headers()
-
-    def do_POST(self):
-        """Handle POST requests (events from frontend)."""
-        if self.handle_event_post():
-            return
-        if self.handle_session_bundle_post():
-            return
-        # No other POST endpoints - return 404
-        self.send_error_response(404, f"POST not supported for path: {self.path}")
 
     def do_HEAD(self):
         """Handle HEAD requests (for urlExists checks)."""
@@ -261,12 +263,18 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
                 self.send_json(_protocol_capability_document(), head_only)
             elif path == "connectivity_manifest.json":
                 self.send_error_response(404, "No connectivity data")
+            elif path.startswith(MAPPING_ROUTE_PREFIX):
+                self._handle_mapping(
+                    path[len(MAPPING_ROUTE_PREFIX) :],
+                    head_only,
+                    supports_gzip,
+                )
             elif head_only and path in self.payload_lengths:
                 self._send_binary_head(self.payload_lengths[path])
             elif path not in self.payload_lengths:
                 self.send_error_response(404, f"Not found: {path}")
-            elif re.fullmatch(r"points_[123]d\.bin", path):
-                self._handle_points(path, head_only, supports_gzip)
+            elif path.startswith("embeddings/"):
+                self._handle_embedding(path, head_only, supports_gzip)
             elif path.startswith("obs/"):
                 self._handle_obs(path, head_only, supports_gzip)
             elif path.startswith("var/"):
@@ -304,18 +312,59 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(content_length))
         self.end_headers()
 
-    def _handle_points(self, path: str, head_only: bool, supports_gzip: bool):
-        """Handle points_Xd.bin requests."""
-        match = re.fullmatch(r"points_([123])d\.bin", path)
-        if not match:
-            self.send_error_response(404, f"Invalid points path: {path}")
-            return
+    def _handle_mapping(self, path: str, head_only: bool, supports_gzip: bool):
+        """Answer one ``_cellucid/mapping/`` route.
 
-        dim = int(match.group(1))
+        404 when the route names no catalog entry, 422 with
+        ``{"error", "key", "reason"}`` when the entry is unusable or its values fail the load-time check. A HEAD
+        answers the length without reading the payload wherever the catalog
+        determines it.
+        """
+        route = parse_mapping_route(path)
+        if route is None:
+            self.send_error_response(404, f"Not found: {MAPPING_ROUTE_PREFIX}{path}")
+            return
+        mapping = self.adapter.mapping
+        is_json = path.endswith(".json")
+        try:
+            if head_only:
+                length = mapping.head_length(route)
+            else:
+                body, content_type = mapping.payload(route)
+        except MappingNotFound as exc:
+            self.send_error_response(404, str(exc))
+            return
+        except MappingLoadError as exc:
+            logger.warning("Refused mapping request %s: %s", path, exc)
+            self.send_json_error(422, exc.as_payload())
+            return
+        if head_only:
+            self.send_response(HTTPStatus.OK)
+            self.send_header(
+                "Content-Type", "application/json" if is_json else "application/octet-stream"
+            )
+            self.send_header("Content-Length", str(length))
+            self.end_headers()
+            return
+        compress = supports_gzip and not is_json
+        self.send_binary(
+            deterministic_gzip_compress(body, compresslevel=6) if compress else body,
+            content_type=content_type,
+            head_only=False,
+            compressed=compress,
+            vary_accept_encoding=not is_json,
+        )
+
+    def _handle_embedding(self, path: str, head_only: bool, supports_gzip: bool):
+        """Handle embeddings/{index}_{dim}d.bin requests."""
+        embedding_id = self.adapter.get_embedding_id_for_payload(path.removeprefix("embeddings/"))
+        if embedding_id is None:
+            self.send_error_response(404, f"Invalid embedding path: {path}")
+            return
         try:
             # Compress if client supports gzip (transparent compression for better network perf)
             compress = supports_gzip
-            data = self.adapter.get_points_binary(dim, compress=compress)
+            data = self.adapter.get_embedding_binary(embedding_id, compress=compress)
             self.send_binary(
                 data,
                 head_only=head_only,
@@ -323,31 +372,24 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
                 vary_accept_encoding=True,
             )
         except ValueError:
-            self.send_error_response(404, "Points data not available")
+            self.send_error_response(404, "Embedding data not available")
 
     def _handle_vector_fields(self, path: str, head_only: bool, supports_gzip: bool):
         """
         Handle vector field requests under /vectors/.
 
         Supported paths:
-        - vectors/{index}_{dim}d.bin
+        - vectors/{fieldIndex}_{embeddingIndex}.bin
         """
-        match = re.fullmatch(r"vectors/(\d+)_([123])d\.bin", path)
-        if not match:
-            self.send_error_response(404, f"Invalid vectors path: {path}")
+        route = self.adapter.get_vector_field_route(path.removeprefix("vectors/"))
+        if route is None:
+            self.send_error_response(404, f"Vector field not found: {path}")
             return
-
-        field_id = self.adapter.get_vector_field_id_for_payload_index(match.group(1))
-        dim = int(match.group(2))
-
-        if field_id is None:
-            self.send_error_response(404, f"Vector field not found: {match.group(1)}")
-            return
-
+        field_id, embedding_id = route
         try:
             data = self.adapter.get_vector_field_binary(
                 field_id,
-                dim,
+                embedding_id,
                 compress=supports_gzip,
             )
             self.send_binary(
@@ -365,7 +407,7 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
 
         Supported paths:
         - obs/{index}.values.f32
-        - obs/{index}.codes.u8 or obs/{index}.codes.u16
+        - obs/{index}.codes.u8, obs/{index}.codes.u16 or obs/{index}.codes.u32
         - obs/{index}.outliers.f32
         """
         # Remove 'obs/' prefix
@@ -585,8 +627,10 @@ class AnnDataServer:
         dataset_name: str,
         dataset_id: str,
         obs_keys: Sequence[str] | None = None,
+        embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
+        knn_key: str | None = None,
+        expression_source: str | None = None,
         vector_field_default: str | None = None,
-        serve_connectivity: bool = False,
         serve_vector_fields: bool = False,
         serve_web_ui: bool = True,
         web_source_url: str = CELLUCID_WEB_URL,
@@ -631,15 +675,29 @@ class AnnDataServer:
             Exact ``obs`` columns to serve, in this order. If None, every
             column is served. Naming the columns leaves out a column Cellucid
             cannot serve, such as a ``datetime64`` collection date.
+        embedding_keys : mapping, optional
+            The embedding of a dimension slot, overriding the default for that
+            slot: ``{"2d": "X_tsne"}`` reads the first two columns of
+            ``obsm['X_tsne']``, and ``{"2d": ("X_pca", [2, 0])}`` reads the 0-based
+            columns named. Slots not named follow the default rule
+            (``X_umap_1d``/``X_umap_2d``/``X_umap_3d``, or a 1- to 3-column
+            ``X_umap``); when no slot resolves, Cellucid makes a deterministic best
+            guess from the other ``obsm`` arrays and reports which one it chose.
+        knn_key : str, optional
+            The ``obsp`` matrix to serve as the neighbour graph, usually
+            ``"connectivities"``. None by default: an edge list costs time and
+            memory proportional to the number of stored neighbours, which on a
+            large object is the single longest part of startup, and most sessions
+            never draw the graph. The named matrix is read and checked before the
+            server binds; one that is not symmetric, such as ``distances``, is
+            refused with that reason, and naming a matrix the object does not carry
+            is an error.
+        expression_source : str, optional
+            Where gene expression is read: ``"X"``, ``"raw"`` (``raw.X``, with
+            genes named from ``raw.var``), or ``"layer:<name>"``; None (the
+            default) follows the default rule of :class:`~cellucid.AnnDataAdapter`.
         vector_field_default : str, optional
             Exact field id required when multiple UMAP vector fields exist.
-        serve_connectivity : bool
-            Whether to read, validate, and serve ``adata.obsp['connectivities']``.
-            False by default: an edge list costs time and memory proportional to
-            the number of stored neighbors, which on a large object is the single
-            longest part of startup, and most sessions never draw the graph.
-            Asking for a graph the object does not carry is an error, so a
-            missing ``obsp['connectivities']`` is reported rather than ignored.
         serve_vector_fields : bool
             Whether to read, validate, and serve the ``<field>_umap_<n>d`` vector
             arrays in ``obsm``. False by default: every declared field is read and
@@ -732,8 +790,10 @@ class AnnDataServer:
                 dataset_name=dataset_name,
                 dataset_id=dataset_id,
                 obs_keys=obs_keys,
+                embedding_keys=embedding_keys,
+                knn_key=knn_key,
+                expression_source=expression_source,
                 vector_field_default=vector_field_default,
-                serve_connectivity=serve_connectivity,
                 serve_vector_fields=serve_vector_fields,
                 quiet=quiet,
             )
@@ -748,8 +808,10 @@ class AnnDataServer:
                 dataset_name=dataset_name,
                 dataset_id=dataset_id,
                 obs_keys=obs_keys,
+                embedding_keys=embedding_keys,
+                knn_key=knn_key,
+                expression_source=expression_source,
                 vector_field_default=vector_field_default,
-                serve_connectivity=serve_connectivity,
                 serve_vector_fields=serve_vector_fields,
                 quiet=quiet,
             )
@@ -778,7 +840,7 @@ class AnnDataServer:
             }
             if not quiet:
                 print_step(4, 5, "Building manifests")
-                print_detail("Centroids", "one per categorical field and dimension")
+                print_detail("Centroids", "one per categorical field and embedding")
             (
                 self._identity,
                 self._metadata_bodies,
@@ -878,15 +940,15 @@ class AnnDataServer:
                 raise ValueError(f"Invalid payload length for {path!r}: {content_length!r}")
             payload_lengths[path] = content_length
 
-        embeddings = identity["embeddings"]
-        for dim in embeddings["available_dimensions"]:
-            add_payload(embeddings["files"][f"{dim}d"], n_cells * dim * 4)
+        items = identity["embeddings"]["items"]
+        for item in items.values():
+            add_payload(item["file"], n_cells * item["dimension"] * 4)
 
         vector_fields = identity.get("vector_fields")
         if vector_fields is not None:
             for field in vector_fields["fields"].values():
-                for dim in field["available_dimensions"]:
-                    add_payload(field["files"][f"{dim}d"], n_cells * dim * 4)
+                for embedding_id, path in field["files"].items():
+                    add_payload(path, n_cells * items[embedding_id]["dimension"] * 4)
 
         # Every payload route is the index the manifest entry itself declares, so
         # the served path set cannot drift from the manifest the browser reads.
@@ -902,8 +964,9 @@ class AnnDataServer:
         categorical_schema = obs_schemas.get("categorical")
         if categorical_schema is not None:
             for field in obs_manifest["_categoricalFields"]:
-                ext = {"uint8": "u8", "uint16": "u16"}[field[3]]
-                item_size = {"uint8": 1, "uint16": 2}[field[3]]
+                width = CATEGORICAL_CODE_WIDTHS[field[3]]
+                ext = width.extension
+                item_size = width.itemsize
                 add_payload(
                     categorical_schema["codesPathPattern"]
                     .replace("{index}", str(field[0]))
@@ -938,10 +1001,12 @@ class AnnDataServer:
         print_detail("Cells", f"{self.adapter.n_cells:,}")
         print_detail("Genes", f"{self.adapter.n_genes:,}")
 
-        # Get embedding info
-        dims = self.adapter._available_dimensions
-        dim_str = ", ".join(f"{d}D" for d in sorted(dims)) if dims else "none"
-        print_detail("Embeddings", dim_str)
+        # Embedding info: which obsm array fills each dimension slot.
+        embeddings = self.adapter.embeddings
+        print_detail(
+            "Embeddings",
+            ", ".join(f"{item.dimension}D {item.id}" for item in embeddings) if embeddings else "none",
+        )
 
         # Count obs field types
         obs_keys = self.adapter.get_obs_keys()
@@ -961,8 +1026,9 @@ class AnnDataServer:
             vectors_str = f"yes ({names})"
         elif self._holds_unserved_vector_fields():
             vectors_str = (
-                "not served (obsm declares vector fields; pass "
-                "serve_vector_fields=True, or --vector-fields, to draw them)"
+                "not bound (obsm declares vector fields; pass "
+                "serve_vector_fields=True, or --vector-fields, to bind them, or "
+                "bind one under Session > Data mapping)"
             )
         else:
             vectors_str = "no"
@@ -978,7 +1044,7 @@ class AnnDataServer:
         elif self._holds_unserved_connectivity():
             conn_str = (
                 "not served (obsp['connectivities'] is present; pass "
-                "serve_connectivity=True, or --connectivity, to draw it)"
+                "knn_key='connectivities', or --knn connectivities, to draw it)"
             )
         else:
             conn_str = "no"
@@ -994,7 +1060,8 @@ class AnnDataServer:
             return False
         try:
             return any(
-                is_vector_field_declaration_key(key) for key in self.adapter.adata.obsm
+                is_vector_field_key(key)
+                for key in self.adapter.adata.obsm
             )
         except Exception:
             return False
@@ -1005,7 +1072,7 @@ class AnnDataServer:
         Membership in ``obsp`` is a key lookup, not a read of the matrix, so
         naming this state costs nothing that opting out was meant to save.
         """
-        if self.adapter.serve_connectivity:
+        if self.adapter.knn_key is not None:
             return False
         try:
             return "connectivities" in self.adapter.adata.obsp
@@ -1276,8 +1343,10 @@ def serve_anndata(
     dataset_name: str,
     dataset_id: str,
     obs_keys: Sequence[str] | None = None,
+    embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
+    knn_key: str | None = None,
+    expression_source: str | None = None,
     vector_field_default: str | None = None,
-    serve_connectivity: bool = False,
     serve_vector_fields: bool = False,
     serve_web_ui: bool = True,
     web_source_url: str = CELLUCID_WEB_URL,
@@ -1325,15 +1394,29 @@ def serve_anndata(
         Exact ``obs`` columns to serve, in this order. If None, every column is
         served. Naming the columns leaves out a column Cellucid cannot serve,
         such as a ``datetime64`` collection date.
+    embedding_keys : mapping, optional
+        The embedding of a dimension slot, overriding the default for that
+        slot: ``{"2d": "X_tsne"}`` reads the first two columns of
+        ``obsm['X_tsne']``, and ``{"2d": ("X_pca", [2, 0])}`` reads the 0-based
+        columns named. Slots not named follow the default rule
+        (``X_umap_1d``/``X_umap_2d``/``X_umap_3d``, or a 1- to 3-column
+        ``X_umap``); when no slot resolves, Cellucid makes a deterministic best
+        guess from the other ``obsm`` arrays and reports which one it chose.
+    knn_key : str, optional
+        The ``obsp`` matrix to serve as the neighbour graph, usually
+        ``"connectivities"``. None by default: an edge list costs time and
+        memory proportional to the number of stored neighbours, which on a
+        large object is the single longest part of startup, and most sessions
+        never draw the graph. The named matrix is read and checked before the
+        server binds; one that is not symmetric, such as ``distances``, is
+        refused with that reason, and naming a matrix the object does not carry
+        is an error.
+    expression_source : str, optional
+        Where gene expression is read: ``"X"``, ``"raw"`` (``raw.X``, with
+        genes named from ``raw.var``), or ``"layer:<name>"``; None (the
+        default) follows the default rule of :class:`~cellucid.AnnDataAdapter`.
     vector_field_default : str, optional
         Exact field id required when multiple UMAP vector fields exist.
-    serve_connectivity : bool
-        Whether to read, validate, and serve ``adata.obsp['connectivities']``.
-        False by default: an edge list costs time and memory proportional to the
-        number of stored neighbors, which on a large object is the single longest
-        part of startup, and most sessions never draw the graph. Asking for a
-        graph the object does not carry is an error, so a missing
-        ``obsp['connectivities']`` is reported rather than ignored.
     serve_vector_fields : bool
         Whether to read, validate, and serve the ``<field>_umap_<n>d`` vector arrays
         in ``obsm``. False by default: every declared field is read and checked in
@@ -1388,8 +1471,10 @@ def serve_anndata(
         dataset_name=dataset_name,
         dataset_id=dataset_id,
         obs_keys=obs_keys,
+        embedding_keys=embedding_keys,
+        knn_key=knn_key,
+        expression_source=expression_source,
         vector_field_default=vector_field_default,
-        serve_connectivity=serve_connectivity,
         serve_vector_fields=serve_vector_fields,
         serve_web_ui=serve_web_ui,
         web_source_url=web_source_url,

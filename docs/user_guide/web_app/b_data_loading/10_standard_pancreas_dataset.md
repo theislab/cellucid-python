@@ -39,22 +39,38 @@ The public dataset exposes:
 - source-owned continuous observations `S_score` and `G2M_score`;
 - 3,753 ordered, source-marked, nonconstant genes for on-demand coloring;
 - 33,476 exact weighted connectivity edges;
-- independently declared 1D, 2D, and 3D embeddings; and
-- one dimension-matched vector field, `velocity_umap`, in 1D, 2D, and 3D.
+- four declared embeddings; and
+- one vector field, `velocity`, bound to the three UMAP embeddings.
+
+The embeddings, exactly as `dataset_identity.json` declares them under
+`embeddings`:
+
+| Embedding id | Label | Dimension | Origin | Velocity |
+| --- | --- | --- | --- | --- |
+| `X_umap_1d` | UMAP | 1D | derived | yes |
+| `X_pca` | PCA | 2D | source, first two components | no |
+| `X_umap` | UMAP | 2D | source | yes |
+| `X_umap_3d` | UMAP | 3D | derived | yes |
+
+The declared defaults are `X_umap_1d` for 1D, `X_umap` for 2D, and `X_umap_3d`
+for 3D, and the default dimension is 3D. The `velocity` field, labelled
+`velocity`, is the declared default field and carries one vector payload for
+each of the three UMAPs. Nothing is bound to `X_pca`: the build projects
+velocity onto the three UMAPs only.
 
 To inspect velocity, open **Visualization**, keep **Render mode** set to
 `Points`, find **Vector Field Overlay**, and enable **Show overlay**. The field
-selector reports `velocity_umap`. The overlay is a qualitative view of the
+selector reports `velocity`. The overlay is a qualitative view of the
 projected stochastic velocity; it does not replace scVelo's numerical
 diagnostics or uncertainty checks.
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/pancreas-velocity-3d.png
-:alt: Cellucid showing the Pancreatic endocrinogenesis (scVelo) sample in its 3D Orbit view, colored by clusters, with the velocity_umap overlay enabled and vector controls visible.
+:alt: Cellucid showing the Pancreatic endocrinogenesis (scVelo) sample in its 3D Orbit view, colored by clusters, with the velocity overlay enabled and vector controls visible.
 :width: 1440px
 
 The standard Pancreas sample in Build 2026-07-27.1: `clusters` supplies eight
-categories, **Show overlay** is enabled, `velocity_umap` is selected, and the
-dimension-owned controls report **3D** with **Orbit** navigation.
+categories, **Show overlay** is enabled, the `velocity` field is selected, and
+the dimension-owned controls report **3D** with **Orbit** navigation.
 ```
 
 ## What is source-owned and what is derived
@@ -86,31 +102,34 @@ the selected expression values.
 
 The canonical provenance is
 [`sources/pancreas.json`](https://github.com/theislab/cellucid-datasets/blob/main/sources/pancreas.json)
-in `cellucid-datasets`. It pins:
+in `cellucid-datasets`, the build contract of
+`cellucid-datasets/scripts/build_pancreas.py`. It pins:
 
 - the source commit, URL, SHA-256, byte size, and biological citation;
-- the exact Python and scientific-package environment;
 - deterministic embedding and velocity parameters;
 - semantic digests for coordinates, vectors, metadata, genes, expression, and
-  connectivity;
-- the exact Cellucid 0.9.1 producer-source digest, over the modules the export
-  path executes; and
-- the total byte size and the SHA-256 generation digest covering all 3,774
+  connectivity; and
+- the total byte size and the SHA-256 generation digest covering all 3,775
   exported files.
 
 Those last two are recorded in `sources/pancreas.json` rather than repeated
 here, because they change whenever the dataset is regenerated. Read them from
 that file if you are verifying a build.
 
-Pancreas is the only one of the five built-in samples with a build contract of
-this kind. The build refuses to start in a different environment and refuses to
-publish an export that does not match the recorded generation digest, so it can
-be rebuilt and checked from the recipe in `cellucid-datasets`. That pin covers
-the producer and the output, not the upstream file itself, which the build
-downloads from the URL above unless it is handed a local copy. The other four
-samples are published artifacts whose exact bytes are recorded but whose build
-is not pinned; {doc}`12_sample_dataset_provenance` states what is and is not
-established for each of the five.
+The environment — the exact Python and scientific-package set in
+`requirements-build.lock` — and the exact Cellucid 0.9.3 producer-source digest, over
+the modules the export path executes, are pinned once for all five samples in
+`sources/build-environment.json`.
+
+Every one of the five built-in samples has a build contract of this kind. The
+build refuses to start in a different environment and refuses to publish an
+export that does not match the recorded generation digest, so Pancreas can be
+rebuilt and checked from the recipe in `cellucid-datasets`. That pin covers the
+producer and the output, not the upstream file itself, which the build
+downloads from the URL above unless it is handed a local copy. Pancreas is the
+one sample built from a public source file; the four human atlases are rebuilt from
+integration outputs the dataset repository does not redistribute.
+{doc}`12_sample_dataset_provenance` states what is pinned for each of the five.
 
 The source data correspond to
 [GSE132188](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE132188).
@@ -126,8 +145,8 @@ to the tools used in your analysis.
   **Pancreatic endocrinogenesis (scVelo)** and that `Points` is the active
   render mode.
 - If **Show overlay** disables after a dimension change, wait for that
-  dimension's embedding and `velocity_umap` payload to finish loading before
-  retrying.
+  dimension's embedding and `velocity` payload to finish loading before
+  retrying. The **PCA** embedding has no `velocity` payload.
 - If points or flow look biologically surprising, compare the exact dimension
   with the scVelo analysis and inspect velocity confidence before interpreting
   directionality.

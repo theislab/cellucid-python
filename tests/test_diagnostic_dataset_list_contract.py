@@ -42,7 +42,7 @@ def _prepared_dataset(root: Path, *, dataset_id: str) -> Path:
     (root / "dataset_identity.json").write_text(
         json.dumps(
             {
-                "version": 2,
+                "version": 3,
                 "id": dataset_id,
                 "name": f"Prepared {dataset_id}",
                 "description": "",
@@ -56,9 +56,16 @@ def _prepared_dataset(root: Path, *, dataset_id: str) -> Path:
                     "n_edges": None,
                 },
                 "embeddings": {
-                    "available_dimensions": [2],
                     "default_dimension": 2,
-                    "files": {"2d": "points_2d.bin"},
+                    "defaults": {"2d": "X_umap"},
+                    "items": {
+                        "X_umap": {
+                            "label": "X_umap",
+                            "dimension": 2,
+                            "file": "embeddings/0_2d.bin",
+                            "source": {"key": "X_umap", "columns": [0, 1]},
+                        }
+                    },
                 },
                 "obs_fields": [],
                 "export_settings": {
@@ -74,7 +81,7 @@ def _prepared_dataset(root: Path, *, dataset_id: str) -> Path:
     (root / "obs_manifest.json").write_text(
         json.dumps(
             {
-                "_format": "compact_v1",
+                "_format": "compact_v2",
                 "n_points": 1,
                 "centroid_outlier_quantile": None,
                 "latent_key": "latent_space",
@@ -86,7 +93,8 @@ def _prepared_dataset(root: Path, *, dataset_id: str) -> Path:
         ),
         encoding="utf-8",
     )
-    (root / "points_2d.bin").write_bytes(b"\x00" * 8)
+    (root / "embeddings").mkdir()
+    (root / "embeddings" / "0_2d.bin").write_bytes(b"\x00" * 8)
     return root
 
 
@@ -104,6 +112,7 @@ def _entry(**overrides: object) -> dict[str, object]:
         "name": "Alpha",
         "state_manifest": _PUBLISHED_STATE_MANIFEST_NAME,
         "state_sha256": "0" * 64,
+        "state_bytes": 3268,
     }
     entry.update(overrides)
     return entry
@@ -112,7 +121,7 @@ def _entry(**overrides: object) -> dict[str, object]:
 def test_wire_and_server_declare_the_same_published_state_pair() -> None:
     """One published-state shape, two modules, and now one check that ties them."""
     assert _PUBLISHED_STATE_MANIFEST_NAME == _PUBLISHED_STATE_MANIFEST
-    assert sorted(_PUBLISHED_STATE_FIELDS) == ["state_manifest", "state_sha256"]
+    assert sorted(_PUBLISHED_STATE_FIELDS) == ["state_bytes", "state_manifest", "state_sha256"]
 
 
 def test_diagnostics_accept_the_exact_catalog_the_prepared_server_serves(
@@ -134,6 +143,7 @@ def test_diagnostics_accept_the_exact_catalog_the_prepared_server_serves(
             "name": "Prepared beta",
             "state_manifest": _PUBLISHED_STATE_MANIFEST,
             "state_sha256": digest,
+            "state_bytes": len(STATE_BUNDLE_BYTES),
         },
     ]
 
@@ -161,6 +171,7 @@ def test_debug_connection_probes_identity_for_a_published_state_catalog(
                     "name": "Prepared beta",
                     "state_manifest": _PUBLISHED_STATE_MANIFEST_NAME,
                     "state_sha256": "b" * 64,
+                    "state_bytes": 3268,
                 }
             ]
         },
@@ -201,6 +212,7 @@ def test_debug_connection_probes_identity_for_a_published_state_catalog(
             "name": "Prepared beta",
             "state_manifest": _PUBLISHED_STATE_MANIFEST_NAME,
             "state_sha256": "b" * 64,
+            "state_bytes": 3268,
         }
     ]
     assert report["dataset_identity_probes"]["beta"] == {
@@ -264,6 +276,26 @@ def test_diagnostics_still_accept_a_catalog_without_a_published_state() -> None:
             _entry(state_sha256=0),
             "state_sha256 must be exactly",
             id="digest-not-text",
+        ),
+        pytest.param(
+            {k: v for k, v in _entry().items() if k != "state_bytes"},
+            "exactly id, name, and path",
+            id="manifest-and-digest-without-length",
+        ),
+        pytest.param(
+            _entry(state_bytes=0),
+            "state_bytes must be the default state's exact positive byte length",
+            id="length-zero",
+        ),
+        pytest.param(
+            _entry(state_bytes="3268"),
+            "state_bytes must be the default state's exact positive byte length",
+            id="length-not-integer",
+        ),
+        pytest.param(
+            _entry(state_bytes=True),
+            "state_bytes must be the default state's exact positive byte length",
+            id="length-boolean",
         ),
     ],
 )

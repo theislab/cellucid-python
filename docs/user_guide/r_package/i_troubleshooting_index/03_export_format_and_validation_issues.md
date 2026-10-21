@@ -13,7 +13,7 @@ Use this page when:
 Required for any export:
 - `dataset_identity.json`
 - `obs_manifest.json`
-- at least one `points_*d.bin[.gz]`
+- `embeddings/` with every `<index>_<dim>d.bin[.gz]` the identity declares
 - `obs/` directory with files
 
 **How to confirm**
@@ -31,7 +31,7 @@ list.files(out_dir)
 - confusion about compression.
 
 If you set `compression=...`, the exporter writes:
-- `points_2d.bin.gz` (not `points_2d.bin`)
+- `embeddings/0_2d.bin.gz` (not `embeddings/0_2d.bin`)
 
 The manifests record the correct suffixes. The viewer should follow manifests.
 

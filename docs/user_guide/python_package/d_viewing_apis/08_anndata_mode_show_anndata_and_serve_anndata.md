@@ -58,38 +58,41 @@ serve_anndata(
 
 ## Minimum AnnData requirements (the “must haves”)
 
-### 1) UMAP embedding in `adata.obsm`
+### 1) An embedding in `adata.obsm`
 
-Each of these keys names its own dimension, and always decides it:
+Cellucid shows one embedding per dimension slot (1D, 2D, 3D) and fills the
+slots from `adata.obsm`, in this order:
 
-- `X_umap_1d` (shape `(n_cells, 1)`)
-- `X_umap_2d` (shape `(n_cells, 2)`)
-- `X_umap_3d` (shape `(n_cells, 3)`)
+1. **The slots you name.** `embedding_keys={"2d": "X_tsne"}` (or
+   `--embedding-2d X_tsne`) shows `obsm['X_tsne']` in 2D. A wider array is read at
+   the 0-based columns you name: `embedding_keys={"2d": ("X_pca", [0, 1])}`, or
+   `--embedding-2d X_pca:0,1`.
+2. **The default rule, for every slot you did not name.** `X_umap_1d`,
+   `X_umap_2d`, and `X_umap_3d` each fill their own slot. When none of them is
+   present, a bare `X_umap` — the key `sc.tl.umap()` writes — fills the slot of
+   its own column count, so the ordinary Scanpy object is served exactly as
+   Scanpy left it.
+3. **A deterministic best guess, only when neither filled any slot.** Cellucid
+   then ranks the other `obsm` arrays by name (UMAP, then t-SNE, force-directed
+   layouts, PHATE, PaCMAP/TriMAP, spatial, diffusion maps, other names, and
+   latent spaces such as PCA or scVI last) and fills each slot with the
+   best-ranked array of exactly that width. If no array has 1 to 3 columns, the
+   best-ranked wider one is shown in 2D at columns 0 and 1. The startup report
+   marks a guessed slot, for example `Embeddings: 2D from obsm['X_tsne'] (guessed)`.
 
-**An object that declares none of them is still served when it carries a bare
-`X_umap`** — the key `sc.tl.umap()` writes. That array is read at the dimension
-its own column count states: two columns are a 2D embedding, three columns are
-a 3D embedding, one column is a 1D embedding. The ordinary Scanpy object is
-therefore served exactly as Scanpy left it, with no rename and no edit to your
-object.
+If nothing in `obsm` can be plotted, construction fails with a message that
+lists what `obsm` holds and why each entry was not used:
 
-Declare the dimensional keys when you want more than one dimension available at
-once, or when the coordinates you want drawn are not the ones `X_umap` holds:
-
-```python
-adata.obsm["X_umap_2d"] = adata.obsm["X_umap"]
+```text
+Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,696) and at least one numeric column. obsm holds: X_df (table), spatial (3,696 × 2, NaN at cell 17).
 ```
 
-Use `X_umap_3d` if you ran `sc.tl.umap(adata, n_components=3)` and want those
-coordinates under a key of their own. When you serve a `.h5ad` or `.zarr` path
-rather than an in-memory object, re-save the file after the assignment.
+Those are the embeddings each dimension shows first, its *defaults*. The data
+mapping the server publishes (`adapter.get_data_mapping()`) also *enables*
+every other usable `obsm` array 1 to 3 columns wide beside them; see
+{doc}`../../web_app/b_data_loading/13_data_mapping`.
 
-If nothing resolves, construction fails with
-“No UMAP embedding Cellucid can read was found in adata.obsm.”. The message
-lists the `obsm` keys the object does have; names the shape of `X_umap` when
-its width is the reason nothing resolved; and prints an exact statement to run
-for every other array that could be an embedding. The complete rules are in the
-section on which `obsm` keys are read, below.
+The complete rules are in the section on which `obsm` keys are read, below.
 
 ### 2) (Optional but common) Gene expression in `adata.X`
 
@@ -122,93 +125,117 @@ column left out is not served at all.
 
 ## Which `obsm` keys are read (detailed, for debugging)
 
-### The keys that name their own dimension
+### Slots you name: `embedding_keys` and `--embedding-<n>d`
 
-| `obsm` key | Required shape | Dimension served |
-| --- | --- | --- |
-| `X_umap_1d` | `(n_cells, 1)` | 1D |
-| `X_umap_2d` | `(n_cells, 2)` | 2D |
-| `X_umap_3d` | `(n_cells, 3)` | 3D |
+`embedding_keys` maps a slot — `"1d"`, `"2d"`, or `"3d"` — to an `obsm` key, or
+to a `(key, columns)` pair whose columns are 0-based and one per axis:
 
-Any combination of the three may be present, and each is served at the
-dimension its key names. The highest dimension present is the one the viewer
-opens in. A key whose array does not carry exactly the column count its name
-declares is an error, not a reinterpretation: `X_umap_3d` holding
-`(n_cells, 2)` fails construction instead of being served as 2D.
+```python
+viewer = show_anndata(
+    "data.h5ad",
+    dataset_name="My study",
+    dataset_id="my-study-v1",
+    embedding_keys={"2d": "X_tsne", "3d": ("X_pca", [0, 1, 2])},
+)
+```
 
-### The bare `X_umap`, resolved by its own width
+```bash
+cellucid serve /path/to/data.h5ad --dataset-name "My study" --dataset-id my-study-v1 \
+  --embedding-2d X_tsne --embedding-3d X_pca:0,1,2
+```
 
-When none of `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` is present and `obsm`
-carries `X_umap`, that one array is read at the dimension its column count
-states:
+A key without columns is read at columns `0 … d-1`, so a 2D slot reads the first
+two columns of any array at least two columns wide. A named array that does not
+exist, is a table or a sparse matrix, does not have one row per cell, is too
+narrow for its slot, repeats a column, or holds a non-finite value in a selected
+column fails construction with that reason. A slot you name replaces that slot's
+default; slots you do not name still follow the default rule.
 
-| `adata.obsm["X_umap"].shape` | Read as | Result |
-| --- | --- | --- |
-| `(n_cells, 1)` | 1D | served as the 1D embedding |
-| `(n_cells, 2)` | 2D | served as the 2D embedding |
-| `(n_cells, 3)` | 3D | served as the 3D embedding |
-| any other width | — | construction fails, naming the shape |
+### The default rule
 
-`sc.tl.umap(adata)` writes two columns and `sc.tl.umap(adata, n_components=3)`
-writes three, so both are readable as written. Only one dimension comes out of
-this path, because there is only one array: to offer 2D *and* 3D in the same
-session, declare `X_umap_2d` and `X_umap_3d`.
+| `obsm` key | Slot it fills |
+| --- | --- |
+| `X_umap_1d` | 1D, columns `[0]` |
+| `X_umap_2d` | 2D, columns `[0, 1]` |
+| `X_umap_3d` | 3D, columns `[0, 1, 2]` |
+| `X_umap`, only when none of the three is present | the slot of its own width, when that is 1, 2, or 3 |
 
-### An explicit key wins, and the bare key then stays out
+Any combination of the three dimensional keys may be present, and each fills its
+own slot. If any of them exists, `X_umap` never joins them: an object holding
+both `X_umap_3d` and `X_umap` serves 3D only. `sc.tl.umap(adata)` writes two
+columns and `sc.tl.umap(adata, n_components=3)` writes three, so both are
+readable as written. A default key that cannot be plotted — a non-finite
+coordinate, or no spread at all — fails construction rather than being skipped,
+because the key says the array was meant to be drawn.
 
-If any of `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` exists anywhere in `obsm`,
-the set of embeddings is exactly the dimensional keys present, and `X_umap`
-never joins it. An object holding both `X_umap_3d` and `X_umap` serves 3D only.
-That is deliberate: a writer who named a dimension named it for the whole
-object, and a second array of unknown provenance is not promoted alongside it.
+When the default rule fills any slot, the result is exactly what earlier releases
+served: the same arrays, the same coordinates, and no guessing.
+
+### The best guess
+
+When neither `embedding_keys` nor the default rule fills any slot, every usable
+`obsm` array — dense, numeric, one row per cell, at least one column — is a
+candidate, except `<field>_umap_<n>d` vector fields and the `latent_key` array.
+Candidates are ranked by the first of these name patterns their lowercased key
+contains, ties broken by key in code-point order:
+
+| Rank | Key contains |
+| --- | --- |
+| 0 | `umap` |
+| 1 | `tsne`, `t-sne`, `t_sne` |
+| 2 | `draw_graph`, `force` |
+| 3 | `phate` |
+| 4 | `pacmap`, `trimap` |
+| 5 | `spatial` |
+| 6 | `diffmap` |
+| 7 | none of these |
+| 8 | `pca`, `scvi`, `latent`, `harmony`, `x_emb` |
+
+For each of 3D, 2D, and 1D, the slot takes the best-ranked candidate whose width
+is exactly that dimension. Only when no candidate of width 1 to 3 fills any slot
+is the 2D slot filled from the best-ranked wider array at columns `[0, 1]` — so a
+10-column `X_umap` is shown as `X_umap[0,1]`. A candidate whose selected columns
+turn out to be non-finite or flat is skipped for the next one. The ranking is
+deterministic, the same object always resolves the same way, and the same cases
+are pinned for every implementation in
+`tests/fixtures/data_mapping_conformance.json`.
 
 ### Nothing in your object is renamed or written
 
-Resolution is a read. Cellucid does not assign `X_umap_1d`, `X_umap_2d`, or
-`X_umap_3d` into `adata.obsm`, does not rename `X_umap`, and does not write to
-the `.h5ad` or `.zarr` you served — an `.h5ad` is opened read-only-backed, so it
-could not. The key that resolved is reported during startup, for example
-`Embeddings: 2D from obsm['X_umap']`, so the transcript always names the array
-being drawn.
+Resolution is a read. Cellucid does not assign anything into `adata.obsm` and
+does not write to the `.h5ad` or `.zarr` you served — an `.h5ad` is opened
+read-only-backed, so it could not. The array that fills each slot is reported
+during startup, for example `Embeddings: 2D from obsm['X_umap']`, and again in
+step 3 under its embedding id (`2D X_umap`, or `2D X_pca[0,1]` when only some
+columns are read), so the transcript always names what is drawn.
 
-### When no width is readable
-
-An `X_umap` of some other width is a latent space someone named after a plot,
-and no rename makes it drawable, so the message names its shape:
+### When nothing can be plotted
 
 ```text
-No UMAP embedding Cellucid can read was found in adata.obsm. Cellucid reads the exact keys 'X_umap_1d', 'X_umap_2d', and 'X_umap_3d', and reads a bare 'X_umap' as the dimension its own column count states. Available obsm keys: ['X_pca', 'X_umap'].
-  adata.obsm['X_umap'] has shape (3696, 10), and Cellucid draws 1, 2, or 3 dimensions, so that array names a dimension no viewer renders. Assign the columns you mean to draw under the key for their own count.
+Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,696) and at least one numeric column. obsm holds: X_df (table), spatial (3,696 × 2, NaN at cell 17).
 ```
 
-Assign the columns you actually want drawn under the key for their own count:
-
-```python
-adata.obsm["X_umap_2d"] = umap_coordinates_2d
-```
-
-When some *other* `obsm` array has `n_cells` rows and 1, 2, or 3 columns, the
-message adds a `Fix:` block containing one copy-pasteable statement per
-candidate, each naming that array's shape.
+Each entry says what the array is and, for a dense array, why it was not used:
+the first non-finite cell, a row count that is not the cell count, a dtype that
+is not numeric, or its role (`a vector field`, `the latent space`). `obsm holds:
+nothing.` means `obsm` is empty. Compute an embedding, or name one with
+`embedding_keys`.
 
 ### Where the same rule applies
 
-This resolution is the direct-AnnData rule. It is used by
-{func}`~cellucid.show_anndata`, {func}`~cellucid.serve_anndata`,
-{class}`~cellucid.AnnDataViewer`, {class}`~cellucid.AnnDataAdapter` (including
-`AnnDataAdapter.from_file`), `cellucid serve` on a path it detects as direct
-AnnData input,
-and {func}`~cellucid.add_transition_drift_to_obsm`, which picks the embedding
-its drift is computed in. The web app's own `.h5ad` and `.zarr` readers apply
-the same rule, so an object that serves also opens in the browser.
+This resolution is used by {func}`~cellucid.show_anndata`,
+{func}`~cellucid.serve_anndata`, {class}`~cellucid.AnnDataViewer`,
+{class}`~cellucid.AnnDataAdapter` (including `AnnDataAdapter.from_file`), and
+`cellucid serve` on a path it detects as direct AnnData input.
+{func}`~cellucid.add_transition_drift_to_obsm` uses the default rule only,
+because it computes drift in a UMAP. The web app's own `.h5ad` and `.zarr`
+readers apply the default rule.
 
 ```{important}
 `prepare()` is a different path and shares none of this. It never looks at
-`obsm` keys: the coordinates arrive as arrays, in the `X_umap_1d=`,
-`X_umap_2d=`, and `X_umap_3d=` arguments, and each argument names the dimension
-of the array you hand it. Passing `adata.obsm["X_umap"]` as `X_umap_2d=` is the
-whole of “resolution” on the export path. See
-{doc}`../c_data_preparation_api/03_embeddings_and_coordinates`.
+`obsm` keys: you pass every embedding you want exported, by id, in
+`embeddings={...}`, with {class}`~cellucid.Embedding` naming the columns of a
+wide array. See {doc}`../c_data_preparation_api/03_embeddings_and_coordinates`.
 ```
 
 ## Loading and memory behavior (critical for large datasets)
@@ -232,31 +259,48 @@ In-memory datasets are convenient but can be risky for large matrices:
 
 Rule of thumb: if your dataset is big enough that you worry about RAM, view from a file.
 
-## Gene IDs (`gene_id_column`) and duplicates
+## Gene IDs, expression source, and repeated names
 
 Cellucid needs a mapping from “what you type in the gene search box” → a column index in the matrix.
 
-By default, `gene_id_column=None` uses `var.index`. Any non-blank string names
-that exact `var` column, so `gene_id_column="index"` selects a column literally
-named `"index"`.
+By default, expression is read from `adata.X` and genes are named by
+`var.index`. An object without `X` reads `adata.raw.X`, else its only layer,
+else its best-named layer (`norm` or `log` first, `counts` and `raw_counts`
+last), and reports that choice as guessed — the rule a file opened in the
+browser follows. `expression_source` (`--expression`) chooses the matrix
+explicitly: `"raw"` reads `adata.raw.X` and names genes from `adata.raw.var`,
+and `"layer:<name>"` reads `adata.layers[<name>]`, which shares `var`. A source
+the object does not have fails construction. The viewer can switch to any
+other matrix or gene-name column afterwards, under **Session › Data mapping ›
+Genes** (see {doc}`../../web_app/b_data_loading/13_data_mapping`).
 
-If your gene IDs are in a column (e.g. `"gene_symbols"`), pass:
+`gene_id_column` (`--gene-id-column`) names genes from a column of that gene
+axis instead of its index. Any non-blank string names that exact column, so
+`gene_id_column="index"` selects a column literally named `"index"`:
 
 ```python
 viewer = show_anndata(
     "data.h5ad",
     gene_id_column="gene_symbols",
+    expression_source="raw",
     dataset_name="My study",
     dataset_id="my-study-v1",
 )
 ```
 
+Repeated and empty names are accepted. An empty value (`""`, `None`, or NaN)
+takes that row's index name, and a repeated name is made unique the way
+anndata's `var_names_make_unique()` does it — the second `MATR3` is served as
+`MATR3-1`. Startup reports what changed, for example
+`Gene names: 1 gene has no 'gene_symbols' value and uses its var index name. 1 duplicate name was made unique, e.g. 'MATR3' → 'MATR3-1'.`
+The rule is the one both export writers apply; see
+{ref}`python_package-make-unique-gene-names`.
+
 ```{warning}
-AnnData construction rejects duplicate gene names, and names carrying
-characters with no glyph (control, zero-width, or edge whitespace). Payload
+Served gene names must still be drawable exactly as stored: a name carrying a
+control or zero-width character, or edge whitespace, fails construction. Payload
 routes are integer indices, so `HLA-DRB1/2` and `Gene A` are served fine, and
-`Gene` and `gene` are two distinct genes. Choose a distinct name in `var.index`
-or the selected `gene_id_column`.
+`Gene` and `gene` are two distinct genes.
 ```
 
 ## Two optional capabilities, both asked for
@@ -267,14 +311,18 @@ always served.
 
 | Capability | Reads | Python | Terminal |
 |---|---|---|---|
-| Neighbor graph | `adata.obsp['connectivities']` | `serve_connectivity=True` | `--connectivity` |
+| Neighbor graph | the `adata.obsp` matrix you name | `knn_key="connectivities"` | `--knn connectivities` |
 | Vector fields | `adata.obsm['<field>_umap_<n>d']` | `serve_vector_fields=True` | `--vector-fields` |
 
 Both are off for the same reason: each is read and validated **in full** before
 the server binds its socket, because the manifests the viewer fetches first
 declare what they contain. On a large object that is the difference between a
 server that opens in a second and one that takes minutes, and most sessions never
-turn either overlay on. Neither choice affects anything else the viewer can do.
+turn either overlay on. Neither choice affects anything else the viewer can do,
+and neither limits it: in the viewer, **Session › Data mapping** can choose any
+`obsp` graph and bind any `obsm` array that fits an embedding, and the server
+reads that one on request (see
+{doc}`/user_guide/web_app/b_data_loading/13_data_mapping`).
 
 The startup report names which state you are in, for each of them separately —
 served, present in the object but not asked for, or absent. See
@@ -288,8 +336,10 @@ transcript.
 
 ## Vector fields (velocity/drift overlays)
 
-Cellucid can render per-cell displacement vectors as an animated overlay, when
-you ask for it with `serve_vector_fields=True` or `--vector-fields`.
+Cellucid can render per-cell displacement vectors as an animated overlay. With
+`serve_vector_fields=True` or `--vector-fields` the viewer opens with the
+fields below bound; without it, it opens with none, and any can be bound under
+**Session › Data mapping › Vector fields**.
 
 ### Naming convention (UMAP basis)
 
@@ -302,8 +352,12 @@ Required dimension-suffixed keys in `adata.obsm`:
 An unsuffixed key such as `velocity_umap` is not discovered as a vector field.
 
 Rules:
-- vectors must match `n_cells` and the current dimension (2D vs 3D)
-- vectors are scaled into the same normalized coordinate space as the embedding points
+- a `<field>_umap_<n>d` key is bound to the `<n>`D slot only when that slot shows
+  `X_umap_<n>d` or `X_umap`, because a UMAP vector drawn over another layout
+  points the wrong way. A key whose slot shows something else is not served
+- vectors must match `n_cells` and the dimension of the embedding they are bound to
+- vectors are scaled by that embedding's own normalization factor, into the same
+  coordinate space as its points
 - when the AnnData object declares more than one field ID, pass the exact
   `vector_field_default` to `show_anndata(...)`, `serve_anndata(...)`, or
   `AnnDataViewer(...)`; construction raises `ValueError` if it is omitted or
@@ -327,26 +381,28 @@ viewer = show_anndata(
 ```
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/overlay-controls.png
-:alt: The real Pancreatic endocrinogenesis sample in its 2D Planar view with the velocity_umap particle overlay and controls visible.
+:alt: The real Pancreatic endocrinogenesis sample in its 2D Planar view with the velocity particle overlay and controls visible.
 :width: 1440px
 
 The real 3,696-cell Pancreas sample in Build 2026-07-27.1, rendered in 2D
-Planar mode with `velocity_umap`; the field, density, speed, trail, size,
-opacity, palette, and LOD controls are visible.
+Planar mode with its exported `velocity` field; the field, density, speed,
+trail, size, opacity, palette, and LOD controls are visible. The sample is a
+prepared export, so its field id is the one `prepare()` was given; served
+straight from AnnData, a `velocity_umap_2d` key is the field `velocity_umap`.
 ```
 
 ## Connectivity (KNN graph)
 
 On the direct-AnnData path the neighbor graph is **opt-in, and off by default**.
 A `.h5ad` straight out of `sc.pp.neighbors()` serves without a graph unless you
-ask for one.
+name the `obsp` matrix to draw:
 
 ```python
 viewer = show_anndata(
     "data.h5ad",
     dataset_name="My study",
     dataset_id="my-study-v1",
-    serve_connectivity=True,
+    knn_key="connectivities",
 )
 ```
 
@@ -354,21 +410,22 @@ viewer = show_anndata(
 cellucid serve /path/to/data.h5ad \
   --dataset-name "My study" \
   --dataset-id my-study-v1 \
-  --connectivity
+  --knn connectivities
 ```
 
-`serve_connectivity` is accepted by {func}`~cellucid.show_anndata`,
+`knn_key` is accepted by {func}`~cellucid.show_anndata`,
 {func}`~cellucid.serve_anndata`, {class}`~cellucid.AnnDataViewer`,
 {class}`~cellucid.AnnDataServer`, {class}`~cellucid.AnnDataAdapter`, and
-`AnnDataAdapter.from_file`. From the terminal it is `--connectivity`, and like
-every other AnnData-only flag it is rejected when the path is a prepared
-export, which already declares whatever artifacts it holds.
+`AnnDataAdapter.from_file`. From the terminal it is `--knn KEY`, and like every
+other AnnData-only flag it is rejected when the path is a prepared export, which
+already declares whatever artifacts it holds. A graph written by
+`sc.pp.neighbors(adata, key_added="pca15")` is `knn_key="pca15_connectivities"`.
 
 ### What “off” means
 
-- `adata.obsp["connectivities"]` is never read. Whether the key exists is
-  checked, because the startup report says so, but that is a key lookup and
-  never touches the matrix.
+- No `obsp` matrix is read. Whether `connectivities` exists is checked, because
+  the startup report says so, but that is a key lookup and never touches the
+  matrix.
 - `dataset_identity.json` reports `stats.has_connectivity` as `false` and
   `stats.n_edges` as `null`.
 - `connectivity_manifest.json` answers `404 No connectivity data`.
@@ -384,34 +441,40 @@ Building the edge list is the single longest part of starting a server on a
 large object. A 50-neighbor graph over millions of cells is hundreds of
 millions of stored neighbors, and validating symmetry, deduplicating the stored
 neighbors into edges, and ordering them costs minutes and several times the
-graph's own memory. Most sessions never draw the graph, and until this was
-opt-in every one of them paid for it.
+graph's own memory. Most sessions never draw the graph.
 
 ### What “on” costs, and when you pay it
 
-Passing `serve_connectivity=True` reads and validates the **whole** graph
-before the server binds its socket. This is not deferrable: the first document
-the viewer fetches is the manifest, and the manifest declares the exact edge
-count and the neighbor maximum, both of which are properties of the finished
-edge list. So the cost lands during startup — between `Loading AnnData` and the
-printed URL — rather than the first time someone switches edges on.
+Naming a `knn_key` reads and validates the **whole** matrix before the server
+binds its socket. This is not deferrable: the first document the viewer fetches
+is the manifest, and the manifest declares the exact edge count and the neighbor
+maximum, both of which are properties of the finished edge list. So the cost
+lands during startup — between `Loading AnnData` and the printed URL — rather
+than the first time someone switches edges on.
 
 For a sparse matrix of 50,000,000 or more stored neighbors, Cellucid logs a
 warning naming that count and the cell count before the validation starts, so a
 long wait is announced rather than merely observed.
 
-### Asking for a graph that is not there is an error
+### A matrix that is not there, or not a graph, is an error
 
-`serve_connectivity=True` (or `--connectivity`) on an object whose `obsp` has no
-`connectivities` fails at construction rather than serving a dataset silently
-missing the thing you asked for:
+Naming a matrix the object does not have fails at construction rather than
+serving a dataset silently missing the thing you asked for:
 
 ```text
-Connectivity was asked for, and adata.obsp has no 'connectivities' matrix to serve. Compute the neighbor graph with sc.pp.neighbors(adata) before serving, or serve without asking for connectivity.
+knn_key names obsp['connectivities'], which this object does not have. obsp holds: []. Compute the neighbour graph with sc.pp.neighbors(adata), or serve without a graph.
 ```
 
-An invalid graph fails the same way, before the socket exists, with the exact
-contract violation quoted.
+The matrix is checked when it is read, and never transformed. Scanpy's
+`obsp['distances']` is a directed k-nearest-neighbour matrix, so it is refused
+with that reason:
+
+```text
+obsp['distances'] is not symmetric — choose a connectivities matrix. The neighbour graph must be undirected: Connectivity matrix must be exactly symmetric in topology and weight.
+```
+
+Any other contract violation fails the same way, before the socket exists, with
+the violation quoted after `obsp['<key>'] cannot be served as the neighbour graph:`.
 
 ### What the matrix must satisfy
 
@@ -425,10 +488,9 @@ contract violation quoted.
 - large graphs can be expensive to render in the browser.
 
 ```{note}
-Only the direct-AnnData path changed. `prepare()` was already opt-in through its
-`connectivities=` argument, and the prepared-export server is unchanged: an
-export either contains the connectivity artifacts or it does not, and there is
-nothing to ask for at serve time.
+Only the direct-AnnData path chooses a matrix at serve time. `prepare()` takes
+one graph through its `connectivities=` argument, and the prepared-export server
+serves whatever artifacts the export contains.
 ```
 
 ## What startup prints
@@ -443,9 +505,10 @@ Startup prints five numbered steps; the transcript is in {doc}`../../web_app/b_d
 Reading the transcript:
 
 - `Embeddings: 2D from obsm['X_umap']` in step 2 names the exact array each
-  dimension resolved to, so the key that decided the embedding is never a
-  guess. A declared object prints, for example,
-  `Embeddings: 2D from obsm['X_umap_2d'], 3D from obsm['X_umap_3d']`.
+  slot resolved to. A declared object prints, for example,
+  `Embeddings: 2D from obsm['X_umap_2d'], 3D from obsm['X_umap_3d']`; an array
+  read at some of its columns adds them (`2D from obsm['X_pca'] columns [3, 1]`),
+  and a guessed slot ends in `(guessed)`.
 - Building the manifests and the categorical centroids is step 4. It used to
   run silently after step 3 reported success, which made a long pause look like
   a stall; it is now its own reported step.
@@ -460,10 +523,10 @@ this object holds but was not asked to serve:
 | Printed | Meaning |
 | --- | --- |
 | `yes (762,984 edges)` | the graph was asked for, validated, and is served |
-| `not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)` | the object has a graph and this server was not asked for it |
+| `not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)` | the object has a graph and this server was not asked for it |
 | `no` | `adata.obsp` has no `connectivities` at all |
 
-With `--connectivity`, step 2 gains the two lines that account for the wait,
+With `--knn connectivities`, step 2 gains the two lines that account for the wait,
 and step 3 reports the edge count:
 
 ```text
@@ -499,34 +562,47 @@ case where the tunnel has to terminate on a login node,
 
 ## Troubleshooting (AnnData mode)
 
-### “No UMAP embedding Cellucid can read was found in adata.obsm”
+### “Cellucid found nothing to plot”
 
 **Likely causes**
-- you didn’t compute UMAP yet
-- `obsm` carries `X_umap`, but with a width no viewer draws (a 10-column latent
-  space named after a plot, not 1, 2, or 3 coordinates)
-- keys are present but have wrong shape — `X_umap_3d` holding two columns
+- you didn’t compute an embedding yet
+- every `obsm` array is a table, sparse, non-numeric, or has a non-finite
+  coordinate in the columns that would be plotted
 - `n_cells` mismatch between `adata.obsm[...]` and `adata.n_obs`
 
 **How to confirm**
-- print `adata.obsm.keys()` and the shapes of candidate arrays
+- read the `obsm holds:` list: each entry names the array and why it was not used
 
 **Fix**
-- run the statement the error prints, e.g.
-  `adata.obsm["X_umap_2d"] = adata.obsm["X_umap"]`
-- when the message names a shape, assign the columns you actually want drawn
-  under the key for their own count
-- or compute UMAP (Scanpy) and store explicit keys (`X_umap_2d` / `X_umap_3d`)
+- compute an embedding (`sc.tl.umap(adata)`), repair the named array, or name a
+  usable one with `embedding_keys={"2d": "<key>"}` / `--embedding-2d <key>`
 
-### “Connectivity was asked for, and adata.obsp has no ‘connectivities’ matrix to serve”
+### The wrong embedding is shown
+
+**Likely cause**
+- the object has no `X_umap*` key, so a slot was guessed; the startup report
+  marks it `(guessed)`
+
+**Fix**
+- name the array you want with `embedding_keys` or `--embedding-<n>d`
+
+### “knn_key names obsp[…], which this object does not have”
 
 **Likely causes**
-- `serve_connectivity=True` or `--connectivity` was passed for an object whose
-  neighbor graph was never computed, or was computed on a different object
+- the neighbor graph was never computed, was computed on a different object, or
+  was stored under another key (`sc.pp.neighbors(..., key_added=...)`)
 
 **Fix**
 - run `sc.pp.neighbors(adata)` before serving (and re-save the file if you serve
-  a path), or serve without asking for connectivity
+  a path), name the key the object holds, or serve without a graph
+
+### “obsp[…] is not symmetric — choose a connectivities matrix”
+
+**Likely cause**
+- the named matrix is a directed matrix such as `distances`
+
+**Fix**
+- name the symmetric `connectivities` matrix instead
 
 ### The viewer offers no edges, and the object has a graph
 
@@ -535,8 +611,8 @@ case where the tunnel has to terminate on a login node,
   says so: `Connectivity: not served (obsp['connectivities'] is present; …)`
 
 **Fix**
-- pass `serve_connectivity=True`, or `--connectivity` from the terminal, and
-  expect the whole graph to be validated before the URL is printed
+- pass `knn_key="connectivities"`, or `--knn connectivities` from the terminal,
+  and expect the whole graph to be validated before the URL is printed
 
 ### “obs field ‘…’ has unsupported dtype”
 
@@ -551,10 +627,12 @@ case where the tunnel has to terminate on a login node,
 
 **Likely causes**
 - you’re searching by gene symbol but `var.index` contains Ensembl IDs (or vice versa)
-- wrong `gene_id_column`
+- wrong `gene_id_column`, or a gene axis other than the one you expected
+  (`expression_source="raw"` names genes from `raw.var`)
+- the name was repeated in `var` and is served as `NAME-1`
 
 **Fix**
-- set `gene_id_column=...` to match your gene IDs
+- set `gene_id_column=...` (or `--gene-id-column`) to match your gene IDs
 
 ### `Gene cannot be shown` — the gene was found and refused (HTTP 422)
 

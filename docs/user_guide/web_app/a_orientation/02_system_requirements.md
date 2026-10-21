@@ -44,11 +44,15 @@ validation contract on every supported platform.
 
 ### Hardware (what matters)
 
-Cellucid’s limiting resource is usually the **GPU** (not CPU):
+Cellucid’s limiting resource is **memory**, in two places — the browser tab's
+JavaScript memory and the GPU — not CPU speed:
 
-- **GPU memory (VRAM)**: more VRAM = fewer “context lost” crashes on large datasets.
+- **System RAM** (the tab's memory): about 18–19 bytes per cell for a 2D
+  embedding and 23–24 for 3D once loaded, plus about 4 bytes per cell for each
+  field or gene you colour by.
+- **GPU memory (VRAM)**: about 13 bytes per cell in 2D and 17 in 3D. On
+  computers with unified memory (Apple silicon) both come out of the same RAM.
 - **GPU driver quality**: outdated drivers can cause rendering glitches or failures.
-- **System RAM**: helps for very large datasets and smoke mode (but does not replace VRAM).
 
 Rule of thumb:
 
@@ -69,7 +73,31 @@ that device.
 
 - Mouse or trackpad recommended.
 - Keyboard shortcuts are available (see the in-app “Keyboard Shortcuts” accordion).
-- Touch devices can work for basic orbit/planar navigation, but are much more likely to run out of GPU memory.
+- Touch devices work for navigation and selection (one finger orbits — pans in
+  planar mode — two fingers pinch to zoom and drag to pan), but are much more
+  likely to run out of GPU memory.
+- **Volumetric smoke** needs float blending (`EXT_float_blend`), which Safari
+  on iPhone and iPad and many Android browsers do not offer. There, choosing
+  smoke shows “Volumetric smoke isn't available on this device: …” and the view
+  stays in Points; everything else works.
+- On a phone-sized screen (720 px wide or less) the sidebar opens over the whole
+  screen. Tap **✕** in its top-right corner to close it and see the plot; tap
+  **☰** in the top-left corner to bring it back.
+- On a touch screen the small icon buttons grow to fingertip size, and the
+  controls that otherwise wait for a mouse to hover over them (the analysis
+  rows' copy buttons, the highlight page tabs' buttons, plot toolbars) are always
+  shown. An undocked panel moves by dragging its header with a finger.
+- Selecting cells (highlighting) is an {kbd}`Alt` + click or
+  {kbd}`Alt` + drag gesture with a keyboard. A touch screen has no
+  {kbd}`Alt`, so turn on **Select mode** instead: its switch sits in the
+  **Highlighting** panel and, on a touch screen, on the selection bar at the
+  bottom of the plot. While it is on, a one-finger tap or drag runs the active
+  highlight tool exactly as {kbd}`Alt` + click or {kbd}`Alt` + drag does, and
+  two fingers still zoom and pan. Its **Intersect / Add / Subtract** buttons
+  stand in for {kbd}`Shift` and {kbd}`Ctrl`, and the bar also confirms,
+  cancels and clears selections, so the menu can stay closed. Turn the switch
+  off (or press {kbd}`Esc` with nothing in progress) to go back to
+  navigating. See {ref}`selection-bar`.
 
 ---
 
@@ -180,7 +208,7 @@ This section is intentionally long. Use the symptom that matches what you see.
 
 **Prevention**
 
-- Avoid enabling smoke mode at very high grid sizes on laptops.
+- Avoid enabling smoke mode at high render resolution and ray quality on laptops.
 
 ---
 
@@ -197,7 +225,7 @@ Cellucid shows an overlay and requires a reload when the GPU context is lost.
 **How to confirm**
 
 - It often happens right after a heavy action:
-  - switching to smoke with a high grid,
+  - switching to smoke at a high render resolution,
   - increasing ray quality,
   - opening many views/snapshots,
   - or loading a very large dataset.
@@ -206,7 +234,7 @@ Cellucid shows an overlay and requires a reload when the GPU context is lost.
 
 1) Reload the page.
 2) After reload, reduce GPU load:
-   - avoid smoke mode or lower grid/quality,
+   - avoid smoke mode, or lower its render resolution, ray quality, and noise detail,
    - keep fewer views,
    - reduce point size,
    - close other GPU-heavy tabs.
@@ -237,10 +265,10 @@ Cellucid shows an overlay and requires a reload when the GPU context is lost.
   applies to the next frame, and was measured at roughly a fifth of the frame
   time at point size 0.75 on one Apple M1 Pro, at the cost of visibly harder
   point edges. Look at the box before you reach for it: until you click it, the
-  choice is automatic from the cell count — on below 5,000,000 cells, off at or
-  above — so on a large dataset it is already clear and there is nothing left to
-  turn off.
-- If using smoke: reduce grid density, ray quality, and render resolution.
+  choice is automatic from the cell count and the view's dimension — on below
+  5,000,000 cells in 3D and below 200,000 in a 1D or 2D view, off at or above —
+  so on a large dataset it is already clear and there is nothing left to turn off.
+- If using smoke: reduce render resolution and ray quality, then grid density; or set animation speed to 0 (`Still`) so a still view is not redrawn.
 
 Lowering `Shader quality:` is a reasonable-sounding move that does **not** help:
 the three qualities measured the same at every point size tested. It changes how

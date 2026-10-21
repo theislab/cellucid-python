@@ -32,8 +32,10 @@ reports **Session fully restored** only after:
 4. transaction preparation and commit; and
 5. the final UI refresh.
 
-The Session panel then reports **Session loaded successfully**. If any step
-fails, earlier mutations roll back and no partial subset is accepted.
+That notification is the restore's one report of success; there is no second
+toast or panel status. If any step fails, earlier mutations roll back, no
+partial subset is accepted, and the same progress entry ends as **Loading
+failed** with the error.
 
 ## Save State
 
@@ -91,11 +93,14 @@ The fingerprint has exactly:
 - `sourceType`;
 - `datasetId`;
 - `cellCount`;
-- `varCount`; and
-- `cellOrder`, itself exactly a `dimension` (1, 2, or 3) and a 16-character
-  hexadecimal `digest` of the coordinates the session was saved against.
+- `varCount`;
+- `cellOrder`, itself exactly the `embedding` the digest was taken over, its
+  `dimension` (1, 2, or 3), and a 16-character hexadecimal `digest` of that
+  embedding's coordinates; and
+- `dataMapping`, the stored embeddings and arrays the dataset was shown with.
 
-All five must match. A GitHub load and a local folder load are different even
+All six must match, except that the data mapping's embeddings may differ when
+this dataset can show the ones the session names: they are restored. A GitHub load and a local folder load are different even
 when their files look identical. Fix the route or publication identity, then
 retry the unchanged bundle. Cellucid does not restore floating layout alone or
 skip filters/highlights.
@@ -110,9 +115,20 @@ Read the message before changing anything — each cause has its own:
   served copy of an export the catalog also publishes. The counts are no help
   here, which is why this message names the two identities instead of repeating
   the same two numbers. Open the dataset the state was captured on.
-- **"saved while the *N*D view was shown"**: only the cell-order dimension
-  differs. Nothing is wrong with the data or the file. Switch back to the
-  dimension the message names and load again.
+- **"This session shows …, which this dataset does not have"**: the
+  session turns on an embedding this dataset lacks (or one it cannot plot,
+  with the reason). A session whose embeddings this dataset
+  *does* have is not refused: they are restored. Open the dataset version the
+  session was saved on.
+- **"This session uses … as its neighbour graph, which this dataset does not
+  have"** (or gene names, expression matrix, latent space, vector fields): the
+  session names an array this dataset does not have or cannot use. One it has
+  is restored instead of refused.
+- **"This session was saved with … as its gene names"**: a prepared dataset
+  exported with one gene-name set cannot show another. The message names the
+  names on each side. Open the dataset version the session was saved on.
+- **"recorded its cell order on … which this dataset does not have"**: the
+  embedding the session was saved in is not part of this dataset.
 - **"the same name and the same number of cells and genes, but the cell
   coordinates differ"**: the digest no longer matches. A one-way digest cannot
   say *why*, so the message offers both causes it could be — the cells are
@@ -123,15 +139,19 @@ Read the message before changing anything — each cause has its own:
   contains"**: the file predates the cell-order record, so its selections can
   never be confirmed. Re-create them and save a new session file. This one is
   not repairable by editing the file.
+- **"saved by an earlier Cellucid release, before sessions recorded which
+  stored embeddings and arrays a dataset is shown with"**: the file predates
+  export format 3. Re-create the view on the current dataset and save a new
+  session file.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/refusal-01-different-dataset.png
-:alt: Two notifications carrying the same message, that the session was saved on a different dataset than the one open now, naming 120 cells and 6 genes when it was saved against 3,696 cells and 3,753 genes now, and advising to open the dataset the session was saved on.
+:alt: A notification titled "Loading failed" reporting that the session was saved on a different dataset than the one open now, naming 3,696 cells and 3,753 genes when it was saved and 219,731 cells and 5,754 genes now, and advising to open the dataset the session was saved on.
 :width: 760px
 
-The first of the messages, as it appears. It names **both** sizes — what
-the file was saved against and what is open now — so you can tell at a glance
-which of the two is the one you meant to open. The message appears twice because
-the loading indicator carries it as well as the final result.
+The message as it appears: a session saved on the Pancreas sample, loaded while
+the Garcia sample is open. It names **both** sizes — what the file was saved
+against and what is open now — so you can tell at a glance which of the two is
+the one you meant to open.
 ```
 
 If the sender changed fields, categories, or gene order while reusing the same
@@ -164,7 +184,7 @@ file. Session files are binary and their names are easy to confuse with the
 figures and exports saved beside them.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/refusal-02-not-a-session-file.png
-:alt: Two notifications reading "Invalid session file (bad MAGIC header)." — one on a loading entry and one as the final result.
+:alt: A notification titled "Loading failed" reading "Session file: Invalid session file (bad MAGIC header).", with a dismiss button at its right, after a file that is not a session bundle was chosen in Load State.
 :width: 760px
 
 `Invalid session file (bad MAGIC header).` means the file does not begin with
@@ -201,7 +221,7 @@ First require terminal success. Then compare:
 1. app build shown in the footer;
 2. dataset route, id, cell count, and variable count;
 3. live/snapshot layout and active view;
-4. camera, dimension, and navigation mode;
+4. every view's embedding, camera, and navigation mode, and whether cameras are linked;
 5. active obs/var field and category legend;
 6. Active filters, including latent-space outlier filtering;
 7. highlight pages, group names, counts, and visibility;

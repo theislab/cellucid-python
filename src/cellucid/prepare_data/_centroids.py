@@ -68,24 +68,24 @@ def _compute_centroids_for_field(
     return centroids
 
 
-def _compute_centroids_for_all_dimensions(
-    embeddings: dict[int, np.ndarray],
+def _compute_centroids_for_all_embeddings(
+    coordinates_by_id: dict[str, np.ndarray],
     codes: np.ndarray,
     categories: list[JsonScalar],
     outlier_quantile: float = 0.95,
     min_points: int = 10,
-) -> dict[int, list[dict]]:
+) -> dict[str, list[dict]]:
     """
-    Compute centroids for each available dimension.
+    Compute centroids on every exported embedding.
 
-    Returns a dictionary keyed by dimension (1, 2, 3) with centroid lists for each.
+    Returns a dictionary keyed by embedding id, in the order the ids were given.
     """
-    centroids_by_dim = {}
-    for dim, coords in embeddings.items():
-        centroids_by_dim[dim] = _compute_centroids_for_field(
+    return {
+        embedding_id: _compute_centroids_for_field(
             coords, codes, categories, outlier_quantile, min_points
         )
-    return centroids_by_dim
+        for embedding_id, coords in coordinates_by_id.items()
+    }
 
 
 def _compute_latent_space_quantiles(
@@ -94,26 +94,45 @@ def _compute_latent_space_quantiles(
     categories: list[JsonScalar],
     min_points: int = 10,
 ) -> np.ndarray:
-    """
-    Compute per-cell outlier quantiles based on latent space distances to category centroids.
+    """Per-cell outlier quantiles: how far a cell lies from its category's centre.
+
+    The one rule ``prepare()``, the AnnData server and the web app's
+    ``data/latent-outliers.js`` share, bit for bit. For each category with at
+    least ``min_points`` cells, over the latent values as stored (float32,
+    widened exactly to float64):
+
+    1. the centroid is the column sums, accumulated cell by cell in cell
+       order, divided by the cell count;
+    2. a cell's distance is the square root of its squared differences from
+       the centroid, accumulated column by column in column order;
+    3. its quantile is the number of the category's cells at that distance or
+       closer, divided by the cell count, both as float32.
+
+    Every other cell (a missing code, or a category under ``min_points``) is
+    NaN.
     """
     n_cells = latent.shape[0]
     quantiles = np.full(n_cells, np.nan, dtype=np.float32)
+    values = np.asarray(latent, dtype=np.float32)
 
     for code, _label in enumerate(categories):
-        mask = codes == code
-        idx = np.nonzero(mask)[0]
+        idx = np.nonzero(codes == code)[0]
         n = idx.size
-
         if n < min_points:
             continue
 
-        pts = latent[idx, :]
-        centroid = pts.mean(axis=0)
-        dists = np.linalg.norm(pts - centroid, axis=1)
+        # One column at a time, so a category never holds more than a few
+        # float64 vectors. A cumulative sum adds in cell order (numpy's sum
+        # would add pairwise), so every implementation can reproduce it.
+        squared = np.zeros(n, dtype=np.float64)
+        for column in range(values.shape[1]):
+            column_values = values[idx, column].astype(np.float64)
+            centroid = np.cumsum(column_values)[-1] / n
+            difference = column_values - centroid
+            squared += difference * difference
+        dists = np.sqrt(squared)
         sorted_dists = np.sort(dists)
         ranks = np.searchsorted(sorted_dists, dists, side="right")
-        cell_quantiles = ranks.astype(np.float32) / n
-        quantiles[idx] = cell_quantiles
+        quantiles[idx] = ranks.astype(np.float32) / np.float32(n)
 
     return quantiles

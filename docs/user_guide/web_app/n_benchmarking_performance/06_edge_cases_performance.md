@@ -20,42 +20,46 @@ If you’re here because something is already slow, you can also jump straight t
 
 ---
 
-## Edge case: the two-view row (the layout that actually costs)
+## Edge case: multiview on a large dataset
 
 ### What you see
-- A single view feels fine, but adding one snapshot makes navigation choppy.
-- Adding a *fourth* view does not make it noticeably worse — and may improve it.
+- A single view feels fine, but each kept view makes navigation choppier.
+- With very large points, a two- or three-view row can feel worse than the
+  four-view grid.
 
 ### Why it happens
-This one surprises people, so it is worth stating precisely.
+Cellucid renders any number of views: the live view plus any number of
+snapshots. Two or three views are laid out as **one row**; four or more as a
+**grid** of ⌈√n⌉ columns (four as 2×2).
 
-Cellucid renders at most four views: the live view plus up to three snapshots.
-Two or three views are laid out as **one row**; four are laid out as a **2×2
-grid**.
+Every view draws every visible point again, and each point costs the GPU
+roughly the same whatever its size. On a large dataset at the default point
+size this per-point cost dominates, so frame time grows with the view count:
+four views of a 10,000,000-point 2D embedding took 147 ms a frame against 30 ms
+for one (Chromium, Apple M1 Pro, ANGLE Metal).
 
-Point size scales with the height of the pane a point is drawn in. In a one-row
-layout every pane is still full canvas height, so the points stay full size and
-you pay for each pane in full — two views shade about twice the pixels of one.
-In the 2×2 grid each pane is half height, so every point is drawn at half the
-diameter and covers about a quarter of the area. Four panes at a quarter of the
-area each add up to roughly the fill cost of a single view.
+Point size also scales with the height of the pane a point is drawn in. In a
+one-row layout every pane is full canvas height, so points stay full size; in
+the 2×2 grid each pane is half height and every point covers about a quarter
+of the area. So the **fill** part of the cost follows 1 ≈ 4 < 2 < 3, which you
+only notice when points are large enough to overlap heavily.
 
-So the cost curve is not monotonic: **1 ≈ 4 < 2 < 3.**
-
-Overlay buffers and post-processing passes are allocated per view and do not get
-this benefit, so a heavy vector-field overlay still scales with the view count
-in every layout.
+Overlay buffers and post-processing passes are allocated per view, so a heavy
+vector-field overlay also scales with the view count in every layout.
 
 ### How to confirm
-1) Go back to a single view. If FPS recovers, the layout was the cost.
-2) If you were on two or three views, try adding one more to reach four. If FPS
-   recovers there too, you were fill-rate bound and the smaller point size fixed
-   it.
+1) Go back to a single view. If FPS recovers, the extra views were the cost.
+2) Turn on **Level-of-Detail** (Visualization panel). If FPS recovers, you were
+   bound by the number of points drawn; the same four views took 13.5 ms with it.
+3) If you use large points and were on two or three views, try four. If FPS
+   recovers there, you were fill-rate bound and the smaller points fixed it.
 
 ### Fix
+- Turn on Level-of-Detail before comparing views of a large dataset: kept views
+  draw the same reduced levels as the live view.
 - Tune filters/fields in the live view first.
-- Choose the layout for the comparison you actually want, then check both
-  directions if it is slow — one view and four views are the cheap ones.
+- With large points, prefer one view or the four-view grid to a two- or
+  three-view row.
 - If overlays are on, reduce their density before blaming the layout.
 
 ### Prevention
@@ -112,7 +116,8 @@ published, and datasets are switched **in place**:
 - **Point size** is chosen so the total drawn area stays roughly constant, so
   the dot diameter falls with the square root of the cell count.
 - **`Antialiasing (smooth point edges)`** is chosen automatically — on below
-  5,000,000 cells, off at or above.
+  5,000,000 cells in 3D and below 200,000 cells in a 1D or 2D view, off at or
+  above.
 
 Neither is a bug and neither is a reset: they are the right opening answers for
 two datasets that are not the same size. But nothing announces the point-size
@@ -120,7 +125,8 @@ change, so it reads as the app behaving differently for no reason.
 
 ### How to confirm
 1) Read the line under the antialiasing checkbox. While the choice is still
-   automatic it names the count, as in `Chosen automatically: 18,142,044 cells.`
+   automatic it names the count and dimension, as in
+   `Chosen automatically: 18,142,044 cells in 3D.`
    Once you have clicked the checkbox yourself the line goes quiet and the box
    holds your answer on every dataset from then on.
 2) Compare `Point size (log):` against what you remember. The opening size is
@@ -157,7 +163,7 @@ dataset size.
 
 ### How to confirm
 - It often happens right after:
-  - enabling smoke mode with high grid density,
+  - enabling smoke mode at a high render resolution or ray quality,
   - enabling overlays at high density,
   - loading a very large dataset,
   - selecting a very large highlight group,
@@ -181,7 +187,7 @@ Related docs:
 
 ---
 
-## Edge case: smoke mode quality cliffs (grid density + ray quality)
+## Edge case: smoke mode quality cliffs (render resolution + ray quality)
 
 ### What you see
 - Smoke mode is extremely slow or immediately causes context loss.
@@ -189,22 +195,32 @@ Related docs:
 
 ### Why it happens
 Smoke mode is a ray-marched volumetric rendering:
-- **Grid density** increases density-build time and GPU memory;
-  the current exact choices run from 32³ through 128³ and start at 128³.
+- **Render resolution** sets the rays rendered each frame: 0.25x to 1.00x of
+  the canvas, and never more than 2560×1440 rays.
+- **Ray quality** sets samples per voxel along each ray (0.5 to 2).
+- **Grid density** sets density-build time and, through the voxel size, the
+  samples each ray takes; the exact choices run from 32³ through 128³ and start
+  at 128³. Its memory is bounded: the 128³ volume is 8 MiB.
+- **Noise detail** sets the size of the two noise volumes (32³ to 128³, about
+  18 MiB together at 128³).
 - **Visible-cell count** increases density-build validation and submission.
-- **Render resolution** increases the pixels rendered each frame.
-- **Ray quality** increases ray-march steps per pixel.
+
+A WebGL context is lost when one frame runs past the GPU watchdog (about two
+seconds on Windows and macOS), so the frame-cost controls are the ones that
+matter there.
 
 ### How to confirm
 - Lower render resolution first, then ray quality, when frame rate is poor.
-- Lower grid density when entering Smoke or rebuilding after a filter is slow,
-  or when GPU memory pressure is the problem. Grid changes are applied after
-  the approximately 300 ms slider debounce and then rebuild the volume.
+- Lower grid density when entering Smoke or rebuilding after a filter or
+  recolour is slow. Grid changes are applied after the approximately 300 ms
+  slider debounce and then rebuild the volume.
 
 ### Fix
 - Lower render resolution and ray quality in **Volumetric smoke:**.
-- Lower grid density for build latency or memory pressure.
-- Lower noise detail if memory pressure remains.
+- Lower noise detail next.
+- Lower grid density for build latency.
+- Set animation speed to 0 (`Still`) when nothing needs to move: a settled
+  still view is not redrawn.
 - Return to points mode when doing scientific work; use smoke selectively.
 
 ### Prevention
@@ -248,20 +264,20 @@ Related docs:
 
 ---
 
-## Edge case: category explosion (the UI becomes unusable)
+## Edge case: category explosion (colours stop meaning anything)
 
 ### What you see
-- A categorical field has thousands–tens of thousands of categories.
-- Legends become enormous; interactions and counts lag; colors are meaningless.
+- A categorical field has thousands to millions of categories (barcodes, free
+  text).
+- The field loads and its legend scrolls, but neighbouring categories share
+  near-identical colours, and switching to the field takes longer.
 
 ### Why it happens
-Even if rendering points is fine, the UI cost of:
-- listing categories,
-- computing counts,
-- assigning colors,
-- and presenting a usable legend
-
-can become a CPU and UX cliff.
+The legend builds only the rows in view, so its size does not grow with the
+category count. What still grows with it:
+- sorting the category labels,
+- computing per-category counts,
+- assigning one colour per category, which a palette cannot keep distinct.
 
 ### How to confirm
 - Switch to a simpler categorical field; if the UI becomes responsive, the category explosion is the issue.
@@ -343,17 +359,22 @@ Related docs:
 
 ---
 
-## Edge case: large `.h5ad` loaded in-browser (memory cliff)
+## Edge case: large cell-major `.h5ad` loaded in-browser (first genes wait)
 
 ### What you see
-- The tab freezes during load.
-- The browser crashes or becomes unresponsive.
+- The dataset opens, but the first gene you colour by takes a while; a progress
+  notice reports the reorganisation of the matrix.
 
 ### Why it happens
-Browser `.h5ad` loading is not truly lazy; large files can exceed browser memory budgets.
+A cell-major (CSR) matrix stores each gene spread across the whole file, so it
+is reorganised by gene once, in the background, after opening. Genes asked for
+meanwhile are answered by the same pass. Without the browser's private file
+storage (some private windows), a matrix too large for memory is scanned for
+each gene instead.
 
 ### How to confirm
-- Try the same file via Server Mode; if it works there, the in-browser load path was the cliff.
+- Watch the progress notice; or open the same file via Server Mode, which
+  answers genes from Python with no reorganisation.
 
 ### Fix
 - Use Server Mode for large `.h5ad` / `.zarr`.

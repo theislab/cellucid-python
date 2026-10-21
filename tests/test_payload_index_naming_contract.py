@@ -31,6 +31,7 @@ import pytest
 from cellucid.prepare_data import _generation, prepare
 from cellucid.prepare_data._binary_io import _write_binary
 from cellucid.prepare_data._manifest import (
+    _declared_embedding_payload_paths,
     _gene_names_from_compact_manifest,
     _identity_obs_fields_from_compact_manifest,
     _require_declared_payloads_on_disk,
@@ -41,9 +42,25 @@ from cellucid.server._artifacts import _declared_dataset_artifacts
 # Identifiers that no filesystem could carry, and that no longer have to.
 HOSTILE_OBS_KEYS = ["% mito", "cell type", "CON", "Field", "field"]
 HOSTILE_GENE_NAMES = ["HLA-DRB1/2", "NUL.txt", "trailing.", "細胞", "Gene", "gene"]
+HOSTILE_EMBEDDING_ID = "UMAP / 2D: COM1"
 
 INDEXED_PAYLOAD = re.compile(r"^(0|[1-9][0-9]*)\.(values|codes|outliers)\.(f32|u8|u16)(\.gz)?$")
-INDEXED_VECTOR = re.compile(r"^(0|[1-9][0-9]*)_[123]d\.bin(\.gz)?$")
+INDEXED_EMBEDDING = re.compile(r"^(0|[1-9][0-9]*)_[123]d\.bin(\.gz)?$")
+INDEXED_VECTOR = re.compile(r"^(0|[1-9][0-9]*)_(0|[1-9][0-9]*)\.bin(\.gz)?$")
+
+
+def _var_manifest(fields: list) -> dict:
+    return {
+        "_format": "compact_v2",
+        "n_points": 3,
+        "compression": None,
+        "quantization": None,
+        "_varSchema": {},
+        "fields": fields,
+        "gene_name_sets": [
+            {"source": None, "filled_from_index": 0, "renamed": [], "names": None}
+        ],
+    }
 
 
 def _hostile_export(out_dir: Path, **overrides: object) -> None:
@@ -82,10 +99,10 @@ def _hostile_export(out_dir: Path, **overrides: object) -> None:
             n_cells * len(HOSTILE_GENE_NAMES), dtype=np.float32
         ).reshape(n_cells, len(HOSTILE_GENE_NAMES)),
         "connectivities": connectivities,
-        "X_umap_2d": coordinates,
+        "embeddings": {HOSTILE_EMBEDDING_ID: coordinates},
         "vector_fields": {
-            "Velocity_umap_2d": coordinates * 0.25,
-            "velocity_umap_2d": coordinates * 0.5,
+            "Velocity_umap": {HOSTILE_EMBEDDING_ID: coordinates * 0.25},
+            "velocity_umap": {HOSTILE_EMBEDDING_ID: coordinates * 0.5},
         },
         "vector_field_default": "Velocity_umap",
         "out_dir": out_dir,
@@ -125,6 +142,9 @@ def test_no_payload_filename_carries_any_identifier(export: Path) -> None:
         for name in names:
             assert pattern.fullmatch(name), f"{directory}/{name}"
 
+    for name in sorted(path.name for path in (export / "embeddings").iterdir()):
+        assert INDEXED_EMBEDDING.fullmatch(name), name
+
     for name in sorted(path.name for path in (export / "vectors").iterdir()):
         assert INDEXED_VECTOR.fullmatch(name), name
 
@@ -139,7 +159,13 @@ def test_no_payload_filename_carries_any_identifier(export: Path) -> None:
     every_relative_path = "\n".join(
         path.relative_to(export).as_posix() for path in export.rglob("*")
     )
-    for identifier in (*HOSTILE_OBS_KEYS, *HOSTILE_GENE_NAMES, "Velocity_umap", "velocity_umap"):
+    for identifier in (
+        *HOSTILE_OBS_KEYS,
+        *HOSTILE_GENE_NAMES,
+        HOSTILE_EMBEDDING_ID,
+        "Velocity_umap",
+        "velocity_umap",
+    ):
         assert identifier not in every_relative_path
         assert identifier.replace(" ", "_").replace("/", "_") not in every_relative_path
 
@@ -170,9 +196,10 @@ def test_var_and_vector_indices_are_dense_and_position_based(export: Path) -> No
         field_id: field["files"]
         for field_id, field in identity["vector_fields"]["fields"].items()
     } == {
-        "Velocity_umap": {"2d": "vectors/0_2d.bin"},
-        "velocity_umap": {"2d": "vectors/1_2d.bin"},
+        "Velocity_umap": {HOSTILE_EMBEDDING_ID: "vectors/0_0.bin"},
+        "velocity_umap": {HOSTILE_EMBEDDING_ID: "vectors/1_0.bin"},
     }
+    assert identity["embeddings"]["items"][HOSTILE_EMBEDDING_ID]["file"] == "embeddings/0_2d.bin"
 
 
 def test_manifest_path_patterns_substitute_the_index(export: Path) -> None:
@@ -215,7 +242,7 @@ def test_a_shared_payload_index_is_rejected_rather_than_silently_overwritten() -
 
 def test_the_obs_manifest_validator_rejects_a_collided_index() -> None:
     manifest = {
-        "_format": "compact_v1",
+        "_format": "compact_v2",
         "n_points": 3,
         "centroid_outlier_quantile": 0.95,
         "latent_key": "latent_space",
@@ -232,11 +259,9 @@ def test_the_obs_manifest_validator_rejects_a_collided_index() -> None:
 
 def test_the_var_manifest_validator_rejects_a_collided_index() -> None:
     with pytest.raises(RuntimeError, match="Gene payload indices"):
-        _gene_names_from_compact_manifest(
-            {"fields": [[0, "TNMD"], [0, "CIITA"]]},
-        )
+        _gene_names_from_compact_manifest(_var_manifest([[0, "TNMD"], [0, "CIITA"]]))
     with pytest.raises(ValueError, match=r"\[index, name\]"):
-        _gene_names_from_compact_manifest({"fields": [["TNMD"]]})
+        _gene_names_from_compact_manifest(_var_manifest([["TNMD"]]))
 
 
 def test_a_manifest_that_does_not_describe_its_own_files_is_rejected(
@@ -284,43 +309,40 @@ def test_a_manifest_that_does_not_describe_its_own_files_is_rejected(
 def test_the_export_root_must_hold_exactly_what_the_export_declares(
     tmp_path: Path,
 ) -> None:
-    """The root carries the point payloads, and they are declared by path there."""
+    """The root carries manifests and axis directories, and no payload at all."""
     root = tmp_path / "export"
     (root / "obs").mkdir(parents=True)
-    for name in ("dataset_identity.json", "obs_manifest.json", "points_2d.bin.gz"):
+    (root / "embeddings").mkdir()
+    for name in ("dataset_identity.json", "obs_manifest.json"):
         (root / name).write_bytes(b"")
 
     def reconcile(directories: set[str] | None = None) -> None:
         _require_declared_payloads_on_disk(
             root,
             directory_name=None,
-            declared={"dataset_identity.json", "obs_manifest.json", "points_2d.bin.gz"},
+            declared={"dataset_identity.json", "obs_manifest.json"},
             axis="Export",
-            declared_directories={"obs"} if directories is None else directories,
+            declared_directories={"obs", "embeddings"} if directories is None else directories,
         )
 
     reconcile()
 
-    # The mutation that reached disk once: the coordinates were written
-    # uncompressed while dataset_identity.json declared the compressed name.
-    (root / "points_2d.bin.gz").rename(root / "points_2d.bin")
+    # A coordinate payload at the root, where format v2 kept them, is a file
+    # nothing declares.
+    (root / "points_2d.bin").write_bytes(b"")
     with pytest.raises(
         RuntimeError,
-        match=(
-            r"Declared but absent: \['points_2d\.bin\.gz'\]\. "
-            r"Written but undeclared: \['points_2d\.bin'\]\."
-        ),
+        match=r"Declared but absent: \[\]\. Written but undeclared: \['points_2d\.bin'\]\.",
     ):
         reconcile()
-    (root / "points_2d.bin").rename(root / "points_2d.bin.gz")
-    reconcile()
+    (root / "points_2d.bin").unlink()
 
     # A payload directory the export never created is absent, not invisible.
     with pytest.raises(
         RuntimeError,
         match=r"Declared but absent: \['var'\]\. Written but undeclared: \[\]\.",
     ):
-        reconcile(directories={"obs", "var"})
+        reconcile(directories={"obs", "embeddings", "var"})
 
     # A directory the export does not declare is refused by kind, so it can
     # never be mistaken for a declared payload of the same name.
@@ -344,7 +366,7 @@ def test_the_export_root_must_hold_exactly_what_the_export_declares(
         RuntimeError,
         match=r"Declared but absent: \['var'\]\. Written but undeclared: \['var'\]\.",
     ):
-        reconcile(directories={"obs", "var"})
+        reconcile(directories={"obs", "embeddings", "var"})
     (root / "var").unlink()
 
     (root / "scratch.tmp").write_bytes(b"")
@@ -355,12 +377,89 @@ def test_the_export_root_must_hold_exactly_what_the_export_declares(
         reconcile()
 
 
+def test_the_embeddings_directory_must_hold_exactly_what_the_identity_declares(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "embeddings"
+    directory.mkdir()
+    (directory / "0_2d.bin.gz").write_bytes(b"")
+
+    def reconcile() -> None:
+        _require_declared_payloads_on_disk(
+            tmp_path,
+            directory_name="embeddings",
+            declared={"embeddings/0_2d.bin.gz"},
+            axis="Embedding",
+        )
+
+    reconcile()
+
+    # The mutation that reached disk once: the coordinates were written
+    # uncompressed while dataset_identity.json declared the compressed name.
+    (directory / "0_2d.bin.gz").rename(directory / "0_2d.bin")
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            r"^Embedding manifest does not describe the payloads that were written\. "
+            r"Declared but absent: \['embeddings/0_2d\.bin\.gz'\]\. "
+            r"Written but undeclared: \['embeddings/0_2d\.bin'\]\.$"
+        ),
+    ):
+        reconcile()
+    (directory / "0_2d.bin").rename(directory / "0_2d.bin.gz")
+
+    (directory / "nested").mkdir()
+    with pytest.raises(RuntimeError, match="Embedding payload directory holds a non-file entry"):
+        reconcile()
+
+
+@pytest.mark.parametrize(
+    ("items", "compression", "expected"),
+    [
+        (
+            {"a": {"dimension": 2, "file": "embeddings/0_2d.bin"}},
+            6,
+            r"'embeddings/0_2d\.bin'; the format requires 'embeddings/0_2d\.bin\.gz'",
+        ),
+        (
+            {"a": {"dimension": 2, "file": "embeddings/a_2d.bin"}},
+            None,
+            r"requires 'embeddings/0_2d\.bin'",
+        ),
+        (
+            {
+                "a": {"dimension": 2, "file": "embeddings/1_2d.bin"},
+                "b": {"dimension": 2, "file": "embeddings/0_2d.bin"},
+            },
+            None,
+            r"Embedding 'a' declares file 'embeddings/1_2d\.bin'",
+        ),
+        (
+            {"a": {"dimension": 3, "file": "embeddings/0_2d.bin"}},
+            None,
+            r"requires 'embeddings/0_3d\.bin'",
+        ),
+    ],
+)
+def test_an_embedding_file_must_be_the_exact_path_its_position_derives(
+    items: dict,
+    compression: int | None,
+    expected: str,
+) -> None:
+    identity = {
+        "embeddings": {"items": items},
+        "export_settings": {"compression": compression},
+    }
+    with pytest.raises(RuntimeError, match=expected):
+        _declared_embedding_payload_paths(identity)
+
+
 def _root_reconciliation_export(out_dir: Path) -> None:
     coordinates = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]], dtype=np.float32)
     prepare(
         latent_space=coordinates,
         obs=pd.DataFrame({"group": pd.Categorical(["a", "b", "a"])}),
-        X_umap_2d=coordinates,
+        embeddings={"X_umap": coordinates},
         out_dir=out_dir,
         dataset_id="root-reconciliation",
         dataset_name="Root reconciliation",
@@ -371,13 +470,13 @@ def _root_reconciliation_export(out_dir: Path) -> None:
     )
 
 
-def test_a_generation_that_declares_the_points_it_wrote_publishes(tmp_path: Path) -> None:
+def test_a_generation_that_declares_the_embeddings_it_wrote_publishes(tmp_path: Path) -> None:
     out_dir = tmp_path / "points"
     _root_reconciliation_export(out_dir)
 
     identity = json.loads((out_dir / "dataset_identity.json").read_text(encoding="utf-8"))
-    assert identity["embeddings"]["files"] == {"2d": "points_2d.bin.gz"}
-    assert (out_dir / "points_2d.bin.gz").is_file()
+    assert identity["embeddings"]["items"]["X_umap"]["file"] == "embeddings/0_2d.bin.gz"
+    assert sorted(path.name for path in (out_dir / "embeddings").iterdir()) == ["0_2d.bin.gz"]
 
 
 @pytest.mark.parametrize(
@@ -385,20 +484,27 @@ def test_a_generation_that_declares_the_points_it_wrote_publishes(tmp_path: Path
     [
         (
             "uncompressed",
-            r"Declared but absent: \['points_2d\.bin\.gz'\]\. "
-            r"Written but undeclared: \['points_2d\.bin'\]\.",
+            r"^Embedding manifest .*Declared but absent: \['embeddings/0_2d\.bin\.gz'\]\. "
+            r"Written but undeclared: \['embeddings/0_2d\.bin'\]\.",
         ),
         (
             "unwritten",
-            r"Declared but absent: \['points_2d\.bin\.gz'\]\. Written but undeclared: \[\]\.",
+            r"^Embedding manifest .*Declared but absent: \['embeddings/0_2d\.bin\.gz'\]\. "
+            r"Written but undeclared: \[\]\.",
         ),
         (
             "stray",
-            r"Declared but absent: \[\]\. Written but undeclared: \['scratch\.tmp'\]\.",
+            r"^Embedding manifest .*Declared but absent: \[\]\. "
+            r"Written but undeclared: \['embeddings/scratch\.tmp'\]\.",
+        ),
+        (
+            "root",
+            r"^Export manifest .*Declared but absent: \[\]\. "
+            r"Written but undeclared: \['points_2d\.bin'\]\.",
         ),
     ],
 )
-def test_a_published_generation_cannot_disagree_with_its_own_export_root(
+def test_a_published_generation_cannot_disagree_with_its_own_declarations(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     mutation: str,
@@ -406,10 +512,10 @@ def test_a_published_generation_cannot_disagree_with_its_own_export_root(
 ) -> None:
     """The failure this rule exists for: an export the browser cannot draw.
 
-    The declared name and the written name of a point payload are two
-    expressions of one compression setting, and until the root was reconciled
-    a generation whose points disagreed published successfully and then failed
-    at read time with no coordinates.
+    The declared name and the written name of an embedding payload are two
+    expressions of one compression setting, and a generation whose coordinates
+    disagree would otherwise publish and then fail at read time with nothing to
+    draw. Anything else that reaches the root is refused too.
     """
     out_dir = tmp_path / "points"
 
@@ -418,14 +524,16 @@ def test_a_published_generation_cannot_disagree_with_its_own_export_root(
         data: np.ndarray,
         compression: int | None = None,
     ) -> Path:
-        if path.name.startswith("points_"):
-            if mutation == "uncompressed":
-                return _write_binary(path, data, None)
-            if mutation == "unwritten":
-                return Path(f"{path}.gz")
+        is_embedding = path.parent.name == "embeddings"
+        if is_embedding and mutation == "uncompressed":
+            return _write_binary(path, data, None)
+        if is_embedding and mutation == "unwritten":
+            return Path(f"{path}.gz")
         written = _write_binary(path, data, compression)
-        if mutation == "stray" and path.name.startswith("points_"):
+        if is_embedding and mutation == "stray":
             (path.parent / "scratch.tmp").write_bytes(b"")
+        if is_embedding and mutation == "root":
+            (path.parent.parent / "points_2d.bin").write_bytes(b"")
         return written
 
     monkeypatch.setattr(_generation, "_write_binary", patched_write_binary)
@@ -442,30 +550,44 @@ def test_a_full_export_root_holds_exactly_the_artifacts_it_declares(
 ) -> None:
     """Genes, connectivity, vector fields, and two dimension levels, both codecs."""
     out_dir = tmp_path / f"full-{compression}"
+    coordinates = np.array(
+        [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.5, 0.25], [0.25, 0.75]],
+        dtype=np.float32,
+    )
     _hostile_export(
         out_dir,
-        X_umap_1d=np.linspace(0.0, 1.0, 6, dtype=np.float32).reshape(6, 1),
+        embeddings={
+            HOSTILE_EMBEDDING_ID: coordinates,
+            "X_umap_1d": np.linspace(0.0, 1.0, 6, dtype=np.float32).reshape(6, 1),
+        },
         compression=compression,
     )
 
     identity = json.loads((out_dir / "dataset_identity.json").read_text(encoding="utf-8"))
     suffix = ".gz" if compression is not None else ""
-    assert identity["embeddings"]["files"] == {
-        "1d": f"points_1d.bin{suffix}",
-        "2d": f"points_2d.bin{suffix}",
+    assert {
+        embedding_id: item["file"] for embedding_id, item in identity["embeddings"]["items"].items()
+    } == {
+        "X_umap_1d": f"embeddings/0_1d.bin{suffix}",
+        HOSTILE_EMBEDDING_ID: f"embeddings/1_2d.bin{suffix}",
+    }
+    assert identity["vector_fields"]["fields"]["velocity_umap"]["files"] == {
+        HOSTILE_EMBEDDING_ID: f"vectors/1_1.bin{suffix}"
     }
     assert sorted(entry.name for entry in out_dir.iterdir()) == [
         "connectivity",
         "connectivity_manifest.json",
         "dataset_identity.json",
+        "embeddings",
         "obs",
         "obs_manifest.json",
-        f"points_1d.bin{suffix}",
-        f"points_2d.bin{suffix}",
         "var",
         "var_manifest.json",
         "vectors",
     ]
+    assert _declared_dataset_artifacts(out_dir, include_published_state=False) == {
+        path.relative_to(out_dir).as_posix() for path in out_dir.rglob("*") if path.is_file()
+    }
 
 
 def test_quantized_entries_keep_the_index_and_gain_their_bounds(tmp_path: Path) -> None:

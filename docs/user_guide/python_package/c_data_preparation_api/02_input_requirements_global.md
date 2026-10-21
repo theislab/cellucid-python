@@ -12,8 +12,8 @@ This page documents the **global rules** that apply to *every* input you pass to
 
 Before you export a real dataset, confirm:
 
-1) You have **at least one embedding** (`X_umap_1d`, `X_umap_2d`, or
-   `X_umap_3d`).
+1) You pass **at least one embedding** in `embeddings={...}`, and name the
+   default with `embedding_defaults` for every dimension that has more than one.
 2) `latent_space` is provided (required by `prepare()`).
 3) `obs` has exactly `n_cells` rows and matches the embedding row order.
 4) If exporting genes:
@@ -39,7 +39,7 @@ Cellucid’s export format does not store a separate “cell ID table”.
 This is the single most important invariant.
 
 You must keep a consistent row order across:
-- embeddings (`X_umap_1d/2d/3d`)
+- every embedding in `embeddings`
 - `latent_space`
 - `obs`
 - `gene_expression` rows (if provided)
@@ -63,23 +63,23 @@ If you construct arrays separately (common in pipelines), you must enforce align
 `prepare()` requires:
 - `latent_space` (for categorical outlier quantiles),
 - `obs`,
-- and at least one embedding (`X_umap_1d` or `X_umap_2d` or `X_umap_3d`).
+- and at least one embedding in `embeddings`.
 
 ### Embeddings (at least one required)
 
-| Argument | Required shape | Notes |
-|---|---:|---|
-| `X_umap_1d` | `(n_cells, 1)` or `(n_cells,)` | Optional |
-| `X_umap_2d` | `(n_cells, 2)` | Common |
-| `X_umap_3d` | `(n_cells, 3)` | Recommended if you want true 3D navigation |
+`embeddings` maps an embedding id to an array or to an
+{class}`~cellucid.Embedding`:
 
-```{note}
-`X_umap_1d` declares one coordinate per cell, so a plain `(n_cells,)` vector
-already *is* the single column it declares: `prepare()` reshapes it to
-`(n_cells, 1)`, exactly as AnnData does when you put such an array in `obsm`.
-`X_umap_2d` and `X_umap_3d` have no such shortcut — each must be a 2D array with
-exactly the column count its name declares.
-```
+| Value | Required shape | Dimension |
+|---|---:|---|
+| a plain array | `(n_cells, 1)`, `(n_cells, 2)`, or `(n_cells, 3)` | its column count |
+| a plain vector | `(n_cells,)` | 1D |
+| `Embedding(values, columns=[...])` | `(n_cells, width)`, any width | the number of `columns` (1–3) |
+
+Any number of embeddings may share a dimension; `embedding_defaults` then names
+the one shown first, for example `{"2d": "X_umap"}`. `prepare()` reads no `obsm`
+key: the id is a name you choose, and `adata.obsm["X_umap"]` is simply the array
+you pass under it. Details: {doc}`03_embeddings_and_coordinates`.
 
 ### Required non-embedding inputs
 
@@ -95,7 +95,8 @@ exactly the column count its name declares.
 | `gene_expression` | `(n_cells, n_genes)` | Dense or sparse; written one file per gene |
 | `var` | `n_genes` rows | Required if `gene_expression` is provided |
 | `connectivities` | `(n_cells, n_cells)` | Typically `adata.obsp["connectivities"]` |
-| `vector_fields[field]` | `(n_cells, dim)` | Optional velocity/displacement vectors aligned to embedding space |
+| `vector_fields[field][embedding_id]` | `(n_cells, dim)` of that embedding | Optional velocity/displacement vectors, bound to an exported embedding |
+| `var_gene_name_columns` | list of `var` columns | Optional alternative gene-name sets |
 
 ```{warning}
 Cellucid export expects **cells × genes** for `gene_expression`.
@@ -148,8 +149,8 @@ identifier is never a path. Use your real names: `HLA-DRB1/2`, `% mito`,
 There is no ASCII restriction, no length limit, no reserved-name list, and no
 case-insensitive collision rule.
 
-`prepare()` never rewrites an identifier, so three rules remain. Observation
-keys, gene names, and vector-field IDs must each:
+`prepare()` never rewrites an observation key, embedding id, or vector-field
+ID, so three rules remain. Each must:
 
 - be a non-empty string,
 - be distinct within their axis, and
@@ -165,10 +166,16 @@ trimming would rewrite an annotation you did not ask to change.
 
 The display rule applies to the identifiers you **export**. `obs_keys` and
 `gene_identifiers` narrow the export, and they narrow this rule with it: a
-column or gene you leave out reaches no manifest and is never drawn. Gene names
-carry one extra rule that is *not* narrowed — every name in `var` must be a
-non-empty string and must be distinct, because `gene_identifiers` addresses
-`var` rows by name.
+column or gene you leave out reaches no manifest and is never drawn.
+
+Gene names are the one identifier Cellucid completes for you, by one rule shared
+with the R writer, the AnnData server, and the viewer: an empty value (`""`,
+`None`, NaN) takes the row's `var.index` name, and a repeated name is made
+unique the way anndata's `var_names_make_unique()` does it (`MATR3`, `MATR3-1`).
+The rule runs over the whole `var`, so `gene_identifiers` addresses rows by the
+unique names, and the export prints and records what it changed. The resulting
+names must still be drawable exactly as stored. See
+{ref}`python_package-make-unique-gene-names`.
 
 `dataset_id` is the one exception, because it is not a field identifier: it
 names a real directory in a multi-dataset export root and in a served URL, so
@@ -256,19 +263,15 @@ mistakes earlier and lets you attach study-specific context to the error.
 ```python
 import numpy as np
 
-embedding_key = next(
-    (key for key in ("X_umap_3d", "X_umap_2d", "X_umap_1d") if key in adata.obsm),
-    None,
-)
-if embedding_key is None:
-    raise ValueError("Provide X_umap_1d, X_umap_2d, or X_umap_3d in adata.obsm.")
+embedding_key = "X_umap"  # the obsm array you will pass in embeddings={...}
+if embedding_key not in adata.obsm:
+    raise ValueError(f"adata.obsm has no {embedding_key!r}; compute an embedding first.")
 
 X_umap = np.asarray(adata.obsm[embedding_key])
-expected_dimension = int(embedding_key[-2])
-if X_umap.ndim != 2 or X_umap.shape[1] != expected_dimension:
+if X_umap.ndim != 2 or X_umap.shape[1] not in (1, 2, 3):
     raise ValueError(
-        f"{embedding_key} must have shape (n_cells, {expected_dimension}); "
-        f"got {X_umap.shape}."
+        f"{embedding_key} has shape {X_umap.shape}; pass Embedding(values, columns=[...]) "
+        "to plot chosen columns of a wider array."
     )
 
 n_cells = X_umap.shape[0]
@@ -308,11 +311,10 @@ def _is_array(x):
 
 assert _is_array(latent_space)
 assert isinstance(obs, pd.DataFrame)
-assert _is_array(X_umap_2d) or _is_array(X_umap_3d)
+assert isinstance(embeddings, dict) and embeddings
 
-X = X_umap_3d if X_umap_3d is not None else X_umap_2d
-X = np.asarray(X)
-assert X.ndim == 2 and X.shape[1] in (2, 3)
+X = np.asarray(next(iter(embeddings.values())))
+assert X.ndim == 2 and X.shape[1] in (1, 2, 3)
 
 n_cells = X.shape[0]
 assert np.isfinite(X).all()
@@ -337,4 +339,4 @@ if connectivities is not None:
 
 ## Next steps
 
-- Embedding details (normalization, multi-dim exports): {doc}`03_embeddings_and_coordinates`
+- Embedding details (normalization, several embeddings per dimension): {doc}`03_embeddings_and_coordinates`

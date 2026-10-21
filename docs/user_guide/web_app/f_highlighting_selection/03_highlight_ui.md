@@ -34,10 +34,15 @@ This page is the “UI map” for highlighting:
 In the left sidebar, open the accordion section labeled **Highlighting**.
 
 Inside this section you will see four sub-areas, top to bottom:
-1) **Highlight mode** (toolbelt for selection)
+1) **Highlight mode** (the four selection tools, then the **Select mode** switch
+   below a divider — an input setting, not a fifth tool)
 2) **Highlight pages** (tabs)
 3) **Highlighted groups** (the list + count + Clear)
 4) `Create Categorical` (a collapsed accordion that turns pages into an obs column)
+
+On the plot itself, the **selection bar** repeats Select mode's switch and
+combine choice, the active tool's step controls, and the page's count and
+**Clear** (see {ref}`selection-bar`).
 
 ---
 
@@ -65,6 +70,77 @@ These controls are tool-specific but behave consistently across tools.
 - `Ctrl+Alt` or `Cmd+Alt` usually means “remove” (subtract).
 
 For the annotation-based tool on categorical fields, `Alt` acts like “replace” (details in {doc}`02_selection_tools_document_each_tool`).
+
+(select-mode)=
+### Select mode (touch screens, or no `Alt` key)
+
+A touch screen has no `Alt` key, so the **Select mode** switch below the four
+Highlight mode tools stands in for holding it. It is drawn as a switch, not as
+another tool button, because it changes how every tool is triggered rather than
+choosing one:
+
+- While **Select mode** is on, a plain primary press runs the active tool
+  exactly as an `Alt` press does: a one-finger tap (or a plain click) is an
+  `Alt+click`, and a one-finger drag is an `Alt+drag` — a lasso, a proximity
+  radius, a KNN degree, or a continuous range, whichever tool is active. It
+  works in every navigation mode and, in multiview, selects in the pane the
+  finger lands on without moving view focus, as `Alt+click` does.
+- Turning it on shows a **Combine** choice of **Intersect**, **Add** and
+  **Subtract** (one segmented control), which stands in for the modifiers a finger cannot press: **Intersect** is a
+  plain `Alt` gesture (and is the “replace” behaviour of the annotation tool on
+  categorical fields), **Add** is `Shift+Alt`, **Subtract** is `Ctrl/Cmd+Alt`.
+  A held `Shift` or `Ctrl/Cmd` key still wins over the button.
+- Two fingers always navigate: pinch to zoom, move both to pan. A second finger
+  that lands while a one-finger selection is still being drawn abandons that
+  gesture without selecting anything, and the panel says it was interrupted.
+- A tap or click on empty plot selects nothing and changes nothing: it never
+  clears what you have. The panel (and the selection bar) say so, so a miss
+  does not look like a broken tool.
+- To leave Select mode, turn either switch off, or press `Esc` when no
+  selection is in progress (the first `Esc` cancels a selection in progress).
+
+Select mode is an input setting, like holding `Alt`: it is not saved in
+sessions.
+
+(selection-bar)=
+#### The selection bar (on the plot)
+
+The **selection bar** is a small card at the bottom of the plot that carries
+Select mode's controls, so you can select, combine, confirm, discard, clear and
+leave the mode without opening the menu — which on a phone covers the whole
+screen. Every control on it is the Highlighting panel's own control shown a
+second time: both show the same state and do exactly the same thing.
+
+From top to bottom it shows:
+
+1. **What a tap or drag will do**, for the active tool (for example
+   “Lasso: draw around cells to select them.”), or, while a selection is in
+   progress, **how many cells it holds** with that tool's **Undo**, **Cancel**
+   and **Confirm**. **Cancel** discards the selection in progress (as `Esc`
+   does); **Confirm** saves it to the active highlight page.
+2. A one-line note when your last gesture changed nothing (for example
+   “No cell there. Nothing changed; zoom in to hit cells.”).
+3. **What is saved on the active highlight page** (“40 cells highlighted”),
+   with **Clear**, which removes this page's highlights exactly as the panel's
+   **Clear** does. It sits on its own row, below **Confirm**, so a second tap
+   after confirming cannot clear what you just saved.
+4. The **Select mode** switch and the **Intersect / Add / Subtract** choice.
+
+When the bar shows:
+
+- On a touch screen (any device with a touch pointer, including a laptop with
+  a touch screen) it is always there. While Select mode is off it is only the
+  switch, plus a selection still in progress, so you can turn the mode off to
+  rotate with one finger and still confirm or cancel what you drew.
+- With a mouse it appears while Select mode is on, and goes away when you turn
+  it off.
+- On a phone it hides while the full-screen menu is open.
+
+It is centred in the part of the plot the sidebar leaves uncovered (the same
+area the multiview grid is laid out in, so the bar and the panels always
+agree), and notifications stack above it rather than covering it. A finger on the bar never
+reaches the plot, so tapping or dragging on it never starts a selection or moves
+the camera.
 
 ---
 
@@ -118,7 +194,7 @@ On drop, the UI offers:
 This creates a new page whose name reflects the operation (e.g. `Page A ∩ Page B`).
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/compare-highlight-pages.png
-:alt: The Highlighting panel with two page tabs, a blue Page 1 carrying 870 and an active red Page 2 carrying 250, the group list showing one Proximity group, and the pointer on the button that adds another page.
+:alt: The Highlighting panel with two page tabs ringed — Page 1 with a blue swatch carrying 842, and the active Page 2 with a red swatch carrying 223, each with a combine (⋈) and a delete (×) control — the group list showing one "Proximity (223 cells) (223)" group, and the pointer on the button that adds another page.
 :width: 516px
 
 Two pages. Each tab carries a colour swatch, the page name, and that page's
@@ -211,7 +287,10 @@ It is always present. It is greyed out only until a dataset is loaded.
 4) Press **Create**.
 
 A notification confirms it: `Created "<your name>" (<N> categories)`, and the
-new field appears alongside the dataset's own obs fields.
+new field appears alongside the dataset's own obs fields. Colour by it and
+**Show centroids** / **Show labels** mark each category at the mean position of
+its cells, in whichever dimension the view shows; switching the dimension moves
+the labels with the embedding.
 
 ### The two questions it asks you
 
@@ -232,13 +311,14 @@ non-overlapping pages that covers every cell will show neither.
 **Limits and refusals** (the **Create** button stays disabled and prints the reason):
 
 - at least one page must be added — `Add at least one highlight page`
-- the column name must be non-empty, untrimmed-whitespace-free, at most 256
-  characters, and must not contain `:`
+- the column name must be non-empty, free of leading and trailing whitespace,
+  and must not contain `:`
 - the name must not collide with a visible obs field —
   `A visible observation field named "<name>" already exists`
-- **Each intersection** supports at most 12 pages, because it enumerates every
-  combination of them
-- a dataset carries at most 20 user-created fields in total
+- **Each intersection** supports at most 32 pages: a cell's combination of pages
+  is one bit per page in a 32-bit mask, and the session stores each
+  intersection's label under that mask. The other strategies take any number of
+  pages.
 
 Fields made this way are saved in a `.cellucid-session` and restored with it, so
 a collaborator opening your session on the same dataset gets the same column.

@@ -15,7 +15,8 @@ Python commands enter the iframe through `postMessage`. The embedding layer
 adds the exact `viewerId` and `viewerToken`; user code supplies only the
 command-specific record.
 
-Viewer events return through `POST /_cellucid/events`. The server authenticates
+Viewer events return through `POST /_cellucid/events`, and selections through
+`POST /_cellucid/selection` as binary cell indices. The server authenticates
 the routing pair, removes the token, and gives the closed event record to the
 Python viewer.
 

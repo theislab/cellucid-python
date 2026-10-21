@@ -62,9 +62,9 @@ tell a live connection from a path you merely typed.
 
 | Exact dataset ID | Contents | A useful first question |
 |---|---|---|
-| `synthetic-cell-types-2d` | 72 cells, 8 genes, four `obs` fields, a 2D embedding, and 144 weighted edges | Do the three `cell_type` categories agree with their marker-gene patterns? |
-| `synthetic-development-3d` | 96 cells, 10 genes, five `obs` fields, a 3D embedding, 187 weighted edges, and 3D `velocity_umap` vectors | Does the vector field follow both developmental branches when you orbit the view? |
-| `synthetic-trajectory-1d` | 48 cells, 6 genes, four `obs` fields, a 1D embedding, 93 weighted edges, and 1D `velocity_umap` vectors | How do `pseudotime` and gene activity change along the line? |
+| `synthetic-cell-types-2d` | 72 cells, 8 genes, four `obs` fields, two 2D embeddings (`islands`, the default, and `marker_scores`), and 144 weighted edges | Do the three `cell_type` categories agree with their marker-gene patterns? |
+| `synthetic-development-3d` | 96 cells, 10 genes, five `obs` fields, a 3D embedding (`branches`), 187 weighted edges, and a `velocity` vector field bound to it | Does the vector field follow both developmental branches when you orbit the view? |
+| `synthetic-trajectory-1d` | 48 cells, 6 genes, four `obs` fields, a 1D embedding (`trajectory`), 93 weighted edges, and a `velocity` vector field bound to it | How do `pseudotime` and gene activity change along the line? |
 
 Each dataset uses the navigation mode expected for its geometry: Planar in 1D
 and 2D, Orbit in 3D.
@@ -93,11 +93,11 @@ my-cellucid-datasets/
     ├── datasets.json
     ├── study-a/
     │   ├── dataset_identity.json
-    │   ├── points_2d.bin.gz
+    │   ├── embeddings/
     │   └── ...
     └── study-b/
         ├── dataset_identity.json
-        ├── points_3d.bin.gz
+        ├── embeddings/
         └── ...
 ```
 
@@ -177,7 +177,7 @@ prepare(
     dataset_name="Study A",
     dataset_id="study-a",
     obs_categorical_dtype="uint16",
-    X_umap_2d=adata.obsm["X_umap_2d"],
+    embeddings={"X_umap_2d": adata.obsm["X_umap_2d"]},
 )
 ```
 
@@ -336,7 +336,7 @@ choices made during preparation still matter:
 - export only genes and metadata fields that the public visualization needs;
 - use sparse gene expression when the source is sparse;
 - use gzip and choose quantization deliberately;
-- avoid high-cardinality categorical fields that produce unusable legends;
+- prefer coarse categorical fields to high-cardinality ones, whose colours are not distinguishable;
 - keep `datasets.json` and every identity concise;
 - preserve the original full-precision analysis object outside the public
   visualization export.

@@ -171,7 +171,7 @@ At the top, you’ll see:
 Click the gradient bar to open the **colormap menu**, then click a palette to apply it.
 
 ```{figure} ../../../_static/screenshots/web_app/legend-colormap-menu-open.png
-:alt: A legend headed COLOR SCALE (VIRIDIS) with its gradient bar expanded into a grid of small named gradient swatches — Viridis highlighted as active, then Plasma, Inferno, Magma, Cividis, Turbo, Twilight, Coolwarm and many more — above the numeric range and the Log color scale and Rescale colorbar toggles.
+:alt: A legend headed COLOR SCALE (VIRIDIS) with its gradient bar expanded into a grid of small named gradient swatches — Viridis highlighted as active, then Plasma, Inferno, Magma, Cividis, Turbo, Twilight, Coolwarm and many more — above the Min and Max range sliders and the FILTER and RESET buttons.
 :width: 428px
 
 The colormap menu, open. The active palette is marked, and the heading above
@@ -189,7 +189,9 @@ Practical guidance:
 
 Notes:
 - Zeros, negatives, and missing values render as neutral “None” gray.
-- Log scale affects coloring only; filtering remains in original units.
+- Log scale affects coloring only; filtering remains in original units. With
+  **Rescale colorbar to slider range** on, a slider range that holds no positive
+  value simply draws its cells gray; the range filter still applies.
 
 ### Rescale colorbar to slider range
 
@@ -255,6 +257,17 @@ cross-reference into a picture you can read directly — which is usually what
 you want in a figure.
 ```
 
+Where the centres come from:
+- a dataset's own categorical fields carry the centroids written at export, one
+  set per embedding dimension;
+- a field you create — with `Create Categorical`, by merging or deleting a
+  category, by duplicating a field — gets each category's centre as the plain
+  mean of its cells' positions in the embedding the view draws. Centres are
+  computed when the field is made, for every embedding already loaded; an
+  embedding loaded later gets its centres when a view switches to it. Merging
+  or deleting its categories recomputes them, and a saved session stores them
+  and puts them back exactly where they were.
+
 Notes for multiview users:
 - centroid visibility is tracked per view, so different snapshots can show/hide centroids independently.
 
@@ -270,7 +283,7 @@ If community annotation voting is enabled for the current categorical field:
 - category labels become clickable to open a voting modal,
 - rename/merge/delete label tools are disabled (to keep votes stable),
 - additional per-category summary lines can appear (consensus suggestions),
-- a small `◉` button can appear to quickly create/remove a highlight for that category.
+- a small `◉` button can appear to quickly create/remove a highlight for that category. It highlights the category's currently visible cells, so it is disabled while the category has none (for example while its checkbox is cleared).
 
 If you don’t use Community Annotation, you can ignore this.
 

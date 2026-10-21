@@ -23,6 +23,9 @@ These checks solve most “it’s broken” reports in under a minute:
    - See {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`
 7) **Modifier keys:** are you holding `Alt` to start a selection gesture?
    - `Shift+Alt` = add; `Ctrl/Cmd+Alt` = subtract.
+   - On a touch screen there is no `Alt`: is **Select mode** on (its switch, in
+     the Highlighting panel or on the selection bar at the bottom of the plot)?
+     See {ref}`select-mode`.
 8) **Tool mode:** are you in the tool you think you are in (Lasso vs Proximity vs KNN vs Annotation based)?
    - **Annotation based** additionally needs a coloured field. With none, the
      panel replaces its `Alt+click` invitation with the sentence that asks for
@@ -56,18 +59,20 @@ Two rules hold for every message in the table below:
 
 | What you see | What happened | What to do |
 |---|---|---|
-| “That click did not land on a cell, so there is nothing to select. Zoom in to make cells easier to hit: only the cells the viewer is currently drawing can be clicked.” | `Alt+click` hit no point. Points draw about a pixel wide when zoomed out, so this is ordinary rather than exceptional. | Zoom in, then click again. **Point size** does not help: picking uses a fixed radius in data space and never reads the drawn size. |
+| “That click did not land on a cell, so there is nothing to select. Zoom in or raise Point size to make cells easier to hit: only the cells the viewer is currently drawing can be clicked.” | `Alt+click` hit no point. Points draw about a pixel wide when zoomed out, so this is ordinary rather than exceptional. | Zoom in or raise **Point size**, then click again. A click hits the dot drawn under the pointer, at the size it is drawn, so a bigger dot is a bigger target. |
 | “That gesture ended outside the view, so nothing was selected.” | You released the mouse somewhere other than the plot. The gesture was abandoned deliberately — see the symptom below. | Repeat the gesture and release over the plot. |
-| “That cell has no value on the active field, so there is nothing to select.” | Annotation based: the clicked cell is missing a value on the active field, so the rule resolves to no cells. | Click a cell that has a value, or switch to a field that covers it. |
+| “That gesture was interrupted before it ended, by a second finger or by the browser, so nothing was selected.” | Select mode: a second finger landed while a one-finger selection was still being drawn (two fingers always zoom and pan), or the browser took the touch over. | Draw with one finger only, and lift it before pinching or panning. |
+| “That cell has no value on that panel's field, so there is nothing to select.” | Annotation based: the clicked cell is missing a value on the field of the panel you pressed, so the rule resolves to no cells. | Click a cell that has a value, or color that panel by a field that covers it. |
+| “That panel is not colored by a field, so there is nothing to select.” | Annotation based: the panel you pressed is colored by no field, whatever the focused view is colored by. The gesture is read on the panel you press. | Color that panel by a field, or select in a panel that has one. |
 | “That gesture did not change the selection.” | The gesture resolved to exactly the set you already had. | Nothing is wrong. Draw elsewhere, or change the modifier key. |
-| “Annotation selection needs an active field. Choose a Categorical obs or Continuous obs field under Coloring & Filtering, then Alt+click a cell.” | Annotation based is selected but no field is coloured, so the viewer never starts the gesture at all. | Choose a categorical or continuous field first. |
+| “Color by a field first (Coloring & filtering), then Alt+click a cell.” | Annotation based is selected but no panel on screen is colored by a field, so no press can select anything. | Choose a categorical or continuous field first. |
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/read-missed-click-notice.png
-:alt: A proximity Alt+click on empty space, with the pointer pressed where no cell is drawn and the Highlighting panel showing the notice that the click did not land on a cell and that only the cells the viewer is currently drawing can be clicked.
+:alt: A proximity Alt+click on empty space: the pointer is pressed above the embedding where no cell is drawn, and the ringed line in the Highlighting panel adds "That click did not land on a cell, so there is nothing to select. Zoom in or raise Point size to make cells easier to hit: only the cells the viewer is currently drawing can be clicked." under the Proximity drag help text.
 :width: 1440px
 
-Where to look. The pointer was pressed in empty space on the right; the
-explanation appears on the left, under the **Highlight mode** buttons. It is
+Where to look. The pointer was pressed in empty space above the embedding;
+the explanation appears on the left, under the **Highlight mode** buttons. It is
 appended to the mode's usual help text, not shown in its place.
 ```
 
@@ -178,10 +183,29 @@ Repeat the gesture you are actually debugging before you trust the line.
 
 ---
 
+## Symptom: “In Select mode I can’t deselect or clear”
+
+Tapping empty plot never clears anything in Select mode: it selects nothing,
+changes nothing, and the selection bar says “No cell there. Nothing changed”.
+What removes a selection depends on whether it is still in progress or saved:
+
+- **In progress** (the selection bar reads “N cells selected” beside **Undo**,
+  **Cancel** and **Confirm**): **Cancel** discards it, **Undo** steps back once.
+  `Esc` cancels it too.
+- **Saved** to the page (the bar reads “N cells highlighted”): **Clear** on the
+  bar, or **Clear** under the page tabs in the Highlighting panel, removes this
+  page's highlights. Other pages are not touched. To remove one group, use its ×
+  in the panel's list.
+- **Leaving Select mode** keeps both: turn either switch off, or press `Esc`
+  with nothing in progress.
+
+---
+
 ## Symptom: “I can’t start lasso / nothing happens when I draw”
 
 ### Likely causes (ordered)
-1) You are not holding `Alt` (lasso mode requires `Alt`).
+1) You are not holding `Alt` (lasso mode requires `Alt`, or **Select mode** on a
+   touch screen).
 2) You are not in **Lasso** mode (toolbelt mismatch).
 3) You are in a navigation interaction state (dragging/rotating) and never entered lasso.
 4) Browser/OS intercepts `Alt` in your environment (rare but possible).
@@ -197,6 +221,8 @@ Repeat the gesture you are actually debugging before you trust the line.
 
 ### Fix
 - Use `Alt+drag` (not plain drag).
+- On a touch screen, turn on **Select mode** (in the Highlighting panel or on
+  the selection bar at the bottom of the plot) and draw with one finger.
 - If `Alt`/`Option` is captured, disable the extension or operating-system
   shortcut that owns the gesture, then activate **Lasso** and use
   `Alt`/`Option`+drag again.
@@ -204,7 +230,7 @@ Repeat the gesture you are actually debugging before you trust the line.
 ### Prevention
 - Learn the mental split:
   - drag = navigation,
-  - `Alt+drag` = selection tool.
+  - `Alt+drag` (or a drag with **Select mode** on) = selection tool.
 
 ---
 
@@ -293,7 +319,7 @@ on the selection.
 
 ---
 
-## Symptom: “KNN drag says neighbor graph not available (or does nothing)”
+## Symptom: “KNN drag says no neighbor graph is available (or does nothing)”
 
 ### Likely causes (ordered)
 1) Your dataset export does not include connectivities/edges.
@@ -320,25 +346,29 @@ on the selection.
 ## Symptom: “Annotation based selection selects nothing / too many / too few cells”
 
 ### Likely causes (ordered)
-1) **No field is coloured at all**, so the tool has nothing to read. The panel
-   says so in place of the usual invitation, and the viewer never starts the
-   gesture.
+1) **No panel on screen is colored by a field**, so the tool has nothing to
+   read. The panel says so in place of the usual invitation, and a press
+   selects nothing.
 2) Filters are hiding part of the category/range (selection only considers visible cells).
-3) You are selecting on a different active field than you think.
+3) You are selecting on a different field than you think. In a grid of views
+   the gesture reads the field of the panel you press, not the focused view's.
 4) The field has missing values or extreme distribution (continuous).
 5) You expected “Alt = intersect” but on categorical fields it behaves like “replace”.
 
 ### How to confirm
-- Confirm the active field in the UI (legend/field selector).
+- Confirm the field of the view you click in (its legend; focus that view to see it in the field selector).
 - Temporarily disable filters and repeat the selection.
 - Try a known categorical field with obvious labels (e.g., `cell_type`) to validate semantics.
 - If **nothing at all** is selected, read the line under the **Highlight mode**
-  buttons. Two states are reported there and they mean different things:
-  - *“Annotation selection needs an active field…”* replaces the usual
-    `Alt+click` invitation whenever no field is coloured. The viewer never
-    starts the gesture in that state, so there is nothing to debug beyond
-    choosing a field.
-  - *“That cell has no value on the active field, so there is nothing to
+  buttons. Three states are reported there and they mean different things:
+  - *“Color by a field first…”* replaces the usual `Alt+click` invitation
+    whenever no panel on screen is colored by a field. No press can select
+    anything in that state, so there is nothing to debug beyond choosing a
+    field.
+  - *“That panel is not colored by a field…”* means the panel you pressed has
+    no field, though another panel on screen does. Press in that one, or color
+    this one.
+  - *“That cell has no value on that panel's field, so there is nothing to
     select.”* means the field is fine but the cell you clicked is missing a
     value on it. Click a different cell.
 

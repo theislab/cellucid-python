@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from _repository_source import repository_source_environment
 
 from cellucid.prepare_data import prepare
 from cellucid.prepare_data._generation import _prepare_generation
@@ -29,8 +30,8 @@ from cellucid.prepare_data._generation import _prepare_generation
 CONSUMER_MODULE = "uses_prepare.py"
 
 # ``_categoricalFields`` entries are positional: the sixth element is the
-# ``centroidsByDim`` mapping, keyed by embedding dimension.
-CENTROIDS_BY_DIM = 5
+# ``centroidsByEmbedding`` mapping, keyed by embedding id.
+CENTROIDS_BY_EMBEDDING = 5
 
 
 def _export(out_dir: Path, quantile: float | None) -> dict:
@@ -41,10 +42,10 @@ def _export(out_dir: Path, quantile: float | None) -> dict:
             dtype=np.float32,
         ),
         obs=pd.DataFrame({"cell_type": pd.Categorical(["a", "a", "b", "b"])}),
-        X_umap_2d=np.array(
+        embeddings={"X_umap_2d": np.array(
             [[0.0, 0.0], [0.1, 0.0], [5.0, 5.0], [5.1, 5.0]],
             dtype=np.float32,
-        ),
+        )},
         out_dir=out_dir,
         obs_categorical_dtype="uint8",
         dataset_id="centroid-quantile-contract",
@@ -64,9 +65,12 @@ def test_none_publishes_every_categorical_field_with_empty_centroids(tmp_path: P
     fields = manifest["_categoricalFields"]
     assert fields, "the export must hold the categorical field this asserts about"
     for field in fields:
-        centroids_by_dim = field[CENTROIDS_BY_DIM]
-        assert centroids_by_dim, "the dimension keys survive; only the centroids are dropped"
-        assert all(centroids == [] for centroids in centroids_by_dim.values()), centroids_by_dim
+        centroids_by_embedding = field[CENTROIDS_BY_EMBEDDING]
+        # The embedding keys survive; only the centroids are dropped.
+        assert list(centroids_by_embedding) == ["X_umap_2d"]
+        assert all(
+            centroids == [] for centroids in centroids_by_embedding.values()
+        ), centroids_by_embedding
 
 
 def test_a_quantile_still_publishes_centroids(tmp_path: Path) -> None:
@@ -78,9 +82,11 @@ def test_a_quantile_still_publishes_centroids(tmp_path: Path) -> None:
     fields = manifest["_categoricalFields"]
     assert fields
     for field in fields:
-        centroids_by_dim = field[CENTROIDS_BY_DIM]
-        assert centroids_by_dim
-        assert all(centroids for centroids in centroids_by_dim.values()), centroids_by_dim
+        centroids_by_embedding = field[CENTROIDS_BY_EMBEDDING]
+        assert list(centroids_by_embedding) == ["X_umap_2d"]
+        assert all(
+            centroids for centroids in centroids_by_embedding.values()
+        ), centroids_by_embedding
 
 
 def test_both_forwarding_signatures_admit_none() -> None:
@@ -102,12 +108,14 @@ def test_a_consumer_type_checks_the_documented_none_call(tmp_path: Path) -> None
         '    obs_categorical_dtype="uint8",\n'
         '    dataset_name="Demo",\n'
         '    dataset_id="demo",\n'
+        "    embeddings={'X_umap': cellucid.Embedding([[0.0, 0.0]])},\n"
         "    centroid_outlier_quantile=None,\n"
         ")\n"
         "cellucid.prepare(\n"
         '    obs_categorical_dtype="uint8",\n'
         '    dataset_name="Demo",\n'
         '    dataset_id="demo",\n'
+        "    embeddings={'X_umap': cellucid.Embedding([[0.0, 0.0]])},\n"
         '    centroid_outlier_quantile="0.95",\n'
         ")\n",
         encoding="utf-8",
@@ -124,6 +132,7 @@ def test_a_consumer_type_checks_the_documented_none_call(tmp_path: Path) -> None
         capture_output=True,
         text=True,
         cwd=consumer_dir,
+        env=repository_source_environment(),
         check=False,
     )
     output = completed.stdout + completed.stderr

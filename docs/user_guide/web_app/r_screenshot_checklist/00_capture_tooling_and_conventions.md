@@ -57,7 +57,7 @@ two variables that server does, plus one of its own:
 | --- | --- | --- |
 | ``CELLUCID_BROWSER_TEST_PORT`` | 4173 | the application |
 | ``CELLUCID_BROWSER_TEST_SAMPLE_PORT`` | main + 1 | the permissive-CORS mirror |
-| ``CELLUCID_DOCS_EXPORTS_PORT`` | main + 2 | ``cellucid-datasets/exports/`` |
+| ``CELLUCID_DOCS_EXPORTS_PORT`` | main + 2 | ``cellucid-datasets/exports-v3/`` |
 
 **Check the defaults are free before you run.** A browser-test run or another
 capture run may already hold them, and the server refuses to bind rather than
@@ -73,7 +73,7 @@ node capture.mjs shoot --all --out /tmp/shots
 ### Data
 
 Scenarios load the **real published exports** from
-``cellucid-datasets/exports/``, served over loopback. That is deliberate: a
+``cellucid-datasets/exports-v3/``, served over loopback. That is deliberate: a
 reader has to recognise the picture as the app they are using, and a 120-cell
 synthetic fixture does not look like single-cell data. The tree is pinned on
 disk, so it is reproducible in the way that matters.

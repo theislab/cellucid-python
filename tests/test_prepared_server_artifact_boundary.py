@@ -21,7 +21,7 @@ def _prepare_fixture(output: Path, *, compression: int | None = None) -> None:
     prepare(
         latent_space=embedding.copy(),
         obs=pd.DataFrame({"score": [0.25, 0.5, 0.75]}),
-        X_umap_2d=embedding,
+        embeddings={"X_umap_2d": embedding},
         out_dir=output,
         dataset_name="Server artifact boundary",
         dataset_id="server-artifact-boundary",
@@ -89,6 +89,9 @@ def test_prepared_server_serves_only_declared_in_root_regular_artifacts(
             "private-notes.txt",
             "linked-secret.txt",
             "obs/",
+            "embeddings/",
+            "embeddings/1_2d.bin",
+            "points_2d.bin",
             "dataset_identity.json?download=1",
             "%2e%2e/outside-secret.txt",
             "%252e%252e/outside-secret.txt",
@@ -100,9 +103,9 @@ def test_prepared_server_serves_only_declared_in_root_regular_artifacts(
                 )
                 assert status == 404, (method, path, status, body)
 
-        point_bytes = (output / "points_2d.bin").read_bytes()
+        point_bytes = (output / "embeddings" / "0_2d.bin").read_bytes()
         status, body, headers = _request(
-            f"{server.url}/points_2d.bin",
+            f"{server.url}/embeddings/0_2d.bin",
             headers={"Range": "bytes=4-11"},
         )
         assert status == 206
@@ -111,7 +114,7 @@ def test_prepared_server_serves_only_declared_in_root_regular_artifacts(
         assert headers.headers["Accept-Ranges"] == "bytes"
 
         status, body, headers = _request(
-            f"{server.url}/points_2d.bin",
+            f"{server.url}/embeddings/0_2d.bin",
             method="HEAD",
             headers={"Range": "bytes=4-11"},
         )
@@ -120,7 +123,7 @@ def test_prepared_server_serves_only_declared_in_root_regular_artifacts(
         assert int(headers.headers["Content-Length"]) == 8
 
         status, _body, headers = _request(
-            f"{server.url}/points_2d.bin",
+            f"{server.url}/embeddings/0_2d.bin",
             headers={"Range": "bytes=999-1000"},
         )
         assert status == 416
@@ -157,7 +160,7 @@ def test_prepared_server_rejects_every_noncanonical_or_unsatisfied_range(
 ) -> None:
     output = tmp_path / "generation"
     _prepare_fixture(output)
-    point_bytes = (output / "points_2d.bin").read_bytes()
+    point_bytes = (output / "embeddings" / "0_2d.bin").read_bytes()
     server = CellucidServer(
         output,
         port=0,
@@ -169,7 +172,7 @@ def test_prepared_server_rejects_every_noncanonical_or_unsatisfied_range(
     try:
         for method in ("GET", "HEAD"):
             status, body, headers = _request(
-                f"{server.url}/points_2d.bin",
+                f"{server.url}/embeddings/0_2d.bin",
                 method=method,
                 headers={"Range": range_value},
             )
@@ -200,7 +203,7 @@ def test_prepared_server_supports_one_exact_byte_range(
 ) -> None:
     output = tmp_path / "generation"
     _prepare_fixture(output)
-    point_bytes = (output / "points_2d.bin").read_bytes()
+    point_bytes = (output / "embeddings" / "0_2d.bin").read_bytes()
     server = CellucidServer(
         output,
         port=0,
@@ -211,7 +214,7 @@ def test_prepared_server_supports_one_exact_byte_range(
     server.start_background()
     try:
         status, body, headers = _request(
-            f"{server.url}/points_2d.bin",
+            f"{server.url}/embeddings/0_2d.bin",
             headers={"Range": range_value},
         )
         assert status == 206
@@ -258,7 +261,7 @@ def test_prepared_server_sends_gzip_artifacts_as_opaque_declared_bytes(
 ) -> None:
     output = tmp_path / "generation"
     _prepare_fixture(output, compression=1)
-    compressed_path = output / "points_2d.bin.gz"
+    compressed_path = output / "embeddings" / "0_2d.bin.gz"
     compressed_bytes = compressed_path.read_bytes()
     server = CellucidServer(
         output,
@@ -269,7 +272,7 @@ def test_prepared_server_sends_gzip_artifacts_as_opaque_declared_bytes(
     )
     server.start_background()
     try:
-        status, body, headers = _request(f"{server.url}/points_2d.bin.gz")
+        status, body, headers = _request(f"{server.url}/embeddings/0_2d.bin.gz")
         assert status == 200
         assert body == compressed_bytes
         assert headers.headers.get("Content-Encoding") is None
@@ -281,7 +284,7 @@ def test_prepared_server_sends_gzip_artifacts_as_opaque_declared_bytes(
 def test_prepared_server_rejects_duplicate_range_headers(tmp_path: Path) -> None:
     output = tmp_path / "generation"
     _prepare_fixture(output)
-    point_bytes = (output / "points_2d.bin").read_bytes()
+    point_bytes = (output / "embeddings" / "0_2d.bin").read_bytes()
     server = CellucidServer(
         output,
         port=0,
@@ -293,7 +296,7 @@ def test_prepared_server_rejects_duplicate_range_headers(tmp_path: Path) -> None
     try:
         connection = http.client.HTTPConnection("127.0.0.1", server.port, timeout=5)
         try:
-            connection.putrequest("GET", "/points_2d.bin")
+            connection.putrequest("GET", "/embeddings/0_2d.bin")
             connection.putheader("Range", "bytes=0-1")
             connection.putheader("Range", "bytes=2-3")
             connection.endheaders()
@@ -312,7 +315,7 @@ def test_prepared_server_rejects_a_declared_symlink_before_binding(
 ) -> None:
     output = tmp_path / "generation"
     _prepare_fixture(output)
-    point_path = output / "points_2d.bin"
+    point_path = output / "embeddings" / "0_2d.bin"
     outside = tmp_path / "outside.bin"
     outside.write_bytes(point_path.read_bytes())
     point_path.unlink()

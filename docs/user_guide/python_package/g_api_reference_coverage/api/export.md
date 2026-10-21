@@ -33,8 +33,6 @@ If you want the long-form, user-guide style walkthroughs, see:
 ```python
 from cellucid import prepare
 
-X_umap_2d = adata.obsm["X_umap_2d"]
-
 prepare(
     latent_space=adata.obsm["X_pca"],
     obs=adata.obs,
@@ -42,7 +40,7 @@ prepare(
     gene_expression=adata.X,
     connectivities=adata.obsp.get("connectivities"),
 
-    X_umap_2d=X_umap_2d,
+    embeddings={"X_umap": adata.obsm["X_umap"]},
 
     out_dir="./my_export",
     dataset_name="My study",
@@ -107,9 +105,12 @@ If you need *exact* values preserved:
 Vector fields are optional, but powerful:
 - They are **per-cell displacement vectors in embedding space**, not physical
   trajectories or absolute positions.
-- Naming convention: `<field>_umap_<dim>d`.
+- Each field is bound to the embeddings it is drawn over, by embedding id:
+  `vector_fields={"velocity": {"X_umap": velocity_2d}}`. The field id is any
+  name; it does not have to follow a naming pattern.
 
-See {doc}`vector_fields` for helper functions and naming conventions.
+See {doc}`vector_fields` for the helper functions, and for the
+`<field>_umap_<n>d` `obsm` keys they write for the direct-AnnData path.
 
 ---
 
@@ -134,9 +135,7 @@ my_export/
 ├── obs_manifest.json
 ├── var_manifest.json                 # optional (gene expression)
 ├── connectivity_manifest.json        # optional (KNN edges)
-├── points_1d.bin.gz                  # optional
-├── points_2d.bin.gz                  # optional
-├── points_3d.bin.gz                  # optional
+├── embeddings/                       # one coordinate file per embedding
 ├── obs/                              # obs field binaries
 ├── var/                              # gene expression binaries
 ├── connectivity/                     # KNN edge binaries
@@ -144,7 +143,10 @@ my_export/
 ```
 
 Notes:
-- You must provide at least one of `points_1d/2d/3d`.
+- You must provide at least one embedding in `embeddings`; any number may share a
+  dimension, with `embedding_defaults` naming the one shown first.
+- `var_gene_name_columns` adds alternative gene-name sets to `var_manifest.json`
+  without duplicating any expression payload.
 
 ---
 
@@ -158,11 +160,16 @@ Notes:
 
 ## Edge cases (do not skip)
 
-### Missing embeddings
-- If none of `X_umap_1d`, `X_umap_2d`, `X_umap_3d` are provided, export fails.
-- Only `X_umap_1d`, `X_umap_2d`, and `X_umap_3d` are accepted keyword names.
-- `X_umap_1d` accepts a plain `(n_cells,)` vector as the single column it
-  declares; `X_umap_2d` and `X_umap_3d` require the full 2D array.
+### Embeddings
+- `embeddings` is required and must map at least one embedding id to an array;
+  an empty mapping fails the export.
+- An array of 1, 2, or 3 columns is plotted whole, and its column count is its
+  dimension. A plain `(n_cells,)` vector is a 1D embedding.
+- A wider array (for example `X_pca`) needs `Embedding(values, columns=[...])`
+  naming the 0-based columns to plot.
+- Any number of embeddings may share a dimension. When one has more than one,
+  `embedding_defaults` (for example `{"2d": "X_umap"}`) must name the one
+  shown first.
 
 ### Shape mismatches
 - All inputs must agree on `n_cells` (rows).
@@ -178,14 +185,13 @@ Notes:
 - `force=True` publishes one complete replacement generation.
 
 ### Vector field validation
-- `vector_fields` must be a dict of arrays (or sparse matrices).
-- Keys must match `<field>_umap_1d`, `<field>_umap_2d`, or
-  `<field>_umap_3d` exactly, and the matching embedding dimension must exist.
-  An unsuffixed key such as `velocity_umap` is rejected: the key declares the
-  dimension, it is never inferred from the array's width.
-- Each vector field must be shaped `(n_cells, dim)` for the `dim` its key
-  declares. A `_1d` key also accepts a plain `(n_cells,)` vector as the single
-  column it declares, exactly as `X_umap_1d` does.
+- `vector_fields` maps each field id to a mapping of embedding ids to arrays
+  (or sparse matrices).
+- Every embedding id a field names must be one of the exported embeddings.
+- Each array must be shaped `(n_cells, d)` for the dimension `d` of the
+  embedding it is bound to; a field bound to a 1D embedding also accepts a plain
+  `(n_cells,)` vector.
+- `vector_field_default` is required when more than one field is exported.
 
 ### NaN/Inf and constant-value fields
 - Scientific arrays must contain real finite values representable as
@@ -210,9 +216,10 @@ Notes:
 
 ## Troubleshooting (symptom → diagnosis → fix)
 
-### Symptom: “At least one dimensional embedding must be provided”
+### Symptom: “embeddings is required: map at least one embedding id to an array”
 Fix:
-- Provide one of `X_umap_1d`, `X_umap_2d`, `X_umap_3d`.
+- Pass at least one embedding, for example
+  `embeddings={"X_umap": adata.obsm["X_umap"]}`.
 
 ### Symptom: “All embeddings must have the same number of cells”
 Fix:
@@ -255,9 +262,16 @@ Fix:
 
 ---
 
-### Symptom: an unsupported embedding keyword is rejected
+### Symptom: “Embedding 'X_pca' has 50 columns, and an embedding plots 1, 2, or 3 of them”
 Fix:
-- Pass only `X_umap_1d`, `X_umap_2d`, or `X_umap_3d`.
+- Name the columns to plot: `Embedding(adata.obsm["X_pca"], columns=[0, 1])`.
+
+---
+
+### Symptom: “2 2D embeddings were supplied (…), so embedding_defaults must name the one shown first”
+Fix:
+- Pass `embedding_defaults={"2d": "X_umap"}` naming the embedding each such
+  dimension opens on.
 
 ---
 
@@ -271,9 +285,11 @@ Fix:
 
 ---
 
-### Symptom: “Vector field '…' must have 1/2/3 components”
+### Symptom: “Vector field 'velocity' on embedding 'X_umap' must have exactly 2 columns, got 3.”
 Fix:
-- Ensure each vector field array is shaped `(n_cells, dim)` with `dim ∈ {1,2,3}` (or 1D arrays for 1D).
+- Shape each array `(n_cells, d)` for the dimension `d` of the embedding it is
+  bound to (a plain `(n_cells,)` vector for a 1D embedding).
+- Bind a 3D field to a 3D embedding: `{"velocity": {"X_umap_3d": velocity_3d}}`.
 - Ensure the vector field’s `n_cells` matches the embedding `n_cells`.
 
 ---

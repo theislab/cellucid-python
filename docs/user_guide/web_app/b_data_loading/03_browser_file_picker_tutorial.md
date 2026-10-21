@@ -37,9 +37,11 @@ If your dataset is large or you want maximum reliability/performance, use **Serv
 2) Expand **Session** in the left sidebar and find **Local data:**.
 3) Choose the button matching exactly what you have. The three sit together, in
    this order:
-   - **H5AD** — one current-schema `.h5ad`, no larger than 512 MiB
+   - **H5AD** — one current-schema `.h5ad`, of any size
    - **Zarr ZIP** — one `.zarr.zip` or `.zip` archive
    - **Prepared** — a folder created by `prepare()`
+   Or drag the file or folder from your file manager and drop it onto the
+   viewer; see {ref}`drop-to-open`.
 4) Wait for the dataset to load.
 5) Confirm success:
    - you see points rendered in the canvas
@@ -95,7 +97,7 @@ Click **Prepared** and select the export directory.
 
 **Vector fields (optional)**
 - If the export includes vector fields (e.g. RNA velocity), you’ll be able to enable the overlay after loading.
-- If the overlay toggle is disabled or the dropdown is empty, it usually means the dataset has no vectors for the current dimension (2D vs 3D) or they weren’t exported.
+- If the overlay toggle is disabled or the dropdown is empty, it usually means the view shows an embedding the dataset has no vectors for (a vector field is bound to the embedding it was computed on), or they weren’t exported.
 - See {doc}`../i_vector_field_velocity/index`.
 
 ```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
@@ -105,42 +107,44 @@ Click **Prepared** and select the export directory.
 A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
 ```
 
-## Option #4 — Load a `.h5ad` File Directly (Quick Preview)
+## Option #4 — Load a `.h5ad` File Directly
 
 ### When to use this
-- You have a **small** `.h5ad` and just want a quick look.
+- You have a `.h5ad`, of any size, and want to look at it without Python.
 - You do not want to run Python locally.
 
-(h5ad-size-ceiling)=
-### Important performance limitation (do not skip)
+(h5ad-direct-reading)=
+### How a direct `.h5ad` is read
 
-Browser `.h5ad` loading is **not truly lazy**.
+The file is read where it is, as each view needs it: nothing is uploaded and
+the file is never copied into the browser's memory, so there is **no size
+limit**. A background worker opens it, so the page stays responsive while it
+does.
 
-Due to browser limitations, the viewer must load the entire `.h5ad` file into memory
-before it can read data.
+- Opening reads the metadata, the observation table and the embedding shown
+  first, not the expression matrix.
+- A gene is read when you colour by it. When `X` is stored by gene (CSC) or
+  dense, a gene reads only its own column.
+- When `X` is stored by cell (CSR, what Scanpy writes by default), a gene's
+  values are spread through the whole matrix, so Cellucid reorganises it by
+  gene in the background right after opening and shows its progress. A gene
+  you choose meanwhile is answered by the same pass. The reorganised matrix is
+  kept in memory when it fits (a share of the memory the browser reports) and
+  otherwise in the browser's private file storage on your disk, removed when
+  the file is closed.
 
 Practical consequences:
-- **Files over 512 MiB are refused outright.** Cellucid checks the file size
-  before reading a single byte and reports:
+- Memory holds what is shown: positions and the fields and genes in use, four
+  bytes per cell each.
+- A very large CSR matrix takes a while to reorganise the first time; the
+  progress notice says how far it is. Server mode reads genes from Python
+  instead and needs no reorganisation.
+- A browser without private file storage (some private windows) scans the file
+  for each gene once a CSR matrix is too large for memory, which is slow; use
+  server mode there.
 
-  ```text
-  H5AD direct browser files must have a positive safe size no larger than
-  512 MiB; use the Cellucid server or prepared format
-  ```
-
-- Files comfortably under that ceiling can still exhaust the tab, because the
-  decompressed matrix is larger than the file on disk.
-
-```{figure} ../../../_static/screenshots/data_loading/fail-h5ad-over-size-limit.png
-:alt: A Cellucid notification reading H5AD direct browser files must have a positive safe size no larger than 512 MiB; use the Cellucid server or prepared format.
-:width: 776px
-
-Selecting an `.h5ad` above the ceiling. This appears immediately, because the
-size is checked before any read — nothing is uploaded and nothing is parsed.
-```
-
-### Recommended alternative for larger `.h5ad`
-Use server mode (recommended):
+### Server mode, for a file you open often
+Server mode reads genes from Python on request:
 
 ```bash
 cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
@@ -155,34 +159,43 @@ http://127.0.0.1:8765/?anndata=true
 
 ### `.h5ad` minimum requirements
 
-Your `.h5ad` must include at least one embedding. A key that names its own
-dimension always decides that dimension:
+Your `.h5ad` needs at least one `obsm` array Cellucid can draw: a dense numeric
+array with one row per cell and at least one column (a one-dimensional array
+counts as one column). Which array each dimension shows is decided like this:
 
-- `obsm['X_umap_1d']` with shape `(n_cells, 1)`
-- `obsm['X_umap_2d']` with shape `(n_cells, 2)`
-- `obsm['X_umap_3d']` with shape `(n_cells, 3)`
+- A UMAP the file carries is used first. `obsm['X_umap_1d']`, `obsm['X_umap_2d']`
+  and `obsm['X_umap_3d']` fill their own dimensions; when none of those three
+  exists, the plain `X_umap` that `sc.tl.umap()` writes is read at the
+  dimension its column count states (1, 2 or 3 columns). So an `.h5ad` straight out of Scanpy loads as
+  written, with nothing renamed.
+- A file with no UMAP is opened on a **best guess** (a t-SNE, a force layout,
+  spatial coordinates, …, and last the first two columns of a wide array such
+  as `X_pca`). The guess is marked *guessed* and a notification says what is
+  shown.
+- Any other array can be chosen afterwards under **Session › Dataset › Data
+  mapping**, at any columns.
 
-If your file declares none of those three and carries the plain `X_umap` that
-`sc.tl.umap()` writes, that array is read at the dimension its own column count
-states — 1, 2, or 3 columns. So an `.h5ad` straight out of Scanpy loads here as
-written, with nothing renamed. An array of any other width names a dimension no
-viewer draws and is refused, with its shape reported.
-
-A dimensional key takes precedence: if one is present anywhere in `obsm`, the
-plain key never joins the set. This is the same rule the Python package applies,
-so one file opens the same way in this picker and through `cellucid serve`.
+This is the same rule the Python package applies, so one file opens the same
+way in this picker and through `cellucid serve`. See {doc}`13_data_mapping`.
 
 Optional (but highly recommended):
-- `obs` columns for coloring and filtering
-- expression matrix `X` (dense or sparse) for gene coloring
+- `obs` columns for coloring and filtering (numeric columns are read as
+  32-bit floats, exactly as `cellucid.prepare` exports them: an integer above
+  16,777,216 becomes its nearest 32-bit value, so keep identifier columns as
+  strings if their exact values matter)
+- an expression matrix (dense or sparse) for gene coloring: `X`, any layer or
+  `raw.X`, named by the var index or any text var column, chosen under
+  **Session › Data mapping › Genes** (see [Genes and expression](13_data_mapping.md#genes-and-expression))
 - `obsp['connectivities']` if you want connectivity visualization
 
 Optional (if you want the vector field / velocity overlay):
 - Per-cell vectors in `obsm` using the naming convention `<field>_umap_<dim>d` (e.g. `velocity_umap_2d`, `velocity_umap_3d`).
-- The overlay dropdown shows fields available for the current dimension only.
-- This picker finds them on its own — there is nothing to switch on. (The
-  Python paths are the opposite: `cellucid serve` and `show_anndata()` leave
-  the vectors unread unless asked. See {doc}`04_server_tutorial`.)
+- The overlay dropdown shows the fields bound to the embedding the view shows: `<field>_umap_<d>d` is bound to `X_umap_<d>d` (or `X_umap`), so it is drawn only while the view shows that UMAP.
+- This picker binds them on its own — there is nothing to switch on. (The
+  Python paths are the opposite: `cellucid serve` and `show_anndata()` bind
+  none unless asked. See {doc}`04_server_tutorial`.) Any other array that fits
+  an embedding (`velocity_pca` on `X_pca`) is bound under **Session › Data
+  mapping › Vector fields**; values are read only when the overlay shows them.
 
 ## Option #5 — Load a Zarr ZIP Archive Directly
 
@@ -193,7 +206,9 @@ Optional (if you want the vector field / velocity overlay):
 ### Practical expectations
 - Cellucid validates the ZIP directory and Zarr metadata before adopting the
   dataset.
-- Gene expression is read by Zarr chunk on demand.
+- Gene expression is read by Zarr chunk on demand. Decoded chunks of a dense
+  `X` are kept in a cache of up to 256 MiB, so genes that share a chunk
+  column strip decode those chunks once instead of once per gene.
 - Archive entries, decoded chunks, and the active embedding still consume
   browser memory and are bounded by the documented reader limits.
 
@@ -221,39 +236,36 @@ A CSV renamed to `.h5ad`. Cellucid checks the file's leading bytes, not its
 name, so renaming a file never makes it loadable.
 ```
 
-### The file is an H5AD, but it has no UMAP
+### The file has no UMAP, or nothing Cellucid can draw
 
-The current message reads:
+A file without a UMAP is not refused: it opens on a best guess, and a
+notification says what is shown, for example:
 
 ```text
-No UMAP embedding this viewer can read was found in obsm. Expected one or more
-of X_umap_1d, X_umap_2d, or X_umap_3d, or a plain X_umap of 1, 2, or 3 columns.
-Available obsm keys: X_pca.
+This file has no default UMAP (X_umap_1d, X_umap_2d, X_umap_3d or X_umap).
+Showing 'X_tsne' as 2D. Change it under Session › Data mapping.
 ```
 
-```{figure} ../../../_static/screenshots/data_loading/fail-missing-umap-embedding.png
-:alt: A Cellucid notification about a missing UMAP embedding, listing X_umap_1d, X_umap_2d and X_umap_3d as the expected obsm keys and then naming X_pca as the only key the selected file contained, with a dismiss button at its right.
-:width: 760px
+Its **Show** button opens the Data mapping panel. See
+{doc}`13_data_mapping`.
 
-The trailing list is the useful half: it names the `obsm` keys your file *does*
-have — here only `X_pca` — so you can see at a glance what to rename or
-recompute. `X_pca` is refused whatever its width: only a key that names a UMAP
-dimension, or the plain `X_umap`, is read as an embedding. The capture predates
-the current wording quoted above, which also names the plain `X_umap`; the key
-list at the end is unchanged.
+Only a file with no drawable `obsm` array at all is refused. The message lists
+what `obsm` holds and why each entry was not used:
+
+```text
+Cellucid found nothing to plot. It needs an obsm array with one row per cell
+(10,000) and at least one numeric column. obsm holds: X_df (table),
+spatial (10,000 × 2, NaN at cell 17).
 ```
 
-### The file is bigger than the browser ceiling
-
-Shown above under {ref}`the performance limitation <h5ad-size-ceiling>`: the
-512 MiB refusal, raised before any byte is read.
+The list is the useful half: a table, a sparse array, or a dense array with the
+cell that holds a missing or infinite value. Fix that array, or add an
+embedding (for example `sc.tl.umap(adata)`), and open the file again.
 
 ## Common Failure Modes (and Why They Happen)
 
 ### “It worked for a demo dataset but not my data”
 - Your file is missing required embeddings.
-- Your `.h5ad` is over 512 MiB, or large enough that the decompressed matrix
-  exhausts the tab.
 - Your Zarr ZIP is incomplete, contains multiple roots, or omits required
   `.zgroup`, `.zattrs`, or `.zarray` entries.
 
@@ -284,7 +296,7 @@ Shown above under {ref}`the performance limitation <h5ad-size-ceiling>`: the
 - **H5AD** and **Zarr ZIP** use ordinary single-file inputs and have the same
   validation contract in Chrome, Edge, Firefox, and Safari.
 - **Permission prompts**: if you deny folder access, Cellucid cannot read files.
-- **Large `.h5ad`**: the browser loads the whole file; memory spikes are normal.
+- **Large `.h5ad`**: read from disk as each view needs it; a cell-major matrix is reorganised by gene in the background, with a progress notice.
 - **Zarr ZIP root**: the archive must contain either root metadata at archive
   root or exactly one wrapper directory around the Zarr store.
 
@@ -332,30 +344,45 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 
 ---
 
-### Symptom: “It says no embedding / no UMAP”
+### Symptom: “It says Cellucid found nothing to plot”
 
 **Likely causes**
-- None of the exact supported keys—`obsm['X_umap_1d']`,
-  `obsm['X_umap_2d']`, or `obsm['X_umap_3d']`—is present, **and** there is no
-  plain `X_umap` of 1, 2, or 3 columns either.
-- Or there is a plain `X_umap`, but it is wider than 3 columns — a latent space
-  named after a plot. The message reports its shape.
+- `obsm` holds no dense numeric array with one row per cell: only tables
+  (DataFrames), sparse arrays, or arrays with another row count.
+- Every array that could be drawn holds a value that cannot be: a NaN, an
+  infinity, a value too large for 32-bit floats, or the same coordinates for
+  every cell.
 
 **How to confirm**
-- Read the message itself: it ends with `Available obsm keys: …`, which lists
-  what your file actually contains.
+- Read the message itself: it ends with `obsm holds: …`, which lists every
+  entry with its shape and, for a dense array, the reason it was not used
+  (for example `NaN at cell 17`).
 - In Python:
 
   ```python
-  print(adata.obsm.keys())
+  print({key: getattr(value, "shape", None) for key, value in adata.obsm.items()})
   ```
 
 **Fix**
-- Compute a UMAP. `sc.tl.umap(adata)` writes the plain `X_umap`, which this
-  picker reads as written.
-- To serve more than one dimension from the same file, store each embedding under
-  the key matching its exact column count: a two-column UMAP at
-  `obsm['X_umap_2d']`, a three-column one at `obsm['X_umap_3d']`.
+- Compute an embedding. `sc.tl.umap(adata)` writes the plain `X_umap`, which
+  this picker reads as written.
+- Or fix the array the message names (replace its missing values) and open the
+  file again.
+
+---
+
+### Symptom: “It shows the wrong embedding”
+
+**Likely cause**
+- The file has no UMAP, so Cellucid opened it on a best guess (marked
+  *guessed* in **Session › Data mapping**).
+- Or the file has a UMAP and you wanted another array.
+
+**Fix**
+- Turn the array on, and for a wide array choose its columns, in **Session ›
+  Data mapping**, mark it **Default** if every new view should show it, and
+  press **Apply**. A view shows it once you choose it in **View N shows**
+  (or it is the default). See {doc}`13_data_mapping`.
 
 ---
 
@@ -393,8 +420,10 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 
 **Likely causes (ordered)**
 1) The dataset truly has no vector fields.
-2) Vector fields exist, but the naming convention is wrong (Cellucid can’t discover them).
-3) Dimension mismatch: vectors exist for 2D but you’re viewing 3D (or vice versa).
+2) Vector fields exist, but their keys do not follow the `<field>_umap_<dim>d`
+   default rule, so nothing is bound to them by default.
+3) The view shows an embedding the field is not bound to (for example the 3D
+   UMAP while the field is bound to the 2D one).
 
 **How to confirm**
 - In Python, list `obsm` keys and look for entries like `velocity_umap_2d`:
@@ -404,8 +433,9 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
   ```
 
 **Fix**
-- Rename/regenerate vector fields to follow the `*_umap_2d` / `*_umap_3d` convention.
-- Switch the viewer to the dimension that has vectors.
+- Bind the array yourself under **Session › Data mapping › Vector fields**, or
+  rename it to follow the `*_umap_2d` / `*_umap_3d` default rule.
+- Show an embedding the field is bound to; the overlay info line names them.
 - If you’re using exports, re-export with `prepare(..., vector_fields={...})`.
 
 For overlay UI behavior and deeper debugging, see:

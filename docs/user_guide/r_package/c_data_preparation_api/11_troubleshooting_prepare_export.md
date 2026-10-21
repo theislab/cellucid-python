@@ -63,10 +63,10 @@ Embeddings should not contain `NA`/`Inf`.
 
 ---
 
-## Symptom: “At least one embedding must be provided”
+## Symptom: “cellucid_prepare() is missing 1 required argument: embeddings”
 
 **Likely causes**
-- You forgot to pass `X_umap_1d`, `X_umap_2d`, and `X_umap_3d`.
+- You did not pass `embeddings`.
 - Your embedding object is `NULL` because extraction failed (common with Seurat/SCE when the reduction name is wrong).
 
 **How to confirm**
@@ -75,27 +75,36 @@ Embeddings should not contain `NA`/`Inf`.
 **Fix**
 - Pass at least one embedding:
   ```r
-  cellucid_prepare(..., X_umap_2d = umap2)
+  cellucid_prepare(..., embeddings = list(X_umap = umap2))
   ```
 
 ---
 
-## Symptom: “X_umap_2d must have exactly 2 columns”
+## Symptom: “Embedding '…' has 10 columns, and an embedding plots 1, 2, or 3 of them”
 
 **Likely causes**
-- You passed a vector instead of a matrix.
-- Your embedding matrix has the wrong dimension (e.g., 3 columns).
+- You passed a wide reduction (a PCA, a 10-component UMAP) as a plain matrix.
 
 **How to confirm**
 ```r
-dim(X_umap_2d)
+dim(umap)
 ```
 
 **Fix**
-- Use the right embedding or subset columns:
+- Name the 1-based columns to plot:
   ```r
-  X_umap_2d <- X_umap[, 1:2, drop = FALSE]
+  cellucid_prepare(..., embeddings = list(X_pca = cellucid_embedding(pca, columns = c(1, 2))))
   ```
+
+---
+
+## Symptom: “… so embedding_defaults must name the one shown first”
+
+**Likely cause**
+- Two or more embeddings share a dimension.
+
+**Fix**
+- Add `embedding_defaults = c("2d" = "X_umap")` for the dimension the message names.
 
 ---
 
@@ -171,6 +180,8 @@ dim(gene_expression)
 **Fix**
 - Ensure `nrow(var) == ncol(gene_expression)`.
 - Ensure the gene identifiers you want are in `rownames(var)` or your chosen `var_gene_id_column`.
+- A repeated gene name is exported as `NAME-1`, `NAME-2`, …; request that unique
+  name in `gene_identifiers`.
 
 ---
 
@@ -233,12 +244,13 @@ install.packages("Matrix")
 
 ---
 
-## Symptom: “Field 'X' has N categories, but uint8 supports at most 255.”
+## Symptom: “Field 'X' has N categories, but uint8 supports at most 255. Pass obs_categorical_dtype='uint16'.”
 
 **Likely cause**
 - You chose `obs_categorical_dtype = "uint8"` and one field has more than 255
   categories. The top code of each width is reserved for “missing”, so `uint8`
-  addresses 255 categories and `uint16` addresses 65,535.
+  addresses 255 categories, `uint16` 65,535 and `uint32` 4,294,967,295. The
+  message ends with the width that fits.
 
 **How to confirm**
 ```r
@@ -246,32 +258,33 @@ sort(vapply(obs, function(x) length(unique(x)), integer(1)), decreasing = TRUE)[
 ```
 
 **Fix**
-- Use `obs_categorical_dtype = "uint16"`, or collapse rare categories. The width
+- Use the width the message names (`"uint16"`, or `"uint32"` above 65,535
+  categories), or collapse rare categories. The width
   applies to *every* categorical field in the export, not one field at a time.
 
 ---
 
-## Symptom: a `vector_fields` list name is rejected
+## Symptom: a `vector_fields` entry is rejected
 
-**Likely cause**
-- The key is not exactly `<field>_umap_<1|2|3>d`, and the export stops with
-  `Vector field key '...' must exactly match '<field>_umap_<1|2|3>d'.` An
-  unsuffixed `velocity_umap` is rejected: the key declares the dimension and it
-  is never inferred from the array.
-- Or the same list name is declared twice, and the export stops with
-  `vector_fields names must be unique.` before any array is read.
+**Likely causes**
+- A field's value is a bare matrix, and the export stops with
+  `Vector field 'velocity' must map embedding ids to arrays, for example list(velocity = list(X_umap = vectors)).`
+- A field names an embedding you did not export:
+  `Vector field 'velocity' is bound to embedding 'X_tsne', which is not one of the exported embeddings: …`
+- An array's width is not its embedding's dimension:
+  `Vector field 'velocity' on embedding 'X_umap' must have exactly 2 columns, got 3.`
 
-The field id itself carries no character rule: it names a field in
-`dataset_identity.json`, and the payload is written to
-`vectors/<index>_<dim>d.bin`.
+The field id itself carries no character rule beyond the display rule: it names
+a field in `dataset_identity.json`, and the payload is written to
+`vectors/<field index>_<embedding index>.bin`.
 
 **Fix**
-- Add or correct the dimensional suffix:
+- Bind each array to the embedding it was computed in:
   ```r
-  names(vector_fields) <- paste0(names(vector_fields), "_2d")
+  vector_fields <- list(velocity = list(X_umap = velocity_2d))
   ```
 
-Better: choose explicit safe, suffixed names up front (see {doc}`08_vector_fields_velocity_displacement`).
+See {doc}`08_vector_fields_velocity_displacement`.
 
 ---
 
@@ -367,14 +380,14 @@ The same rule covers `dataset_name`, `dataset_description`, `source_name`,
 ## Symptom: gene or field identifiers are rejected
 
 **Likely cause**
-- an identifier is empty, two identifiers on the same axis are equal, or an
-  exported identifier carries a character with no glyph. There is no filename
-  rule to violate: payload files are named by an integer index, so
-  `HLA-DRB1/2`, `CON`, and a name with interior spaces all export.
+- an identifier is empty, two observation keys are equal, or an exported
+  identifier carries a character with no glyph. There is no filename rule to
+  violate: payload files are named by an integer index, so `HLA-DRB1/2`, `CON`,
+  and a name with interior spaces all export. Repeated and empty **gene** names
+  are not an error: they are made unique, and an empty one takes its row name.
 
 **How to confirm**
-- Compare the exact IDs for duplicates with `anyDuplicated(ids)`. Note that gene
-  uniqueness spans every row of `var`, not only the exported subset.
+- Compare observation keys for duplicates with `anyDuplicated(keys)`.
 - Check for invisible characters with `identical(ids, trimws(ids))`.
 
 **Fix**

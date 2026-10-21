@@ -32,7 +32,8 @@ There are two communication channels:
 ### Viewer → Python (events/hooks)
 
 The viewer sends HTTP POSTs to the local server:
-- `POST /_cellucid/events`
+- `POST /_cellucid/events` (JSON events)
+- `POST /_cellucid/selection` (selections, as binary cell indices)
 
 Events include:
 - `ready`

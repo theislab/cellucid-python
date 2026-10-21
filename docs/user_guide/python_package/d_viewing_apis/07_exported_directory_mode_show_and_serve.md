@@ -59,7 +59,7 @@ An export directory is a folder containing:
 - `obs_manifest.json` (cell metadata fields list + schemas)
 - `var_manifest.json` (gene IDs list + gene expression schema)
 - one or more embedding binaries:
-  - `points_1d.bin` / `points_2d.bin` / `points_3d.bin` (optionally `.gz`)
+  - `embeddings/<index>_<dim>d.bin` (optionally `.gz`), one per exported embedding
 - optional subfolders for larger artifacts:
   - `obs/` (per-field values/codes)
   - `var/` (per-gene values)
@@ -80,10 +80,8 @@ At minimum, you should see:
 
 - `dataset_identity.json`
 - `obs_manifest.json`
-- at least one of:
-  - `points_1d.bin` / `points_1d.bin.gz`
-  - `points_2d.bin` / `points_2d.bin.gz`
-  - `points_3d.bin` / `points_3d.bin.gz`
+- an `embeddings/` folder holding every file `dataset_identity.json` declares
+  under `embeddings.items` (for example `embeddings/0_2d.bin.gz`)
 
 ### 2) Confirm the server can serve the identity file
 
@@ -100,8 +98,9 @@ If `dataset_identity.json` fails to load, the viewer cannot load the dataset.
 Open `dataset_identity.json` and confirm:
 
 - `stats.n_cells` matches your expectation
-- `embeddings.available_dimensions` matches what you exported
-- `embeddings.files` contains `points_2d...` and/or `points_3d...` paths that actually exist on disk
+- `embeddings.items` lists every embedding you exported, and each item's `file`
+  exists on disk
+- `embeddings.defaults` names the embedding each dimension shows first
 
 ## Serving multiple exported datasets (one server, many folders)
 
@@ -112,12 +111,12 @@ exports/
   pbmc_demo/
     dataset_identity.json
     obs_manifest.json
-    points_3d.bin.gz
+    embeddings/
     ...
   pancreas_demo/
     dataset_identity.json
     obs_manifest.json
-    points_2d.bin.gz
+    embeddings/
     ...
 ```
 
@@ -156,7 +155,7 @@ Two common sharing modes:
 ## Edge cases (exports)
 
 - **Missing gene expression**: you can export embeddings + obs without exporting `gene_expression`. The viewer can load, but gene search/expression overlays won’t work.
-- **Huge categorical fields**: very large numbers of categories can be unusable in the UI; consider coarsening or filtering before export.
+- **Huge categorical fields**: any number of categories loads (more than 65,535 use `uint32` codes), but their colours are not distinguishable; consider coarsening before export.
 - **Dimension mismatch**: exporting only 2D points means 3D view and 3D vector fields cannot appear.
 
 ## Troubleshooting

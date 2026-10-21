@@ -42,7 +42,7 @@ CURRENT_TEXT_SUFFIXES = {
 
 def _identity(dataset_id: str, name: str = "Dataset") -> dict[str, object]:
     return {
-        "version": 2,
+        "version": 3,
         "id": dataset_id,
         "name": name,
         "stats": {
@@ -99,7 +99,7 @@ def test_shipped_python_repository_surfaces_contain_only_current_contract_langua
 def test_readme_cross_references_the_current_cellucid_ecosystem() -> None:
     readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
     for url in (
-        "https://cellucid.readthedocs.io/en/latest/user_guide/python_package/index.html",
+        "https://docs.cellucid.com/en/latest/user_guide/python_package/index.html",
         "https://github.com/theislab/cellucid",
         "https://github.com/theislab/cellucid-r",
         "https://github.com/theislab/cellucid-datasets",

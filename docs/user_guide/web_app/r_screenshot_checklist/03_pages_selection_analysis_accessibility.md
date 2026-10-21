@@ -40,7 +40,7 @@ Read-only pass; the only file written is this one.
    IDs (`ENSG00000158488.16`, `ENSG00000017483.16`). No published sample dataset
    contains a single `ENSG` name any more — `suo`, `garcia`, `he`, `kanemaru` publish
    HGNC symbols and `pancreas` publishes MGI symbols (verified against
-   `cellucid-datasets/exports/*/var_manifest.json`; ENSG count = 0 in all five).
+   `cellucid-datasets/exports-v3/*/var_manifest.json`; ENSG count = 0 in all five).
    Both shots predate the gene-symbol switch.
 3. **{doc}`/user_guide/web_app/h_analysis/06_analysis_mode_differential_expression_de` has no figure at all** — confirmed,
    the file contains zero `{figure}` directives. DE is the flagship statistical feature,
@@ -290,9 +290,9 @@ element five times and stack them into a single labelled composite:
 | --- | --- | --- |
 | `That click did not land on a cell…` | Proximity drag, zoom far out with LOD on, `Alt+click` empty space, no candidate set | suo |
 | `That gesture ended outside the view…` | Lasso, `Alt+drag`, release the mouse over the sidebar | pancreas |
-| `That cell has no value on the active field…` | Annotation based on a field with a missing-code sentinel, `Alt+click` a sentinel cell | he |
+| `That cell has no value on that panel's field…` | Annotation based on a field with a missing-code sentinel, `Alt+click` a sentinel cell | he |
 | `That gesture did not change the selection.` | Lasso the identical polygon twice with `Alt` | pancreas |
-| `Annotation selection needs an active field…` | Annotation based with colour-by set to None | pancreas |
+| `Color by a field first…` | Annotation based with colour-by set to None | pancreas |
 
 Crop each to `#highlight-mode-description` (plus the `Step N:` line above it where
 present, since the doc says the readout distinguishes the two cases). Assemble into one
@@ -484,8 +484,8 @@ Two things the recapture corrected in the instruction above. **Percentages** is 
 off: the figure is captioned as counts and the summary table beside it prints counts, so
 turning it on would put a percentage axis under a counts caption. And "8 categories, all
 legible" is not achievable and is not what the page now claims — a categorical axis is
-thinned to the labels its box can show, which is one name in the sidebar and five in the
-expanded view; `cellucid c177e77ce` made that a clean drop instead of a smear.
+thinned to the labels its box can show, which is two names (the two ends) in the
+sidebar and five in the expanded view; `cellucid c177e77ce` made that a clean drop instead of a smear.
 
 **notes** — The test descriptions match `statistical-tests.js`. "Export … per-cell
 values … `detailed-analysis-data.csv` … columns `page`, `cell_index`, `<variable>`"
@@ -829,7 +829,7 @@ the two `{octicon}` glyphs — is theme-rendered and needs no capture.
 simulation in Figure Export, the `i` help-dialog keyboard contract, the global
 shortcut table, what keyboard cannot do, and motion-sensitivity guidance.
 
-**has** — `web_app/keyboard-shortcuts.png`, `:width: 516px`. Native 516×1154, a
+**has** — `web_app/keyboard-shortcuts.png`, `:width: 516px`. Native 516×1242, a
 258 CSS px crop of `#shortcuts-section` captured at DPR 2 by the
 `accessibility-panel-keyboard-shortcuts` scenario. Not reused elsewhere in the
 docs.
@@ -899,11 +899,14 @@ Create `_static/screenshots/accessibility/` for 2–4; there is no such topic fo
 
 **notes** — The old image baked in an app string that contradicted the selection docs:
 its Highlighting block read `Shift + click — Add to selection`, while the renderer
-requires `altKey` on every selection path (`highlight-renderer.js` lines ~3139, ~3200,
-~3299, ~3352) and the real binding is **`Shift+Alt`+click**. That was fixed in
-`index.html` — and pinned by `tests/keyboard-shortcut-panel-contract.test.mjs`, which
-now ties every row of the panel to the handler that serves it — before the recapture, so
-the current image ships the corrected panel and its five groups.
+requires `Alt` on every selection path (today one gate,
+`resolveSelectionGestureCombine` in `rendering/select-mode.js`, which also accepts
+Select mode in place of `Alt`) and the real binding is **`Shift+Alt`+click**. That was
+fixed in `index.html` — and pinned by `tests/keyboard-shortcut-panel-contract.test.mjs`,
+which now ties every row of the panel to the handler that serves it — before the
+recapture, so the current image ships the corrected panel and its five groups,
+including the second Highlighting `Esc` row, *Leave Select mode when nothing is
+in progress*.
 
 ---
 

@@ -89,6 +89,7 @@ neither is a typo for the other.
 | Form | Use it for | Why |
 |---|---|---|
 | `https://www.cellucid.com` | Every **navigational** URL: documentation links, README links, `CITATION.cff` `url:`, package homepages, CORS origin the app is served from | This is the host `cellucid/CNAME` publishes and the host the app’s own `<link rel="canonical">` declares, so it is where a browser should land |
+| `https://docs.cellucid.com/en/latest/…` | Every link **into this documentation** | This is the Read the Docs canonical domain: every page declares it in `<link rel="canonical">` (`html_baseurl` in `docs/conf.py`) and lists it in `sitemap.xml`. The former `readthedocs.io` subdomain only redirects here, so it is never written as a link |
 | `https://cellucid.com/…` | Every **frozen identifier**: JSON Schema `$id`, XML namespace, exported-figure provenance strings | Identifiers must never change once published. A schema `$id` is a name, not an address — it is compared as a string and is not required to resolve |
 
 The identifiers currently frozen at the bare apex are:

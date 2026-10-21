@@ -20,8 +20,38 @@ import unicodedata
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import NamedTuple
 
 JsonScalar = str | bool | int | float
+
+#: The version of ``dataset_identity.json`` every writer emits and every reader
+#: requires. Version 3 declares any number of embeddings per dimension.
+IDENTITY_VERSION = 3
+
+#: The axis directory an export's embedding payloads live in.
+EMBEDDINGS_DIRNAME = "embeddings"
+
+
+class CategoricalCodeWidth(NamedTuple):
+    """One categorical code width of the export format."""
+
+    #: The codes payload's file extension, ``obs/{index}.codes.{extension}``.
+    extension: str
+    #: Bytes per code.
+    itemsize: int
+    #: The width's largest value, which marks a missing cell, so the width
+    #: carries exactly this many categories (codes ``0`` to ``missing - 1``).
+    missing: int
+
+
+#: Every categorical code width, narrowest first. uint32 exists for fields
+#: with more than 65,535 categories (barcodes, free text); a reader that
+#: predates it refuses such a field by name instead of misreading it.
+CATEGORICAL_CODE_WIDTHS: dict[str, CategoricalCodeWidth] = {
+    "uint8": CategoricalCodeWidth("u8", 1, 255),
+    "uint16": CategoricalCodeWidth("u16", 2, 65_535),
+    "uint32": CategoricalCodeWidth("u32", 4, 4_294_967_295),
+}
 _PORTABLE_COMPONENT_PATTERN = re.compile(
     r"^[A-Za-z0-9][A-Za-z0-9._-]{0,179}$",
     flags=re.ASCII,

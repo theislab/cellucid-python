@@ -39,7 +39,7 @@ Cellucid has two different network surfaces:
 | Hosted web app (`cellucid.com`) | Yes | The browser loads the website directly. |
 | `ensure_web_ui_cached(force=True)` | Yes | Establishes the complete source generation now. |
 | `ensure_web_ui_cached(force=False)` | No | Verifies an existing generation only; it does not alter normal viewer startup. |
-| Hooks/events after a viewer has started | No additional source request | Messages use `/_cellucid/events` on the Python server. |
+| Hooks/events after a viewer has started | No additional source request | Messages use `/_cellucid/events` on the Python server; selections use `/_cellucid/selection`. |
 
 ## Practical notes per environment
 
@@ -201,7 +201,7 @@ served as a substitute.
 **Likely causes**
 - Viewer isn’t fully loaded yet (wait for `on_ready`).
 - Old viewer is still registered (multiple viewers, stale kernel state).
-- Browser can’t reach `/_cellucid/events` on the server.
+- Browser can’t reach `/_cellucid/events` (or `/_cellucid/selection`) on the server.
 
 **How to confirm**
 - Add a raw message logger:

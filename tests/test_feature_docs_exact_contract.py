@@ -87,9 +87,14 @@ def test_smoke_and_multiview_docs_publish_current_exact_limits() -> None:
         "`Ray quality:`",
         "75 / `High`",
         "`Render resolution:`",
-        "15 / `0.51x`",
+        "33 / `0.50x`",
         "`Noise detail:`",
-        "58 / `128³`",
+        "80 / `128³`",
+        "65 / `1.00`",
+        "40 / `2.0`",
+        "15 / `0.3`",
+        "50 / `1.00x`",
+        "`Still`",
         "approximately 300 ms debounce",
         "Volumetric smoke requires a single view. Clear snapshots first.",
     ):
@@ -98,14 +103,15 @@ def test_smoke_and_multiview_docs_publish_current_exact_limits() -> None:
     assert "A `.cellucid-session` saves `Render mode:`" in smoke
 
     for exact in (
-        "at most **three** kept snapshots",
+        "at most **three** kept views",
         "`Keep view`",
-        "`Locked Cam`",
-        "`Unlocked Cam`",
+        "`View 2 shows`",
+        "`Link cameras`",
         "`Layout: Grid compare`",
         "`Layout: Edit selected view`",
-        "`Orb`, `Pan`, or `Fly`",
-        "starts multiview with linked cameras",
+        "`Orbit`, `Pan` or `Fly`",
+        "**Link cameras** is on by default",
+        "Views that show different embeddings always keep their\nown cameras",
     ):
         assert exact in multiview
     assert "Highlight pages are a separate feature" in " ".join(multiview.split())
@@ -149,7 +155,8 @@ def test_velocity_docs_use_real_pancreas_captures_and_current_controls() -> None
     assert captures.count(":width: 1440px") == 3
     assert "3,696 cells" in captures
     assert "2D **Planar**" in captures
-    assert "3D `velocity_umap`" in captures
+    assert "3D `velocity` payload" in captures
+    assert "velocity_umap" not in captures
 
 
 def test_every_reused_velocity_capture_keeps_real_pancreas_provenance() -> None:
@@ -220,13 +227,12 @@ def test_community_annotation_docs_publish_current_network_and_repository_contra
         "`/auth/installations`",
         "`/auth/installation-repos`",
         "`/cap/lookup-cells`",
-        "`/cap/search-datasets`",
         "`/api/repos/*`",
         "`ALLOWED_ORIGINS`, `GITHUB_CLIENT_ID`, and `GITHUB_CLIENT_SECRET`",
         '`{"status":"ok","service":"Cellucid GitHub Auth","contractVersion":1,',
         "1,000,000 decoded UTF-8 bytes",
-        "10,000 active user files",
-        "64,000,000 aggregate decoded UTF-8 bytes across those user files",
+        "A Pull has no limit on how many user files there are or on their total size",
+        "streaming the cache one file at a time",
         "persistent raw-file cache requires IndexedDB",
         "Cellucid never switches to an in-memory cache",
         "Only the GitHub identity that created a merge record can edit or delete its note",
@@ -240,6 +246,7 @@ def test_community_annotation_docs_publish_current_network_and_repository_contra
         assert "GitHub bearer token and OAuth cookies are not sent to CAP" in guide_normalized
     assert "`/cap/search-datasets`" not in annotator
     assert "`/cap/search-datasets`" not in ui
+    assert "`/cap/search-datasets`" not in author
     assert "`/cap/lookup-cells` or" not in annotator
     assert "`/cap/lookup-cells` or" not in ui
     assert "related datasets" not in annotator
@@ -308,24 +315,24 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
     # watching a view appear and finding nothing that documents it, so the page
     # has to name all five and this loop has to cover all five.
     for dataset_id in ("suo", "garcia", "he", "kanemaru", "pancreas"):
-        assert f"exports/{dataset_id}/default.cellucid-session" in presets
-        assert f"exports/{dataset_id}/state-snapshots.json" in presets
+        assert f"exports-v3/{dataset_id}/default.cellucid-session" in presets
+        assert f"exports-v3/{dataset_id}/state-snapshots.json" in presets
 
     for exact in (
         '{ "states": ["default.cellucid-session"] }',
-        "`state_manifest` and `state_sha256` as a pair",
+        "advertises `state_manifest`, `state_sha256` and `state_bytes` together",
         "catalog's SHA-256",
         "Only after the scientific dataset has been published",
         "automatically applies the verified static starting view",
         "`cell_type` observation field",
         "3-D **Orbit** camera",
-        "light theme and grid background",
+        "light theme and the **Studio (light)** background",
         "no `cinematic/camera` chunk",
         "**Loop playback**, or **Autoplay**",
         "moving-camera playback remains off",
         "The official catalog uses this capability",
         "A custom `exportsBaseUrl` catalog may deliberately opt in",
-        "same paired fields and exact sidecars",
+        "same fields and exact sidecars",
         "only explicit catalog advertisement enables the state requests",
         "Jupyter, GitHub, local-user, and remote sources are not probed",
         "a GitHub repository (`github-repo`)",
@@ -339,7 +346,7 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
         # stale silently. The page has to send readers to the catalog instead.
         "Read the current value out of the catalog",
         "all five generation directories",
-        "| Kanemaru | `exports/kanemaru/default.cellucid-session`",
+        "| Kanemaru | `exports-v3/kanemaru/default.cellucid-session`",
     ):
         assert exact in normalized
 
@@ -356,7 +363,7 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
         # The published presets are regenerated with the reviewed view and the
         # session format, so each digest the page has ever quoted is dead the
         # moment the next generation is published. These are the ones it has
-        # carried; the example must track `exports/datasets.json`, never a
+        # carried; the example must track `exports-v3/datasets.json`, never a
         # value copied out of an earlier revision of this page.
         "5581569118eaa992",
         "20769ea20075a212",
@@ -395,13 +402,14 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
 
     for exact in (
         "`createdAt`, `datasetFingerprint`, and `chunks`",
-        # The fingerprint carries five fields, not four: the viewer records a
-        # `cellOrder` digest so a dataset republished re-sorted under an
-        # unchanged identity cannot silently re-point saved selections.
-        "`sourceType`, `datasetId`, `cellCount`, `varCount`, and `cellOrder`",
-        "`cellOrder` has exactly `dimension` and `digest`",
+        # The fingerprint carries six fields: the viewer records a `cellOrder`
+        # digest so a dataset republished re-sorted under an unchanged identity
+        # cannot silently re-point saved selections, and the data mapping the
+        # dataset was shown with.
+        "`sourceType`, `datasetId`, `cellCount`, `varCount`, `cellOrder`, and `dataMapping`",
+        "`cellOrder` has exactly `embedding`, `dimension`, and `digest`",
         "16 lowercase hexadecimal characters",
-        "All five fingerprint fields must match",
+        "All six fingerprint fields must match",
         "`analysis/cache-inventory`",
         "`cinematic/camera`",
         "one for every categorical user-defined field",
@@ -442,19 +450,35 @@ def test_session_docs_publish_only_the_atomic_current_contract() -> None:
         sources["l_sessions_sharing/10_troubleshooting_sessions.md"].split()
     )
     for exact in (
-        "The session stores five fields",
-        "All five must equal the currently loaded dataset",
+        "The session stores six fields",
+        "The four scalars and `cellOrder` must equal the currently loaded dataset",
+        "The data mapping must too, with one exception: its embeddings",
         "`cellOrder`: a record of *which ordering*",
+        "`dataMapping`: which stored arrays the dataset was shown with",
         "exactly 1, 2, or 3",
-        "A different embedding dimension is on screen",
+        "Restoring is *verify, then apply*",
+        "The session turns on other embeddings, or names other defaults, that this dataset can show",
+        "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have.",
+        "The session names another graph, gene names, expression matrix, latent space or vector bindings, ones this dataset can use",
         "stores its cells in a different order",
         "A session file saved before Cellucid recorded cell order",
-        "accepts a fingerprint **with or without** `cellOrder`",
+        "a fingerprint with `cellOrder` but no `dataMapping`",
+        # The Python reader requires the same fingerprint and never verifies
+        # the digest; the page must say both.
+        "a file without `cellOrder.embedding` or `dataMapping` is refused",
+        "Python validates `cellOrder`'s shape and never its digest",
     ):
         assert exact in identity
+    for retired in (
+        "accepts a fingerprint **with or without** `cellOrder`",
+        "A different embedding dimension is on screen",
+        "The session stores five fields",
+        "All six must equal the currently loaded dataset",
+    ):
+        assert retired not in identity
     for exact in (
-        "All five must match",
-        "`cellOrder`, itself exactly a `dimension` (1, 2, or 3)",
+        "All six must match",
+        "`cellOrder`, itself exactly the `embedding` the digest was taken over",
     ):
         assert exact in troubleshooting
 

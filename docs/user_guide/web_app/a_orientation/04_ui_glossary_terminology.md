@@ -39,13 +39,17 @@ Filtering* telling you how many of the dataset's cells are currently drawn.
   the current load. Explicit Jupyter, remote-server, and GitHub-served startup
   links skip it because they already declare a data source.
 - **Suo**: the sample catalog default. It may finish loading behind the welcome
-  overlay before you choose another source.
-- **Default background**: light grid in a fresh browser profile. A user-selected
-  background remains an explicit preference.
-- **Build**: the web build identity printed in the sidebar footer. Include this
-  exact value in bug reports so maintainers can identify the HTML, JavaScript,
-  CSS, and asset inventory you exercised. It is not the Python or R package
-  version.
+  overlay before you choose another source, and opens in 3D on its default
+  embedding.
+- **Default background**: **Studio (light)** in a fresh browser profile. A user-selected
+  background remains an explicit preference (see [Background](#background)).
+- **Version**: the release version printed first in the sidebar footer. The
+  web app, the Python package and the R package share it and are released
+  together, so one number names the three.
+- **Build**: the web build identity printed after the version in the sidebar
+  footer. Include this exact value in bug reports so maintainers can identify
+  the HTML, JavaScript, CSS, and asset inventory you exercised; it changes on
+  every deployment, the version only at a release.
 
 ```{figure} ../../../_static/screenshots/web_app/startup-loaded-build.png
 :alt: Loaded Suo point cloud on a light grid with Community Annotation and Camera Path collapsed and a dated Build line in the sidebar footer.
@@ -77,19 +81,75 @@ keyboard and screen-reader behavior.
 
 - **`Render mode:`**: the dropdown that decides how points are drawn. It has
   exactly two options: `Points`, the default, which draws one point per cell;
-  and `Volumetric smoke cloud (alpha)`, which draws a continuous density cloud
-  instead. **“Smoke mode”** in these pages always means the second one.
+  and `Volumetric smoke cloud (beta)`, which draws a continuous density cloud,
+  coloured by the active field, instead. **“Smoke mode”** in these pages always
+  means the second one.
 - **Maturity tag**: a small pill beside a control's label naming how finished
   the currently selected option is. It describes the option you chose, not the
   control it sits next to.
-- **`Alpha`**: the only maturity tag in the app. It sits beside `Render mode:`
-  and appears only while `Volumetric smoke cloud (alpha)` is the selected mode;
+- **`Beta`**: the only maturity tag in the app. It sits beside `Render mode:`
+  and appears only while `Volumetric smoke cloud (beta)` is the selected mode;
   `Points` never wears it, and nothing else in Cellucid is tagged.
 - Its hover text reads
-  `Volumetric smoke cloud is in alpha: it is still changing, it is slower than points, and figure export cannot reproduce it.`
+  `Volumetric smoke cloud is in beta: it is slower than points, and figure export cannot reproduce it.`
 
 See {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` for
 what alpha means in practice for that mode.
+
+## Background
+
+- **`Background`**: the **Visualization** dropdown that sets what is drawn
+  behind the cells. Its twelve options sit in two groups, **Light** (`White`,
+  `Grid (light)`, `Studio (light)`, `Atelier (light)`, `Abyss (light)`,
+  `Aurora (light)`) and **Dark** (`Black`, `Grid (dark)`, `Studio (dark)`,
+  `Nebula (dark)`, `Abyss (dark)`, `Aurora (dark)`); the two lists pair up
+  line by line, so `Nebula` is `Atelier`'s dark twin:
+  - `White` and `Black`: a plain colour, nothing drawn.
+  - `Grid (light)` and `Grid (dark)`: a matplotlib-style grid box
+    of ruled walls around the data.
+  - `Studio (light)` (the default) and `Studio (dark)`: a calm stage on a neutral grey or
+    charcoal. A 3D view in Orbit or Free-fly stands on a **floor**: one plane
+    just under the lowest cell, ruled with hairlines that fade out long before
+    its edge and with a soft pool of shade (light) or light (dark) under the
+    data. It is the same ruled floor from every angle, straight down
+    included; it fades only where the camera sees it nearly edge-on, and once
+    the camera has gone below it the stage is plain, as under a real floor. A
+    1D or 2D view, and any view in Planar navigation, sits on a **dot
+    surface** instead, like dotted paper behind the cells. Which of the two a
+    view shows follows its embedding's dimension and its navigation mode,
+    never the camera angle, so rotating a view never swaps them. Rules and dots
+    keep the same on-screen size at every zoom and screen density, and their
+    spacing steps by fives as you zoom, crossfading so the pattern never
+    crowds or empties.
+  - The **looks** are painted, three-dimensional settings. Each turns with
+    the camera like the sky around a room, and a nearer layer (a dust shell,
+    marine snow, a sea of clouds, the studio floor) slides against it as you
+    orbit, pan or zoom, so the stage has depth in 3D and in 2D:
+    - `Atelier (light)`: an endless paper studio. The cells cast a soft
+      contact shadow on the floor (in 2D, on the paper behind them) that
+      follows filters and representation changes; seen from below the floor,
+      the paper glows with the shadow showing through.
+    - `Nebula (dark)`: deep space, a nebula and a star field whose colours are
+      taken from the colours the cells are coloured by.
+    - `Abyss (light)` and `Abyss (dark)`: sunlit shallows over a caustic-lit
+      sea floor, and the deep ocean with light shafts and glowing marine snow.
+    - `Aurora (light)` and `Aurora (dark)`: a dawn sky with clouds and sun
+      haze, and a night sky with aurora curtains over a sea of clouds.
+
+    The cells stay the brightest (dark looks) or darkest (light looks) things
+    on the stage: every look keeps its large areas outside the lightness range
+    of the category palettes, and stars behind the cells are dimmed. A look is
+    prepared in the background the first time you choose it (a fraction of a
+    second; the stage shows the look's base colour meanwhile, then the look
+    fades in) and costs nothing while the scene is still. The sky is prepared
+    coarse first and sharpened in steps while the graphics processor keeps up,
+    so it appears quickly on every machine and reaches full detail on a
+    capable one. With the system's *reduce motion* setting it appears without
+    the fade.
+- The choice applies to every view of a grid compare, is remembered in the
+  browser, and is saved in sessions. Figure export reproduces the grid box,
+  the studio backdrop and the looks; see
+  {doc}`../k_figure_export/06_edge_cases`.
 
 ---
 
@@ -98,10 +158,23 @@ what alpha means in practice for that mode.
 - **Dataset**: the loaded data bundle (points + metadata + optional gene expression + optional connectivities/vector fields).
 - **Cell / point**: one row/observation rendered as a point. (The UI often says “points” because the viewer is generic.)
 - **Gene / feature**: one variable/feature; used for gene expression coloring and some analyses.
-- **Embedding**: coordinates for points in 1D/2D/3D (UMAP/tSNE/PCA/etc).
-- **Dimension (1D / 2D / 3D)**: which embedding dimensionality you are currently viewing for a given view.
+- **Embedding** (also *representation*): coordinates for points in 1D/2D/3D
+  (UMAP/tSNE/PCA/etc). A dataset may carry several embeddings of one dimension
+  (the Pancreas sample has a 2D UMAP and a 2D PCA view); each view shows one of
+  them, and each dimension has one **default embedding**, which keys `1`, `2`
+  and `3` show first.
+- **Data mapping**: which stored arrays the dataset is drawn from — the
+  embeddings that are turned on, the default of each dimension, and read-only
+  the neighbour graph, gene names, expression matrix, latent space and vector
+  fields. Set under **Session › Data mapping**
+  ({doc}`../b_data_loading/13_data_mapping`).
+- **Best guess**: the default embeddings a file without a UMAP opens on, marked
+  *guessed* in the Data mapping checklist.
+- **View embedding**: the embedding one view shows, chosen under **Compare
+  views → View N shows**; the view's row then reads e.g. `t-SNE · 2D`.
+- **Dimension (1D / 2D / 3D)**: the dimension of the embedding a view shows.
 - **Connectivity**: a neighbor graph (edges). When enabled, edges are drawn between visible points only.
-- **Vector field / velocity overlay**: an optional overlay that visualizes per-cell vectors (dimension-specific).
+- **Vector field / velocity overlay**: an optional overlay that visualizes per-cell vectors, bound to the embeddings it was computed on.
 
 ---
 
@@ -197,22 +270,21 @@ Scope note:
 
 These terms are the most important for understanding Cellucid.
 
-- **View**: one panel that renders the dataset with its own state (camera, dimension, coloring, filters, highlights).
-- **Live view**: your default working view (often labeled “All cells” in the view badges).
+- **View**: one panel that renders the dataset with its own state (embedding, camera, navigation mode, coloring, filters); highlights belong to cells and show in every view.
+- **Live view**: your default working view (often labeled “All cells” in the view rows).
 - **Snapshot view** (also “kept view”): a view created by clicking **Keep view**; used to compare multiple states side-by-side.
 - **Multiview**: the overall feature of having multiple views/snapshots.
 - **View layout**
   - **Grid compare**: shows all views in a grid.
   - **Edit selected view**: shows only the active view so you can edit it precisely.
-- **Active view**: the view you are editing/configuring (the one selected in the view badges).
+- **Active view**: the view you are editing/configuring (the row selected in **Compare views**).
 - **Focused view**: in grid mode, the view under your last click; this determines which view the camera controls target.
-- **View badge**: the clickable pill/row representing a view (with indicators like `3D`, `Orb/Pan/Fly`).
-- **Cameras locked**: all views share one camera (navigation is synchronized).
-- **Cameras unlocked**: each view has its own camera and navigation mode; badges show per-view navigation indicators.
+- **View row**: the row representing a view in **Compare views**: its number, what it shows (`UMAP · 3D`), its field, `linked`, its navigation mode (`Orbit`/`Pan`/`Fly`) and `×`.
+- **Link cameras**: views that show the same embedding share one camera and navigation mode; views of different embeddings always keep their own.
 
 Scope note:
 
-- When cameras are unlocked, Cellucid stores camera state **per view** and switches it when you focus a different view.
+- Cellucid stores camera state and navigation mode **per view** and switches to them when you focus a different view.
 
 ---
 
@@ -224,8 +296,9 @@ Scope note:
 - **Pointer lock / Capture pointer**: a browser feature that hides the cursor and reports raw mouse movement (needed for FPS-style looking).
 - **Orbit anchor**: a visual compass/anchor indicator shown in orbit mode (optional).
 - **Reset Camera**: returns the camera to a default framing (and can reset related UI controls depending on how you trigger it).
-- **Dimension-specific navigation default**: 1D and 2D start in Planar; 3D
-  starts in Orbit. An explicit user change takes precedence.
+- **Dimension-specific navigation default**: a view showing a 1D or 2D
+  embedding starts in Planar; a 3D one in Orbit. A mode chosen for a view is
+  remembered for that view in that dimension and takes precedence.
 - **Camera Path**: a collapsed-at-start panel for user-created keyframes. Its
   transport appears only after two valid keyframes. Playback is stopped by
   default; explicit **Autoplay** starts a ready path immediately and after a

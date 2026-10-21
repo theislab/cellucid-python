@@ -228,6 +228,10 @@ Voting behavior:
 - Clicking ▲ casts an upvote.
 - Clicking ▼ casts a downvote.
 - Clicking the same button again removes your vote (returns to “no vote”).
+- A removed vote, or a deleted comment, stays removed when you Pull before
+  publishing again: your own published file only fills in local state when it
+  changed since your last Publish or Pull (for example, after publishing from
+  another device).
 
 :::{important}
 Downvotes are part of the consensus math. Use them deliberately:
@@ -256,6 +260,8 @@ Under each suggestion card:
 - use **Shift+Enter** to insert a newline without submitting
 
 You can edit or delete your own comments (other people’s comments are read-only).
+An edit in progress survives the modal refreshing around it; if the comment you
+are editing disappears, the editor closes and tells you the edit was not saved.
 
 Good comments include:
 

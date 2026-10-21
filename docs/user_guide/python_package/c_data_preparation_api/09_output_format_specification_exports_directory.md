@@ -13,6 +13,12 @@ If you just need a high-level overview, start here:
 
 ## Fast path (directory tour)
 
+This page describes export format **version 3** (`dataset_identity.json`
+`"version": 3`, compact manifests `compact_v2`), the format {func}`~cellucid.prepare`
+and `cellucid_prepare()` write. A reader accepts exactly this version and no
+other, so an export written by an earlier Cellucid release is regenerated with
+the current writer rather than converted.
+
 ### Minimal export folder (required)
 
 ```text
@@ -20,7 +26,8 @@ my_export/
 ├── dataset_identity.json                      # always required
 ├── obs_manifest.json                          # always required
 ├── obs/                                       # payload per declared obs field
-└── points_2d.bin(.gz) or points_3d.bin(.gz)   # at least one points file required
+└── embeddings/                                # one payload per declared embedding
+    └── 0_2d.bin(.gz)                          # at least one embedding is required
 ```
 
 `obs_manifest.json` is **not optional and never degrades gracefully**. The web
@@ -39,21 +46,22 @@ my_export/
 ├── obs_manifest.json                 # required
 ├── var_manifest.json                 # optional (gene expression)
 ├── connectivity_manifest.json        # optional (KNN edges)
-├── points_1d.bin(.gz)                # optional
-├── points_2d.bin(.gz)                # optional
-├── points_3d.bin(.gz)                # optional
+├── embeddings/                       # required: one file per embedding, any number per dimension
 ├── obs/                              # obs field binaries
 ├── var/                              # gene expression binaries
 ├── connectivity/                     # graph edge binaries
 └── vectors/                          # optional vector fields
 ```
 
+No payload file lives at the export root: every binary sits in one of the five
+axis directories, and the root holds only the manifests and those directories.
+
 ---
 
 ## Binary payload conventions (apply to every payload file)
 
-Every binary file an export contains — `points_<dim>d.bin`, everything under
-`obs/`, `var/`, `connectivity/`, and `vectors/` — obeys the same three rules.
+Every binary file an export contains — everything under `embeddings/`, `obs/`,
+`var/`, `connectivity/`, and `vectors/` — obeys the same three rules.
 None of them is recorded anywhere in the export, so they hold unconditionally:
 
 - **Little-endian.** Every multi-byte value is stored least-significant byte
@@ -91,14 +99,14 @@ mistake is invisible until an export crosses architectures.
 
 Every scientific payload file in an export is named by its **integer index**, or
 by a fixed neutral name. No filename anywhere in the tree contains an
-observation key, a gene name, or a vector field id:
+observation key, a gene name, an embedding id, or a vector field id:
 
 ```text
 var/0.values.u8.gz            var/1.values.u8.gz            …
 obs/0.values.u8.gz            obs/1.codes.u8.gz             obs/1.outliers.u8.gz
-vectors/0_2d.bin.gz           vectors/0_3d.bin.gz
+embeddings/0_2d.bin.gz        embeddings/1_2d.bin.gz        embeddings/2_3d.bin.gz
+vectors/0_1.bin.gz            vectors/0_2.bin.gz
 connectivity/edges.src.bin.gz  edges.dst.bin.gz  edges.weights.f64.bin.gz
-points_2d.bin.gz              points_3d.bin.gz
 ```
 
 Every manifest path pattern therefore substitutes `{index}`, never a key, and
@@ -107,7 +115,9 @@ every field entry declares its own index as element `[0]`.
 **Within one axis directory the indices are exactly `0 … N-1`, each used once.**
 The index is assigned by position: for `var` it is the position in the exported
 gene subset, for `obs` the position in the exported column selection, for
-vectors the position in the sorted field list.
+`embeddings` the position in the item order of `dataset_identity.json`
+(dimension ascending, then id in code-point order), and for vectors the position
+in the sorted field list followed by the bound embedding's own index.
 
 `obs` shares **one** index space across `_continuousFields` and
 `_categoricalFields`, because both arrays write into `obs/`. That space follows
@@ -165,10 +175,11 @@ A **non**-constant payload is the complementary case, and its two terminal
 codes are both used: `minValue` and `maxValue` are the payload's own extremes,
 so `0` and `maxQuant` each occur at least once.
 
-The one continuous payload with no encoding at all is a categorical entry's
-generated outlier quantiles when *every* quantile is missing — no category held
-`centroid_min_points` cells, so there is no value to publish and no bound to
-declare. Both writers reject that export and name every affected field.
+A categorical entry's generated outlier quantiles can be missing for *every*
+cell — no category held `centroid_min_points` cells. Quantized, that set is
+published with the constant bounds `0` and `0` and every code the missing
+marker, so it decodes to all-missing exactly as its `float32` form does; no
+code refers to the bounds.
 
 ### What an identifier still has to be
 
@@ -199,11 +210,46 @@ portable-component rule (see {doc}`02_input_requirements_global`).
 
 ### Gene names come from you, not from Cellucid
 
-`var_gene_id_column` selects the column whose values become the exported gene
-names, and both writers record whatever it selects, faithfully. Neither writer
-performs a symbol lookup, ships a mapping, or knows what HGNC is. If you want
-HGNC symbols rather than Ensembl accessions, resolve them in your own
-preprocessing, write the result into a `var` column, and pass that column.
+`var_gene_id_column` selects the column whose values become the default gene
+names (`var.index` when it is `None`), and both writers record whatever it
+selects, faithfully. `var_gene_name_columns` adds further columns as alternative
+name sets the viewer can switch between. Neither writer performs a symbol lookup,
+ships a mapping, or knows what HGNC is. If you want HGNC symbols rather than
+Ensembl accessions, resolve them in your own preprocessing, write the result into
+a `var` column, and pass that column.
+
+(python_package-make-unique-gene-names)=
+### Empty and repeated gene names: the make-unique rule
+
+A gene name may be repeated and a column may be empty in places, so every name
+set — the default one and each alternative — is resolved with one rule, shared by
+`cellucid.prepare()`, `cellucid_prepare()`, the Python AnnData server, and the web
+app. It is the rule anndata's `var_names_make_unique()` applies:
+
+1. An empty value — `""`, `None`/`NA`, or NaN — is replaced by the var index name
+   of the same row first. An empty value whose index name is not a non-empty
+   string is an error.
+2. The names are walked in var order. The first occurrence of a name keeps it.
+3. Each later occurrence of `name` becomes `name-k`. `k` is one counter per
+   original name that only counts up, and a candidate is skipped while it already
+   exists among the filled names or has already been produced — so
+   `A, A, A-1, A` becomes `A, A-2, A-1, A-3`.
+
+Uniqueness is resolved over the **whole** `var`, not the exported subset, so a
+gene keeps its name however `gene_identifiers` narrows the export, and
+`gene_identifiers` is matched against these unique default names. A name set
+that was already unique is unchanged, so a unique axis exports exactly the names
+it exported before the rule existed. Both writers print what the rule changed,
+in the words the viewer uses:
+
+```text
+Gene names from var column 'gene_symbols': 312 genes have no 'gene_symbols' value and use their var index name. 41 duplicate names were made unique, e.g. 'MATR3' → 'MATR3-1'.
+```
+
+The cases every implementation must agree on are pinned in
+`tests/fixtures/data_mapping_conformance.json` (`makeUniqueNames`,
+`uniqueNamesNote`), which `cellucid-python`, `cellucid-r`, and the web app keep
+byte-identical.
 
 ## Exact key sets (applies to every manifest)
 
@@ -216,10 +262,11 @@ written or patched by hand:
   annotations, editor metadata, or comment keys.
 
 The rule governs `dataset_identity.json` (and its nested `stats`, `embeddings`,
-`export_settings`, `source`, and `vector_fields` objects), `obs_manifest.json`,
-`var_manifest.json`, `connectivity_manifest.json`, the manifest schema objects
-(`_obsSchemas.continuous`, `_obsSchemas.categorical`, `_varSchema`), and each
-categorical centroid entry. The key lists in this page are therefore complete
+`embeddings.items` entries and their `source`, `export_settings`, `source`, and
+`vector_fields` objects), `obs_manifest.json`, `var_manifest.json` and each of its
+`gene_name_sets` entries, `connectivity_manifest.json`, the manifest schema
+objects (`_obsSchemas.continuous`, `_obsSchemas.categorical`, `_varSchema`), and
+each categorical centroid entry. The key lists in this page are therefore complete
 specifications, not examples: emit every key shown and nothing else.
 
 Optional keys exist in exactly two places, both in `dataset_identity.json`. At
@@ -239,7 +286,8 @@ This file is required for exported datasets.
 It provides:
 - dataset name/id/description metadata,
 - counts (cells/genes/fields),
-- embeddings metadata (which points files exist and which dimension is default),
+- the embeddings the export carries, which one each dimension shows first, and
+  where each one's payload is,
 - optional vector field metadata,
 - export settings used (compression/quantization),
 - and lightweight obs field summaries.
@@ -248,16 +296,16 @@ It provides:
 
 The reader validates this object against an exact key set, so a key that is not
 listed here makes the dataset fail to load. In this example
-`cellucid_data_version` is `0.9.1`. <!-- CELLUCID_VERSION -->
+`cellucid_data_version` is `0.9.4`. <!-- CELLUCID_VERSION -->
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "id": "pbmc_demo",
   "name": "PBMC demo",
   "description": "",
   "created_at": "2026-01-01T00:00:00Z",
-  "cellucid_data_version": "0.9.1",
+  "cellucid_data_version": "0.9.4",
   "stats": {
     "n_cells": 10000,
     "n_genes": 2000,
@@ -268,11 +316,30 @@ listed here makes the dataset fail to load. In this example
     "n_edges": 123456
   },
   "embeddings": {
-    "available_dimensions": [2, 3],
     "default_dimension": 3,
-    "files": {
-      "2d": "points_2d.bin.gz",
-      "3d": "points_3d.bin.gz"
+    "defaults": {
+      "2d": "X_umap",
+      "3d": "X_umap_3d"
+    },
+    "items": {
+      "X_pca": {
+        "label": "PCA",
+        "dimension": 2,
+        "file": "embeddings/0_2d.bin.gz",
+        "source": { "key": "X_pca", "columns": [0, 1] }
+      },
+      "X_umap": {
+        "label": "UMAP",
+        "dimension": 2,
+        "file": "embeddings/1_2d.bin.gz",
+        "source": { "key": "X_umap", "columns": [0, 1] }
+      },
+      "X_umap_3d": {
+        "label": "X_umap_3d",
+        "dimension": 3,
+        "file": "embeddings/2_3d.bin.gz",
+        "source": { "key": null, "columns": [0, 1, 2] }
+      }
     }
   },
   "obs_fields": [
@@ -291,17 +358,14 @@ listed here makes the dataset fail to load. In this example
     "citation": "..."
   },
   "vector_fields": {
-    "default_field": "velocity_umap",
+    "default_field": "velocity",
     "fields": {
-      "velocity_umap": {
-        "label": "velocity_umap",
-        "available_dimensions": [2, 3],
-        "default_dimension": 3,
+      "velocity": {
+        "label": "velocity",
         "files": {
-          "2d": "vectors/0_2d.bin.gz",
-          "3d": "vectors/0_3d.bin.gz"
-        },
-        "basis": "umap"
+          "X_umap": "vectors/0_1.bin.gz",
+          "X_umap_3d": "vectors/0_2.bin.gz"
+        }
       }
     }
   }
@@ -309,12 +373,41 @@ listed here makes the dataset fail to load. In this example
 ```
 
 Notes:
-- `vector_fields` is present only if you exported vectors. Inside a field
-  entry, `label` and `basis` are **derived by the writer, not chosen by you**:
-  `label` is always the field id character for character, and `basis` is always
-  the string `"umap"`. The reader compares both and rejects the dataset when
-  either differs, so `"label": "Velocity (UMAP)"` on a field called
-  `velocity_umap` fails to load. There is no display-name field in this format.
+- `version` is exactly `3`. A reader of this format refuses any other value; there
+  is no compatibility path.
+- `export_settings.obs_categorical_dtype` is `"uint8"`, `"uint16"` or
+  `"uint32"`, and every categorical field's `codesDtype` in `obs_manifest.json`
+  equals it.
+- `embeddings` holds exactly `default_dimension`, `defaults`, and `items`:
+  - every key of `items` is an embedding id, which obeys the field-identity rule
+    (non-empty, drawable exactly as stored, distinct). Items are ordered by
+    **dimension ascending, then id in code-point order**, and an item's position
+    in that order is its payload index;
+  - each item holds exactly `label`, `dimension`, `file`, and `source`. `label` is
+    display text and defaults to the id; `dimension` is `1`, `2`, or `3`;
+  - `file` must equal exactly `embeddings/{index}_{dimension}d.bin`, plus `.gz`
+    exactly when `export_settings.compression` is not null — the same producer
+    rule vector paths follow;
+  - `source` holds exactly `key` and `columns`. `key` is the provenance the caller
+    supplied (`Embedding(source_key=...)` / `cellucid_embedding(source_key = ...)`)
+    or `null`; it changes nothing a reader does. `columns` is always present: the
+    distinct 0-based source columns the item was read from, one per axis, so its
+    length equals `dimension`;
+  - `defaults` has exactly one key per dimension that has an item — `"1d"`,
+    `"2d"`, `"3d"`, ascending — and each value names an item of that dimension.
+    When a dimension has more than one item, the caller chose its default
+    (`embedding_defaults`); a dimension with one item uses it;
+  - `default_dimension` is a key of `defaults`. Both writers emit the highest
+    dimension the export carries.
+- `vector_fields` is present only if you exported vectors. Field ids are sorted in
+  code-point order. Inside a field entry, `label` is
+  **derived by the writer, not chosen by you**: it is always the field id
+  character for character. The reader
+  compares it and rejects the dataset when it differs, so
+  `"label": "Velocity (UMAP)"` on a field called `velocity` fails to load. There
+  is no display-name field in this format. `files` maps each embedding id the
+  field is bound to — a non-empty subset of `embeddings.items`, in item order — to
+  its exact payload path (see [Vector files](python_package-vector-files)).
 - `source` is present only if you provided `source_*` metadata, and inside it
   only `name` is required. `url` and `citation` are each written only when you
   supplied that argument, so `"source": {"name": "Cellucid browser CI"}` is a
@@ -349,25 +442,33 @@ Notes:
 
 ---
 
-## Points files: `points_<dim>d.bin(.gz)`
+## Embedding files: `embeddings/<index>_<dim>d.bin(.gz)`
 
-For each exported dimensionality:
+One file per item of `dataset_identity.json` `embeddings.items`:
 
-- filename: `points_1d.bin`, `points_2d.bin`, `points_3d.bin` (optionally with `.gz`)
+- filename: `embeddings/{index}_{dimension}d.bin` (optionally with `.gz`), where
+  `{index}` is the item's position in item order — `embeddings/0_1d.bin`,
+  `embeddings/1_2d.bin`, `embeddings/2_2d.bin`, `embeddings/3_3d.bin`, …
 - dtype: `float32`
-- shape: `(n_cells, dim)`
-- coordinate system: centred per axis, then scaled by **one factor shared by every
-  axis** — `center = (axis_mins + axis_maxs) / 2` and `scale_factor = 2 / max(axis
+- shape: `(n_cells, dimension)`
+- source: the item's `source.columns` of the caller's array, in that order. A
+  wide array such as a 50-column PCA is exported by naming the columns to plot;
+  the other columns are never read, so a non-finite value in a column that is
+  not selected does not reject the export
+- coordinate system: each item is normalized **on its own**, centred per axis
+  and then scaled by **one factor shared by every axis** —
+  `center = (axis_mins + axis_maxs) / 2` and `scale_factor = 2 / max(axis
   ranges)`. Only the widest axis fills `[-1, 1]`; the narrower ones deliberately do
   not, because a per-axis scale would stretch the embedding to the box and destroy
   its aspect ratio. Both writers do exactly this, so a reimplementation must too
 - rounding: the extents and the normalization are computed at the input's own
   precision, and the normalized coordinate is rounded to `float32` exactly
   once, at the write. Both writers do this, so one embedding produces one
-  `points_<dim>d.bin` whichever writer produced it
-- accepted input: every source coordinate must be finite *and* representable as
-  a nonzero finite `float32` — no larger than `(2 - 2^-23) x 2^127` and, if
-  nonzero, no smaller than `2^-149` in magnitude. This is checked before
+  payload whichever writer produced it
+- accepted input: every selected source coordinate must be finite *and*
+  representable as a nonzero finite `float32` — no larger than
+  `(2 - 2^-23) x 2^127` and, if nonzero, no smaller than `2^-149` in magnitude —
+  and the selected columns must span a nonzero range. This is checked before
   normalization, not at the write: normalization pulls every coordinate into
   roughly `[-1, 1]`, so a source coordinate outside the range would arrive at
   the writer already inside it and be published as a number the caller never
@@ -382,11 +483,11 @@ For each exported dimensionality:
 - how to find their payload files under `obs/`,
 - and (for categorical fields) categories, centroids, and outlier quantiles.
 
-### Manifest structure (compact_v1)
+### Manifest structure (compact_v2)
 
 Top-level keys — all eight are required, and no other key is allowed:
 
-- `"_format": "compact_v1"`
+- `"_format": "compact_v2"`
 - `"n_points": <n_cells>`
 - `"centroid_outlier_quantile": <number in (0, 1) or null>`
 - `"latent_key": "latent_space"`
@@ -435,7 +536,8 @@ Example (quantized continuous + quantized outliers):
 Notes:
 - `{index}` is the entry's own element `[0]`, written in plain decimal with no
   padding: `0`, `1`, … `N-1`.
-- `{ext}` for codes is chosen based on the field’s codes dtype (`uint8 → u8`, `uint16 → u16`).
+- `{ext}` for codes is chosen based on the field’s codes dtype (`uint8 → u8`,
+  `uint16 → u16`, `uint32 → u32`).
 - `_obsSchemas` is always a JSON **object**, including when it is empty — an
   export with no observation fields writes `{}`, never `[]`. The reader refuses
   an array. This is worth stating because the two writers reach it through
@@ -455,11 +557,21 @@ Each entry is either:
   `minValue <= maxValue`; see
   [How a quantized continuous payload decodes](python_package-quantized-continuous-payloads)
 
+A continuous field holds `float32` whatever the source column's type. An integer
+column converts like any other number: values up to 16,777,216 (2^24) stay
+exact, and a larger integer becomes its nearest `float32`, so 16,777,217 reads
+as 16,777,216. Both writers do this, and the web app's direct `.h5ad` and Zarr
+readers do the same for observation columns, embeddings and expression values,
+so one file shows the same numbers on every path. Only values outside the finite
+`float32` range are refused. An identifier column whose exact values matter
+(barcodes stored as integers, genomic positions) belongs in a string column,
+which exports as a categorical field.
+
 #### `_categoricalFields`
 
 Each entry is either:
-- `[index, key, categories, codesDtype, codesMissingValue, centroidsByDim]` — **6 members**, float32 outliers, or
-- `[index, key, categories, codesDtype, codesMissingValue, centroidsByDim, outlierMinValue, outlierMaxValue]` — **8 members**, quantized outliers, with
+- `[index, key, categories, codesDtype, codesMissingValue, centroidsByEmbedding]` — **6 members**, float32 outliers, or
+- `[index, key, categories, codesDtype, codesMissingValue, centroidsByEmbedding, outlierMinValue, outlierMaxValue]` — **8 members**, quantized outliers, with
   `outlierMinValue <= outlierMaxValue`; see
   [How a quantized continuous payload decodes](python_package-quantized-continuous-payloads)
 
@@ -475,16 +587,24 @@ Where:
   whitespace are reduced to one space. Both writers reject a candidate export
   that breaks either rule; neither writer trims a label. See
   [Category labels must read as the value they store](python_package-category-label-display-text).
-- `codesDtype` is `"uint8"` or `"uint16"`
-- `codesMissingValue` is `255` or `65535`. That value is reserved for "missing",
-  so it caps how many categories a field may declare: **at most 255 categories
-  under `"uint8"` codes and at most 65,535 under `"uint16"`**. Both writers
-  reject an export whose field exceeds the cap for the requested
-  `obs_categorical_dtype` and name the offending field.
-- `centroidsByDim` is a dict keyed by dimension strings (`"1"`, `"2"`, `"3"`)
-  mapping to centroid lists. Each centroid is an exact three-key object
-  `{"category": <declared category>, "position": [<dim finite numbers>],
-  "n_points": <0..n_points>}`, with at most one entry per category.
+- `codesDtype` is `"uint8"`, `"uint16"` or `"uint32"`
+- `codesMissingValue` is `255`, `65535` or `4294967295`, the width's largest
+  value. That value is reserved for "missing", so it caps how many categories a
+  field may declare: **at most 255 categories under `"uint8"` codes, at most
+  65,535 under `"uint16"` and at most 4,294,967,295 under `"uint32"`**. Both
+  writers reject an export whose field exceeds the cap for the requested
+  `obs_categorical_dtype`, name the offending field and the width that fits it.
+  `"uint32"` exists for fields with more than 65,535 distinct values, such as
+  barcodes or free text; a field with fewer is never stored wider than the
+  caller asked for.
+- `centroidsByEmbedding` is an object keyed by embedding id, mapping to centroid
+  lists. Its keys are a subset of `dataset_identity.json` `embeddings.items`;
+  both writers emit every item, in item order, with an empty list for each item
+  when `centroid_outlier_quantile` is null. Each centroid is an exact three-key
+  object `{"category": <declared category>, "position": [<finite numbers>],
+  "n_points": <0..n_points>}`, whose `position` has exactly
+  `items[id].dimension` numbers, measured on that item's normalized
+  coordinates, with at most one entry per category.
 
 The two arrays are read in order — every `_continuousFields` entry first, then
 every `_categoricalFields` entry — and that concatenation is the order
@@ -498,12 +618,28 @@ Per continuous field:
 - `obs/<index>.values.f32` or `.values.u8` or `.values.u16` (optionally `.gz`)
 
 Per categorical field:
-- `obs/<index>.codes.u8` or `.codes.u16` (optionally `.gz`)
+- `obs/<index>.codes.u8`, `.codes.u16` or `.codes.u32` (optionally `.gz`)
 - `obs/<index>.outliers.f32` or `.outliers.u8` or `.outliers.u16` (optionally `.gz`)
 
 Quantized outlier/categorical missing markers:
 - 8-bit: `255`
 - 16-bit: `65535`
+- 32-bit (categorical codes only): `4294967295`
+
+(python_package-uint32-codes-version)=
+#### `uint32` codes and the format version
+
+`uint32` codes were added inside format version 3, without a version bump.
+Every export written before them is unchanged byte for byte and still valid,
+because a writer emits `uint32` only when it is asked for:
+{func}`~cellucid.prepare` and `cellucid_prepare()` when the caller passes
+`obs_categorical_dtype="uint32"`, and the servers ({func}`~cellucid.serve`,
+{func}`~cellucid.show_anndata`) and the web app's direct `.h5ad`/Zarr readers,
+which pick the narrowest width per field, only for a field with more than 65,535
+categories. A reader that predates `uint32` does not misread such an export: it
+refuses it by name, either at `export_settings.obs_categorical_dtype` or at the
+field's `codesDtype`, so the failure is an explicit "update Cellucid" and never
+wrong colours.
 
 Worked example — four `obs` columns declared in the order
 `leiden` (categorical), `pct_mito`, `total_counts`, `phase` (categorical):
@@ -512,8 +648,8 @@ Worked example — four `obs` columns declared in the order
 {
   "_continuousFields": [[1, "pct_mito"], [2, "total_counts"]],
   "_categoricalFields": [
-    [0, "leiden", ["0", "1"], "uint8", 255, {"2": []}],
-    [3, "phase", ["G1", "S"], "uint8", 255, {"2": []}]
+    [0, "leiden", ["0", "1"], "uint8", 255, {"X_umap": []}],
+    [3, "phase", ["G1", "S"], "uint8", 255, {"X_umap": []}]
   ]
 }
 ```
@@ -529,23 +665,25 @@ obs/3.codes.u8      obs/3.outliers.f32     # phase
 
 ## Var manifest: `var_manifest.json` (and `var/` binaries)
 
-`var_manifest.json` indexes gene expression vectors stored under `var/`.
+`var_manifest.json` indexes gene expression vectors stored under `var/`, and the
+gene-name sets those vectors can be shown under.
 
-### Manifest structure (compact_v1)
+### Manifest structure (compact_v2)
 
 Top-level keys — all seven are required, and no other key is allowed:
-- `"_format": "compact_v1"`
+- `"_format": "compact_v2"`
 - `"n_points": <n_cells>`
-- `"var_gene_id_column": null | "<exact-column>"`
 - `"compression": <gzip level or null>`
 - `"quantization": 8 | 16 | null`
 - `"_varSchema": { ... }`
 - `"fields": [...]`
+- `"gene_name_sets": [...]`
 
 `fields` length must equal `dataset_identity.json` `stats.n_genes`. When
 `stats.n_genes` is `0` neither writer emits this file, and the reader never
 looks for it — `dataset_identity.json` is the index that decides which optional
-manifests are fetched at all.
+manifests are fetched at all. The column the default names came from is recorded
+in `gene_name_sets[0].source`; there is no `var_gene_id_column` key.
 
 #### `_varSchema`
 
@@ -594,10 +732,56 @@ Each entry is either:
 
 Element `[0]` is the position in the **exported** gene set, so a narrowed export
 is still `0 … n_genes-1` and never inherits the row numbers of `var`. Element
-`[1]` is whatever `var_gene_id_column` selected, recorded verbatim.
+`[1]` is the gene's name in the **default** name set: what `var_gene_id_column`
+selected (or `var.index`), with the
+[make-unique rule](python_package-make-unique-gene-names) applied. The names are
+distinct and drawable exactly as stored.
 
 `var` entries and obs-continuous entries deliberately share a shape. Read the
 kind from the array the entry came from, never from its length.
+
+#### `gene_name_sets`
+
+Every name set the genes can be shown under, default first. Each entry is an
+exact four-key object, keys in this order:
+
+```json
+{
+  "gene_name_sets": [
+    { "source": "gene_ids", "filled_from_index": 0, "renamed": [], "names": null },
+    {
+      "source": "gene_symbols",
+      "filled_from_index": 1,
+      "renamed": [["MATR3", "MATR3-1"]],
+      "names": ["MATR3", "MATR3-1", null]
+    }
+  ]
+}
+```
+
+- `gene_name_sets[0]` is the **default** set. Its names are the `fields` names, so
+  its `names` is always `null`. Its `source` is the `var` column
+  `var_gene_id_column` named, or `null` when the names came from `var.index`.
+- Every later entry is one alternative set, in the order `var_gene_name_columns`
+  listed them. Its `source` is that column's name — never `null`, never the
+  default set's column, and never repeated. Its `names` lists **one entry per
+  `fields` entry, in the same order**: the gene's name in this set, or `null`
+  where that name equals the default name (`fields[i][1]`). A column that mostly
+  agrees with the default therefore costs a few bytes per gene, and a column that
+  differs everywhere costs one string per gene.
+- `filled_from_index` counts the exported genes whose value in `source` was empty
+  and that therefore took the var index name of their row; it is `0` for a set
+  whose `source` is `null`. `renamed` lists `[from, to]` for every exported gene the make-unique
+  rule renamed, in exported order. Both are reported over the exported genes,
+  even though uniqueness itself is resolved over the whole `var`.
+- A reader reconstructs set `k`'s names as `names[i] ?? fields[i][1]` and must
+  require them to be distinct within the set; it must refuse a non-`null` entry
+  equal to the default name, because the writer never emits one.
+
+The name sets are **metadata only**. Every set addresses the same `var/` payload
+of each gene — entry `i` of every set names payload `fields[i][0]` — so no
+expression value is stored twice, and a reader switches name sets by swapping the
+names it shows, without fetching or re-reading anything under `var/`.
 
 ### Binary payload files under `var/`
 
@@ -684,75 +868,66 @@ format must handle both widths.
   each edge at both endpoints. It is `0` exactly when `n_edges` is `0`, and it
   must be less than `n_cells`
 
-### Browser working-set ceiling (`n_edges`)
+### Graph size in the browser (`n_edges`)
 
-Neither writer caps `n_edges`, but the reader does. It budgets a fixed
-**536,870,912 bytes (512 MiB)** working set for the edge list and rejects the
-manifest before fetching a single edge byte when the declared graph would exceed
-it. The budget charges every copy the browser holds at once — the canonical
-endpoint and weight arrays, the render-owned copy of both, the GPU topology and
-Float32 weight staging buffers, one `uint32` degree counter per cell, and, when
-`index_bytes` is not `4`, the raw file buffer as well:
-
-| `index_dtype` | bytes charged |
-| --- | --- |
-| `"uint32"` | `44 × n_edges + 4 × n_cells` |
-| `"uint16"` | `48 × n_edges + 4 × n_cells` |
-
-That is a ceiling of about **12.2 million edges** for a `uint32` export and about
-**11.1 million** for a `uint16` one. The largest graph shipped in
-`cellucid-datasets` is `suo` — 6,279,148 edges over 561,947 cells, charging
-about 266 MiB — so every shipped dataset clears the limit with room to spare. An
-export above the line is a well-formed export that the web app still refuses to
-open, so thin the neighbour graph before exporting rather than after.
+Neither writer nor the reader caps `n_edges`. The web app keeps the edge list
+on the CPU as loaded (one `uint32` source, one `uint32` destination and the
+`float64` weight, read once into a `float32` relative strength) and sends the
+GPU only the edges a panel shows — the slider's K of them, 28 bytes each — so a
+k = 15 neighbour graph over 10 million cells (about 110 million edges) loads
+and draws like a small one. The browser's memory is the only limit: an edge
+list it cannot allocate is reported as a connectivity failure, and the dataset
+stays loaded without edges.
 
 ---
 
-## Vector files: `vectors/<index>_<dim>d.bin(.gz)` (optional)
+(python_package-vector-files)=
+## Vector files: `vectors/<field index>_<embedding index>.bin(.gz)` (optional)
 
-Vector fields are stored as:
+A vector field is a per-cell displacement drawn over one embedding, so each of
+its payloads is bound to one embedding item. Vector fields are stored as:
 - dtype: `float32`
-- shape: `(n_cells, dim)`
-- files: `vectors/<index>_<dim>d.bin(.gz)`
-- rounding: the caller's values are scaled by the embedding's own scale factor
-  at the input's precision, and the product is rounded to `float32` exactly
-  once, at the write. Rounding the input first and the product second rounds
-  twice, which moves a component one ULP away from the correctly rounded value;
-  neither writer does that
+- shape: `(n_cells, dimension)` of the bound embedding item
+- files: `vectors/{field index}_{embedding index}.bin(.gz)`
+- rounding: the caller's values are scaled by **the bound embedding's own scale
+  factor** at the input's precision, and the product is rounded to `float32`
+  exactly once, at the write. Rounding the input first and the product second
+  rounds twice, which moves a component one ULP away from the correctly rounded
+  value; neither writer does that
 - accepted input: as for the coordinates above, every component must be finite
   and representable as a nonzero finite `float32`. The small end matters as much
   as the large one — a nonzero component below `2^-149` converts to exactly
   `0.0`, which is finite, so a check that asked only about finiteness would
   publish a vector whose component had silently become zero
 
-`<index>` is the field's position in the sorted field list, `0 … N-1`, exactly
-as on the other axes; the field id itself never appears in a path. Vector
+`{field index}` is the field's position in the sorted field list, `0 … N-1`,
+exactly as on the other axes, and `{embedding index}` is the bound item's own
+payload index in `embeddings.items`. Neither id ever appears in a path. Vector
 presence and file locations are indexed in
-`dataset_identity.json["vector_fields"]`, whose per-field `files` object states
-the complete path.
+`dataset_identity.json["vector_fields"]`, whose per-field `files` object maps each
+bound embedding id to the complete path.
 
 That path is **not** free-form, and this is the rule a hand-written or converted
 export trips on most often. The reader rebuilds each path from the manifest —
 
 ```text
-vectors/{index}_{dim}d.bin      when export_settings.compression is null
-vectors/{index}_{dim}d.bin.gz   otherwise
+vectors/{fieldIndex}_{embeddingIndex}.bin      when export_settings.compression is null
+vectors/{fieldIndex}_{embeddingIndex}.bin.gz   otherwise
 ```
 
-— where `{index}` is the field's position in the key order of the
-`vector_fields.fields` object, and it rejects the dataset when the declared
-string is anything else. A path that resolves to a real file is not enough: it
-must be the exact string the producer rule generates. Two further rules come
-with it:
+— where `{fieldIndex}` is the field's position in the key order of the
+`vector_fields.fields` object and `{embeddingIndex}` is the position of the
+`files` key in the key order of `embeddings.items`, and it rejects the dataset
+when the declared string is anything else. A path that resolves to a real file is
+not enough: it must be the exact string the producer rule generates. Two further
+rules come with it:
 
-- `available_dimensions` is strictly increasing and is a subset of
-  `embeddings.available_dimensions` — a vector field cannot advertise a
-  dimension the dataset has no points file for — and `files` holds exactly one
-  key per entry in it, named `"1d"`, `"2d"`, or `"3d"`, and no others;
-- `default_dimension` must be the **largest** entry of `available_dimensions`,
-  not merely one of them. Both writers emit `max(available_dimensions)`. (The
-  top-level `embeddings.default_dimension` is the looser case: there, any
-  available dimension is accepted.)
+- the keys of `files` are a non-empty subset of `embeddings.items`, listed in item
+  order — a field cannot be bound to an embedding the export does not carry;
+- each field entry holds exactly `label` and `files`, and any other key is
+  refused. The bound embedding says which dimension a payload has, and the field
+  is drawn over whichever embedding a view shows when it is bound to that
+  embedding.
 
 ---
 
@@ -776,10 +951,10 @@ Browser requirement:
 
 A candidate generation is built in a staging directory and is reconciled against
 its own declarations before the transaction publishes it. {func}`~cellucid.prepare`
-checks **five** surfaces: the four payload directories — `Observation`, `Gene`,
-`Connectivity`, and `Vector field` — and the `Export` root itself. On each one,
-every path the export declares must exist and every file present must be
-declared. A mismatch aborts the run and rolls the whole generation back, so a
+checks **six** surfaces: the five payload directories — `Observation`, `Gene`,
+`Connectivity`, `Vector field`, and `Embedding` — and the `Export` root itself. On
+each one, every path the export declares must exist and every file present must
+be declared. A mismatch aborts the run and rolls the whole generation back, so a
 partial or self-contradictory export is never published:
 
 ```text
@@ -790,29 +965,31 @@ absent: ['var/7.values.u8.gz']. Written but undeclared: ['var/8.values.u8.gz'].
 That is what makes the index space trustworthy: a stale file from an earlier
 generation cannot survive beside a current manifest.
 
-The root is checked for a reason of its own. `points_<dim>d.bin(.gz)` is the only
-payload this format declares by path *from the export root* — in
-`dataset_identity.json`, under `embeddings.files` — so no axis manifest can speak
-for it. Its declared name and its written name are two expressions of one
-`compression` setting, and a generation whose points disagree would otherwise
-publish successfully and then fail in the browser with no coordinates:
+The `Embedding` surface is the one declared from `dataset_identity.json` rather
+than from an axis manifest. Every item's `file` is first re-derived from the
+producer rule — `embeddings/{index}_{dimension}d.bin`, plus `.gz` when compressed
+— and an item that declares any other string is refused; the derived set is then
+compared with the directory. The declared name and the written name are two
+expressions of one `compression` setting, and a generation whose coordinates
+disagree would otherwise publish successfully and then fail in the browser with
+nothing to draw:
 
 ```text
-Export manifest does not describe the payloads that were written. Declared but
-absent: ['points_2d.bin.gz']. Written but undeclared: ['points_2d.bin'].
+Embedding manifest does not describe the payloads that were written. Declared but
+absent: ['embeddings/0_2d.bin.gz']. Written but undeclared: ['embeddings/0_2d.bin'].
 ```
 
-The root check covers the whole directory rather than only the points. After a
-successful export the root holds exactly `dataset_identity.json`,
-`obs_manifest.json`, the declared point payloads, whichever of
-`var_manifest.json` and `connectivity_manifest.json` the export wrote, and the
-`obs/`, `var/`, `connectivity/`, and `vectors/` directories it created — and
-nothing else. A leftover scratch file or a directory the export did not create is
-refused rather than published. A directory standing where a payload file belongs
-gets its own message, `Export payload directory holds a non-file entry: …`, which
-is also what an axis directory raises for a subdirectory inside it.
+The root holds no payload at all. After a successful export it holds exactly
+`dataset_identity.json`, `obs_manifest.json`, whichever of `var_manifest.json`
+and `connectivity_manifest.json` the export wrote, and the `embeddings/`, `obs/`,
+`var/`, `connectivity/`, and `vectors/` directories it created — and nothing
+else. A leftover scratch file, a coordinate file outside `embeddings/`, or a
+directory the export did not create is refused rather than published. A
+directory standing where a payload file belongs gets its own message,
+`Export payload directory holds a non-file entry: …`, which is also what an axis
+directory raises for a subdirectory inside it.
 
-`cellucid_prepare()` in the R package performs the same five reconciliations and
+`cellucid_prepare()` in the R package performs the same six reconciliations and
 refuses the same generations. Only the rendering of the two lists differs, as
 `c("var/7.values.u8.gz")` rather than `['var/7.values.u8.gz']`.
 
@@ -832,8 +1009,8 @@ The cross-writer guarantee is **semantic equality of every export, plus byte
 identity of the uncompressed binary payloads**. One input written by
 `cellucid.prepare()` and by `cellucid_prepare()` produces:
 
-- **byte-identical `points_<dim>d.bin`, `vectors/<index>_<dim>d.bin`, `obs/`,
-  `var/`, and connectivity payloads** when `compression=None` — same bytes, same
+- **byte-identical `embeddings/`, `vectors/`, `obs/`, `var/`, and connectivity
+  payloads** when `compression=None` — same bytes, same
   length, same order. The single float32 rounding described above is what makes
   that true of the coordinate and vector payloads, and the pinned little-endian
   byte order is what makes it true on any architecture rather than only on the
@@ -841,6 +1018,13 @@ identity of the uncompressed binary payloads**. One input written by
 - **equal** `dataset_identity.json`, `obs_manifest.json`, `var_manifest.json`,
   and `connectivity_manifest.json` — the same keys with the same parsed values,
   which is what a reader consumes.
+
+Both test suites hold the same fixture, `writer_parity_v3.json` (two cells; five
+embeddings including a 1D vector and a wide array read at chosen columns; two
+vector fields; duplicate and empty gene names in the default and in an
+alternative name set; a neighbour graph), pinned to one SHA-256 in both
+repositories. Each writer exports it and must reproduce every payload byte and
+every parsed manifest the fixture records.
 
 Byte identity does **not** extend to the JSON files as bytes. It does extend to
 the compressed `.gz` payloads, but only as far as the two zlib builds agree.
@@ -894,6 +1078,7 @@ timestamp explicitly:
 ```python
 prepare(
     ...,
+    embeddings={"X_umap": adata.obsm["X_umap"]},
     dataset_name="Canonical build",
     dataset_id="canonical-build-v1",
     obs_categorical_dtype="uint16",
@@ -956,7 +1141,8 @@ Web app docs:
   root are real paths and behave differently on macOS vs Linux vs Windows;
   prefer lowercase IDs. Field identifiers are not paths and are unaffected.
 - **Renumbering on re-export**: an index is a position, not a stable name.
-  Adding one gene or reordering `obs_keys` renumbers the payload files, so
+  Adding one gene, reordering `obs_keys`, or adding an embedding renumbers the
+  payload files, so
   never bookmark, cache, or hard-code a payload path across exports — resolve it
   through the manifest every time.
 - **Huge category lists**: categorical fields with massive category counts bloat `obs_manifest.json`.
@@ -985,6 +1171,16 @@ Fix:
 - confirm the folder contains both `dataset_identity.json` and
   `obs_manifest.json`,
 - re-export to a clean directory with `force=True`.
+
+### Symptom: an export from an earlier release no longer loads
+
+An export whose `dataset_identity.json` `version` is not `3`, or that has
+coordinate files at its root instead of an `embeddings/` directory, was written by
+an earlier release. No current reader accepts it and there is no conversion mode:
+regenerate it with the
+current {func}`~cellucid.prepare` or `cellucid_prepare()`, passing the embeddings
+through `embeddings=`. `cellucid serve` reports the same thing for a
+served directory: `dataset_identity.json version must be exactly 3`.
 
 ### Symptom: web app rejects a hand-assembled or converted export
 

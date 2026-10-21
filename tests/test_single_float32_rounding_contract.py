@@ -9,7 +9,7 @@ rounded value.
 That is not only an accuracy question. cellucid-r scales the caller's doubles
 and rounds once, so a second rounding here is exactly what made the two writers
 publish different bytes from one input: on a 600-cell fixture, 25-28% of every
-``vectors/*`` component differed by one ULP while ``points_*`` -- rounded once
+``vectors/*`` component differed by one ULP while ``embeddings/*`` -- rounded once
 on both sides -- was byte-identical. These tests pin the single rounding on
 every payload the two writers share.
 """
@@ -67,13 +67,13 @@ def _prepare(out_dir: Path) -> tuple[np.ndarray, np.ndarray]:
     prepare(
         latent_space=embedding.copy(),
         obs=_obs(),
-        X_umap_2d=embedding,
+        embeddings={"X_umap_2d": embedding},
         out_dir=out_dir,
         dataset_name="Single rounding",
         dataset_id="single-rounding",
         obs_categorical_dtype="uint16",
         centroid_min_points=4,
-        vector_fields={"velocity_umap_2d": vectors},
+        vector_fields={"velocity_umap": {"X_umap_2d": vectors}},
     )
     return embedding, vectors
 
@@ -82,7 +82,7 @@ def test_a_vector_payload_is_the_scaled_value_rounded_once(tmp_path: Path) -> No
     embedding, vectors = _prepare(tmp_path)
     _center, scale_factor = _normalization(embedding)
 
-    published = np.fromfile(tmp_path / "vectors" / "0_2d.bin", dtype="<f4")
+    published = np.fromfile(tmp_path / "vectors" / "0_0.bin", dtype="<f4")
     rounded_once = (vectors * scale_factor).astype(np.float32).reshape(-1)
     rounded_twice = (
         (vectors.astype(np.float32).astype(np.float64) * scale_factor)
@@ -101,7 +101,7 @@ def test_a_points_payload_is_the_normalized_value_rounded_once(tmp_path: Path) -
     embedding, _vectors = _prepare(tmp_path)
     center, scale_factor = _normalization(embedding)
 
-    published = np.fromfile(tmp_path / "points_2d.bin", dtype="<f4")
+    published = np.fromfile(tmp_path / "embeddings" / "0_2d.bin", dtype="<f4")
     rounded_once = ((embedding - center) * scale_factor).astype(np.float32).reshape(-1)
 
     assert np.array_equal(published, rounded_once)
@@ -113,7 +113,7 @@ def test_a_centroid_is_measured_from_unrounded_coordinates(tmp_path: Path) -> No
     coordinates = (embedding - center) * scale_factor
 
     manifest = json.loads((tmp_path / "obs_manifest.json").read_text(encoding="utf-8"))
-    centroids = manifest["_categoricalFields"][0][5]["2"]
+    centroids = manifest["_categoricalFields"][0][5]["X_umap_2d"]
     assert len(centroids) == 4
 
     codes = np.arange(N_CELLS) % 4
@@ -155,10 +155,10 @@ def test_the_served_payloads_carry_the_prepared_bytes(tmp_path: Path) -> None:
         serve_vector_fields=True,
     )
     try:
-        assert adapter.get_points_binary(2) == (tmp_path / "points_2d.bin").read_bytes()
+        assert adapter.get_embedding_binary("X_umap_2d") == (tmp_path / "embeddings" / "0_2d.bin").read_bytes()
         assert (
-            adapter.get_vector_field_binary("velocity_umap", 2)
-            == (tmp_path / "vectors" / "0_2d.bin").read_bytes()
+            adapter.get_vector_field_binary("velocity_umap", "X_umap_2d")
+            == (tmp_path / "vectors" / "0_0.bin").read_bytes()
         )
     finally:
         adapter.close()
@@ -181,9 +181,9 @@ def test_a_vector_field_of_any_dimension_is_rounded_once(
         dataset_id="single-rounding",
         obs_categorical_dtype="uint16",
         centroid_min_points=4,
-        vector_fields={f"velocity_umap_{dimension}d": vectors},
-        **{f"X_umap_{dimension}d": embedding},
+        embeddings={"X_embedding": embedding},
+        vector_fields={"velocity": {"X_embedding": vectors}},
     )
     _center, scale_factor = _normalization(embedding)
-    published = np.fromfile(out_dir / "vectors" / f"0_{dimension}d.bin", dtype="<f4")
+    published = np.fromfile(out_dir / "vectors" / "0_0.bin", dtype="<f4")
     assert np.array_equal(published, (vectors * scale_factor).astype(np.float32).reshape(-1))

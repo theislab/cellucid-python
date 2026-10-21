@@ -24,28 +24,46 @@ fails, the transaction rolls back and reports the exact failure.
 
 ## Exact fingerprint
 
-The session stores five fields:
+The session stores six fields:
 
 - `sourceType`: the loading route, such as `local-demo`, `github-repo`,
   `local-user`, `remote`, or `jupyter`;
 - `datasetId`: the route's exact dataset identifier;
 - `cellCount`: the number of observations;
-- `varCount`: the number of variables; and
+- `varCount`: the number of variables;
 - `cellOrder`: a record of *which ordering* of those cells the session was saved
-  against, with exactly two members.
+  against, with exactly three members; and
+- `dataMapping`: which stored arrays the dataset was shown with.
 
 `cellOrder.digest` is 16 lowercase hexadecimal characters computed over every
-cell coordinate of the displayed embedding in dataset row order.
-`cellOrder.dimension` is the embedding dimension that was on screen when the
-session was saved, exactly 1, 2, or 3; it is part of the record because the 1D,
-2D, and 3D embeddings are separate files normalized independently, so a digest
-only means anything within one of them.
+cell coordinate of one embedding in dataset row order. `cellOrder.embedding`
+names that embedding — the embedding the live view showed when the session was
+saved — as an exported embedding id (`{"key": "X_umap", "columns": null}`) or,
+for an AnnData source, an `obsm` key with the 0-based columns plotted
+(`{"key": "X_pca", "columns": [0, 1]}`). `cellOrder.dimension` is its dimension,
+exactly 1, 2, or 3. The embedding is part of the record because every embedding
+is a separate payload normalized on its own, so a digest only means anything
+within one of them.
 
-All five must equal the currently loaded dataset — six compared values, since
-`cellOrder` contributes two. This means the same files loaded through a GitHub
-repository and through a local folder are intentionally different identities.
-Likewise, moving a remote dataset to a different published identifier requires a
-newly saved session.
+`dataMapping` names the embeddings that are turned on and each dimension's
+default, the vector-field bindings in use, and for an AnnData source also the
+neighbour graph, the gene names, the expression matrix, and the latent space.
+For a prepared export these are fixed when the export is written, except which
+of its embeddings are turned on, which is each dimension's default, which
+exported gene-name set names the genes and which of its vector bindings are in
+use; for an `.h5ad` or Zarr file opened in the browser, or an object served by
+the Python package, they start at the defaults (or the best guess), and every
+group can be changed under **Session › Data mapping**.
+
+The four scalars and `cellOrder` must equal the currently loaded dataset. The
+data mapping must too, with one exception: its embeddings. A session that turns
+on other embeddings, or names other defaults, than the ones on screen restores
+them,
+before its views, provided this dataset can show them; otherwise it is refused
+and names the embedding. This means the same files
+loaded through a GitHub repository and through a local folder are intentionally
+different identities. Likewise, moving a remote dataset to a different
+published identifier requires a newly saved session.
 
 The first four fields say *which* dataset. They cannot say which ordering,
 because all four survive a re-export of the same dataset from re-sorted input.
@@ -54,19 +72,32 @@ under an unchanged identity would silently re-point every lasso, KNN, proximity,
 and annotation selection at different cells. That is the failure `cellOrder`
 exists to catch.
 
+Restoring is *verify, then apply*: the counts and identity, then the data
+mapping, then the digest of the very embedding the session names are all
+checked before anything changes on screen. The named embedding is loaded for the
+check whichever one is on screen, so a session saved in 2D opens while 3D is
+shown.
+
 ## Outcome matrix
 
 | Situation | Result |
 |---|---|
 | Current bundle, exact fingerprint, complete valid chunks | eager and lazy schedules finish, the transaction commits, then Cellucid reports **Session fully restored** |
 | Different source type, id, cell count, or variable count | complete rejection; the message names the saved and current cell and gene counts and asks you to open the dataset the session was saved on |
-| A different embedding dimension is on screen than the one the session was saved in | complete rejection; the message names both dimensions and asks you to switch back, then load again. This is the recoverable case: nothing is wrong with the data |
+| The session turns on other embeddings, or names other defaults, that this dataset can show | the embeddings are turned on, then the views are restored, then the session's data mapping is applied |
+| The session turns on an embedding that this dataset does not have (or cannot plot) | complete rejection; the message names it, for example "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have." |
+| The session names another graph, gene names, expression matrix, latent space or vector bindings, ones this dataset can use | the choice is restored, then the session |
+| The session names a graph, gene-name column, expression matrix, latent space or vector binding this dataset does not have (or cannot use) | complete rejection; the message names it |
+| The session was saved with gene names a prepared dataset with one name set does not show | complete rejection; the message names the names on each side |
+| The embedding the session recorded its cell order on does not exist in this dataset | complete rejection; the message names the embedding |
 | Same id and same cell and gene counts, but the dataset stores its cells in a different order | complete rejection; the message says the coordinates differ from the ones the session was saved against, names both causes a digest cannot tell apart — a different order, or the same cells re-exported from a re-computed embedding — and asks you to load the version the session was saved on, or re-create the selections here |
 | A session file saved before Cellucid recorded cell order — a fingerprint with only the four scalars | complete rejection with its own message: such a file can never be confirmed, so re-create the selections and save a new session file |
+| A session file saved by an earlier release — a fingerprint with `cellOrder` but no `dataMapping` | complete rejection with its own message: that release read an export format this one does not open, so re-create the view on the current dataset and save a new session file |
 | Missing, extra, duplicate, aliased, reordered, or noncanonical chunk | complete rejection before success |
 | Corrupt/truncated framing, dishonest byte count, or invalid gzip/JSON/binary payload | complete rejection, bounded decode, rollback |
 | Newer load starts or the user presses **Cancel** | older restore aborts and its progress is dismissed without a red product error |
 | Bundle made by a different schema/build | accepted only if it is byte-for-byte valid under the one current contract; otherwise rejected |
+| Bundle saved in a different browser (for example Safari, opened in Chrome or Firefox) | restores like any other. A saved camera carries its orbit and free-fly forms; restore compares exactly the one the navigation mode drives and ignores the derived one, whose last bits differ between browser engines |
 
 Cellucid does not store a format-version field and does not guess how to
 translate another schema. For reproducible work, record the app build shown in
@@ -92,15 +123,20 @@ Treat a dataset id as a content identity:
 3. save a new session after the changed dataset is loaded; and
 4. tell collaborators the exact loading route and dataset revision.
 
-## The Python reader is deliberately more permissive
+## The Python reader
 
-The `cellucid` Python package reads the same `.cellucid-session` files, and it
-accepts a fingerprint **with or without** `cellOrder`, validating only the
-record's shape when it is present. It cannot do more: the digest is taken over
-exported coordinates, and
-`apply_cellucid_session_to_anndata()` targets an `AnnData` whose row order the
-caller controls, so there is nothing on that side to check the digest against.
-Enforcing cell-order identity is the web app's job.
+The `cellucid` Python package reads the same six-field fingerprint and requires
+every field: a file without `cellOrder.embedding` or `dataMapping` is refused.
+It checks the data mapping against the `AnnData` it applies the session to — the
+`obsm`, `obsp`, layer and `var` keys it names must exist — and compares
+`varCount` on the mapped gene axis. The exact shapes are in
+{doc}`../../python_package/e_jupyter_hooks/11_session_bundles_apply_session_to_anndata`.
+
+Python validates `cellOrder`'s shape and never its digest: the digest is taken
+over coordinates the viewer drew, and `apply_cellucid_session_to_anndata()`
+targets an `AnnData` whose row order the caller controls, so there is nothing on
+that side to check it against. Enforcing cell-order identity is the web app's
+job.
 
 The practical consequence is one-directional: a bundle Python accepts may still
 be refused by the app. That is not an inconsistency to report. See

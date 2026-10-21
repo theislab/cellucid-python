@@ -33,7 +33,7 @@ Match the last line printed against the phase it names:
 
 | Last line | What is running | What to do |
 | --- | --- | --- |
-| `Connectivity: reading obsp['connectivities']` | The neighbor graph is being validated and deduplicated into edges | Drop `serve_connectivity=True` / `--connectivity` if the session will not draw the graph |
+| `Connectivity: reading obsp['connectivities']` | The neighbor graph is being validated and deduplicated into edges | Drop `knn_key="connectivities"` / `--knn connectivities` if the session will not draw the graph |
 | `Obs columns: classifying N` | One validation pass per continuous obs column | Narrow the served set with `obs_keys=` / `--obs-key` |
 | `[4/5] Building manifests...` | One centroid per category per available dimension | Reduce the number of categorical fields served, or export once |
 | `[5/5] Starting server...` | The configured viewer generation is being fetched and verified | Wait once; the cache is reused afterwards |
@@ -41,7 +41,7 @@ Match the last line printed against the phase it names:
 ## Serving the neighbor graph is slow or runs out of memory
 
 `adata.obsp['connectivities']` is not read at all unless you pass
-`serve_connectivity=True`, or `--connectivity` on the command line. It is off by
+`knn_key="connectivities"`, or `--knn connectivities` on the command line. It is off by
 default because on a large object it is the longest part of startup, and most
 sessions never draw the graph.
 

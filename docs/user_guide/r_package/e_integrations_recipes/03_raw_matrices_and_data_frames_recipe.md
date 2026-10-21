@@ -36,7 +36,7 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 cellucid_prepare(
   latent_space = latent_space,
   obs = obs,
-  X_umap_2d = X_umap_2d,
+  embeddings = list(X_umap = X_umap_2d),
   obs_categorical_dtype = "uint8",
   dataset_name = "Raw Minimal",
   dataset_id = "raw_minimal",
@@ -64,7 +64,7 @@ cellucid_prepare(
   obs = obs,
   var = var,
   gene_expression = gene_expression,
-  X_umap_2d = X_umap_2d,
+  embeddings = list(X_umap = X_umap_2d),
   obs_categorical_dtype = "uint8",
   dataset_name = "Raw Minimal",
   dataset_id = "raw_minimal",

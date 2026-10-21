@@ -219,7 +219,7 @@ follows from three comparisons, in this order.
 :alt: The voting modal for the Beta cluster with a status banner reading Pending and a voter count below the column minimum, above a single suggestion card.
 :width: 996px
 
-**Pending** — fewer voters than the column's minimum. Here two people have voted
+**Pending** — fewer voters than the column's minimum. Here one person has voted
 and the column requires three, so no confidence figure is reported at all; the
 banner names only the shortfall. The label is still shown, because the work is
 real, but it is not yet a decision.

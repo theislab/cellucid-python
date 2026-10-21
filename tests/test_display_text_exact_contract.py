@@ -94,7 +94,7 @@ def _prepare_kwargs(out_dir, obs):
     return {
         "latent_space": _EMBEDDING.copy(),
         "obs": obs,
-        "X_umap_2d": _EMBEDDING.copy(),
+        "embeddings": {"X_umap_2d": _EMBEDDING.copy()},
         "out_dir": out_dir,
         "dataset_id": "display-text",
         "dataset_name": "Display text",
@@ -166,7 +166,7 @@ def test_prepare_rejects_the_published_suo_organ_labels(tmp_path):
     obs = pd.DataFrame({"organ": pd.Categorical(published * 3, categories=published)})
     kwargs = _prepare_kwargs(out_dir, obs)
     kwargs["latent_space"] = np.tile(_EMBEDDING, (9, 1))
-    kwargs["X_umap_2d"] = np.tile(_EMBEDDING, (9, 1))
+    kwargs["embeddings"]["X_umap_2d"] = np.tile(_EMBEDDING, (9, 1))
 
     with pytest.raises(ValueError) as failure:
         prepare(**kwargs)
@@ -288,7 +288,7 @@ def test_datasets_manifest_rejects_an_undisplayable_published_description(tmp_pa
     (dataset / "dataset_identity.json").write_text(
         json.dumps(
             {
-                "version": 2,
+                "version": 3,
                 "id": "study",
                 "name": "Study",
                 "description": "Padded description ",

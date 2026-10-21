@@ -12,7 +12,7 @@
 //   name        File stem. The emitted file is `<topic>/<name>.png`.
 //   describes   One sentence. Becomes the `:alt:` text, so it must describe
 //               what is visible, not what the reader should conclude.
-//   dataset     Dataset id in `cellucid-datasets/exports/datasets.json`.
+//   dataset     Dataset id in `cellucid-datasets/exports-v3/datasets.json`.
 //   query       Extra launch parameters, merged into the URL.
 //   keepWelcome Leave the first-run overlay up (default: dismiss it).
 //   steps       Ordered actions. See `applyStep` in `capture.mjs` for the
@@ -32,7 +32,10 @@
 // is 246 CSS px wide is a 492 px file.
 //
 // READY SIGNALS that are known to work on this application:
+//   PANCREAS_READY     both of the two below; every pancreas scenario starts here
 //   #filter-count      "Showing all 3,696 points"   — data loaded and counted
+//   html[data-startup-phase="ready"]                — the sample's published
+//                      default session has been applied and the viewer runs
 //   #stats             "Points: … • Field: … • Centroids: …"  — colouring live
 //   #legend            present once a field paints a legend
 // `#dataset-cells` is NOT a ready signal: it abbreviates to "4K".
@@ -49,7 +52,96 @@
 // Use `openSection` / `closeSection` rather than clicking a summary, so a
 // scenario is idempotent.
 
-const PANCREAS_READY = { waitForText: '#filter-count', text: 'Showing all 3,696 points' };
+import { OVERLAY_ROOT_ID, paintOverlay } from './overlay.mjs';
+
+// The point count is published before startup has finished: the sample's
+// published default session (`startup.step('session', …)` in the web app's
+// `main.js`) is applied *after* it, and that restore sets the navigation mode,
+// the open accordions and the camera. A step taken in between is undone when
+// the restore lands — `core-navigation-freefly` chose Free-fly and then timed
+// out waiting for its controls in one run of three, and the annotation panel
+// crops resolved to an empty region because Session and Visualization were
+// re-opened above them. The root element's `data-startup-phase` reaches
+// `ready` only after that restore, so waiting for it is what makes "ready"
+// mean ready.
+const PANCREAS_READY = {
+  run: async page => {
+    await page.waitForFunction(() => (
+      document.querySelector('#filter-count')?.textContent
+        ?.includes('Showing all 3,696 points') === true
+    ));
+    await page.waitForFunction(
+      () => document.documentElement.dataset.startupPhase === 'ready'
+    );
+  },
+};
+
+// Every notification raised so far has expired and left the DOM.
+//
+// Loading the sample raises its own — the restored default session, each
+// artifact download, every field that gets coloured — and each expires on its
+// own four- or five-second timer. Left alone they do two kinds of damage: in a
+// window capture they appear or not depending on how fast the host ran the
+// steps, so the same scenario produces different bytes; and under a
+// `#notification-center` crop they drain while the frames settle, so the
+// `column-reverse` stack changes height under the crop and
+// `assertCropStillFramed` fails it. Waiting for an empty center removes the
+// churn instead of racing it. An ERROR carries no timer, so a scenario whose
+// subject is an error must drain *before* raising it.
+const NOTIFICATIONS_DRAINED = {
+  run: page => page.waitForFunction(
+    () => document.querySelector('#notification-center')
+      ?.childElementCount === 0,
+    undefined,
+    { timeout: 60_000 }
+  ),
+};
+
+/**
+ * Stop the clock that is about to delete a timed notification.
+ *
+ * A SUCCESS or INFO notification dismisses itself four seconds after it is
+ * shown (`DEFAULT_DURATIONS_MS` in the web app's `notification-center.js`).
+ * Resolving the crop costs about a second on a loaded machine and each
+ * screenshot about seven hundred milliseconds, so a capture of one races its
+ * subject's lifetime, and the outcome depends on the capture host's load —
+ * the same scenario captured cleanly at load average 4 and failed at load
+ * average 15 with no code changed.
+ *
+ * So the deadline is removed rather than raced: timers of a second or longer
+ * scheduled from this point on are pushed past the end of the capture. Nothing
+ * is dropped and no callback is skipped; they simply do not come due while the
+ * shutter is open. Shorter timers — yields, the 300 ms exit removal — run
+ * normally, so the work that raises the notification is not stalled. It is the
+ * same kind of intervention as the seeded `Math.random`, the pinned time zone
+ * and Playwright's `animations: 'disabled'`; nothing about the notification's
+ * content, wording or appearance is touched, and `assertCropStillFramed` still
+ * proves the real element was in frame.
+ *
+ * @param {import('@playwright/test').Page} page
+ */
+function holdNotificationTimers(page) {
+  return page.evaluate(holdLongTimersInPage);
+}
+
+/**
+ * The page-side half of `holdNotificationTimers`. Serialised into the browser,
+ * so it closes over nothing. A scenario whose subject is raised during
+ * startup, before any step can run, installs it with `addInitScript` instead.
+ */
+function holdLongTimersInPage() {
+  const realSetTimeout = window.setTimeout;
+  const CAPTURE_HORIZON_MS = 600_000;
+  window.setTimeout = function (handler, delay, ...args) {
+    const requested = Number(delay) || 0;
+    return realSetTimeout.call(
+      window,
+      handler,
+      requested >= 1000 ? Math.max(requested, CAPTURE_HORIZON_MS) : requested,
+      ...args
+    );
+  };
+}
 
 /** @type {ReadonlyArray<Object>} */
 export const SCENARIOS = Object.freeze([
@@ -164,12 +256,20 @@ export const SCENARIOS = Object.freeze([
 
   // --- benchmarking_performance -------------------------------------------
   // The Performance Benchmark accordion is the only interface the benchmarking
-  // section documents, and `.benchmark-stats` is `display: none` until a run
-  // finishes, so the panel has two genuinely different states. Both are
-  // captured: the controls a reader has to find, and the metric grid whose
-  // *labels* the prose refers to. Collapsing the six sections that are open on
-  // first load is what keeps the accordion inside the 1000 px viewport, so the
-  // element crop is never silently clamped.
+  // section documents. Opening it starts live performance monitoring
+  // (`activateBenchmarkingPanel` in the web app's `main.js`), which un-hides
+  // `#benchmark-stats` and fills it with the FPS, frame time and Timing
+  // Details min / p95 / max of whatever is loaded — here, the docs page's own
+  // render loop on the capture host. That readout is a measurement of the
+  // machine, not of Cellucid (see the note under this scenario), and it also
+  // grows the panel about a second after it opens, which used to push Copy
+  // Situation Report and Analyze Performance out of the published frame. So
+  // the scenario hides the readout with a style rule rather than racing it:
+  // the image shows every control and no number. The metric names live in a
+  // table in `n_benchmarking_performance/05_benchmark_tools.md`. Collapsing
+  // the six sections that are open on first load is what keeps the accordion
+  // inside the 1000 px viewport, so the element crop is never silently
+  // clamped.
 
   {
     id: 'benchmark-panel-controls',
@@ -177,9 +277,10 @@ export const SCENARIOS = Object.freeze([
     name: 'benchmark-panel-controls',
     describes:
       'The Performance Benchmark panel before any run, showing the six ' +
-      'point-count presets from 100K to 20M, the custom point count field, ' +
+      'point-count presets from 500K to 40M, the custom point count field, ' +
       'the data pattern dropdown, and the Load Synthetic Data, Copy ' +
-      'Situation Report and Analyze Performance buttons.',
+      'Situation Report and Analyze Performance buttons; the live ' +
+      'performance readout is omitted.',
     dataset: 'pancreas',
     steps: [
       PANCREAS_READY,
@@ -190,6 +291,13 @@ export const SCENARIOS = Object.freeze([
       { closeSection: '#highlighted-cells-section' },
       { closeSection: '#page-analysis-section' },
       { openSection: '#benchmark-section' },
+      // `!important` outranks the inline `display: block` the monitor sets.
+      {
+        run: page => page.addStyleTag({
+          content: '#benchmark-stats { display: none !important; }',
+        }),
+      },
+      { waitFor: '#bottleneck-analyze-btn' },
       { scrollIntoView: '#benchmark-section' },
     ],
     shot: { mode: 'element', selector: '#benchmark-section', padding: 6 },
@@ -222,15 +330,17 @@ export const SCENARIOS = Object.freeze([
   //   2. CLOSED STATE DOES NOT HOLD. Driving every section shut with
   //      `closeSection` and capturing produced an image with Session and
   //      Visualization still open, so something re-opens them after the steps
-  //      run. Until that is understood, a "collapsed sidebar" scenario is not
-  //      reproducible.
+  //      run. That something is the sample's published default session, which
+  //      was applied after the point count — the old ready signal — and so
+  //      after the steps; `PANCREAS_READY` now waits for it, which removes
+  //      this blocker. Blocker 1 stands.
   //
   // A third, smaller point: ring labels render as a fixed 22 px circular badge,
   // so file paths cannot go on the image; they would need a numbered key on the
   // page. That part is fine — the key is more readable and it translates.
   //
-  // Fixing this means a per-scenario viewport override plus understanding the
-  // accordion re-open, both of which are changes to shared tooling. Until then
+  // Fixing this means a per-scenario viewport override, which is a change to
+  // shared tooling. Until then
   // the page carries corrected prose tables instead, which is the defect that
   // actually mattered there: it documented 19 of 29 modules and named the wrong
   // initializer for three of them.
@@ -268,6 +378,18 @@ export const SCENARIOS = Object.freeze([
   // reason as the blocks above, and because these are the only scenarios that
   // hand the application a file from disk rather than driving its controls.
   ...buildDataLoadingRefusalScenarios(),
+
+  // f_highlighting_selection. Separate builder for the same reason as the
+  // blocks above: every figure there is one stage of the same few real
+  // gestures on the same 2D view, so they share one prelude and one set of
+  // fixed gesture coordinates that nothing else in this file uses.
+  ...buildHighlightingScenarios(),
+
+  // Multiview (Grid compare). Separate builder for the same reason as the
+  // blocks above: every figure here is the same two-panel grid — the live view
+  // plus one kept snapshot under locked cameras — and they share one prelude,
+  // one zoom gesture and one layout assertion that nothing else uses.
+  ...buildMultiviewScenarios(),
 ]);
 
 // ---------------------------------------------------------------------------
@@ -289,6 +411,33 @@ function buildFilteringScenarios() {
     { select: '#categorical-field', label: 'clusters' },
     { waitForText: '#stats', text: 'Field: clusters (category)' },
     { waitFor: '#legend' },
+  ];
+  /**
+   * Navigation and Compare Views open, the sidebar scrolled so Navigation's
+   * Mode select and the Shows picker below it are both in the window.
+   */
+  const SHOWS_PICKER_IN_VIEW = [
+    { openSection: '#navigation-section' },
+    { openSection: '#compare-views-section' },
+    { waitFor: '#representation-controls:not([hidden])' },
+    {
+      run: page => page.locator('#navigation-section').evaluate(
+        element => element.scrollIntoView({ block: 'start' })
+      ),
+    },
+  ];
+  /**
+   * Show one representation in the selected view with the Shows picker, and
+   * wait for the view's navigation mode to follow it.
+   */
+  const show = (label, mode) => [
+    { waitForStable: '#view-representation-select' },
+    { select: '#view-representation-select', label },
+    { run: page => page.waitForFunction(
+      expected => document.querySelector('#navigation-mode')?.value === expected,
+      mode,
+    ) },
+    { wait: 2000 },
   ];
   const sScore = [
     { waitForStable: '#continuous-field' },
@@ -388,7 +537,7 @@ function buildFilteringScenarios() {
         + 'clusters, every legend row checked, and the sidebar reporting Showing '
         + 'all 3,696 points.',
       dataset: 'pancreas',
-      steps: [READY, ...clusters, { scrollIntoView: '#active-filters-container' }],
+      steps: [READY, ...clusters, { scrollIntoView: '#active-filters-container' }, NOTIFICATIONS_DRAINED],
       shot: { mode: 'window' },
       settle,
     },
@@ -410,6 +559,7 @@ function buildFilteringScenarios() {
         hide('Ngn3 low EP'),
         hide('Ngn3 high EP'),
         { scrollIntoView: '#active-filters-container' },
+        NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
       settle,
@@ -511,6 +661,7 @@ function buildFilteringScenarios() {
         { scrollIntoView: '#legend' },
         setRange(MIN_SLIDER, 20),
         { scrollIntoView: '#active-filters-container' },
+        NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
       settle,
@@ -543,7 +694,7 @@ function buildFilteringScenarios() {
         + 'default 100 percent: scattered cells sit between and around the '
         + 'clusters, and the sidebar reads Showing all 3,696 points.',
       dataset: 'pancreas',
-      steps: [READY, ...clusters, { scrollIntoView: '#outlier-filter-container' }],
+      steps: [READY, ...clusters, { scrollIntoView: '#outlier-filter-container' }, NOTIFICATIONS_DRAINED],
       shot: { mode: 'window' },
       settle,
     },
@@ -562,6 +713,7 @@ function buildFilteringScenarios() {
         ...clusters,
         { scrollIntoView: '#outlier-filter-container' },
         setRange('#outlier-filter', 95),
+        NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
       cursor: { on: '#outlier-filter', at: 'right', dx: -40, state: 'hover' },
@@ -572,9 +724,10 @@ function buildFilteringScenarios() {
       topic: 'filtering',
       name: 'active-filters-three-rows',
       describes:
-        'The filter list holding three rows of different kinds at once: a '
-        + 'clusters hiding row, an S_score numeric range row and a clusters '
-        + 'outlier row, where only the first two carry a cell count.',
+        'The filter list holding three rows of different kinds at once: an '
+        + 'S_score numeric range row followed by its cell count, a clusters '
+        + 'hiding row cut off with an ellipsis, and a clusters outlier row '
+        + 'with no count.',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -669,6 +822,7 @@ function buildFilteringScenarios() {
         { run: page => page.locator('#legend button', { hasText: 'Hide All' }).click() },
         { waitForText: '#filter-count', text: 'Showing 0 of 3,696 points' },
         { scrollIntoView: '#active-filters-container' },
+        NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
       settle,
@@ -708,6 +862,7 @@ function buildFilteringScenarios() {
         { scrollIntoView: '#legend' },
         setRange(MIN_SLIDER, 3),
         { scrollIntoView: '#active-filters-container' },
+        NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
       settle,
@@ -729,6 +884,7 @@ function buildFilteringScenarios() {
         ...clusters,
         { waitForText: '#filter-count', text: 'Showing all 3,696 points' },
         { scrollIntoView: '#active-filters-container' },
+        NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
       settle,
@@ -854,7 +1010,7 @@ function buildFilteringScenarios() {
         + 'scale, dark where the gene is absent and bright in one lobe of the '
         + 'embedding, with the continuous legend open in the sidebar.',
       dataset: 'pancreas',
-      steps: [READY, ...ins1, { scrollIntoView: '#legend' }],
+      steps: [READY, ...ins1, { scrollIntoView: '#legend' }, NOTIFICATIONS_DRAINED],
       shot: { mode: 'window' },
       settle,
     },
@@ -874,6 +1030,7 @@ function buildFilteringScenarios() {
         { run: page => page.check('#toggle-centroid-points') },
         { run: page => page.check('#toggle-centroid-labels') },
         { wait: 1200 },
+        NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
       settle,
@@ -923,7 +1080,8 @@ function buildFilteringScenarios() {
       describes:
         'The Navigation block with Mode set to Free-fly, exposing look '
         + 'sensitivity and move speed sliders with numeric readouts, invert look '
-        + 'and projectile checkboxes, and a Capture pointer button.',
+        + 'and projectile checkboxes, and a Capture pointer checkbox with its '
+        + 'small i button.',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -940,10 +1098,10 @@ function buildFilteringScenarios() {
       name: 'window-dimension-3d',
       describes:
         'The whole window showing the Pancreas 3D embedding inside its grid box, '
-        + 'with the Dimension select reading 3D and the Navigation Mode select '
-        + 'reading Orbit.',
+        + 'with the Navigation Mode select reading Orbit and, under Compare '
+        + 'Views, the Shows picker reading UMAP · 3D.',
       dataset: 'pancreas',
-      steps: [READY, ...clusters, { scrollIntoView: '#dimension-controls' }],
+      steps: [READY, ...clusters, ...SHOWS_PICKER_IN_VIEW, NOTIFICATIONS_DRAINED],
       shot: { mode: 'window' },
       settle,
     },
@@ -952,20 +1110,20 @@ function buildFilteringScenarios() {
       topic: 'web_app',
       name: 'window-dimension-2d',
       describes:
-        'The same window after choosing 2D: the cells now lie on a plane seen '
-        + 'face-on, the Dimension select reads 2D, and the Navigation Mode '
-        + 'select has followed it to Planar.',
+        'The same window after choosing UMAP · 2D in the Shows picker: the '
+        + 'cells now lie on a plane seen face-on, and the Navigation Mode '
+        + 'select has followed the view to Planar.',
       dataset: 'pancreas',
       steps: [
         READY,
         ...clusters,
-        { scrollIntoView: '#dimension-controls' },
-        { select: '#dimension-select', value: '2' },
-        { wait: 2000 },
-        { scrollIntoView: '#dimension-controls' },
+        ...SHOWS_PICKER_IN_VIEW,
+        ...show('UMAP · 2D', 'planar'),
+        ...SHOWS_PICKER_IN_VIEW,
+        NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
-      cursor: { on: '#dimension-select', at: 'right', dx: -18, state: 'press' },
+      cursor: { on: '#view-representation-select', at: 'right', dx: -18, state: 'press' },
       settle,
     },
     {
@@ -973,17 +1131,17 @@ function buildFilteringScenarios() {
       topic: 'web_app',
       name: 'window-dimension-1d',
       describes:
-        'The same window after choosing 1D: the cells are spread along one '
-        + 'axis, the Dimension select reads 1D, and the Navigation Mode select '
-        + 'has followed it to Planar.',
+        'The same window after choosing UMAP · 1D in the Shows picker: the '
+        + 'cells are spread along one axis, and the Navigation Mode select '
+        + 'has followed the view to Planar.',
       dataset: 'pancreas',
       steps: [
         READY,
         ...clusters,
-        { scrollIntoView: '#dimension-controls' },
-        { select: '#dimension-select', value: '1' },
-        { wait: 2000 },
-        { scrollIntoView: '#dimension-controls' },
+        ...SHOWS_PICKER_IN_VIEW,
+        ...show('UMAP · 1D', 'planar'),
+        ...SHOWS_PICKER_IN_VIEW,
+        NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
       settle,
@@ -995,7 +1153,7 @@ function buildFilteringScenarios() {
       describes:
         'A control labelled RENDER MODE holding a dropdown that reads Points, '
         + 'ringed and with the pointer pressing it, above a dashed box labelled '
-        + 'DEPTH PERCEPTION whose first slider, POINT SIZE (LOG), reads 0.75.',
+        + 'DEPTH PERCEPTION whose first slider, POINT SIZE (LOG), reads 2.87.',
       dataset: 'pancreas',
       steps: [READY, { scrollIntoView: '#render-mode' }],
       shot: {
@@ -1005,6 +1163,45 @@ function buildFilteringScenarios() {
       },
       cursor: { on: '#render-mode', at: 'right', dx: -18, state: 'press' },
       settle,
+    },
+    {
+      // Smoke animates by default, so a capture of it would never settle.
+      // Animation speed 0 reads `Still`, and a still smoke view is not
+      // redrawn at all once its noise exists (`needsContinuousFrames()` in the
+      // web app's `smoke-renderer.js`): two consecutive frames are then the
+      // same bytes, which is what the settle loop waits for. The ray-start
+      // jitter is a fixed blue-noise tile, not a per-frame offset, so nothing
+      // else moves.
+      id: 'core-window-smoke-cloud',
+      topic: 'web_app',
+      name: 'window-smoke-cloud',
+      describes:
+        'The whole window in Volumetric smoke cloud mode: the Pancreas cells '
+        + 'drawn as a soft, lit cloud tinted with the colours of their '
+        + 'clusters inside the grid box, and the sidebar showing the '
+        + 'Volumetric smoke controls with Grid density 128³, Ray quality High, '
+        + 'Render resolution 0.50x, Noise detail 128³, Cloud density 1.00 and '
+        + 'Animation speed Still.',
+      dataset: 'pancreas',
+      steps: [
+        READY,
+        ...clusters,
+        { select: '#render-mode', value: 'smoke' },
+        { waitFor: '#smoke-speed' },
+        {
+          run: async page => {
+            const speed = page.locator('#smoke-speed');
+            await speed.fill('0');
+            await speed.dispatchEvent('input');
+            await speed.blur();
+          },
+        },
+        { waitForText: '#smoke-speed-display', text: 'Still' },
+        { scrollIntoView: '#smoke-controls' },
+        NOTIFICATIONS_DRAINED,
+      ],
+      shot: { mode: 'window' },
+      settle: { attempts: 40, gapMs: 250 },
     },
 
     // ------------------------------------------------------------- orientation
@@ -1018,7 +1215,7 @@ function buildFilteringScenarios() {
         + 'clusters, and the eight-row legend beside the matching colours on the '
         + 'canvas.',
       dataset: 'pancreas',
-      steps: [READY, ...clusters, { scrollIntoView: '#legend' }],
+      steps: [READY, ...clusters, { scrollIntoView: '#legend' }, NOTIFICATIONS_DRAINED],
       shot: { mode: 'window' },
       settle,
     },
@@ -1046,7 +1243,9 @@ function buildFilteringScenarios() {
         + 'O/P/G and ?; Navigation (Orbit / Planar / Free-fly) with W A S D and '
         + 'Shift; Orbit and Planar only with the zoom keys; Free-fly specific '
         + 'with E/Q and Esc; and Highlighting with Alt+click, Alt+drag, '
-        + 'Shift+Alt+click, Ctrl+Alt+click, Esc and X.',
+        + 'Shift+Alt+click, Ctrl+Alt+click, Esc to cancel a selection in '
+        + 'progress, Esc to leave Select mode when nothing is in progress, '
+        + 'and X.',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -1182,7 +1381,14 @@ function buildAnnotationAndSessionScenarios() {
    * picker. One scenario, one context: a bundle saved here is not visible to
    * any other scenario.
    */
-  const saveThenRestore = () => ({
+  //
+  // The reload starts the application over, so it is waited for exactly as a
+  // fresh scenario is: `PANCREAS_READY` (the sample's own default session has
+  // been applied — otherwise "Session fully restored." below can match *that*
+  // restore instead of this one) and `NOTIFICATIONS_DRAINED`. With
+  // `holdNotifications`, the restore's own notifications are kept on screen
+  // for a crop of them; see `holdNotificationTimers`.
+  const saveThenRestore = ({ holdNotifications = false } = {}) => ({
     run: async page => {
       const download = page.waitForEvent('download');
       await page.click('#save-state-btn');
@@ -1193,10 +1399,9 @@ function buildAnnotationAndSessionScenarios() {
       await welcome.waitFor({ state: 'visible' });
       await page.keyboard.press('Escape');
       await welcome.waitFor({ state: 'hidden' });
-      await page.waitForFunction(() => (
-        document.querySelector('#filter-count')?.textContent
-          ?.includes('Showing all 3,696 points') === true
-      ));
+      await PANCREAS_READY.run(page);
+      await NOTIFICATIONS_DRAINED.run(page);
+      if (holdNotifications) await holdNotificationTimers(page);
       const chooser = page.waitForEvent('filechooser');
       await page.click('#load-state-btn');
       await (await chooser).setFiles(saved);
@@ -1718,7 +1923,9 @@ function buildAnnotationAndSessionScenarios() {
         READY,
         { openSection: '#session-section' },
         { scrollIntoView: '#session-state-controls' },
+        NOTIFICATIONS_DRAINED,
         { run: async page => {
+          await holdNotificationTimers(page);
           const download = page.waitForEvent('download');
           await page.click('#save-state-btn');
           await download;
@@ -1736,17 +1943,25 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'sessions_sharing',
       name: 'save-restore-04-restore-confirmation',
       describes:
-        'Notifications after a completed restore, ending with "Session fully '
-        + 'restored." and "Session loaded successfully".',
+        'The one notification a completed restore publishes: the restore\'s '
+        + 'progress entry, now titled "Loaded" and reading "Session fully '
+        + 'restored.".',
       dataset: 'pancreas',
       steps: [
         READY,
-        { openSection: '#visualization-section' },
-        { scrollIntoView: '#renderer-controls' },
-        ...RENDERER_CHANGES,
+        // No RENDERER_CHANGES here, unlike the scenarios either side. A
+        // restored state with LOD on raises "LOD node mappings ready (N ms)"
+        // as well, and that notification races the restore's own: across
+        // three otherwise identical runs it landed above or below the
+        // restore's entry, so the stack — and the bytes — changed from run to
+        // run, and its N is a timing of the capture host besides.
+        // `saveThenRestore` already waits for "Session fully restored.", the
+        // only notification a completed restore publishes.
         { openSection: '#session-section' },
-        saveThenRestore(),
-        { waitForText: '#notification-center', text: 'Session loaded successfully' },
+        saveThenRestore({ holdNotifications: true }),
+        // Under 1000 ms on purpose: `holdNotificationTimers` defers every
+        // in-page timer of a second or more, this step's own included.
+        { waitForStable: '#notification-center', forMs: 700 },
       ],
       shot: { mode: 'element', selector: '#notification-center', padding: 10 },
     },
@@ -1768,6 +1983,7 @@ function buildAnnotationAndSessionScenarios() {
         { openSection: '#session-section' },
         saveThenRestore(),
         { openSection: '#coloring-filtering-section' },
+        NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
     },
@@ -1788,13 +2004,14 @@ function buildAnnotationAndSessionScenarios() {
           // Every claim the caption makes, checked against the running app
           // rather than against the prose that describes the published state.
           const applied = await page.evaluate(() => ({
-            dimension: document.querySelector('#dimension-select')?.value ?? null,
+            shows: document.querySelector('#view-representation-select')
+              ?.selectedOptions[0]?.textContent ?? null,
             navigation: document.querySelector('#navigation-mode')?.value ?? null,
             theme: document.querySelector('#theme-select')?.value ?? null,
             background: document.querySelector('#background-select')?.value ?? null,
           }));
           const expected = {
-            dimension: '3', navigation: 'orbit', theme: 'light', background: 'grid',
+            shows: 'UMAP · 3D', navigation: 'orbit', theme: 'light', background: 'grid',
           };
           for (const [key, value] of Object.entries(expected)) {
             if (applied[key] !== value) {
@@ -1806,6 +2023,7 @@ function buildAnnotationAndSessionScenarios() {
           }
         } },
         { openSection: '#session-section' },
+        NOTIFICATIONS_DRAINED,
       ],
       shot: { mode: 'window' },
     },
@@ -1815,13 +2033,20 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'sessions_sharing',
       name: 'refusal-02-not-a-session-file',
       describes:
-        'Two notifications reading "Invalid session file (bad MAGIC header)." '
-        + 'after a file that is not a session bundle was chosen in Load State.',
+        'A notification titled "Loading failed" reading "Session file: '
+        + 'Invalid session file (bad MAGIC header).", with a dismiss button at '
+        + 'its right, after a file that is not a session bundle was chosen in '
+        + 'Load State.',
       dataset: 'pancreas',
       steps: [
         READY,
         { openSection: '#session-section' },
         { scrollIntoView: '#session-state-controls' },
+        // Drained first: triggered while the sample's own notifications were
+        // still expiring, the capture failed with "#notification-center moved
+        // while the image settled (380x346 became 380x292)", and the run that
+        // passed showed two unrelated startup messages under the refusal.
+        NOTIFICATIONS_DRAINED,
         { run: async page => {
           // A real file on disk, because the picker is the product's own and a
           // reader reaches this state by choosing the wrong file, not by
@@ -1845,6 +2070,12 @@ function buildAnnotationAndSessionScenarios() {
               ?.includes('Invalid session file') === true
           ));
         } },
+        // The refusal is the restore's own progress row turning into its
+        // failure (title, icon and message all change in that transition), so
+        // the crop is measured only once the stack has stopped changing. An
+        // ERROR notification carries no dismissal timer, so nothing expires
+        // after this.
+        { waitForStable: '#notification-center', forMs: 1000 },
       ],
       shot: { mode: 'element', selector: '#notification-center', padding: 10 },
     },
@@ -1854,9 +2085,10 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'sessions_sharing',
       name: 'refusal-01-different-dataset',
       describes:
-        'Notifications reporting that the session was saved on a different '
-        + 'dataset than the one open now, naming the cell and gene counts the '
-        + 'file was saved against and the counts of the dataset currently open.',
+        'A notification titled "Loading failed" reporting that the session was '
+        + 'saved on a different dataset than the one open now, naming 3,696 '
+        + 'cells and 3,753 genes when it was saved and 219,731 cells and 5,754 '
+        + 'genes now, and advising to open the dataset the session was saved on.',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -1866,15 +2098,25 @@ function buildAnnotationAndSessionScenarios() {
           // Save against pancreas, switch to a genuinely different published
           // dataset, then load the pancreas bundle. The refusal is the
           // product's own identity check, not a doctored file.
+          //
+          // Garcia, not He: in this capture browser the published sample
+          // views of `he` and `kanemaru` fail to apply ("Multiview restoration
+          // failed and graph rollback was incomplete."), and those two ERROR
+          // notifications would sit in the crop beside the refusal. That is
+          // a web-app defect to fix there, not something to photograph here.
           const download = page.waitForEvent('download');
           await page.click('#save-state-btn');
           const saved = await (await download).path();
-          await page.selectOption('#dataset-select', 'dataset:local-demo:he');
+          await page.selectOption('#dataset-select', 'dataset:local-demo:garcia');
           await page.waitForFunction(() => (
             document.querySelector('#filter-count')?.textContent
-              ?.includes('Showing all 3,696 points') === false
-          ), undefined, { timeout: 120_000 });
-          await page.waitForTimeout(1500);
+              ?.includes('Showing all 219,731 points') === true
+          ), undefined, { timeout: 180_000 });
+          // The switch raises its own download and field notifications, and
+          // any work still in flight keeps a progress row in the center, so
+          // an empty center is the signal that the new dataset has settled.
+          // A fixed pause here used to let them drain under the crop.
+          await NOTIFICATIONS_DRAINED.run(page);
           const chooser = page.waitForEvent('filechooser');
           await page.click('#load-state-btn');
           await (await chooser).setFiles(saved);
@@ -1883,6 +2125,7 @@ function buildAnnotationAndSessionScenarios() {
               ?.includes('saved on a different dataset') === true
           ), undefined, { timeout: 60_000 });
         } },
+        { waitForStable: '#notification-center', forMs: 1000 },
       ],
       shot: { mode: 'element', selector: '#notification-center', padding: 10 },
     },
@@ -1898,10 +2141,38 @@ function buildAnnotationAndSessionScenarios() {
         + "user's role for the repository could not be determined and that the "
         + 'annotation repo was disconnected.',
       dataset: 'pancreas',
-      setup: mock({ repoStatus: 404 }),
+      // The refusal is raised during startup — the mock pre-binds the
+      // repository, so the role lookup runs before any step can — and it is
+      // an ERROR published with an 8-second timer. The image published before
+      // this scenario held its timers showed the panel and no notification:
+      // the refusal had expired while the frames settled. So the clock is
+      // held from the first line of page code, and the startup notifications
+      // that therefore also stay are dismissed with their own × buttons,
+      // leaving the refusal as the only one, as a reader would.
+      setup: async context => {
+        await mock({ repoStatus: 404 })(context);
+        await context.page.addInitScript(holdLongTimersInPage);
+      },
       steps: [
         ...openPanel,
         { waitForText: '#notification-center', text: 'Unable to determine your role' },
+        {
+          run: async page => {
+            const others = page.locator(
+              '#notification-center > .notification',
+              { hasNotText: 'Unable to determine your role' }
+            );
+            while ((await others.count()) > 0) {
+              await others.first().locator('.notification-dismiss').click();
+              await page.waitForTimeout(400);
+            }
+            await page.waitForFunction(() => {
+              const center = document.querySelector('#notification-center');
+              return center?.childElementCount === 1
+                && center.textContent.includes('Unable to determine your role');
+            });
+          },
+        },
       ],
       shot: { mode: 'window' },
       rings: [{ on: '#community-annotation-controls', label: '1' }],
@@ -2163,7 +2434,8 @@ function buildAnalysisScenarios() {
         + 'cell_type, a Compare pages block with Page 1 and Rest of Page 1 '
         + 'both selected, a Plot Type select reading Bar Plot under a pointer, '
         + 'and a grouped bar plot of cell-type counts beneath it whose '
-        + 'horizontal axis carries a single category name.',
+        + 'horizontal axis carries two category names, Ductal and Delta, at '
+        + 'its two ends.',
       dataset: 'pancreas',
       steps: DETAILED_CATEGORICAL_RESULT,
       shot: { mode: 'element', selector: '#analysis-panel-detailed', padding: 10 },
@@ -2263,11 +2535,29 @@ function buildAnalysisScenarios() {
         + 'of PNG, SVG and CSV buttons above a PLOT OPTIONS column, a SUMMARY '
         + 'STATISTICS panel naming the category, mode, method and counts, and '
         + 'a STATISTICAL ANALYSIS panel holding the Top Marker Genes table, '
-        + 'with a pointer on the CSV button.',
+        + 'with a pointer on the CSV button; the run-time Duration row is '
+        + 'omitted.',
       dataset: 'pancreas',
       steps: [
         ...markerGenes('clustered'),
         { run: page => expandAnalysisResult(page, 'genesPanel') },
+        // The summary table ends with a Duration row: the wall-clock time the
+        // discovery took on the capture host ("82.1s", then "1m 32s" a day
+        // later). That is a measurement of the machine, not of Cellucid —
+        // the reason the benchmark scenario hides its live readout — and it
+        // made every recapture differ. The row is removed from the frame and
+        // the alt text says so.
+        {
+          run: page => page.evaluate(() => {
+            const rows = [...document.querySelectorAll(
+              '.analysis-modal-content .analysis-stats-table tr'
+            )].filter(row => row.cells[0]?.textContent === 'Duration');
+            if (rows.length !== 1) {
+              throw new Error(`expected one Duration row, found ${rows.length}`);
+            }
+            rows[0].style.display = 'none';
+          }),
+        },
       ],
       shot: { mode: 'element', selector: '.analysis-modal-content' },
       cursor: {
@@ -2396,11 +2686,11 @@ async function setVolcanoFoldChangeThreshold(page, threshold) {
 // `fixtures/generate-refusal-fixtures.py`, which regenerates it.
 //
 // Both figures on that page shipped empty — 776 px of background scatter under
-// an `:alt:` describing a message that was never in the frame. The refusal is a
-// timed state that deletes itself four seconds after it appears, and the
-// capture was still working when it went. `holdTimers` below is why that cannot
-// happen again, and `assertCropStillFramed` in `capture.mjs` is why a future
-// variant of it would fail the run instead of shipping.
+// an `:alt:` describing a message that was never in the frame: the refusal was
+// then a timed state that deleted itself four seconds after it appeared, and
+// the capture was still working when it went. The web app now keeps an ERROR
+// until it is dismissed, and `assertCropStillFramed` in `capture.mjs` is why a
+// future variant of that failure would fail the run instead of shipping.
 // ---------------------------------------------------------------------------
 
 /** @returns {Array<Object>} */
@@ -2408,76 +2698,26 @@ function buildDataLoadingRefusalScenarios() {
   // Two screenshots back to back. Everything the settle loop would otherwise
   // wait for has already been waited for by the steps below — the dataset is
   // loaded and counted, the canvas has stopped drawing, and the notification
-  // center is empty until the refusal lands in it — so a long gap buys nothing
-  // and only spends the subject's lifetime.
+  // center is empty until the refusal lands in it — so a long gap buys
+  // nothing.
   const REFUSAL_SETTLE = Object.freeze({ attempts: 2, gapMs: 0 });
 
-  // Stop the clock that is about to delete the subject.
+  // A refusal is reported with `notifications.fail(...)`, which turns the
+  // loading row into an ERROR without naming a duration, and an ERROR stays
+  // until it is dismissed (`DEFAULT_DURATIONS_MS` in the web app's
+  // `notification-center.js`). The subject therefore holds still once it has
+  // landed; what does not hold still is everything raised before it, so the
+  // center is drained first (see `NOTIFICATIONS_DRAINED`). That is also what
+  // makes the figure show one message rather than four.
   //
-  // A refusal is a *timed* state: `dataset-connections.js` reports it with
-  // `notifications.fail(...)`, which reaches `_updateNotification` with the
-  // type changed to `error` and no duration, so the notification center falls
-  // back to `defaultDuration` — 4000 ms — and schedules its own dismissal
-  // (`notification-center.js`: `defaultDuration = 4000`, `fail()`,
-  // `_scheduleDismiss`). The web repository's own browser suite says the same
-  // thing in `data-source-failure-modes.spec.mjs`: "Notifications auto-dismiss,
-  // so a failure message has to be sampled while it is on screen."
-  //
-  // Budgeting against that deadline does not work, and was measured not to
-  // work. Resolving the crop costs about a second on a loaded machine and each
-  // screenshot about seven hundred milliseconds, so the tool needs roughly half
-  // the window on an idle host and more than all of it on a busy one: the same
-  // scenario captured cleanly at load average 4 and failed at load average 15,
-  // with no code changed between the two runs. A capture whose correctness
-  // depends on the capture host's load is not reproducible, and it is exactly
-  // how `fail-h5ad-wrong-file.png` and `fail-missing-umap-embedding.png` came
-  // to ship as photographs of the empty canvas.
-  //
-  // So the deadline is removed rather than raced. Timers scheduled from this
-  // point on are pushed past the end of the capture — nothing is dropped and no
-  // callback is skipped, they simply do not come due while the shutter is open.
-  // It is the same kind of intervention as the seeded `Math.random`, the pinned
-  // time zone and Playwright's `animations: 'disabled'`: the environment is
-  // held still so that what the application draws can be photographed. Nothing
-  // about the notification's content, wording or appearance is touched, and
-  // `assertCropStillFramed` still proves the real element was in frame.
-  const holdTimers = page => page.evaluate(() => {
-    const realSetTimeout = window.setTimeout;
-    const CAPTURE_HORIZON_MS = 600_000;
-    window.setTimeout = function (handler, delay, ...args) {
-      return realSetTimeout.call(
-        window,
-        handler,
-        Math.max(Number(delay) || 0, CAPTURE_HORIZON_MS),
-        ...args
-      );
-    };
-  });
-
   // Selecting a file is a `change` on a hidden input, so the Session panel is
   // opened and scrolled to first: the notification is captured, but a reader
   // who reruns this should see the control that raised it.
-  //
-  // Then wait for the notification center to empty. Loading a dataset raises a
-  // handful of its own — the restored session, each artifact download, the
-  // field that got coloured — and every one of them expires on its own timer.
-  // While they are draining, the center's height changes under a
-  // `column-reverse` stack, the crop region never holds still, and the settle
-  // loop is still sampling when the refusal itself expires. Starting from an
-  // empty center removes the churn instead of racing it, and it is also what
-  // makes the figure show one message rather than four.
   const AT_LOCAL_CONTROLS = [
     PANCREAS_READY,
     { openSection: '#session-section' },
     { scrollIntoView: '#user-data-h5ad-btn' },
-    {
-      run: page => page.waitForFunction(
-        () => document.querySelector('#notification-center')
-          ?.childElementCount === 0,
-        undefined,
-        { timeout: 60_000 }
-      ),
-    },
+    NOTIFICATIONS_DRAINED,
   ];
 
   /**
@@ -2493,7 +2733,6 @@ function buildDataLoadingRefusalScenarios() {
       const { join } = await import('node:path');
       const directory = await mkdtemp(join(tmpdir(), 'cellucid-docs-'));
       const fixture = await write(directory);
-      await holdTimers(page);
       await page.locator('#user-data-h5ad-input').setInputFiles(fixture);
       await page.waitForFunction(
         needle => (
@@ -2540,15 +2779,18 @@ function buildDataLoadingRefusalScenarios() {
       settle: REFUSAL_SETTLE,
     },
 
-    // ------------------------------------- a valid `.h5ad` with no embedding
+    // ------------------------------------------ a valid `.h5ad` with no UMAP
+    // The file opens on a best guess. The notification stays until it is
+    // dismissed, so it is photographed on its own, Show button included.
     {
-      id: 'loading-refusal-missing-umap-embedding',
+      id: 'loading-best-guess-notification',
       topic: 'data_loading',
-      name: 'fail-missing-umap-embedding',
+      name: 'best-guess-notification',
       describes:
-        'A Cellucid notification reading "No exact UMAP embedding found in '
-        + 'obsm. Expected one or more of X_umap_1d, X_umap_2d, or X_umap_3d. '
-        + 'Available obsm keys: X_pca.", with a dismiss button at its right.',
+        'A Cellucid notification reading "This file has no default UMAP '
+        + '(X_umap_1d, X_umap_2d, X_umap_3d or X_umap). Showing \'X_pca\' as 2D. Change '
+        + 'it under Session › Data mapping.", with a Show button under the '
+        + 'text and a dismiss button at its right.',
       dataset: 'pancreas',
       steps: [
         ...AT_LOCAL_CONTROLS,
@@ -2562,11 +2804,783 @@ function buildDataLoadingRefusalScenarios() {
               'pca-only.h5ad'
             );
           },
-          'No exact UMAP embedding found in obsm'
+          'This file has no default UMAP'
         ),
       ],
-      shot: { mode: 'element', selector: '#notification-center', padding: 10 },
+      shot: {
+        mode: 'element',
+        selector: '#notification-center .notification:has(.notification-action)',
+        padding: 10,
+      },
       settle: REFUSAL_SETTLE,
+    },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Highlighting and selection: f_highlighting_selection.
+//
+// Every figure is a real gesture on the Pancreas sample, made the way the
+// pages tell a reader to make it: a tool button, then `Alt` held while the
+// mouse presses, drags and releases over the plot. The 2D embedding is used
+// because a flat projection makes the geometry of a gesture legible, and the
+// gestures are fixed CSS coordinates in the fixed 1440x1000 viewport over that
+// fixed view. A coordinate is only as good as the camera it was measured
+// against, so every gesture that completes asserts the step readout the panel
+// writes for it (`Step 1: 842 cells`, `Step 1: 591 cells`, …) and every
+// gesture that is photographed mid-drag asserts the drag class the renderer
+// puts on the canvas. A moved default camera therefore fails the capture
+// instead of photographing a different selection under an unchanged caption.
+// ---------------------------------------------------------------------------
+
+/**
+ * The one lasso every lasso figure draws, as viewport CSS points: an ellipse
+ * of 36 segments around the upper part of the left lobe of the 2D embedding
+ * (mostly Ductal cells), starting at its lower-left and running clockwise.
+ * The whole loop encloses 842 cells.
+ *
+ * @param {number} fraction how much of the loop has been drawn, 0..1
+ * @returns {Array<{x: number, y: number}>}
+ */
+function highlightLassoPath(fraction) {
+  const centerX = 440;
+  const centerY = 390;
+  const radiusX = 120;
+  const radiusY = 165;
+  const segments = 36;
+  const start = 0.75 * Math.PI;
+  const points = [];
+  for (let index = 0; index <= Math.round(segments * fraction); index += 1) {
+    const angle = start + (2 * Math.PI * index) / segments;
+    points.push({
+      x: Math.round(centerX + radiusX * Math.cos(angle)),
+      y: Math.round(centerY + radiusY * Math.sin(angle)),
+    });
+  }
+  return points;
+}
+
+/**
+ * A straight drag as twelve evenly spaced pointer positions.
+ *
+ * @param {{x: number, y: number}} from
+ * @param {{x: number, y: number}} to
+ */
+function highlightDragPath(from, to) {
+  const points = [];
+  for (let index = 0; index <= 12; index += 1) {
+    points.push({
+      x: Math.round(from.x + ((to.x - from.x) * index) / 12),
+      y: Math.round(from.y + ((to.y - from.y) * index) / 12),
+    });
+  }
+  return points;
+}
+
+/**
+ * Hold `Alt`, press at the first point and move through the rest — the
+ * gesture every highlight tool reads. `release: false` leaves the button and
+ * `Alt` held, which is how a figure shows a gesture in progress: the preview
+ * the renderer paints while dragging exists only while the button is down.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {Array<{x: number, y: number}>} path
+ * @param {{release: boolean}} options
+ */
+async function altGesture(page, path, { release }) {
+  const [first, ...rest] = path;
+  await page.mouse.move(first.x, first.y);
+  await page.keyboard.down('Alt');
+  await page.mouse.down();
+  for (const point of rest) {
+    await page.mouse.move(point.x, point.y, { steps: 3 });
+  }
+  if (release) {
+    await page.mouse.up();
+    await page.keyboard.up('Alt');
+  }
+}
+
+/**
+ * Draw the pointer glyph where a canvas gesture is, plus any rings.
+ *
+ * `capture.mjs`'s own `cursor` field anchors to an element and, for `press`,
+ * issues a real `mouse.down()`. A gesture on the canvas is neither: its point
+ * is a coordinate in the plot, and the button is either already held (a
+ * second press would restart the gesture) or already released (a fresh
+ * press would start a new one). So the glyph is painted here, with the same
+ * overlay code, at the coordinate the gesture actually used, and the real
+ * pointer is left exactly where the gesture left it.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {{x: number, y: number}} point
+ * @param {Array<{on: string, label?: string}>} [rings]
+ */
+async function paintGesturePointer(page, point, rings = []) {
+  const ringRects = [];
+  for (const ring of rings) {
+    const box = await page.locator(ring.on).first().boundingBox();
+    if (box === null || box.width <= 0 || box.height <= 0) {
+      throw new Error(`Ring selector has no painted area: ${ring.on}`);
+    }
+    ringRects.push({ ...box, label: ring.label ?? null });
+  }
+  await page.evaluate(paintOverlay, {
+    rootId: OVERLAY_ROOT_ID,
+    cursor: { x: point.x, y: point.y, state: 'press' },
+    rings: ringRects,
+  });
+}
+
+/**
+ * Pin the highlight glow, the one animation a highlight figure cannot settle.
+ *
+ * Highlighted and preview cells are drawn with a glow that pulses on the
+ * shader uniform `u_time` (`0.5 + 0.5 * sin(u_time * 4.0)` in the web app's
+ * `high-perf-shaders.js`), fed from `performance.now()` minus the moment the
+ * highlight renderer was built. No two frames agree, so the settle loop never
+ * converges, and a frame-pinned capture is no better: the phase depends on
+ * how long startup took on the capture host. So the uniform, and only that
+ * uniform, is held at zero — the midpoint of the pulse. It is the same kind of
+ * intervention as the seeded `Math.random`: the clock the app reads for
+ * everything else, its timers, and every other uniform are untouched.
+ *
+ * @param {{context: import('@playwright/test').BrowserContext}} options
+ */
+function pinHighlightGlow({ context }) {
+  return context.addInitScript(pinShaderTimeInPage);
+}
+
+/** The page-side half of `pinHighlightGlow`; serialised, closes over nothing. */
+function pinShaderTimeInPage() {
+  const timeLocations = new WeakSet();
+  for (const Context of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) {
+    if (Context === undefined) continue;
+    const getUniformLocation = Context.prototype.getUniformLocation;
+    const uniform1f = Context.prototype.uniform1f;
+    Context.prototype.getUniformLocation = function (program, name) {
+      const location = getUniformLocation.call(this, program, name);
+      if (name === 'u_time' && location !== null) timeLocations.add(location);
+      return location;
+    };
+    Context.prototype.uniform1f = function (location, value) {
+      return uniform1f.call(this, location, timeLocations.has(location) ? 0 : value);
+    };
+  }
+}
+
+/** @returns {Array<Object>} */
+function buildHighlightingScenarios() {
+  // Open on first load and not the subject; collapsed so the panel fits.
+  // Declared here, not beside the helpers: `SCENARIOS` calls this builder
+  // while the module is still initialising, before a later top-level
+  // `const` exists.
+  const NON_HIGHLIGHT_SECTIONS = [
+    '#session-section',
+    '#visualization-section',
+    '#compare-views-section',
+    '#coloring-filtering-section',
+    '#page-analysis-section',
+  ];
+  const PANEL = { mode: 'element', selector: '#highlighted-cells-section', padding: 6 };
+  const WINDOW = { mode: 'window' };
+  const settle = { attempts: 20, gapMs: 220 };
+  const readout = text => ({ waitForText: '#highlight-mode-description', text });
+
+  const LASSO_END = highlightLassoPath(0.8).at(-1);
+  const BETA_CELL = { x: 1040, y: 225 };
+  const EMPTY_SPACE = { x: 860, y: 250 };
+  const SEED = { x: 440, y: 420 };
+  // Proximity drags outward and KNN drags up, by the same 112 px, from the
+  // same seed cell, so the two figures compare like with like.
+  const PROXIMITY_END = { x: 540, y: 470 };
+  const KNN_END = { x: 440, y: 308 };
+
+  /**
+   * Pancreas, flat 2D view in Planar navigation, the given colouring, and
+   * every other open section collapsed so Highlighting sits whole in the
+   * window. Showing UMAP · 2D moves the view to Planar; waiting for that
+   * and then for the notification center to drain is what makes the view
+   * final before the first coordinate is used.
+   */
+  const ready2d = field => [
+    PANCREAS_READY,
+    { waitForStable: '#categorical-field' },
+    { select: '#categorical-field', label: field },
+    {
+      waitForText: '#stats',
+      text: field === 'None' ? 'Field: None' : `Field: ${field} (category)`,
+    },
+    { openSection: '#compare-views-section' },
+    { waitForStable: '#view-representation-select' },
+    { select: '#view-representation-select', label: 'UMAP · 2D' },
+    { run: page => page.waitForFunction(
+      () => document.querySelector('#navigation-mode')?.value === 'planar'
+    ) },
+    ...NON_HIGHLIGHT_SECTIONS.map(selector => ({ closeSection: selector })),
+    NOTIFICATIONS_DRAINED,
+  ];
+  const READY = ready2d('cell_type');
+
+  const LASSO_RELEASED = [
+    ...READY,
+    { click: '#highlight-mode-lasso' },
+    { run: page => altGesture(page, highlightLassoPath(1), { release: true }) },
+    readout('Step 1: 842 cells'),
+  ];
+  const LASSO_CONFIRMED = [
+    ...LASSO_RELEASED,
+    { click: '#lasso-confirm-btn' },
+    { waitForText: '#highlight-count', text: '842 cells highlighted' },
+    // Off the panel, so no control keeps the hover styling of the click.
+    { run: page => page.mouse.move(1300, 940) },
+  ];
+  const ANNOTATION_CLICKED = [
+    ...READY,
+    { run: page => altGesture(page, [BETA_CELL], { release: true }) },
+    readout('Step 1: 591 cells'),
+  ];
+
+  return [
+    {
+      id: 'highlighting-choose-mode',
+      topic: 'highlighting_selection',
+      name: 'choose-highlight-mode',
+      describes:
+        'The Highlighting panel before anything is selected: the four Highlight '
+        + 'mode buttons — Annotation based (active), KNN drag, Proximity drag and '
+        + 'Lasso — ringed, with the pointer on Lasso; below a dashed divider the '
+        + 'Select mode switch, off, with the hint "tap, click or drag selects '
+        + 'without Alt"; the Annotation based help text; one page tab reading '
+        + 'Page 1 (0); and the empty group list reading "No cells highlighted".',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [...READY, { scrollIntoView: '#highlighted-cells-section' }],
+      shot: PANEL,
+      cursor: { on: '#highlight-mode-lasso', at: 'center', state: 'hover' },
+      rings: [{ on: '#highlight-mode', label: '1' }],
+      settle,
+    },
+    {
+      id: 'highlighting-lasso-draw',
+      topic: 'highlighting_selection',
+      name: '01-draw-lasso',
+      describes:
+        'The 2D planar Pancreas embedding mid-lasso: Alt is held, the pointer '
+        + 'is pressed at the end of a dotted path drawn most of the way round the '
+        + 'upper part of the left lobe, and the cells the path already encloses '
+        + 'are drawn in the highlight colour while the step readout has not yet '
+        + 'appeared.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...READY,
+        { click: '#highlight-mode-lasso' },
+        { run: page => altGesture(page, highlightLassoPath(0.8), { release: false }) },
+        { waitFor: '#glcanvas.lassoing' },
+        { run: page => paintGesturePointer(page, LASSO_END) },
+      ],
+      shot: WINDOW,
+      settle,
+    },
+    {
+      id: 'highlighting-lasso-step',
+      topic: 'highlighting_selection',
+      name: '02-review-lasso-step',
+      describes:
+        'The Highlighting panel after the lasso was released, showing the step '
+        + 'readout "Step 1: 842 cells" with the help line "Alt to intersect, '
+        + 'Shift+Alt to add, Ctrl+Alt to subtract", and the ringed Confirm, undo, '
+        + 'redo and Cancel step controls with the pointer on Confirm; the page '
+        + 'tab still reads Page 1 (0) and the list still reads "No cells '
+        + 'highlighted".',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [...LASSO_RELEASED, { scrollIntoView: '#highlighted-cells-section' }],
+      shot: PANEL,
+      cursor: { on: '#lasso-confirm-btn', at: 'center', state: 'hover' },
+      rings: [{ on: '#lasso-step-controls', label: '2' }],
+      settle,
+    },
+    {
+      id: 'highlighting-lasso-confirmed',
+      topic: 'highlighting_selection',
+      name: '03-confirm-lasso-group',
+      describes:
+        'The Highlighting panel after Confirm: the page tab reads Page 1 842, '
+        + 'and the ringed group list shows the summary "842 cells highlighted", a '
+        + 'Clear button, and one group row labelled "Lasso (842 cells) (842)" '
+        + 'with a checkbox and a remove control.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [...LASSO_CONFIRMED, { scrollIntoView: '#highlighted-cells-section' }],
+      shot: PANEL,
+      rings: [{ on: '#highlighted-groups', label: '3' }],
+      settle,
+    },
+    {
+      id: 'highlighting-lasso-result-window',
+      topic: 'highlighting_selection',
+      name: '04-view-highlighted-cells',
+      describes:
+        'The whole window after confirming the lasso group: the 842 enclosed '
+        + 'cells in the upper part of the left lobe are drawn in the highlight '
+        + 'colour, and the Highlighting panel reports 842 cells highlighted with '
+        + 'one Lasso group.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: LASSO_CONFIRMED,
+      shot: WINDOW,
+      settle,
+    },
+    {
+      id: 'highlighting-annotation-click',
+      topic: 'highlighting_selection',
+      name: 'select-category-by-click',
+      describes:
+        'Annotation based selection after Alt+click on one cell at the tip of '
+        + 'the green Beta arm: all 591 Beta cells are drawn in the highlight '
+        + 'colour, and the panel reads "Step 1: 591 cells" with the help line '
+        + '"Alt to replace, Shift+Alt to add, Ctrl+Alt to subtract" above the '
+        + 'Confirm, undo, redo and Cancel controls.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...ANNOTATION_CLICKED,
+        { run: page => paintGesturePointer(page, BETA_CELL) },
+      ],
+      shot: WINDOW,
+      settle,
+    },
+    {
+      id: 'highlighting-proximity-drag',
+      topic: 'highlighting_selection',
+      name: 'drag-proximity-radius',
+      describes:
+        'Proximity drag mid-gesture on the 2D embedding: a dashed circle '
+        + 'centred on a dot at the seed cell in the left lobe, the cells inside '
+        + 'it drawn in the highlight colour, the pointer pressed on the circle\'s '
+        + 'edge, and the panel still showing the Proximity drag help text.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...READY,
+        { click: '#highlight-mode-proximity' },
+        {
+          run: page => altGesture(
+            page, highlightDragPath(SEED, PROXIMITY_END), { release: false }
+          ),
+        },
+        { waitFor: '#glcanvas.proximity-dragging' },
+        { run: page => paintGesturePointer(page, PROXIMITY_END) },
+      ],
+      shot: WINDOW,
+      settle,
+    },
+    {
+      id: 'highlighting-knn-drag',
+      topic: 'highlighting_selection',
+      name: 'drag-knn-degree',
+      describes:
+        'KNN drag mid-gesture from the same seed cell, dragged upward by the '
+        + 'same distance: a small dashed circle labelled 3° around the seed, and '
+        + 'the highlighted cells spreading through the left lobe along the '
+        + 'neighbour graph rather than filling a disc, with the pointer pressed '
+        + 'above the seed.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...READY,
+        { click: '#highlight-mode-knn' },
+        // Entering KNN mode loads the neighbour graph if it is not loaded yet,
+        // under a "Loading neighbor graph" notification, and a press made
+        // before it lands only starts that load. Draining the notification
+        // center waits for the load (and its completion notice) to finish.
+        NOTIFICATIONS_DRAINED,
+        {
+          run: page => altGesture(
+            page, highlightDragPath(SEED, KNN_END), { release: false }
+          ),
+        },
+        { waitFor: '#glcanvas.knn-dragging' },
+        { run: page => paintGesturePointer(page, KNN_END) },
+      ],
+      shot: WINDOW,
+      settle,
+    },
+    {
+      id: 'highlighting-two-pages',
+      topic: 'highlighting_selection',
+      name: 'compare-highlight-pages',
+      describes:
+        'The Highlighting panel with two page tabs ringed — Page 1 with a blue '
+        + 'swatch carrying 842, and the active Page 2 with a red swatch carrying '
+        + '223, each with a combine (⋈) and a delete (×) control — the group list '
+        + 'showing one "Proximity (223 cells) (223)" group, and the pointer on '
+        + 'the button that adds another page.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...LASSO_CONFIRMED,
+        { click: '#add-highlight-page' },
+        { waitForText: '#highlight-pages-tabs', text: 'Page 2' },
+        { click: '#highlight-mode-proximity' },
+        {
+          run: page => altGesture(
+            page,
+            highlightDragPath({ x: 1180, y: 640 }, { x: 1230, y: 670 }),
+            { release: true }
+          ),
+        },
+        readout('Step 1: 223 cells'),
+        { click: '#proximity-confirm-btn' },
+        { waitForText: '#highlight-count', text: '223 cells highlighted' },
+        { scrollIntoView: '#highlighted-cells-section' },
+      ],
+      shot: PANEL,
+      cursor: { on: '#add-highlight-page', at: 'center', state: 'hover' },
+      rings: [{ on: '#highlight-pages-tabs', label: '1' }],
+      settle,
+    },
+    {
+      id: 'highlighting-across-views',
+      topic: 'highlighting_selection',
+      name: 'share-highlight-across-views',
+      describes:
+        'Two 3D panels of the same dataset side by side with the sidebar '
+        + 'collapsed: the left panel at the default close-up camera, the right '
+        + 'panel zoomed out and rotated; the cells confirmed by one lasso drawn '
+        + 'in the left panel are drawn in the highlight colour in both.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        PANCREAS_READY,
+        { waitForStable: '#categorical-field' },
+        { select: '#categorical-field', label: 'cell_type' },
+        { waitForText: '#stats', text: 'Field: cell_type (category)' },
+        { click: '#split-keep-view-btn' },
+        {
+          run: page => page.waitForFunction(() => (
+            document.querySelectorAll('#split-view-badges-list > .split-badge').length === 2
+          )),
+        },
+        // Kept views start with linked cameras; unlinking is what lets the
+        // second panel look from another angle.
+        { click: '#camera-lock-btn' },
+        { waitForText: '#camera-lock-btn', text: 'Unlocked Cam' },
+        { click: '#highlight-mode-lasso' },
+        { click: '#sidebar-toggle' },
+        { waitForText: '#sidebar-toggle', text: '☰' },
+        NOTIFICATIONS_DRAINED,
+        {
+          // Zoom out and orbit the focused right panel only. The pointer
+          // rests before release so no drag velocity is carried past it.
+          run: async page => {
+            await page.mouse.move(1080, 500);
+            for (let notch = 0; notch < 5; notch += 1) {
+              await page.mouse.wheel(0, 300);
+              await page.waitForTimeout(80);
+            }
+            await page.mouse.down();
+            await page.mouse.move(1260, 420, { steps: 15 });
+            await page.waitForTimeout(300);
+            await page.mouse.up();
+          },
+        },
+        // One lasso, in the left panel, around the Ductal flap.
+        {
+          run: page => altGesture(page, [
+            { x: 50, y: 370 }, { x: 200, y: 300 }, { x: 330, y: 285 },
+            { x: 425, y: 330 }, { x: 420, y: 420 }, { x: 300, y: 475 },
+            { x: 180, y: 515 }, { x: 60, y: 430 }, { x: 50, y: 370 },
+          ], { release: true }),
+        },
+        readout('Step 1: 1,204 cells'),
+        { click: '#sidebar-toggle' },
+        { waitForText: '#sidebar-toggle', text: '✕' },
+        { click: '#lasso-confirm-btn' },
+        { waitForText: '#highlight-count', text: '1,204 cells highlighted' },
+        { click: '#sidebar-toggle' },
+        { waitForText: '#sidebar-toggle', text: '☰' },
+        { run: page => page.mouse.move(720, 990) },
+        NOTIFICATIONS_DRAINED,
+      ],
+      shot: WINDOW,
+      settle,
+    },
+    {
+      id: 'highlighting-missed-click-notice',
+      topic: 'highlighting_selection',
+      name: 'read-missed-click-notice',
+      describes:
+        'A proximity Alt+click on empty space: the pointer is pressed above the '
+        + 'embedding where no cell is drawn, and the ringed line in the '
+        + 'Highlighting panel adds "That click did not land on a cell, so there '
+        + 'is nothing to select. Zoom in or raise Point size to make cells easier '
+        + 'to hit: only the cells the viewer is currently drawing can be '
+        + 'clicked." under the '
+        + 'Proximity drag help text.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...READY,
+        { click: '#highlight-mode-proximity' },
+        { run: page => altGesture(page, [EMPTY_SPACE], { release: true }) },
+        readout('That click did not land on a cell'),
+        {
+          run: page => paintGesturePointer(page, EMPTY_SPACE, [
+            { on: '#highlight-mode-description', label: '1' },
+          ]),
+        },
+      ],
+      shot: WINDOW,
+      settle,
+    },
+    {
+      id: 'highlighting-no-active-field-notice',
+      topic: 'highlighting_selection',
+      name: 'read-no-active-field-notice',
+      describes:
+        'The Highlighting panel in Annotation based mode with no coloured '
+        + 'field, with the ringed line "Annotation selection needs an active '
+        + 'field. Choose a Categorical obs or Continuous obs field under Coloring '
+        + '& Filtering, then Alt+click a cell (or tap it in Select mode)." in '
+        + 'place of the usual help text.',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...ready2d('None'),
+        readout('Annotation selection needs an active field'),
+        { scrollIntoView: '#highlighted-cells-section' },
+      ],
+      shot: PANEL,
+      rings: [{ on: '#highlight-mode-description', label: '1' }],
+      settle,
+    },
+    {
+      id: 'highlighting-annotation-step',
+      topic: 'highlighting_selection',
+      name: 'read-annotation-step',
+      describes:
+        'The Highlighting panel after an annotation Alt+click on a Beta cell, '
+        + 'with the ringed step readout "Step 1: 591 cells" and the categorical '
+        + 'help line "Alt to replace, Shift+Alt to add, Ctrl+Alt to subtract".',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [...ANNOTATION_CLICKED, { scrollIntoView: '#highlighted-cells-section' }],
+      shot: PANEL,
+      rings: [{ on: '#highlight-mode-description', label: '1' }],
+      settle,
+    },
+    {
+      id: 'highlighting-named-page',
+      topic: 'highlighting_selection',
+      name: 'highlighting-selected-page',
+      describes:
+        'The Highlighting panel with one page renamed "Left lobe" carrying 842 '
+        + 'cells, the summary "842 cells highlighted", and one group row labelled '
+        + '"Lasso (842 cells) (842)".',
+      dataset: 'pancreas',
+      setup: pinHighlightGlow,
+      steps: [
+        ...LASSO_CONFIRMED,
+        // Rename by double-clicking the tab name, as the UI page documents.
+        { run: page => page.dblclick('.highlight-page-tab-name') },
+        { fill: '.highlight-page-tab-input', value: 'Left lobe' },
+        { press: 'Enter' },
+        { waitForText: '#highlight-pages-tabs', text: 'Left lobe' },
+        // Enter returns focus to the tab; a click on the summary line moves
+        // it off, so the tab is drawn without a keyboard focus ring.
+        { click: '#highlight-count' },
+        { run: page => page.mouse.move(1300, 940) },
+        { scrollIntoView: '#highlighted-cells-section' },
+      ],
+      shot: PANEL,
+      settle,
+    },
+  ];
+}
+
+
+// ---------------------------------------------------------------------------
+// Multiview: c_core_interactions and n_benchmarking_performance.
+//
+// Grid compare lays its panels out in the presented area — the part of the
+// canvas the sidebar does not cover — as equal cells (`resolvePresentedLayout`
+// in the web app's `rendering/viewer/presented-view-layout.js`). These figures
+// exist to show that layout, so each one asserts it before the shutter rather
+// than trusting it: every panel's title chip is centred on the panel it
+// labels, so the chips' centres pin down where the panels are.
+// ---------------------------------------------------------------------------
+
+/** @returns {Array<Object>} */
+function buildMultiviewScenarios() {
+  const settle = { attempts: 20, gapMs: 220 };
+
+  /** Colour the selected view and wait for the stats line to say so. */
+  const colourBy = (select, field, kind) => [
+    { waitForStable: select },
+    { select, label: field },
+    { waitForText: '#stats', text: `Field: ${field} (${kind})` },
+  ];
+
+  /**
+   * Keep view: the live view becomes badge 1 and the new snapshot, badge 2,
+   * is the selected view. The grid exists once both badges and both panel
+   * title chips do.
+   */
+  const KEEP_VIEW = [
+    { click: '#split-keep-view-btn' },
+    {
+      run: page => page.waitForFunction(() => (
+        document.querySelectorAll('#split-view-badges-list > .split-badge').length === 2
+        && document.querySelectorAll('#view-title-layer .view-title-chip').length === 2
+      )),
+    },
+  ];
+
+  /**
+   * The published sample's camera is framed for one full-window view; a panel
+   * a little under half as wide shows the embedding too close. Four wheel
+   * notches over the right panel zoom both panels out (the cameras are locked),
+   * and the pointer then rests in the bottom-left corner of the window, clear of
+   * the embedding and of every control, so nothing in the frame carries hover
+   * styling.
+   */
+  const ZOOM_OUT = {
+    run: async page => {
+      await page.mouse.move(1150, 500);
+      for (let notch = 0; notch < 4; notch += 1) {
+        await page.mouse.wheel(0, 300);
+        await page.waitForTimeout(80);
+      }
+      await page.mouse.move(150, 995);
+    },
+  };
+
+  /**
+   * The layout under test: two equal panels side by side, starting at the
+   * sidebar's right edge when it is open and at the window's left edge when it
+   * is closed. Waiting for it, rather than reading it once, also waits out the
+   * sidebar's open/close slide.
+   */
+  const TWO_EQUAL_PANELS_IN_PRESENTED_AREA = {
+    run: page => page.waitForFunction(() => {
+      const sidebar = document.querySelector('#sidebar');
+      const left = sidebar.classList.contains('hidden')
+        ? 0
+        : Math.ceil(sidebar.getBoundingClientRect().right);
+      const chips = [...document.querySelectorAll('#view-title-layer .view-title-chip')];
+      const panelWidth = (window.innerWidth - left) / chips.length;
+      return chips.length === 2 && chips.every((chip, index) => {
+        const rect = chip.getBoundingClientRect();
+        const centre = rect.left + rect.width / 2;
+        return Math.abs(centre - (left + panelWidth * (index + 0.5))) < 1;
+      });
+    }),
+  };
+
+  /** Scroll the sidebar so one section's header sits at its top edge. */
+  const scrollSidebarTo = selector => ({
+    run: page => page.locator(selector).evaluate(
+      element => element.scrollIntoView({ block: 'start' })
+    ),
+  });
+
+  return [
+    {
+      id: 'core-multiview-two-panels',
+      topic: 'web_app',
+      name: 'multiview-two-panels',
+      describes:
+        'The whole window in Grid compare with the sidebar open: two equal '
+        + 'panels fill the area to the right of the sidebar and show the '
+        + 'Pancreas 3D embedding from the same locked camera — the left panel, '
+        + 'the live view, coloured by cell_type, and the right panel, the kept '
+        + 'snapshot, recoloured by S_score on a Viridis scale — each under a '
+        + 'title chip naming its field. The sidebar, scrolled to Compare Views, '
+        + 'lists badge 1 cell_type and the selected badge 2 S_score above the '
+        + 'Layout select set to Grid compare, and Coloring & Filtering shows '
+        + 'S_score in the Continuous obs select.',
+      dataset: 'pancreas',
+      steps: [
+        PANCREAS_READY,
+        ...colourBy('#categorical-field', 'cell_type', 'category'),
+        ...KEEP_VIEW,
+        // The snapshot is the selected view, so this recolours it alone.
+        ...colourBy('#continuous-field', 'S_score', 'continuous'),
+        { waitForText: '#view-title-layer .view-title-chip.active', text: 'S_score' },
+        ZOOM_OUT,
+        TWO_EQUAL_PANELS_IN_PRESENTED_AREA,
+        scrollSidebarTo('#compare-views-section'),
+        NOTIFICATIONS_DRAINED,
+      ],
+      shot: { mode: 'window' },
+      settle,
+    },
+    {
+      id: 'performance-dark-theme-multiview',
+      topic: 'web_app',
+      name: 'dark-theme-multiview',
+      describes:
+        'The whole window in the dark theme on the Grid (dark) background, in '
+        + 'Grid compare with the sidebar open: two equal panels to the right of '
+        + 'the sidebar show the Pancreas 3D embedding coloured by cell_type from '
+        + 'the same locked camera, each under a cell_type title chip. The '
+        + 'sidebar, scrolled to Visualization, reads Theme Dark and Background '
+        + 'Grid (dark), and Compare Views below it lists the two view badges.',
+      dataset: 'pancreas',
+      theme: 'dark',
+      steps: [
+        PANCREAS_READY,
+        { select: '#theme-select', value: 'dark' },
+        { run: page => page.waitForFunction(() => document.documentElement.dataset.theme === 'dark') },
+        { select: '#background-select', value: 'grid-dark' },
+        ...colourBy('#categorical-field', 'cell_type', 'category'),
+        ...KEEP_VIEW,
+        ZOOM_OUT,
+        TWO_EQUAL_PANELS_IN_PRESENTED_AREA,
+        scrollSidebarTo('#visualization-section'),
+        NOTIFICATIONS_DRAINED,
+      ],
+      shot: { mode: 'window' },
+      settle,
+    },
+    {
+      id: 'core-connectivity-multiview',
+      topic: 'web_app',
+      name: 'connectivity-multiview',
+      describes:
+        'Two equal panels filling the whole window with the sidebar closed, '
+        + 'both showing the Pancreas 3D embedding coloured by cell_type from the '
+        + 'same locked camera, and in both the KNN connectivity edges, drawn at '
+        + 'line width 2.0, form a grey web between the cells.',
+      dataset: 'pancreas',
+      steps: [
+        PANCREAS_READY,
+        ...colourBy('#categorical-field', 'cell_type', 'category'),
+        ...KEEP_VIEW,
+        // Turned on after the snapshot exists and while it is the selected
+        // view, so edges in the live panel show the setting reaching it too.
+        { run: page => page.check('#toggle-connectivity') },
+        { waitForText: '#connectivity-info', text: '33k total · 33k visible · 33k shown' },
+        // Thicker than the 1.0 default so the edges survive the page's
+        // downscale; the alt text names the width.
+        {
+          run: async page => {
+            await page.fill('#connectivity-width', '20');
+            await page.dispatchEvent('#connectivity-width', 'change');
+          },
+        },
+        { waitForText: '#connectivity-width-display', text: '2.0' },
+        { click: '#sidebar-toggle' },
+        { waitForText: '#sidebar-toggle', text: '☰' },
+        ZOOM_OUT,
+        TWO_EQUAL_PANELS_IN_PRESENTED_AREA,
+        NOTIFICATIONS_DRAINED,
+      ],
+      shot: { mode: 'window' },
+      settle,
     },
   ];
 }

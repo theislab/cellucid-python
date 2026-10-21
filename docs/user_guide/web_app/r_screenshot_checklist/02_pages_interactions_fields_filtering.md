@@ -35,18 +35,18 @@ which is a legitimate single use.
 
 ## Current inventory
 
-### `c_core_interactions/` — 26 blocks, 15 distinct images
+### `c_core_interactions/` — 28 blocks, 16 distinct images
 
 | Page | Blocks | Images |
 | --- | ---: | --- |
 | section index | 1 | `navigation-controls-orbit` |
 | {doc}`/user_guide/web_app/c_core_interactions/01_navigation_modes_orbit_planar_free_fly` | 3 | `navigation-controls-orbit`, `-planar`, `-freefly` |
 | {doc}`/user_guide/web_app/c_core_interactions/02_camera_controls_advanced` | 2 | `navigation-controls-freefly`, `camera-path-configured-panel` |
-| {doc}`/user_guide/web_app/c_core_interactions/03_render_modes_points_vs_volumetric_smoke` | 1 | `render-mode-select` |
+| {doc}`/user_guide/web_app/c_core_interactions/03_render_modes_points_vs_volumetric_smoke` | 2 | `render-mode-select`, `window-smoke-cloud` |
 | {doc}`/user_guide/web_app/c_core_interactions/04_view_layout_live_snapshots_small_multiples` | 1 | `multiview-two-panels` |
 | {doc}`/user_guide/web_app/c_core_interactions/05_dimension_switching_1d_2d_3d` | 3 | `window-dimension-1d`, `-2d`, `-3d` |
 | {doc}`/user_guide/web_app/c_core_interactions/06_troubleshooting_core_interactions` | **0** | — |
-| `07_screenshots.md` | 15 | the section's gallery |
+| `07_screenshots.md` | 16 | the section's gallery |
 
 ### `d_fields_coloring_legends/` — 25 blocks, 11 distinct images
 
@@ -82,15 +82,21 @@ Confirmed against the tree, not inherited from the original audit.
    `*-before`/`*-after` pair under `_static/screenshots/`. The three
    `navigation-controls-*` stills show the *control panels*, not the motion the
    page is about, so the "why did the wrong view move" gap is still open.
-3. **Thirteen images in these sections have no provenance record**, so
-   `node capture.mjs check` cannot re-verify them — 12 under `web_app/`
+3. **Ten images in these sections have no provenance record**, so
+   `node capture.mjs check` cannot re-verify them — 9 under `web_app/`
    (`app-overview-cell-type`, `camera-path-configured-panel`,
    `camera-path-transport-visible`, `camera-path-unconfigured`,
-   `connectivity-edges-controls`, `connectivity-multiview`,
-   `dark-theme-multiview`, `dimension-2d-planar-default`,
-   `dimension-navigation-controls-2d`, `multiview-two-panels`,
-   `startup-loaded-build`, `welcome-startup`) and one under `filtering/`
+   `connectivity-edges-controls`, `dimension-2d-planar-default`,
+   `dimension-navigation-controls-2d`, `startup-loaded-build`,
+   `welcome-startup`) and one under `filtering/`
    (`coloring-filtering-cell-type-panel`). They predate the capture tool.
+   The three multiview frames that used to be on this list —
+   `multiview-two-panels`, `connectivity-multiview` and
+   `dark-theme-multiview` — went stale when Grid compare moved its panels out
+   from under the sidebar, and were recaptured on `pancreas` by
+   `buildMultiviewScenarios()` (`core-multiview-two-panels`,
+   `core-connectivity-multiview`, `performance-dark-theme-multiview`), so they
+   now carry provenance.
    `tests/test_docs_current_api_contract.py::test_screenshot_provenance_records_describe_the_published_images`
    holds the total across all topics at a number that may only decrease.
 4. **KNN Connectivity has UI, working controls on all five samples and two
@@ -101,9 +107,19 @@ Confirmed against the tree, not inherited from the original audit.
 
 ### Resolved since the audit
 
-- **Dimension switching and navigation mode** — `c_/05` now documents that a
-  mode you chose yourself survives a dimension change, matching
-  `viewer-contracts.js:27 getDefaultNavigationMode`.
+- **Dimension switching and navigation mode** — `c_/01` and `c_/05` now
+  document that each view owns its camera and mode, that a mode you chose is
+  remembered per view and dimension, and that the default follows the
+  dimension of the embedding the view shows
+  (`viewer-contracts.js getDefaultNavigationMode`).
+- **Multi-representation interface** — the Dimension dropdown and the
+  `Compare views › Embedding` menu are gone: each view shows one embedding,
+  chosen in `View N shows` (`#view-representation-select`), and keys 1, 2 and 3
+  show a dimension's default, then cycle. Every frame captured before that
+  (`window-dimension-1d/-2d/-3d`, `multiview-two-panels`,
+  `connectivity-multiview`, `dimension-2d-planar-default`,
+  `dimension-navigation-controls-2d`, `dark-theme-multiview`) shows the
+  earlier interface; their captions say so until they are recaptured.
 - **`(restored)` suffix** — both `d_/02:221` and `d_/05:392` now state plainly
   that no such suffix exists, matching `overlay-public.js`.
 - **`Use log scale`** — corrected to the app's actual label `Log color scale`
@@ -126,6 +142,12 @@ node. To photograph one panel, crop the canvas region or set
 `Layout: Edit selected view` so the panel fills the canvas. Never write a
 capture scenario that crops to a per-panel selector.
 
+`Grid compare` lays the panels out in the part of the canvas the sidebar does
+not cover, as equal cells starting at the sidebar's right edge (the whole width
+when the sidebar is closed). The one DOM anchor per panel is its title chip in
+`#view-title-layer`, centred on the panel it labels; `buildMultiviewScenarios()`
+asserts the panel geometry through those chips before every multiview capture.
+
 ### DOM crop targets
 
 All forty confirmed present in `cellucid/index.html`:
@@ -134,8 +156,8 @@ All forty confirmed present in `cellucid/index.html`:
 `#smoke-controls` · `#points-controls` · `#connectivity-controls` ·
 `#compare-views-section` · `#split-view-controls` · `#split-keep-view-btn` ·
 `#camera-lock-btn` · `#split-view-badges-box` · `#split-view-badges-list` ·
-`#view-layout-mode` · `#split-clear-btn` · `#dimension-controls` ·
-`#dimension-select` · `#navigation-controls` · `#navigation-mode` ·
+`#view-layout-mode` · `#split-clear-btn` · `#representation-controls` ·
+`#view-representation-select` · `#navigation-controls` · `#navigation-mode` ·
 `#orbit-controls` · `#planar-controls` · `#freefly-controls` · `#reset-camera-btn` ·
 `#coloring-filtering-section` · `#categorical-field-row` · `#continuous-field-row` ·
 `#gene-expression-row` · `#gene-expression-dropdown` · `#display-options-container` ·
@@ -146,7 +168,7 @@ All forty confirmed present in `cellucid/index.html`:
 
 ### Dataset facts
 
-Read from `cellucid-datasets/exports/*/dataset_identity.json`:
+Read from `cellucid-datasets/exports-v3/*/dataset_identity.json`:
 
 | Sample id | Cells | Genes | Dimensions | Default | Connectivity | Useful fields |
 | --- | ---: | ---: | --- | ---: | --- | --- |

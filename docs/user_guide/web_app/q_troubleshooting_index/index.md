@@ -41,6 +41,10 @@ identifies the cause on its own.
 A full-screen card headed **“Cellucid could not start”** means the application
 never reached a usable state. The line beneath it is the reason and the footer
 asks you to correct the launch configuration or server response and reload.
+Below that, **Open Cellucid without this link’s settings** (shown when the
+address carried launch settings such as `?dataset=` or `?remote=`) reopens the
+app as it starts by default, and **Troubleshooting data loading** opens
+{doc}`../b_data_loading/08_troubleshooting_data_loading`.
 
 | The reason says | What it means | Go to |
 |---|---|---|
@@ -61,7 +65,7 @@ distinction is the single most useful thing on this page.
 | The message contains | Cause | What to do |
 |---|---|---|
 | **“was cancelled”** | The request was aborted — you switched datasets, disconnected, or navigated away mid-load. **Nothing is wrong.** | Retry the load. If it cancels on its own, something else is switching the source underneath you. |
-| **“is larger than the metadata size ceiling”** | A size limit was hit, not a corrupt file | See {ref}`size-limits` below |
+| **“is longer than the longest text this browser can hold”** | A metadata file is bigger than any browser can parse, not a corrupt file | See {ref}`size-limits` below |
 | **“response body transfer failed”** | The connection dropped partway through | Network, VPN, proxy or a server that closed early. Retry, then check the server. |
 | **“must contain valid JSON”** | Genuinely malformed content — this now means what it says | The file is not what it claims to be. {doc}`../b_data_loading/08_troubleshooting_data_loading` |
 
@@ -109,25 +113,19 @@ through it.
 (size-limits)=
 ### It says something exceeded a limit
 
-Browser tabs have finite memory, so Cellucid refuses work it cannot finish
-rather than crashing halfway. Every one of these is a deliberate refusal with a
-fixed ceiling.
+Cellucid has no fixed size ceilings: a prepared export, a direct `.h5ad` or
+Zarr file and their metadata load at any size. What remains are the limits of
+the browser itself, and each is reported by name rather than as a crash:
 
-| Limit | Applies to |
-|---|---|
-| **512 MiB** | one direct-in-browser `.h5ad` file; any single materialised array; a declared payload; a Zarr array; the connectivity working set |
-| **64 MiB** | one metadata JSON document; one decoded Zarr chunk |
-| **4 MiB** | Zarr metadata |
-| **64 GiB** | a Zarr ZIP archive, and its total uncompressed size |
-
-The fix is almost always the same: **stop loading it in the browser**. Use
-{doc}`../b_data_loading/04_server_tutorial` for large `.h5ad` or `.zarr`, or
-prepare an export with the Python or R package.
-
-:::{note}
-Several of these messages print the ceiling as a raw byte count —
-`67108864` is 64 MiB, `536870912` is 512 MiB, `68719476736` is 64 GiB.
-:::
+- **An array the browser cannot allocate** is refused as too large, naming the
+  bytes it needed. Close other tabs, or use
+  {doc}`../b_data_loading/04_server_tutorial`, where Python holds the data and
+  the browser receives only what it asks for.
+- **A metadata document longer than the browser's longest text** (about half a
+  billion characters) cannot be parsed by any reader; the message names the
+  file.
+- **A session file frame** holds at most 4 GiB − 1 bytes, the session format's
+  own limit.
 
 ---
 
@@ -135,11 +133,12 @@ Several of these messages print the ceiling as a raw byte count —
 
 | The message says | What it means | Go to |
 |---|---|---|
-| “That click did not land on a cell, so there is nothing to select. Zoom in to make cells easier to hit: only the cells the viewer is currently drawing can be clicked.” | Picking searches a fixed radius around the ray in data space. It has nothing to do with how big the points look, so **changing Point size will not help** — zooming will, and so will turning off level of detail | {doc}`../f_highlighting_selection/06_troubleshooting_highlighting` |
-| “That cell has no value on the active field, so there is nothing to select.” | The cell is real but missing on the field you are colouring by | {doc}`../d_fields_coloring_legends/03_color_by_behavior` |
+| “That click did not land on a cell, so there is nothing to select. Zoom in or raise Point size to make cells easier to hit: only the cells the viewer is currently drawing can be clicked.” | A click hits the dot drawn under the pointer, at its drawn size, plus a few pixels of slack. Zooming in, raising **Point size**, or turning off level of detail all make cells easier to hit | {doc}`../f_highlighting_selection/06_troubleshooting_highlighting` |
+| “That cell has no value on that panel's field, so there is nothing to select.” | The cell is real but missing on the field the panel you pressed is coloured by | {doc}`../d_fields_coloring_legends/03_color_by_behavior` |
+| “That panel is not colored by a field, so there is nothing to select.” | The panel you pressed has no colour-by field; an annotation gesture reads the pressed panel's field, not the focused view's | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
 | “That gesture ended outside the view, so nothing was selected.” | The drag was released off the panel | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
 | “That gesture did not change the selection.” | The gesture worked; it just selected what was already selected | — |
-| “Annotation selection needs an active field.” | Choose a categorical or continuous obs field first | {doc}`../d_fields_coloring_legends/02_field_selector_ux` |
+| “Color by a field first (Coloring & filtering), then Alt+click a cell.” | No panel on screen is colored by a field; choose a categorical or continuous obs field first | {doc}`../d_fields_coloring_legends/02_field_selector_ux` |
 
 :::{warning}
 If you find advice anywhere telling you to **raise Point size so clicks land**,
@@ -155,7 +154,8 @@ is fixed. Zoom in instead.
 |---|---|---|
 | **“WebGL Context Lost”** dialog, “WebGL context lost. Reload required to continue.”, with a **Reload** button | The GPU dropped the context, usually from memory pressure. A reload is genuinely required — the viewer does not resume from a restored context | {doc}`../n_benchmarking_performance/07_troubleshooting_performance` |
 | “WebGL context restored, but Cellucid requires a reload…” | Your browser handed the context back; Cellucid still needs a reload | Reload |
-| “Smoke rendering failed: …” / “Smoke density could not be built: …” | Volumetric rendering could not run; the view keeps drawing points | {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` |
+| “Volumetric smoke isn't available on this device: …” (titled **Volumetric smoke unavailable**) | This browser's graphics driver lacks something the smoke cloud needs, most often float blending (iPhone/iPad Safari, many Android browsers); the view stays in Points | {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` |
+| “Volumetric smoke could not be built. Points rendering works as usual.” / “Volumetric smoke stopped rendering, so the view is back in Points.” | A smoke build or frame failed; the view is in Points and the technical detail is in the browser console | {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` |
 | “Volumetric smoke requires a single view. Clear snapshots first.” | Smoke mode is single-view only | {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples` |
 | “Velocity overlay unavailable” | The overlay could not be built for this dataset or dimension | {doc}`../i_vector_field_velocity/07_troubleshooting_velocity_overlay` |
 
@@ -235,11 +235,21 @@ readers announce this, and each control is described by that line.
 
 So:
 
-- **Greyed out for a moment on a slow start** — expected. Wait.
+- **Greyed out for a moment on a slow start** — expected. Wait. They open as
+  soon as the dataset catalog has been read; they do not wait for the first
+  dataset to load, and anything you choose while it loads replaces it (see
+  {ref}`changing-dataset-while-loading`).
 - **A click that did nothing at all** — this should no longer be reproducible.
   If it happens, it is a bug worth reporting.
 - **Never becomes ready** — that is a startup failure. Look for the “Cellucid
   could not start” card, or check the console.
+- **The line turns red and reads “Cellucid could not load its code…”** — one of
+  the app's own files failed to download (a dropped connection, a proxy or
+  firewall, a browser extension that blocks requests to this site, or a site
+  update that landed while the page was loading), so nothing could start. Check
+  the connection and reload the page; if it persists, try with extensions
+  disabled. Ad and tracking blockers refusing the usage-analytics files do
+  *not* cause this: analytics is optional and the app starts without it.
 
 ---
 
@@ -380,9 +390,9 @@ Use this section when Cellucid is slow, the canvas is blank, or you see WebGL-re
 1) Confirm WebGL2 is hardware-accelerated: {doc}`../a_orientation/02_system_requirements`  
 2) Make the window smaller. This is the highest-yield single test.
 3) Switch to **Points** render mode while debugging (smoke + heavy overlays can hide root causes).  
-4) Clear snapshots. Then, if you need a comparison, note that the four-view
-   grid is often cheaper than a two-view row —
-   {doc}`../n_benchmarking_performance/06_edge_cases_performance` explains why.
+4) Clear snapshots. Then, if you need a comparison of a large dataset, turn on
+   Level-of-Detail first: every view draws every point again —
+   {doc}`../n_benchmarking_performance/06_edge_cases_performance` explains it.
 5) If you see “WebGL context lost”: reload, then re-try with reduced load.
 
 :::{note}
@@ -415,7 +425,8 @@ Selection/highlighting problems are often mismatches between:
 1) Check **Active filters** (most “missing highlights” are just hidden): {doc}`../e_filtering/07_troubleshooting_filtering`  
 2) Confirm the active highlight page and that the group checkbox is enabled.  
 3) Confirm you are interacting with the intended panel: {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`  
-4) Confirm the tool’s modifier keys (`Alt`, `Shift+Alt`, `Ctrl/Cmd+Alt`).  
+4) Confirm the tool’s modifier keys (`Alt`, `Shift+Alt`, `Ctrl/Cmd+Alt`), or on a
+   touch screen that **Select mode** is on.  
 5) If clicks miss cells, **zoom in** — the pick radius is fixed and only drawn
    cells are hittable. Point size is not the knob.
 

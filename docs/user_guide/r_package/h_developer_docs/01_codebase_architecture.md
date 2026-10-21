@@ -81,12 +81,12 @@ concern, and per publication step.
 At a high level:
 
 1) **Validate embeddings** and infer `n_cells`.
-2) **Normalize embeddings** (center + scale) and write `points_*d.bin`.
+2) **Normalize each embedding** (center + scale) and write `embeddings/<index>_<dim>d.bin`.
 3) Validate/convert `latent_space` and `obs`.
 4) Export optional **vector fields** (scaled with embedding normalization).
 5) Export **obs**:
    - continuous values (float32 or quantized)
-   - categorical codes (uint8/uint16) + outlier quantiles (latent-space)
+   - categorical codes (uint8/uint16/uint32) + outlier quantiles (latent-space)
    - centroids (embedding-space)
    - write `obs_manifest.json`
 6) Export **gene expression** (optional):

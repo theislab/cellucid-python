@@ -1,5 +1,5 @@
 {% set name = "cellucid" %}
-{% set version = "0.9.1" %}
+{% set version = "0.9.4" %}
 # CELLUCID_VERSION
 
 package:
@@ -8,7 +8,7 @@ package:
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/cellucid-{{ version }}.tar.gz
-  sha256: c390218fa0346de9b058ad356725e3a82419ceef68f5501cbf41b37c534d764e
+  sha256: e1c312b93f81ee96f8d78863cc6244c12795790c0560a92ac345ecbc20d4220e
 
 build:
   entry_points:
@@ -52,7 +52,7 @@ about:
   license_family: BSD
   license_file: LICENSE
   dev_url: https://github.com/theislab/cellucid-python
-  doc_url: https://cellucid.readthedocs.io
+  doc_url: https://docs.cellucid.com
 
 extra:
   recipe-maintainers:

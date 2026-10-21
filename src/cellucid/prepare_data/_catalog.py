@@ -16,6 +16,7 @@ from pathlib import Path
 from .._console import console_print
 from .._contracts import (
     _WINDOWS_RESERVED_COMPONENTS,
+    IDENTITY_VERSION,
     _require_dataset_id,
     _require_dataset_name,
     _require_display_text,
@@ -104,8 +105,8 @@ def generate_datasets_manifest(
             raise ValueError(f"{identity_file} must contain readable UTF-8 JSON.") from error
         if not isinstance(identity, dict):
             raise TypeError(f"{identity_file} must contain a JSON object.")
-        if type(identity.get("version")) is not int or identity["version"] != 2:
-            raise ValueError(f"{identity_file} version must be exactly 2.")
+        if type(identity.get("version")) is not int or identity["version"] != IDENTITY_VERSION:
+            raise ValueError(f"{identity_file} version must be exactly {IDENTITY_VERSION}.")
 
         dataset_id = _require_dataset_id(
             identity.get("id"),

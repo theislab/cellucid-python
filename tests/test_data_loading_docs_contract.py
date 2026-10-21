@@ -196,23 +196,23 @@ def test_real_pancreas_server_and_jupyter_evidence_is_wired_into_the_guides() ->
         "      Connectivity: reading obsp['connectivities']",
     ):
         assert step_two_line in server_guide
-    assert "      Centroids: one per categorical field and dimension" in server_guide
+    assert "      Centroids: one per categorical field and embedding" in server_guide
 
     # Both optional capabilities report their own state in step 3, so a reader
     # can tell a graph they own from a graph they lack, and likewise an overlay.
     assert "      Vector fields: no" in server_guide
     assert "      Connectivity: not served (obsp['connectivities'] is present" in server_guide
 
-    # A bare ``X_umap`` is read at the dimension its own column count states.
+    # A bare ``X_umap`` fills the slot of its own column count, a named slot
+    # wins, and only an object the default rule cannot read is guessed.
     # Describing that as anything other than a rule about width invites the
     # reader to rename a key that does not need renaming.
     normalized_server_guide = " ".join(server_guide.split())
-    assert "read at the dimension its own column count states" in normalized_server_guide
-    assert "`X_umap_1d`, `X_umap_2d`, and `X_umap_3d` each name their own dimension" in (
-        normalized_server_guide
-    )
-    assert "A bare `X_umap` of any other width is refused" in normalized_server_guide
-    assert "has shape (4096, 10)" in server_guide
+    assert "fills the slot of its own column count" in normalized_server_guide
+    assert "`--embedding-1d`, `--embedding-2d`, and `--embedding-3d`" in normalized_server_guide
+    assert "deterministic best guess" in normalized_server_guide
+    assert "Error: Cellucid found nothing to plot." in server_guide
+    assert "has shape (4096, 10)" not in server_guide
 
     # Connectivity on the direct-AnnData path is opt-in, and its report has
     # three states rather than two. ``not served`` is the one that goes missing
@@ -220,11 +220,13 @@ def test_real_pancreas_server_and_jupyter_evidence_is_wired_into_the_guides() ->
     assert "Connectivity: yes (35,167 edges)" in server_guide
     assert (
         "Connectivity: not served (obsp['connectivities'] is present; pass "
-        "serve_connectivity=True, or --connectivity, to draw it)"
+        "knn_key='connectivities', or --knn connectivities, to draw it)"
     ) in server_guide
     assert "Connectivity: no`" in server_guide
-    assert "--connectivity" in server_guide
-    assert "serve_connectivity=True" in server_guide
+    assert "--knn connectivities" in server_guide
+    assert 'knn_key="connectivities"' in server_guide
+    assert "serve_connectivity" not in server_guide
+    assert "--connectivity" not in server_guide
     assert "Off by default" in server_guide
     # Any page naming the source-index payload must name the weights too.
     assert "connectivity/edges.src.bin" in server_guide

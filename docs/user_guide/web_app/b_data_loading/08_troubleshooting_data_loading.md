@@ -68,9 +68,17 @@ and the middle clause is the one that identifies the layer:
 | the server refused access | Reached, but not public | Repository visibility |
 | the server rejected the request | Reached, but the request was malformed | Your address |
 | the server reported a problem of its own | Reached; the far side failed | Wait, then retry |
-| what is published there is larger than Cellucid opens in a browser | Reached, readable, valid — and over a browser ceiling | The export size. Serve it instead ({doc}`04_server_tutorial`), or publish a smaller export. The ceilings are tabulated in {doc}`../q_troubleshooting_index/index` |
+| what is published there is larger than Cellucid opens in a browser | Reached, readable, valid — and more than this browser could allocate, or over a metadata ceiling | The export size and the machine's memory. Serve it instead ({doc}`04_server_tutorial`), open it on a machine with more memory, or publish a smaller export. The ceilings are tabulated in {doc}`../q_troubleshooting_index/index` |
 | what is published there is not in a format Cellucid can read | Reached and readable, but not a Cellucid export | Re-export with `prepare()` |
 | nothing readable came back — the connection may have failed, or that address may not hold Cellucid data | Ambiguous: no usable response arrived | Your network *and* your address |
+
+An address the field cannot use never reaches this table. A GitHub path that is
+not `owner/repo/exports`, `owner/repo@branch/exports`, or a GitHub URL, and a
+remote address with a trailing slash, a `?…` query, or no `http(s)://`, are
+refused before any request is made, with one message about the address itself
+(for example `Invalid GitHub path. Use format: owner/repo/exports (or
+owner/repo@branch/exports), or paste a GitHub URL.`). An empty field asks for an
+address the same way.
 
 :::{warning}
 Read the size row and the format row as opposites. *Larger than Cellucid opens
@@ -96,7 +104,7 @@ evidence anyone has. Quote it if you report the problem.
 
 Local file failures use neither shape. They quote the specific defect instead —
 for example `The selected file is not a valid HDF5/H5AD file…` or
-`No UMAP embedding this viewer can read was found in obsm…`.
+`Cellucid found nothing to plot. It needs an obsm array with one row per cell…`.
 
 ---
 
@@ -134,16 +142,15 @@ for example `The selected file is not a valid HDF5/H5AD file…` or
 ### Symptom: “It loads forever / spinner never ends”
 
 :::{note}
-An `.h5ad` **above 512 MiB never gets this far**. It is refused immediately,
-before a byte is read, with `H5AD direct browser files must have a positive safe
-size no larger than 512 MiB; use the Cellucid server or prepared format`. An
-endless spinner therefore means a file under the ceiling that is still too big
-once decompressed — or one of the network causes below.
+A direct `.h5ad` has no size limit and is read from disk as each view needs it,
+so a large file opens in seconds. What can take longer is the first gene of a
+cell-major (CSR) matrix while it is reorganised by gene in the background; a
+progress notice shows how far that is.
 :::
 
 **Likely causes (ordered)**
-1) Large `.h5ad` under 512 MiB loaded directly in the browser (memory pressure
-   from the decompressed matrix).
+1) A very large cell-major (CSR) `.h5ad` opened directly in the browser while
+   its matrix is still being reorganised by gene (watch the progress notice).
 2) Remote server URL is wrong or unreachable.
 3) GitHub raw fetch blocked (corporate firewall/content blocker).
 
@@ -171,46 +178,27 @@ once decompressed — or one of the network causes below.
 
 ---
 
-### Symptom: “No embedding / it says no UMAP”
+### Symptom: “It says Cellucid found nothing to plot”
 
-The two browser readers word this differently, and only one of them tells you
-what your file actually contains.
-
-A **browser-selected `.h5ad`** reports:
-
-```text
-No UMAP embedding this viewer can read was found in obsm. Expected one or more
-of X_umap_1d, X_umap_2d, or X_umap_3d, or a plain X_umap of 1, 2, or 3 columns.
-Available obsm keys: <what your file has>.
-```
-
-A file with an empty `obsm` reads `Available obsm keys: (none).`
-
-A **browser-selected Zarr ZIP** reports the same requirement without the key
-list:
+A browser-selected `.h5ad` or Zarr ZIP without a UMAP is not refused: it opens
+on a best guess (see {doc}`13_data_mapping`). Only a file with no drawable
+`obsm` array at all is refused, with the same message from both readers:
 
 ```text
-AnnData Zarr requires a UMAP embedding in obsm: X_umap_1d, X_umap_2d, or
-X_umap_3d, or a plain X_umap of 1, 2, or 3 columns
+Cellucid found nothing to plot. It needs an obsm array with one row per cell
+(<n_cells>) and at least one numeric column. obsm holds: <each entry>.
 ```
 
-So for a Zarr ZIP, list the keys yourself in Python (`print(adata.obsm.keys())`)
-rather than looking for them in the message.
-
-```{figure} ../../../_static/screenshots/data_loading/fail-missing-umap-embedding.png
-:alt: A Cellucid notification listing the expected X_umap_1d, X_umap_2d and X_umap_3d keys and then the single obsm key the selected file actually contained, X_pca.
-:width: 760px
-
-The trailing list is the useful half: it names the `obsm` keys your file does
-have, so you can see immediately whether the embedding is missing or merely
-named differently. This capture predates the current wording, which also names
-the plain `X_umap` among the keys it accepts; the key list at the end is
-unchanged.
-```
+The list names every `obsm` entry with its shape and, for a dense array, why it
+was not used: `X_df (table)`, `X_sparse (sparse 10,000 × 5)`,
+`spatial (10,000 × 2, NaN at cell 17)`. A file with an empty `obsm` reads
+`obsm holds: nothing.`
 
 **Likely causes**
-- AnnData is missing required `obsm` keys.
-- Export folder is missing `points_2d.bin(.gz)` / `points_3d.bin(.gz)`.
+- AnnData has no dense numeric `obsm` array with one row per cell, or every
+  such array holds a NaN, an infinity, a value too large for 32-bit floats, or
+  the same coordinates for every cell.
+- Export folder is missing its embedding files (`embeddings/` in a format-3 export).
 
 **How to confirm**
 - AnnData (Python):
@@ -219,10 +207,13 @@ unchanged.
   print(adata.obsm.keys())
   ```
 
-- Exports: check that your export folder has at least one `points_*d.bin` file and that `dataset_identity.json["embeddings"]` lists it.
+- Exports: check that every file `dataset_identity.json["embeddings"]` declares exists in the export folder.
 
 **Fix**
-- Compute UMAP and store it in `obsm` under a supported key, or re-export with embeddings.
+- Compute an embedding (for example `sc.tl.umap(adata)`), fix the array the message names, or re-export with embeddings.
+- If the file opens but shows the wrong embedding, turn the one you want on
+  (and make it the default) under **Session › Data mapping**
+  ({doc}`13_data_mapping`), or show it in a view with **View N shows**.
 - Prefer exports for the smoothest experience.
 
 ---
@@ -265,14 +256,26 @@ unchanged.
 - Ensure `obs` is populated before exporting.
 - Re-export with `obs=adata.obs` (and appropriate categorical/continuous handling).
 
+:::{note}
+An `obs` column or gene name that starts or ends with whitespace, or that
+contains a control or zero-width character (`U+200B`, `U+2060`, `U+FEFF`), is
+not a name Cellucid can show exactly. Both writers refuse it, and an `.h5ad` or
+Zarr opened directly is refused when it loads, with a message such as
+`Invalid compact_v2 obs manifest: field name "cell_type " cannot be displayed
+exactly: Field name cannot have leading/trailing whitespace`. Rename the column
+(for example `adata.obs.columns = adata.obs.columns.str.strip()`) and open the
+file again.
+:::
+
 ---
 
 ### Symptom: “Gene search returns nothing / genes are missing”
 
 **Likely causes (ordered)**
-1) No gene expression provided (`adata.X` missing/empty), so there is nothing to query.
+1) No gene expression provided (no `X`, layer or `raw.X`), so there is nothing to query.
 2) The genes were named from the wrong `var` column, so the names you search for are not the ones published.
-3) Data is extremely large and gene fetch is slow (looks like “nothing”).
+3) The matrix in use has another gene list than the one you expect (`raw.X` often holds more genes than `X`).
+4) Data is extremely large and gene fetch is slow (looks like “nothing”).
 
 **How to confirm**
 - AnnData: `print(adata.X is None)`, `print(adata.n_vars)`, `print(adata.var.head())`
@@ -281,6 +284,7 @@ unchanged.
   `var_manifest.json` rather than out of the directory listing.
 
 **Fix**
+- For an `.h5ad`, a Zarr ZIP or a served AnnData, choose the matrix and the gene names under **Session › Data mapping › Genes** (see [Genes and expression](13_data_mapping.md#genes-and-expression)).
 - Provide a valid gene expression matrix, and name the genes from the `var` column your readers will search — `gene_id_column=...` in server/Jupyter mode, `var_gene_id_column=...` when exporting.
 - For very large datasets, use server mode (best reliability): {doc}`04_server_tutorial`
 

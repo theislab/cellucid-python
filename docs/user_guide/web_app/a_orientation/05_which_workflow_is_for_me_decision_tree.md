@@ -9,7 +9,7 @@
 ## The short answer (most common choices)
 
 - If you are a **wet-lab scientist** and someone already exported data for you → load the **Prepared** folder in the web app.
-- If you have your own `.h5ad` **under 512 MiB** and no Python → open it with the
+- If you have your own `.h5ad` and no Python → open it with the
   **H5AD** button in the web app, nothing installed
   ({doc}`../b_data_loading/03_browser_file_picker_tutorial`).
 - If you are a **computational user with AnnData** → use `cellucid-python` (`show_anndata(...)` or `prepare(...); show(...)`).
@@ -27,7 +27,7 @@
 
 1) Do you already have a folder called something like `export/` from a colleague?
    - Yes → use **Local data → Prepared** in the web app.
-   - No, but you have a `.h5ad` under 512 MiB → use **Local data → H5AD**. You
+   - No, but you have a `.h5ad` → use **Local data → H5AD**. You
      do not need Python for this.
    - No → ask a computational colleague to export one, with `cellucid-python`
      or with `cellucid_prepare()` in R. Both write the same folder, so it does
@@ -128,8 +128,8 @@ Choose workflows based on your constraints:
 **How to confirm**
 
 - If you have a folder with files like `dataset_identity.json` and embedding/field binaries → you likely have a prepared export.
-- If you have a `.h5ad` file → use the browser **H5AD** control when it is under
-  512 MiB, otherwise `cellucid serve` or `show_anndata()`
+- If you have a `.h5ad` file → use the browser **H5AD** control, or
+  `cellucid serve` / `show_anndata()` when you work in Python
   ({doc}`../b_data_loading/03_browser_file_picker_tutorial`,
   {doc}`../b_data_loading/04_server_tutorial`).
 - If you have a `.zarr` directory → the browser reads a *packaged* store only,

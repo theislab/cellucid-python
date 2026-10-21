@@ -45,7 +45,7 @@ def _prepared_dataset(root: Path) -> Path:
     (root / "dataset_identity.json").write_text(
         json.dumps(
             {
-                "version": 2,
+                "version": 3,
                 "id": "host-contract",
                 "name": "Host contract",
                 "description": "",
@@ -59,9 +59,16 @@ def _prepared_dataset(root: Path) -> Path:
                     "n_edges": None,
                 },
                 "embeddings": {
-                    "available_dimensions": [2],
                     "default_dimension": 2,
-                    "files": {"2d": "points_2d.bin"},
+                    "defaults": {"2d": "X_umap"},
+                    "items": {
+                        "X_umap": {
+                            "label": "X_umap",
+                            "dimension": 2,
+                            "file": "embeddings/0_2d.bin",
+                            "source": {"key": "X_umap", "columns": [0, 1]},
+                        }
+                    },
                 },
                 "obs_fields": [],
                 "export_settings": {
@@ -77,7 +84,7 @@ def _prepared_dataset(root: Path) -> Path:
     (root / "obs_manifest.json").write_text(
         json.dumps(
             {
-                "_format": "compact_v1",
+                "_format": "compact_v2",
                 "n_points": 1,
                 "centroid_outlier_quantile": None,
                 "latent_key": "latent_space",
@@ -89,7 +96,8 @@ def _prepared_dataset(root: Path) -> Path:
         ),
         encoding="utf-8",
     )
-    (root / "points_2d.bin").write_bytes(POINTS_BYTES)
+    (root / "embeddings").mkdir()
+    (root / "embeddings" / "0_2d.bin").write_bytes(POINTS_BYTES)
     return root
 
 
@@ -189,7 +197,7 @@ def test_rebound_dns_name_never_reaches_a_route_on_the_prepared_server(
     with _prepared_server(tmp_path) as (_server, port):
         status, raw = _exchange(
             port,
-            _request("/points_2d.bin", [f"{REBOUND_HOST}:{port}"]),
+            _request("/embeddings/0_2d.bin", [f"{REBOUND_HOST}:{port}"]),
         )
 
     assert status == 421
@@ -303,7 +311,7 @@ def test_loopback_authorities_are_served(tmp_path: Path, template: str) -> None:
     with _prepared_server(tmp_path) as (_server, port):
         status, raw = _exchange(
             port,
-            _request("/points_2d.bin", [template.format(port=port)]),
+            _request("/embeddings/0_2d.bin", [template.format(port=port)]),
         )
 
     assert status == 200
@@ -318,7 +326,7 @@ def test_the_real_serving_path_still_works_end_to_end(tmp_path: Path) -> None:
             health = json.loads(response.read())
         with urllib.request.urlopen(f"{base}/dataset_identity.json", timeout=5) as response:
             identity = json.loads(response.read())
-        with urllib.request.urlopen(f"{base}/points_2d.bin", timeout=5) as response:
+        with urllib.request.urlopen(f"{base}/embeddings/0_2d.bin", timeout=5) as response:
             points = response.read()
 
     assert health["status"] == "ok"
@@ -467,7 +475,7 @@ def test_enforcement_uses_the_os_assigned_port_not_the_requested_one(
 def test_a_declared_proxy_authority_is_served_the_real_payload(tmp_path: Path) -> None:
     """The documented `jupyter-server-proxy` path works again, end to end."""
     with _prepared_server(tmp_path, allowed_hosts=[PROXY_HOST]) as (_server, port):
-        status, raw = _exchange(port, _request("/points_2d.bin", [PROXY_HOST]))
+        status, raw = _exchange(port, _request("/embeddings/0_2d.bin", [PROXY_HOST]))
 
     assert status == 200
     assert raw.endswith(POINTS_BYTES)
@@ -513,7 +521,7 @@ def test_declaring_one_name_does_not_admit_any_other(tmp_path: Path) -> None:
     """The hole stays shut for every authority the operator did not name."""
     with _prepared_server(tmp_path, allowed_hosts=[PROXY_HOST]) as (_server, port):
         results = {
-            value: _exchange(port, _request("/points_2d.bin", [value]))
+            value: _exchange(port, _request("/embeddings/0_2d.bin", [value]))
             for value in (
                 f"{REBOUND_HOST}:{port}",
                 REBOUND_HOST,
@@ -541,8 +549,8 @@ def test_declaring_one_name_does_not_admit_any_other(tmp_path: Path) -> None:
 def test_the_proxy_authority_is_refused_without_the_declaration(tmp_path: Path) -> None:
     """No opt-in means byte-identical behaviour to the loopback-only guard."""
     with _prepared_server(tmp_path) as (_server, port):
-        bare, _raw = _exchange(port, _request("/points_2d.bin", [PROXY_HOST]))
-        ported, _raw = _exchange(port, _request("/points_2d.bin", [f"{PROXY_HOST}:{port}"]))
+        bare, _raw = _exchange(port, _request("/embeddings/0_2d.bin", [PROXY_HOST]))
+        ported, _raw = _exchange(port, _request("/embeddings/0_2d.bin", [f"{PROXY_HOST}:{port}"]))
 
     assert bare == 421
     assert ported == 421
@@ -561,7 +569,7 @@ def test_the_local_loopback_authority_still_works_beside_a_declared_name(
 ) -> None:
     """Declaring a proxy name must not cost the operator their own `curl`."""
     with _prepared_server(tmp_path, allowed_hosts=[PROXY_HOST]) as (server, port):
-        with urllib.request.urlopen(f"{server.url}/points_2d.bin", timeout=5) as response:
+        with urllib.request.urlopen(f"{server.url}/embeddings/0_2d.bin", timeout=5) as response:
             points = response.read()
         wrong_port, _raw = _exchange(port, _request("/_cellucid/info", ["127.0.0.1:8765"]))
 

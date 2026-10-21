@@ -43,7 +43,7 @@ If you’re actively stuck, use {doc}`06_troubleshooting_highlighting` (it’s o
 
 **What changes**
 - The *look* of the plot changes (because color-by changed).
-- Annotation-based selection behavior can change (because it depends on the active field’s kind: categorical vs continuous).
+- Annotation-based selection behavior can change (because it depends on the kind of the field of the view you click in: categorical vs continuous).
 
 **What does not change**
 - Highlight pages and highlight groups (membership) do not change when you switch fields.
@@ -56,17 +56,24 @@ If you’re actively stuck, use {doc}`06_troubleshooting_highlighting` (it’s o
 
 ## Annotation based with no field at all
 
-Set both **Categorical obs** and **Continuous obs** to `None` and the tool has
-nothing to work from. It says so rather than failing silently:
+Set both **Categorical obs** and **Continuous obs** to `None` in every panel
+on screen and the tool has nothing to work from. It says so rather than failing
+silently:
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/read-no-active-field-notice.png
-:alt: The Highlighting panel in Annotation based mode with no coloured field, showing the line that annotation selection needs an active field chosen under Coloring and Filtering.
+:alt: The Highlighting panel in Annotation based mode with no coloured field, with the ringed line "Annotation selection needs an active field. Choose a Categorical obs or Continuous obs field under Coloring & Filtering, then Alt+click a cell (or tap it in Select mode)." in place of the usual help text.
 :width: 516px
 
 With no coloured field the usual `Alt+click` invitation is replaced by an
-instruction. In this state the viewer never starts the gesture, so there is
-nothing to debug beyond choosing a field.
+instruction. In this state no press can select anything, so there is nothing to
+debug beyond choosing a field.
 ```
+
+In a grid of views the instruction appears only when no panel has a field. One
+field-less panel beside a colored one keeps the invitation: a press in the
+colored panel selects, even when the field-less one has focus, and a press in
+the field-less one answers *“That panel is not colored by a field, so there is
+nothing to select.”*
 
 The other three tools are unaffected: lasso, proximity and KNN are geometric or
 graph-based and do not read the coloured field at all.
@@ -151,11 +158,12 @@ Highlight groups store explicit arrays of indices, and highlight recomputation s
 - Switch to a simpler color-by (e.g., a single color) just to visually validate highlights.
 - Change background mode to increase contrast.
 
-:::{warning}
-**Point size** changes only what is *drawn*. It has no effect on what can be
-*clicked*: picking uses a fixed radius in data space and never reads the drawn
-size. If an `Alt+click` is missing cells, zoom in — do not reach for the point
-size slider. See {doc}`06_troubleshooting_highlighting`.
+:::{note}
+What you can click is what is drawn. A click picks the dot under the pointer at
+the size it is drawn (plus a few pixels of slack), and where dots overlap the
+front-most one wins. Cells that are filtered out, or that the current level of
+detail does not draw, are never picked. If an `Alt+click` keeps missing, zoom in
+or raise **Point size**. See {doc}`06_troubleshooting_highlighting`.
 :::
 
 ---
@@ -198,7 +206,8 @@ This approximates a 3D volume by combining multiple 2D “cuts”.
 ## KNN selection when the neighbor graph is missing
 
 **What you see**
-- KNN drag mode shows a message like “Neighbor graph not available”, or KNN selection does nothing.
+- Choosing KNN drag raises the notification “No neighbor graph available for this dataset”, and KNN selection does nothing.
+- Or, with a graph that has not finished loading: the first `Alt+click` only starts the load (“Loading neighbor graph for KNN mode”) and selects nothing.
 
 **Why**
 - KNN selection requires a connectivity graph.

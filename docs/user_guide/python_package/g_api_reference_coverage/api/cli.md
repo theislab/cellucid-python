@@ -31,7 +31,7 @@ cellucid --version
 ### `cellucid serve`
 
 ```bash
-cellucid serve <data_path> [--port 8765] [--host 127.0.0.1] [--no-browser] [--quiet] [--verbose] [--vector-fields] [--connectivity]
+cellucid serve <data_path> [--port 8765] [--host 127.0.0.1] [--no-browser] [--quiet] [--verbose] [--vector-fields] [--knn connectivities]
 ```
 
 `<data_path>` can be:
@@ -58,7 +58,7 @@ cellucid serve <data_path> [--port 8765] [--host 127.0.0.1] [--no-browser] [--qu
 | `--obs-key KEY` | Serve only this `obs` column; repeat per column | AnnData-only; every column is served when omitted |
 | `--vector-field-default FIELD_ID` | Choose the initial vector field | AnnData-only; required when more than one exists |
 | `--vector-fields` | Serve the `obsm` `<field>_umap_<n>d` overlay arrays | AnnData-only; **off by default** because every declared field is read and checked before the server binds |
-| `--connectivity` | Serve the `obsp['connectivities']` neighbor graph | AnnData-only; **off by default** because reading the graph is the longest part of starting a large object |
+| `--knn connectivities` | Serve the `obsp['connectivities']` neighbor graph | AnnData-only; **off by default** because reading the graph is the longest part of starting a large object |
 
 The AnnData-only flags are rejected for a prepared export directory. The error
 names every flag that does not apply, because an export already declares its
@@ -74,7 +74,7 @@ Startup prints five numbered steps; the transcript is in {doc}`../../../web_app/
 
 Step 2 reports the adapter as it is built, so a slow load names the phase it is
 in. Step 4 is the manifest and centroid phase, reported as its own step. When
-`--connectivity` is passed, step 2 gains two more lines — `Connectivity: reading
+`--knn connectivities` is passed, step 2 gains two more lines — `Connectivity: reading
 obsp['connectivities']`, then the edge count and neighbor maximum it found.
 
 A prepared export directory runs **three** steps instead — `Validating dataset`,
@@ -83,20 +83,22 @@ open and its manifests are already written.
 
 ### `Embeddings`: which `obsm` key each dimension came from
 
-`X_umap_1d`, `X_umap_2d`, and `X_umap_3d` each name their own dimension and
-always decide it. When an object declares none of them, a bare `X_umap` — what
-`sc.tl.umap()` writes — is read at the dimension its own column count states:
-one column as 1D, two as 2D, three as 3D. Nothing is renamed and the object is
-not modified. A bare `X_umap` of any other width is refused with a message
-naming its shape, and an explicit dimensional key anywhere in `obsm` means the
-bare key never joins the resolved set.
+`--embedding-1d`, `--embedding-2d`, and `--embedding-3d` name the array of a slot,
+optionally with 0-based columns (`--embedding-2d X_pca:0,1`). Every other slot
+follows the default rule: `X_umap_1d`, `X_umap_2d`, and `X_umap_3d` each fill
+their own slot, and when an object declares none of them, a bare `X_umap` — what
+`sc.tl.umap()` writes — fills the slot of its own column count. When neither
+fills any slot, a deterministic best guess is made from the other `obsm` arrays
+and reported as `(guessed)`. Nothing is renamed and the object is not modified.
+When nothing can be plotted, the command fails with `Cellucid found nothing to
+plot…`, listing every `obsm` entry and why it was not used.
 
 ### `Connectivity`: three states
 
 | Printed in step 3 | Meaning |
 | --- | --- |
 | `yes (N edges)` | The graph was read, validated, and is served |
-| `not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)` | The object carries a graph and this run did not ask for it |
+| `not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)` | The object carries a graph and this run did not ask for it |
 | `no` | The object carries no `obsp['connectivities']` |
 
 ---
@@ -108,13 +110,14 @@ it, `obsm` is not scanned for them, `dataset_identity.json` declares no
 `vector_fields`, and every `/vectors/...` route answers `404`. `--vector-field-default`
 selects among served fields, so it is refused without this flag.
 
-An object that declares no field in the `<field>_umap_<n>d` grammar serves none,
-which is an ordinary result rather than an error — unlike `--connectivity`, which
-names one exact matrix and therefore reports its absence.
+A `<field>_umap_<n>d` key is bound to the `<n>`D slot only when that slot shows
+`X_umap_<n>d` or `X_umap`. An object that declares no field in this grammar
+serves none, which is an ordinary result rather than an error — unlike `--knn`,
+which names one exact matrix and therefore reports its absence.
 
-## `--connectivity`
+## `--knn KEY`
 
-Off by default. Without it, `adata.obsp['connectivities']` is never read,
+Off by default. Without it, no `obsp` matrix is read,
 `stats.has_connectivity` in `dataset_identity.json` is `false`, `stats.n_edges`
 is `null`, and `connectivity_manifest.json`, `connectivity/edges.src.bin`,
 `connectivity/edges.dst.bin`, and `connectivity/edges.weights.f64.bin` all
@@ -130,11 +133,12 @@ stored neighbors or more the command logs a warning naming that cost before it
 begins validating. Most sessions never draw the graph, which is why the default
 is off.
 
-Asking for a graph an object does not carry is an error naming
-`obsp['connectivities']`, not silence — compute it with `sc.pp.neighbors(adata)`
-first, or drop the flag.
+Naming a matrix an object does not carry is an error naming it, not silence —
+compute it with `sc.pp.neighbors(adata)` first, or drop the flag. A matrix that
+is not symmetric, such as `obsp['distances']`, is refused with that reason,
+never symmetrized.
 
-The Python equivalent is the keyword-only `serve_connectivity=True` on
+The Python equivalent is the keyword-only `knn_key="connectivities"` on
 {func}`~cellucid.serve_anndata`, {func}`~cellucid.show_anndata`,
 {class}`~cellucid.AnnDataViewer`, and the adapter; see {doc}`server`.
 {func}`~cellucid.prepare` is a separate decision made at export time through its
@@ -283,7 +287,7 @@ Fix:
 
 ### Symptom: “The graph is not drawn / `connectivity_manifest.json` returns 404”
 Fix:
-- Restart with `--connectivity`. The neighbor graph is off by default.
+- Restart with `--knn connectivities`. The neighbor graph is off by default.
 - If startup then fails naming `obsp['connectivities']`, the object has no
   graph: compute one with `sc.pp.neighbors(adata)` before serving.
 
@@ -292,8 +296,8 @@ Fix:
 ### Symptom: “Startup takes minutes on a large `.h5ad`”
 Fix:
 - Read the step numbers. Nearly all of the time is inside `[2/5] Loading
-  AnnData`, and with `--connectivity` most of that is the edge list.
-- Drop `--connectivity` for sessions that never draw the graph.
+  AnnData`, and with `--knn connectivities` most of that is the edge list.
+- Drop `--knn connectivities` for sessions that never draw the graph.
 - For repeated sessions, run {func}`~cellucid.prepare` once and serve the export
   directory instead; see {doc}`export`.
 

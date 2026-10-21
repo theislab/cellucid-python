@@ -79,10 +79,12 @@ counts for every built-in sample are listed in
    1D/2D/3D velocity example; see
    {doc}`../b_data_loading/10_standard_pancreas_dataset`.
 3) Wait for the dataset info panel to populate (Cells/Genes/Obs fields).
+   Every sample opens each dimension on its default embedding; Pancreas also
+   carries a 2D PCA embedding beside its 2D UMAP.
 
 **What success looks like**
 
-- The canvas shows points on the default light grid.
+- The canvas shows points on the default light studio floor.
 - The dataset info panel shows non‑zero counts.
 
 :::{note}
@@ -93,8 +95,8 @@ ZIP) or from a **Remote server**, but those workflows are documented in
 
 ### 2) Move the camera
 
-1) Open **Compare Views** → **Navigation**.
-2) Check the dimension-specific default:
+1) Open the **Navigation** accordion.
+2) Check the dimension-specific default (each view keeps its own mode):
    - 1D or 2D starts in **Planar**;
    - 3D starts in **Orbit**.
 3) In Planar, drag to pan and use the wheel or trackpad to zoom.
@@ -157,6 +159,11 @@ This is how you compare hypotheses side‑by‑side without losing your current 
 If you want a keyboard-first workflow, the UI supports:
 
 - `Alt` + drag for area selection (and other shortcuts; see the in‑app “Keyboard Shortcuts” accordion).
+
+On a phone or tablet, turn on **Select mode** on the selection bar at the
+bottom of the plot (or in the Highlighting panel) and draw with one finger
+instead; two fingers still zoom and pan. The bar then confirms, cancels or
+clears the selection without the menu.
 
 ### 6) Export or save what you did
 

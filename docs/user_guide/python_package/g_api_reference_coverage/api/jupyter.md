@@ -136,7 +136,7 @@ See {doc}`sessions` for what a session bundle contains and how to apply it back 
    - Exported data: {class}`~cellucid.CellucidServer`
    - AnnData mode: {class}`~cellucid.AnnDataServer`
 2. The exact verified viewer generation is served from that same origin.
-3. The viewer UI posts interaction events back to the local server at `/_cellucid/events`.
+3. The viewer UI posts interaction events back to the local server at `/_cellucid/events` (selections at `/_cellucid/selection`).
 4. The Python viewer routes those events to your hook callbacks (e.g., `@viewer.on_selection`).
 
 ### Environment caveat: when the browser cannot reach the kernel’s localhost

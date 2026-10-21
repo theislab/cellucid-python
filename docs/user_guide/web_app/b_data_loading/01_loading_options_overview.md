@@ -81,16 +81,16 @@ Why you care:
 Important nuance:
 - Some formats/modes are truly lazy.
 - Some are “lazy-ish” (metadata up front; some chunks later).
-- Some are **not lazy** in practice (browser `.h5ad` requires loading the whole file).
+- A browser `.h5ad` is read lazily from disk; a cell-major (CSR) matrix is first reorganised by gene in the background.
 
 ## Vector fields (velocity/drift overlay): what you need for it to appear
 
 Vector fields are optional per-cell vectors (e.g. RNA velocity, drift/displacement) that Cellucid can render as an animated overlay on top of your embedding.
 
 Important rules:
-- Vector fields are **dimension-specific**: you need 2D vectors for a 2D embedding, 3D vectors for 3D, etc.
+- Vector fields are **embedding-specific**: each is bound to the embedding it was computed on (2D vectors for a 2D embedding, 3D for 3D).
 - Vector fields must match the **same row order** as your points/cells.
-- The overlay only shows fields available for the **current dimension**.
+- The overlay only shows fields bound to the embedding the view **shows**.
 
 Where vector fields come from depends on your loading format:
 
@@ -131,7 +131,7 @@ Pick the first row that matches you.
 
 | Your situation | Recommended workflow | Why |
 |---|---|---|
-| “I just want to look at my data quickly, no Python.” | Browser File Picker | Zero setup; good for quick preview. An `.h5ad` must be under 512 MiB |
+| “I just want to look at my data quickly, no Python.” | Browser File Picker | Zero setup; any file size, read from disk as each view needs it |
 | “My dataset is big (hundreds of thousands to millions of cells).” | Server Mode or pre-export + Server Mode | True lazy loading; avoids browser memory limits |
 | “I’m already working in a notebook.” | Jupyter (`show_anndata`, `show`) | Tight analysis loop; programmatic control |
 | “I want to share a dataset publicly without running a server.” | GitHub-hosted exports | Exact dataset-specific URL; no running server |
@@ -156,7 +156,7 @@ This is the canonical list used throughout the documentation.
 | 1 | Cellucid web app | Pick from `Sample datasets:`, which lists whatever exports root the page is configured with — Cellucid's own catalog on www.cellucid.com, or yours via `?exportsBaseUrl=https://host/exports/` | Exported | ✅ | Learning the UI with known-good data; publishing a catalog on a static host or CDN |
 | 2 | Cellucid web app (public GitHub) | Connect to a public exports root (or use `?github=...&dataset=...`) | Exported | ✅ | Sharing a dataset publicly, no running server |
 | 3 | Cellucid web app | Browser **Prepared** picker | Exported | ✅ | Fast local viewing of prepared exports |
-| 4 | Cellucid web app | Browser **.h5ad** picker | `.h5ad` | ❌* | Quick preview of small `.h5ad` |
+| 4 | Cellucid web app | Browser **.h5ad** picker | `.h5ad` | ✅* | Viewing a `.h5ad` of any size without Python |
 | 5 | Cellucid web app | Browser **Zarr ZIP** picker | `.zarr.zip` / `.zip` containing one Zarr v2 store | ✅† | Portable Zarr viewing without Python |
 | 6 | Terminal CLI | `cellucid serve <export_dir>` | Exported | ✅ | Reliable viewing of large exports |
 | 7‡ | Terminal CLI | `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset` | `.h5ad` | ✅ | Large `.h5ad` with read-only backed access |
@@ -168,17 +168,18 @@ This is the canonical list used throughout the documentation.
 | 13‡ | Jupyter | `cellucid.show_anndata(<data.h5ad>, dataset_name="My dataset", dataset_id="my-dataset")` | `.h5ad` | ✅ | Notebook-based exploration of `.h5ad` |
 | 14‡ | Jupyter | `cellucid.show_anndata(<data.zarr or AnnData>, dataset_name="My dataset", dataset_id="my-dataset")` | `.zarr` / in-memory | ✅ | Notebook-based exploration of `.zarr` or in-memory |
 
-\* Browser `.h5ad` loading is **not truly lazy**: the whole file is loaded into
-browser memory before use, and a file larger than **512 MiB** is refused outright
-before any byte is read. Options 7, 10, and 13 have no such ceiling.
+\* Browser `.h5ad` loading is lazy: the file is read where it is, in a
+background worker, as each view needs it, and is never copied into memory, so
+it has no size limit. A cell-major (CSR) matrix is reorganised by gene in the
+background after opening, in memory or in the browser's private file storage.
 
 † Browser Zarr ZIP loading indexes and validates archive metadata before
 adoption, then reads gene-expression chunks on demand. Archive extraction and
 decoded chunk memory remain subject to the documented browser limits.
 
 ‡ These are the direct-AnnData paths, and on all six the neighbor graph **and**
-the vector fields are off unless asked for — `--connectivity` /
-`--vector-fields` on the CLI, `serve_connectivity=True` /
+the vector fields are off unless asked for — `--knn connectivities` /
+`--vector-fields` on the CLI, `knn_key="connectivities"` /
 `serve_vector_fields=True` in Python. The other eight rows either read a
 prepared export or scan `obsm` in the browser, so there is nothing to switch on.
 
@@ -306,19 +307,23 @@ because the notebook supplies the address.
 ## Edge Cases (Read This If Something Feels “Weird”)
 
 ### Data edge cases
-- **No UMAP / embedding keys**: your AnnData is missing `X_umap_1d`,
-  `X_umap_2d`, or `X_umap_3d` in `obsm`.
-- **NaN/Inf in embeddings**: current readers reject the dataset before it can
-  replace the active dataset.
+- **No UMAP**: an AnnData without `X_umap_1d`, `X_umap_2d`, `X_umap_3d` or
+  `X_umap` opens on a best guess from its other `obsm` arrays
+  ({doc}`13_data_mapping`); only a file with nothing drawable is refused.
+- **NaN/Inf in embeddings**: an embedding holding one is refused, naming the
+  cell, before it can replace what is shown. A UMAP the file carries is never
+  replaced silently: its NaN refuses the file; a guessed candidate with one is
+  skipped for the next.
 - **Duplicate variable names**: direct AnnData readers reject them because a
   gene request must identify exactly one column.
-- **Huge categorical fields** (e.g., 100k unique categories): legends and color assignment become unusable.
+- **Huge categorical fields** (e.g., 100k unique categories): they load (32-bit codes) and the legend scrolls, but their colours are not distinguishable.
 
 ### Scale edge cases
-- **Browser `.h5ad` over 512 MiB**: refused immediately, with a message naming
-  the ceiling and pointing at server mode.
-- **Browser `.h5ad` under 512 MiB**: accepted, but the browser may still freeze
-  or crash, because the decompressed matrix is larger than the file on disk.
+- **Very large browser `.h5ad`**: opens at any size; the first genes of a
+  cell-major (CSR) matrix wait for the background reorganisation, which reports
+  its progress. A browser without private file storage (some private windows)
+  scans the file for each gene instead once the matrix is too large for memory,
+  which is slow; use server mode there.
 - **Millions of cells + dense gene matrix**: even with lazy loading, gene queries can be slow or memory-heavy.
 
 ### Environment edge cases
@@ -347,15 +352,18 @@ This is a compact troubleshooting index. Each follow-up notebook contains a **mu
 
 ---
 
-### Symptom: “I don’t see any embedding / it says no UMAP”
+### Symptom: “It says Cellucid found nothing to plot”
 **Likely causes**
-- AnnData missing `X_umap_1d`, `X_umap_2d`, or `X_umap_3d` in `obsm`
+- AnnData has no drawable `obsm` array: only tables, sparse arrays, or arrays
+  holding missing or infinite values (the message lists each entry and why).
+  A file without a UMAP but with another drawable array opens on a best guess.
 
 **How to confirm**
 - In Python: `print(adata.obsm.keys())`
 
 **Fix**
-- Compute UMAP and store it in `obsm` before viewing
+- Compute an embedding (for example `sc.tl.umap(adata)`) before viewing, or
+  fix the array the message names. See {doc}`13_data_mapping`.
 
 ---
 

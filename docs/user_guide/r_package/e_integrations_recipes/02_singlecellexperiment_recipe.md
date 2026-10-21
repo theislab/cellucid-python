@@ -215,7 +215,7 @@ dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 cellucid_prepare(
   latent_space = latent_space,
   obs = obs,
-  X_umap_2d = umap2,
+  embeddings = list(X_umap = umap2),
   obs_categorical_dtype = "uint16",
   dataset_name = "SCE Export",
   dataset_id = "sce_export",

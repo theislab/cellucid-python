@@ -165,8 +165,8 @@ Passing `vector_field_default=` without `serve_vector_fields=True` is refused
 rather than silently ignored: `vector_field_default` selects among *served*
 fields, so with nothing served there is nothing for it to select.
 
-`prepare()` is unaffected — Option B below passes the arrays through
-`vector_fields=`, which has always been the ask.
+`prepare()` does not scan `obsm` — Option B below passes the arrays through
+`vector_fields=`, bound by id to the exported embedding they are drawn over.
 
 ### Option A: view directly from AnnData (notebook)
 
@@ -206,8 +206,9 @@ If you are exporting anyway:
 ```python
 from cellucid import prepare
 
+# A field id, then the exported embedding each array is drawn over.
 vector_fields = {
-    "T_fwd_umap_2d": adata.obsm["T_fwd_umap_2d"],
+    "T_fwd_umap": {"X_umap_2d": adata.obsm["T_fwd_umap_2d"]},
 }
 
 prepare(
@@ -215,7 +216,7 @@ prepare(
     obs=adata.obs,
     var=adata.var,
     gene_expression=adata.X,
-    X_umap_2d=adata.obsm["X_umap_2d"],
+    embeddings={"X_umap_2d": adata.obsm["X_umap_2d"]},
     vector_fields=vector_fields,
     out_dir="exports/my_dataset_with_vectors",
     dataset_name="My dataset with vectors",
@@ -239,12 +240,14 @@ viewer
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/overlay-controls.png
-:alt: The real Pancreatic endocrinogenesis sample in its 2D Planar view with the velocity_umap particle overlay and controls visible.
+:alt: The real Pancreatic endocrinogenesis sample in its 2D Planar view with the velocity particle overlay and controls visible.
 :width: 1440px
 
 The real 3,696-cell Pancreas sample in Build 2026-07-27.1, rendered in 2D
-Planar mode with `velocity_umap`; the field, density, speed, trail, size,
-opacity, palette, and LOD controls are visible.
+Planar mode with its exported `velocity` field; the field, density, speed,
+trail, size, opacity, palette, and LOD controls are visible. The sample is a
+prepared export, so its field id is the one `prepare()` was given; served
+straight from AnnData, a `velocity_umap_2d` key is the field `velocity_umap`.
 ```
 
 ---

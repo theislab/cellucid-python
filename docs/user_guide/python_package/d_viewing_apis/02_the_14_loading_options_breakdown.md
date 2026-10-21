@@ -27,7 +27,7 @@ This matrix is referenced throughout the docs. Most people only use 2–3 of the
 | 1 | Cellucid web app | Built-in demo dataset picker | Exported | ✅ | learning the UI with known-good data |
 | 2 | Cellucid web app | Public GitHub export (`?github=...`) | Exported | ✅ | sharing publicly without running a server |
 | 3 | Cellucid web app | Browser **folder picker** | Exported | ✅ | quick local viewing of prepared exports |
-| 4 | Cellucid web app | Browser **.h5ad picker** | `.h5ad` | ❌* | quick preview of small `.h5ad` |
+| 4 | Cellucid web app | Browser **.h5ad picker** | `.h5ad` | ✅* | viewing a `.h5ad` of any size without Python |
 | 5 | Cellucid web app | Browser **Zarr ZIP picker** | `.zarr.zip` / `.zip` containing one Zarr v2 store | ✅† | portable Zarr viewing without Python |
 | 6 | Terminal (CLI) | `cellucid serve <export_dir>` | Exported | ✅ | reliable, fast local viewing |
 | 7 | Terminal (CLI) | `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset` | `.h5ad` | ✅ | large `.h5ad` with read-only backed access |
@@ -39,7 +39,7 @@ This matrix is referenced throughout the docs. Most people only use 2–3 of the
 | 13 | Jupyter | `cellucid.show_anndata(<data.h5ad>, dataset_name="My dataset", dataset_id="my-dataset")` | `.h5ad` | ✅ | notebook exploration of `.h5ad` |
 | 14 | Jupyter | `cellucid.show_anndata(<data.zarr or AnnData>, dataset_name="My dataset", dataset_id="my-dataset")` | `.zarr` / in-memory | ✅ | notebook exploration of eagerly materialized `.zarr` or in-memory data |
 
-\* Browser `.h5ad` loading is typically **not truly lazy** (the browser ends up holding the file in memory).
+\* Browser `.h5ad` loading reads the file from disk as each view needs it, in a background worker, with no size limit; a cell-major (CSR) matrix is first reorganised by gene in the background.
 
 † Browser Zarr ZIP loading validates and indexes archive metadata before
 adoption, then reads gene-expression chunks on demand within the browser's

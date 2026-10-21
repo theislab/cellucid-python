@@ -99,12 +99,29 @@ Gene expression is usually a long list (thousands of genes), so the UI is a sear
 - Click a result to load and activate it
 
 Keyboard shortcuts:
-- `Enter` selects the **top** result in the dropdown
+- `↓` / `↑` move the highlighted result through the dropdown (opening it if
+  it is closed)
+- `Enter` selects the highlighted result, or the **top** result when none is
+  highlighted
 - `Esc` closes the dropdown (and removes focus)
 
-Result limit:
-- the dropdown shows up to **100** matches
-- if there are more, you’ll see a message like `...and 2,341 more. Type to narrow results.`
+A gene you are about to choose starts loading early. When a result stays
+under the pointer, or highlighted with the arrow keys, for 150 ms, its values
+are fetched and decoded in the background, so choosing it usually colours the
+view without a wait. Moving on to another result cancels that load, and
+choosing the result uses it instead of starting a second one. A background
+load that fails stays silent; choosing the gene loads it again and reports the
+error then.
+
+The search covers the gene list in use. Changing the gene names or the
+expression matrix under **Session › Data mapping** replaces that list; a gene
+a view is coloured by stays selected when the new list has it (see
+{doc}`../b_data_loading/13_data_mapping`).
+
+Results:
+- every match is listed; the dropdown opens with the first **100** and builds
+  the next 100 each time you scroll or arrow to its end
+- **Home** and **End** jump to the first and the last match
 
 ```{figure} ../../../_static/screenshots/web_app/gene-search-dropdown-open.png
 :alt: A field row labelled GENE EXPRESSION with a text box containing the letters Rp, and an open dropdown list below it showing gene names that contain Rp, one per row.
@@ -172,8 +189,12 @@ Renames the field key shown in the UI.
 Naming rules (enforced):
 - name must be non-empty
 - no leading/trailing whitespace
-- cannot contain `:`
+- no control or zero-width character (`U+200B`, `U+2060`, `U+FEFF`)
 - must be unique among visible fields
+
+A rename is dataset-wide: it applies to the live view and to every kept view at
+once, including their panel labels and filter summaries, and a saved session
+records it that way.
 
 To “undo” a rename:
 - rename the field back to its original key (the `*` marker disappears).

@@ -81,10 +81,6 @@ REPOSITORIES = (
 # Repositories that declare no release version at all, and why. Recorded so the
 # sweep can prove the absence is intentional instead of leaving a silent gap.
 NO_VERSION_BY_DESIGN = {
-    "cellucid": (
-        "continuously deployed static site; a deployment is identified by the "
-        "build id in the app footer, not a released version (cellucid/CITATION.cff)"
-    ),
     "cellucid-annotation": (
         "reference repository layout, not a released artifact; the annotation "
         "contract is versioned by its schema $id suffix (`-v1`), not by a "
@@ -145,6 +141,30 @@ class Sweep:
 
 DECLARATIONS: tuple[Declaration, ...] = (
     # -- cellucid (web app) --------------------------------------------------
+    # The web app shares the release version of the Python and R packages; a
+    # deployment is additionally identified by its build id, which is not a
+    # version and is not swept.
+    Declaration("cellucid", "CITATION.cff", r"(?m)^version: (\S+)", RELEASE),
+    Declaration(
+        "cellucid",
+        "index.html",
+        r'(?m)^  <meta name="cellucid-version" content="([^"]+)" />',
+        RELEASE,
+        "the version the footer prints beside the build id",
+    ),
+    Declaration(
+        "cellucid",
+        "index.html",
+        r'(?m)^    "softwareVersion": "([^"]+)",$',
+        RELEASE,
+        "the structured data search engines read",
+        marker_alternative='<meta name="cellucid-version"',
+        marker_reason=(
+            "JSON-LD has no comment syntax and the block is hashed into the "
+            "Content-Security-Policy; the marked cellucid-version meta element "
+            "in the same file declares the same value"
+        ),
+    ),
     Declaration(
         "cellucid",
         "npm/package.json",
@@ -352,8 +372,8 @@ DECLARATIONS: tuple[Declaration, ...] = (
         rf"the exact Cellucid {VERSION} producer-source digest",
         ARTIFACT,
         "describes the exporter release recorded in "
-        "cellucid-datasets/sources/pancreas.json; it changes when the Pancreas "
-        "export is rebuilt, not at a bump",
+        "cellucid-datasets/sources/build-environment.json; it changes when the "
+        "sample generations are rebuilt, not at a bump",
     ),
     # -- cellucid-r ----------------------------------------------------------
     Declaration(
@@ -390,10 +410,10 @@ DECLARATIONS: tuple[Declaration, ...] = (
     # -- cellucid-datasets ---------------------------------------------------
     Declaration(
         "cellucid-datasets",
-        "sources/pancreas.json",
+        "sources/build-environment.json",
         r'(?s)"cellucid_producer": \{.*?"version": "([^"]+)"',
         ARTIFACT,
-        "exporter release recorded in the Pancreas build provenance",
+        "exporter release every sample generation is built with",
     ),
     Declaration(
         "cellucid-datasets",
@@ -404,7 +424,7 @@ DECLARATIONS: tuple[Declaration, ...] = (
     ),
     Declaration(
         "cellucid-datasets",
-        "exports/*/dataset_identity.json",
+        "exports-v3/*/dataset_identity.json",
         r'"cellucid_data_version": "([^"]+)"',
         ARTIFACT,
         "stamped when the export was built; older exports keep older values",
@@ -456,7 +476,7 @@ def tracked_files(root: Path) -> frozenset[str] | None:
     """Repository-relative paths in ``root``'s Git index, or None if unreadable.
 
     The sweep reads only these. A working-tree walk would also pick up ignored
-    scratch directories — `cellucid-datasets/exports/_*/` is ignored precisely
+    scratch directories — `cellucid-datasets/exports-v3/_*/` is ignored precisely
     so local experiments stay local — and a release verdict that depends on
     uncommitted files is not reproducible from a clean checkout.
     """

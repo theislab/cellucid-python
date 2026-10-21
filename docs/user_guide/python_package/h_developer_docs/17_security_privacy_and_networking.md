@@ -68,7 +68,10 @@ Config:
 
 ### 3) Hooks event endpoint
 
-- `POST /_cellucid/events`
+- `POST /_cellucid/events` (JSON events)
+- `POST /_cellucid/selection?viewerId=...&viewerToken=...&source=...`
+  (selections, as binary cell indices; credentials are checked before the
+  body is read, and the body is capped at 512 MiB)
 - used for frontend → Python hooks
 
 Important:

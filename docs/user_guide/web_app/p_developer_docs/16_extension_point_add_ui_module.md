@@ -60,6 +60,31 @@ Example pattern (illustrative):
 </details>
 ```
 
+Keep the `<summary>` to plain text. A summary is itself the button that opens
+and closes the panel, so a button, link, input or info `i` inside it is a
+control nested in a control: screen readers announce it poorly, and its clicks
+and keys reach the toggle as well. The browser suite
+(`tests/browser/panel-header-controls.spec.mjs`) fails if any summary in the app
+contains an interactive element.
+
+At startup `cellucid/assets/js/app/dockable-accordions.js` stands every sidebar
+section in a frame, which is also what docks and floats:
+
+```html
+<div class="accordion-panel">
+  <div class="accordion-panel-actions"><!-- undock / dock buttons --></div>
+  <details class="accordion-section" id="my-feature-section">…</details>
+</div>
+```
+
+The action bar is laid over the right end of the summary row, and the summary
+keeps an empty slot of the same size so its title never runs under the buttons.
+The section keeps its `id` and its open state; whether it floats, its position
+and its stacking layer belong to the frame. If a panel needs header controls of
+its own, pass them to `register(details, { actions: [...] })` rather than
+appending them to the summary — that is how an analysis window gets its copy
+and close buttons.
+
 ### Readiness decision (also early)
 
 Ask when your control’s listener is attached.

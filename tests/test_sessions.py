@@ -11,6 +11,26 @@ from cellucid.session_bundle import SESSION_BUNDLE_MAGIC, CellucidSessionBundle
 from cellucid.session_codecs import decode_delta_uvarint, decode_user_defined_codes, decode_uvarint
 
 
+def _mapping_fingerprint_keys() -> dict:
+    """The cell-order record and data mapping every fingerprint carries."""
+    return {
+        "cellOrder": {
+            "embedding": {"key": "X_umap", "columns": None},
+            "dimension": 2,
+            "digest": "0123456789abcdef",
+        },
+        "dataMapping": {
+            "kind": "export",
+            "embeddings": {
+                "enabled": [{"key": "X_umap", "columns": None}],
+                "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None},
+            },
+            "geneNames": "index",
+            "vectorFields": [],
+        },
+    }
+
+
 def _encode_uvarint(value: int) -> bytes:
     out = bytearray()
     v = int(value)
@@ -74,6 +94,34 @@ def test_decode_user_defined_codes_raw_u8():
     assert decoded.tolist() == [0, 1, 2, 1, 0]
 
 
+def test_decode_user_defined_codes_raw_and_rle_u32():
+    # enc=4 raw little-endian Uint32; enc=5 RLE over uvarint pairs. These are
+    # the web app's encodings for a field with more than 65,535 categories.
+    values = [0, 70_000, 4_294_967_295, 70_000]
+    raw = bytes([4]) + _encode_uvarint(4) + np.array(values, dtype="<u4").tobytes()
+    decoded = decode_user_defined_codes(raw, expected_length=4, expected_codes_type="Uint32Array")
+    assert decoded.dtype == np.uint32
+    assert decoded.tolist() == values
+
+    rle = (
+        bytes([5])
+        + _encode_uvarint(5)
+        + _encode_uvarint(2)
+        + _encode_uvarint(70_000)
+        + _encode_uvarint(3)
+        + _encode_uvarint(4_294_967_295)
+        + _encode_uvarint(2)
+    )
+    decoded = decode_user_defined_codes(rle, expected_length=5, expected_codes_type="Uint32Array")
+    assert decoded.dtype == np.uint32
+    assert decoded.tolist() == [70_000] * 3 + [4_294_967_295] * 2
+
+    with pytest.raises(ValueError, match="does not match expected Uint16Array"):
+        decode_user_defined_codes(raw, expected_length=4, expected_codes_type="Uint16Array")
+    with pytest.raises(ValueError, match="truncated raw Uint32Array payload"):
+        decode_user_defined_codes(raw[:-1], expected_length=4, expected_codes_type="Uint32Array")
+
+
 def test_apply_session_bundle_to_anndata(tmp_path):
     import anndata as ad
     import pandas as pd
@@ -121,8 +169,6 @@ def test_apply_session_bundle_to_anndata(tmp_path):
                 "codesType": "Uint8Array",
                 "isDeleted": False,
                 "isPurged": False,
-                "centroidsByDim": {},
-                "normalizedDims": [],
                 "sourceField": None,
                 "operation": None,
                 "sourcePages": [],
@@ -161,6 +207,7 @@ def test_apply_session_bundle_to_anndata(tmp_path):
             "datasetId": "test",
             "cellCount": n_obs,
             "varCount": n_vars,
+            **_mapping_fingerprint_keys(),
         },
         "chunks": [
             {
@@ -294,6 +341,7 @@ def test_apply_session_rejects_out_of_range_categorical_codes_without_mutation()
                 "datasetId": "exact",
                 "cellCount": 3,
                 "varCount": 1,
+                **_mapping_fingerprint_keys(),
             }
             self._chunks = {
                 "core/field-overlays": {
@@ -310,8 +358,6 @@ def test_apply_session_rejects_out_of_range_categorical_codes_without_mutation()
                             "isPurged": False,
                             "codesLength": 3,
                             "codesType": "Uint8Array",
-                            "centroidsByDim": {},
-                            "normalizedDims": [],
                             "sourceField": None,
                             "operation": None,
                             "sourcePages": [],

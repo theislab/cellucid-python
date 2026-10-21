@@ -62,6 +62,12 @@ http://127.0.0.1:8765/?anndata=true
 3) Keep the terminal running while you use the viewer.
 4) Stop the server with **Ctrl+C**.
 
+If the server stops while a viewer connected through **Remote server** is
+open, the viewer says so at once ("Remote server connection was lost.").
+Should another dataset you chose still be loading, that choice is left to
+land; the server's datasets leave the list once it settles, and the notice
+then reads "… Reconnect to continue."
+
 Real prepared-data startup, against a copy of the standard Pancreas export:
 
 ```text
@@ -202,11 +208,11 @@ Importing dependencies (anndata, numpy, scipy)... done
       Embeddings: 2D
       Obs fields: 2 categorical, 1 continuous
       Vector fields: no
-      Connectivity: not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)
+      Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)
       ✓ Analysis complete
 
 [4/5] Building manifests...
-      Centroids: one per categorical field and dimension
+      Centroids: one per categorical field and embedding
       ✓ Manifests built
 
 [5/5] Starting server...
@@ -267,23 +273,26 @@ line disagree with what you expect, fix the file rather than the viewer.
 
 ### Which `obsm` keys become embeddings
 
-- `X_umap_1d`, `X_umap_2d`, and `X_umap_3d` each name their own dimension, and
-  each one always decides that dimension.
-- When an object declares none of those, a bare `X_umap` — the key
-  `sc.tl.umap()` writes — is read at the dimension its own column count states:
-  1, 2, or 3 columns become the 1D, 2D, or 3D embedding. That is what
+- `--embedding-1d`, `--embedding-2d`, and `--embedding-3d` name the `obsm` array
+  of a slot, optionally with 0-based columns: `--embedding-2d X_pca:0,1`.
+- Every slot you do not name follows the default rule: `X_umap_1d`, `X_umap_2d`,
+  and `X_umap_3d` each fill their own slot, and when an object declares none of
+  those, a bare `X_umap` — the key `sc.tl.umap()` writes — fills the slot of its
+  own column count (1, 2, or 3). That is what
   `Embeddings: 2D from obsm['X_umap']` in the transcript above is reporting. No
   key is renamed and your object is not modified.
-- A bare `X_umap` of any other width is refused, and the message names its
-  shape. Ten columns is a latent space someone named after a plot, and no
-  dimension of it is the picture you meant to draw.
 - If any dimensional key is present anywhere in `obsm`, the writer declared
   dimensions deliberately, so the bare `X_umap` does not join that set.
+- Only when nothing above fills any slot does Cellucid make a deterministic best
+  guess from the other `obsm` arrays — UMAP-like names first, latent spaces such
+  as PCA last — and report it, for example
+  `Embeddings: 2D from obsm['X_tsne'] (guessed)`. A ten-column `X_umap` with no
+  narrower candidate is shown in 2D at columns 0 and 1.
 
 ```{tip}
 Step 2 is the fastest way to answer “does Cellucid see my UMAP?”. An `.h5ad`
-that carries no readable embedding fails there, on the terminal, before a
-browser is involved — and the failure line lists the `obsm` keys it did find.
+that carries nothing plottable fails there, on the terminal, before a browser is
+involved — and the failure line lists every `obsm` entry and why it was not used.
 ```
 
 ### Connectivity is opt-in on this path
@@ -291,13 +300,13 @@ browser is involved — and the failure line lists the `obsm` keys it did find.
 The neighbor graph is **not** served unless you ask for it. Building the edge
 list is the single longest part of startup on a large object — a 50-neighbor
 graph over millions of cells is hundreds of millions of stored neighbors — and
-most sessions never draw the graph, so `--connectivity` (CLI) and
-`serve_connectivity=True` (Python) turn it on:
+most sessions never draw the graph, so `--knn connectivities` (CLI) and
+`knn_key="connectivities"` (Python) turn it on:
 
 ```bash
 cellucid serve /path/to/data.h5ad \
   --dataset-name "My dataset" --dataset-id my-dataset \
-  --connectivity
+  --knn connectivities
 ```
 
 With the flag, step 2 reports the read and step 3 reports the count:
@@ -331,12 +340,12 @@ The `Connectivity` line in step 3 therefore has three states, not two:
 | Line | Meaning |
 | --- | --- |
 | `Connectivity: yes (35,167 edges)` | The graph was asked for, read, and validated |
-| `Connectivity: not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)` | The object carries a graph and this run did not ask for it |
+| `Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)` | The object carries a graph and this run did not ask for it |
 | `Connectivity: no` | The object has no `obsp['connectivities']` at all |
 
 What the flag changes on the wire:
 
-| | `--connectivity` omitted | `--connectivity` passed |
+| | `--knn connectivities` omitted | `--knn connectivities` passed |
 | --- | --- | --- |
 | `obsp['connectivities']` | never read | read and validated before the bind |
 | `stats.has_connectivity` in `dataset_identity.json` | `false` | `true` |
@@ -374,16 +383,22 @@ The `Vector fields` line in step 3 has the same three states:
 | Line | Meaning |
 | --- | --- |
 | `Vector fields: yes (velocity_umap)` | The overlay was asked for, read, and validated; the served field IDs are listed |
-| `Vector fields: not served (obsm declares vector fields; pass serve_vector_fields=True, or --vector-fields, to draw them)` | The object carries vectors and this run did not ask for them |
+| `Vector fields: not bound (obsm declares vector fields; pass serve_vector_fields=True, or --vector-fields, to bind them, or bind one under Session > Data mapping)` | The object carries vectors and this run did not ask for them |
 | `Vector fields: no` | `obsm` declares no `<field>_umap_<n>d` key at all |
 
 What the flag changes on the wire:
 
 | | `--vector-fields` omitted | `--vector-fields` passed |
 | --- | --- | --- |
-| `obsm` vector arrays | never read | read and validated before the bind |
+| `obsm` vector arrays at startup | never read | read and validated before the bind |
 | `vector_fields` block in `dataset_identity.json` | absent | present, listing every served field |
 | `vectors/<index>_<dim>d.bin` | 404 | served |
+| Vector fields the viewer opens with | none | `<field>_umap_<d>d` on the UMAP of that dimension |
+
+Either way, the viewer can bind any `obsm` array that fits an embedding under
+**Session › Data mapping › Vector fields**; the server then reads it, checks
+it and scales it on request (`_cellucid/mapping/vectors/...`, below). See
+[Vector fields](13_data_mapping.md#vector-fields).
 
 `--vector-field-default` chooses among *served* fields, so passing it on its own
 raises rather than doing nothing. And as with connectivity, this default applies
@@ -403,6 +418,71 @@ See:
 - {doc}`../i_vector_field_velocity/index`
 - {doc}`../i_vector_field_velocity/01_what_vector_fields_are_user_facing`
 
+### Data-mapping routes: any array, read on request
+
+The flags above choose what the viewer shows first. Beyond them, a direct-AnnData
+server answers a family of routes under `_cellucid/mapping/` that let a viewer
+re-map the dataset while it is open, from **Session › Data mapping**
+({doc}`13_data_mapping`) — another embedding or other columns of one,
+another neighbour graph, gene names from a `var` column, expression from a layer
+or `raw`, another latent space — without restarting the server.
+
+| Route (under `_cellucid/mapping/`) | Payload |
+| --- | --- |
+| `candidates.json` | The candidate catalog: every `obsm`, `obsp`, layer and `var` column, with shape, storage, dtype, and whether it is usable and why not; the mapping the server serves now (`defaults`) and which slots were `guessed` |
+| `embeddings/{i}/{c0}-{c1}[-{c2}].bin` | `obsm` entry `i` read at those 0-based columns, normalized like every embedding, float32 |
+| `vectors/{i}/{vcols}/{e}/{ecols}.bin` | `obsm` entry `i` bound to embedding `e`, scaled by that embedding's factor |
+| `knn/{p}/connectivity_manifest.json` | `obsp` entry `p` as an edge-pair manifest, checked when asked for |
+| `knn/{p}/connectivity/edges.src.bin`, `edges.dst.bin`, `edges.weights.f64.bin` | Its edge payloads |
+| `genes/{axis}/{names}/var_manifest.json` | The gene list of `axis` (`X`, `raw`, or `layer-{k}`) named by `names` — the var index (`genes/X/index/…`) or a column (`genes/X/column-{k}/…`) — made unique |
+| `genes/{axis}/{names}/var/{g}.values.f32` | Gene `g` of that axis, float32 |
+| `latent/{i}/obs/{f}.outliers.f32` | Outlier quantiles of categorical obs field `f` in latent space `i` |
+
+Every route addresses an entry by its **position** in `candidates.json` (`{i}`
+and `{e}` into `obsm`, `{p}` into `obsp`, `{k}` into `layers` or into that
+axis's `var` columns), never by its key, so no URL carries the dataset's
+vocabulary. Columns are 0-based.
+
+Nothing is read until it is requested, and nothing is repaired:
+
+- **404** — the route names no entry (an index past the end, repeated or
+  out-of-range columns, a vector array bound at columns its embedding does not
+  use).
+- **422** with a JSON body
+  `{"error": "...", "key": "<AnnData key>", "reason": "..."}` — the entry
+  exists but cannot be served: the catalog lists it as unusable (a table in
+  `obsm`, a float column as gene names, an array the best guess already
+  refused), or its values fail the load-time check (a NaN in an embedding or a
+  latent space). `error` is the full sentence;
+  `reason` is the short clause the viewer lists beside the key
+  (`NaN at cell 17`), in the same words a file opened in the browser gets. A
+  neighbour graph is checked only when its manifest or edges are requested;
+  one that is not symmetric is refused — `obsp['distances'] is not symmetric —
+  choose a connectivities matrix.` — and never symmetrized.
+- **HEAD** answers the byte length without reading the payload wherever the
+  catalog determines it (embeddings, vectors, genes, latent outliers). An edge
+  file's length is known once the graph has been read and checked, so a HEAD on
+  it reads the graph.
+
+Payloads are kept in one byte-bounded cache that is safe to use from the
+server thread and a notebook at the same time. The routes exist whatever flags
+the server started with: `--knn` decides only whether the dataset *starts*
+with a graph.
+
+### When the viewer is newer than this server
+
+`cellucid serve` loads the newest viewer from www.cellucid.com, so a viewer can
+be newer than the `cellucid` package that serves it. A server from before
+export format 3 serves a `dataset_identity.json` whose `version` is 2. The
+viewer then asks the same server for `GET /_cellucid/info`, which every
+Cellucid server has always answered with its package `version`, and says:
+
+```text
+This Cellucid server (0.9.2) is older than the viewer; update it with pip install -U cellucid.
+```
+
+Update with `pip install -U cellucid` and start the server again.
+
 ## CLI Options (What They Mean)
 
 Run `cellucid serve --help` anytime. Its complete output:
@@ -415,7 +495,7 @@ usage: cellucid serve [-h] [--port PORT] [--host HOST] [--allowed-host HOST]
                       [--latent-key KEY] [--dataset-name NAME]
                       [--dataset-id ID] [--obs-key KEY]
                       [--vector-field-default FIELD_ID] [--vector-fields]
-                      [--connectivity]
+                      [--knn connectivities]
                       data_path
 
 Serve data for visualization. Automatically detects format.
@@ -460,15 +540,15 @@ options:
   --vector-fields       Serve the obsm '<field>_umap_<n>d' vector arrays as an
                         animated overlay. Off by default: every declared field
                         is read and checked before the server binds
-  --connectivity        Serve the obsp['connectivities'] neighbor graph. Off
+  --knn connectivities        Serve the obsp['connectivities'] neighbor graph. Off
                         by default: reading it costs time and memory
                         proportional to the stored neighbor count, which on a
                         large dataset is the longest part of startup
 
 Auto-detection:
-    - .h5ad files → served directly via AnnData
-    - .zarr directories → served directly via AnnData
-    - Export directories (or exports roots with multiple datasets) → served as pre-exported data
+    - .h5ad files -> served directly via AnnData
+    - .zarr directories -> served directly via AnnData
+    - Export directories (or exports roots with multiple datasets) -> served as pre-exported data
 
 Examples:
     # Serve an h5ad file (auto-detected)
@@ -493,7 +573,7 @@ Examples:
     # Serve the neighbor graph and the velocity overlay, both off by default
     # because each is read and checked in full before the server binds
     cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \
-        --connectivity --vector-fields
+        --knn connectivities --vector-fields
 
     # For SSH tunnel access from a remote server:
     # On the server: cellucid serve /path/to/data
@@ -558,7 +638,7 @@ Key flags:
   - Also serve the `obsm` `<field>_umap_<n>d` arrays as the animated velocity
     overlay. **Off by default**, because every declared field is read and
     checked before the server binds.
-  - Direct AnnData input only, exactly like `--connectivity`. Without it the
+  - Direct AnnData input only, exactly like `--knn connectivities`. Without it the
     overlay is simply absent, and step 3 of startup says so.
 
 - `--vector-field-default`:
@@ -567,7 +647,7 @@ Key flags:
   - It selects among *served* fields, so passing it without `--vector-fields`
     is an error rather than a no-op: there is nothing to choose between.
 
-- `--connectivity`:
+- `--knn connectivities`:
   - Also serve the `obsp['connectivities']` neighbor graph. **Off by default**,
     because reading it costs time and memory proportional to the stored
     neighbor count, and that is the longest part of startup on a large object.
@@ -626,8 +706,8 @@ Both convenience calls block until you interrupt them. Use the class APIs when
 another part of your program must keep control of the process.
 
 The Python path takes the same two opt-in decisions as the CLI, through the
-keyword-only `serve_connectivity` and `serve_vector_fields` parameters. Both
-default to `False` on `serve_anndata()`, `show_anndata()`, `AnnDataViewer`,
+keyword-only `knn_key` and `serve_vector_fields` parameters. They default to
+`None` and `False` on `serve_anndata()`, `show_anndata()`, `AnnDataViewer`,
 `AnnDataAdapter`, `AnnDataAdapter.from_file()`, and `AnnDataServer`:
 
 ```python
@@ -640,7 +720,7 @@ serve_anndata(
     open_browser=True,
     dataset_name="My dataset",
     dataset_id="my-dataset",
-    serve_connectivity=True,
+    knn_key="connectivities",
     serve_vector_fields=True,
 )
 ```
@@ -828,7 +908,7 @@ your data — another process holds the port.
 
 ```text
 $ cellucid serve pbmc_demo.h5ad \
-      --dataset-name "PBMC demo" --dataset-id pbmc-demo --no-browser --connectivity
+      --dataset-name "PBMC demo" --dataset-id pbmc-demo --no-browser --knn connectivities
 cellucid v0.9.1
 
 Importing dependencies (anndata, numpy, scipy)... done
@@ -843,24 +923,24 @@ Importing dependencies (anndata, numpy, scipy)... done
       Obs columns: classifying 3
       Embeddings: resolving obsm keys
       Embeddings: 2D from obsm['X_umap']
-Error: Connectivity was asked for, and adata.obsp has no 'connectivities' matrix to serve. Compute the neighbor graph with sc.pp.neighbors(adata) before serving, or serve without asking for connectivity.
+Error: knn_key names obsp['connectivities'], which this object does not have. obsp holds: []. Compute the neighbour graph with sc.pp.neighbors(adata), or serve without a graph.
 ```
 
 Asking for a graph that is not there is an error rather than silence. Either
-compute the neighbors first or drop `--connectivity`; every other capability of
+compute the neighbors first or drop `--knn connectivities`; every other capability of
 the dataset serves fine without it.
 
-### The bare `X_umap` is not 1, 2, or 3 columns wide
+### Nothing in `obsm` can be plotted
 
 ```text
-$ cellucid serve wide_umap.h5ad \
+$ cellucid serve no_embedding.h5ad \
       --dataset-name "PBMC demo" --dataset-id pbmc-demo --no-browser
 cellucid v0.9.1
 
 Importing dependencies (anndata, numpy, scipy)... done
 
 [1/5] Detecting format...
-      Path: wide_umap.h5ad
+      Path: no_embedding.h5ad
       Format: h5ad
       ✓ Format detected
 
@@ -868,13 +948,12 @@ Importing dependencies (anndata, numpy, scipy)... done
       Mode: read-only backed h5ad
       Obs columns: classifying 3
       Embeddings: resolving obsm keys
-Error: No UMAP embedding Cellucid can read was found in adata.obsm. Cellucid reads the exact keys 'X_umap_1d', 'X_umap_2d', and 'X_umap_3d', and reads a bare 'X_umap' as the dimension its own column count states. Available obsm keys: ['X_umap']. adata.obsm['X_umap'] has shape (4096, 10), and Cellucid draws 1, 2, or 3 dimensions, so that array names a dimension no viewer renders. Assign the columns you mean to draw under the key for their own count.
+Error: Cellucid found nothing to plot. It needs an obsm array with one row per cell (4,096) and at least one numeric column. obsm holds: X_df (table), spatial (4,096 × 2, NaN at cell 17).
 ```
 
-The message names the shape it found, which is the fastest way to see what
-happened: a ten-column array under `X_umap` is a latent space named after a
-plot. Write the columns you actually want to draw to `X_umap_2d` (or `_1d` /
-`_3d`) and serve again.
+The message lists every `obsm` entry and why it was not used — here a table and
+an array with a `NaN` coordinate. Repair the array, compute an embedding, or name
+a usable one with `--embedding-2d KEY`, and serve again.
 
 ### A missing package, an old package, and a Python that is too old
 
@@ -922,8 +1001,8 @@ copy the traceback into the report.
 
 - **The graph is in the file but no edges are drawn**:
   - Step 3 says
-    `Connectivity: not served (obsp['connectivities'] is present; pass serve_connectivity=True, or --connectivity, to draw it)`.
-  - Restart with `--connectivity` (CLI) or `serve_connectivity=True` (Python).
+    `Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)`.
+  - Restart with `--knn connectivities` (CLI) or `knn_key="connectivities"` (Python).
     Connectivity is off by default on the direct-AnnData path because building
     the edge list is the longest part of startup on a large object.
   - A prepared export is unaffected: it either ships the connectivity artifacts
@@ -1049,7 +1128,7 @@ For overlay UI behavior and deeper debugging, see:
 ### Symptom: “The connectivity/edge overlay has nothing to draw”
 
 **Likely causes (ordered)**
-1) The server was started without `--connectivity` / `serve_connectivity=True`,
+1) The server was started without `--knn connectivities` / `knn_key="connectivities"`,
    which is the default on the direct-AnnData path.
 2) The object genuinely has no `obsp['connectivities']`.
 3) You are serving a prepared export that was written without a
@@ -1065,7 +1144,7 @@ For overlay UI behavior and deeper debugging, see:
   `connectivity/edges.weights.f64.bin`.
 
 **Fix**
-- Cause 1: restart with `--connectivity`, or `serve_connectivity=True` from
+- Cause 1: restart with `--knn connectivities`, or `knn_key="connectivities"` from
   Python. The graph is read and validated before the socket opens, so expect
   startup to take longer.
 - Cause 2: compute the graph first, for example with `sc.pp.neighbors(adata)`.
@@ -1083,7 +1162,7 @@ For overlay UI behavior and deeper debugging, see:
 **Fix**
 - Prefer pre-exported data for best performance.
 - If using SSH, run the server close to the data (on the same machine as the file) and tunnel to it.
-- Leave `--connectivity` off unless you are going to draw the graph. A
+- Leave `--knn connectivities` off unless you are going to draw the graph. A
   50-neighbor graph over millions of cells is hundreds of millions of stored
   neighbors, and every one of them is read and validated before the server
   binds. Past 50,000,000 stored neighbors, the validator logs a warning naming

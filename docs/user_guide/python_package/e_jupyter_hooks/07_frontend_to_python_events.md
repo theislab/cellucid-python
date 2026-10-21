@@ -1,9 +1,11 @@
 # Frontend → Python events
 
-The embedded viewer sends one of eight closed event records to Python. The
-browser posts JSON to `POST /_cellucid/events`; the server authenticates
-`viewerId` and `viewerToken`, removes the token, and dispatches the record to
-the matching viewer.
+The embedded viewer sends one of nine closed event records to Python. The
+browser posts most of them as JSON to `POST /_cellucid/events`; a selection is
+posted as binary cell indices to `POST /_cellucid/selection`, and a session
+bundle is uploaded to `POST /_cellucid/session_bundle`. The server
+authenticates `viewerId` and `viewerToken`, removes the token, and dispatches
+the record to the matching viewer.
 
 ## Hook entry points
 
@@ -51,17 +53,24 @@ booleans.
 
 ### `selection`
 
-Posted record:
+A selection can hold millions of cells, so it does not travel as JSON. The
+viewer posts it to its own route:
 
-```json
-{
-  "type": "selection",
-  "viewerId": "<viewer-id>",
-  "viewerToken": "<viewer-token>",
-  "cells": [0, 10, 42],
-  "source": "lasso"
-}
+```text
+POST /_cellucid/selection?viewerId=<viewer-id>&viewerToken=<viewer-token>&source=lasso
+Content-Type: application/octet-stream
+
+<cells as little-endian uint32, strictly ascending>
 ```
+
+The body is the selected row indices, four bytes each (little-endian unsigned
+32-bit), in strictly ascending order, at least one cell; `[0, 10, 42]` is the
+12 bytes `00 00 00 00 0a 00 00 00 2a 00 00 00`. The server checks the
+credentials before it reads the body, refuses a body that is empty, not a
+whole number of 4-byte values, or not strictly ascending (HTTP 400), and
+takes a selection of any size (HTTP 413 only when it cannot hold the body in
+memory). `source` is one exact token
+without whitespace. `POST /_cellucid/events` refuses a `selection` record.
 
 Hook payload:
 
@@ -69,7 +78,7 @@ Hook payload:
 {"cells": [0, 10, 42], "source": "lasso"}
 ```
 
-`cells` contains unique row indices. `source` is one exact non-empty token.
+`cells` is a `list[int]` of unique row indices in ascending order.
 
 ### `hover`
 
@@ -202,7 +211,7 @@ Hook payload:
 }
 ```
 
-`command` must be one of the nine command types in
+`command` must be one of the ten command types in
 {doc}`06_python_to_frontend_commands`; a record naming anything else is
 rejected, so no browser-supplied text reaches your notebook as a command name.
 `reason` is one line of at most 500 characters.
@@ -251,9 +260,68 @@ command and the wait is missed.
 `viewer.debug_connection()["recent_events"]["command_errors"]` lists the most
 recent rejections after the fact.
 
+### `data_mapping`
+
+The viewer reports its *data mapping* — which stored array fills each
+embedding slot, the bound vector fields, and for an AnnData source the
+neighbour graph, the gene names, the expression matrix and the latent space.
+It sends one after the dataset loads and another whenever the mapping changes.
+
+```{note}
+The viewer sends this event only to a `cellucid` that lists `data_mapping`
+among the events of `GET /_cellucid/protocol`, as this release does; an older
+package never receives an event it would reject. A viewer older than this
+release never sends it.
+```
+
+Posted record:
+
+```json
+{
+  "type": "data_mapping",
+  "viewerId": "<viewer-id>",
+  "viewerToken": "<viewer-token>",
+  "requestId": null,
+  "origin": "default",
+  "mapping": {
+    "kind": "anndata",
+    "embeddings": {"1d": null, "2d": {"key": "X_umap", "columns": [0, 1]}, "3d": null},
+    "knn": null,
+    "geneNames": "index",
+    "expression": "X",
+    "latent": null,
+    "vectorFields": []
+  }
+}
+```
+
+Hook payload: the record without `type` and `viewerId` — `requestId`,
+`origin`, and `mapping`.
+
+- `origin` is one of `default`, `best_guess`, `session`, `user`, and
+  `notebook`.
+- `requestId` is a string exactly when `origin` is `notebook`: that event
+  answers the `setDataMapping` command `viewer.set_data_mapping()` sent, and names its request.
+  For every other origin it is `null`.
+- `mapping` must pass the same validation sessions use
+  (`cellucid.data_mapping.validate_data_mapping`); an invalid one rejects
+  the whole record before any hook runs. The validated canonical copy is what
+  the hook receives and what `viewer.data_mapping` returns.
+
+```python
+@viewer.on_data_mapping
+def handle(event):
+    print(event["origin"], event["mapping"]["embeddings"])
+
+viewer.data_mapping          # the latest mapping, or None before the first report
+viewer.data_mapping_origin   # why it is what it is
+```
+
 ## Delivery and failure semantics
 
-- The endpoint accepts at most 1 MiB of UTF-8 JSON.
+- `POST /_cellucid/events` accepts at most 1 MiB of UTF-8 JSON and refuses
+  `selection` and `session_bundle` records, which only their own routes
+  (`/_cellucid/selection`, `/_cellucid/session_bundle`) may produce.
 - The viewer ID must be registered and the token must match.
 - The event name, full field set, and every payload value are validated before
   hook dispatch.

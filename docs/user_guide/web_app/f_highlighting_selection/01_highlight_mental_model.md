@@ -63,10 +63,10 @@ Two key consequences:
 Here is what that looks like once one selection has been confirmed:
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/04-view-highlighted-cells.png
-:alt: The whole window after confirming the lasso group, with the enclosed cells drawn in the highlight colour across the embedding and the panel reporting 870 cells highlighted.
+:alt: The whole window after confirming the lasso group: the 842 enclosed cells in the upper part of the left lobe are drawn in the highlight colour, and the Highlighting panel reports 842 cells highlighted with one Lasso group.
 :width: 1440px
 
-One confirmed group. The panel counts membership (`870 cells highlighted`); the
+One confirmed group. The panel counts membership (`842 cells highlighted`); the
 canvas draws the members it is currently allowed to draw. Those are two
 different numbers whenever a filter is active, and the panel says so by
 switching to *“N of M highlighted cells visible”*.
@@ -192,6 +192,11 @@ In Cellucid, these operations are controlled by modifier keys held during the ge
 - `Shift+Alt` = union (add)
 - `Ctrl+Alt` or `Cmd+Alt` = subtract (remove)
 
+Without a keyboard (a phone or tablet), **Select mode** (in the Highlighting
+panel, or on the selection bar at the bottom of the plot) stands in for `Alt`,
+and its **Intersect / Add / Subtract** buttons pick the operation instead of
+the modifier keys ({ref}`select-mode`).
+
 :::{tip}
 In 3D, intersection across multiple angles is the most reliable way to isolate a “true 3D region” using 2D tools.
 Example: draw a lasso, rotate 90°, draw another lasso with `Alt` to intersect.
@@ -234,12 +239,12 @@ Goal: select a cluster and make it persist.
 7) You now have a highlight group in the list, and the highlight remains even if you change fields.
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/choose-highlight-mode.png
-:alt: The Highlighting panel with the four Highlight mode buttons — Annotation based, KNN drag, Proximity drag, Lasso — the pointer on Lasso, and the empty group list reading "No cells highlighted".
+:alt: The Highlighting panel before anything is selected: the four Highlight mode buttons — Annotation based (active), KNN drag, Proximity drag and Lasso — ringed, with the pointer on Lasso; below a dashed divider the Select mode switch, off, with the hint "tap, click or drag selects without Alt"; the Annotation based help text; one page tab reading Page 1 (0); and the empty group list reading "No cells highlighted".
 :width: 516px
 
-Step 3 in the panel. The line under the buttons always describes the mode that
-is currently active, so it is the fastest way to confirm you are in the tool you
-think you are in.
+Step 3 in the panel. The help text below the buttons (under the **Select mode**
+switch) always describes the mode that is currently active, so it is the fastest
+way to confirm you are in the tool you think you are in.
 ```
 
 The four steps as they actually look, gesture by gesture, are in

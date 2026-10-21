@@ -17,7 +17,7 @@ Each entry follows the same structure:
 If you’re stuck, do this first:
 
 1) Confirm **Visualization → Render mode:** is `Points`.  
-2) Confirm you are on a dimension that actually has vector fields (2D vs 3D).  
+2) Confirm the selected view shows an embedding that actually has vector fields: under **Compare views → View N shows**, the embedding the vectors were computed on.  
 3) Enable `Show overlay`, then temporarily set:
    - `Particle density:` 5K
    - `Trail length:` 3.0s
@@ -31,7 +31,7 @@ If you’re stuck, do this first:
 
 ### Likely causes (ordered)
 
-1) You are in `Render mode: Volumetric smoke cloud (alpha)` (overlay controls are currently in the Points-only controls area).  
+1) You are in `Render mode: Volumetric smoke cloud (beta)` (overlay controls are currently in the Points-only controls area).  
 2) The dataset has **no vector fields**, so the overlay block is hidden.  
 3) You are not looking under **Visualization** in the sidebar (UI location confusion).  
 
@@ -58,22 +58,22 @@ If you’re stuck, do this first:
 
 ### Likely causes (ordered)
 
-1) Vector fields exist, but **not for the current dimension** (e.g., only 2D vectors exist and you are in 3D).  
+1) Vector fields exist, but **not for the embedding the selected view shows**: only 2D vectors exist and the view shows a 3D embedding, or it shows another embedding of the same dimension (a t-SNE chosen under **Compare views → View N shows**).  
 2) The dataset only contains vector fields for a different basis/dimension than you expect.  
 
 ### How to confirm
 
-- The UI will show a hint like:
-  - `Vector fields available for 2D, 3D. Switch embedding dimension to enable.`
+- The UI will show a hint that names the embeddings that have a field, like:
+  - `Vector fields are bound to X_umap, X_umap_3d. Show one of them in this view to enable.`
 
 ### Fix
 
-1) Switch the current view to a supported dimension (2D or 3D).
-2) If you need the missing dimension, export/generate that dimension’s vector field and reload the dataset.
+1) Show one of the named embeddings in the view (**Compare views → View N shows**). The overlay is drawn in every view that shows an embedding the field is bound to; other views stay without it.
+2) If you need vectors on another embedding, export/generate a vector field for it and reload the dataset.
 
 ### Prevention
 
-- Export both `*_umap_2d` and `*_umap_3d` vector fields when you expect users to switch dimensions.
+- Export both `*_umap_2d` and `*_umap_3d` vector fields when you expect users to show both dimensions.
 
 ---
 
@@ -82,7 +82,7 @@ If you’re stuck, do this first:
 ### Likely causes (ordered)
 
 1) The vector field failed to load (file missing, wrong shape, CORS/permission issue).  
-2) You enabled the overlay in a dimension where no field exists (it auto-disables to avoid nonsense).  
+2) You enabled the overlay in a view showing an embedding no field is bound to (it auto-disables to avoid nonsense).  
 3) You switched datasets (the UI resets the overlay state on dataset changes).  
 
 ### How to confirm
@@ -93,14 +93,14 @@ If you’re stuck, do this first:
 
 ### Fix
 
-1) Confirm you are in a supported dimension for this dataset.
+1) Confirm the view shows an embedding a field is bound to.
 2) Try a different field in `Vector field:` (if available).
 3) If you are loading via server/public hosting, confirm the vector files exist and are reachable.
 4) If you are loading an AnnData, confirm `adata.obsm` contains the expected key and shape (see “How do I add vector fields?”).
 
 ### Prevention
 
-- Keep vector field naming and shapes consistent (dimension-specific, row-aligned).
+- Keep vector field naming and shapes consistent (bound to one embedding, row-aligned).
 - Prefer pre-exported folders created by `cellucid.prepare(...)` for reproducibility.
 
 ---
@@ -109,22 +109,25 @@ If you’re stuck, do this first:
 
 ### Likely causes (ordered)
 
-1) There are no vector fields for the current dimension (the dropdown is dimension-filtered).  
+1) There are no vector fields for the embedding the view shows (the dropdown lists only the fields bound to it).  
 2) Your dataset metadata says vector fields exist, but the actual arrays/files are missing.  
-3) The vector fields are present but do not match naming conventions, so they aren’t detected.  
+3) For an AnnData file: the arrays are present, but their keys do not follow the `<field>_umap_<dim>d` default rule, so nothing is bound until you bind them under **Session › Data mapping › Vector fields**.
 
 ### How to confirm
 
-- Switch dimensions and see if entries appear in 2D or 3D.
+- Switch the view's embedding and see if entries appear; the info line names the embeddings that have a field.
 - If you’re loading an AnnData, inspect `adata.obsm.keys()` in Python and look for:
   - `velocity_umap_2d`, `velocity_umap_3d`, `T_fwd_umap_2d`, etc.
 - If you’re loading an export folder, check for:
   - `dataset_identity.json` containing a `vector_fields` block
-  - a `vectors/` directory with files like `velocity_umap_2d.bin` (or `.bin.gz`)
+  - a `vectors/` directory with the files that block lists under
+    `vector_fields.fields.<field>.files`, one per bound embedding and named by
+    index, such as `vectors/0_2.bin.gz` (or `.bin` when the export is
+    uncompressed)
 
 ### Fix
 
-1) Switch to a dimension that has vector fields.
+1) Show an embedding that has vector fields.
 2) If the dataset should have vector fields but doesn’t:
    - regenerate/export them and reload the dataset.
 
@@ -352,7 +355,7 @@ returns without touching the overlay. See {doc}`06_edge_cases`.
 
 ### How to confirm
 
-- Switch dimension and see whether the dropdown changes.
+- Show the other dimension's embedding in the view and see whether the dropdown changes.
 - Check your export folder or AnnData `obsm` keys for `*_2d` and `*_3d` variants.
 
 ### Fix
@@ -403,19 +406,26 @@ is a data-preparation question rather than a UI one. The full recipe — both th
 with the exact shape and dtype requirements — is
 {doc}`../../python_package/c_data_preparation_api/08_vector_fields_velocity_displacement`.
 
-Two rules from it decide whether the field is detected at all, so they are worth
-repeating here:
+The two routes bind a field to an embedding differently, and the binding
+decides whether the field is drawn at all:
 
-- **The key carries the dimension.** Cellucid looks for `obsm` keys of the form
-  `<something>_umap_<dim>d` — `velocity_umap_2d`, `T_fwd_umap_3d`. A key without
-  the suffix is not a vector field, and a key whose array width disagrees with
-  its suffix is rejected at load time with an error naming both numbers.
-- **The matching embedding must exist.** A 2D field needs `X_umap_2d`, a 3D field
-  needs `X_umap_3d`. Export every dimension you expect people to switch to.
+- **Export (`prepare(..., vector_fields=...)`).** Each field names the
+  embedding ids it is drawn over, for example
+  `{"velocity": {"X_umap": v2, "X_umap_3d": v3}}`. The field id is any name.
+  Each array must have as many columns as the embedding it is bound to has
+  dimensions, or the export is refused naming both numbers. Bind the field to
+  every embedding you expect people to show it on.
+- **Direct AnnData (the browser H5AD/Zarr path, or `serve_anndata` with
+  `serve_vector_fields=True`).** The default binding reads the key: an `obsm`
+  key of the form `<something>_umap_<dim>d` — `velocity_umap_2d`,
+  `T_fwd_umap_3d` — is bound to the embedding of its dimension when that
+  embedding is the UMAP (`X_umap_<dim>d` or the plain `X_umap`). Any other
+  binding is chosen under **Session › Data mapping › Vector fields**.
 
+Either way a field is drawn only in a view showing an embedding it is bound to.
 A finished export folder carries the evidence: `dataset_identity.json` gains a
 `vector_fields` block, and a `vectors/` directory appears holding one `.bin`
-(or `.bin.gz`) per field and dimension.
+(or `.bin.gz`) per field and bound embedding.
 
 ---
 
@@ -426,10 +436,11 @@ not on a paraphrase — each one has exactly one cause.
 
 | Message | Raised by | The one condition |
 |---|---|---|
-| `Dataset metadata does not advertise an exact 2D vector field key for "<id>"` (or `3D`) | AnnData adapter | The overlay asked for a dimension this field never registered a key for. |
-| `Metadata advertises '<obsmKey>' for 2D vector field "<id>", but it is missing from obsm` | AnnData adapter | The key was registered at load time but is no longer present in `obsm`. |
-| `Vector field '<obsmKey>' has N dimensions, expected D` | AnnData adapter | A 2D array is stored under a 3D key, or the reverse. Note the **single** quotes around the `obsm` key. |
-| `Vector field '<obsmKey>' has N columns, but its Dd suffix requires exactly D` | AnnData adapter, at dataset load | The same shape mismatch, caught during discovery — so the field never appears in `Vector field:` at all. |
+| `Vector field "<id>" has no data bound to layout "<layout>".` | DataState | A load was asked for in a view showing an embedding this field is not bound to. |
+| `Vector field "<id>" is not bound to embedding "<embedding id>"` | AnnData adapter | The same, for a file read in the browser. |
+| `Vector field '<obsmKey>' has N columns, but its Dd suffix requires exactly D` | AnnData adapter, at dataset load | A 2D array is stored under a 3D key, or the reverse — so the dataset does not open. Note the **single** quotes around the `obsm` key. |
+| `Vector field '<obsmKey>' contains a non-finite component at flat index I` | AnnData adapter | A `NaN` or `Inf` in an `obsm` vector array; `I` is the flat index (cell × dimension + component). |
+| `Vector field '<obsmKey>' component at flat index I is outside the finite Float32 range after normalization` | AnnData adapter | The values are finite but leave `float32` range once scaled with their embedding. |
 | `VectorFieldManager.loadField: vectors length X does not equal expected length Y.` | Vector field manager | The payload length is not `n_cells × components`: usually a stale or mismatched `vectors/*.bin` in an export folder. |
 | `VectorFieldManager.loadField: field "<id>" contains a non-finite value at cell N, component C.` | Vector field manager | A `NaN` or `Inf` in the field. The message names the exact cell and component; see {doc}`06_edge_cases`. |
 | `VectorFieldManager.loadField: scaling field "<id>" overflowed at cell N, component C.` | Vector field manager | The values are finite but so large that scaling them leaves `float32` range. |
@@ -445,7 +456,7 @@ When reporting an overlay bug, include:
 
 - Dataset loading path: file picker / server / Jupyter / GitHub-hosted exports
 - Browser + OS + GPU (e.g., Chrome 121, macOS 14.2, Apple M2)
-- Dataset size: `n_cells`, and which dimension you were viewing (2D vs 3D)
+- Dataset size: `n_cells`, and which embedding each view showed (its row in **Compare views**, e.g. `t-SNE · 2D`)
 - Selected `Vector field:` label and a screenshot of the overlay settings panel
 - Any toast/notification error text (copy/paste)
 - Browser console logs around the failure (copy/paste)

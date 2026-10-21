@@ -109,7 +109,9 @@ Views: A. Live (Field: cell_type; Filters: total_counts: 500.00 – 12000.00) | 
 
 Read it as: `Views:` then one `Panel. Label (Field: …; Filters: …)` clause per
 panel joined by ` | `, then the source. `none` means exactly that — no color
-field, or no active filter. The SVG `dc:description` is built by the same code,
+field, or no active filter. A panel's filters are the ones in force in that
+view, including a gene range filter, whether or not the view is the focused
+one; a filter you disabled in Active filters hides nothing and is not listed. The SVG `dc:description` is built by the same code,
 so it is identical text for the same export.
 
 ### What `Comment` looks like (structured JSON)
@@ -181,7 +183,9 @@ Exports are named conservatively:
 Two segments behave differently for a multi-panel export:
 
 - `<view>` is the exported view's label for a single-view export, and the
-  literal `multiview` for a grid.
+  literal `multiview` for a grid. A view whose label is just its color field
+  (one you never renamed) adds no segment of its own, so the field is not
+  written twice: `<dataset>_<color-field>_<timestamp>.png`.
 - `<color-field>` is **omitted** when the panels do not all share one color
   field, for the same reason `Color Field` is: a filename may not name a field
   that only some panels use. A grid where every panel shares the field keeps the

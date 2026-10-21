@@ -31,13 +31,15 @@ Authentication:
 ### Channel B — frontend → Python (events)
 
 Transport:
-- HTTP `POST` to `/_cellucid/events` on the data server
+- HTTP `POST` to `/_cellucid/events` on the data server (JSON events)
+- HTTP `POST` to `/_cellucid/selection` on the data server (selections, binary)
 
 Used for:
 - “user did something” events (selection, hover, click, ready)
 
 Routing:
-- the event payload contains `viewerId`, `viewerToken`, and `type`
+- a JSON event payload contains `viewerId`, `viewerToken`, and `type`; a
+  selection names `viewerId`, `viewerToken` and `source` in its query
 - the server authenticates the token, then routes to the registered callback
 
 Important security note:
@@ -48,13 +50,31 @@ Important security note:
 
 ## Frontend → Python events: transport and routing
 
-### HTTP endpoint
+### HTTP endpoints
 
 - `POST /_cellucid/events`
-- body: JSON
+- body: JSON, at most 1 MiB; a `selection` or `session_bundle` record is
+  refused with HTTP 400, because only their own routes may produce them
+
+- `POST /_cellucid/selection?viewerId=...&viewerToken=...&source=...`
+- body: `application/octet-stream`, the selected row indices as little-endian
+  `uint32`, strictly ascending, one or more (no size cap; the server's memory
+  is the only limit, HTTP 413)
+- the server authenticates before reading the body, checks it
+  (`_require_selection_cell_array` in `jupyter/_wire.py`), and routes one
+  `selection` event whose `cells` field is the body bytes; the viewer's
+  validator decodes them into the `list[int]` its hooks receive
+
+A selection has its own binary route because a JSON array of indices costs
+about 8 bytes per cell to encode, parse and validate, the event endpoint's
+1 MiB limit stops it near 130,000 cells, and a browser `keepalive` request
+(which the event posts do not use) is limited to 64 KiB in total. Four bytes
+per cell, sorted, lets both sides check uniqueness in one pass without a hash
+set.
 
 Server implementation:
-- `cellucid-python/src/cellucid/_server_base.py` (`CORSMixin.handle_event_post`)
+- `cellucid-python/src/cellucid/_server_base.py` (`CORSMixin.handle_event_post`,
+  `CORSMixin.handle_selection_post`)
 
 Routing:
 - server validates `viewerId`, `viewerToken`, and `type`
@@ -77,6 +97,7 @@ The viewer accepts exactly:
 - `pong`
 - `debug_snapshot`
 - `command_error`
+- `data_mapping`
 - the server-generated `session_bundle`
 
 Each type owns one exact required field set. Unknown types, missing fields,
@@ -172,7 +193,7 @@ Meaning:
 - a command Python sent was rejected by the viewer instead of applied.
 
 Expected keys:
-- `command`: exactly one of the nine command types this protocol defines
+- `command`: exactly one of the ten command types this protocol defines
 - `reason`: one line, at most 500 characters
 
 Commands carry no `requestId`, so this event correlates with a command *type*
@@ -185,6 +206,24 @@ registered, because the command methods are one-way — `set_color_by` has
 already returned `None` by the time the rejection arrives on the server thread,
 and nothing can make it raise without blocking every command on a browser round
 trip.
+
+### `data_mapping`
+
+Meaning:
+- the viewer resolved or changed its data mapping (which arrays it plots and
+  reads).
+
+Expected keys:
+- `origin`: one of `default`, `best_guess`, `session`, `user`, `notebook`
+- `requestId`: a string exactly when `origin` is `notebook` (the event answers
+  that `setDataMapping` command); `null` otherwise
+- `mapping`: a complete data mapping, validated by
+  `cellucid.data_mapping.validate_data_mapping` and stored as its canonical copy
+
+`setDataMapping` is the one command that carries a `requestId`: it is new, so
+no deployed build validates a key set for it, and `viewer.set_data_mapping()`
+needs the answer to tell an applied mapping from a refused one. Its key set is
+exactly `type`, `requestId`, `mapping`.
 
 ---
 
@@ -281,9 +320,9 @@ be sniffed the way a version would be:
 {
   "commands": ["clearHighlights", "debug_snapshot", "freeze", "highlight",
                "ping", "requestSessionBundle", "resetCamera", "setColorBy",
-               "setVisibility"],
-  "events": ["click", "command_error", "debug_snapshot", "hover", "pong",
-             "ready", "selection", "session_bundle"]
+               "setDataMapping", "setVisibility"],
+  "events": ["click", "command_error", "data_mapping", "debug_snapshot",
+             "hover", "pong", "ready", "selection", "session_bundle"]
 }
 ```
 
@@ -295,9 +334,17 @@ would reject. Both grow inside the arrays and the key set stays fixed, because
 the viewer validates payloads against exact key sets and a new key would break
 the very builds this route exists to protect.
 
-The web build does not fetch this route yet. Until it does, no `command_error`
-is emitted and the reader stays idle; the endpoint is the precondition, not the
-feature.
+The web build fetches this route during `JupyterBridgeDataSource.initialize()`
+and sends `command_error` and `data_mapping` only when the notebook lists them;
+a notebook too old to answer the route (HTTP 404) is treated as accepting
+neither.
+
+The gate covers new event types, not a new wire form for an existing one. When
+`selection` moved from a JSON event to the binary `POST /_cellucid/selection`
+route, the change was a clean break in both repositories: a `cellucid` older
+than the route answers that POST with HTTP 404, which the viewer reports as a
+failed selection delivery, and a current `cellucid` refuses a JSON `selection`
+event with HTTP 400.
 
 ---
 
@@ -305,7 +352,9 @@ feature.
 
 ### Huge selections
 
-Selection payloads can be large (tens/hundreds of thousands of indices).
+Selections can be large (millions of indices). On the wire they are 4 bytes
+per cell; in the hook payload `event["cells"]` is a Python `list[int]`, about
+36 bytes per cell.
 
 Developer guidance:
 - treat `event["cells"]` as untrusted and potentially huge,

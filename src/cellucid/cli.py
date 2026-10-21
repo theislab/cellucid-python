@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import errno
 import logging
 import platform
@@ -20,11 +21,14 @@ import socket
 import sys
 import traceback
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 # Import shared configuration from _server_base
-from ._console import console_print
+from ._console import _text_for_console_stream, console_print
 from ._server_base import CELLUCID_WEB_URL, DEFAULT_HOST, DEFAULT_PORT
+
+if TYPE_CHECKING:
+    from _typeshed import SupportsWrite
 
 ISSUE_TRACKER_URL = "https://github.com/theislab/cellucid-python/issues"
 
@@ -54,6 +58,24 @@ _OPERATOR_ERROR_TYPES: Final = (
     OSError,
     ImportError,
 )
+
+
+class _ConsoleArgumentParser(argparse.ArgumentParser):
+    """Argument parser whose help, usage, version, and errors are console-escaped.
+
+    argparse writes to the stream directly, so on a CP1252 Windows console any
+    character outside that code page -- in help text, or in a path echoed back
+    in an error -- raised ``UnicodeEncodeError`` before a command ran. This
+    applies the escaping ``console_print`` gives every other console line.
+    Subparsers inherit this class, so every parser in the tree is covered.
+    """
+
+    def _print_message(self, message: str, file: SupportsWrite[str] | None = None) -> None:
+        if message:
+            stream = sys.stderr if file is None else file
+            # argparse's own tolerance of a missing stream, e.g. under pythonw.
+            with contextlib.suppress(AttributeError, OSError):
+                stream.write(_text_for_console_stream(message, stream))
 
 
 def _create_common_server_parser() -> argparse.ArgumentParser:
@@ -191,9 +213,9 @@ def _add_serve_subparser(subparsers, common_parser: argparse.ArgumentParser) -> 
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Auto-detection:
-    - .h5ad files → served directly via AnnData
-    - .zarr directories → served directly via AnnData
-    - Export directories (or exports roots with multiple datasets) → served as pre-exported data
+    - .h5ad files -> served directly via AnnData
+    - .zarr directories -> served directly via AnnData
+    - Export directories (or exports roots with multiple datasets) -> served as pre-exported data
 
 Examples:
     # Serve an h5ad file (auto-detected)
@@ -218,7 +240,14 @@ Examples:
     # Serve the neighbor graph and the velocity overlay, both off by default
     # because each is read and checked in full before the server binds
     cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \\
-        --connectivity --vector-fields
+        --knn connectivities --vector-fields
+
+    # Choose what is plotted: t-SNE in 2D, PCA components 1 and 2 in a second
+    # run, and expression from a layer named by the gene-symbol column
+    cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \\
+        --embedding-2d X_tsne --expression layer:log1p --gene-id-column gene_symbols
+    cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \\
+        --embedding-2d X_pca:0,1
 
     # For SSH tunnel access from a remote server:
     # On the server: cellucid serve /path/to/data
@@ -293,19 +322,71 @@ Examples:
         ),
     )
 
+    for dimension in (1, 2, 3):
+        serve_parser.add_argument(
+            f"--embedding-{dimension}d",
+            type=str,
+            default=None,
+            dest=f"embedding_{dimension}d",
+            metavar="KEY[:COLUMNS]",
+            help=(
+                f"AnnData obsm array to plot in {dimension}D, optionally with its "
+                f"0-based columns, e.g. X_pca:{','.join(str(c) for c in range(dimension))}. "
+                "Overrides the default (X_umap_<n>d or X_umap) for this dimension"
+            ),
+        )
+
     serve_parser.add_argument(
-        "--connectivity",
-        action="store_true",
+        "--knn",
+        type=str,
         default=None,
+        metavar="KEY",
         help=(
-            "Serve the obsp['connectivities'] neighbor graph. Off by default: "
-            "reading it costs time and memory proportional to the stored "
-            "neighbor count, which on a large dataset is the longest part of "
-            "startup"
+            "AnnData obsp matrix to serve as the neighbor graph, usually "
+            "'connectivities'. Off by default: reading it costs time and memory "
+            "proportional to the stored neighbor count, which on a large dataset "
+            "is the longest part of startup. A matrix that is not symmetric, "
+            "such as 'distances', is refused"
+        ),
+    )
+
+    serve_parser.add_argument(
+        "--gene-id-column",
+        type=str,
+        default=None,
+        metavar="COLUMN",
+        help=(
+            "AnnData var column (raw.var with --expression raw) whose values "
+            "name the genes; the var index is used when omitted"
+        ),
+    )
+
+    serve_parser.add_argument(
+        "--expression",
+        type=str,
+        default=None,
+        metavar="X|raw|layer:NAME",
+        help=(
+            "Where AnnData gene expression is read: X, raw, or layer:NAME "
+            "(default: X when present, else raw or a layer, reported as guessed)"
         ),
     )
 
     serve_parser.set_defaults(func=_run_serve)
+
+
+def _parse_embedding_flag(value: str, *, flag: str) -> str | tuple[str, list[int]]:
+    """Parse ``KEY`` or ``KEY:c0,c1`` into an ``embedding_keys`` value.
+
+    The columns are 0-based. A key that itself contains ``:`` is read whole
+    unless what follows its last ``:`` is a comma-separated list of integers.
+    """
+    if not value:
+        raise ValueError(f"{flag} needs an obsm key, for example {flag} X_tsne.")
+    key, separator, columns = value.rpartition(":")
+    if separator and key and columns and all(part.isdigit() for part in columns.split(",")):
+        return key, [int(part) for part in columns.split(",")]
+    return value
 
 
 def _run_serve(args: argparse.Namespace) -> None:
@@ -342,7 +423,12 @@ def _run_serve(args: argparse.Namespace) -> None:
                     "--vector-field-default",
                     args.vector_field_default is not None,
                 ),
-                ("--connectivity", args.connectivity is not None),
+                ("--embedding-1d", args.embedding_1d is not None),
+                ("--embedding-2d", args.embedding_2d is not None),
+                ("--embedding-3d", args.embedding_3d is not None),
+                ("--knn", args.knn is not None),
+                ("--gene-id-column", args.gene_id_column is not None),
+                ("--expression", args.expression is not None),
                 ("--vector-fields", args.vector_fields is not None),
             )
             if supplied
@@ -406,13 +492,24 @@ def _run_serve(args: argparse.Namespace) -> None:
         if not args.quiet:
             console_print("done")
 
+        embedding_keys = {
+            f"{dimension}d": _parse_embedding_flag(
+                getattr(args, f"embedding_{dimension}d"),
+                flag=f"--embedding-{dimension}d",
+            )
+            for dimension in (1, 2, 3)
+            if getattr(args, f"embedding_{dimension}d") is not None
+        }
         adapter_options = {
             "latent_key": args.latent_key,
+            "gene_id_column": args.gene_id_column,
             "dataset_name": args.dataset_name,
             "dataset_id": args.dataset_id,
             "obs_keys": args.obs_key,
+            "embedding_keys": embedding_keys or None,
+            "knn_key": args.knn,
+            "expression_source": args.expression,
             "vector_field_default": args.vector_field_default,
-            "serve_connectivity": bool(args.connectivity),
             "serve_vector_fields": bool(args.vector_fields),
         }
         serve_anndata(
@@ -602,13 +699,13 @@ def create_parser() -> argparse.ArgumentParser:
     # Import version here to avoid circular imports.
     from . import __version__
 
-    parser = argparse.ArgumentParser(
+    parser = _ConsoleArgumentParser(
         prog="cellucid",
         description="Cellucid - Interactive Single-Cell Data Visualization",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 For more information, see:
-    https://cellucid.readthedocs.io
+    https://docs.cellucid.com
     https://github.com/theislab/cellucid-python
 
 Quick start:

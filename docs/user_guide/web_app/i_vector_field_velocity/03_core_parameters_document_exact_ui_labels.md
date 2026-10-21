@@ -7,7 +7,7 @@ These controls appear under **Visualization → Vector Field Overlay:** after
 `Show overlay` is enabled.
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/set-core-overlay-controls.png
-:alt: The Vector Field Overlay controls with Show overlay checked, the Vector field selector showing velocity_umap, and the Particle density, Flow speed, Trail length, Particle size, Opacity, Color scheme and Sync with LOD controls at their initial values, above a collapsed Advanced Visual Settings group.
+:alt: The Vector Field Overlay controls with Show overlay checked, the Vector field selector showing the velocity field, and the Particle density, Flow speed, Trail length, Particle size, Opacity, Color scheme and Sync with LOD controls at their initial values, above a collapsed Advanced Visual Settings group.
 :width: 472px
 
 Every core control, at the values the table below records as initial: `15K`,

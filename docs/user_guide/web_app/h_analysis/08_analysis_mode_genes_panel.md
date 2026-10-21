@@ -65,6 +65,12 @@ If enabled, Cellucid can reuse cached marker results for the same dataset + grou
 and only when the group-by field still assigns exactly the same cells to the same groups.
 Editing that field — merging two categories, or moving one to unassigned — changes the grouping, so the
 next run is recomputed rather than read from the cache.
+Results are also tied to the loaded data generation. A prepared export carries
+its export time (`created_at` in `dataset_identity.json`), so its results are
+kept across page loads and are never reused for a re-export under the same
+`dataset_id`. A dataset without one — an `.h5ad` or Zarr opened directly, for
+example — keeps results only for the current load: reopening the file, even
+under the same name, computes markers afresh.
 This can make repeated runs much faster.
 
 ### 5) Performance Settings (collapsible)
@@ -84,12 +90,12 @@ For each group `g` and each gene:
 
 For each gene and group, Cellucid computes (conceptually):
 - `meanInGroup`, `meanOutGroup`
-- `log2FoldChange = log2((meanInGroup + 0.01) / (meanOutGroup + 0.01))`
+- `log2FoldChange = log2((meanInGroup + 0.01) / (meanOutGroup + 0.01))` for non-negative expression; when the gene has negative values (scaled or z-scored data) both means are first shifted by the gene's most negative value over all grouped cells, the same rule Differential Expression uses ({doc}`06_analysis_mode_differential_expression_de`), so the sign always matches `meanInGroup − meanOutGroup`
 - `pValue` (Wilcoxon U or Welch t-test)
 - `adjustedPValue` via Benjamini–Hochberg (computed per group across genes)
 - `percentInGroup`, `percentOutGroup` = percent of cells with expression `> 0`
 
-Wilcoxon always uses exact, tie-aware ranks. For low-cardinality values (including quantized prepared data), Cellucid aggregates exact counts per distinct value; high-cardinality values use an exact index sort. Its p-value is exact only when both comparison groups contain fewer than 50 finite values and there are no ties; otherwise inference uses the exact U statistic with a tie- and continuity-corrected asymptotic reference distribution. See {doc}`01_analysis_mental_model` for analysis-wide scope and assumptions.
+Wilcoxon always uses exact, tie-aware ranks. For low-cardinality values (including quantized prepared data), Cellucid aggregates exact counts per distinct value; high-cardinality values are ranked through an exact linear-time radix ordering of the measured cells. Its p-value is exact only when both comparison groups contain fewer than 50 finite values and there are no ties; otherwise inference uses the exact U statistic with a tie- and continuity-corrected asymptotic reference distribution. See {doc}`01_analysis_mental_model` for analysis-wide scope and assumptions.
 
 Markers are filtered by thresholds (typically controlled in the expanded view):
 - p-value/FDR threshold (default ~0.05)
@@ -178,6 +184,12 @@ When a group has no markers to show, the message distinguishes the two reasons:
 
 - A heatmap of genes (rows) vs groups (columns).
 - Optional clustering of rows/columns (distance + linkage choices).
+- Clustering n genes (or groups) takes about 100 bytes of memory per pair,
+  so about 100 MB for 1,000 genes and 1.6 GB for 4,000. It must fit the
+  analysis **memory budget** (Performance settings; 512 MB by default, enough
+  for about 2,270 genes). A larger request is refused with the size it needs,
+  before clustering starts. Raise the budget, use fewer genes, or turn that
+  axis's clustering off.
 - Plot options usually include:
   - p-value threshold / log2FC threshold
   - use adjusted vs raw p-values
@@ -249,7 +261,9 @@ or a heavily subset gene panel is the usual reason.
 
 If “Use cached results” is enabled:
 - reruns may return instantly with the same markers.
-Disable caching if you suspect you changed the underlying dataset or want a fresh recompute.
+- a re-export or a reopened file is a new data generation and is recomputed;
+  only an export with an unchanged `created_at` is answered from the cache.
+Disable caching if you want a fresh recompute.
 
 ---
 
@@ -294,7 +308,7 @@ so expand when you need to read which gene a column is.
 
 ```{figure} ../../../_static/screenshots/analysis/marker-genes-clustered.png
 :alt: A heatmap with cell-type groups down one axis and gene names across the other, dendrograms attached to both axes, and a colour bar for the Z-scored expression.
-:width: 1160px
+:width: 1156px
 
 **Clustered** mode, shown in the expanded view. Genes and groups are each
 reordered by hierarchical clustering, and the two dendrograms are drawn along

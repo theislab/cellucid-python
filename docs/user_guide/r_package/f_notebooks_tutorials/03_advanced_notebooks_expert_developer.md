@@ -48,11 +48,11 @@ conn[4, 3] <- 1
 conn[3, 4] <- 1
 
 vector_fields <- list(
-  velocity_umap_2d = matrix(c(0.2, 0,
+  velocity = list(X_umap = matrix(c(0.2, 0,
                               0.2, 0,
                               0.2, 0,
                               0.2, 0),
-                            ncol = 2, byrow = TRUE)
+                            ncol = 2, byrow = TRUE))
 )
 
 out_dir <- file.path(tempdir(), "cellucid_advanced_debug")
@@ -65,7 +65,7 @@ cellucid_prepare(
   gene_expression = gene_expression,
   connectivities = conn,
   vector_fields = vector_fields,
-  X_umap_2d = X_umap_2d,
+  embeddings = list(X_umap = X_umap_2d),
   obs_categorical_dtype = "uint8",
   dataset_name = "Cellucid Advanced Debug",
   dataset_id = "cellucid_advanced_debug",
@@ -82,12 +82,14 @@ list.files(out_dir, recursive = TRUE)
 
 ---
 
-## Part 2 — Validate embeddings (`points_2d.bin`)
+## Part 2 — Validate embeddings (`embeddings/0_2d.bin`)
 
-`points_2d.bin` is float32 row-major.
+Each embedding file is float32 row-major. `dataset_identity.json` names the
+file of every embedding:
 
 ```r
-path <- file.path(out_dir, "points_2d.bin")
+identity <- jsonlite::read_json(file.path(out_dir, "dataset_identity.json"))
+path <- file.path(out_dir, identity$embeddings$items$X_umap$file)  # "embeddings/0_2d.bin"
 con <- file(path, open = "rb")
 on.exit(close(con), add = TRUE)
 
@@ -133,7 +135,7 @@ codes
 
 Remember:
 - codes are 0-based
-- missing is 255 (uint8) or 65535 (uint16)
+- missing is 255 (uint8), 65535 (uint16) or 4294967295 (uint32)
 
 ---
 

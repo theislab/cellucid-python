@@ -39,6 +39,7 @@ from cellucid import prepare, show
 
 prepare(
     ...,
+    embeddings={"X_umap": adata.obsm["X_umap"]},
     out_dir="./my_export",
     dataset_name="Example",
     dataset_id="example",
@@ -76,7 +77,8 @@ Python ──starts────────────────────�
   ▼                                             ▼
 Notebook iframe / browser tab  ◀────────────  Cellucid web app UI
   ▲
-  │  HTTP POST /_cellucid/events
+  │  HTTP POST /_cellucid/events     (JSON events)
+  │  HTTP POST /_cellucid/selection  (selections, binary cell indices)
   └─────────────────────────────────────────────── frontend → Python events
 ```
 
@@ -92,8 +94,8 @@ Notebook iframe / browser tab  ◀────────────  Cellucid
 1) Python starts a `CellucidServer` that serves the export folder over HTTP.
 2) Before binding, Python establishes the exact source web generation; the
    browser then loads it from the same server.
-3) The web app fetches `points_2d.bin(.gz)` / `obs_manifest.json` / expression binaries, etc.
-4) Interactions (selection/hover/click) can be sent back to Python via `/_cellucid/events`.
+3) The web app fetches `embeddings/<index>_<dim>d.bin(.gz)` / `obs_manifest.json` / expression binaries, etc.
+4) Interactions can be sent back to Python: hover/click via `/_cellucid/events`, selections via `/_cellucid/selection`.
 
 **Why this is fast:** the export folder is already in a viewer-optimized format (binary, quantized, compressible).
 
@@ -105,7 +107,7 @@ Notebook iframe / browser tab  ◀────────────  Cellucid
 1) Python starts an `AnnDataServer` with an `AnnDataAdapter`.
 2) The web app asks the server for the same *logical* resources as in export mode (points, obs fields, gene expression),
    but the server produces them on demand from AnnData.
-3) Hooks/events work the same way (`/_cellucid/events`).
+3) Hooks/events work the same way (`/_cellucid/events`; selections via `/_cellucid/selection`).
 
 **Why this is convenient:** you don’t have to export first.
 
@@ -149,9 +151,11 @@ def handle(event):
 Here is the concrete path:
 
 1) In the web app, a user selects cells (lasso/click/etc.).
-2) The web app POSTs JSON to the server:
-   - URL: `http://127.0.0.1:<port>/_cellucid/events`
-   - Body includes `viewerId` so the server can route it.
+2) The web app POSTs the selection to the server:
+   - URL: `http://127.0.0.1:<port>/_cellucid/selection?viewerId=...&viewerToken=...&source=...`
+   - Body: the selected cell indices as little-endian `uint32`, ascending
+     (other events, such as hover and click, are JSON posted to `/_cellucid/events`).
+   - The `viewerId` in the query lets the server route it.
 3) The Python server calls the correct viewer object’s internal handler.
 4) The viewer object triggers your hook callback.
 
@@ -248,12 +252,14 @@ Fix options:
 
 Likely causes:
 - the viewer is not fully loaded,
-- the browser cannot reach the server endpoint `/_cellucid/events`,
+- the browser cannot reach the server endpoint `/_cellucid/events` (or
+  `/_cellucid/selection`, for selection hooks),
 - you registered hooks on a different viewer instance than the one in the iframe.
 
 How to confirm:
 - Run `viewer.debug_connection()` (see {doc}`08_debugging_mental_model_where_to_look`).
-- In the browser network tab, look for POST requests to `/_cellucid/events`.
+- In the browser network tab, look for POST requests to `/_cellucid/events`
+  (and to `/_cellucid/selection` when you select cells).
 
 Fix:
 - call `viewer.wait_for_ready(timeout=60)` before relying on hooks,

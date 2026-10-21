@@ -5,7 +5,7 @@ This page documents the **developer-facing data loading pipeline** for the Cellu
 - how datasets are discovered and selected
 - how the app derives a dataset **base URL**
 - which files are fetched (and in what order)
-- where caching happens (HTTP cache, in-memory caches, LRU field caches, IndexedDB caches)
+- where caching happens (HTTP cache, in-memory caches, byte-bounded field residency, IndexedDB caches)
 - how remote server / GitHub / file picker / Jupyter modes differ
 
 If you are looking for a user-facing guide, start with:
@@ -59,7 +59,7 @@ dataset_identity.json  obs_manifest.json    embeddings / points
                        var_manifest.json    connectivity (optional)
                           │
                           ▼
-                     DataState                        ← typed arrays + LRU caches
+                     DataState                        ← typed arrays + field residency
 ```
 
 Everything below `DataSourceManager` sees only a base URL and relative paths.
@@ -89,14 +89,75 @@ At startup, `cellucid/assets/js/app/main.js`:
    - exactly one canonical `?exportsBaseUrl=...` may replace the configured
      demo exports base URL for that launch
    - `?dataset=...&source=...` selects a specific dataset from a registered source
-4) Chooses the active dataset and sets `EXPORT_BASE_URL` to the active `baseUrl`.
+4) Resolves the startup selection (source, dataset id, load method) without
+   loading it, publishes the empty runtime, and builds the interface, so every
+   data control is live before any dataset is fetched.
 
-Then the loader phase begins:
-- load obs manifest → attach obs field loader
-- optionally load var manifest → attach var field loader
-- load dataset identity + embeddings metadata
-- load points positions (for the active dimension)
-- optionally load connectivity manifest + edges
+Then the startup selection loads as the first ordinary dataset change (see
+{ref}`dataset-change-transactions`), and its loader phase begins:
+- load the dataset's metadata and `dataset_identity.json`
+- load the obs manifest → attach obs field loader
+- optionally load the var manifest → attach var field loader
+- load the positions of the embedding the dataset opens on (the default of
+  its opening dimension, `dimensionManager.getDefaultLayoutKey()`); every other
+  enabled embedding is read when a view first shows it
+- optionally load the connectivity manifest (edges load when shown)
+
+(dataset-change-transactions)=
+## Dataset changes: the newest choice wins
+
+Every change of the displayed dataset is one transaction of the dataset-change
+coordinator (`createLatestDatasetReloadCoordinator` in
+`app/dataset-reload-outcome.js`): the startup selection, a sample, **None**, a
+local file or prepared folder, a connection that opens its only dataset, and
+the synthetic benchmark. The rules:
+
+- **A transaction begins when the user acts**, before any of that choice's own
+  work — before a file is read, before a sample's first request. Beginning one
+  aborts the previous transaction's signal, so the load in flight stops
+  fetching (its staged `DimensionManager` is retired, which aborts its
+  requests; a local candidate is disconnected, which aborts a prepared folder
+  mid-read) and can never publish over the newer choice.
+- **Ownership is checked against the newest transaction of all**, not only
+  the newest of one kind. The dataset controls own their presentation (the
+  select shows the pending choice, or an *Opening …* / *Loading …* stand-in
+  for one without a catalog option) only while their intent's transaction
+  `isLatest()`; an intent overtaken by the benchmark puts the select back
+  itself.
+- **A connection may or may not change the dataset**, which is known only once
+  the server answers. Every user action that decides the dataset advances
+  `actionSequence`: each transaction begun, and each session file applied
+  (`recordAction()`, which begins no transaction and aborts nothing). The
+  Connect click reads `actionSequence`; a one-dataset activation then calls
+  `beginIfNoActionSince(sequence)`, which supersedes loads that were running at
+  the click but never a choice made or a session applied after it. A
+  connection that lost that race is kept as a catalog.
+- **A session file** chosen during a load waits on `whenSettled()` (the newest
+  transaction has called `finish()`) and is then restored onto whatever
+  dataset that produced.
+- **A lost remote connection** clears only its own dataset, and only once
+  `settled` is true: a newer choice still loading replaces the lost dataset
+  itself, and recovery clears it only if that choice failed and the lost
+  dataset is still active. The manager's `getCurrentBaseUrl()` is the base URL
+  the selection committed, never re-derived from a transport that may have
+  closed.
+- **A drop onto the viewer** (`ui/modules/dataset-drop.js`) is classified
+  inside the `drop` event — one `.h5ad`, one `.zip`, or one directory entry
+  from `webkitGetAsEntry()`, listed with each file's `webkitRelativePath` set —
+  and handed to the same local reader and intent as the file inputs. The
+  classic script `ui/core/file-drop-guard.js` cancels every file drag at the
+  document from the first paint, so a drop never navigates, and offers it as
+  `none` until the drop target sets `data-dataset-drop="ready"` on the root.
+- **A published dataset's own continuations** (UI synchronization, the
+  published sample view) belong to its publication, not to the request: a
+  newer request that fails must not interrupt the dataset still on screen.
+- **Startup** loads its selection through `ui.loadStartupDataset`. Its network
+  awaits are deadline-bound startup steps; if it is superseded, startup
+  publishes `ready` without it; only a failure nothing superseded becomes the
+  terminal startup failure.
+
+A superseded load is silent: it dismisses its own progress, announces nothing,
+and leaves the outcome to the choice that replaced it.
 
 ---
 
@@ -164,28 +225,29 @@ Common failure modes:
 - malformed current AnnData identity or non-finite scientific payloads
 - invalid/multi-root Zarr ZIPs or archive/chunk memory limits
 
-#### Browser memory ceilings (deliberate refusals)
+#### Browser memory (no fixed ceilings)
 
-These are refusals, not crashes: the loader rejects work it cannot finish rather
-than exhausting the tab. Each has a fixed constant in the data layer.
+No reader refuses data for its size. Every binary payload is declared exactly,
+by a prepared manifest (cells × item size, edges × item size) or by a direct
+file's own array metadata (shape × dtype, one Zarr chunk at a time), checked
+against the transfer and the gzip or ZIP envelope, and a payload the browser
+cannot allocate is refused as **too large** naming the bytes
+(`allocatePayloadBytes` for prepared payloads, `allocateTypedArray` in the
+direct readers; an inflate whose output cannot be allocated is the same
+refusal). A gzip payload is held to its manifest length modulo 2^32, as its
+trailer records it (RFC 1952), so payloads past 4 GiB load too; an undeclared
+gzip payload is bounded exactly by its trailer. The connectivity graph has no
+working-set ceiling either (see
+{doc}`07_rendering_pipeline_webgl_and_performance_notes`).
 
-| Ceiling | Applies to |
-|---|---|
-| 512 MiB | a direct-in-browser `.h5ad` file; any single materialised array; a declared binary payload; a Zarr array; the connectivity validation working set |
-| 64 MiB | one metadata JSON document; one decoded Zarr chunk |
-| 4 MiB | Zarr metadata |
-| 64 GiB | a Zarr ZIP archive, and its total uncompressed size |
+Two real limits remain, both the browser's own: a JSON document longer than
+the engine's longest string cannot be parsed (the message names the file), and
+one typed array cannot exceed the engine's buffer maximum, which is why the
+gene-column index is held in segments (`data/sparse-column-index.js`). Memory
+budgets (`data/memory-budget.js`) only decide what is kept for reuse; they
+never refuse. If you add a reader, follow the same pattern: bound by the size
+the data declares, and name the bytes when an allocation fails.
 
-The user-facing advice for every one of them is the same: use the Cellucid
-server or a prepared export. If you add a new bounded reader, follow the same
-pattern — refuse before allocating, and name the ceiling in the message.
-
-:::{note}
-Several of these messages currently print the ceiling as a raw byte integer
-(`67108864`, `536870912`, `68719476736`) rather than a human unit. Two of them
-spell out “512 MiB”. That inconsistency is worth fixing the next time these
-messages are touched.
-:::
 
 ### `remote` (cellucid-python server)
 
@@ -262,10 +324,17 @@ Cellucid uses multiple caches; knowing which one you’re hitting makes debuggin
 
 ### 1) HTTP cache (browser)
 
-Some loaders use fetch options like:
-- `{ cache: 'force-cache' }`
+Every dataset artifact — catalogs, identities, manifests, binary payloads and
+published presets — is fetched with `{ cache: 'no-cache' }`, in one place
+(`DATASET_ARTIFACT_CACHE` in `data/data-source.js`); a caller cannot choose
+another mode. The browser keeps its copy but asks the origin before every use,
+and an unchanged file costs a conditional request answered with 304.
 
-This can speed up repeated loads, but can also make debugging confusing if you expect a changed file to reload immediately.
+Reusing a cached payload without asking would be wrong, not merely stale: a
+payload path is an index, so a re-export at the same URL that adds one gene
+renumbers `var/`, and `var/3.values.u8.gz` then holds another gene with exactly
+the same byte length. Only revalidation keeps the bytes and the manifest that
+names them from one publication.
 
 Debug tip:
 - DevTools → Network → “Disable cache” while you debug.
@@ -276,13 +345,16 @@ Examples:
 - `DataSourceManager` caches dataset metadata per source.
 - Some sources cache manifests (`datasets.json`, metadata) after first load.
 
-### 3) `DataState` field caches (bounded LRU)
+### 3) `DataState` field residency (bounded in bytes)
 
-`DataState` maintains LRU caches for loaded field arrays:
-- obs fields (many small arrays)
-- var fields (gene vectors; fewer but larger)
-
-These caches are designed to prevent “scroll through genes for 10 minutes → tab uses 10GB”.
+`DataState` keeps loaded field arrays — obs fields and gene vectors — and
+releases inactive ones least recently used once they exceed their budget, a
+share of the device memory the browser reports (`state/managers/field/residency.js`,
+`data/memory-budget.js`). The active field, fields with filter
+state, and fields still loading are always kept. This is what stops “scroll
+through genes for 10 minutes → tab uses 10 GB”; the earlier entry-count bound
+did not, because each field object kept its arrays alive. Categorical codes
+stay in the type the file stored (uint8 stays uint8).
 
 ### 4) Community annotation caches (IndexedDB + localStorage index)
 
@@ -338,7 +410,8 @@ When something “doesn’t load”, do the following in order:
 5) **Confirm point buffer sizes**
    - After load, check:
      - `window._cellucidState.pointCount`
-     - `window._cellucidState.positionsArray.length === pointCount * 3`
+     - `window._cellucidState.positionsArray.length === pointCount * window._cellucidState.positionsDimension`
+       (positions hold the embedding's own components: 1, 2 or 3 per cell)
 
 6) **Check gzip support**
    - Cellucid requires native `DecompressionStream('gzip')` for `.gz` files.
@@ -381,7 +454,7 @@ Read the message again — this class of failure is now split four ways, and
 | Message contains | Cause |
 |---|---|
 | “was cancelled” | An abort — a newer selection superseded this load. Re-thrown untouched so it is never relabelled. |
-| “is larger than the metadata size ceiling” | A bounded reader refused the payload |
+| “is longer than the longest text this browser can hold” | A metadata document exceeds the engine's longest string |
 | “response body transfer failed” | The connection dropped mid-body |
 | “must contain valid JSON” | Genuinely malformed content |
 

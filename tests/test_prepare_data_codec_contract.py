@@ -17,10 +17,10 @@ def _prepare_with_options(out_dir, **options):
             dtype=np.float32,
         ),
         obs=pd.DataFrame({"score": [0.0, 0.5, 1.0]}),
-        X_umap_2d=np.array(
+        embeddings={"X_umap_2d": np.array(
             [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
             dtype=np.float32,
-        ),
+        )},
         out_dir=out_dir,
         dataset_id="codec-contract",
         dataset_name="Codec contract",
@@ -227,7 +227,7 @@ def test_prepare_reserves_missing_marker_for_generated_outlier_quantiles(tmp_pat
             dtype=np.float32,
         ),
         obs=pd.DataFrame({"cluster": pd.Categorical(["large", "large", "large", "small"])}),
-        X_umap_2d=embedding,
+        embeddings={"X_umap_2d": embedding},
         out_dir=out_dir,
         dataset_id="outlier-missing-marker",
         dataset_name="Outlier missing marker",

@@ -19,7 +19,7 @@ This page is the short R-focused checklist.
 You have an export folder that contains at least:
 - `dataset_identity.json`
 - `obs_manifest.json`
-- `points_2d.bin` or `points_3d.bin` (optionally `.gz`)
+- an `embeddings/` folder with at least one `<index>_<dim>d.bin` (optionally `.gz`)
 
 Quick check:
 

@@ -36,6 +36,7 @@ Both servers share:
 - CORS rules
 - exact web-generation establishment and delivery
 - hooks event endpoint (`/_cellucid/events`)
+- selection delivery endpoint (`/_cellucid/selection`)
 - session bundle upload endpoint (`/_cellucid/session_bundle`)
 
 Shared code:
@@ -80,9 +81,9 @@ curl -s http://127.0.0.1:8765/_cellucid/protocol | python -m json.tool
 {
   "commands": ["clearHighlights", "debug_snapshot", "freeze", "highlight",
                "ping", "requestSessionBundle", "resetCamera", "setColorBy",
-               "setVisibility"],
-  "events": ["click", "command_error", "debug_snapshot", "hover", "pong",
-             "ready", "selection", "session_bundle"]
+               "setDataMapping", "setVisibility"],
+  "events": ["click", "command_error", "data_mapping", "debug_snapshot",
+             "hover", "pong", "ready", "selection", "session_bundle"]
 }
 ```
 
@@ -107,15 +108,73 @@ reads, so it cannot announce a capability the notebook would then reject.
 Implementation:
 - `_protocol_capability_document` in `src/cellucid/jupyter/_wire.py`
 
+(python-mapping-embeddings-endpoint)=
+### `GET /_cellucid/mapping/embeddings/{obsm}/{c0-c1-c2}.bin` (AnnData servers only)
+
+One `obsm` array of the candidate catalog, read at 1 to 3 zero-based columns
+(`{obsm}` is its index in the catalog's `obsm` list, the columns are joined by
+`-`, for example `3/0-1.bin`). The served mapping turns on every narrow `obsm`
+array beside the served defaults, but `dataset_identity.json` lists only the
+defaults, so this is where the viewer reads the others when a view first shows
+one. The array is checked (finite, float32-representable, non-zero range) and
+normalized exactly as a served embedding is; the same key at the same columns
+as a served embedding returns the same bytes. A route that names no usable
+dense array at valid columns answers 404; an array that fails the check
+answers 422 with the reason.
+
+(python-mapping-candidates-endpoint)=
+### `GET /_cellucid/mapping/candidates.json` (AnnData servers only)
+
+The data mapping an AnnData server serves, and every array it could serve:
+
+```bash
+curl -s http://127.0.0.1:8765/_cellucid/mapping/candidates.json | python -m json.tool
+```
+
+`defaults` is the data mapping this server serves — the embedding of each
+dimension (`obsm` key and 0-based columns), the neighbour graph (`knn`), the
+gene names, the expression matrix, the latent space and the vector bindings —
+in the exact shape a session fingerprint records it. The viewer reads it when it
+opens a dataset served from AnnData, because the graph and the expression matrix
+the server chose are not visible in `dataset_identity.json`, and writes it into
+every session it saves. `obsm`, `obsp`, `var`, `X`, `layers` and `raw` list every
+candidate array with its shape, dtype and whether it can be used; `guessed` names
+the embedding slots the server best-guessed. A server that serves prepared
+exports has no such route.
+
+The document is built from metadata alone — shapes and dtypes, never array
+values — on the first request, and then frozen.
+
+Implementation:
+- `AnnDataAdapter.get_mapping_candidates()` and `get_data_mapping()` in
+  `src/cellucid/anndata_adapter.py`; the catalog itself is
+  `build_anndata_candidates` in `src/cellucid/data_mapping.py`.
+
 ### `POST /_cellucid/events`
 
 Frontend → Python hooks/events channel:
 
-- browser posts JSON events here
+- browser posts JSON events here (at most 1 MiB)
 - server routes by `viewerId` to the correct notebook viewer callback
+- `selection` and `session_bundle` records are refused with `400`: only their
+  own routes may produce them
 
 Implementation:
 - `CORSMixin.handle_event_post` in `src/cellucid/_server_base.py`
+
+### `POST /_cellucid/selection?viewerId=...&viewerToken=...&source=...`
+
+Frontend → Python selection channel:
+
+- viewer posts the selected row indices as little-endian `uint32`, strictly
+  ascending, one or more (`Content-Type: application/octet-stream`; no size
+  limit beyond the format's own, every `uint32` index once, and the server's
+  memory: a body it cannot hold is refused with `413`)
+- server authenticates before reading the body, refuses a malformed body
+  with `400`, and routes one `selection` event back to Python
+
+Implementation:
+- `CORSMixin.handle_selection_post` in `src/cellucid/_server_base.py`
 
 ### `POST /_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
 
@@ -141,9 +200,10 @@ The exported server can serve:
 `/_cellucid/datasets` lists what’s available (used for multi-dataset browsing).
 
 Detection rules:
-- a dataset is a directory containing a valid version-2
-  `dataset_identity.json`, an object-valued `obs_manifest.json`, and at least
-  one non-empty supported `points_1d`, `points_2d`, or `points_3d` binary;
+- a dataset is a directory containing a valid version-3
+  `dataset_identity.json`, an object-valued `obs_manifest.json`, and a non-empty
+  `embeddings/` directory; the files served from it are exactly the
+  `embeddings.items[*].file` paths the identity declares;
 - once any immediate child is a dataset candidate, every immediate
   subdirectory must be one complete current dataset. Stray directories reject
   the root;
@@ -169,7 +229,8 @@ Examples:
 - `/dataset_identity.json`
 - `/obs_manifest.json`
 - `/var_manifest.json`
-- `/points_3d.bin`
+- `/embeddings/<index>_<dim>d.bin`
+- `/vectors/<field index>_<embedding index>.bin`
 - `/obs/<index>.values.f32`
 - `/var/<index>.values.f32`
 
@@ -184,7 +245,7 @@ Key behaviors:
 - **gzip behavior**: an exact unsuffixed binary route may return
   `Content-Encoding: gzip` when the request advertises gzip support; `.gz` route
   variants return `404`
-- **one rooted route contract**: data paths such as `/points_3d.bin` are served
+- **one rooted route contract**: data paths such as `/embeddings/0_2d.bin` are served
   exactly at the root; dataset-prefixed variants return `404`.
 
 ---
@@ -251,6 +312,10 @@ It is not a firewall and does not stop:
 the event exactly once. Unknown viewers return `404`; missing or incorrect
 credentials return `403`.
 
+`POST /_cellucid/selection` takes the same credentials in its query and checks
+them before it reads the body, so an unauthenticated caller cannot make the
+server read up to its 512 MiB limit.
+
 ### The capability route carries no credentials, because it carries no secret
 
 `GET /_cellucid/protocol` answers anyone who can reach the port, exactly as
@@ -297,7 +362,7 @@ Use:
 
 ```bash
 curl -I http://127.0.0.1:8765/obs_manifest.json
-curl -I http://127.0.0.1:8765/points_3d.bin
+curl -I http://127.0.0.1:8765/embeddings/0_2d.bin
 ```
 
 ### Symptom: “Hooks don’t fire”

@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from ._schema import _CATEGORY_LABEL_MAX_LENGTH, _FIELD_KEY_MAX_LENGTH, _WIRE_ID_RE
+from ._schema import _WIRE_ID_RE
 
 
 def _require_exact_bool(value: Any, *, label: str) -> bool:
@@ -73,8 +73,6 @@ def _require_field_key(value: Any, *, label: str) -> str:
     key = _require_nonempty_string(value, label=label)
     if key.strip() != key:
         raise ValueError(f"{label} cannot have leading or trailing whitespace")
-    if len(key) > _FIELD_KEY_MAX_LENGTH:
-        raise ValueError(f"{label} exceeds {_FIELD_KEY_MAX_LENGTH} Unicode code points")
     if ":" in key:
         raise ValueError(f"{label} cannot contain ':'")
     return key
@@ -108,10 +106,6 @@ def _require_category_list(
     identities: set[tuple[str, Any]] = set()
     for index, item in enumerate(value):
         exact = _require_category_primitive(item, label=f"{label}[{index}]")
-        if isinstance(exact, str) and len(exact) > _CATEGORY_LABEL_MAX_LENGTH:
-            raise ValueError(
-                f"{label}[{index}] exceeds {_CATEGORY_LABEL_MAX_LENGTH} Unicode code points"
-            )
         identity: tuple[str, Any]
         if isinstance(exact, bool):
             identity = ("boolean", exact)

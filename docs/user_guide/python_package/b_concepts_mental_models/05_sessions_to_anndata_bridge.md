@@ -159,28 +159,42 @@ Even if the session came from “your own browser”, treat it like external inp
 ### Dataset match checks (shape + exact ID)
 
 Before applying dataset-dependent chunks, Python checks a lightweight fingerprint stored in the bundle:
-- `cellCount` vs `adata.n_obs`
-- `varCount` vs `adata.n_vars`
 - `datasetId` vs the required `expected_dataset_id`
+- `cellCount` vs `adata.n_obs`
+- every key the `dataMapping` names vs what `adata` holds
+- `varCount` vs the gene count of the mapped axis (`adata.raw.n_vars` when the
+  mapping reads expression from `raw`, `0` when it reads none, `adata.n_vars`
+  otherwise)
 
 Any mismatch raises `ValueError` before Cellucid mutates the target object.
 
-### The fifth fingerprint field: `cellOrder`
+### The two records: `cellOrder` and `dataMapping`
 
-A session written by a current viewer also carries `cellOrder` — exactly a
-`dimension` (1, 2, or 3) and a 16-character lowercase hexadecimal `digest` of
-the coordinates the session was saved against. It ties the session to one cell
-ordering, which the four scalars cannot do: they all survive a re-export of the
-same dataset from re-sorted input.
+The current session fingerprint has exactly six required fields:
+the four scalars, `cellOrder`, and `dataMapping`.
 
-**The web app requires it. Python accepts a bundle with or without it**, and
-when it is present validates only the record's shape, never its value. The
-digest is over exported coordinates and this API targets an `AnnData` whose row
-order the caller controls, so there is nothing here to compare it to; enforcing
-that identity is the viewer's job.
+`cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
+16-character lowercase hexadecimal `digest` of the coordinates of that
+embedding. `embedding` is `{"key", "columns"}`: an exported embedding id with
+`columns: null`, or an AnnData `obsm` key with the 0-based columns that were
+read, one per dimension. It ties the session to one cell ordering, which the four
+scalars cannot do: they all survive a re-export of the same dataset from
+re-sorted input.
 
-Practical consequence: a bundle this reader accepts may still be refused by the
-web app. Treat that as normal, not as a bug in either reader.
+`dataMapping` records which stored arrays the session was showing. Its `kind`
+is `"export"` — exactly `kind`, `embeddings` (`enabled`, the embeddings that are turned on, and
+`defaults`, the `1d`/`2d`/`3d` default of each dimension),
+`geneNames` (`"index"` or `"column:<name>"`), and `vectorFields` — or
+`"anndata"`, which adds `knn`, `expression` (`"X"`, `"raw"`, `"layer:<name>"`,
+or null), and `latent`. A user-defined field copied from a gene is resolved by name
+on that axis — through the mapping's gene names, made unique with the shared
+rule — and its values are read from the mapping's expression matrix.
+
+Both readers require both records. Python validates `cellOrder`'s shape, never
+its digest: the digest is over coordinates the viewer drew, and this API targets
+an `AnnData` whose row order the caller controls. Enforcing that identity is the
+viewer's job, so a bundle this reader accepts may still be refused by the web
+app. Treat that as normal, not as a bug in either reader.
 
 ### Critical constraint: cell identity is index-based (today)
 

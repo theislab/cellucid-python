@@ -10,7 +10,10 @@ vector values or allocate the particle overlay until you enable it.
 
 1. Load the dataset and open **Visualization**.
 2. Set `Render mode:` to `Points`.
-3. Select the required 1D, 2D, or 3D view under **Compare Views → Dimension:**.
+3. Show an embedding the field is bound to: choose its dimension under
+   **Compare Views → Dimension**, and, where the dimension has several
+   embeddings, the embedding under **Embedding** (the UMAP the vectors were
+   computed on).
 4. Find **Vector Field Overlay:**.
 5. If `Vector field:` is already visible, choose a field. This is required when
    the dataset has multiple fields and does not declare a default.
@@ -18,8 +21,8 @@ vector values or allocate the particle overlay until you enable it.
 7. Wait for `Loading vector field…`, then for particle preparation to complete.
 
 The settings panel opens after the overlay is enabled. A small `i` button beside
-the heading explains that the animation uses dimension-specific per-cell
-velocity or drift vectors.
+the heading explains that the animation uses per-cell velocity or drift
+vectors, each exported for one embedding.
 
 ## Availability states
 
@@ -27,7 +30,7 @@ The UI has three deliberate states.
 
 ### No **Vector Field Overlay:** block
 
-The loaded dataset declares no vector fields in any dimension. There is no
+The loaded dataset declares no vector fields for any embedding. There is no
 message for this state, and none is needed: the whole block is simply absent,
 and `Show connectivity edges` is followed straight by **Reset Camera**.
 
@@ -56,19 +59,21 @@ then reload the dataset.
 
 Read the message beneath the controls:
 
-- `Vector fields available for 1D, 2D, 3D. Switch embedding dimension to enable.`
-  means no field matches the selected dimension. The dimension list reflects
-  the dataset and can contain any subset of 1D, 2D, and 3D.
-- `Available for 1D, 2D, 3D. Select a vector field before enabling the overlay.`
+- `Vector fields are bound to X_umap, X_umap_3d. Show one of them in this view to enable.`
+  means no field is bound to the embedding the selected view shows. The list
+  names every embedding some field is bound to (by its label), so it tells you
+  which embedding to show — another dimension, or another embedding of the same
+  dimension in **View N shows** under **Compare views**.
+- `Available on X_umap, X_umap_3d. Select a vector field before enabling the overlay.`
   means matching fields exist, but none is selected.
 
-Only fields declared for the selected dimension appear in `Vector field:`.
+Only fields bound to the embedding the view shows appear in `Vector field:`.
 Cellucid does not silently choose the first field. A declared default is selected
-only when that same field supports the current dimension.
+only when that same field is bound to that embedding.
 
 ### Overlay enabled
 
-The status becomes `Available for …`. `Vector field:` and all core/advanced
+The status becomes `Available on …`. `Vector field:` and all core/advanced
 controls are visible. Changing the field shows `Loading vector field…`; on
 success the overlay uses the newly selected field.
 
@@ -77,22 +82,24 @@ checkbox is turned off, and the status reads `Failed to load vector field.`.
 Follow {doc}`07_troubleshooting_velocity_overlay` rather than repeatedly
 toggling it.
 
-## Dimension changes
+## Dimension and embedding changes
 
-Vector data is dimension-specific:
+A vector field is bound to the embedding it was computed on, so what matters is
+the embedding the view shows, not only its dimension:
 
-- If the selected field also exists in the new dimension, Cellucid loads that
-  array and keeps the overlay enabled.
+- If the selected field is also bound to the newly shown embedding, Cellucid
+  loads that array and keeps the overlay enabled.
 - If that field is unavailable but an applicable declared default exists, the
-  dimension-filtered selector can use that default.
-- If there is no valid selected/default field for the new dimension, the
+  selector can use that default.
+- If there is no valid selected/default field for the new embedding, the
   overlay turns off and asks for an explicit selection.
-- If the dataset has no field at all for the new dimension, the overlay turns
-  off and reports which dimensions are available.
+- If no field at all is bound to the new embedding (for example a view switched
+  to a t-SNE, or a dataset whose 2D slot was changed under **Session › Data
+  mapping**), the overlay turns off and names the embeddings that have one.
 
-For a large remote or AnnData-served dataset, the first switch to a dimension
+For a large remote or AnnData-served dataset, the first switch to an embedding
 can require a separate vector request. Wait for the current request to finish
-before changing dimension or field again.
+before changing dimension, embedding or field again.
 
 ## Filters and multiview
 
@@ -107,7 +114,7 @@ GPU work. See
 {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`.
 
 The overlay controls are points-only. Selecting
-`Volumetric smoke cloud (alpha)` hides them and uses the smoke renderer instead.
+`Volumetric smoke cloud (beta)` hides them and uses the smoke renderer instead.
 
 ## Dataset and session behavior
 
@@ -125,6 +132,6 @@ does not contain the vector arrays or dataset. See
 
 ## Verified interface
 
-{doc}`08_screenshots` shows the real Pancreas `velocity_umap` field in 2D
+{doc}`08_screenshots` shows the real Pancreas `velocity` field in 2D
 **Planar**, the expanded advanced controls, and the independent 3D field in
 **Orbit**.

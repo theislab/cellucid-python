@@ -18,6 +18,21 @@ _ENC_RAW_U8 = 0
 _ENC_RAW_U16 = 1
 _ENC_RLE_U8 = 2
 _ENC_RLE_U16 = 3
+_ENC_RAW_U32 = 4
+_ENC_RLE_U32 = 5
+
+#: Each code width's (raw encoding, RLE encoding, little-endian dtype, largest
+#: value), keyed by the JavaScript typed-array name the bundle declares.
+_CODE_WIDTHS: dict[str, tuple[int, int, str, int]] = {
+    "Uint8Array": (_ENC_RAW_U8, _ENC_RLE_U8, "u1", 0xFF),
+    "Uint16Array": (_ENC_RAW_U16, _ENC_RLE_U16, "<u2", MAX_UINT16),
+    "Uint32Array": (_ENC_RAW_U32, _ENC_RLE_U32, "<u4", MAX_UINT32),
+}
+_NATIVE_CODE_DTYPES: dict[str, type[np.unsignedinteger]] = {
+    "Uint8Array": np.uint8,
+    "Uint16Array": np.uint16,
+    "Uint32Array": np.uint32,
+}
 
 
 def decode_uvarint(data: bytes | bytearray | memoryview, offset: int = 0) -> tuple[int, int]:
@@ -124,6 +139,8 @@ def decode_user_defined_codes(
       - 1 = raw Uint16 (little-endian)
       - 2 = RLE Uint8 pairs encoded as uvarints (value, runLength)
       - 3 = RLE Uint16 pairs encoded as uvarints (value, runLength)
+      - 4 = raw Uint32 (little-endian)
+      - 5 = RLE Uint32 pairs encoded as uvarints (value, runLength)
     - codesLength (uvarint)
     - payload:
       - raw: `codesLength * bytesPerElement` bytes
@@ -137,10 +154,10 @@ def decode_user_defined_codes(
         raise ValueError(
             "decode_user_defined_codes: expected_length exceeds Uint32 capacity"
         )
-    if expected_codes_type not in {"Uint8Array", "Uint16Array"}:
+    if expected_codes_type not in _CODE_WIDTHS:
         raise ValueError(
             "decode_user_defined_codes: expected_codes_type must be "
-            "Uint8Array or Uint16Array"
+            "Uint8Array, Uint16Array or Uint32Array"
         )
     if len(data) < 2:
         raise ValueError("decode_user_defined_codes: payload too short")
@@ -152,76 +169,72 @@ def decode_user_defined_codes(
             "decode_user_defined_codes: declared length "
             f"{length} does not match expected length {expected_length}"
         )
-    is_u8 = enc in {_ENC_RAW_U8, _ENC_RLE_U8}
-    is_u16 = enc in {_ENC_RAW_U16, _ENC_RLE_U16}
-    if not is_u8 and not is_u16:
+    width = next(
+        (
+            (codes_type, raw, dtype, maximum, enc == rle)
+            for codes_type, (raw, rle, dtype, maximum) in _CODE_WIDTHS.items()
+            if enc in (raw, rle)
+        ),
+        None,
+    )
+    if width is None:
         raise ValueError(f"decode_user_defined_codes: unknown encoding type {enc}")
-    actual_codes_type = "Uint8Array" if is_u8 else "Uint16Array"
+    actual_codes_type, _raw, dtype, maximum_value, is_rle = width
     if actual_codes_type != expected_codes_type:
         raise ValueError(
             "decode_user_defined_codes: encoding type "
             f"{actual_codes_type} does not match expected {expected_codes_type}"
         )
 
-    if enc == _ENC_RAW_U8:
-        end = offset + length
-        if end > len(data):
-            raise ValueError("decode_user_defined_codes: truncated raw u8 payload")
-        if end != len(data):
-            raise ValueError("decode_user_defined_codes: trailing bytes")
-        return np.frombuffer(bytes(data[offset:end]), dtype=np.uint8)
-
-    if enc == _ENC_RAW_U16:
-        nbytes = length * 2
+    if not is_rle:
+        nbytes = length * np.dtype(dtype).itemsize
         end = offset + nbytes
         if end > len(data):
-            raise ValueError("decode_user_defined_codes: truncated raw u16 payload")
+            raise ValueError(
+                f"decode_user_defined_codes: truncated raw {actual_codes_type} payload"
+            )
         if end != len(data):
             raise ValueError("decode_user_defined_codes: trailing bytes")
-        return np.frombuffer(bytes(data[offset:end]), dtype="<u2")
+        return np.frombuffer(bytes(data[offset:end]), dtype=dtype)
 
-    if enc in {_ENC_RLE_U8, _ENC_RLE_U16}:
-        pair_count, offset = decode_uvarint(data, offset)
-        if length == 0:
-            if pair_count != 0:
-                raise ValueError(
-                    "decode_user_defined_codes: empty RLE payload must contain zero pairs"
-                )
-        elif pair_count == 0 or pair_count > length:
+    pair_count, offset = decode_uvarint(data, offset)
+    if length == 0:
+        if pair_count != 0:
             raise ValueError(
-                "decode_user_defined_codes: RLE pair count cannot fill the declared length"
+                "decode_user_defined_codes: empty RLE payload must contain zero pairs"
             )
-        maximum_value = 0xFF if is_u8 else MAX_UINT16
-        out = np.empty(length, dtype=np.uint8 if is_u8 else np.uint16)
-        decoded_length = 0
-        previous_value: int | None = None
-        for _ in range(pair_count):
-            value, offset = decode_uvarint(data, offset)
-            run, offset = decode_uvarint(data, offset)
-            if value > maximum_value:
-                raise ValueError(
-                    "decode_user_defined_codes: RLE value exceeds its declared code type"
-                )
-            if run == 0:
-                raise ValueError(
-                    "decode_user_defined_codes: RLE run length must be positive"
-                )
-            if previous_value == value:
-                raise ValueError(
-                    "decode_user_defined_codes: adjacent RLE runs must have distinct values"
-                )
-            end = decoded_length + run
-            if end > length:
-                raise ValueError(
-                    "decode_user_defined_codes: RLE run total exceeds declared length"
-                )
-            out[decoded_length:end] = value
-            decoded_length = end
-            previous_value = value
-        if offset != len(data):
-            raise ValueError("decode_user_defined_codes: trailing bytes")
-        if decoded_length != length:
-            raise ValueError("decode_user_defined_codes: RLE did not fill expected length")
-        return out
-
-    raise AssertionError("decode_user_defined_codes: unreachable encoding")
+    elif pair_count == 0 or pair_count > length:
+        raise ValueError(
+            "decode_user_defined_codes: RLE pair count cannot fill the declared length"
+        )
+    out = np.empty(length, dtype=_NATIVE_CODE_DTYPES[actual_codes_type])
+    decoded_length = 0
+    previous_value: int | None = None
+    for _ in range(pair_count):
+        value, offset = decode_uvarint(data, offset)
+        run, offset = decode_uvarint(data, offset)
+        if value > maximum_value:
+            raise ValueError(
+                "decode_user_defined_codes: RLE value exceeds its declared code type"
+            )
+        if run == 0:
+            raise ValueError(
+                "decode_user_defined_codes: RLE run length must be positive"
+            )
+        if previous_value == value:
+            raise ValueError(
+                "decode_user_defined_codes: adjacent RLE runs must have distinct values"
+            )
+        end = decoded_length + run
+        if end > length:
+            raise ValueError(
+                "decode_user_defined_codes: RLE run total exceeds declared length"
+            )
+        out[decoded_length:end] = value
+        decoded_length = end
+        previous_value = value
+    if offset != len(data):
+        raise ValueError("decode_user_defined_codes: trailing bytes")
+    if decoded_length != length:
+        raise ValueError("decode_user_defined_codes: RLE did not fill expected length")
+    return out

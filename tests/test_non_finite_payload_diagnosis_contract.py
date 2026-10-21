@@ -95,7 +95,6 @@ def _running_server(adata: ad.AnnData) -> Iterator[tuple[str, int]]:
         serve_web_ui=False,
         dataset_name="Diagnosis contract",
         dataset_id="diagnosis-contract",
-        serve_connectivity=False,
         serve_vector_fields=False,
     )
     server.start_background()
@@ -459,7 +458,7 @@ def test_a_vector_field_underflow_is_refused_like_the_r_writer_refuses_it() -> N
     vectors[1, 1] = 1e-320
     with pytest.raises(ValueError) as refusal:
         validate_vector_fields(
-            {"v_umap_2d": vectors}, n_cells=3, available_dimensions=(2,)
+            {"velocity": {"X_umap": vectors}}, n_cells=3, embedding_dimensions={"X_umap": 2}
         )
     message = str(refusal.value)
     assert "outside the finite float32 range" in message

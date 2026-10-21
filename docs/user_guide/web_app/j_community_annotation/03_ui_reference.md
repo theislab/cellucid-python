@@ -144,6 +144,12 @@ Navigation:
 - **Back** / **Next** buttons navigate the wizard.
 - A status line at the bottom shows progress, warnings, and error text.
 
+While any sync is running — including a background **Auto pull** — **Pull
+latest** and **Publish** are disabled until it finishes. A Pull or Publish that
+still reaches a running sync does not run and reports `Another GitHub sync is
+still running. Wait for it to finish, then try again.`; one you cancel reports
+`Cancelled.`. Only a completed transaction reports its success text.
+
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-05-sync.png
 :alt: Step 4 of 4, headed "Sync (pull / publish)", with Pull latest and Publish buttons, an Auto pull selector offering 10, 15 and 60 minute intervals, and a status line reading "Pulled latest annotations."
 :width: 1040px
@@ -173,10 +179,11 @@ Pull:
 - compiles the merged view in the browser
 - applies author settings from `annotations/config.json` (annotatable columns, thresholds, closed fields)
 
-Pull is fail-closed and atomic. A missing configured categorical field, an
-invalid or oversized active document, more than 10,000 active user files, or
-more than 64,000,000 aggregate decoded UTF-8 bytes across those active user
-files fails the complete Pull without changing annotation state. Cellucid
+Pull is fail-closed and atomic. A missing configured categorical field or an
+invalid or oversized active document fails the complete Pull without changing
+annotation state. There is no limit on how many user files a repository holds
+or on their total size: changed files are cached a batch at a time, and the
+merged view is compiled by streaming the cache one file at a time. Cellucid
 checks configured fields before selecting the raw-cache scope or downloading
 user/moderation files, so that mismatch cannot mutate the raw-file cache. No
 partial merged annotation view is applied.
@@ -353,10 +360,11 @@ dataset/repo/branch/user scope. See
 You open this by clicking a category label in the categorical legend when the selected field is annotatable.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-11-consensus.png
-:alt: The full application window with the Community voting modal open over the viewer, showing a disputed status banner, two suggestion cards with vote buttons, attribution lines and comment boxes, and a New suggestion form at the bottom.
+:alt: The voting modal for the Beta cluster whose status banner reads Consensus, "Beta cell", 100 percent, 4 voters, above one suggestion card at net 4 with its vote buttons, attribution line and comment box, and a New suggestion form at the bottom.
 :width: 996px
 
-The complete voting modal for one category, over the viewer it belongs to.
+The voting modal for one category: the status line, the suggestion cards, and
+the **New suggestion** form beneath them.
 ```
 
 ### What you see at a glance
@@ -374,7 +382,7 @@ The status line is exact about which of the three states applies and why:
 | Pending | `Pending (<n> voters)` | fewer than `minAnnotators` voters; no confidence is reported |
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-12-disputed.png
-:alt: A voting modal whose status banner reads Disputed, "Alpha cell, Alpha/PP doublet", 0 percent, 4 voters, above two suggestion cards each at net 0 with two upvotes and two downvotes.
+:alt: A voting modal whose status banner reads Disputed, "Beta (immature), Beta cell", 0 percent, 4 voters, above two suggestion cards each at net 0 with two upvotes and two downvotes.
 :width: 996px
 
 **Disputed by a tie.** Both suggestions have identical net votes and identical
@@ -383,10 +391,10 @@ the banner names every tied label alphabetically.
 ```
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-09-pending.png
-:alt: A voting modal whose status banner reads "Pending (2 voters)" above one suggestion card showing net 2.
+:alt: A voting modal whose status banner reads "Pending (1 voters)" above one suggestion card showing net 1.
 :width: 996px
 
-**Pending.** Two voters against a three-annotator minimum. No confidence figure
+**Pending.** One voter against a three-annotator minimum. No confidence figure
 is reported, because the column's own rule says there is not yet enough
 participation to compute one.
 ```
@@ -394,7 +402,7 @@ participation to compute one.
 ### Suggestion card anatomy
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-10-vote.png
-:alt: One suggestion card headed "Alpha cell" with net 0 at the right, Ontology, Markers and Evidence lines, up and down vote buttons at 2 each, Edit, Delete and Merge buttons, an attribution line naming the proposer and their title, and a comment input showing a 0 of 500 counter.
+:alt: One suggestion card headed "Beta cell" with net 4 at the right, Ontology, Markers and Evidence lines, an upvote button at 4 under the mouse pointer and a downvote button at 0, Edit and Delete buttons, an attribution line naming the proposer and their title, and a comment input showing a 0 of 500 counter.
 :width: 1028px
 
 One card, with every element named below present: label, `net` score, the three
@@ -438,6 +446,13 @@ Comments:
 - comment box accepts up to 500 characters
 - **Enter** submits a comment
 - **Shift+Enter** inserts a newline without submitting
+- unsent comments and suggestions, and open edits of your own comments,
+  suggestions, and merge notes, keep their text, cursor, and focus when the
+  modal refreshes (a Pull, a change from another tab, your own vote)
+- if the item you were editing is deleted, merged away, or no longer on the
+  page you are viewing, or voting closes, the editor closes and warns
+  `Edit not saved: the … you were editing is no longer shown here (deleted,
+  merged, closed, or on another page).`
 
 
 

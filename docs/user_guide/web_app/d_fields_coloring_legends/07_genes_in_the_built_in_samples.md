@@ -65,8 +65,9 @@ cannot know whether your query was dropped, misspelled, or never measured.
 
 Before concluding a gene is absent, note how the search behaves: it is a
 **substring** match and it ignores letter case, so `gata3` finds `GATA3` and the
-shorter `gata` matches every published name containing it. At most 100 matches
-are listed at once, with a `...and N more` line when there are further ones.
+shorter `gata` matches every published name containing it. Every match is
+listed: the list opens with the first 100 and builds the rest as you scroll or
+arrow down, and **End** jumps to the last match.
 Matching in the Analysis panel is stricter — see
 [Where else this list is used](#where-else-this-list-is-used).
 
@@ -91,11 +92,10 @@ data.
 
 ### Reduction 2 — only genes that resolve to a symbol are published
 
-Cellucid publishes **one name per gene and keeps no second identifier**, so
-whatever a dataset publishes is the only string its gene search can match. An
-Ensembl accession such as `ENSG00000004948.16` is not a name a reader would type,
-so the export step for these four samples translates accessions into gene
-symbols and publishes only the ones it can name:
+A gene's default name is the string a reader searches for, and an Ensembl
+accession such as `ENSG00000004948.16` is not a name a reader would type. So the
+build of these four samples translates accessions into gene symbols and
+publishes only the genes it can name:
 
 1. An identifier that is already a symbol passes through unchanged.
 2. An `ENSG…` accession is translated through one fixed local symbol table — no
@@ -109,6 +109,14 @@ entirely, or it may be present but mapped to another accession — the table hol
 1,627 entries that return an accession — so the lookup succeeds and still yields
 no name. Both count as unnamed, and unnamed genes are left out rather than
 published under an accession.
+
+Every published gene still keeps its upstream identifier. Each of these four
+samples publishes two gene-name sets in its `var_manifest.json`: the default
+set, from the `gene_name` column, holds the symbols above, and a second set,
+from the `ensembl_gene_id` column, holds each translated gene's Ensembl
+accession. A gene that passed through as a symbol has no separate accession, so
+its entry in the second set falls back to the default name. The second set never
+adds a gene: a gene whose accession has no symbol is not published at all.
 
 ### What each sample publishes
 
@@ -126,12 +134,14 @@ respectively.
 
 :::{note}
 Every published count above is the `stats.n_genes` value in that sample’s own
-`exports/<id>/dataset_identity.json`, which is also the number of entries in its
-`var_manifest.json` and the number of payload files in its `var/` directory. Each
-sample’s `<id>_2_export_cellucid.ipynb` in
-[`cellucid-datasets`](https://github.com/theislab/cellucid-datasets) prints the
-full breakdown in its committed output. Read those rather than this page if you
-are verifying a build; they change when a sample is regenerated.
+`exports-v3/<id>/dataset_identity.json`, which is also the number of entries in its
+`var_manifest.json` and the number of payload files in its `var/` directory. The
+full breakdown is recorded as `gene_naming.census` in each sample’s
+`sources/<id>.json` in
+[`cellucid-datasets`](https://github.com/theislab/cellucid-datasets), and the
+build refuses to publish a rebuild whose census differs. Read those rather than
+this page if you are verifying a build; they change when a sample is
+regenerated.
 :::
 
 ---

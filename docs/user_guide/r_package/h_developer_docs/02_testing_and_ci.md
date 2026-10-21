@@ -28,7 +28,7 @@ R CMD check cellucid-r
 ## What the tests cover (high level)
 
 The existing tests validate:
-- core files are written (`dataset_identity.json`, manifests, points)
+- core files are written (`dataset_identity.json`, manifests, `embeddings/`)
 - embedding normalization matches the Python implementation
 - categorical codes and generated nullable outlier quantiles use their exact
   reserved markers, while gene and continuous-observation inputs are finite-only

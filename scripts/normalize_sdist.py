@@ -18,8 +18,9 @@ CANONICAL_FILE_MODE = 0o644
 CANONICAL_EXECUTABLE_MODE = 0o755
 CANONICAL_DIRECTORY_MODE = 0o755
 DEFLATE_STORED_BLOCK_BYTES = 65_535
-MAX_NORMALIZED_SDIST_BYTES = 1_048_576
-MAX_SDIST_MEMBERS = 4_096
+#: PyPI's default per-file upload limit, 100 MB: an archive past it cannot be
+#: published, so the release build stops at it instead of at upload.
+MAX_NORMALIZED_SDIST_BYTES = 100_000_000
 WINDOWS_FORBIDDEN_CHARACTERS = frozenset('<>:"\\|?*')
 WINDOWS_RESERVED_NAMES = frozenset(
     {"CON", "PRN", "AUX", "NUL"}
@@ -45,8 +46,6 @@ def _validated_members(archive: tarfile.TarFile) -> list[tarfile.TarInfo]:
     members = archive.getmembers()
     if not members:
         raise ValueError("source distribution is empty")
-    if len(members) > MAX_SDIST_MEMBERS:
-        raise ValueError("source distribution has too many members")
 
     names: set[str] = set()
     logical_names: set[str] = set()

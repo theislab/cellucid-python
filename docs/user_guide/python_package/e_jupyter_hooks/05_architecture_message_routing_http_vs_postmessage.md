@@ -23,6 +23,7 @@ Cellucid’s notebook integration is designed to:
 │   - BaseViewer / CellucidViewer / AnnDataViewer                               │
 │   - CellucidServer / AnnDataServer                                            │
 │   - /_cellucid/events (hooks)                                                 │
+│   - /_cellucid/selection (binary selections)                                  │
 │   - /_cellucid/session_bundle (uploads)                                       │
 │                                                                               │
 └───────────────────────────────────┬───────────────────────────────────────────┘
@@ -147,10 +148,13 @@ Fix: re-run the cell to create a new viewer.
 The flow for a selection event is:
 
 ```text
-iframe -> POST /_cellucid/events {type:"selection", viewerId:"...", cells:[...], source:"lasso"}
-server -> route_event(viewerId, event)
+iframe -> POST /_cellucid/selection?viewerId=...&viewerToken=...&source=lasso
+          body: cell indices as little-endian uint32, strictly ascending
+server -> authenticates, checks the body, then
+          route_event(viewerId, {type:"selection", viewerId, cells:<body bytes>, source})
 viewer._handle_frontend_message(event)
   - validates the exact closed record for its event type
+    (a selection's bytes become cells: list[int])
   - strips internal fields (type, viewerId)
   - updates viewer.state + wakes waiters
   - triggers HookRegistry callbacks

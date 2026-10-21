@@ -8,49 +8,38 @@ Vector fields are optional, but powerful: they let Cellucid render per-cell arro
 
 In `cellucid_prepare()`, vector fields are provided as:
 
-- `vector_fields`: a **named list** of arrays
+- `vector_fields`: a **named list of named lists** — field id, then the id of
+  the exported embedding each array is drawn over:
+  `list(velocity = list(X_umap = v2, X_umap_3d = v3))`
 
-Each entry must be a numeric matrix with **exactly the number of columns its key
-declares** and one row per cell. A `_1d` key also accepts a plain numeric vector
-of length `n_cells` as the single column it declares; `_2d` and `_3d` keys
-require the full matrix.
+Each array must be a numeric matrix with one row per cell and **exactly the
+number of columns of the embedding it is bound to**. A plain numeric vector of
+length `n_cells` is accepted for a 1D embedding.
 
-Rows must be cells.
+## Binding a field to embeddings
 
-## Naming conventions (important)
+A vector field is drawn over one embedding at a time, so every array names the
+embedding it belongs to. One field may be bound to several embeddings —
+typically a 2D and a 3D UMAP — and an embedding with no binding simply shows no
+overlay: a velocity computed in UMAP space points the wrong way over a t-SNE.
 
-`cellucid-r` requires an explicit dimensional suffix. Every key must exactly
-match `<field>_umap_<1|2|3>d`.
-
-Use keys like:
-- `velocity_umap_2d`
-- `velocity_umap_3d`
-
-The exporter groups these by base field id (`velocity_umap`) and writes one file per dimension that matches an available embedding.
-
-An unsuffixed key such as `velocity_umap` is rejected with
-`Vector field key 'velocity_umap' must exactly match '<field>_umap_<1|2|3>d'.`
-The dimension is always declared, never inferred from an array's width: a field
-can carry both a 2D and a 3D version, and a suffix that disagrees with the
-array's shape is a mistake worth catching rather than a shape to trust. This is
-the same rule the Python package enforces, so the same field is named the same
-way from either writer.
+- Every embedding id a field names must be one of the exported `embeddings`.
+- A field must bind at least one embedding.
+- `vector_field_default` names the field selected first; it is required when
+  more than one field is exported.
 
 ## Field IDs are names, not filenames
 
 A field id is recorded in `dataset_identity.json` and is never used as a path.
-Its payload is written to `vectors/<index>_<dim>d.bin`, where `<index>` is the
-field's position once the ids are sorted by code point. So a field id carries no
-filename rule at all — no character restriction, no length limit, no Windows
-device-name rule.
+Its payloads are written to `vectors/<i>_<e>.bin`, where `<i>` is the field's
+position once the ids are sorted by code point and `<e>` is the payload index of
+the bound embedding. So a field id carries no filename rule at all — no
+character restriction, no length limit, no Windows device-name rule.
 
-What remains is the key grammar above (`<field>_umap_<1|2|3>d`) and the identity
-rules every exported identifier obeys: a field id must be a non-empty string,
-**distinct**, and text the viewer can draw verbatim — no control or zero-width
-characters and no leading or trailing whitespace, because the id becomes a UI
-label. Two list names that produce the same field id and dimension are the same
-list name, so they are rejected with `vector_fields names must be unique.`
-before any array is read.
+What remains are the identity rules every exported identifier obeys: a field id
+must be a non-empty string, **distinct**, and text the viewer can draw verbatim —
+no control or zero-width characters and no leading or trailing whitespace,
+because the id becomes a UI label. `RNA velocity (steady state)` is a legal id.
 
 ```{note}
 Sorting by code point is what makes `cellucid-r` and the `cellucid` Python
@@ -58,21 +47,17 @@ package assign the same index to the same field, so the two writers produce
 byte-identical layouts from the same input.
 ```
 
-## Embedding coupling and automatic scaling
-
-Vector fields are dimension-specific:
-- 2D vectors require a 2D embedding to be present
-- 3D vectors require a 3D embedding to be present
-
-If you provide a 3D vector field but do not export `X_umap_3d`, the complete
-candidate is rejected before publication.
-
 ### Automatic scaling (critical)
 
-Embeddings are normalized (center + scale). To keep vectors consistent with the normalized coordinates, `cellucid-r` multiplies vectors by the same per-dimension `scale_factor` used for the embedding normalization.
+Each embedding is normalized on its own (center + scale). To keep vectors
+consistent with the normalized coordinates, `cellucid-r` multiplies each array
+by the `scale_factor` of **the embedding it is bound to**.
 
 Practical implication:
-- provide vectors in the same coordinate system/units as your original embedding coordinates
+- provide vectors in the same coordinate system/units as the original
+  coordinates of their embedding
+- for an embedding exported from chosen columns (`cellucid_embedding(columns = ...)`),
+  pass the vectors for those same columns, in the same order
 - the exported vectors will “match” the exported points
 
 ## Output files and metadata
@@ -83,29 +68,22 @@ Vector files are written under:
 Each file is:
 - float32, little-endian
 - row-major
-- shape `(n_cells, dim)`
+- shape `(n_cells, dim)` of the bound embedding
 
-Example, for the field at payload index `0`:
-- `vectors/0_2d.bin` (or `.gz`)
+Example, for the field at payload index `0` bound to the embeddings at payload
+indices `1` and `3`:
+- `vectors/0_1.bin` and `vectors/0_3.bin` (or `.gz`)
 
 Metadata is written into `dataset_identity.json` under `vector_fields`, and that
-is what maps each field id to its files.
+is what maps each field id to its files. Each field entry records exactly
+`label` and `files`:
 
-Each field entry records `label`, `basis`, `available_dimensions`,
-`default_dimension`, and `files`. Two of those are derived by the writer, not
-chosen by you:
-
-- `label` is the field id **character for character** (`velocity_umap`), and
-- `basis` is always the string `"umap"`, because every field id ends in `_umap`
-  by construction.
-
-The web app compares both and refuses to load the dataset if either differs, so
-there is no display-name field in this format: the string in the overlay's field
-selector is the field id exactly as you named it. If you want a prettier name in
-the UI, rename the list entry — `RNA velocity_umap_2d` is a legal key.
-
-`available_dimensions` lists the dimensions you supplied for that field, and
-`default_dimension` is the largest of them.
+- `label` is derived by the writer, not chosen by you: it is the field id
+  **character for character**. The web app compares it and refuses to load the
+  dataset if it differs, so there is no display-name field in this format; to
+  show a prettier name, rename the list entry.
+- `files` maps each bound embedding id to its exact payload path, in embedding
+  order.
 
 The exporter also records one exact `default_field`:
 - with one vector field, that field is the default;
@@ -116,18 +94,20 @@ The exporter also records one exact `default_field`:
 
 ```r
 vector_fields <- list(
-  velocity_umap_2d = matrix(
-    c(0.1, 0,
-      0.1, 0,
-      0.1, 0),
-    ncol = 2, byrow = TRUE
+  velocity = list(
+    X_umap = matrix(
+      c(0.1, 0,
+        0.1, 0,
+        0.1, 0),
+      ncol = 2, byrow = TRUE
+    )
   )
 )
 
 cellucid_prepare(
   latent_space = latent,
   obs = obs,
-  X_umap_2d = umap2,
+  embeddings = list(X_umap = umap2),
   vector_fields = vector_fields,
   obs_categorical_dtype = "uint8",
   dataset_name = "My dataset",
@@ -143,46 +123,29 @@ cellucid_prepare(
 ### Mismatched shapes
 
 Export fails if:
-- a vector field has a different number of rows than your embeddings (`n_cells`)
-- a vector field's array has a different number of columns than its key declares,
-  which includes passing a plain vector under a `_2d` or `_3d` key
+- a vector array has a different number of rows than your embeddings (`n_cells`)
+- a vector array has a different number of columns than the dimension of the
+  embedding it is bound to
 
-### Bad naming
+### Bindings
 
 Export fails if:
-- the key is not exactly `<field>_umap_<1|2|3>d` (no suffix, a suffix other than
-  `1`/`2`/`3`, or no `_umap` before it)
-
-The part before `_umap` is otherwise unconstrained: interior spaces, slashes, a
-leading `.`, and non-ASCII characters are all accepted, because the id names a
-field in the identity metadata and never a file. Only invisible characters are
-rejected, and only because the id is drawn as a UI label.
-
-### Duplicate definitions
-
-A key determines its field id and dimension exactly, so two declarations of the
-same field and dimension are two identical list names, and `cellucid_prepare()`
-rejects them with `vector_fields names must be unique.` before reading any
-array. No declaration overrides another.
-
-`Velocity_umap_2d` and `velocity_umap_3d` are two different fields and both
-export: they no longer share a payload path, so case alone is not a collision.
+- a field's value is not a named list of arrays,
+- a field binds no embedding,
+- a field names an embedding id that is not exported.
 
 ## Troubleshooting pointers
 
-- `Vector field key '…' must exactly match '<field>_umap_<1|2|3>d'.` → add or
-  correct the dimensional suffix on the list name.
-- `vector_fields names must be unique.` → the same list name is declared twice;
-  remove or rename one of them.
-- `Vector field '…' declares 2D but contains 1 components.` → check `ncol(...)`;
-  a plain vector counts as one component.
-- `Vector field '…' requires a matching 3D embedding.` → export `X_umap_3d`, or
-  drop that vector dimension.
-- `vector_field_default is required when more than one vector field is
-  supplied.` → name the field you want selected on load, without a dimensional
-  suffix (`vector_field_default = "velocity_umap"`).
-- `vector_field_default '…' is not present in vector_fields.` → the value must
-  be a field id, not a list name; drop the `_2d`/`_3d`.
-- `vector_field_default requires vector_fields.` → you named a default but
-  passed no vectors.
-- “Vectors look too long/short” → remember vectors are scaled by embedding normalization.
+- `Vector field 'velocity' on embedding 'X_umap' must have exactly 2 columns, got 3.`
+  → bind the 3D vectors to the 3D embedding, or pass the matching 2D vectors.
+- `Vector field 'velocity' is bound to embedding 'X_tsne', which is not one of the exported embeddings: …`
+  → export that embedding, or bind the field to one you export.
+- `Vector field 'velocity' must map embedding ids to arrays, for example list(velocity = list(X_umap = vectors)).`
+  → wrap the array in a list named by its embedding id.
+- `vector_field_default is required when more than one vector field is declared.`
+  → name the field you want selected on load.
+- `vector_field_default 'drift' does not match an available field: …` → the value
+  must be one of the field ids.
+- `vector_field_default was provided but no vector fields exist.` → you named a
+  default but passed no vectors.
+- “Vectors look too long/short” → remember vectors are scaled by their embedding's normalization.

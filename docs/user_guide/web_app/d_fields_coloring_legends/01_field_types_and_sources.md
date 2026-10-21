@@ -59,10 +59,18 @@ In the UI, var fields appear as:
 Cellucid treats gene expression as **continuous**: selecting a gene always creates a continuous-style legend (colorbar + sliders).
 :::
 
-The var axis is whatever the export published — one name per gene, decided when
-the dataset was prepared. It is not necessarily every gene the study measured,
-and Cellucid neither knows nor can recover what was left out. For the built-in
-samples this is documented: see {doc}`07_genes_in_the_built_in_samples`.
+For a prepared dataset the var axis is whatever the export published — the
+genes and their names, decided when the dataset was prepared. It is not
+necessarily every gene the study measured, and Cellucid neither knows nor can
+recover what was left out. For the built-in samples this is documented: see
+{doc}`07_genes_in_the_built_in_samples`. An exported dataset with several
+gene-name sets can switch between them.
+
+For an AnnData file (opened in the browser, served, or shown from a notebook)
+the var axis is that of the chosen expression matrix — `X`, a layer, or
+`raw.X`, which has its own gene list — named by the var index or a var column.
+Both are chosen under **Session › Data mapping › Genes**; see
+{doc}`../b_data_loading/13_data_mapping`.
 
 ---
 

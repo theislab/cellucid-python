@@ -51,8 +51,8 @@ holds content instead of discarding it silently, and it restates the identity
 only after re-deriving the generation's cell and gene counts and recomputing its
 cell-order digest from the coordinates it publishes — so a capture taken against
 different data is refused rather than relabelled. It also repoints the catalog's
-`state_sha256` at the file it just wrote, because a preset replaced without that
-is refused for its digest instead. If you maintain your own catalog, use that
+`state_sha256` and `state_bytes` at the file it just wrote, because a preset
+replaced without that is refused for its digest or its length instead. If you maintain your own catalog, use that
 script rather than editing a save by hand.
 
 ## The exact publication contract
@@ -61,11 +61,11 @@ Every official export generation contains both sidecars:
 
 | Built-in sample | State bundle | Manifest |
 | --- | --- | --- |
-| Suo | `exports/suo/default.cellucid-session` | `exports/suo/state-snapshots.json` |
-| Garcia | `exports/garcia/default.cellucid-session` | `exports/garcia/state-snapshots.json` |
-| He | `exports/he/default.cellucid-session` | `exports/he/state-snapshots.json` |
-| Kanemaru | `exports/kanemaru/default.cellucid-session` | `exports/kanemaru/state-snapshots.json` |
-| Pancreas | `exports/pancreas/default.cellucid-session` | `exports/pancreas/state-snapshots.json` |
+| Suo | `exports-v3/suo/default.cellucid-session` | `exports-v3/suo/state-snapshots.json` |
+| Garcia | `exports-v3/garcia/default.cellucid-session` | `exports-v3/garcia/state-snapshots.json` |
+| He | `exports-v3/he/default.cellucid-session` | `exports-v3/he/state-snapshots.json` |
+| Kanemaru | `exports-v3/kanemaru/default.cellucid-session` | `exports-v3/kanemaru/state-snapshots.json` |
+| Pancreas | `exports-v3/pancreas/default.cellucid-session` | `exports-v3/pancreas/state-snapshots.json` |
 
 The manifest has one exact root, `states`, and one exact entry:
 
@@ -74,31 +74,34 @@ The manifest has one exact root, `states`, and one exact entry:
 ```
 
 The matching entry in
-[`exports/datasets.json`](https://github.com/theislab/cellucid-datasets/blob/main/exports/datasets.json)
-advertises `state_manifest` and `state_sha256` as a pair. Each entry has this
-shape:
+[`exports-v3/datasets.json`](https://github.com/theislab/cellucid-datasets/blob/main/exports-v3/datasets.json)
+advertises `state_manifest`, `state_sha256` and `state_bytes` together. Each
+entry has this shape:
 
 ```json
 {
   "state_manifest": "state-snapshots.json",
-  "state_sha256": "<64 lowercase hexadecimal characters>"
+  "state_sha256": "<64 lowercase hexadecimal characters>",
+  "state_bytes": "<exact byte length, a positive integer>"
 }
 ```
 
 `state_manifest` names the manifest beside that dataset generation.
 `state_sha256` pins the exact bytes of `default.cellucid-session`; it is not a
-digest of the JSON manifest. Both fields are required for the capability to be
-advertised.
+digest of the JSON manifest. `state_bytes` is that file's exact length: the
+viewer stops reading past it and refuses a file of any other length, so a
+published state has no size limit of its own. All three fields are required for
+the capability to be advertised.
 
 A published state is regenerated whenever the reviewed view or the session
-format changes, and its `state_sha256` changes with it. Read the current value
+format changes, and its `state_sha256` and `state_bytes` change with it. Read the current value
 out of the catalog rather than copying one from documentation — that is why the
 example above shows the field's shape instead of a digest. A digest written into
 prose is correct only until the next generation is published, and it then
 becomes a value a reader can check against and be misled by.
 
 You can inspect all five generation directories in the
-[`cellucid-datasets` exports](https://github.com/theislab/cellucid-datasets/tree/main/exports).
+[`cellucid-datasets` exports](https://github.com/theislab/cellucid-datasets/tree/main/exports-v3).
 For what each generation is an export of, what to cite, and how far its build is
 pinned, see {doc}`../b_data_loading/12_sample_dataset_provenance`.
 
@@ -108,7 +111,7 @@ Each official state:
 
 - activates the `cell_type` observation field;
 - restores a modest, static close-up in the 3-D **Orbit** camera;
-- uses the light theme and grid background; and
+- uses the light theme and the **Studio (light)** background; and
 - starts without active filters or kept snapshots.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/official-01-sample-state-applied.png
@@ -117,12 +120,12 @@ Each official state:
 
 The Pancreas sample moments after it was chosen. Nothing was clicked beyond
 picking the sample: the dataset published first, then its verified starting
-state put the view into 3-D **Orbit** on the light grid background with
+state put the view into 3-D **Orbit** on the light studio background with
 `cell_type` active. **Save State** and **Load State** were not involved.
 ```
 
 You can confirm each of those four from the sidebar in the figure: the
-**Visualization** accordion shows `Light` theme, `Grid (light)` background and
+**Visualization** accordion shows `Light` theme, `Studio (light)` background and
 `Points` render mode, and the dataset opens on its 3-D embedding with the
 navigation mode set to orbit.
 
@@ -134,10 +137,10 @@ the state is applied, but moving-camera playback remains off.
 ## Which catalogs opt in—and which sources are not probed
 
 Automatic starting states belong to a `local-demo` catalog generation whose
-entry explicitly advertises the paired `state_manifest` and `state_sha256`
-fields. The official catalog uses this capability. A custom `exportsBaseUrl`
-catalog may deliberately opt in by publishing the same paired fields and exact
-sidecars.
+entry explicitly advertises the `state_manifest`, `state_sha256` and
+`state_bytes` fields together. The official catalog uses this capability. A
+custom `exportsBaseUrl` catalog may deliberately opt in by publishing the same
+fields and exact sidecars.
 
 Custom hosting is therefore not rejected as a class: only explicit catalog
 advertisement enables the state requests. Jupyter, GitHub, local-user, and

@@ -195,7 +195,7 @@ Use this when you want to quickly decide whether you have:
 1) Confirm **Visualization → Render mode:** is `Points`.
 2) Confirm the overlay section exists (**Vector Field Overlay:** is visible).
 3) Confirm `Show overlay` is enabled (checkbox stays on).
-4) Confirm you are on a dimension that has a vector field (if the toggle is disabled, switch dimension).
+4) Confirm the view shows an embedding that has a vector field (if the toggle is disabled, show one of the embeddings the info line names).
 5) Set conservative settings:
    - `Particle density:` 5K
    - `Trail length:` 3.0s

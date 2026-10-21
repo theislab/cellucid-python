@@ -15,11 +15,13 @@
 
 ## What this filter is (and is not)
 
-The outlier filter is a **per-cell outlierness score** that comes from your dataset export.
+The outlier filter is a **per-cell outlierness score**, measured in a latent
+space: the one your dataset was exported with, or, for an AnnData file, the one
+chosen under **Session › Data mapping › Latent space**.
 
 It is typically computed for **categorical fields** (e.g., clustering labels) as:
 
-- compute a centroid per category in a latent space (a vector embedding used during export),
+- compute a centroid per category in a latent space (an `obsm` array such as `X_scVI` or `X_pca`),
 - compute each cell’s distance to its category centroid,
 - convert that distance into a within-category **quantile** in `[0, 1]`.
 
@@ -123,10 +125,11 @@ Why a quantile goes missing:
 - or the category could not be scored at all.
 
 :::{note}
-An export in which *every* quantile for a field is missing is rejected outright
-at preparation time, with an error naming `centroid_min_points`. So a shipped
-dataset either has usable outlier statistics for a field or has none at all —
-never an all-missing set that would silently do nothing.
+When *every* quantile of a field is missing (no category reaches
+`centroid_min_points`), the field has no outlier statistics, so the outlier
+control stays hidden for it, exactly as for a field without quantiles. The
+export, the server and the browser all publish such a field instead of
+refusing it; lower `centroid_min_points` to give its categories quantiles.
 :::
 
 ### When the outlier slider appears
@@ -144,6 +147,12 @@ Outlier quantiles are generated during export in `cellucid-python`:
 
 - `cellucid.prepare(..., latent_space=<n_cells × n_dims>, obs=<DataFrame>)`
 - For each categorical obs field, Cellucid computes per-cell quantiles based on latent-space distances to category centroids.
+
+For an `.h5ad`, a Zarr ZIP or a served AnnData, choose the latent space under
+**Session › Data mapping › Latent space**: the browser (or the server)
+computes the same quantiles `prepare()` writes, and your threshold is kept
+when the space changes (see
+[Latent space](../b_data_loading/13_data_mapping.md#latent-space)).
 
 If your dataset is loaded from a source that does not provide outlier quantiles for a field, the UI simply hides the outlier control for that field.
 

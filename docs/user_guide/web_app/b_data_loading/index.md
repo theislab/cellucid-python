@@ -38,8 +38,8 @@ Use this as a decision tree. You can always switch later.
 |---|---|---|---|
 | A pre-exported folder from `prepare()` | Browser Prepared picker | Fastest, most reliable, no server | {doc}`03_browser_file_picker_tutorial` |
 | A portable `.zarr.zip` or `.zip` | Browser Zarr ZIP picker | One validated file selection in every supported browser | {doc}`03_browser_file_picker_tutorial` |
-| A `.h5ad` **under 512 MiB**, and no Python | Browser H5AD picker | One file selection, nothing installed, nothing uploaded | {doc}`03_browser_file_picker_tutorial` |
-| A `.h5ad` **over 512 MiB**, or one that stalls the tab | Server mode (recommended) or Jupyter | Python opens the file read-only-backed, reducing matrix memory pressure | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
+| A `.h5ad` of any size, and no Python | Browser H5AD picker | One file selection, nothing installed, nothing uploaded; read from disk as each view needs it | {doc}`03_browser_file_picker_tutorial` |
+| A `.h5ad` you will open again and again, or share | Server mode or Jupyter | Python serves genes on request and keeps the file read-only-backed | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
 | A `.zarr` directory | Server mode or Jupyter | Direct Python loading is supported and eager | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
 | An in-memory `AnnData` in a notebook | Jupyter | Fastest way to iterate while analyzing | {doc}`05_jupyter_tutorial` |
 | A dataset collection you want to share publicly | GitHub-hosted exports | Exact shareable URLs, no running server | {doc}`11_custom_dataset_repository` |
@@ -66,6 +66,55 @@ elsewhere, or move focus outside to close it. See
 {doc}`../a_orientation/04_ui_glossary_terminology` and
 {doc}`../o_accessibility_privacy_security/01_accessibility`.
 :::
+
+(changing-dataset-while-loading)=
+### Changing your mind while a dataset loads
+
+Every dataset control is live while a dataset loads, including the dataset
+Cellucid opens when it starts. Whatever you choose last is what you get:
+
+- Choosing another sample, **None**, an H5AD or Zarr ZIP file, or a prepared
+  folder, or running the benchmark, stops the load in progress at once (its
+  downloads are cancelled) and loads your new choice instead. The dataset
+  picker shows what is loading; a file shows as *Opening <name>…* while it is
+  read.
+- Connecting to a server or GitHub repository that holds exactly one dataset
+  opens that dataset, unless you chose another dataset, or applied a session
+  with **Load State**, after clicking **Connect**. Then what you did later
+  stays, the connection is kept, and its dataset is listed in the dataset
+  picker.
+- **Load State** chosen while a dataset loads waits for it, says so in a
+  notification, and then applies the session to the dataset that loaded. A
+  session saved from a different dataset is refused with an explanation, as
+  always.
+
+- If the connection to a server is lost, Cellucid clears only the dataset that
+  came from it. When you have already chosen another dataset that is still
+  loading, that choice is left to finish; the server's dataset is cleared
+  afterwards only if your choice fails and it is still on screen.
+
+A load you replaced never appears afterwards and reports nothing; only the
+outcome of your latest choice is reported. If the dataset Cellucid opens at
+startup fails and you had not chosen anything else, startup stops on the
+“Cellucid could not start” card.
+
+(drop-to-open)=
+### Dropping a file or folder onto the viewer
+
+Instead of a button, you can drag one `.h5ad` file, one `.zarr.zip` archive,
+or one prepared export folder from your file manager and drop it anywhere on
+the viewer. While you drag, an outline and a *Drop to open* card cover the
+viewer. A drop is read exactly as the matching **H5AD**, **Zarr ZIP** or
+**Prepared** button would read it, and it replaces any load in progress like
+any other choice.
+
+Anything else is refused with a notification that says what can be dropped:
+several items at once (drop the export's folder, not the files inside it), a
+`.zarr` directory (zip it first, or use a server), or any other file. A file
+dropped onto the page never makes the browser leave Cellucid, including while
+it is still starting; until the data controls are ready, the pointer shows the
+drop as not allowed. The buttons remain the way to open data from the keyboard
+or with a screen reader.
 
 ---
 
@@ -159,6 +208,14 @@ Visualize AnnData objects directly within Jupyter notebooks with embedded intera
 What makes a dataset “the same dataset” in Cellucid, and why it matters for sessions, sharing, and community annotation.
 :::
 
+:::{grid-item-card} {octicon}`git-compare;1.5em;sd-mr-1` Data Mapping
+:link: 13_data_mapping
+:link-type: doc
+
+Choose which `obsm` array or prepared embedding each dimension and each view
+shows, and what happens when a file has no UMAP.
+:::
+
 :::{grid-item-card} {octicon}`file;1.5em;sd-mr-1` Format Expectations
 :link: 07_folder_file_format_expectations_high_level_link_to_spec
 :link-type: doc
@@ -185,7 +242,7 @@ acceptance captures.
 :link: ../i_vector_field_velocity/index
 :link-type: doc
 
-If your dataset includes vector fields (e.g. RNA velocity), enable the overlay after loading and pick a field for the current dimension.
+If your dataset includes vector fields (e.g. RNA velocity), enable the overlay after loading and pick a field bound to the embedding the view shows.
 :::
 
 ::::

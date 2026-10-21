@@ -12,8 +12,10 @@ accepts instead of assuming it.
 
 The checks are exact rather than permissive -- ``type(value) is str`` instead of
 ``isinstance``, exact key sets instead of subsets -- because a viewer running in
-a browser is not a trusted caller. This module holds the standard library only,
-so the protocol can be reasoned about without loading the viewer machinery.
+a browser is not a trusted caller. This module imports only the standard
+library, NumPy (to read the binary ``selection`` body in one vectorized pass),
+and :mod:`cellucid.data_mapping`, which is standard-library only itself, so the
+protocol can be reasoned about without loading the viewer machinery.
 """
 
 from __future__ import annotations
@@ -22,6 +24,10 @@ import json
 import math
 from typing import Any
 from urllib.parse import urlparse
+
+import numpy as np
+
+from ..data_mapping import DataMappingError, validate_data_mapping
 
 # Every command Python may send into the viewer iframe, mapped to the complete
 # key set that command must carry. This mapping is the single declaration of
@@ -38,6 +44,7 @@ _COMMAND_MESSAGE_FIELDS: dict[str, frozenset[str]] = {
     "setVisibility": frozenset({"type", "cells", "visible"}),
     "resetCamera": frozenset({"type"}),
     "freeze": frozenset({"type"}),
+    "setDataMapping": frozenset({"type", "requestId", "mapping"}),
 }
 
 # Every event the viewer may send back, mapped to the complete key set that
@@ -45,6 +52,12 @@ _COMMAND_MESSAGE_FIELDS: dict[str, frozenset[str]] = {
 # event is: :func:`_require_inbound_jupyter_event` validates against it and
 # :func:`_protocol_capability_document` publishes its keys, so a viewer can ask
 # what this installation accepts instead of guessing from a version number.
+#
+# Two events do not arrive as JSON on ``POST /_cellucid/events``: the server
+# builds ``selection`` from a binary ``POST /_cellucid/selection`` body (its
+# ``cells`` field is those exact bytes until :func:`_decode_selection_cells`
+# reads them) and ``session_bundle`` from a ``POST /_cellucid/session_bundle``
+# upload. The event endpoint refuses both types.
 _INBOUND_EVENT_FIELDS: dict[str, frozenset[str]] = {
     "selection": frozenset({"type", "viewerId", "cells", "source"}),
     "hover": frozenset({"type", "viewerId", "cell", "position"}),
@@ -76,7 +89,15 @@ _INBOUND_EVENT_FIELDS: dict[str, frozenset[str]] = {
         }
     ),
     "command_error": frozenset({"type", "viewerId", "command", "reason"}),
+    "data_mapping": frozenset({"type", "viewerId", "requestId", "origin", "mapping"}),
 }
+
+# Why the viewer's data mapping is what it is, as a ``data_mapping`` event
+# reports it. ``notebook`` is the one origin that answers a ``setDataMapping``
+# command, so it is the one origin that carries a ``requestId``.
+_DATA_MAPPING_ORIGINS = frozenset(
+    {"default", "best_guess", "session", "user", "notebook"}
+)
 
 # The optional pair a prepared export adds to its ``/_cellucid/datasets`` entry
 # when it ships a published default session. ``cellucid.server._state`` writes
@@ -90,7 +111,7 @@ _INBOUND_EVENT_FIELDS: dict[str, frozenset[str]] = {
 # asserts the two declarations agree, which is what was missing when the
 # published-state pair was added and the validator was not.
 _DATASET_ENTRY_FIELDS = frozenset({"id", "path", "name"})
-_PUBLISHED_STATE_FIELDS = frozenset({"state_manifest", "state_sha256"})
+_PUBLISHED_STATE_FIELDS = frozenset({"state_manifest", "state_sha256", "state_bytes"})
 _PUBLISHED_STATE_MANIFEST_NAME = "state-snapshots.json"
 _SHA256_HEX_DIGITS = frozenset("0123456789abcdef")
 
@@ -175,13 +196,16 @@ def _require_exact_message_text(
     return value
 
 
+_EXACT_JSON_SCALAR_TYPES = frozenset({str, bool, int})
+
+
 def _require_exact_json_value(
     value: object,
     *,
     label: str,
     ancestors: set[int] | None = None,
 ) -> None:
-    if value is None or type(value) in {str, bool, int}:
+    if value is None or type(value) in _EXACT_JSON_SCALAR_TYPES:
         return
     if type(value) is float:
         if not math.isfinite(value):
@@ -196,6 +220,12 @@ def _require_exact_json_value(
     try:
         if type(value) is list:
             for index, entry in enumerate(value):
+                # Scalars are checked inline: a label is built only for an
+                # entry that fails or that nests further, never per element.
+                if entry is None or type(entry) in _EXACT_JSON_SCALAR_TYPES:
+                    continue
+                if type(entry) is float and math.isfinite(entry):
+                    continue
                 _require_exact_json_value(
                     entry,
                     label=f"{label}[{index}]",
@@ -217,7 +247,7 @@ def _require_exact_json_value(
         ancestors.remove(identity)
 
 
-def _require_debug_dataset_list(payload: object) -> list[dict[str, str]]:
+def _require_debug_dataset_list(payload: object) -> list[dict[str, Any]]:
     """Validate the exact dataset-list response used by diagnostics."""
     if type(payload) is not dict or set(payload) != {"datasets"}:
         raise TypeError("Dataset-list response must contain exactly 'datasets'")
@@ -225,7 +255,7 @@ def _require_debug_dataset_list(payload: object) -> list[dict[str, str]]:
     if type(raw_datasets) is not list:
         raise TypeError("Dataset-list response 'datasets' must be a native list")
 
-    datasets: list[dict[str, str]] = []
+    datasets: list[dict[str, Any]] = []
     dataset_ids: set[str] = set()
     dataset_paths: set[str] = set()
     for index, entry in enumerate(raw_datasets):
@@ -235,7 +265,7 @@ def _require_debug_dataset_list(payload: object) -> list[dict[str, str]]:
         ):
             raise TypeError(
                 f"Dataset-list entry {index} must contain exactly id, name, and path, "
-                "and may add state_manifest and state_sha256 only as a complete pair"
+                "and may add state_manifest, state_sha256 and state_bytes only together"
             )
         dataset_id = _require_exact_message_text(
             entry["id"],
@@ -274,7 +304,7 @@ def _require_debug_dataset_list(payload: object) -> list[dict[str, str]]:
             raise ValueError(f"Dataset-list response duplicates path {path!r}")
         dataset_ids.add(dataset_id)
         dataset_paths.add(path)
-        validated = {
+        validated: dict[str, Any] = {
             "id": dataset_id,
             "path": path,
             "name": dataset_name,
@@ -296,8 +326,15 @@ def _require_debug_dataset_list(payload: object) -> list[dict[str, str]]:
                     f"Dataset-list entry {index} state_sha256 must be exactly 64 "
                     "lowercase hexadecimal characters"
                 )
+            state_bytes = entry["state_bytes"]
+            if type(state_bytes) is not int or state_bytes < 1:
+                raise ValueError(
+                    f"Dataset-list entry {index} state_bytes must be the default "
+                    "state's exact positive byte length"
+                )
             validated["state_manifest"] = manifest
             validated["state_sha256"] = digest
+            validated["state_bytes"] = state_bytes
         datasets.append(validated)
     return datasets
 
@@ -313,6 +350,56 @@ def _require_cell_indices(value: object, *, label: str = "cell_indices") -> list
             raise ValueError(f"{label} must not contain duplicate cell indices")
         seen.add(cell_index)
     return value
+
+
+# One selected cell on the ``POST /_cellucid/selection`` wire: a little-endian
+# unsigned 32-bit cell index. The body is the whole selection, strictly
+# ascending, so it is unique by construction and checked in one pass.
+_SELECTION_CELL_DTYPE = np.dtype("<u4")
+
+
+def _require_selection_cell_array(body: object, *, label: str = "selection cells") -> np.ndarray:
+    """Validate one binary selection body and return a view of its cells.
+
+    The body is the exact ``POST /_cellucid/selection`` payload: one or more
+    little-endian ``uint32`` cell indices, strictly ascending. Strict order is
+    what makes the indices unique, so the check is one vectorized comparison
+    rather than a set of every index. The returned array is a read-only view
+    of ``body``.
+    """
+    if type(body) is not bytes:
+        raise TypeError(f"{label} must be the exact bytes of one selection body")
+    itemsize = _SELECTION_CELL_DTYPE.itemsize
+    if not body or len(body) % itemsize:
+        raise ValueError(
+            f"{label} must be one or more little-endian uint32 cell indices "
+            f"({itemsize} bytes each), not {len(body)} bytes"
+        )
+    cells = np.frombuffer(body, dtype=_SELECTION_CELL_DTYPE)
+    if cells.size > 1 and not bool(np.all(cells[1:] > cells[:-1])):
+        raise ValueError(f"{label} must be strictly ascending, so each cell appears once")
+    return cells
+
+
+def _decode_selection_cells(body: object, *, label: str = "selection cells") -> list[int]:
+    """Return the cell indices of one binary selection body as native ints."""
+    cells: list[int] = _require_selection_cell_array(body, label=label).tolist()
+    return cells
+
+
+def _require_data_mapping(value: object, *, label: str) -> dict[str, Any]:
+    """Validate one data mapping and return its canonical copy.
+
+    The mapping is checked with :func:`cellucid.data_mapping.validate_data_mapping`,
+    the same rule sessions and the web app apply, so a mapping the viewer would
+    refuse is refused here before it crosses the wire. A mapping that passes is
+    replaced by its canonical copy -- the one that is serialized outbound and
+    stored inbound -- so the order of keys is never a property of the caller.
+    """
+    try:
+        return validate_data_mapping(value, label=label)
+    except DataMappingError as error:
+        raise ValueError(str(error)) from error
 
 
 def _require_frontend_message(message: object) -> str:
@@ -365,6 +452,18 @@ def _require_frontend_message(message: object) -> str:
             _require_cell_indices(cells, label="setVisibility cells")
         if type(message["visible"]) is not bool:
             raise TypeError("setVisibility visible must be exactly True or False")
+    elif message_type == "setDataMapping":
+        _require_exact_message_text(
+            message["requestId"],
+            label="setDataMapping requestId",
+        )
+        message = {
+            **message,
+            "mapping": _require_data_mapping(
+                message["mapping"],
+                label="setDataMapping mapping",
+            ),
+        }
 
     return json.dumps(
         message,
@@ -408,7 +507,16 @@ def _require_inbound_jupyter_event(
 ) -> tuple[str, dict[str, Any]]:
     if type(message) is not dict:
         raise TypeError("Inbound Jupyter event must be a native dictionary")
-    _require_exact_json_value(message, label="Inbound Jupyter event")
+    # A selection's cells are the binary body the server received, not JSON;
+    # they are read by `_decode_selection_cells` below.
+    _require_exact_json_value(
+        (
+            {key: value for key, value in message.items() if key != "cells"}
+            if message.get("type") == "selection"
+            else message
+        ),
+        label="Inbound Jupyter event",
+    )
     event_type = _require_exact_message_text(
         message.get("type"),
         label="Inbound Jupyter event type",
@@ -430,11 +538,14 @@ def _require_inbound_jupyter_event(
     )
 
     if event_type == "selection":
-        _require_cell_indices(message["cells"], label="selection cells")
         _require_exact_message_text(
             message["source"],
             label="selection source",
         )
+        message = {
+            **message,
+            "cells": _decode_selection_cells(message["cells"]),
+        }
     elif event_type == "hover":
         cell = message["cell"]
         if cell is not None:
@@ -519,6 +630,33 @@ def _require_inbound_jupyter_event(
                 "command_error reason must be at most "
                 f"{_COMMAND_ERROR_REASON_LIMIT} characters"
             )
+    elif event_type == "data_mapping":
+        origin = message["origin"]
+        if type(origin) is not str or origin not in _DATA_MAPPING_ORIGINS:
+            raise ValueError(
+                "data_mapping origin must be one of "
+                f"{sorted(_DATA_MAPPING_ORIGINS)}, not {origin!r}"
+            )
+        request_id = message["requestId"]
+        if origin == "notebook":
+            # Only an answer to setDataMapping says "notebook", and an answer
+            # names the request it answers.
+            _require_exact_message_text(
+                request_id,
+                label="data_mapping requestId",
+            )
+        elif request_id is not None:
+            raise ValueError(
+                "data_mapping requestId must be null unless the event answers "
+                "setDataMapping (origin 'notebook')"
+            )
+        message = {
+            **message,
+            "mapping": _require_data_mapping(
+                message["mapping"],
+                label="data_mapping mapping",
+            ),
+        }
     else:
         if message["status"] != "ok":
             raise ValueError("session_bundle status must equal 'ok'")

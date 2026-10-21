@@ -121,6 +121,7 @@ This is a practical, high-signal pattern that works for both beginners and exper
 from cellucid import prepare
 prepare(
     ...,
+    embeddings={"X_umap": adata.obsm["X_umap"]},
     out_dir="./exports/pbmc_v1",
     dataset_name="PBMC v1",
     dataset_id="pbmc-v1",

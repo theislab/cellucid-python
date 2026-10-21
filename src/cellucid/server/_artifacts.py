@@ -15,6 +15,8 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
+from .._contracts import CATEGORICAL_CODE_WIDTHS
+from ._datasets import _DatasetEntry
 from ._state import (
     _PUBLISHED_STATE_BUNDLE,
     _PUBLISHED_STATE_MANIFEST,
@@ -106,13 +108,17 @@ def _declared_dataset_artifacts(
     paths = {"dataset_identity.json", "obs_manifest.json"}
 
     embeddings = identity.get("embeddings")
-    if not isinstance(embeddings, dict) or not isinstance(embeddings.get("files"), dict):
-        raise ValueError("dataset_identity.json embeddings.files must be a JSON object.")
-    for dimension, artifact_path in embeddings["files"].items():
+    if not isinstance(embeddings, dict) or not isinstance(embeddings.get("items"), dict):
+        raise ValueError("dataset_identity.json embeddings.items must be a JSON object.")
+    if not embeddings["items"]:
+        raise ValueError("dataset_identity.json embeddings.items must declare an embedding.")
+    for embedding_id, item in embeddings["items"].items():
+        if not isinstance(item, dict):
+            raise ValueError(f"dataset_identity.json embedding {embedding_id!r} is invalid.")
         paths.add(
             _require_artifact_path(
-                artifact_path,
-                label=f"dataset_identity.json embeddings.files.{dimension}",
+                item.get("file"),
+                label=f"dataset_identity.json embedding {embedding_id!r} file",
             )
         )
 
@@ -156,7 +162,9 @@ def _declared_dataset_artifacts(
     if not categorical_fields and categorical_schema is not None:
         raise ValueError("Categorical observation schema exists without any fields.")
     categorical_schema_values = categorical_schema if isinstance(categorical_schema, dict) else {}
-    dtype_extensions = {"uint8": "u8", "uint16": "u16"}
+    dtype_extensions = {
+        dtype: width.extension for dtype, width in CATEGORICAL_CODE_WIDTHS.items()
+    }
     for position, field in enumerate(categorical_fields):
         if not isinstance(field, list) or len(field) < 4:
             raise ValueError(f"obs_manifest.json categorical field {position} is invalid.")
@@ -253,11 +261,11 @@ def _declared_dataset_artifacts(
         for field_id, field in vector_fields["fields"].items():
             if not isinstance(field, dict) or not isinstance(field.get("files"), dict):
                 raise ValueError(f"dataset_identity.json vector field {field_id!r} is invalid.")
-            for dimension, artifact_path in field["files"].items():
+            for embedding_id, artifact_path in field["files"].items():
                 paths.add(
                     _require_artifact_path(
                         artifact_path,
-                        label=f"vector field {field_id!r} file {dimension}",
+                        label=f"vector field {field_id!r} file for {embedding_id!r}",
                     )
                 )
     if include_published_state:
@@ -268,7 +276,7 @@ def _declared_dataset_artifacts(
 
 def _build_prepared_artifact_inventory(
     data_dir: Path,
-    datasets: list[dict[str, str]],
+    datasets: list[_DatasetEntry],
 ) -> dict[str, _PreparedArtifact]:
     root = data_dir.resolve(strict=True)
     inventory: dict[str, _PreparedArtifact] = {}
@@ -276,19 +284,24 @@ def _build_prepared_artifact_inventory(
         public_path = dataset["path"]
         prefix = "" if public_path == "/" else public_path.strip("/")
         dataset_dir = root if not prefix else root / prefix
-        has_state_manifest = "state_manifest" in dataset
-        has_state_sha256 = "state_sha256" in dataset
-        if has_state_manifest != has_state_sha256:
+        state_fields = [
+            "state_manifest" in dataset,
+            "state_sha256" in dataset,
+            "state_bytes" in dataset,
+        ]
+        has_state_manifest = all(state_fields)
+        if any(state_fields) and not has_state_manifest:
             raise ValueError(
-                "Prepared dataset state_manifest and state_sha256 must be declared together."
+                "Prepared dataset state_manifest, state_sha256 and state_bytes "
+                "must be declared together."
             )
         if has_state_manifest:
             current_state = _read_optional_published_state(dataset_dir)
-            expected_state = {
-                "state_manifest": dataset["state_manifest"],
-                "state_sha256": dataset["state_sha256"],
-            }
-            if current_state != expected_state:
+            if current_state is None or (
+                current_state["state_manifest"] != dataset["state_manifest"]
+                or current_state["state_sha256"] != dataset["state_sha256"]
+                or current_state["state_bytes"] != dataset["state_bytes"]
+            ):
                 raise ValueError(
                     "Published sample state changed while the artifact inventory was built."
                 )

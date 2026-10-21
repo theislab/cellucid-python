@@ -131,9 +131,16 @@ def test_real_zarr_v2_store_runs_the_read_and_serve_preparation_path(
         identity = adapter.get_dataset_identity()
         assert identity["source"] == {"name": "Zarr store"}
         assert identity["embeddings"] == {
-            "available_dimensions": [2],
             "default_dimension": 2,
-            "files": {"2d": "points_2d.bin"},
+            "defaults": {"2d": "X_umap_2d"},
+            "items": {
+                "X_umap_2d": {
+                    "label": "X_umap_2d",
+                    "dimension": 2,
+                    "file": "embeddings/0_2d.bin",
+                    "source": {"key": "X_umap_2d", "columns": [0, 1]},
+                }
+            },
         }
         obs_manifest = adapter.get_obs_manifest()
         assert obs_manifest["_continuousFields"] == [[1, "score"]]
@@ -144,12 +151,12 @@ def test_real_zarr_v2_store_runs_the_read_and_serve_preparation_path(
                 ["alpha", "beta"],
                 "uint8",
                 255,
-                {"2": []},
+                {"X_umap_2d": []},
             ]
         ]
         assert adapter.get_var_manifest()["fields"] == [[0, "Gene_A"], [1, "Gene_B"]]
         np.testing.assert_allclose(
-            np.frombuffer(adapter.get_points_binary(2), dtype="<f4").reshape(3, 2),
+            np.frombuffer(adapter.get_embedding_binary("X_umap_2d"), dtype="<f4").reshape(3, 2),
             np.array([[-1.0, 0.5], [0.0, 0.0], [1.0, -0.5]], dtype=np.float32),
         )
         np.testing.assert_array_equal(

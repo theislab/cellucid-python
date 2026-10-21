@@ -147,7 +147,10 @@ The simulation is meant to catch *obvious* issues quickly. It is not a substitut
 
 Cellucid lets you adjust:
 - **Theme** (light/dark UI)
-- **Viewer background** (e.g., white/black/grid modes)
+- **Viewer background** (plain white or black, grid, studio, or a painted look
+  such as Atelier or Nebula). Every look keeps its large areas outside the
+  lightness range of the category palettes, and with the system's *reduce
+  motion* setting a look appears without its fade.
 
 Practical guidance:
 
@@ -190,7 +193,7 @@ control label.
 | `h` | Toggle sidebar visibility |
 | `f` | Toggle fullscreen |
 | `r` | Reset the camera |
-| `1` / `2` / `3` | Switch dimension (only when that dimension exists and is enabled) |
+| `1` / `2` / `3` | Show that dimension's default embedding in the selected view; pressed again, its next embedding (a notice names it, e.g. `2D · t-SNE (2 of 3)`) |
 | `o` | Switch navigation mode to Orbit |
 | `p` | Switch navigation mode to Planar |
 | `g` | Switch navigation mode to Free-fly |
@@ -225,10 +228,11 @@ in muscle memory.
 |---|---|
 | `x` | Remove every highlight group on the **active highlight page** (other pages keep theirs) |
 | `Esc` | Cancel the selection in progress, exactly as the **Cancel** button does |
+| `Esc` (nothing in progress) | Leave **Select mode**, if it is on |
 
-`Esc` is only consumed when a selection is actually in progress, so the same
-key still closes a dialog, dismisses the welcome overlay, or leaves a text field
-alone when there is nothing to abandon.
+`Esc` is only consumed when a selection is actually in progress or Select mode
+is on, so the same key still closes a dialog, dismisses the welcome overlay, or
+leaves a text field alone when there is nothing to abandon.
 
 Two focus rules, both deliberate:
 
@@ -241,16 +245,19 @@ Two focus rules, both deliberate:
   are typing, so those keys still drive the scene behind the overlay.
 
 ```{figure} ../../../_static/screenshots/web_app/keyboard-shortcuts.png
-:alt: The Keyboard Shortcuts panel open in the Cellucid sidebar, listing five groups of shortcuts: the ungrouped global keys R, F, H, 1/2/3, O/P/G and ?; Navigation (Orbit / Planar / Free-fly) with W A S D and Shift; Orbit and Planar only with the zoom keys; Free-fly specific with E/Q and Esc; and Highlighting with Alt+click, Alt+drag, Shift+Alt+click, Ctrl+Alt+click, Esc and X.
+:alt: The Keyboard Shortcuts panel open in the Cellucid sidebar, listing five groups of shortcuts: the ungrouped global keys R, F, H, 1/2/3, O/P/G and ?; Navigation (Orbit / Planar / Free-fly) with W A S D and Shift; Orbit and Planar only with the zoom keys; Free-fly specific with E/Q and Esc; and Highlighting with Alt+click, Alt+drag, Shift+Alt+click, Ctrl+Alt+click, Esc to cancel a selection in progress, Esc to leave Select mode when nothing is in progress, and X.
 :width: 516px
 
 Press `?` to open this panel in the app. It is the authoritative list, and it
 shows **five** groups. The three tables above restate every keyboard row of all
 five: the ungrouped global keys, then Navigation together with the two
-mode-specific groups, then the two keyboard rows of Highlighting. The four
-pointer gestures in that last group (`Alt`+click, `Alt`+drag, `Shift`+`Alt`+click
-and `Ctrl`+`Alt`+click) are deliberately not restated here — they need a mouse,
-which is the subject of the next section.
+mode-specific groups, then the keyboard rows of Highlighting — `X` and the two
+`Esc` rows, *Cancel selection in progress* and *Leave Select mode when nothing
+is in progress*. The four pointer gestures in that last group
+(`Alt`+click, `Alt`+drag, `Shift`+`Alt`+click and `Ctrl`+`Alt`+click) are
+deliberately not restated here — they need a pointer, which is the subject of
+the next section. (Earlier interface: the `1`/`2`/`3` row now reads *1D, 2D,
+3D embedding · again: next*.)
 ```
 
 ### What keyboard cannot do (yet)
@@ -258,7 +265,11 @@ which is the subject of the next section.
 The genuine gap is **selection**, not navigation:
 
 - **Lasso and area selection require a pointer.** There is no keyboard equivalent
-  for dragging a region over the plot.
+  for dragging a region over the plot. The pointer does not need a held key,
+  though: with **Select mode** on (Highlighting panel or the selection bar on
+  the plot), a plain click, tap, or drag runs the active tool, and its
+  **Intersect / Add / Subtract** buttons replace `Shift` and `Ctrl`. That serves touch screens and anyone who cannot
+  hold a modifier key while pressing.
 - **Clicking an individual cell requires a pointer.** Picking is a
   point-and-shoot operation against the drawn scene.
 - Dragging a slider quickly is easier with a pointer, though every slider accepts
@@ -266,7 +277,9 @@ The genuine gap is **selection**, not navigation:
 
 If you need a keyboard-only workflow:
 
-- navigation, dimension switching, field selection, filtering, page/highlight
+- navigation, switching embeddings (the **View N shows** picker and keys
+  `1`/`2`/`3`), selecting a view (each row in **Compare views** is a button),
+  field selection, filtering, page/highlight
   management, docking and the analysis panels are all operable from the
   keyboard, so “set state → export figure” works end to end;
 - but use Python/R notebooks for anything that requires selecting cells by
@@ -281,6 +294,23 @@ are safe to rely on:
   and is the first `Tab` stop.
 - Every icon-only button resolves to exactly one accessible name; the sidebar
   toggle's name and its expanded state change together.
+- While the sidebar is hidden it is `inert`: none of its controls can take
+  focus, be reached with `Tab`, or be read by a screen reader until the sidebar
+  is shown again.
+- No panel header nests a control inside its open/close toggle. A panel's
+  undock, dock, copy and close buttons sit beside the header rather than in it,
+  are named after their panel (“Undock Visualization panel into a floating
+  window”), and come just before the panel's header in `Tab` order. The header
+  opens and closes the panel with `Enter` or `Space`; activating one of its
+  buttons never does, and after docking or undocking, focus moves to the button
+  that reverses the move.
+- Both **Select mode** switches (the Highlighting panel's and the selection
+  bar's) are switches (`role="switch"`) named “Select mode” whose
+  `aria-checked` state always matches, and each Intersect / Add / Subtract
+  choice is a named group with one pressed button, the same one on both. The
+  selection bar is a region named “Selection”; its cell count and its note on
+  a gesture that changed nothing are announced politely, and every control on
+  it is reachable and operable from the keyboard.
 - Every control in every analysis panel has an accessible name, and highlight
   page chips are operable with both `Enter` and `Space`, keep focus after
   activation, and announce their state (“120 cells”, “no cells, cannot be

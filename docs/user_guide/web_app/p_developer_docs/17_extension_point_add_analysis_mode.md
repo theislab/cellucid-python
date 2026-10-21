@@ -6,7 +6,7 @@ There are multiple “kinds” of analysis extensions; pick the right one before
 
 1) Add a **new analysis UI mode** (new accordion “type” like Quick/Detailed/etc.)
 2) Add a **new plot type**
-3) Add a **new compute operation / transform / stat test**
+3) Add a **new compute operation / stat test**
 
 ## Prerequisites
 
@@ -97,7 +97,7 @@ Remember:
 
 ---
 
-## Option C: Add a compute operation / transform / stat test
+## Option C: Add a compute operation / stat test
 
 This is the deepest extension point and the easiest to get wrong.
 
@@ -107,15 +107,12 @@ Steps (high level):
 2) Implement the handler in:
    - `analysis/compute/operation-handlers.js` (or a specialized module)
 3) Decide where it can run:
-   - GPU-capable, Worker-capable, or CPU-capable?
+   - Worker-capable, CPU-capable, or both?
 4) Add validation for payload schemas (avoid silent corruption).
 5) Update UI factories to use the new operation through the compute manager.
 
 Stat tests typically live under:
 - `analysis/stats/statistical-tests.js`
-
-Transforms typically live under:
-- `analysis/data/transform-pipeline.js` and registry modules.
 
 ---
 

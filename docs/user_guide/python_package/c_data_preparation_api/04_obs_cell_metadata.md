@@ -147,12 +147,14 @@ Practical guidance:
 
 Categorical fields are stored as:
 - a list of category labels (strings) in the manifest,
-- and a per-cell integer code array written to `obs/<index>.codes.u8` or `.u16`.
+- and a per-cell integer code array written to `obs/<index>.codes.u8`, `.u16`
+  or `.u32`.
 
 Missing values:
 - pandas missing categories (`NaN`) become a reserved missing code:
   - `255` for `uint8`
   - `65535` for `uint16`
+  - `4294967295` for `uint32`
 
 (python_package-category-label-display-text)=
 #### Category labels must read as the value they store
@@ -205,12 +207,21 @@ The same rule applies to `dataset_name`, `dataset_description`, `source_name`,
 - `uint8`:
   - stores up to 255 categories and errors above that count
 - `uint16`:
-  - stores up to 65,535 categories
+  - stores up to 65,535 categories and errors above that count
+- `uint32`:
+  - stores up to 4,294,967,295 categories, for a field with more than 65,535
+    distinct values (barcodes, free text)
+
+Every categorical field of the export uses the declared width. When a field
+does not fit, the error names the field and the width that would hold it.
 
 Practical guidance:
 - Choose the storage mode explicitly for every export; use `uint16` when one
-  stable choice is more important than the smaller `uint8` payload.
-- Treat fields with tens of thousands of categories as a design smell; the UI will not be usable.
+  stable choice is more important than the smaller `uint8` payload, and
+  `uint32` only when a field needs it, since it doubles the codes payload.
+- A field with tens of thousands of categories exports and loads, but each
+  category is its own colour and legend entry, so colouring by it is rarely
+  informative.
 
 ### Outlier quantiles for categorical fields (why `latent_space` is required)
 
@@ -228,6 +239,13 @@ UI context (how users experience this):
 - {doc}`../../web_app/e_filtering/02_outlier_filtering_per_active_field`
 
 Important details:
+The computation is stated exactly, so `prepare()`, `cellucid_prepare()`,
+`cellucid serve` and the web app give the same bytes: the latent values are
+rounded to float32 and widened to float64, centroid sums are accumulated cell
+by cell in cell order, squared distances column by column, and the share of
+the category at that distance or closer is a float32. A shared conformance
+fixture pins those bytes in all three repositories.
+
 - Categories with fewer than `centroid_min_points` cells get `NaN` outlier quantiles (exported as “missing”).
 - Outlier quantiles can also be quantized using `obs_continuous_quantization`.
 
@@ -274,10 +292,11 @@ Recommendation:
 ### `obs_manifest.json` (compact format)
 
 The Python exporter writes a compact manifest:
-- `"_format": "compact_v1"`
+- `"_format": "compact_v2"`
 - schema patterns under `"_obsSchemas"`
 - continuous field tuples under `"_continuousFields"`
-- categorical field tuples under `"_categoricalFields"`
+- categorical field tuples under `"_categoricalFields"`, each carrying its
+  category centroids per exported embedding (`centroidsByEmbedding`)
 
 The web app expands this into a verbose “fields array” at load time.
 
@@ -292,7 +311,7 @@ Per continuous field:
 - `obs/<index>.values.f32` (or `.values.u8` / `.values.u16`)
 
 Per categorical field:
-- `obs/<index>.codes.u8` (or `.codes.u16`)
+- `obs/<index>.codes.u8` (or `.codes.u16` / `.codes.u32`)
 - `obs/<index>.outliers.f32` (or `.outliers.u8` / `.outliers.u16`)
 
 All files may have a `.gz` suffix if `compression` is enabled. No payload
@@ -310,12 +329,15 @@ Full spec: {doc}`09_output_format_specification_exports_directory`
 If you export a column where every cell has a unique string ID:
 - it becomes categorical,
 - category count becomes `n_cells`,
-- and you hit practical/technical limits quickly:
+- and it needs a wide code width:
   - `uint8` stores at most 255 categories (codes `0…254`, with code 255 reserved
     for missing)
   - `uint16` stores at most 65,535 categories (codes `0…65534`, with code 65535
     reserved for missing)
-  - large category lists bloat `obs_manifest.json`
+  - `uint32` stores any realistic count, so such a column exports with
+    `obs_categorical_dtype="uint32"`
+  - every label is written into `obs_manifest.json`, so the manifest grows with
+    the cell count
 
 Preferred pattern:
 - keep cell IDs in your analysis object (AnnData),

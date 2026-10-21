@@ -57,14 +57,25 @@ moves what actually changed. So the thing to avoid is a repeated recompute loop
 At a high level:
 
 - The viewer maintains large arrays (positions, colors, visibility, selection, sometimes per-view buffers).
-- A settled frame uploads nothing. Buffer and texture writes are gated behind
-  dirty flags, and the frame that follows a camera move reuses its published
-  index buffer unless the set of admitted spatial nodes actually changed. The
-  steady-state cost is uniforms plus draw calls.
+- A settled frame uploads nothing, and neither does a camera move: buffer and
+  texture writes are gated behind dirty flags, and frustum culling draws ranges
+  of the points as they are stored (in the order of their spatial tree), so a
+  moving camera only recomputes which tree nodes are in view. The steady-state
+  cost is uniforms plus at most one multi-draw call per view.
 - A visibility change uploads only the rows of the alpha texture whose bytes
   moved, so the transfer is proportional to how scattered the change is rather
   than to the dataset size. Deciding *which* cells changed is still a pass over
   every cell on the CPU.
+- A recolor (switching the colored field or gene) uploads 4 bytes per point —
+  only the color stream; positions live in a separate stream and are not
+  re-sent. Once a view's points are stored in their tree's order (whenever
+  the view's spatial index exists), the GPU gathers the
+  uploaded colors into that order in one pass; the CPU does no per-point work
+  for it. Level of detail keeps no second copy of anything.
+- Positions cost 4 bytes per embedding axis per point, on the CPU and on the
+  GPU: a 2D UMAP or t-SNE is held as x and y only (8 bytes a point), never
+  padded to XYZ, so it takes a third less position memory than a 3D
+  embedding of the same cells.
 - Some modules add full-screen passes or per-view framebuffers, making performance scale with **pixel count**.
 
 So “performance” is usually about:
@@ -111,9 +122,10 @@ So “performance” is usually about:
 - reduce visual quality knobs (see {doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke` and {doc}`../i_vector_field_velocity/05_performance_and_quality`).
 
 :::{note}
-**More views is not automatically slower.** Cellucid allows at most four views —
-the live view plus three snapshots — and it lays them out as one row for two or
-three views, and as a 2×2 grid for four.
+**More views is not automatically slower.** Cellucid keeps any number of views —
+the live view plus any number of snapshots — and lays them out as one row for
+two or three views, and as a grid of ⌈√n⌉ columns for four or more (2×2 for
+four, 3×2 for five or six, 3×3 for seven to nine).
 
 Point size scales with the height of the pane a point is drawn in, so in the 2×2
 grid every point is drawn at half the diameter, covering roughly a quarter of
@@ -165,7 +177,7 @@ See {doc}`../e_filtering/05_performance_considerations` for the filtering-specif
 - things are fast *after* loading, but slow at the moment data is requested.
 
 **Common triggers in Cellucid:**
-- loading large `.h5ad` directly in the browser (not truly lazy; can freeze/crash),
+- the first genes of a large cell-major `.h5ad` opened in the browser, while its matrix is reorganised by gene,
 - remote server latency or throttled networks,
 - first-time loads of gene expression chunks (cold cache),
 - loading from slow disks / network drives / remote desktop mounts.
@@ -189,16 +201,17 @@ Most costs in Cellucid are not “mysterious”—they scale with a small set of
 |---|---|---|
 | `n_cells` | Many operations are per-cell (visibility recomputation, colors, selections) | filter applies take longer; memory pressure grows |
 | Point size | A dot's area grows with the square of its size, so point size sets how many pixels the renderer has to cover | frame time rises steeply once points start overlapping on screen |
-| Layout shape (1, 2, 3 or 4 views) | Each view submits its own draw, but point size follows pane height — so the *row* layouts (2, 3) cost most and the 2×2 grid costs about as much as one view | a two-view comparison stutters where a four-view grid does not |
+| Number of views (1–4) | Each view draws every point again, so on a large dataset frame time grows with the view count; point size follows pane height, which only matters once points are large and overlapping | multiview stutters where one view is smooth; Level-of-Detail fixes it |
 | Window pixel count (`width × height × dpr²`) | Overlays and post-processing scale with pixels | smoother when window is smaller |
 | `n_enabled_filters` | Each filter change re-derives visibility for every cell, testing each enabled filter | slider scrubbing becomes the main lag source |
-| Category count | Legends/counts and color mapping can degrade with huge category explosions | legends slow; UI becomes cluttered/unusable |
+| Category count | Sorting labels, counts and colour mapping grow with it (the legend draws only the rows in view) | switching to the field slows; colours stop being distinguishable |
 | “First-time” loads | cold cache → extra I/O | first gene switch slow; second is faster |
 
 :::{important}
 **Two of these were already set for you, from the cell count, when the dataset
 opened.** The point size, and whether `Antialiasing (smooth point edges)` is on
-— on below 5,000,000 cells, off at or above. Both are live settings you can
+— on below 5,000,000 cells in 3D and below 200,000 in a 1D or 2D view, off at
+or above. Both are live settings you can
 change at any time, and both are the settings measured in
 {doc}`02_performance_considerations_what_gets_slow_and_why`. Check what they are
 before assuming they sit at some fixed default.

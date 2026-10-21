@@ -81,19 +81,17 @@ See {doc}`01_analysis_mental_model` for the visibility vs membership distinction
 ### Minimum group size
 
 DE requires enough cells in both groups:
-- the implementation enforces a minimum of **10 valid cells** per group (default).
-- the run itself is only refused when a chosen page has **zero** cells; a page with
-  one to nine cells is accepted and started.
-- the check is applied **per gene**, on the cells that actually carry a
-  measured value for that gene. A gene that falls below the minimum on either
-  side is skipped: it gets no p-value, no adjusted p-value, and is excluded from
-  the FDR correction. The summary reports how many genes this happened to — see
+- the implementation enforces a minimum of **10 cells** per group (default).
+- the run is refused before any gene is loaded when either chosen group has fewer
+  cells than that: a page of five cells stops with
+  `Differential expression requires at least 10 cells per group; received 5 and …`.
+  A page with zero cells cannot be selected at all.
+- the same minimum is applied again **per gene**, on the cells that actually
+  carry a measured value for that gene. A gene that falls below the minimum on
+  either side is skipped: it gets no p-value, no adjusted p-value, and is
+  excluded from the FDR correction. The summary reports how many genes this
+  happened to — see
   [Which genes the correction is applied to](#which-genes-the-correction-is-applied-to).
-- so a page of five cells does not error. It runs, every gene fails the per-gene
-  check, and you get a result reading `Genes tested (FDR denominator) 0` with the
-  entire panel counted under *Not tested*. An empty volcano with a zero
-  denominator is the app telling you the group was too small, not that nothing
-  differs.
 
 ---
 
@@ -136,6 +134,19 @@ Where:
 - `meanA` is the mean expression in **Page A**
 - `meanB` is the mean expression in **Page B**
 - `0.01` is a fixed pseudocount to avoid division by zero
+
+That is the whole formula whenever the compared cells are non-negative, which
+is every count, normalized or log1p matrix. Scaled or z-scored expression can
+be negative, and a ratio of negative means has no meaning (it is undefined when
+the means straddle `-0.01` and its sign inverts when both are negative). For
+such a gene both means are first shifted by `m`, the most negative value over
+the cells of both pages:
+
+`log2FC = log2((meanA − m + 0.01) / (meanB − m + 0.01))`
+
+so the fold change is always finite and its sign is always the sign of
+`meanA − meanB`. Its magnitude depends on that shift, so read it as a ranking
+of direction and strength rather than a biological fold for scaled data.
 
 Interpretation:
 - `log2FC > 0` → gene is higher in **Page A**
@@ -271,7 +282,7 @@ different counts.
 :::{grid-item}
 ```{figure} ../../../_static/screenshots/analysis/volcano-threshold-a.png
 :alt: A volcano plot at a log2 fold-change threshold of 0.5, with broad red and blue clouds of coloured points either side of a narrow grey band, and a legend below the axis title reading Up (750), Down (841) and Not significant (2162).
-:width: 1160px
+:width: 1156px
 
 **|log₂FC| ≥ 0.5** — 1,591 genes significant, 750 up and 841 down.
 ```
@@ -280,7 +291,7 @@ different counts.
 :::{grid-item}
 ```{figure} ../../../_static/screenshots/analysis/volcano-threshold-b.png
 :alt: The same volcano plot at a log2 fold-change threshold of 3, with the dashed threshold lines pushed far apart and nearly every point grey, and a legend below the axis title reading Up (0), Down (192) and Not significant (3561).
-:width: 1160px
+:width: 1156px
 
 **|log₂FC| ≥ 3** — the same run, now 192 significant genes, all downregulated.
 ```
@@ -326,7 +337,7 @@ Use **Performance Settings** (collapsible) to tune:
 
 - **Batch size**: how many genes to preload ahead of compute (higher can be faster but uses more memory).
 - **Memory budget**: limits how many gene vectors can be in flight without crashing the browser.
-- **Network parallelism**: concurrent gene loads (relevant for server/remote loading).
+- **Network parallelism**: how many genes are loaded (fetched and decoded into memory) at once. When the export is served over the network, the downloads of the genes queued after them run further ahead on their own: as many at once as the connection needs to stay full, kept compressed until each gene's turn, so a run is bound by the connection's bandwidth rather than its round trips. A second run on the same dataset reuses those downloads instead of requesting the genes again.
 - **Compute parallelism**: number of concurrent genes computed (bounded by worker pool size and memory).
 
 Recommended workflow for very large datasets:

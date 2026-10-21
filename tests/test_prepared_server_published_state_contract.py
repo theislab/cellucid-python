@@ -20,7 +20,7 @@ def _prepared_dataset(root: Path, *, dataset_id: str) -> Path:
     (root / "dataset_identity.json").write_text(
         json.dumps(
             {
-                "version": 2,
+                "version": 3,
                 "id": dataset_id,
                 "name": f"Prepared {dataset_id}",
                 "description": "",
@@ -34,9 +34,16 @@ def _prepared_dataset(root: Path, *, dataset_id: str) -> Path:
                     "n_edges": None,
                 },
                 "embeddings": {
-                    "available_dimensions": [2],
                     "default_dimension": 2,
-                    "files": {"2d": "points_2d.bin"},
+                    "defaults": {"2d": "X_umap"},
+                    "items": {
+                        "X_umap": {
+                            "label": "X_umap",
+                            "dimension": 2,
+                            "file": "embeddings/0_2d.bin",
+                            "source": {"key": None, "columns": [0, 1]},
+                        }
+                    },
                 },
                 "obs_fields": [],
                 "export_settings": {
@@ -52,7 +59,7 @@ def _prepared_dataset(root: Path, *, dataset_id: str) -> Path:
     (root / "obs_manifest.json").write_text(
         json.dumps(
             {
-                "_format": "compact_v1",
+                "_format": "compact_v2",
                 "n_points": 1,
                 "centroid_outlier_quantile": None,
                 "latent_key": "latent_space",
@@ -64,7 +71,8 @@ def _prepared_dataset(root: Path, *, dataset_id: str) -> Path:
         ),
         encoding="utf-8",
     )
-    (root / "points_2d.bin").write_bytes(b"\x00" * 8)
+    (root / "embeddings").mkdir()
+    (root / "embeddings" / "0_2d.bin").write_bytes(b"\x00" * 8)
     return root
 
 
@@ -157,6 +165,7 @@ def test_exact_published_state_is_advertised_and_served_in_every_prepared_mode(
             "name": f"Prepared state-{mode}",
             "state_manifest": STATE_MANIFEST_NAME,
             "state_sha256": digest,
+            "state_bytes": len(bundle),
         }
     ]
     assert f"{request_prefix}{STATE_MANIFEST_NAME}" in server._artifact_inventory
@@ -223,6 +232,7 @@ def test_multi_dataset_catalog_augments_only_the_exact_opted_in_generation(
             "name": "Prepared published",
             "state_manifest": STATE_MANIFEST_NAME,
             "state_sha256": hashlib.sha256(bundle).hexdigest(),
+            "state_bytes": len(bundle),
         },
         {
             "id": "plain",
@@ -283,37 +293,28 @@ def test_published_state_rejects_a_partial_sidecar_pair(
         _server(dataset)
 
 
-@pytest.mark.parametrize(
-    ("bundle", "message"),
-    [
-        (b"", "1 through 32768"),
-        (b"x" * 32769, "1 through 32768"),
-    ],
-    ids=("empty", "one-byte-over-limit"),
-)
-def test_published_state_bundle_has_one_exact_bounded_transport(
-    tmp_path: Path,
-    bundle: bytes,
-    message: str,
-) -> None:
-    dataset = _prepared_dataset(tmp_path / "dataset", dataset_id="bounded-state")
-    _publish_state(dataset, bundle)
+def test_published_state_bundle_must_not_be_empty(tmp_path: Path) -> None:
+    dataset = _prepared_dataset(tmp_path / "dataset", dataset_id="empty-state")
+    _publish_state(dataset, b"")
 
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError, match="must be at least 1 bytes"):
         _server(dataset)
 
 
-@pytest.mark.parametrize("size", [1, 32768])
-def test_published_state_bundle_accepts_both_exact_size_boundaries(
+# A published state has no size limit: 1 byte, and sizes far past the former
+# 32 KiB cap, are listed with their exact length and streamed digest.
+@pytest.mark.parametrize("size", [1, 32768, 32769, 8 * 1024 * 1024 + 3])
+def test_published_state_bundle_of_any_size_is_listed_exactly(
     tmp_path: Path,
     size: int,
 ) -> None:
     dataset = _prepared_dataset(tmp_path / "dataset", dataset_id=f"boundary-{size}")
-    bundle = _publish_state(dataset, b"x" * size)
+    bundle = _publish_state(dataset, (bytes(range(251)) * (size // 251 + 1))[:size])
 
     server = _server(dataset)
 
     assert server._datasets[0]["state_sha256"] == hashlib.sha256(bundle).hexdigest()
+    assert server._datasets[0]["state_bytes"] == size
     assert server._artifact_inventory[STATE_BUNDLE_NAME].size == size
 
 

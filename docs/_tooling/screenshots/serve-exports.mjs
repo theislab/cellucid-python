@@ -3,7 +3,7 @@
 // Why this exists rather than reusing the web repository's server: the
 // browser-test server (`cellucid/scripts/serve-browser-tests.mjs`) is confined
 // to the web repository root by design, so it can serve the application but
-// cannot serve `cellucid-datasets/exports/`. Documentation screenshots want the
+// cannot serve `cellucid-datasets/exports-v3/`. Documentation screenshots want the
 // real published datasets — a reader has to recognise the picture as the app
 // they are using — so the capture run needs one more origin that hosts that
 // tree. The application itself is still served by the repository's own script;

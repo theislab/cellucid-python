@@ -38,7 +38,7 @@ main.js (orchestrator)
   └─ admits deferred controls once their listeners exist
 
 DataState (state coordinator)
-  ├─ emits events: visibility/field/highlight/page/dimension/vectorFields changes
+  ├─ emits events: visibility/field/highlight/page/view-representation/mapping/vectorFields changes
   ├─ owns: typed arrays + per-view contexts
   └─ calls viewer: updateColors/updateTransparency/updatePositions/etc
 
@@ -66,23 +66,33 @@ The high-level startup flow is:
    If the canvas yields no `webgl2` context this throws immediately and the
    startup-failure card replaces the app. There is no software renderer.
 3) `main.js` creates the app state: `createDataState({ viewer, labelLayer })`.
-4) `main.js` initializes notifications and analytics, then sets up the `DataSourceManager`.
-5) The app decides what to load first:
+4) `main.js` initializes notifications and the optional analytics entry point
+   (`app/optional-analytics.js`): it queues events while the analytics modules
+   load by dynamic import, is never awaited, never throws, and stays inert when a
+   privacy blocker refuses them. Then it sets up the `DataSourceManager`.
+5) The app decides what to load first — it resolves the startup selection
+   (source, dataset id, load method) but loads nothing yet:
    - URL params (`?remote=…`, `?github=…`, `?dataset=…`) may override the default demo.
-   - Jupyter context (iframe) may register a Jupyter data source and auto-load.
-6) The app loads dataset metadata and core buffers:
-   - `obs_manifest.json` (field list + metadata)
-   - optional `var_manifest.json` (gene expression availability)
-   - points buffers (embedding positions, colors, outlier quantiles, etc.)
-   - optional connectivity (KNN graph edges)
-7) The app initializes the UI coordinator (`initUI`) which wires the sidebar modules to state/viewer.
-8) Only once their listeners exist are the deferred controls (data sources,
+   - Jupyter context (iframe) may register a Jupyter data source and select its dataset.
+6) The app publishes the empty runtime and initializes the UI coordinator
+   (`initUI`), which wires the sidebar modules to state/viewer.
+7) Only once their listeners exist are the deferred controls (data sources,
    renderer toggles, benchmark) enabled, and the live-region line under the
    dataset picker switches from *“Starting Cellucid…”* to *“Data sources are
-   ready…”*.
+   ready…”*. The render loop starts.
+8) The startup selection loads as the first ordinary dataset change
+   (`ui.loadStartupDataset` → `reloadActiveDatasetInPlace`), under the same
+   transaction owner as every later change, so any choice the user makes while
+   it loads replaces it:
+   - dataset metadata, `dataset_identity.json`, `obs_manifest.json`, optional
+     `var_manifest.json` and the connectivity manifest
+   - points buffers (embedding positions, colors, outlier quantiles, etc.)
+   - the published sample view, when the catalog advertises one
+   A failure of this load that nothing superseded is the terminal startup
+   failure; otherwise startup publishes `ready` when it settles.
 
 :::{important}
-Step 8 is an invariant, not a nicety. Any control whose handler is wired after
+Step 7 is an invariant, not a nicety. Any control whose handler is wired after
 an `await` in this bootstrap must be authored `disabled` in `index.html` and
 registered with `ui/core/deferred-control-readiness.js`. A control that is
 clickable before its listener exists silently discards the click, which is
@@ -122,15 +132,17 @@ Cellucid has *many* interacting features. The app treats state as first-class:
 - field registries (rename/delete/user-defined)
 - highlight pages/groups and per-point highlight overlay arrays
 - per-view contexts (live view + snapshot views)
-- dimension switching state and vector-field availability
-- caches for loaded obs/var field data (bounded LRU)
+- the representation (embedding) each view shows, the data mapping, and
+  vector-field availability
+- loaded obs/var field data, released least recently used once inactive fields pass their memory budget (`field/residency.js`, `data/memory-budget.js`)
 
 `DataState` emits events so UI/analysis modules can stay decoupled:
 - `visibility:changed`
 - `field:changed`
 - `highlight:changed`
 - `page:changed`
-- `dimension:changed`
+- `view:representation-changed`
+- `mapping:changed` / `representations:changed`
 - `vectorFields:changed`
 
 Deep dive: {doc}`06_state_datastate_and_events`.
