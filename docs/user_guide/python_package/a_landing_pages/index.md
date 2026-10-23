@@ -11,15 +11,15 @@ This section is intentionally written for mixed audiences:
 
 Cellucid is a **web app** (the viewer UI) plus **helper packages** that bring your data into the viewer:
 - **Cellucid web app**: what you see and interact with in the browser.
-- **`cellucid` (cellucid-python)**: this package — export/serve data and embed the web app in notebooks.
+- **`cellucid` (cellucid-python)**: this package — prepare/serve AnnData and embed the web app in notebooks.
 - **`cellucid-annotation`**: helper repo for community annotation workflows.
-- **`cellucid-r`**: prepares R objects and matrices as Cellucid export folders;
-  see {doc}`../../r_package/index`.
+- **`cellucid-r`**: writes the same Cellucid-ready AnnData from R objects and
+  matrices; see {doc}`../../r_package/index`.
 
 ## Choose your workflow (start here)
 
 - “I have an AnnData and want to see it *now*” → {doc}`04_quick_start_3_levels` (Level 1: `show_anndata`)
-- “I need a shareable, fast export folder (papers/collaboration)” → {doc}`04_quick_start_3_levels` (Level 2: `prepare`) + {doc}`../c_data_preparation_api/index`
+- “I need a shareable, fast file (papers/collaboration)” → {doc}`04_quick_start_3_levels` (Level 2: `prepare`) + {doc}`../c_data_preparation_api/index`
 - “I want the viewer in a browser (no notebook)” → {doc}`../installation` (verify CLI) + {doc}`04_quick_start_3_levels` (use `cellucid serve`)
 - “I need Python ↔ UI hooks (selection callbacks, programmatic highlights)” → {doc}`04_quick_start_3_levels` (Level 3) + {doc}`../e_jupyter_hooks/index`
 - “Something failed” → {doc}`../i_troubleshooting_index/index`
@@ -49,10 +49,10 @@ How to install, optional dependencies, platform notes, and installation troubles
 :link: 04_quick_start_3_levels
 :link-type: doc
 
-Copy/paste: a minimal “show”, a practical export workflow, and an advanced server + hooks workflow.
+Copy/paste: a minimal `show_anndata`, a practical `prepare()` workflow, and an advanced server + hooks workflow.
 :::
 
-:::{grid-item-card} {octicon}`checklist;1.5em;sd-mr-1` Compatibility matrix (must be explicit)
+:::{grid-item-card} {octicon}`checklist;1.5em;sd-mr-1` Compatibility matrix
 :link: 03_compatibility_matrix_must_be_explicit
 :link-type: doc
 

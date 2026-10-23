@@ -24,7 +24,7 @@ both are worth knowing before you start tuning:
 - **Hiding cells with a filter makes navigation faster**, not slower. Hidden
   cells are rejected before anything is drawn for them.
 - **Each view draws every point again.** On a large dataset frame time grows
-  with the number of views, and Level-of-Detail is what keeps a multiview
+  with the number of views, and Level of detail is what keeps a multiview
   comparison smooth.
 
 {doc}`01_performance_mental_model` explains both.
@@ -47,8 +47,8 @@ Use this table when you’re in the middle of work and just need relief.
 | What you see | Most likely bottleneck | Do this first (safe) | Next page |
 |---|---|---|---|
 | Navigation (orbit/pan/zoom) feels choppy | GPU | Make the window smaller, switch to **Points** mode, close other GPU-heavy tabs | {doc}`01_performance_mental_model` |
-| Slider scrubbing (filters) stutters | CPU | Turn **Live filtering** off and use **FILTER** to apply once | {doc}`02_performance_considerations_what_gets_slow_and_why` |
-| Loading takes forever or tab freezes | I/O or memory | Prefer **Server Mode** for large `.h5ad`/`.zarr` and large exports | {doc}`03_large_dataset_best_practices` |
+| Slider scrubbing (filters) stutters | CPU | Turn **Live filtering** off and use **Filter** to apply once | {doc}`02_performance_considerations_what_gets_slow_and_why` |
+| Loading takes forever or tab freezes | I/O or memory | Prefer **Server Mode** for large `.h5ad`/`.zarr`/`.zarr.zip` files | {doc}`03_large_dataset_best_practices` |
 | Fans spin up / laptop throttles | GPU + thermals | Lower quality knobs (smoke/grid, overlays), reduce window size, clear snapshots | {doc}`06_edge_cases_performance` |
 | “WebGL context lost” / blank canvas | GPU memory | Reload, then reduce GPU load (no smoke, no snapshots, smaller highlights, lower overlay density) | {doc}`07_troubleshooting_performance` |
 | “It got slower after a change” | Regression | Run a small benchmark loop and compare numbers | {doc}`04_benchmarking_methodology_and_metrics` |
@@ -104,7 +104,7 @@ The concrete “cost model”: which interactions scale with `n_cells`, `n_views
 :link: 03_large_dataset_best_practices
 :link-type: doc
 
-A practical, step-by-step workflow for staying fast on very large exports.
+A practical, step-by-step workflow for staying fast on very large datasets.
 :::
 
 :::{grid-item-card} {octicon}`beaker;1.5em;sd-mr-1` Benchmarking methodology
@@ -125,7 +125,7 @@ How to use the in-app benchmark tools, plus interpretation and common pitfalls.
 :link: 06_edge_cases_performance
 :link-type: doc
 
-Surprising “performance cliffs” like category explosion, too many views, GPU memory limits, and huge exports.
+Surprising “performance cliffs” like category explosion, too many views, GPU memory limits, and huge datasets.
 :::
 
 :::{grid-item-card} {octicon}`bug;1.5em;sd-mr-1` Troubleshooting

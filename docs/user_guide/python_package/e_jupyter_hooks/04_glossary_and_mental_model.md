@@ -9,13 +9,13 @@ The browser-based viewer UI. In notebooks, this UI is embedded in an iframe.
 
 ### cellucid-python (Python package)
 The helper package you use from Python/CLI. It can:
-- serve datasets (exported or AnnData-backed),
+- serve datasets (an AnnData store the viewer reads itself),
 - embed the Cellucid UI in notebooks,
 - send commands to the UI and receive events back (hooks),
 - capture session bundles and apply them to AnnData.
 
 ### Viewer / `viewer`
-The Python object returned by `show(...)` or `show_anndata(...)`.
+The Python object returned by `show_anndata(...)`.
 
 It owns:
 - a running background server (`viewer.server_url`)
@@ -25,7 +25,7 @@ It owns:
 
 ### Data server
 A small local HTTP server started by `viewer`. It serves:
-- dataset files (exported mode) or dynamic endpoints (AnnData mode)
+- the AnnData store's bytes, read by the viewer with range requests
 - the exact verified viewer generation
 - special endpoints like:
   - `/_cellucid/health`

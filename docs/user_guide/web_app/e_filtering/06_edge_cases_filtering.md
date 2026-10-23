@@ -19,13 +19,13 @@
 ### What you see
 
 - The canvas looks empty.
-- Active filters shows: `Showing 0 of N points`.
+- Filters shows: `Showing 0 of N cells`.
 
 ```{figure} ../../../_static/screenshots/filtering/window-zero-visible-cells.png
 :alt: The whole application window with a completely blank light grid where the embedding was, every legend row unchecked and greyed and reading 0 of its own total, and the sidebar reading Showing 0 of 3,696 points above a single clusters hiding row.
 :width: 1440px
 
-An empty canvas produced by pressing `Hide All`. This is a filter state, not a
+An empty canvas produced by pressing `Hide all`. This is a filter state, not a
 crash and not a failed load — and the two lines in the sidebar say so exactly:
 the count says `0 of 3,696`, and there is a filter row to remove.
 ```
@@ -42,11 +42,11 @@ One or more filters reduced visibility to zero:
 
 Use a deterministic “unwind” sequence:
 
-1) In **Active filters**, disable filters one-by-one.
+1) In **Filters**, disable filters one-by-one.
 2) When you find the culprit, either:
    - relax it (widen range / show categories / raise outlier percent), or
    - remove it (×), or
-   - reset it in the legend (`RESET`, `Show All`, outlier `100%`).
+   - reset it in the legend (`Reset`, `Show all`, outlier `100%`).
 
 ---
 
@@ -63,16 +63,16 @@ Continuous range filters treat `NaN` as “outside range”, so those cells beco
 invisible whenever the filter is active.
 
 :::{important}
-**This cannot happen with a prepared export.** Both writers refuse to prepare a
-continuous obs field or a gene that contains a non-finite value, and the refusal
-counts them — how many are `NaN` or infinite, and the first affected cells — so
-the export never carries one. You can only reach this state by opening a raw `.h5ad` or
-Zarr archive directly in the browser, which reads the values as they are.
+A file written by `prepare()` or `cellucid_prepare()` stores a missing value
+in a continuous obs column as `NaN`, so this is ordinary data: those cells are
+the ones the column does not measure. Gene expression cannot hold `NaN` in
+such a file — both writers refuse it, counting the offending values and
+naming the first affected cells.
 :::
 
 ### What to do
 
-- If you are opening a raw archive: fill or impute missing values upstream, or prepare an export instead, which will tell you exactly which field is at fault.
+- Fill or impute the missing values upstream if those cells should stay visible, or leave the filter off for that column.
 - If you want to exclude them, current behavior already does this.
 
 ---
@@ -89,7 +89,7 @@ Zarr archive directly in the browser, which reads the values as they are.
 :width: 428px
 
 Four categories with nothing left in them, under a narrow `S_score` range
-filter. The rows are **disabled**, not merely empty, and `Show All` / `Hide
+filter. The rows are **disabled**, not merely empty, and `Show all` / `Hide
 All` will skip them.
 ```
 
@@ -113,7 +113,7 @@ Note the count format changes with the state, which is a useful tell:
 
 1) Relax upstream filters (continuous ranges, other category hides, gene/outlier filters if active).
 2) Revisit the categorical legend.
-3) Use `Show All` to make categories visible again.
+3) Use `Show all` to make categories visible again.
 
 ---
 
@@ -121,7 +121,7 @@ Note the count format changes with the state, which is a useful tell:
 
 ### What you see
 
-- You disable a category filter in Active filters.
+- You disable a category filter in Filters.
 - Cells return, but some categories are colored gray/de-emphasized.
 
 ### Why it happens
@@ -134,25 +134,44 @@ Disabling the category filter stops it from hiding cells, but the legend may sti
 
 ### What to do
 
-- Use `Show All` in the categorical legend (or remove the filter) to fully restore.
+- Use `Show all` in the categorical legend (or remove the filter) to fully restore.
 
 ---
 
-## 5) Outlier slider disappears after editing a categorical field
+## 5) Outlier slider hidden, greyed out, or reading data
 
 ### What you see
 
-- Outlier filtering was available on a categorical field.
-- After merging/deleting categories (creating a derived field), the outlier slider is gone.
+- After merging/deleting categories (creating a derived field), the outlier
+  slider is gone; or
+- the slider is greyed out, with a line under it; or
+- moving it below `100%` shows a progress bar instead of filtering at once.
 
 ### Why it happens
 
-Derived categorical fields typically do **not** carry latent outlier statistics, because those stats are tied to the original category definitions at export time.
+- A field you create by merging or deleting categories has **no** outlier
+  quantiles: they exist only for the file's own categorical `obs` columns, so
+  the control is hidden for it.
+- The filter measures in a latent space, and none is chosen: the line says
+  *“Choose the latent space in Data mapping”* and offers **Choose latent
+  space** ([Turning it on](02_outlier_filtering_per_active_field.md#turning-it-on-choose-a-latent-space)).
+- No category of the field has `centroid_min_points` cells (10 by default):
+  there is nothing to measure, and the line says so.
+- The file stores no outlier quantiles for this latent space, so the first
+  move reads the latent space once and computes them; the line under the
+  slider said beforehand how much it reads
+  ([Stored or computed](02_outlier_filtering_per_active_field.md#stored-or-computed)).
 
 ### What to do
 
-- Switch back to the original (non-derived) field if you need outlier filtering, or
-- re-export data with the desired categorical field defined upstream.
+- Switch back to the original (non-derived) field, or add the categorical
+  field to `obs` upstream and write the file again.
+- Choose a latent space under **Data mapping › Latent space**.
+- Lower `centroid_min_points` when writing or serving the file, to measure
+  smaller categories.
+- Wait for the read, or press **Cancel** (the slider returns to `100%`); write
+  the file with `prepare(latent_key=...)` or `cellucid_prepare(latent_key = ...)`
+  to store the quantiles so it works at once.
 
 ---
 
@@ -177,7 +196,7 @@ the filter genuinely stopped applying.
 
 Current behavior:
 - gene filters apply only while that gene is the active field,
-- outlier filtering applies only while the active field supports outlier stats (that’s when the control is visible).
+- outlier filtering applies only while the categorical field it was set on is the active field (its threshold is kept for when you come back).
 
 ### What to do
 
@@ -191,7 +210,7 @@ Current behavior:
 ### What you see
 
 - In Live + Snapshots mode, different views show different visible counts.
-- Active filters changes when you click different snapshots.
+- Filters changes when you click different snapshots.
 
 ### Why it happens
 
@@ -199,7 +218,7 @@ Each view/snapshot can have its own filter state.
 
 ### What to do
 
-- Click the view you care about first, then inspect Active filters.
+- Click the view you care about first, then inspect Filters.
 - If you want two views to match, apply the same filter stack to both (or recreate the snapshot from the filtered live view).
 
 ---
@@ -209,8 +228,8 @@ Each view/snapshot can have its own filter state.
 ### A categorical field with a single category
 
 Nothing special happens, and that is the point. The legend renders exactly one
-row with the whole dataset's count beside it, `Show All` / `Hide All` act on
-that one row, and unchecking it takes you straight to `Showing 0 of N points`.
+row with the whole dataset's count beside it, `Show all` / `Hide all` act on
+that one row, and unchecking it takes you straight to `Showing 0 of N cells`.
 There is no separate “all cells are in one group” state to recognise — it is
 the ordinary zero-visible case from section 1 above, reached in one click.
 
@@ -220,12 +239,12 @@ A constant continuous field is a legitimate export: the writers publish it with
 equal bounds rather than rejecting it, so you will meet one eventually (a gene
 detected in no exported cell is the common case).
 
-Its **Filtering** block is degenerate. Both readouts print the same number,
+Its **Visible range** block is degenerate. Both readouts print the same number,
 because the field's minimum *is* its maximum, and there is no interval for the
 sliders to divide.
 
 :::{note}
-The sliders and `RESET` still work, but there is nothing to select: every
+The sliders and `Reset` still work, but there is nothing to select: every
 slider position maps onto the one value, so the filter always keeps every cell.
 Use a categorical field, or the outlier filter, to gate cells instead — or
 filter on this field upstream, before export, where a constant column is easy
@@ -272,7 +291,7 @@ after.
 
 ---
 
-## 10) Quantization and slider resolution (export-time edge case)
+## 10) Slider resolution
 
 ### What you see
 
@@ -281,15 +300,13 @@ after.
 
 ### Why it happens
 
-Two effects can compound:
-
-- UI sliders are `0–100` percent steps (1% increments).
-- Exports can quantize continuous fields and/or outlier quantiles (8-bit/16-bit), reducing numeric precision.
+UI sliders are `0–100` percent steps (1% increments) of the field's full
+range.
 
 ### What to do
 
 - Use UI filtering for coarse/interactive gating.
-- Do fine-grained gating upstream in Python before export when precision matters.
+- Do fine-grained gating upstream in Python or R when precision matters.
 
 ---
 

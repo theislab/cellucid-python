@@ -3,7 +3,7 @@
 The `cellucid` command-line interface is a **single entry point** for common workflows.
 
 Right now, the main user-facing command is:
-- the `serve` subcommand, which auto-detects direct AnnData input or an exported dataset directory
+- the `serve` subcommand, which serves an `.h5ad` file, a Zarr store folder, or a zipped Zarr store
 
 If you prefer Python APIs, see {doc}`server` and {doc}`jupyter`.
 
@@ -12,10 +12,10 @@ If you prefer Python APIs, see {doc}`server` and {doc}`jupyter`.
 ## Fast path (beginner-friendly)
 
 ```bash
-# Serve anything (auto-detected)
+# Serve an AnnData file or store (format detected)
 cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 cellucid serve /path/to/data.zarr --dataset-name "My dataset" --dataset-id my-dataset
-cellucid serve /path/to/exported_dataset
+cellucid serve /path/to/data.zarr.zip --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
 ---
@@ -31,13 +31,18 @@ cellucid --version
 ### `cellucid serve`
 
 ```bash
-cellucid serve <data_path> [--port 8765] [--host 127.0.0.1] [--no-browser] [--quiet] [--verbose] [--vector-fields] [--knn connectivities]
+cellucid serve <data_path> [--port 8765] [--host 127.0.0.1] [--no-browser] [--quiet] [--verbose] [dataset and launch options]
 ```
 
 `<data_path>` can be:
 - `.h5ad` file
-- `.zarr` directory
-- exported dataset directory (contains `dataset_identity.json`)
+- Zarr store folder (Zarr v2 with `.zgroup`, or v3 with `zarr.json`)
+- zipped Zarr store (`.zip`, for example `data.zarr.zip`)
+
+A file written by `cellucid.prepare()` declares its own name and id, so
+`cellucid serve pbmc_cellucid.h5ad` needs no `--dataset-name`/`--dataset-id`.
+An `.h5ad` file or Zarr store is served as it is on disk; the viewer reads it
+itself, in place, with HTTP range requests.
 
 #### Options
 
@@ -52,34 +57,39 @@ cellucid serve <data_path> [--port 8765] [--host 127.0.0.1] [--no-browser] [--qu
 | `--no-web-ui` | Serve the data endpoints without establishing the web application | For machines with no outbound network access |
 | `--web-source-url URL` | Exact origin publishing `cellucid-web-assets.json` | |
 | `--web-cache-dir PATH` | Directory for the active verified web build | |
-| `--latent-key KEY` | Choose the exact latent key in `obsm` | AnnData-only |
-| `--dataset-name NAME` | Set the display name | Required for direct AnnData input |
-| `--dataset-id ID` | Set the stable dataset identifier | Required for direct AnnData input |
-| `--obs-key KEY` | Serve only this `obs` column; repeat per column | AnnData-only; every column is served when omitted |
-| `--vector-field-default FIELD_ID` | Choose the initial vector field | AnnData-only; required when more than one exists |
-| `--vector-fields` | Serve the `obsm` `<field>_umap_<n>d` overlay arrays | AnnData-only; **off by default** because every declared field is read and checked before the server binds |
-| `--knn connectivities` | Serve the `obsp['connectivities']` neighbor graph | AnnData-only; **off by default** because reading the graph is the longest part of starting a large object |
+| `--latent-key KEY` | The `obsm` latent space (scVI, PCA) the outlier filter measures in | never a 2D/3D layout; without it the file's own `latentKey`, else none (the filter waits for one in Data mapping) |
+| `--centroid-min-points N` | The fewest cells a category needs for the outlier filter to measure it | without it the file's own `centroidMinPoints`, else 10; stored quantiles written for another number are computed again in the browser |
+| `--dataset-name NAME` | Set the display name | Defaults to the store's `uns['cellucid']['name']`, required without it |
+| `--dataset-id ID` | Set the stable dataset identifier | Defaults to the store's `uns['cellucid']['id']`, required without it |
+| `--obs-key KEY` | Show this `obs` column; repeat per column, in order | every column is shown when omitted |
+| `--vector-field-default FIELD_ID` | The vector field the overlay opens on: `<field>` of an `obsm['<field>_<basis>']` array drawn over `X_<basis>` (`velocity` for `velocity_umap`) | |
+| `--embedding-1d`, `--embedding-2d`, `--embedding-3d KEY[:COLUMNS]` | The `obsm` array (and 0-based columns) of a dimension slot | |
+| `--normalize-embeddings`, `--no-normalize-embeddings` | Scale every embedding into the viewer's coordinate range, or show the coordinates the store holds | without either, the file's own `normalizeEmbeddings`, else scaled |
+| `--knn KEY` | The `obsp` matrix drawn as the neighbour graph, usually `connectivities` | read only when a view draws it |
+| `--gene-id-column COLUMN` | The `var` column (`raw.var` with `--expression raw`) whose values name the genes | the var index when omitted |
+| `--expression X\|raw\|layer:NAME` | Where gene expression is read | |
 
-The AnnData-only flags are rejected for a prepared export directory. The error
-names every flag that does not apply, because an export already declares its
-identity, its columns, and its artifacts in `dataset_identity.json`.
+Every AnnData launch option is checked against the store's metadata before the
+server binds — a named `obsm`, `obsp`, layer, or column must exist — and handed
+to the viewer as a launch default. An option left out is taken from the store's
+own `uns['cellucid']['defaults']`, else the viewer applies its default rule
+({doc}`../../../web_app/b_data_loading/13_data_mapping`).
+
+A flag overrides the store's own `uns['cellucid']['defaults']` for this server
+only; the file is not changed.
 
 ---
 
 ## Startup output
 
-Direct AnnData input runs **five numbered steps**:
+Startup runs **four numbered steps**: `[1/4] Detecting format`,
+`[2/4] Reading metadata`, `[3/4] Checking launch choices`, `[4/4] Starting
+server`. The transcript is in {doc}`../../../web_app/b_data_loading/04_server_tutorial`.
 
-Startup prints five numbered steps; the transcript is in {doc}`../../../web_app/b_data_loading/04_server_tutorial`.
-
-Step 2 reports the adapter as it is built, so a slow load names the phase it is
-in. Step 4 is the manifest and centroid phase, reported as its own step. When
-`--knn connectivities` is passed, step 2 gains two more lines — `Connectivity: reading
-obsp['connectivities']`, then the edge count and neighbor maximum it found.
-
-A prepared export directory runs **three** steps instead — `Validating dataset`,
-`Loading dataset info`, `Starting server` — because it has no AnnData object to
-open and its manifests are already written.
+Steps 1 to 3 read metadata only, never an array, so they take about the same
+time on an atlas as on a small file. Step 2 prints the cell and gene counts and
+the `obsm`, `obs`, `obsp`, and `layers` entries; step 3 prints each launch
+choice it accepted.
 
 ### `Embeddings`: which `obsm` key each dimension came from
 
@@ -88,62 +98,28 @@ optionally with 0-based columns (`--embedding-2d X_pca:0,1`). Every other slot
 follows the default rule: `X_umap_1d`, `X_umap_2d`, and `X_umap_3d` each fill
 their own slot, and when an object declares none of them, a bare `X_umap` — what
 `sc.tl.umap()` writes — fills the slot of its own column count. When neither
-fills any slot, a deterministic best guess is made from the other `obsm` arrays
-and reported as `(guessed)`. Nothing is renamed and the object is not modified.
-When nothing can be plotted, the command fails with `Cellucid found nothing to
-plot…`, listing every `obsm` entry and why it was not used.
-
-### `Connectivity`: three states
-
-| Printed in step 3 | Meaning |
-| --- | --- |
-| `yes (N edges)` | The graph was read, validated, and is served |
-| `not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)` | The object carries a graph and this run did not ask for it |
-| `no` | The object carries no `obsp['connectivities']` |
-
----
-
-## `--vector-fields`
-
-Serves the `<field>_umap_<n>d` arrays in `obsm` as an animated overlay. Without
-it, `obsm` is not scanned for them, `dataset_identity.json` declares no
-`vector_fields`, and every `/vectors/...` route answers `404`. `--vector-field-default`
-selects among served fields, so it is refused without this flag.
-
-A `<field>_umap_<n>d` key is bound to the `<n>`D slot only when that slot shows
-`X_umap_<n>d` or `X_umap`. An object that declares no field in this grammar
-serves none, which is an ordinary result rather than an error — unlike `--knn`,
-which names one exact matrix and therefore reports its absence.
+fills any slot, the viewer makes a deterministic best guess from the other
+`obsm` arrays and reports it as guessed. Nothing is renamed and the object is
+not modified. When nothing can be plotted, the viewer reports `Cellucid found
+nothing to plot…`, listing every `obsm` entry and why it was not used.
 
 ## `--knn KEY`
 
-Off by default. Without it, no `obsp` matrix is read,
-`stats.has_connectivity` in `dataset_identity.json` is `false`, `stats.n_edges`
-is `null`, and `connectivity_manifest.json`, `connectivity/edges.src.bin`,
-`connectivity/edges.dst.bin`, and `connectivity/edges.weights.f64.bin` all
-return 404.
+Names the `obsp` matrix the viewer draws as the neighbour graph. Without it the
+viewer draws `obsp['connectivities']` when the store has one. Either way the
+graph is read the first time a view draws edges, never at startup.
 
-With it, the whole graph is read, validated, and ordered **before the server
-binds**, because the manifest the viewer fetches first declares the edge count
-and the neighbor maximum; the weights route then carries one Float64 weight per
-edge. The wait is real: a 50-neighbor graph over millions of cells is hundreds
-of millions of stored neighbors, and deduplicating it into a symmetric, ordered
-edge list costs minutes and several times the graph's own memory. At 50,000,000
-stored neighbors or more the command logs a warning naming that cost before it
-begins validating. Most sessions never draw the graph, which is why the default
-is off.
-
-Naming a matrix an object does not carry is an error naming it, not silence —
-compute it with `sc.pp.neighbors(adata)` first, or drop the flag. A matrix that
-is not symmetric, such as `obsp['distances']`, is refused with that reason,
-never symmetrized.
+Naming a matrix the store does not carry is an error before the bind, not
+silence — compute it with `sc.pp.neighbors(adata)` first, or drop the flag. A
+matrix that is not symmetric, such as `obsp['distances']`, is refused by the
+viewer with that reason, never symmetrized.
 
 The Python equivalent is the keyword-only `knn_key="connectivities"` on
 {func}`~cellucid.serve_anndata`, {func}`~cellucid.show_anndata`,
-{class}`~cellucid.AnnDataViewer`, and the adapter; see {doc}`server`.
-{func}`~cellucid.prepare` is a separate decision made at export time through its
-own `connectivities=` argument, and a server reading an export never revisits
-it.
+{class}`~cellucid.AnnDataViewer`, and {class}`~cellucid.AnnDataServer`; see
+{doc}`server`. {func}`~cellucid.prepare` stores one graph,
+`obsp['connectivities']`, from its own `connectivities=` argument; the viewer's
+default rule finds it without `--knn`.
 
 ---
 
@@ -166,8 +142,8 @@ ssh -L 8765:127.0.0.1:8765 user@remote
 Then open:
 - `http://127.0.0.1:8765/?anndata=true`
 
-This H5AD command prints `?anndata=true`; a prepared export prints
-`?source=remote`. Always copy the exact Viewer URL from the server banner.
+The Viewer URL ends in `?anndata=true`. Always copy the exact Viewer URL from
+the server banner.
 
 ### Serving from an HPC compute node
 
@@ -244,8 +220,8 @@ An import that fails is not one condition, and the advice differs:
 Fix:
 - Provide a path that is:
   - a real `.h5ad` file, or
-  - a real `.zarr` directory, or
-  - an exported folder containing `dataset_identity.json`.
+  - a Zarr store folder (with `.zgroup` or `zarr.json` at its root), or
+  - a zipped Zarr store (`.zip`).
 
 ### Symptom: “Permission denied” / “Address already in use”
 Fix:
@@ -285,21 +261,12 @@ Fix:
 
 ---
 
-### Symptom: “The graph is not drawn / `connectivity_manifest.json` returns 404”
+### Symptom: “The graph is not drawn”
 Fix:
-- Restart with `--knn connectivities`. The neighbor graph is off by default.
-- If startup then fails naming `obsp['connectivities']`, the object has no
-  graph: compute one with `sc.pp.neighbors(adata)` before serving.
-
----
-
-### Symptom: “Startup takes minutes on a large `.h5ad`”
-Fix:
-- Read the step numbers. Nearly all of the time is inside `[2/5] Loading
-  AnnData`, and with `--knn connectivities` most of that is the edge list.
-- Drop `--knn connectivities` for sessions that never draw the graph.
-- For repeated sessions, run {func}`~cellucid.prepare` once and serve the export
-  directory instead; see {doc}`export`.
+- Read the `obsp:` line of step 2. A graph stored under a key other than
+  `connectivities` is drawn when you name it with `--knn KEY`.
+- No `obsp` entry at all means the object has no graph: compute one with
+  `sc.pp.neighbors(adata)` before serving.
 
 ---
 

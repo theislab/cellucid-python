@@ -90,7 +90,7 @@ Cellucid's own reports estimate GPU memory from what the points renderer stores
 per cell — 4 bytes per position axis, 4 of colour and 1 of alpha: **13 bytes per
 point in 2D and 17 in 3D**, about 12 and 16 MiB at one million points. Read it as an order of
 magnitude for whether a dataset will fit, not as a measurement: the report marks
-it `GPU Memory (estimate)` while it is one, and switches to `GPU Memory` once
+it `GPU memory (estimate)` while it is one, and switches to `GPU memory` once
 the renderer reports the real value. Highlights, snapshot views and overlays all
 add on top of it.
 
@@ -113,13 +113,13 @@ This is the workflow that produces comparable results without fancy tooling.
 
 At minimum record:
 - dataset identifier and size (cells, genes, fields; approximate is fine),
-- loading mode (browser-export, server mode, remote server),
+- loading mode (local file picker, link, server mode, Jupyter),
 - browser + version,
 - machine + GPU (even “M1 MacBook Air” is better than nothing),
 - window size + whether retina/high-DPI (pixels matter),
 - the exact Cellucid settings that affect the scenario (views, render mode, overlays),
-- `Point size (log):`, whether `Antialiasing (smooth point edges)` is ticked, and
-  whether `Level-of-Detail (LOD)` is on and forced to a level.
+- `Point size`, whether `Antialiasing` is ticked, and
+  whether `Level of detail (LOD)` is on and forced to a level.
 
 :::{important}
 Record those last three even though you did not set them. The point size and the
@@ -147,8 +147,8 @@ Before you measure:
 4) Keep the filter state fixed. Hidden cells are rejected before rasterisation,
    so a run on a filtered view and a run on the full dataset measure different
    scenes.
-5) Avoid changing multiple quality knobs between runs — and set `Point size
-   (log):` and `Antialiasing (smooth point edges)` explicitly rather than
+5) Avoid changing multiple quality knobs between runs — and set `Point size`
+   and `Antialiasing` explicitly rather than
    inheriting whatever each dataset opened with.
 
 Thermals matter:
@@ -261,7 +261,7 @@ Use this table format in a GitHub issue, lab notebook, or internal doc.
 - Dataset: `<name or id>`
 - Size: `<n_cells> cells`, `<n_genes> genes`, `<n_fields> fields`
 - Layout: `<1 view / 2-view row / 3-view row / 2x2 grid>`
-- Loading mode: `<export folder / server mode / remote>`
+- Loading mode: `<browser file / link / server mode / remote>`
 - Browser: `<Chrome 123>`
 - Machine/GPU: `<e.g., M2 Pro / RTX 3070 / Intel Iris>`
 - Window: `<width × height>`, `<devicePixelRatio>`
@@ -278,7 +278,7 @@ Use this table format in a GitHub issue, lab notebook, or internal doc.
 |---|---:|---:|---:|---:|---|
 | TTFR (load → first render) | | | | | |
 | Switch gene (first time) | | | | | |
-| Apply filter (FILTER once) | | | | | |
+| Apply filter (Filter once) | | | | | |
 | Navigate in the fixed layout (FPS) | | | | | |
 
 ---

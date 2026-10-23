@@ -12,7 +12,7 @@
 //   name        File stem. The emitted file is `<topic>/<name>.png`.
 //   describes   One sentence. Becomes the `:alt:` text, so it must describe
 //               what is visible, not what the reader should conclude.
-//   dataset     Dataset id in `cellucid-datasets/exports-v3/datasets.json`.
+//   dataset     Dataset id in `cellucid-datasets/anndata/datasets.json`.
 //   query       Extra launch parameters, merged into the URL.
 //   keepWelcome Leave the first-run overlay up (default: dismiss it).
 //   steps       Ordered actions. See `applyStep` in `capture.mjs` for the
@@ -33,14 +33,14 @@
 //
 // READY SIGNALS that are known to work on this application:
 //   PANCREAS_READY     both of the two below; every pancreas scenario starts here
-//   #filter-count      "Showing all 3,696 points"   — data loaded and counted
+//   #filter-count      "Showing all 3,696 cells"   — data loaded and counted
 //   html[data-startup-phase="ready"]                — the sample's published
 //                      default session has been applied and the viewer runs
 //   #stats             "Points: … • Field: … • Centroids: …"  — colouring live
 //   #legend            present once a field paints a legend
 // `#dataset-cells` is NOT a ready signal: it abbreviates to "4K".
 //
-// The field selectors are rebuilt once the observation manifest arrives, which
+// The field selectors are rebuilt once the obs field list arrives, which
 // is after `#filter-count` settles. Always put `{ waitForStable:
 // '#categorical-field' }` before selecting a field; without it the selection is
 // silently discarded and the image shows "Field: None".
@@ -68,7 +68,7 @@ const PANCREAS_READY = {
   run: async page => {
     await page.waitForFunction(() => (
       document.querySelector('#filter-count')?.textContent
-        ?.includes('Showing all 3,696 points') === true
+        ?.includes('Showing all 3,696 cells') === true
     ));
     await page.waitForFunction(
       () => document.documentElement.dataset.startupPhase === 'ready'
@@ -78,8 +78,8 @@ const PANCREAS_READY = {
 
 // Every notification raised so far has expired and left the DOM.
 //
-// Loading the sample raises its own — the restored default session, each
-// artifact download, every field that gets coloured — and each expires on its
+// Loading the sample raises its own — the restored default session, the
+// opening of its AnnData store, every field that gets coloured — and each expires on its
 // own four- or five-second timer. Left alone they do two kinds of damage: in a
 // window capture they appear or not depending on how fast the host ran the
 // steps, so the same scenario produces different bytes; and under a
@@ -351,7 +351,7 @@ export const SCENARIOS = Object.freeze([
   //
   // All on `pancreas`: 3,696 cells, 3,753 genes, categorical
   // `clusters_coarse` / `clusters` / `cell_type`, continuous `S_score` /
-  // `G2M_score`, latent outlier quantiles generated at 0.95. It is the
+  // `G2M_score`, and `X_pca` as its latent space for the outlier filter. It is the
   // smallest published sample that carries all four filter surfaces, so a
   // reader can reproduce any of these frames in under a minute.
   //
@@ -379,6 +379,12 @@ export const SCENARIOS = Object.freeze([
   // hand the application a file from disk rather than driving its controls.
   ...buildDataLoadingRefusalScenarios(),
 
+  // Open from link and the Transfers list on b_data_loading, and the panel
+  // they live in. Separate builder for the same reason as the blocks above;
+  // every link points at a loopback host of this run, never the internet, so
+  // a capture is reproducible offline.
+  ...buildDataLinkScenarios(),
+
   // f_highlighting_selection. Separate builder for the same reason as the
   // blocks above: every figure there is one stage of the same few real
   // gestures on the same 2D view, so they share one prelude and one set of
@@ -403,7 +409,7 @@ export const SCENARIOS = Object.freeze([
 function buildFilteringScenarios() {
   const READY = PANCREAS_READY;
 
-  // The field selectors are rebuilt when the observation manifest arrives,
+  // The field selectors are rebuilt when the obs field list arrives,
   // which is after the point count settles; selecting before that is silently
   // discarded. `waitForStable` is what makes these two lines truthful.
   const clusters = [
@@ -484,7 +490,7 @@ function buildFilteringScenarios() {
       describes:
         'The Coloring and Filtering panel with the clusters field selected: the '
         + 'three field selectors, the outlier slider at 100 percent, the '
-        + 'eight-category legend, and the line Showing all 3,696 points above an '
+        + 'eight-category legend, and the line Showing all 3,696 cells above an '
         + 'empty filter list.',
       dataset: 'pancreas',
       steps: [READY, ...clusters, { scrollIntoView: '#coloring-filtering-section' }],
@@ -497,7 +503,7 @@ function buildFilteringScenarios() {
       name: 'active-filters-empty',
       describes:
         'The block labelled Active filters (selected view only), reading Showing '
-        + 'all 3,696 points above the words No filters active.',
+        + 'all 3,696 cells above the words No filters active.',
       dataset: 'pancreas',
       steps: [READY, ...clusters, { scrollIntoView: '#active-filters-container' }],
       shot: { mode: 'element', selector: '#active-filters-container', padding: 8 },
@@ -535,7 +541,7 @@ function buildFilteringScenarios() {
       describes:
         'The whole application window with the Pancreas embedding coloured by '
         + 'clusters, every legend row checked, and the sidebar reporting Showing '
-        + 'all 3,696 points.',
+        + 'all 3,696 cells.',
       dataset: 'pancreas',
       steps: [READY, ...clusters, { scrollIntoView: '#active-filters-container' }, NOTIFICATIONS_DRAINED],
       shot: { mode: 'window' },
@@ -692,7 +698,7 @@ function buildFilteringScenarios() {
       describes:
         'The whole window coloured by clusters with the outlier slider at its '
         + 'default 100 percent: scattered cells sit between and around the '
-        + 'clusters, and the sidebar reads Showing all 3,696 points.',
+        + 'clusters, and the sidebar reads Showing all 3,696 cells.',
       dataset: 'pancreas',
       steps: [READY, ...clusters, { scrollIntoView: '#outlier-filter-container' }, NOTIFICATIONS_DRAINED],
       shot: { mode: 'window' },
@@ -812,7 +818,7 @@ function buildFilteringScenarios() {
       name: 'window-zero-visible-cells',
       describes:
         'The whole window with a completely empty canvas after pressing Hide All '
-        + 'in the clusters legend, the sidebar reading Showing 0 of 3,696 points '
+        + 'in the clusters legend, the sidebar reading Showing 0 of 3,696 cells '
         + 'above one clusters hiding row.',
       dataset: 'pancreas',
       steps: [
@@ -820,7 +826,7 @@ function buildFilteringScenarios() {
         ...clusters,
         { scrollIntoView: '#legend' },
         { run: page => page.locator('#legend button', { hasText: 'Hide All' }).click() },
-        { waitForText: '#filter-count', text: 'Showing 0 of 3,696 points' },
+        { waitForText: '#filter-count', text: 'Showing 0 of 3,696 cells' },
         { scrollIntoView: '#active-filters-container' },
         NOTIFICATIONS_DRAINED,
       ],
@@ -874,7 +880,7 @@ function buildFilteringScenarios() {
       describes:
         'The same window after switching the active field to clusters: every cell '
         + 'is drawn again, the Ins1 row has left the filter list, and the count '
-        + 'line reads Showing all 3,696 points.',
+        + 'line reads Showing all 3,696 cells.',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -882,7 +888,7 @@ function buildFilteringScenarios() {
         { scrollIntoView: '#legend' },
         setRange(MIN_SLIDER, 3),
         ...clusters,
-        { waitForText: '#filter-count', text: 'Showing all 3,696 points' },
+        { waitForText: '#filter-count', text: 'Showing all 3,696 cells' },
         { scrollIntoView: '#active-filters-container' },
         NOTIFICATIONS_DRAINED,
       ],
@@ -1377,7 +1383,7 @@ function buildAnnotationAndSessionScenarios() {
 
   /**
    * Save the current state to a file, reload the application so every control
-   * returns to its default, then restore that file through the real Load State
+   * returns to its default, then restore that file through the real Load
    * picker. One scenario, one context: a bundle saved here is not visible to
    * any other scenario.
    */
@@ -1791,7 +1797,7 @@ function buildAnnotationAndSessionScenarios() {
 
     // ======================================================== sessions
     // A session bundle is a file, so these scenarios drive the real file
-    // controls: `Save State` produces a download, and `Load State` opens a file
+    // controls: `Save` produces a download, and `Load` opens a file
     // chooser that Playwright answers. The whole round trip runs inside one
     // scenario, because the tool gives each scenario a fresh browser context
     // and a bundle saved in one context is not visible to another.
@@ -1801,9 +1807,10 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'sessions_sharing',
       name: 'save-restore-01-session-controls',
       describes:
-        'The Session accordion showing the loaded dataset summary, the sample '
-        + 'picker, the local, remote-server and GitHub loading controls, and '
-        + 'the Session state block with Save State and Load State at the bottom.',
+        'The Session accordion showing the loaded Dataset summary, the Open data '
+        + 'group with the Sample dataset picker, the Files buttons and the Server '
+        + 'and Open from link fields, the Session file group with Save and Load '
+        + 'below them, and the Data mapping group.',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -1818,8 +1825,8 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'sessions_sharing',
       name: 'save-restore-02-save-state-action',
       describes:
-        'The Session state block with Save State and Load State side by side '
-        + 'and the pointer on Save State.',
+        'The Session file group with Save and Load side by side '
+        + 'and the pointer on Save.',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -1916,7 +1923,7 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'sessions_sharing',
       name: 'save-restore-03-save-confirmation',
       describes:
-        'A notification reading "Session saved successfully" after Save State '
+        'A notification reading "Session saved successfully" after Save '
         + 'produced a session bundle.',
       dataset: 'pancreas',
       steps: [
@@ -2034,9 +2041,10 @@ function buildAnnotationAndSessionScenarios() {
       name: 'refusal-02-not-a-session-file',
       describes:
         'A notification titled "Loading failed" reading "Session file: '
-        + 'Invalid session file (bad MAGIC header).", with a dismiss button at '
+        + 'This file is not a Cellucid session file of format 2 (it does not '
+        + 'start with CELLUCID_SESSION/2).", with a dismiss button at '
         + 'its right, after a file that is not a session bundle was chosen in '
-        + 'Load State.',
+        + 'Load.',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -2110,7 +2118,7 @@ function buildAnnotationAndSessionScenarios() {
           await page.selectOption('#dataset-select', 'dataset:local-demo:garcia');
           await page.waitForFunction(() => (
             document.querySelector('#filter-count')?.textContent
-              ?.includes('Showing all 219,731 points') === true
+              ?.includes('Showing all 219,731 cells') === true
           ), undefined, { timeout: 180_000 });
           // The switch raises its own download and field notifications, and
           // any work still in flight keeps a progress row in the center, so
@@ -2813,6 +2821,141 @@ function buildDataLoadingRefusalScenarios() {
         padding: 10,
       },
       settle: REFUSAL_SETTLE,
+    },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Opening data from a link: b_data_loading/14_open_from_link and the pages
+// that show the Session panel.
+//
+// A catalog link points at the docs catalog host (the published sample
+// catalog, `datasets.json` and the AnnData stores it lists, read as a linked
+// folder); a single-file link points at the web repository's permissive-CORS
+// mirror, which answers range requests the way a bucket or a repository's file
+// host does.
+
+function buildDataLinkScenarios() {
+  const SETTLE = Object.freeze({ attempts: 2, gapMs: 0 });
+  const startupReady = {
+    run: page => page.waitForFunction(
+      () => document.documentElement.dataset.startupPhase === 'ready',
+      undefined,
+      { timeout: 120_000 }
+    ),
+  };
+  const AT_LINK_CONTROL = [
+    { openSection: '#session-section' },
+    { scrollIntoView: '#data-link-block' },
+  ];
+  // The catalog host's address, read back from the page the tool opened.
+  const catalogBaseOf = page =>
+    new URL(page.url()).searchParams.get('sampleCatalog');
+
+  return [
+    {
+      id: 'loading-session-panel',
+      topic: 'data_loading',
+      name: 'data-loading-session-panel',
+      describes:
+        'The Session panel with the Pancreatic endocrinogenesis sample loaded: '
+        + 'the Dataset summary table, the Sample dataset dropdown, the H5AD, '
+        + 'Zarr ZIP and Zarr folder buttons under Files, the Server field, the Open from '
+        + 'link field with its Connect button, and Save and Load under Session file.',
+      dataset: 'pancreas',
+      steps: [PANCREAS_READY, NOTIFICATIONS_DRAINED, { openSection: '#session-section' }],
+      shot: { mode: 'element', selector: '#session-section', padding: 6 },
+    },
+    {
+      id: 'loading-link-control-typed',
+      topic: 'data_loading',
+      name: 'open-from-link-control',
+      describes:
+        'The Open from link control with "zenodo:23288289" typed into its field, '
+        + 'the pointer on its Connect button.',
+      dataset: 'pancreas',
+      steps: [
+        PANCREAS_READY,
+        ...AT_LINK_CONTROL,
+        { fill: '#data-link-url', value: 'zenodo:23288289' },
+      ],
+      shot: { mode: 'element', selector: '#data-link-block', padding: 8 },
+      cursor: { on: '#data-link-connect-btn', state: 'hover' },
+    },
+    {
+      id: 'loading-link-catalog-connected',
+      topic: 'data_loading',
+      name: 'connect-data-link',
+      describes:
+        'The Open from link control connected to a dataset catalog folder, '
+        + 'with its Disconnect button and, under it, the Transfers list naming '
+        + 'the folder it reads, what is read and that nothing is saved to disk.',
+      dataset: 'pancreas',
+      query: urls => ({ data: `${urls.catalogOrigin}/` }),
+      steps: [PANCREAS_READY, NOTIFICATIONS_DRAINED, ...AT_LINK_CONTROL],
+      shot: { mode: 'element', selector: '#data-link-block', padding: 8 },
+      settle: SETTLE,
+    },
+    {
+      id: 'loading-link-file-transfers',
+      topic: 'data_loading',
+      name: 'transfers-file-in-place',
+      describes:
+        'The Transfers list after an .h5ad file was opened from a web address: '
+        + 'one entry reading the file in place, with the bytes read of the '
+        + "file's size, the number of requests, why it is read and where it goes.",
+      query: urls => ({
+        data: `${urls.sampleOrigin}/tests/browser/fixtures/current-ui-smoke.h5ad`,
+      }),
+      steps: [
+        startupReady,
+        { waitForText: '#dataset-name', text: 'current-ui-smoke' },
+        NOTIFICATIONS_DRAINED,
+        ...AT_LINK_CONTROL,
+        { waitFor: '#transfers-list .transfer-row' },
+      ],
+      // Close: the Disconnect button sits right above the list.
+      shot: { mode: 'element', selector: '#transfers-block', padding: 2 },
+      settle: SETTLE,
+    },
+    {
+      id: 'loading-link-refusal-unrecognised',
+      topic: 'data_loading',
+      name: 'fail-data-link-unrecognised',
+      describes:
+        'A Cellucid notification reading "Cellucid does not recognise "not a '
+        + 'link"", followed by the kinds of link it opens.',
+      dataset: 'pancreas',
+      steps: [
+        PANCREAS_READY,
+        ...AT_LINK_CONTROL,
+        NOTIFICATIONS_DRAINED,
+        { fill: '#data-link-url', value: 'not a link' },
+        { click: '#data-link-connect-btn' },
+        { waitForText: '#notification-center', text: 'does not recognise' },
+      ],
+      shot: { mode: 'element', selector: '#notification-center', padding: 10 },
+      settle: SETTLE,
+    },
+    {
+      id: 'loading-link-refusal-not-found',
+      topic: 'data_loading',
+      name: 'fail-data-link-not-found',
+      describes:
+        'A Cellucid notification saying the linked folder has no datasets.json, '
+        + 'after a web address that is not a dataset catalog folder was '
+        + 'opened; the dataset that was open stays open.',
+      dataset: 'pancreas',
+      steps: [
+        PANCREAS_READY,
+        ...AT_LINK_CONTROL,
+        NOTIFICATIONS_DRAINED,
+        { run: page => page.fill('#data-link-url', `${catalogBaseOf(page)}missing/`) },
+        { click: '#data-link-connect-btn' },
+        { waitForText: '#notification-center', text: 'datasets.json' },
+      ],
+      shot: { mode: 'element', selector: '#notification-center', padding: 10 },
+      settle: SETTLE,
     },
   ];
 }

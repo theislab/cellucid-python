@@ -35,7 +35,7 @@ Cellucid is designed so you can get results without writing code, but you can st
 
 :::{tab-item} Computational / Power User
 
-Cellucid is an interactive viewer for an **exported dataset bundle** (or a server that serves one). It supports:
+Cellucid is an interactive viewer for an **AnnData file** (`.h5ad` or Zarr), opened from your disk, from a link, or through a server. It supports:
 
 - multiple embeddings (1D/2D/3D) with fast switching,
 - categorical + continuous metadata fields (`obs`) and gene expression (`var`),
@@ -52,9 +52,9 @@ Cellucid (web) is a stateful UI + WebGL viewer:
 
 - **Data model:** dataset → embeddings → fields → per‑view contexts → artifacts (figures/sessions).
 - **Performance model:** big arrays (positions/colors/visibility) are GPU‑resident; UI changes try to avoid hot‑path allocations.
-- **Persistence:** “Save State” writes one exact-current
+- **Persistence:** **Save** (under **Session file**) writes one exact-current
   `.cellucid-session` bundle with a closed, validated chunk inventory.
-- **Integration:** `cellucid-python` can export the required folder layout and can embed/drive the viewer from notebooks (hooks/events).
+- **Integration:** `cellucid-python` and `cellucid-r` write a Cellucid-ready AnnData (`prepare()` / `cellucid_prepare()`); `cellucid-python` also serves AnnData files and embeds/drives the viewer from notebooks (hooks/events).
 
 If you’re trying to reason about edge cases, start from the UI glossary ({doc}`04_ui_glossary_terminology`) and the “Core interactions” section ({doc}`../c_core_interactions/index`).
 :::
@@ -89,7 +89,7 @@ Cellucid intentionally does **not** try to be everything:
 - It is not a full analysis notebook replacement (it’s an interactive viewer with targeted analysis modules).
 - It is not a data-cleaning tool; if your inputs are malformed (NaNs, wrong shapes, mismatched cell order), the correct fix is usually upstream in data preparation.
 - It is not a genome browser; gene expression support is for coloring/analysis, not raw read inspection.
-- It is not a secure multi-user database by default. For multi-user label workflows, use **Community Annotation** (GitHub-backed) rather than “sending a screenshot around”.
+- It is not a secure multi-user database by default. For multi-user label workflows, use **Community annotation** (GitHub-backed) rather than “sending a screenshot around”.
 
 ---
 
@@ -97,16 +97,20 @@ Cellucid intentionally does **not** try to be everything:
 
 Most non-demo workflows look like this:
 
-1) **Prepare** a dataset in Python (usually an AnnData): export embeddings + fields + gene expression into a folder layout.
-2) **Load** that folder (or a server that hosts it) in the Cellucid web app.
+1) **Have** an AnnData file (`.h5ad`, a `.zarr` folder or a `.zarr.zip`).
+   Any AnnData opens; `cellucid.prepare()` writes one laid out for the fastest
+   gene reads, with its name, citation and defaults stored in
+   `uns['cellucid']`.
+2) **Open** that file in the Cellucid web app — from your disk, from a link,
+   or through a server that hands it to the browser.
 3) **Explore**: switch embeddings, color by fields, filter, highlight.
 4) **Save / export**:
    - figures for papers,
    - a `.cellucid-session` bundle for reproducibility and sharing.
 
 Step 1 is not Python-only: `cellucid_prepare()` in the R package writes the same
-export folder from R matrices and data frames, and the browser cannot tell which
-language wrote it. See {doc}`../../r_package/index`.
+Cellucid-ready AnnData from R matrices and data frames, and the browser cannot
+tell which language wrote it. See {doc}`../../r_package/index`.
 
 If you’re choosing a workflow, use the decision tree: {doc}`05_which_workflow_is_for_me_decision_tree`.
 
@@ -125,7 +129,7 @@ Cellucid is a **stateful application**. Most UI actions modify state such as:
 You have three common “persistence” layers:
 
 1) **In‑memory state** (lost on refresh/crash)
-2) **Saved session bundle** (`Save State` → `.cellucid-session`)  
+2) **Saved session bundle** (**Save** → `.cellucid-session`)  
    Intended to restore the app state later or share with collaborators.
 3) **Small browser preferences** (e.g. theme/background) stored in `localStorage`  
    These are convenience settings; they are not a reproducibility mechanism.

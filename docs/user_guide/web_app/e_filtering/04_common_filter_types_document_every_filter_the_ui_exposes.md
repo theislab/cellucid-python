@@ -1,4 +1,4 @@
-# Common filter types (document every filter the UI exposes)
+# Common filter types
 
 **Audience:** computational users + power users (still readable for wet lab)  
 **Time:** 20–30 minutes  
@@ -19,15 +19,15 @@ Cellucid’s current “visibility stack” is built from these filter types:
 | Filter type | Created in the UI by… | Applies to… | Typical use |
 |---|---|---|---|
 | Category visibility filter | Categorical legend checkboxes | obs categorical fields | Hide clusters/samples/batches you don’t want to see |
-| Numeric range filter | Continuous legend Min/Max sliders (FILTER / Live filtering) | obs continuous fields | QC gating (e.g., `n_counts`, `pct_mito`, scores) |
+| Numeric range filter | Continuous legend Min/Max sliders (Filter / Live filtering) | obs continuous fields | QC gating (e.g., `n_counts`, `pct_mito`, scores) |
 | Gene expression range filter | Gene legend Min/Max sliders | the active gene (var) | “Show only cells expressing gene X above Y” |
-| Outlier filter (latent space) | Display options → Outlier slider (when available) | fields with outlier stats | Hide fringe/outlier-like cells within categories |
+| Outlier filter | Legend → **Outlier filter** slider | categorical obs fields of the file, once a latent space is chosen | Hide fringe/outlier-like cells within categories |
 
 :::{important}
 Not all filters apply at all times:
 
 - Gene filters apply only while that gene is the active field.
-- Outlier filtering applies only while the active field supports outlier stats (that’s when the slider is visible).
+- Outlier filtering applies only while the categorical field it was set on is the active field.
 :::
 
 ---
@@ -37,7 +37,7 @@ Not all filters apply at all times:
 ### UI name / where it lives
 
 - Categorical legend (checkboxes next to category labels)
-- Buttons: `Show All`, `Hide All`
+- Buttons: `Show all`, `Hide all`
 
 ### What it does
 
@@ -60,22 +60,22 @@ Three categories hidden. Note what a hidden row keeps: its swatch position, its
 label, and its total (`0 / 916 cells`). Nothing was deleted.
 ```
 
-### “Show All / Hide All” behavior
+### “Show all / Hide all” behavior
 
-In the categorical legend, `Show All` / `Hide All` affect **only categories that are currently available** after other filters.
+In the categorical legend, `Show all` / `Hide all` affect **only categories that are currently available** after other filters.
 
 Practical implication:
 - if a category has `0 available` cells (because of other filters), its checkbox is disabled and Show/Hide All skip it entirely.
 
 ### Active filters entry
 
-Shows up in **Active filters** when **at least one category is hidden**, even if you later disable the filter:
+Shows up in **Filters** when **at least one category is hidden**, even if you later disable the filter:
 
 - `Field: hiding A, B, C +N more`
 
 ### Enable/disable vs remove
 
-- **Disable** the category filter in Active filters:
+- **Disable** the category filter in Filters:
   - cells from hidden categories can reappear,
   - but they may appear visually “de-emphasized” (e.g., greyed) because the legend still considers them hidden.
 - **Remove** the category filter:
@@ -90,9 +90,9 @@ Shows up in **Active filters** when **at least one category is hidden**, even if
 
 In the continuous legend:
 
-- “Filtering” section with Min/Max sliders
+- the **Visible range** section with `Minimum` / `Maximum` sliders
 - `Live filtering` toggle
-- `FILTER` and `RESET` buttons
+- `Filter` and `Reset` buttons
 
 ### What it does
 
@@ -106,13 +106,13 @@ For a continuous obs field (QC metric/score):
 :width: 428px
 
 The complete numeric-range control, with `Live filtering` switched **off** so
-`FILTER` is clickable.
+`Filter` is clickable.
 ```
 
 ### Semantics (exact)
 
 - **Inclusive range**: values `min ≤ v ≤ max` are kept.
-- **Missing values**: `NaN` is treated as “outside range” and is filtered out whenever the filter is active. A prepared export cannot contain `NaN` here — both writers reject non-finite continuous values — so this only arises when you open a raw `.h5ad` or Zarr archive directly.
+- **Missing values**: `NaN` is treated as “outside range” and is filtered out whenever the filter is active. A `NaN` in a continuous obs column is a missing value (both writers store one as `NaN`); gene expression written by `prepare()` or `cellucid_prepare()` never holds one.
 - The filter stack is an **AND** with other filters (categories, other continuous fields, etc.).
 
 ### What “0–100” means in the sliders
@@ -125,30 +125,26 @@ steps of 1:
 
 The UI shows the corresponding numeric values so you don’t have to reason in percent.
 
-The two sliders cannot cross: dragging `Min` past `Max` pushes `Max` along with
+The two sliders cannot cross: dragging `Minimum` past `Maximum` pushes `Maximum` along with
 it, and vice versa.
 
-### Live filtering vs FILTER button
+### Live filtering vs Filter button
 
 `Live filtering` starts **On**.
 
 - `Live filtering = On`: changing sliders recomputes visibility immediately —
-  and `FILTER` is **greyed out and unclickable**, with the tooltip
+  and `Filter` is **greyed out and unclickable**, with the tooltip
   `Turn off Live filtering to use Filter`.
 - `Live filtering = Off`: changing sliders updates the displayed values only,
-  and you must click `FILTER` to apply.
+  and you must click `Filter` to apply.
 
 ```{figure} ../../../_static/screenshots/filtering/filter-button-disabled-live-on.png
 :alt: The same Filtering block with the Live filtering toggle reading On, the hint below it reading Changes apply as you drag, and a pale grey FILTER button under the mouse pointer beside a black RESET button.
 :width: 428px
 
-With `Live filtering` on, `FILTER` is disabled. This is the intended state, not
+With `Live filtering` on, `Filter` is disabled. This is the intended state, not
 a fault: there is nothing for the button to do.
 ```
-
-The one-line hint under the toggle changes with it — `Changes apply as you
-drag` when on, `Drag sliders, then click Filter` when off — so the toggle
-state is readable without hunting for the button.
 
 :::{warning}
 **The toggle does not stay off.** It is rebuilt with the legend, so it returns
@@ -158,18 +154,18 @@ a `.cellucid-session`. Check it again after any of those before you drag on a
 large dataset — see {doc}`05_performance_considerations`.
 :::
 
-### RESET
+### Reset
 
-`RESET` returns the filter to the full range (equivalent to “no filter”). It
+`Reset` returns the filter to the full range (equivalent to “no filter”). It
 also snaps both sliders back to `0` and `100`.
 
 ### Active filters entry
 
-Shows up in **Active filters** when the range is not the full range:
+Shows up in **Filters** when the range is not the full range:
 
 - `Field: min – max`, both numbers rounded to two decimal places
 
-(with `(disabled)` appended if you turned the filter off via Active filters —
+(with `(disabled)` appended if you turned the filter off via Filters —
 though on a narrow sidebar that suffix is usually past the ellipsis, so read
 the greyed, struck-through row instead).
 
@@ -188,7 +184,7 @@ colorbar to slider range**.
 ## 3) Gene expression range filter (var field)
 
 Gene expression filters behave like numeric range filters — same block, same
-`Live filtering` / `FILTER` / `RESET` controls — but with an important scope
+`Live filtering` / `Filter` / `Reset` controls — but with an important scope
 limitation:
 
 - **Gene filters apply only while that gene is the active field.**
@@ -216,13 +212,18 @@ Practical workflows:
 
 ---
 
-## 4) Outlier filter (latent space)
+## 4) Outlier filter
 
 ### UI name / where it lives
 
-When the active field provides outlier stats, Display options shows:
+When the active field is a categorical obs field of the file, the **Legend**
+box shows, below **Show centroids**:
 
-- `Outlier filter (latent space)` slider with a percent readout
+- an `Outlier filter` slider with a percent readout,
+- a line under it, when there is something to say: that a latent space must
+  be chosen first (with a **Choose latent space** button), that the field's
+  categories are too small to measure, what the first use reads, or the
+  progress of that read (with **Cancel**).
 
 ```{figure} ../../../_static/screenshots/filtering/outlier-slider-95.png
 :alt: A control labelled Outlier filter (latent space) whose slider handle sits a short distance in from the right end with the number 95 percent printed beside it and the mouse pointer on the handle.
@@ -241,13 +242,24 @@ Interpretation:
 
 ### Data requirements
 
-Outlier quantiles are dataset-provided statistics (typically computed during export for categorical fields).
+The filter measures in a latent space (an `obsm` array such as `X_scVI` or
+`X_pca`), named by the file (`prepare(latent_key=...)`,
+`cellucid_prepare(latent_key = ...)`), by the launch (`--latent-key`,
+`latent_key=`), or by you under **Data mapping › Latent space**. Without one
+the control is shown disabled
+([Turning it on](02_outlier_filtering_per_active_field.md#turning-it-on-choose-a-latent-space)).
 
-If the dataset/field does not provide outlier quantiles, the outlier control is hidden.
+Its quantiles are either stored in the file for that latent space (read at
+once, one field at a time) or computed in the browser on the slider's first
+move below `100%`, with progress and **Cancel**
+([Stored or computed](02_outlier_filtering_per_active_field.md#stored-or-computed)).
+
+A field you create by merging or deleting categories has no outlier
+quantiles, so the control is hidden for it.
 
 ### Active filters entry
 
-When active and set below 100%, Active filters shows a line like:
+When active and set below 100%, Filters shows a line like:
 
 - `Field: outlier ≤ 95%`
 

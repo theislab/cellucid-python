@@ -130,7 +130,7 @@ filtering out is not highlighted there. See
 :alt: A proximity Alt+click on empty space: the pointer is pressed above the embedding where no cell is drawn, and the ringed line in the Highlighting panel adds "That click did not land on a cell, so there is nothing to select. Zoom in or raise Point size to make cells easier to hit: only the cells the viewer is currently drawing can be clicked." under the Proximity drag help text.
 :width: 1440px
 
-A click that hits nothing says so, in one line, under the **Highlight mode**
+A click that hits nothing says so, in one line, under the **Tool**
 buttons. That line is the only place these messages appear — no toast, no
 history. The full list is in {doc}`06_troubleshooting_highlighting`.
 ```
@@ -139,7 +139,7 @@ history. The full list is in {doc}`06_troubleshooting_highlighting`.
 :alt: The Highlighting panel in Annotation based mode with no coloured field, with the ringed line "Annotation selection needs an active field. Choose a Categorical obs or Continuous obs field under Coloring & Filtering, then Alt+click a cell (or tap it in Select mode)." in place of the usual help text.
 :width: 516px
 
-With no coloured field, **Annotation based** has no rule to apply, so it replaces
+With no coloured field, **Annotation** has no rule to apply, so it replaces
 its usual invitation with an instruction instead of failing silently.
 ```
 

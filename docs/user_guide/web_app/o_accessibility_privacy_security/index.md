@@ -25,7 +25,7 @@ If you are in a regulated environment (clinical, IRB-controlled, corporate IP), 
 
 | You need to… | Do this first (safe default) | Then read |
 |---|---|---|
-| Use sensitive/clinical data without uploading it | **Self-host or run locally** (this alone switches off usage analytics), then use local prepared exports, avoid Community Annotation, and review figure metadata before sharing | {doc}`02_privacy_model` |
+| Use sensitive/clinical data without uploading it | **Self-host or run locally** (this alone switches off usage analytics), then open local files (H5AD, Zarr), avoid Community Annotation, and review figure metadata before sharing | {doc}`02_privacy_model` |
 | Answer “what does this send to third parties?” for a review board | Read the analytics section first — it is the only third-party egress, and it is hostname-gated | {doc}`02_privacy_model` |
 | Share sessions safely with a team | Treat `.cellucid-session` files like sensitive derived artifacts; avoid patient IDs in labels | {doc}`../l_sessions_sharing/08_security_privacy_and_trust` |
 | Make figures readable for colorblind audiences | Keep the categories you rely on within the first 24 of a field; check the export preview’s colorblind simulation | {doc}`01_accessibility` + {doc}`../k_figure_export/04_quality_knobs_and_best_practices` |

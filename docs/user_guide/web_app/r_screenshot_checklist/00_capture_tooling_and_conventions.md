@@ -18,7 +18,7 @@ not documentation for a reader of the app.
 | ``capture.mjs`` | The engine and the command line. |
 | ``scenarios.mjs`` | The registry of named, reproducible scenarios. |
 | ``overlay.mjs`` | The pointer and annotation layer, injected into the page. |
-| ``serve-exports.mjs`` | A loopback host for a prepared dataset export tree. |
+| ``serve-catalog.mjs`` | A loopback host for the AnnData sample catalog (``datasets.json`` and the stores it lists), with range requests. |
 | ``captures.json`` | Generated provenance: one record per captured image. |
 
 It lives in the **Python repository** rather than the web repository for three
@@ -57,7 +57,7 @@ two variables that server does, plus one of its own:
 | --- | --- | --- |
 | ``CELLUCID_BROWSER_TEST_PORT`` | 4173 | the application |
 | ``CELLUCID_BROWSER_TEST_SAMPLE_PORT`` | main + 1 | the permissive-CORS mirror |
-| ``CELLUCID_DOCS_EXPORTS_PORT`` | main + 2 | ``cellucid-datasets/exports-v3/`` |
+| ``CELLUCID_DOCS_CATALOG_PORT`` | main + 2 | ``cellucid-datasets/anndata/`` (``?sampleCatalog=``) |
 
 **Check the defaults are free before you run.** A browser-test run or another
 capture run may already hold them, and the server refuses to bind rather than
@@ -66,14 +66,19 @@ adopting someone else's. Move all three together:
 ```sh
 CELLUCID_BROWSER_TEST_PORT=4213 \
 CELLUCID_BROWSER_TEST_SAMPLE_PORT=4214 \
-CELLUCID_DOCS_EXPORTS_PORT=4215 \
+CELLUCID_DOCS_CATALOG_PORT=4215 \
 node capture.mjs shoot --all --out /tmp/shots
 ```
 
 ### Data
 
-Scenarios load the **real published exports** from
-``cellucid-datasets/exports-v3/``, served over loopback. That is deliberate: a
+Scenarios load the **real published sample datasets** from the AnnData sample
+catalog ``cellucid-datasets/anndata/`` (``datasets.json`` schema 2 and the
+stores it lists, the folder published at
+``https://theislab.github.io/cellucid-datasets/anndata/``), served over loopback
+and named to the app with ``?sampleCatalog=``. Set ``CELLUCID_DATASETS_REPO``
+when the checkout is elsewhere; a run without the folder stops at once and
+names the path it looked for. That is deliberate: a
 reader has to recognise the picture as the app they are using, and a 120-cell
 synthetic fixture does not look like single-cell data. The tree is pinned on
 disk, so it is reproducible in the way that matters.
@@ -381,10 +386,10 @@ render real paths and cannot be sanitised — do not capture them.
 verbatim ```` ```text ```` block, never as an image. This is a rule, not a
 preference, and it is not satisfied by a neutralised prompt:
 
-- **The leak is in the output, not the prompt.** ``cellucid serve`` over a
-  prepared export prints the **absolute** directory it resolved —
-  ``server/_server.py`` calls ``print_detail("Path", str(self.data_dir))`` — and
-  AnnData's own ``INFO`` logging prints the absolute file path beside it. Both
+- **The leak is in the output, not the prompt.** ``cellucid serve`` prints the
+  **absolute** path of the store it serves — ``anndata_server.py`` calls
+  ``print_detail("Path", str(store.path))`` — and AnnData's own ``INFO``
+  logging prints the absolute file path beside it. Both
   are correct behaviour and neither can be configured away, so *every*
   screenshot of these commands contains a host path by construction. A
   neutralised ``PS1`` hides the prompt and changes nothing about the transcript.

@@ -5,16 +5,14 @@ The listing is checked against the profiles in :mod:`._schema`: every generic
 chunk must carry exactly the metadata its profile declares, every dataset
 dependent chunk id must be one this version knows, and the per-chunk
 contributor and priority must be the ones the viewer writes. The dynamic id
-families -- highlight cell sets, user-defined codes, analysis artifacts -- are
-checked for exact URI-component encoding so a chunk id cannot smuggle a path.
+families -- highlight cell sets and user-defined codes -- are checked against
+their exact identity patterns so a chunk id cannot smuggle a path.
 """
 
 from __future__ import annotations
 
-import json
 import re
 from typing import Any, cast
-from urllib.parse import quote, unquote_to_bytes
 
 from ._primitives import (
     _require_exact_bool,
@@ -24,13 +22,11 @@ from ._primitives import (
 )
 from ._records import _CurrentChunkInventory
 from ._schema import (
-    _ANALYSIS_ARTIFACT_PREFIX,
     _CHUNK_META_KEYS,
     _CONTRIBUTOR_INDEX,
     _CURRENT_EXACT_CHUNK_CONTRIBUTORS,
     _CURRENT_GENERIC_STATIC_CHUNK_PROFILES,
     _HIGHLIGHT_CELLS_PREFIX,
-    _JAVASCRIPT_URI_COMPONENT_SAFE,
     _STATIC_PROFILE_BY_ID,
     _STATIC_PROFILE_KEYS,
     _USER_DEFINED_CODES_PREFIX,
@@ -52,30 +48,7 @@ def _expected_chunk_contributor(chunk_id: str) -> str | None:
     if chunk_id.startswith(_USER_DEFINED_CODES_PREFIX):
         field_id = chunk_id.removeprefix(_USER_DEFINED_CODES_PREFIX)
         return "user-defined-codes" if _WIRE_ID_RE.fullmatch(field_id) is not None else None
-    if chunk_id.startswith(_ANALYSIS_ARTIFACT_PREFIX):
-        identity = chunk_id.removeprefix(_ANALYSIS_ARTIFACT_PREFIX).split("/")
-        if len(identity) == 3 and all(_is_canonical_uri_component(segment) for segment in identity):
-            return "analysis-artifacts"
     return None
-
-
-def _is_canonical_uri_component(value: str) -> bool:
-    if not value:
-        return False
-    try:
-        decoded = unquote_to_bytes(value).decode("utf-8", errors="strict")
-    except UnicodeDecodeError:
-        return False
-    return (
-        bool(decoded)
-        and quote(
-            decoded,
-            safe=_JAVASCRIPT_URI_COMPONENT_SAFE,
-            encoding="utf-8",
-            errors="strict",
-        )
-        == value
-    )
 
 
 def _validate_current_chunk_inventory(
@@ -84,7 +57,7 @@ def _validate_current_chunk_inventory(
 ) -> _CurrentChunkInventory:
     manifest = _require_exact_keys(
         bundle.manifest,
-        {"createdAt", "datasetFingerprint", "chunks"},
+        {"createdAt", "datasetFingerprint", "source", "requires", "chunks"},
         label="bundle.manifest",
     )
     if manifest["datasetFingerprint"] != bundle.dataset_fingerprint:
@@ -180,7 +153,7 @@ def _validate_current_chunk_inventory(
                 raise ValueError(
                     f"Session chunk {chunk_id!r} must be binary, gzip, and dataset-dependent"
                 )
-        elif contributor_id in {"highlights-cells", "analysis-artifacts"} and (
+        elif contributor_id == "highlights-cells" and (
             raw_meta["priority"] != "lazy"
             or raw_meta["kind"] != "binary"
             or raw_meta["codec"] != "gzip"
@@ -201,51 +174,7 @@ def _validate_current_chunk_inventory(
             "Current session requires singleton chunks: " + ", ".join(missing_singletons)
         )
 
-    raw_inventory = bundle.decode_chunk("analysis/cache-inventory")
-    inventory = _require_exact_keys(
-        raw_inventory,
-        {"artifactIds"},
-        label="analysis/cache-inventory",
-    )
-    raw_artifact_ids = inventory["artifactIds"]
-    if not isinstance(raw_artifact_ids, list):
-        raise TypeError("analysis/cache-inventory.artifactIds must be an array")
-    artifact_ids: list[str] = []
-    seen_artifact_ids: set[str] = set()
-    for index, raw_artifact_id in enumerate(raw_artifact_ids):
-        artifact_id = _require_nonempty_string(
-            raw_artifact_id,
-            label=f"analysis/cache-inventory.artifactIds[{index}]",
-        )
-        if _expected_chunk_contributor(artifact_id) != "analysis-artifacts":
-            raise ValueError(
-                "analysis/cache-inventory artifact IDs must use the exact "
-                "current bulk-gene identity"
-            )
-        if artifact_id in seen_artifact_ids:
-            raise ValueError(f"analysis/cache-inventory duplicates artifact {artifact_id!r}")
-        seen_artifact_ids.add(artifact_id)
-        artifact_ids.append(artifact_id)
-
-    manifest_artifact_ids = [
-        chunk_id for chunk_id in raw_chunk_ids if chunk_id.startswith(_ANALYSIS_ARTIFACT_PREFIX)
-    ]
-    if manifest_artifact_ids != artifact_ids:
-        raise ValueError("Analysis artifact chunks must exactly match the cache inventory order")
-    canonical_inventory_bytes = len(
-        json.dumps(
-            {"artifactIds": artifact_ids},
-            ensure_ascii=False,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    )
-    if metadata_by_id["analysis/cache-inventory"]["uncompressedBytes"] != canonical_inventory_bytes:
-        raise ValueError(
-            "analysis/cache-inventory uncompressedBytes must match its canonical payload"
-        )
-
     return _CurrentChunkInventory(
         ids=set(raw_chunk_ids),
         metadata_by_id=metadata_by_id,
-        analysis_artifact_ids=tuple(artifact_ids),
     )

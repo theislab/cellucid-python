@@ -40,12 +40,13 @@ SpatialData, OME-TIFF and OME-Zarr, among other formats
 - **Any number of 1D, 2D and 3D embeddings**, one per view and any mix side
   by side, with orbit, planar and free-fly navigation per view; see
   {doc}`../c_core_interactions/05_dimension_switching_1d_2d_3d`.
-- **No server needed to share.** A prepared export is a folder of static files:
-  host it on GitHub and anyone opens it from a link
+- **No server needed to share.** An AnnData file, or a folder of them with a
+  `datasets.json` catalog, is static: host it on GitHub and anyone opens it
+  from a link
   ({doc}`../b_data_loading/11_custom_dataset_repository`). A server is there
   when you want one: `cellucid serve` in Python, or a notebook.
-- **Exports from Python and R** with the same format: `cellucid.prepare` and
-  `cellucid_prepare()`.
+- **Cellucid-ready AnnData from Python and R** with the same layout:
+  `cellucid.prepare` and `cellucid_prepare()`.
 - **Community annotation**: several people vote on cell-type labels for one
   dataset through a GitHub repository; see {doc}`../j_community_annotation/index`.
 - **In-browser analysis and figures**: compare selections, find marker genes,
@@ -57,7 +58,7 @@ SpatialData, OME-TIFF and OME-Zarr, among other formats
   ready to explore.
 - **Spatial and multimodal data with images**: Vitessce is designed for it.
 - **Publishing a lab's datasets as static files**: both the UCSC Cell Browser
-  and Cellucid produce them. Cellucid's exports open from a GitHub repository in
+  and Cellucid produce them. Cellucid opens AnnData files and Zarr folders from a GitHub repository in
   the hosted app, so you need no web server or site of your own.
 - **Millions of cells in 2D or 3D, on a laptop or a phone, in your own browser
   with nothing uploaded**: that is what Cellucid is for.

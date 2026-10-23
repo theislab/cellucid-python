@@ -107,7 +107,7 @@ If you need a “methods-ready” record of what was exported, use {doc}`05_meta
 
 ---
 
-## What figure export does NOT reproduce (must be explicit)
+## What figure export does NOT reproduce
 
 Figure export is intentionally scoped. Common “expected but missing” items include:
 
@@ -130,8 +130,8 @@ Figure export is intentionally scoped. Common “expected but missing” items i
 Use this workflow when you want to be able to recreate a figure weeks later (or hand it to a collaborator):
 
 1) **Freeze the data identity**
-   - Record the dataset identifier/version you loaded (export folder version tag, dataset id, or hosting URL).
-   - If you are iterating on exported data, decide which version is “figure-final”.
+   - Record the dataset identifier/version you loaded (dataset file version, dataset id, or hosting URL).
+   - If you are iterating on the dataset file, decide which version is “figure-final”.
 
 2) **Freeze the app state**
    - Save a **session bundle** that captures the view (camera, filters, active field, highlights, etc.).  
@@ -145,7 +145,7 @@ Use this workflow when you want to be able to recreate a figure weeks later (or 
    - Frame export crop settings (if used)
 
    :::{important}
-   Figure export UI state is not persisted in sessions. If you want to re-export later with the same settings, either record them manually or rely on the embedded metadata in the exported file.
+   Figure export settings are saved in sessions. Save a session right after exporting and **Load** brings back the same views and the same export settings; the exported file's embedded metadata records them too.
    :::
 
 4) **Export and verify**

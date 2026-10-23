@@ -3,7 +3,7 @@
 **Audience:** everyone (wet lab → developer)  
 **Time:** 15–25 minutes  
 **What you’ll learn:**
-- The three persistence layers (live state vs session bundle vs export folder)
+- The three persistence layers (live state vs session bundle vs dataset file)
 - What lives in Python vs in the browser vs on disk
 - What tends to reset when you reload/re-run
 - The safest way to make interactive work reproducible
@@ -12,7 +12,7 @@
 
 ## Mental model (one sentence)
 
-Cellucid has **live state** (changes while you interact), **durable state** (session bundles), and **reproducible data artifacts** (export folders) — and you should choose the right one depending on whether you’re exploring, sharing, or publishing.
+Cellucid has **live state** (changes while you interact), **durable state** (session bundles), and **reproducible data artifacts** (Cellucid-ready AnnData files) — and you should choose the right one depending on whether you’re exploring, sharing, or publishing.
 
 ---
 
@@ -40,7 +40,7 @@ Live state is lost if:
 A session bundle is a single file that captures **a portable snapshot of the app state** (not the dataset itself).
 
 You can create it:
-- in the web app via **Save State** (downloads a file), or
+- in the web app via **Save** under **Session file** (downloads a file), or
 - in notebooks via `viewer.get_session_bundle()` (no-download capture).
 
 You can use it to:
@@ -48,15 +48,15 @@ You can use it to:
 - send “this exact view/highlight/filter setup” to a collaborator,
 - apply selected parts of state back onto an AnnData in Python (see {doc}`05_sessions_to_anndata_bridge`).
 
-### 3) Export folder (reproducible dataset artifact)
+### 3) Dataset file (reproducible dataset artifact)
 
-An export folder (from `prepare(...)`) is a versioned dataset representation designed for:
+A Cellucid-ready AnnData (from `prepare(...)`) is a versioned dataset file designed for:
 - fast loading,
 - stable behavior across machines,
 - long-term sharing/hosting,
 - paper-ready reproducibility.
 
-The export folder is where you put stable identity metadata like `dataset_identity.json` (see {doc}`04_dataset_identity_and_reproducibility`).
+The file carries its stable identity in `uns['cellucid']` (see {doc}`04_dataset_identity_and_reproducibility`).
 
 ---
 
@@ -86,7 +86,7 @@ Practical implication:
 
 ### Disk-side artifacts (what survives across machines)
 
-- Export folder: stable dataset artifact, shareable.
+- Dataset file: stable dataset artifact, shareable.
 - Session bundle: stable state artifact, shareable.
 - Notebook code + environment: the “how to reproduce” part.
 
@@ -115,25 +115,25 @@ If a session detects a dataset mismatch, Cellucid intentionally restores only th
 
 This is a practical, high-signal pattern that works for both beginners and experts.
 
-### Step 1: export (once)
+### Step 1: prepare (once)
 
 ```python
 from cellucid import prepare
 prepare(
-    ...,
+    "pbmc_v1.h5ad",
+    format="h5ad",
     embeddings={"X_umap": adata.obsm["X_umap"]},
-    out_dir="./exports/pbmc_v1",
-    dataset_name="PBMC v1",
     dataset_id="pbmc-v1",
-    obs_categorical_dtype="uint16",
+    dataset_name="PBMC v1",
+    obs=adata.obs,
 )
 ```
 
 ### Step 2: explore (many times)
 
 ```python
-from cellucid import show
-viewer = show("./exports/pbmc_v1")
+from cellucid import show_anndata
+viewer = show_anndata("pbmc_v1.h5ad")
 viewer.wait_for_ready(timeout=60)
 ```
 
@@ -146,7 +146,7 @@ bundle = viewer.get_session_bundle(timeout=60)
 bundle.save("./sessions/pbmc_v1_my_findings.cellucid-session")
 ```
 
-In the web app: use **Save State** (downloads a `.cellucid-session` file).
+In the web app: use **Save** (downloads a `.cellucid-session` file).
 
 ### Step 4: materialize key decisions back into AnnData (optional)
 
@@ -164,13 +164,13 @@ See: {doc}`05_sessions_to_anndata_bridge`.
 
 ---
 
-## Screenshot: where “Save State” lives in the web app
+## Screenshot: where the Save button lives in the web app
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
+:alt: The Cellucid Session panel: the Dataset summary, the Open data group with Sample dataset, Files, Server and Open from link, the Session file group with its Save and Load buttons, and the Data mapping group.
 :width: 524px
 
-The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
+The Session panel gathers every loading path under **Open data** and keeps the **Save** and **Load** buttons under **Session file**, directly below it.
 ```
 
 ---
@@ -182,7 +182,7 @@ The Session panel presents each loading path separately and keeps Save State and
 Selections/highlights/codes are aligned to **cell indices** (row positions). If you apply a session to an AnnData whose row order differs, your highlights can silently point to different cells.
 
 Mitigations:
-- keep exports versioned and immutable once shared,
+- keep dataset files versioned and immutable once shared,
 - treat cell order as part of dataset identity,
 - use `expected_dataset_id=...` when applying sessions in Python.
 
@@ -208,7 +208,7 @@ Likely causes:
 - you saved a session but did not reload it after refresh.
 
 Fix:
-- save state in the web app (Save State) or in Python (`viewer.get_session_bundle()`),
+- save state in the web app (**Save** under **Session file**) or in Python (`viewer.get_session_bundle()`),
 - reload the session after reloading the dataset.
 
 ### Symptom: “I loaded a session but nothing changed”

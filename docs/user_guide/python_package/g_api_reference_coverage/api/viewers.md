@@ -4,7 +4,7 @@
 .. currentmodule:: cellucid
 ```
 
-Viewer classes are the **stateful** notebook objects returned by {func}`~cellucid.show` and {func}`~cellucid.show_anndata`.
+The viewer class is the **stateful** notebook object returned by {func}`~cellucid.show_anndata`.
 
 They are designed for two-way interaction:
 - **Viewer → Python:** hooks/events like `@viewer.on_selection`
@@ -16,16 +16,7 @@ If you prefer a minimal interface, start with {doc}`jupyter`.
 
 ## Fast path
 
-### A) Exported data (recommended for speed)
-
-```python
-from cellucid import CellucidViewer
-
-viewer = CellucidViewer("./my_export")
-viewer.display()
-```
-
-### B) AnnData mode (convenient for exploration)
+### A) Any AnnData
 
 ```python
 from cellucid import AnnDataViewer
@@ -35,6 +26,15 @@ viewer = AnnDataViewer(
     dataset_name="My study",
     dataset_id="my-study-v1",
 )
+viewer.display()
+```
+
+### B) A Cellucid-ready AnnData (written by `prepare()`)
+
+```python
+from cellucid import AnnDataViewer
+
+viewer = AnnDataViewer("my_study.h5ad")  # names itself (uns['cellucid'])
 viewer.display()
 ```
 
@@ -65,8 +65,7 @@ viewer.reset_view()
 
 These calls return `None` without waiting for the viewer. If the viewer refuses
 one, it reports a `command_error` back to Python, which Cellucid prints to
-`sys.stderr` unless you take it over. Only the web build that emits
-`command_error` sends it; older builds refuse a command silently.
+`sys.stderr` unless you take it over.
 
 ```python
 @viewer.on_command_error
@@ -98,11 +97,9 @@ viewer.set_data_mapping(
 )
 ```
 
-`viewer.data_mapping`, `viewer.data_mapping_origin`, `viewer.set_data_mapping()`
-and `@viewer.on_data_mapping` are shared by both viewers. The viewer reports
-its mapping because this package lists `data_mapping` among the events of
-`GET /_cellucid/protocol`; a viewer older than this release never reports one,
-so `set_data_mapping()` raises before sending anything.
+The viewer reports its mapping once the dataset loads (and again whenever it
+changes); until then `viewer.data_mapping` is `None` and `set_data_mapping()`
+raises before sending anything.
 
 ---
 
@@ -118,20 +115,11 @@ Best practices:
 
 ## API reference
 
-### `CellucidViewer`
-
-```{eval-rst}
-.. autoclass:: CellucidViewer
-   :members:
-   :show-inheritance:
-```
-
 ### `AnnDataViewer`
 
 ```{eval-rst}
 .. autoclass:: AnnDataViewer
    :members:
-   :show-inheritance:
 ```
 
 ---
@@ -171,5 +159,5 @@ Fix:
 
 ## See also
 
-- {doc}`jupyter` for function-level entry points (`show`, `show_anndata`)
+- {doc}`jupyter` for the function-level entry point (`show_anndata`)
 - {doc}`server` for serving in a browser tab

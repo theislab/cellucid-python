@@ -1,6 +1,6 @@
 # Notebook / widget mode (advanced)
 
-This page explains the notebook embedding details for `show(...)` and `show_anndata(...)`, including:
+This page explains the notebook embedding details for `show_anndata(...)`, including:
 - why HTTPS notebooks can break “simple” localhost iframes,
 - how to supply the one browser-reachable URL,
 - what the constructor is doing during a long, silent cell,
@@ -8,7 +8,7 @@ This page explains the notebook embedding details for `show(...)` and `show_annd
   default,
 - and how to debug the browser ↔ kernel connection.
 
-If you want the minimal notebook quickstart, go to {doc}`06_jupyter_show_and_show_anndata_quickstart`.
+If you want the minimal notebook quickstart, go to {doc}`06_jupyter_show_anndata_quickstart`.
 
 ## At a glance
 
@@ -46,34 +46,28 @@ Cellucid does not probe for Jupyter Server Proxy, call a Colab proxy API, or
 rewrite the URL in the notebook frontend. This keeps routing explicit and makes
 connectivity failures reproducible.
 
-## A notebook viewer builds quietly
+## A notebook viewer starts quietly
 
 `AnnDataViewer` and `show_anndata(...)` run their server with output suppressed,
-so the numbered startup report a terminal prints — `[1/5] Detecting format`
-through `[5/5] Starting server` — never appears in a notebook. On a small object
-that is invisible. On a very large one it means the cell runs for minutes with
-no output at all, and the constructor is where every one of those minutes is
-spent.
+so the numbered startup report a terminal prints — `[1/4] Detecting format`
+through `[4/4] Starting server` — never appears in a notebook. None of those
+steps reads an array: the server reads the store's metadata, checks the launch
+choices you passed, and binds; the viewer then reads what each view needs. Two
+things can make the constructor take longer:
 
-The phases are the same ones the terminal names, in this order:
+| Phase | When it runs |
+|---|---|
+| Writing a temporary `.h5ad` | an in-memory `AnnData`, once; or a store with an array the browser cannot decode |
+| Viewer generation and bind | every start; slowest on the first run on a machine, or after a cleared cache |
 
-| Phase | What it does | What makes it slow |
-|---|---|---|
-| Obs columns | classifies every served `obs` column, so an unservable dtype fails now rather than inside a later request | many columns; wide categorical fields |
-| Embeddings: resolving obsm keys | resolves `X_umap_1d` / `X_umap_2d` / `X_umap_3d`, or a bare `X_umap` at the dimension its column count states | validating and normalizing each embedding over all cells |
-| Vector fields | scans `obsm` for `<field>_umap_<dim>d` declarations | one pass per declared field |
-| Connectivity | reads and validates `obsp['connectivities']` — **only if you asked for it** | the largest phase by far, when it runs at all |
-| Manifests and centroids | one centroid per categorical field per available dimension, then a cross-check of every served route | number of categories × number of dimensions |
-| Viewer generation and bind | establishes the configured web generation and binds the port | first run on a machine, or a cleared cache |
+To see the report, run the same object through a terminal server once —
+`serve_anndata(..., quiet=False)` prints the four steps.
 
-To see the same work reported, run the object through a terminal server once —
-`serve_anndata(..., quiet=False)` prints the five-step report, and what it says
-about your object is what the notebook constructor is doing silently.
+## The neighbor graph
 
-## Connectivity is opt-in here too
-
-A notebook viewer does not read `adata.obsp['connectivities']` unless you ask.
-The parameter is keyword-only, `False` by default, and accepted by both
+A notebook viewer reads the neighbor graph only when a view draws it. Without
+`knn_key` it uses `obsp['connectivities']` when the store has it; `knn_key`
+names another `obsp` matrix. The parameter is keyword-only and accepted by both
 {class}`~cellucid.AnnDataViewer` and {func}`~cellucid.show_anndata`:
 
 ```python
@@ -99,27 +93,13 @@ viewer = show_anndata(
 )
 ```
 
-With it off, the matrix is never read, `dataset_identity.json` reports
-`stats.has_connectivity` as `false` and `stats.n_edges` as `null`, and
-`connectivity_manifest.json`, `connectivity/edges.src.bin`,
-`connectivity/edges.dst.bin`, and `connectivity/edges.weights.f64.bin` all
-answer `404`. The overlay is simply not offered.
-
-With it on, the whole graph is read and validated inside the constructor, before
-the server binds — the manifest the viewer fetches first declares the edge count
-and the neighbor maximum, so there is nothing to defer. That is the phase most
-likely to turn a quiet cell into a multi-minute one: a 50-neighbor graph over
-millions of cells is hundreds of millions of stored neighbors.
-
 ```{important}
-Asking for connectivity on an object whose `obsp` holds no `connectivities`
-matrix raises during construction rather than producing a graph-less viewer.
-Compute it first with `sc.pp.neighbors(adata)`, or leave the parameter alone.
+Naming a matrix the object's `obsp` does not hold raises during construction
+rather than producing a graph-less viewer. Compute it first with
+`sc.pp.neighbors(adata)`, or leave the parameter unset.
 ```
 
-The reasoning, the arithmetic, and the terminal transcript are in
-{doc}`08_anndata_mode_show_anndata_and_serve_anndata` and
-{doc}`../b_concepts_mental_models/07_performance_mental_model_and_scaling`.
+The rules are in {doc}`08_anndata_mode_show_anndata_and_serve_anndata`.
 
 ## Jupyter Server Proxy
 
@@ -184,7 +164,7 @@ viewer.debug_connection()
 
 This report includes:
 - server health probes (`/_cellucid/health`, `/_cellucid/info`)
-- `dataset_identity_probes`, keyed by every exact server-declared dataset id
+- `anndata_store_probes`, keyed by every exact listed dataset id
 - the configured and browser-facing server URLs
 - the verified local viewer-generation status
 - recent accepted-event counts grouped by exact event type

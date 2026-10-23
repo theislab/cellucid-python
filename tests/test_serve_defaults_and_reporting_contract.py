@@ -26,9 +26,7 @@ from cellucid._server_base import (
     loopback_origin_for_bind,
     machine_origin,
 )
-from cellucid.anndata_adapter import AnnDataAdapter
 from cellucid.anndata_server import AnnDataServer
-from cellucid.connectivity_contract import validate_connectivity_edges
 
 N_CELLS = 8
 
@@ -56,158 +54,6 @@ def _adata(*, obsm: dict[str, Any] | None = None, connectivity: bool = False) ->
             neighbors[index + 1, index] = 0.5
         adata.obsp["connectivities"] = sparse.csr_matrix(neighbors)
     return adata
-
-
-def _adapter(adata: ad.AnnData, **kwargs: Any) -> AnnDataAdapter:
-    return AnnDataAdapter(
-        adata,
-        dataset_name="Serve defaults",
-        dataset_id="serve-defaults",
-        centroid_min_points=1,
-        **kwargs,
-    )
-
-
-# ---------------------------------------------------------------------------
-# A graph is read only when it is asked for
-# ---------------------------------------------------------------------------
-
-
-def test_a_graph_is_not_read_when_it_was_not_asked_for() -> None:
-    adapter = _adapter(_adata(connectivity=True))
-    try:
-        assert adapter.knn_key is None
-        assert adapter.has_connectivity() is False
-        assert adapter.get_connectivity_manifest() is None
-        identity = adapter.get_dataset_identity()
-        # The browser refuses a dataset whose flag and manifest disagree, and
-        # refuses a zero it reads as a count, so this must be null and not 0.
-        assert identity["stats"]["has_connectivity"] is False
-        assert identity["stats"]["n_edges"] is None
-    finally:
-        adapter.close()
-
-
-def test_the_same_graph_is_served_in_full_when_it_is_asked_for() -> None:
-    adapter = _adapter(_adata(connectivity=True), knn_key="connectivities")
-    try:
-        assert adapter.has_connectivity() is True
-        manifest = adapter.get_connectivity_manifest()
-        assert manifest is not None
-        assert manifest["n_edges"] == N_CELLS - 1
-        assert adapter.get_dataset_identity()["stats"]["n_edges"] == N_CELLS - 1
-    finally:
-        adapter.close()
-
-
-def test_asking_for_a_graph_that_does_not_exist_is_an_error() -> None:
-    with pytest.raises(ValueError, match=r"knn_key names obsp\['connectivities'\], which this object does not have"):
-        _adapter(_adata(connectivity=False), knn_key="connectivities")
-
-
-def test_an_unasked_graph_is_never_touched_by_construction() -> None:
-    """Opting out has to mean not reading obsp, not reading it and discarding it."""
-    reads: list[str] = []
-
-    class _CountingObsp(dict):
-        def __getitem__(self, key: str) -> Any:
-            reads.append(key)
-            return super().__getitem__(key)
-
-    adata = _adata(connectivity=True)
-    graph = adata.obsp["connectivities"]
-    object.__setattr__(adata, "_obsp", _CountingObsp({"connectivities": graph}))
-
-    adapter = _adapter(adata)
-    try:
-        assert reads == []
-    finally:
-        adapter.close()
-
-
-def test_the_dataset_report_separates_no_graph_from_an_unserved_one(capsys) -> None:
-    server = AnnDataServer(
-        _adata(connectivity=True),
-        host="127.0.0.1",
-        port=0,
-        quiet=False,
-        serve_web_ui=False,
-        dataset_name="Report",
-        dataset_id="report",
-    )
-    try:
-        printed = capsys.readouterr().out
-        assert "Connectivity: not served" in printed
-        assert "--knn connectivities" in printed
-    finally:
-        server.stop()
-
-    server = AnnDataServer(
-        _adata(connectivity=False),
-        host="127.0.0.1",
-        port=0,
-        quiet=False,
-        serve_web_ui=False,
-        dataset_name="Report",
-        dataset_id="report",
-    )
-    try:
-        assert "Connectivity: no\n" in capsys.readouterr().out
-    finally:
-        server.stop()
-
-
-# ---------------------------------------------------------------------------
-# Degree counting
-# ---------------------------------------------------------------------------
-
-
-def test_degrees_count_every_cell_including_one_no_edge_reaches() -> None:
-    """``minlength`` is what keeps an isolated last cell in the degree array."""
-    graph = np.zeros((6, 6), dtype=np.float64)
-    graph[0, 1] = graph[1, 0] = 1.0
-    edges = validate_connectivity_edges(sparse.csr_matrix(graph), n_cells=6)
-
-    assert edges.n_edges == 1
-    assert edges.max_neighbors == 1
-    # A native int, because the manifest contract accepts nothing else.
-    assert type(edges.max_neighbors) is int
-
-
-def test_the_neighbor_maximum_is_the_true_maximum_degree() -> None:
-    graph = np.zeros((5, 5), dtype=np.float64)
-    for other in (1, 2, 3):
-        graph[0, other] = graph[other, 0] = 1.0
-    edges = validate_connectivity_edges(sparse.csr_matrix(graph), n_cells=5)
-
-    assert edges.n_edges == 3
-    assert edges.max_neighbors == 3
-
-
-def test_a_large_graph_names_its_own_cost_before_paying_it(caplog, monkeypatch) -> None:
-    """The size is reported before the work its size implies, not after it."""
-    from cellucid import connectivity_contract
-
-    graph = np.zeros((4, 4), dtype=np.float64)
-    graph[0, 1] = graph[1, 0] = 1.0
-    graph[2, 3] = graph[3, 2] = 1.0
-    matrix = sparse.csr_matrix(graph)
-
-    monkeypatch.setattr(connectivity_contract, "_LARGE_GRAPH_STORED_NEIGHBORS", 1)
-    with caplog.at_level("WARNING", logger="cellucid.connectivity"):
-        edges = validate_connectivity_edges(matrix, n_cells=4)
-
-    assert edges.n_edges == 2
-    assert "stored neighbors" in caplog.text
-    assert "Serve without connectivity" in caplog.text
-
-
-def test_an_ordinary_graph_reports_nothing(caplog) -> None:
-    graph = np.zeros((4, 4), dtype=np.float64)
-    graph[0, 1] = graph[1, 0] = 1.0
-    with caplog.at_level("WARNING", logger="cellucid.connectivity"):
-        validate_connectivity_edges(sparse.csr_matrix(graph), n_cells=4)
-    assert caplog.text == ""
 
 
 # ---------------------------------------------------------------------------
@@ -324,13 +170,7 @@ def test_a_banner_without_network_urls_is_byte_identical_to_the_loopback_form(ca
 
 
 def test_opening_an_object_reports_every_phase_of_the_build(capsys) -> None:
-    """A build that can run for minutes must not run silently.
-
-    Each line here marks a phase that is unbounded on a large object: the obs
-    classification pass, the embedding resolution, the vector-field scan, and
-    the manifest and centroid pass that used to run after a success line with
-    nothing printed at all.
-    """
+    """Every phase of a start is named, and an object says where it is written."""
     server = AnnDataServer(
         _adata(),
         host="127.0.0.1",
@@ -346,20 +186,15 @@ def test_opening_an_object_reports_every_phase_of_the_build(capsys) -> None:
         server.stop()
 
     for expected in [
-        "[1/5] Detecting format",
-        "[2/5] Loading AnnData",
-        "Obs columns: classifying",
-        "Embeddings: resolving obsm keys",
-        "[3/5] Analyzing dataset",
-        "[4/5] Building manifests",
-        "Centroids: one per categorical field and embedding",
+        "[1/4] Detecting format",
+        "Format: written once to a temporary .h5ad",
+        "[2/4] Reading metadata",
+        "obsm: X_umap",
+        "[3/4] Checking launch choices",
     ]:
         assert expected in printed, expected
-
-    # The resolved key is named, so a reader can see which array was drawn.
-    assert "Embeddings: 2D from obsm['X_umap']" in printed
     # Every step numbers itself out of the same total.
-    assert "/4]" not in printed
+    assert "/5]" not in printed
 
 
 def test_a_quiet_build_reports_nothing_at_all(capsys) -> None:
@@ -378,32 +213,6 @@ def test_a_quiet_build_reports_nothing_at_all(capsys) -> None:
         server.stop()
 
 
-def test_the_adapter_is_silent_unless_a_caller_asks_for_progress(capsys) -> None:
-    """Used as a library, the adapter prints nothing by default."""
-    adapter = _adapter(_adata())
-    try:
-        assert adapter.quiet is True
-        assert capsys.readouterr().out == ""
-    finally:
-        adapter.close()
-
-    adapter = _adapter(_adata(), quiet=False)
-    try:
-        assert "Embeddings" in capsys.readouterr().out
-    finally:
-        adapter.close()
-
-
-def test_asking_for_a_graph_reports_it_before_reading_it(capsys) -> None:
-    adapter = _adapter(_adata(connectivity=True), knn_key="connectivities", quiet=False)
-    try:
-        printed = capsys.readouterr().out
-        assert "Connectivity: reading obsp['connectivities']" in printed
-        assert "edges" in printed
-    finally:
-        adapter.close()
-
-
 # ---------------------------------------------------------------------------
 # The CLI flag
 # ---------------------------------------------------------------------------
@@ -420,93 +229,16 @@ def test_the_knn_flag_is_off_unless_it_names_a_matrix() -> None:
         create_parser().parse_args([*base, "--connectivity"])
 
 
-def test_the_knn_flag_is_refused_for_a_prepared_export(tmp_path) -> None:
-    import json
-
-    from cellucid.cli import _run_serve, create_parser
-
-    export = tmp_path / "export"
-    export.mkdir()
-    (export / "dataset_identity.json").write_text(
-        json.dumps({"version": 3, "id": "e", "name": "E"}),
-        encoding="utf-8",
-    )
-    (export / "obs_manifest.json").write_text("{}", encoding="utf-8")
-    (export / "embeddings").mkdir()
-    (export / "embeddings" / "0_2d.bin").write_bytes(b"\x00" * 8)
-
-    args = create_parser().parse_args(
-        ["serve", str(export), "--quiet", "--knn", "connectivities"]
-    )
-    with pytest.raises(ValueError, match="--knn"):
-        _run_serve(args)
-
-
 # ---------------------------------------------------------------------------
 # Vector fields are asked for on the same terms as connectivity
 # ---------------------------------------------------------------------------
 
 
-def test_vector_fields_are_not_read_when_they_were_not_asked_for() -> None:
-    adapter = _adapter(_adata())
-    try:
-        assert adapter.serve_vector_fields is False
-        assert "vector_fields" not in adapter.get_dataset_identity()
-    finally:
-        adapter.close()
-
-
-def test_the_same_vector_fields_are_served_when_they_are_asked_for() -> None:
-    adapter = _adapter(_adata(), serve_vector_fields=True)
-    try:
-        identity = adapter.get_dataset_identity()
-        assert list(identity["vector_fields"]["fields"]) == ["velocity_umap"]
-    finally:
-        adapter.close()
-
-
-def test_asking_for_vector_fields_an_object_declares_none_of_is_not_an_error() -> None:
-    """A key outside the grammar is not a malformed field: it is not a field.
-
-    This is where vector fields part from connectivity, which names one exact
-    matrix and therefore cannot be absent once it has been asked for.
-    """
-    adata = _adata(obsm={"X_umap": np.zeros((N_CELLS, 2), dtype=np.float32) + np.arange(
-        N_CELLS, dtype=np.float32
-    )[:, None]})
-    adapter = _adapter(adata, serve_vector_fields=True)
-    try:
-        assert "vector_fields" not in adapter.get_dataset_identity()
-    finally:
-        adapter.close()
-
-
-def test_a_default_cannot_name_fields_nobody_asked_to_serve() -> None:
-    with pytest.raises(ValueError, match="vector_field_default"):
-        _adapter(_adata(), vector_field_default="velocity_umap")
-
-
-def test_the_report_separates_no_vector_fields_from_unserved_ones(capsys) -> None:
-    server = AnnDataServer(
-        _adata(),
-        host="127.0.0.1",
-        port=0,
-        quiet=False,
-        serve_web_ui=False,
-        dataset_name="Report",
-        dataset_id="report",
-    )
-    try:
-        printed = capsys.readouterr().out
-        assert "Vector fields: not bound" in printed
-        assert "--vector-fields" in printed
-    finally:
-        server.stop()
-
-
-def test_the_vector_fields_flag_is_off_unless_it_is_given() -> None:
+def test_vector_fields_need_no_flag_to_be_drawn() -> None:
+    """The viewer reads a vector field only when the overlay shows it."""
     from cellucid.cli import create_parser
 
     base = ["serve", "data.h5ad", "--dataset-name", "N", "--dataset-id", "n"]
-    assert create_parser().parse_args(base).vector_fields is None
-    assert create_parser().parse_args([*base, "--vector-fields"]).vector_fields is True
+    assert not hasattr(create_parser().parse_args(base), "vector_fields")
+    with pytest.raises(SystemExit):
+        create_parser().parse_args([*base, "--vector-fields"])

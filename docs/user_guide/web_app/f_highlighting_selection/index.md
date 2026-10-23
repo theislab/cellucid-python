@@ -23,7 +23,7 @@ If you just want to “select a cluster and save it”:
 |---|---|
 | {doc}`01_highlight_mental_model` | You want to know how highlighting differs from filtering and colouring. |
 | {doc}`02_selection_tools_document_each_tool` | You are choosing between lasso, proximity, KNN and annotation-based selection. |
-| {doc}`03_highlight_ui` | You need the button-by-button map, including `Create Categorical`. |
+| {doc}`03_highlight_ui` | You need the button-by-button map, including `Create categorical`. |
 | {doc}`04_selection_synchronization` | You work across snapshots, or drive selection from Python/Jupyter. |
 | {doc}`05_edge_cases_highlighting` | Something behaved surprisingly but not wrongly (3D lasso, overlapping groups, huge pages). |
 | {doc}`06_troubleshooting_highlighting` | Something is broken and you want symptom → fix. |

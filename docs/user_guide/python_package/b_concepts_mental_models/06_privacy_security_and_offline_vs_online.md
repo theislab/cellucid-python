@@ -32,9 +32,9 @@ Your dataset is **not uploaded** anywhere automatically.
 
 ### Web app file picker mode (no Python server)
 
-If you open the Cellucid web app and use the browser file picker to select an export folder:
-- the browser reads files locally,
-- nothing is uploaded unless you explicitly host/share the export folder yourself.
+If you open the Cellucid web app and use its **Files** buttons to open an `.h5ad`, a `.zarr.zip` or a `.zarr` folder:
+- the browser reads the file locally,
+- nothing is uploaded unless you explicitly host/share the file yourself.
 
 Start here: {doc}`../../web_app/b_data_loading/index`
 
@@ -44,7 +44,7 @@ Start here: {doc}`../../web_app/b_data_loading/index`
 
 ### Default: localhost-only
 
-`CellucidServer` and notebook viewers bind to `127.0.0.1` by default.
+`AnnDataServer` (`cellucid serve`, `serve_anndata`) and notebook viewers bind to `127.0.0.1` by default.
 
 That means:
 - only the same machine can reach the server,
@@ -173,9 +173,9 @@ cellucid serve /path/to/data --allowed-host hub.example.org
 ```
 
 ```python
-from cellucid import serve
+from cellucid import serve_anndata
 
-serve("/path/to/data", allowed_hosts=["hub.example.org"])
+serve_anndata("/path/to/data.h5ad", allowed_hosts=["hub.example.org"])
 ```
 
 Rules for an entry, all enforced when the server is constructed:
@@ -234,7 +234,7 @@ Before binding its HTTP server, Cellucid:
 
 ### What this means without source access
 
-- `cellucid serve`, `show(...)`, and `show_anndata(...)` require the configured
+- `cellucid serve`, `serve_anndata(...)`, and `show_anndata(...)` require the configured
   source at each startup when they serve the viewer UI.
 - Source or inventory failure stops startup. A previous local generation is
   kept intact but is not served as a substitute.
@@ -300,7 +300,7 @@ A `.cellucid-session` file is not “just UI state” — it can encode:
 
 Treat session bundles as data artifacts:
 - don’t share them publicly if the underlying dataset is sensitive,
-- version them alongside the matching dataset export folder.
+- version them alongside the matching dataset file.
 
 ---
 

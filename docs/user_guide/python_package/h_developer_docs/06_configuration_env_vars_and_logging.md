@@ -10,7 +10,7 @@ behavior.
 
 In general, configuration flows like this:
 
-1) **Function arguments** (e.g. `serve(..., host=..., port=...)`)
+1) **Function arguments** (e.g. `serve_anndata(..., host=..., port=...)`)
 2) **CLI flags** (e.g. `cellucid serve ... --host ... --port ...`)
 3) **Defaults** in code (`DEFAULT_HOST`, `DEFAULT_PORT`)
 

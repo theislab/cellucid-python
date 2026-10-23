@@ -9,7 +9,7 @@
 - How to debug “bundle capture is stuck” and “apply did nothing”
 
 **Prerequisites:**
-- A viewer running in a notebook (`show(...)` or `show_anndata(...)`)
+- A viewer running in a notebook (`show_anndata(...)`)
 - An `AnnData` object you want to annotate (in memory)
 
 For deeper design rationale and file-format notes, see {doc}`05_sessions_to_anndata_design`.
@@ -165,28 +165,29 @@ Before applying dataset-dependent chunks, Python checks a lightweight fingerprin
 - `varCount` vs the gene count of the mapped axis (`adata.raw.n_vars` when the
   mapping reads expression from `raw`, `0` when it reads none, `adata.n_vars`
   otherwise)
+- every obs column and gene the session uses (the manifest's `requires`) vs
+  what `adata` holds
 
 Any mismatch raises `ValueError` before Cellucid mutates the target object.
 
 ### The two records: `cellOrder` and `dataMapping`
 
-The current session fingerprint has exactly six required fields:
-the four scalars, `cellOrder`, and `dataMapping`.
+The current session fingerprint (format 2) has exactly six required fields:
+the three scalars (`datasetId`, `cellCount`, `varCount`), the dataset's display
+`name` (or null, informational), `cellOrder`, and `dataMapping`.
 
 `cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
 16-character lowercase hexadecimal `digest` of the coordinates of that
-embedding. `embedding` is `{"key", "columns"}`: an exported embedding id with
-`columns: null`, or an AnnData `obsm` key with the 0-based columns that were
-read, one per dimension. It ties the session to one cell ordering, which the four
-scalars cannot do: they all survive a re-export of the same dataset from
-re-sorted input.
+embedding. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
+columns that were read, one per dimension. It ties the session to one cell
+ordering, which the four scalars cannot do: they all survive a rewrite of the
+same dataset from re-sorted input.
 
-`dataMapping` records which stored arrays the session was showing. Its `kind`
-is `"export"` — exactly `kind`, `embeddings` (`enabled`, the embeddings that are turned on, and
-`defaults`, the `1d`/`2d`/`3d` default of each dimension),
-`geneNames` (`"index"` or `"column:<name>"`), and `vectorFields` — or
-`"anndata"`, which adds `knn`, `expression` (`"X"`, `"raw"`, `"layer:<name>"`,
-or null), and `latent`. A user-defined field copied from a gene is resolved by name
+`dataMapping` records which stored arrays the session was showing: `kind`
+(`"anndata"`), `embeddings` (`enabled`, the embeddings that are turned on, and
+`defaults`, the `1d`/`2d`/`3d` default of each dimension), `knn`, `geneNames`
+(`"index"` or `"column:<name>"`), `expression` (`"X"`, `"raw"`,
+`"layer:<name>"`, or null), `latent`, and `vectorFields`. A user-defined field copied from a gene is resolved by name
 on that axis — through the mapping's gene names, made unique with the shared
 rule — and its values are read from the mapping's expression matrix.
 

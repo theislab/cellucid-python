@@ -1,16 +1,16 @@
 # Large dataset best practices
 
-**Audience:** everyone (especially laptop users and teams sharing large exports)  
+**Audience:** everyone (especially laptop users and teams sharing large datasets)  
 **Time:** 20–45 minutes  
 **What you’ll learn:**
 - A “large dataset survival checklist” that keeps Cellucid responsive
-- Which loading workflows are safe for large `.h5ad`/`.zarr`/exports
+- Which loading workflows are safe for large `.h5ad`/`.zarr`/`.zarr.zip` files
 - How to avoid the most common performance cliffs (views, pixels, overlays, category explosion)
 - What to ask your computational collaborator to change upstream when the UI can’t save you
 
 **Prerequisites:**
 - Ideally: a dataset large enough to notice performance differences
-- Optional: access to server mode (recommended for large `.h5ad`/`.zarr`)
+- Optional: access to server mode (for a large `.h5ad` or Zarr store on a remote machine)
 
 ---
 
@@ -60,17 +60,17 @@ If you only do one thing from this page, do this list in order.
 - Keep the browser window modest (pixels matter; retina is expensive).
 - Close other GPU-heavy tabs (video calls + WebGL + Cellucid = sadness).
 - Two of the biggest levers have already been pulled for you, and are worth
-  checking rather than assuming: `Antialiasing (smooth point edges)` starts off
+  checking rather than assuming: `Antialiasing` starts off
   at or above five million cells in 3D, or 200,000 cells in a 1D or 2D view, and
   the point size starts small, both chosen from the cell count. Turning antialiasing off saved 19–34% of the frame in 3D
   and about 90% in a dense 2D view, in the measurements on
   {doc}`02_performance_considerations_what_gets_slow_and_why`; it applies to the
   next frame either way.
-- `Level-of-Detail (LOD)` starts off. Turn it on whenever the frame is slow while
+- `Level of detail (LOD)` starts off. Turn it on whenever the frame is slow while
   zoomed out — it works at every dataset size. `Auto` draws fewer points the
   further back you pull, down to a floor of `min(2,000,000, cells ÷ 8)` points:
   never more than an 8× reduction, and never below two million on a large atlas.
-  If you want fewer than that on weak hardware, set `Force LOD level:` yourself:
+  If you want fewer than that on weak hardware, set `Force LOD level` yourself:
   the forced level is deliberately not held to that floor. The exact rule, and why the reduction lands where it does, is in
   {doc}`02_performance_considerations_what_gets_slow_and_why`.
 
@@ -93,7 +93,7 @@ and often cost about the same as one view. See {doc}`06_edge_cases_performance`.
 On large datasets:
 - turn **Live filtering** off for continuous fields,
 - move the sliders,
-- click **FILTER** once.
+- click **Filter** once.
 
 Why: repeated recomputation is the most common CPU bottleneck.  
 See {doc}`../e_filtering/05_performance_considerations`.
@@ -148,7 +148,7 @@ This is written for the situation:
 1) Use Server Mode if you have a `.h5ad` or `.zarr` (ask your collaborator to run it if needed).
 2) Start by coloring with a simple categorical field (clusters, sample, batch).
 3) Make one snapshot only after you find an interesting view.
-4) If filters feel slow: turn Live filtering off and use FILTER.
+4) If filters feel slow: turn Live filtering off and use Filter.
 5) If the app becomes choppy: clear snapshots and disable overlays.
 
 ### What to ask your computational collaborator for (copy/paste request)
@@ -156,27 +156,27 @@ This is written for the situation:
 Ask for one of these deliverables:
 
 - **A server endpoint** you can open in the web app (recommended for very large data), or
-- **A pre-exported folder** (fast, reliable, no Python needed after export).
+- **A file written by `prepare()`** (gene-major, fast to read, no Python needed to open it).
 
 Ask them to also provide (if possible):
 
 - a “human-friendly” cluster/sample label (no 20,000-unique-ID fields as your primary categorical),
 - a short list of “recommended fields” (QC + biology),
-- a “lite export” if the full dataset is too large for your laptop.
+- a “lite” subset if the full dataset is too large for your laptop.
 
-If you can only ask for one improvement: ask for a **lite export** that is guaranteed to run smoothly on a normal laptop.
+If you can only ask for one improvement: ask for a **lite version** of the dataset that is guaranteed to run smoothly on a normal laptop.
 
 ---
 
-## Computational workflow (how to make exports that stay fast)
+## Computational workflow (how to write datasets that stay fast)
 
 This section is intentionally practical and non-dogmatic: it’s about what actually helps users.
 
-### Principle 1 — Make two exports when the dataset is huge
+### Principle 1 — Write two versions when the dataset is huge
 
-For million-cell datasets, a single “one size fits all” export often fails.
+For million-cell datasets, a single “one size fits all” file often fails.
 
-Create two bundles:
+Write two files with `prepare()`, each with its own `dataset_id`:
 
 1) **Lite** (interactive-first)  
    - fewer fields (only what people actually use),
@@ -186,7 +186,7 @@ Create two bundles:
 2) **Full** (everything, slower)  
    - complete field coverage,
    - full-resolution expression,
-   - intended for power users and final exports.
+   - intended for power users and final figures.
 
 This is often the fastest way to reduce “it’s slow” support load while still preserving access to the full dataset.
 
@@ -205,7 +205,7 @@ UI filtering is great for interactive refinement, but it is not a substitute for
 
 If users consistently apply the same heavy gate:
 - remove obvious QC failures upstream,
-- export fewer “junk” fields,
+- write fewer “junk” fields (`prepare(obs_keys=...)` lists only those that matter),
 - and keep the UI workflows focused on discovery.
 
 ### Principle 4 — Document the intended workflow
@@ -255,9 +255,9 @@ This is often more reproducible than doing many incremental heavy operations in 
 
 These are so common that it’s worth recognizing them immediately.
 
-- **Multiview without Level-of-Detail**: every view draws every point again,
+- **Multiview without Level of detail**: every view draws every point again,
   so on a large dataset each kept view adds about one view's frame time (four
-  views of 10,000,000 cells: 30 → 147 ms a frame). With Level-of-Detail on, the
+  views of 10,000,000 cells: 30 → 147 ms a frame). With Level of detail on, the
   same four views took 13.5 ms.
 - **High-DPI + large window**: smooth on an external monitor, choppy on a laptop retina display.
 - **Smoke mode on a laptop**: looks great, then crashes (context lost) when render resolution and ray quality push one frame past the GPU watchdog.
@@ -278,10 +278,10 @@ If large datasets are unusable, triage in this order:
 2) Reduce pixels: make the window smaller and retry.
 3) Clear snapshots and retry.
 4) Disable smoke mode and overlays and retry.
-5) Change filtering workflow: Live filtering off → FILTER once.
+5) Change filtering workflow: Live filtering off → Filter once.
 6) Clear large highlight groups and retry.
-7) If still slow: switch loading method (server mode) and retry.
-8) If still slow: treat it as a dataset/export issue; go to {doc}`09_reporting_performance_bugs`.
+7) If still slow: move the data to a local disk (or serve it from the machine that holds it) and retry.
+8) If still slow: treat it as a dataset issue; go to {doc}`09_reporting_performance_bugs`.
 
 ---
 

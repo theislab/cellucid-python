@@ -29,15 +29,15 @@ Handled by:
 | `dataset` | `?dataset=suo` | Selects a local-demo dataset by id; on a page served by the Python server (which auto-connects to its own origin) a bare `dataset` names a server dataset instead |
 | `source` | `?source=local-demo&dataset=suo` | Selects the source type for `dataset` (default: `local-demo`). Picking a sample writes this explicit form, so the URL reloads as the sample on any origin |
 | `remote` | `?remote=https://data.example.org&dataset=study-a` | Connects to a remote data server; `dataset` is required when its manifest contains multiple datasets |
-| `anndata` | `?remote=http://127.0.0.1:8765&anndata=true` | Hint: remote server is serving live AnnData (UI shows performance warning) |
-| `github` | `?github=owner/repo/path&dataset=study-a` | Connects to a GitHub-hosted exports path; `dataset` is required when its manifest contains multiple datasets |
+| `anndata` | `?remote=http://127.0.0.1:8765&anndata=true` | Says the source is a Python server serving an AnnData store (`cellucid serve` on an `.h5ad` or Zarr store, `show_anndata()`); startup requires a server source and refuses a static origin. The browser reads the store the server's `_cellucid/datasets` names |
+| `data` | `?data=gh:owner/repo/path&dataset=study-a` | Opens a link: `gh:owner/repo/path` (a GitHub folder or file), `cellxgene:<dataset id>`, `geo:GSE…[/<file>]`, or a web address of an `.h5ad`, a Zarr ZIP, a Zarr store folder or a dataset catalog folder. `dataset` is required when the link holds several datasets ({doc}`../b_data_loading/14_open_from_link`) |
 
 Notes:
-- A remote or GitHub manifest containing exactly one dataset selects that sole
-  dataset when `dataset` is omitted. A manifest containing multiple datasets
+- A remote or linked dataset list containing exactly one dataset selects that sole
+  dataset when `dataset` is omitted. A list containing multiple datasets
   requires `dataset=<exact-dataset-id>`; Cellucid does not choose an arbitrary
   catalog entry.
-- **Mixed content:** when the viewer origin is HTTPS (e.g. `https://www.cellucid.com`), browsers will block `remote=http://127.0.0.1:<port>` (HTTPS page fetching HTTP). For local prepared-data servers, open the exact server-backed Viewer URL (`http://127.0.0.1:<port>/?source=remote`) served by `cellucid-python`; direct AnnData uses `?anndata=true`.
+- **Mixed content:** when the viewer origin is HTTPS (e.g. `https://www.cellucid.com`), browsers will block `remote=http://127.0.0.1:<port>` (HTTPS page fetching HTTP). For a local `cellucid serve`, open the exact server-backed Viewer URL it prints (`http://127.0.0.1:<port>/?anndata=true`), served by `cellucid-python` itself.
 - For **local-user** (browser file picker), the URL is intentionally kept clean (no local paths in the URL).
 - `url-state.js` uses `history.replaceState()` so UI changes don’t spam browser history.
 - Publishing a new data source replaces every data-source param (`dataset`, `source`, `remote`, `github`, `anndata`); `anndata=true` describes the Python AnnData server the page was opened from, so it is not carried over to another source.
@@ -114,13 +114,14 @@ privacy model: {doc}`../o_accessibility_privacy_security/02_privacy_model`.
 | Database | Store | Contents |
 |---|---|---|
 | `cellucid_community_annotation_file_cache` | `files` | Raw annotation JSON downloaded from GitHub |
-| `cellucid_marker_cache` | `markers` | Marker-discovery results, including computed statistic arrays |
 
-Both hold data derived from the user's dataset. The marker cache degrades
-**silently** when IndexedDB is unavailable — no notification is raised.
+It is the only database. Marker-discovery results are cached in memory for the
+dataset load they were computed on and never written to IndexedDB
+(`cellucid/assets/js/app/analysis/genes-panel/marker-cache.js`). When IndexedDB
+is unavailable, Community Annotation Pull fails with a message and leaves the
+annotation view as it was.
 
-Code: `cellucid/assets/js/app/community-annotations/file-cache.js`,
-`cellucid/assets/js/app/analysis/genes-panel/marker-cache.js`.
+Code: `cellucid/assets/js/app/community-annotations/file-cache.js`.
 
 ### `sessionStorage` keys
 
@@ -145,7 +146,7 @@ These are intended for local development and troubleshooting only.
 | `window.__CELLUCID_DEBUG__ = true` | Enables analysis-module debug logging | `cellucid/assets/js/app/analysis/shared/debug-utils.js` |
 | `window.__CELLUCID_GITHUB_WORKER_ORIGIN__` | Override GitHub auth worker origin (local dev only) | `cellucid/assets/js/app/community-annotations/github-auth.js` |
 | `window._cellucidViewer`, `window._cellucidState` | The live viewer and state, for console debugging | `cellucid/assets/js/app/main.js` |
-| `window._cellucidBenchmarkHarness` | The configuration-matrix benchmark harness, published when the Performance Benchmark panel is first opened | `cellucid/assets/js/app/main.js` |
+| `window._cellucidBenchmarkHarness` | The configuration-matrix benchmark harness, published when the Benchmark panel is first opened | `cellucid/assets/js/app/main.js` |
 | `window.cellucidAnalyticsEnabled` | Read-only: whether this origin reports analytics | `cellucid/assets/js/app/ui/core/ga-init.js` |
 
 :::{important}

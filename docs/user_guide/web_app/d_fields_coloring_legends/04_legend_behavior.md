@@ -11,11 +11,11 @@
 
 ---
 
-## Where the legend lives (Display options)
+## Where the legend lives (Legend)
 
 The legend appears under:
 
-- **Coloring & Filtering → Display options**
+- **Coloring & filtering → Legend**
 
 It is hidden until you select an active field (categorical obs, continuous obs, or a gene).
 
@@ -48,10 +48,10 @@ delete**. The pencil renames the category; the bin merges it into
 `unassigned` and does **not** delete any cells.
 ```
 
-### Show All / Hide All
+### Show all / Hide all
 
 Buttons at the top:
-- **Show All**: checks all currently available categories
+- **Show all**: checks all currently available categories
 - **Hide All**: unchecks all currently available categories
 
 “Available” matters when other filters are active:
@@ -97,7 +97,7 @@ Pick high-contrast colors for categories you plan to compare side-by-side in mul
 
 Unchecking a category:
 - makes those cells invisible (fully transparent),
-- and adds a categorical filter entry to **Active filters**.
+- and adds a categorical filter entry to **Filters**.
 
 This is why hiding categories is a powerful workflow tool (not just cosmetic).
 
@@ -190,12 +190,12 @@ Practical guidance:
 Notes:
 - Zeros, negatives, and missing values render as neutral “None” gray.
 - Log scale affects coloring only; filtering remains in original units. With
-  **Rescale colorbar to slider range** on, a slider range that holds no positive
+  **Rescale to range** on, a slider range that holds no positive
   value simply draws its cells gray; the range filter still applies.
 
-### Rescale colorbar to slider range
+### Rescale to range
 
-**Rescale colorbar to slider range** controls whether the colormap spans:
+**Rescale to range** controls whether the colormap spans:
 - the full data range (Off), or
 - your current slider range (On).
 
@@ -205,37 +205,40 @@ On is best for bringing out contrast in a filtered subset; Off is best for consi
 
 ## Filtering controls inside the continuous legend
 
-Under **Filtering → Visible range** you’ll see:
+Under **Visible range** you’ll see:
 - **Live filtering** toggle
-- **Min** slider and **Max** slider
-- **FILTER** and **RESET** buttons
+- **Minimum** slider and **Maximum** slider
+- **Filter** and **Reset** buttons
 
 Behavior summary:
-- With Live filtering on, visibility updates as you drag sliders — and **FILTER
+- With Live filtering on, visibility updates as you drag sliders — and **Filter
   is greyed out and unclickable**, with the tooltip
   `Turn off Live filtering to use Filter`. There is nothing for it to do.
-- With Live filtering off, you drag first, then click FILTER to apply.
-- RESET works in both states and restores the full numeric range for that field.
+- With Live filtering off, you drag first, then click Filter to apply.
+- Reset works in both states and restores the full numeric range for that field.
 
 Filtering notes:
 - `Live filtering` starts `On`, and it goes back to `On` every time the legend
   is rebuilt — a different active field, a different colormap, a different kept
   view, or a loaded session. It is not saved in a `.cellucid-session`.
 - Missing (`NaN`) values are excluded when a numeric filter is active.
-- These filters appear in the **Active filters** box and (for obs fields) stack with other obs filters.
+- These filters appear in the **Filters** box and (for obs fields) stack with other obs filters.
 
-The complete filter inventory, with a screenshot of the disabled `FILTER`
+The complete filter inventory, with a screenshot of the disabled `Filter`
 button, is in
 {doc}`../e_filtering/04_common_filter_types_document_every_filter_the_ui_exposes`.
 
 ---
 
-## Extra controls in Display options
+## Extra controls in the Legend section
 
-### Outlier filter (latent space)
+### Outlier filter
 
-If the active field provides latent outlier quantiles, you’ll see:
-- **Outlier filter (latent space)** slider
+When the active field is a categorical field of the file, you’ll see, below
+**Show centroids**:
+- the **Outlier filter** slider, greyed out with a **Choose latent space**
+  button until a latent space is chosen, and a line under it saying what its
+  first use reads (or its progress, with **Cancel**)
 
 See {doc}`03_color_by_behavior` for semantics and edge cases.
 
@@ -258,9 +261,10 @@ you want in a figure.
 ```
 
 Where the centres come from:
-- a dataset's own categorical fields carry the centroids written at export, one
-  set per embedding dimension;
-- a field you create — with `Create Categorical`, by merging or deleting a
+- a dataset's own categorical fields get each category's centre computed in
+  the browser from its codes and the cells' positions, once per embedding the
+  first time a view draws it, and cached on the field;
+- a field you create — with `Create categorical`, by merging or deleting a
   category, by duplicating a field — gets each category's centre as the plain
   mean of its cells' positions in the embedding the view draws. Centres are
   computed when the field is made, for every embedding already loaded; an

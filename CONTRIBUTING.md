@@ -19,14 +19,14 @@ Cellucid is split by responsibility:
 | Repo | What it is | Contribute here when you… |
 |---|---|---|
 | `cellucid` | Web app (UI + state + WebGL rendering) | are fixing UI bugs, rendering/performance, figure export, sessions, or community annotation frontend |
-| `cellucid-python` (this repo) | Python package + CLI (`prepare`, `serve`, `show_anndata`, hooks) + Sphinx docs | are fixing Python/CLI bugs, data prep/export, server endpoints, Jupyter hooks, or docs on ReadTheDocs |
-| `cellucid-r` | R package for exporting data to the Cellucid viewer format | are changing the R exporter (`cellucid_prepare`) or adding R-side docs/tests |
+| `cellucid-python` (this repo) | Python package + CLI (`prepare`, `serve`, `show_anndata`, hooks) + Sphinx docs | are fixing Python/CLI bugs, `prepare()` (Cellucid-ready AnnData), server endpoints, Jupyter hooks, or docs on ReadTheDocs |
+| `cellucid-r` | R package writing the same Cellucid-ready AnnData from R | are changing the R writer (`cellucid_prepare`) or adding R-side docs/tests |
 | `cellucid-annotation` | GitHub repo template for community annotation | are changing the repo schema/validation/workflows |
 | `cellucid-datasets` | The published demo catalog | are correcting a published generation or its catalog entry |
 | `cellucid-demo-custom-datasets` | Worked example of publishing your own datasets | are changing that guide or its synthetic examples |
 
 If you’re not sure where a bug belongs, open an issue in the repo you’re currently using and include:
-- how you loaded data (exports vs h5ad/zarr vs remote server vs Jupyter),
+- how you loaded data (`.h5ad`/`.zarr`, prepared with `prepare()` or not, vs remote server vs Jupyter),
 - the UI environment (hosted app vs local app vs Jupyter iframe),
 - and the smallest reproduction you can share.
 
@@ -39,7 +39,7 @@ If you’re not sure where a bug belongs, open an issue in the repo you’re cur
 Please include:
 - Cellucid version (`python -c "import cellucid; print(cellucid.__version__)"` if available)
 - Python version + OS
-- how you loaded data (exports / `.h5ad` / `.zarr` / remote server / Jupyter)
+- how you loaded data (`.h5ad` / `.zarr`, prepared or not / remote server / Jupyter)
 - exact steps to reproduce (click-by-click or code)
 - expected vs actual behavior
 - logs:

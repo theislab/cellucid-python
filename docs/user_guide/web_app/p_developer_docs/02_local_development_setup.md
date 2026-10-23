@@ -78,11 +78,12 @@ What this does:
 
 ### Option A: Use built-in demo datasets (fastest)
 
-If the app can fetch `datasets.json` from the configured exports base URL, the dataset dropdown will populate from the **local-demo** source.
+If the app can fetch `datasets.json` from the configured sample catalog, the dataset dropdown will populate from the **local-demo** source.
 
-Configure the exports base URL via:
-- `<meta name="cellucid-exports-base-url" ...>` in `cellucid/index.html`, or
-- `?exportsBaseUrl=...` as a runtime override (useful in development).
+Configure the sample catalog via:
+- `<meta name="cellucid-sample-catalog" ...>` in `cellucid/index.html`, or
+- `?sampleCatalog=...` as a runtime override (useful in development): one
+  absolute folder URL ending in `/` that holds a `datasets.json`.
 
 This is best for:
 - UI work
@@ -91,16 +92,18 @@ This is best for:
 
 ### Option B: Use the browser file picker (local-user)
 
-Use the “Browse local data…” UI to select:
-- a prepared `exports/` folder, or
-- a `.h5ad` file, or
-- a `.zarr` directory
+Use the buttons under **Open data → Files** to select:
+- a `.h5ad` file (**H5AD**), or
+- a `.zarr` store folder (**Zarr folder**), or
+- a `.zarr.zip` archive holding one Zarr store (**Zarr ZIP**)
+
+or drop one of them on the viewer.
 
 This is best for:
 - “real user” workflows with no Python server running
 - testing permission/UX issues around file pickers
 
-### Option C: Connect to a local Python server (recommended for large h5ad/zarr)
+### Option C: Connect to a local Python server (an `.h5ad` or Zarr store)
 
 Run (in another terminal) from your `cellucid-python` environment:
 
@@ -110,11 +113,14 @@ cellucid serve /path/to/dataset.h5ad --dataset-name "My dataset" --dataset-id my
 cellucid serve /path/to/dataset.zarr --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
-Then in the Cellucid UI, use the “Remote server” connection and point it at:
+Then in the Cellucid UI, use the **Server** field under **Open data** and point it at:
 - `http://127.0.0.1:<port>`
 
 This is best for:
-- large H5AD datasets (read-only backed access)
+- debugging the served-AnnData path (`data/remote-source.js`,
+  `data/served-anndata.js`): the browser reads the store in place with range
+  requests, and the server only serves its bytes
+- Zarr store folders, which the server serves key by key
 - reproducible debugging (server logs + client logs)
 
 :::{note}

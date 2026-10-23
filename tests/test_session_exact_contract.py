@@ -18,24 +18,27 @@ from cellucid.session_bundle import (
     SESSION_BUNDLE_MAGIC,
     CellucidSessionBundle,
 )
-from cellucid.session_codecs import decode_delta_uvarint, decode_user_defined_codes
+from cellucid.session_codecs import decode_cell_set, decode_user_defined_codes
 
 
 def _mapping_fingerprint_keys() -> dict:
     """The cell-order record and data mapping every fingerprint carries."""
     return {
         "cellOrder": {
-            "embedding": {"key": "X_umap", "columns": None},
+            "embedding": {"key": "X_umap", "columns": [0, 1]},
             "dimension": 2,
             "digest": "0123456789abcdef",
         },
         "dataMapping": {
-            "kind": "export",
+            "kind": "anndata",
             "embeddings": {
-                "enabled": [{"key": "X_umap", "columns": None}],
-                "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None},
+                "enabled": [{"key": "X_umap", "columns": [0, 1]}],
+                "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": [0, 1]}, "3d": None},
             },
+            "knn": None,
             "geneNames": "index",
+            "expression": "X",
+            "latent": None,
             "vectorFields": [],
         },
     }
@@ -55,7 +58,9 @@ def _uvarint(value: int) -> bytes:
 
 
 def _delta_indices(indices: list[int]) -> bytes:
-    output = bytearray(_uvarint(len(indices)))
+    """A sorted-delta cell set (cell-set encoding 0)."""
+    output = bytearray([0])
+    output.extend(_uvarint(len(indices)))
     previous = 0
     for position, index in enumerate(indices):
         output.extend(_uvarint(index if position == 0 else index - previous))
@@ -68,11 +73,11 @@ def _raw_u8_codes(values: list[int]) -> bytes:
 
 
 def _rle_codes(
-    encoding: int,
     length: int,
     pairs: list[tuple[int, int]],
 ) -> bytes:
-    output = bytearray([encoding])
+    """User-defined codes stored as runs (codes encoding 1)."""
+    output = bytearray([1])
     output.extend(_uvarint(length))
     output.extend(_uvarint(len(pairs)))
     for value, run in pairs:
@@ -117,12 +122,14 @@ def _write_bundle(
         "createdAt": "2026-07-25T00:00:00.000Z",
         "datasetFingerprint": fingerprint
         or {
-            "sourceType": "anndata",
             "datasetId": "exact",
+            "name": None,
             "cellCount": 3,
             "varCount": 2,
             **_mapping_fingerprint_keys(),
         },
+        "source": None,
+        "requires": {"obs": [], "var": []},
         "chunks": [meta for meta, _payload in entries],
     }
     if root_extra is not None:
@@ -154,6 +161,7 @@ def _adata() -> ad.AnnData:
             index=pd.Index(["cell-1", "cell-2", "cell-3"], dtype=object),
         ),
         var=pd.DataFrame(index=pd.Index(["gene-a", "gene-b"], dtype=object)),
+        obsm={"X_umap": np.zeros((3, 2), dtype=np.float32)},
     )
 
 
@@ -167,29 +175,25 @@ class _MemoryBundle:
         metadata_overrides: dict[str, dict[str, Any]] | None = None,
         chunk_order: list[str] | None = None,
         omit_chunks: set[str] | None = None,
+        requires: dict[str, list[str]] | None = None,
     ):
         defaults: dict[str, Any] = {
             "core/field-overlays": _field_overlays([]),
             "cinematic/camera": {"notDecoded": True},
             "core/state": {"notDecoded": True},
             "ui/dockable-layout": {"notDecoded": True},
-            "analysis/windows": {"notDecoded": True},
+            "ui/figure-export": {"notDecoded": True},
+            "analysis/windows": b"opaque typed JSON",
+            "analysis/docked": b"opaque typed JSON",
             "highlights/meta": _empty_highlights(),
-            "analysis/cache-inventory": {
-                "artifactIds": [
-                    chunk_id
-                    for chunk_id in chunks
-                    if chunk_id.startswith("analysis/artifacts/bulk-gene/")
-                ]
-            },
         }
         defaults.update(chunks)
         for chunk_id in omit_chunks or set():
             defaults.pop(chunk_id)
         self._chunks = defaults
         self.dataset_fingerprint = fingerprint or {
-            "sourceType": "anndata",
             "datasetId": "exact",
+            "name": None,
             "cellCount": 3,
             "varCount": 2,
             **_mapping_fingerprint_keys(),
@@ -197,6 +201,8 @@ class _MemoryBundle:
         self.manifest = {
             "createdAt": "2026-07-25T00:00:00.000Z",
             "datasetFingerprint": self.dataset_fingerprint,
+            "source": None,
+            "requires": requires or {"obs": [], "var": []},
             "chunks": [],
         }
         metadata = {
@@ -223,10 +229,11 @@ class _MemoryBundle:
                         "cinematic-camera",
                         "core-state",
                         "dockable-layout",
+                        "figure-export",
                         "analysis-windows",
+                        "analysis-docked",
                         "highlights-meta",
                         "highlights-cells",
-                        "analysis-artifacts",
                     )
                 )
             }
@@ -265,12 +272,12 @@ def _application_contributor(chunk_id: str) -> str:
         return "dockable-layout"
     if chunk_id == "analysis/windows":
         return "analysis-windows"
-    if chunk_id == "analysis/cache-inventory":
-        return "analysis-artifacts"
+    if chunk_id == "analysis/docked":
+        return "analysis-docked"
+    if chunk_id == "ui/figure-export":
+        return "figure-export"
     if chunk_id.startswith("user-defined/codes/"):
         return "user-defined-codes"
-    if chunk_id.startswith("analysis/artifacts/bulk-gene/"):
-        return "analysis-artifacts"
     return "unknown-contributor"
 
 
@@ -307,12 +314,28 @@ _STATIC_CHUNK_PROFILES: dict[str, dict[str, Any]] = {
         "label": "Floating panels",
         "datasetDependent": False,
     },
-    "analysis/windows": {
-        "contributorId": "analysis-windows",
+    "ui/figure-export": {
+        "contributorId": "figure-export",
         "priority": "eager",
         "kind": "json",
         "codec": "gzip",
+        "label": "Figure export",
+        "datasetDependent": False,
+    },
+    "analysis/windows": {
+        "contributorId": "analysis-windows",
+        "priority": "eager",
+        "kind": "binary",
+        "codec": "gzip",
         "label": "Analysis windows",
+        "datasetDependent": True,
+    },
+    "analysis/docked": {
+        "contributorId": "analysis-docked",
+        "priority": "eager",
+        "kind": "binary",
+        "codec": "gzip",
+        "label": "Docked analysis",
         "datasetDependent": True,
     },
     "highlights/meta": {
@@ -321,14 +344,6 @@ _STATIC_CHUNK_PROFILES: dict[str, dict[str, Any]] = {
         "kind": "json",
         "codec": "gzip",
         "label": "Highlight metadata",
-        "datasetDependent": True,
-    },
-    "analysis/cache-inventory": {
-        "contributorId": "analysis-artifacts",
-        "priority": "eager",
-        "kind": "json",
-        "codec": "gzip",
-        "label": "Analysis cache inventory",
         "datasetDependent": True,
     },
 }
@@ -403,15 +418,6 @@ def _application_chunk_meta(
             "kind": "binary",
             "codec": "gzip",
             "label": f"Highlight cells: {group_label}",
-            "datasetDependent": True,
-        }
-    elif chunk_id.startswith("analysis/artifacts/bulk-gene/"):
-        base = {
-            "contributorId": "analysis-artifacts",
-            "priority": "lazy",
-            "kind": "binary",
-            "codec": "gzip",
-            "label": "Analysis cache: unmaterialized",
             "datasetDependent": True,
         }
     else:
@@ -520,8 +526,8 @@ def test_session_apply_rejects_dataset_mismatch_without_mutation() -> None:
     bundle = _MemoryBundle(
         chunks={},
         fingerprint={
-            "sourceType": "anndata",
             "datasetId": "other",
+            "name": None,
             "cellCount": 3,
             "varCount": 2,
             **_mapping_fingerprint_keys(),
@@ -549,6 +555,8 @@ def test_session_apply_rejects_dataset_mismatch_without_mutation() -> None:
         ("highlights/meta", "highlights-cells"),
         ("highlights/cells/highlight_1", "highlights-meta"),
         ("user-defined/codes/user_cat_1", "field-overlays"),
+        ("analysis/cache-inventory", "analysis-artifacts"),
+        ("analysis/artifacts/bulk-gene/cache/gene/page", "analysis-artifacts"),
     ],
 )
 def test_session_apply_rejects_unknown_or_mismatched_chunk_contributors_before_decode(
@@ -581,21 +589,14 @@ def test_session_apply_rejects_unknown_or_mismatched_chunk_contributors_before_d
 
 
 def test_session_apply_accepts_current_nonmaterialized_chunk_inventory() -> None:
-    analysis_chunk = "analysis/artifacts/bulk-gene/bulk_genes%3Apage%2F%CE%B1/IL%2F7/page%2F1"
     bundle = _MemoryBundle(
         chunks={
             "core/state": object(),
             "ui/dockable-layout": object(),
+            "ui/figure-export": object(),
             "analysis/windows": object(),
+            "analysis/docked": object(),
             "cinematic/camera": object(),
-            analysis_chunk: object(),
-        },
-        contributors={
-            "core/state": "core-state",
-            "ui/dockable-layout": "dockable-layout",
-            "analysis/windows": "analysis-windows",
-            "cinematic/camera": "cinematic-camera",
-            analysis_chunk: "analysis-artifacts",
         },
     )
 
@@ -603,11 +604,7 @@ def test_session_apply_accepts_current_nonmaterialized_chunk_inventory() -> None
     decode_chunk = bundle.decode_chunk
 
     def guarded_decode(chunk_id: str) -> Any:
-        if chunk_id not in {
-            "analysis/cache-inventory",
-            "core/field-overlays",
-            "highlights/meta",
-        }:
+        if chunk_id not in {"core/field-overlays", "highlights/meta"}:
             raise AssertionError(f"nonmaterialized current chunk {chunk_id!r} must not be decoded")
         decoded_chunk_ids.append(chunk_id)
         return decode_chunk(chunk_id)
@@ -624,18 +621,40 @@ def test_session_apply_accepts_current_nonmaterialized_chunk_inventory() -> None
 
     assert output.n_obs == 3
     assert output.n_vars == 2
-    assert decoded_chunk_ids == [
-        "analysis/cache-inventory",
-        "highlights/meta",
-        "core/field-overlays",
-    ]
+    assert decoded_chunk_ids == ["highlights/meta", "core/field-overlays"]
+
+
+def test_session_apply_names_every_required_field_the_anndata_lacks() -> None:
+    adata = _adata()
+    before_obs = adata.obs.copy(deep=True)
+    bundle = _MemoryBundle(
+        chunks={},
+        requires={"obs": ["cell_type", "score", "zone"], "var": ["gene-a", "gene-z"]},
+    )
+
+    def forbidden_decode(_chunk_id: str) -> Any:
+        raise AssertionError("a missing required field must fail before payload decode")
+
+    bundle.decode_chunk = forbidden_decode  # type: ignore[method-assign]
+    with pytest.raises(ValueError) as error:
+        apply_cellucid_session_to_anndata(
+            bundle,
+            adata,
+            inplace=True,
+            expected_dataset_id="exact",
+        )
+    assert str(error.value) == (
+        "This session uses the obs columns 'cell_type', 'zone' and the gene 'gene-z', "
+        "which this AnnData does not have."
+    )
+    pd.testing.assert_frame_equal(adata.obs, before_obs)
 
 
 @pytest.mark.parametrize(
     "missing_chunk",
-    ["analysis/cache-inventory", "cinematic/camera"],
+    ["analysis/windows", "analysis/docked", "ui/figure-export", "cinematic/camera"],
 )
-def test_session_apply_requires_current_cache_and_camera_singletons_before_decode(
+def test_session_apply_requires_current_singletons_before_decode(
     missing_chunk: str,
 ) -> None:
     adata = _adata()
@@ -667,7 +686,9 @@ def test_session_apply_requires_current_cache_and_camera_singletons_before_decod
         ("core/state", {"codec": "none"}),
         ("core/state", {"label": "State"}),
         ("ui/dockable-layout", {"datasetDependent": True}),
-        ("analysis/cache-inventory", {"label": "Cache"}),
+        ("analysis/windows", {"kind": "json"}),
+        ("analysis/docked", {"label": "Analysis"}),
+        ("ui/figure-export", {"datasetDependent": True}),
         ("cinematic/camera", {"label": "Cinematic camera"}),
     ],
 )
@@ -712,37 +733,6 @@ def test_session_apply_rejects_registered_contributor_reordering_before_decode()
             _adata(),
             expected_dataset_id="exact",
         )
-
-
-def test_session_apply_requires_exact_analysis_inventory_order_without_artifact_decode() -> None:
-    artifact_a = "analysis/artifacts/bulk-gene/cache-a/gene-a/page-a"
-    artifact_b = "analysis/artifacts/bulk-gene/cache-b/gene-b/page-b"
-    bundle = _MemoryBundle(
-        chunks={
-            "analysis/cache-inventory": {
-                "artifactIds": [artifact_b, artifact_a],
-            },
-            artifact_a: object(),
-            artifact_b: object(),
-        }
-    )
-    decode_chunk = bundle.decode_chunk
-    decoded_ids: list[str] = []
-
-    def inventory_only_decode(chunk_id: str) -> Any:
-        if chunk_id != "analysis/cache-inventory":
-            raise AssertionError("analysis artifact payloads must remain nonmaterialized")
-        decoded_ids.append(chunk_id)
-        return decode_chunk(chunk_id)
-
-    bundle.decode_chunk = inventory_only_decode  # type: ignore[method-assign]
-    with pytest.raises(ValueError, match="cache inventory order"):
-        apply_cellucid_session_to_anndata(
-            bundle,
-            _adata(),
-            expected_dataset_id="exact",
-        )
-    assert decoded_ids == ["analysis/cache-inventory"]
 
 
 def test_session_apply_requires_user_code_order_from_field_overlay_inventory() -> None:
@@ -828,36 +818,6 @@ def test_session_apply_rejects_materialized_dynamic_metadata_mutations_atomicall
 
 
 @pytest.mark.parametrize(
-    "overrides",
-    [
-        {"priority": "eager"},
-        {"kind": "json"},
-        {"codec": "none"},
-        {"datasetDependent": False},
-    ],
-)
-def test_session_apply_rejects_analysis_artifact_metadata_without_heavy_decode(
-    overrides: dict[str, Any],
-) -> None:
-    artifact_id = "analysis/artifacts/bulk-gene/cache/gene/page"
-    bundle = _MemoryBundle(
-        chunks={artifact_id: object()},
-        metadata_overrides={artifact_id: overrides},
-    )
-
-    def forbidden_decode(_chunk_id: str) -> Any:
-        raise AssertionError("invalid analysis metadata must fail before payload decode")
-
-    bundle.decode_chunk = forbidden_decode  # type: ignore[method-assign]
-    with pytest.raises(ValueError, match="lazy, binary, gzip"):
-        apply_cellucid_session_to_anndata(
-            bundle,
-            _adata(),
-            expected_dataset_id="exact",
-        )
-
-
-@pytest.mark.parametrize(
     "highlights",
     [
         {
@@ -925,6 +885,32 @@ def test_session_apply_rejects_analysis_artifact_metadata_without_heavy_decode(
             ],
             "activePageId": "page_1",
         },
+        {
+            # Field and category positions beside their names: the format
+            # stores the names only.
+            "pages": [
+                {
+                    "id": "page_1",
+                    "name": "Page 1",
+                    "color": "#2563eb",
+                    "highlightedGroups": [
+                        {
+                            "id": "highlight_1",
+                            "type": "category",
+                            "label": "score: A",
+                            "enabled": True,
+                            "cellCount": 1,
+                            "fieldKey": "score",
+                            "fieldIndex": 0,
+                            "fieldSource": "obs",
+                            "categoryIndex": 0,
+                            "categoryName": "A",
+                        }
+                    ],
+                }
+            ],
+            "activePageId": "page_1",
+        },
     ],
 )
 def test_session_apply_rejects_noncurrent_highlight_metadata(
@@ -937,37 +923,6 @@ def test_session_apply_rejects_noncurrent_highlight_metadata(
             _adata(),
             expected_dataset_id="exact",
             store_uns=False,
-        )
-
-
-@pytest.mark.parametrize(
-    "chunk_id",
-    [
-        "analysis/artifacts/bulk-gene/cache/gene",
-        "analysis/artifacts/bulk-gene/cache/gene/page/extra",
-        "analysis/artifacts/bulk-gene/cache/gene/",
-        "analysis/artifacts/bulk-gene/cache/gene%2fvalue/page",
-        "analysis/artifacts/bulk-gene/cache/gene value/page",
-        "analysis/artifacts/bulk-gene/cache/%FF/page",
-    ],
-)
-def test_session_apply_rejects_noncanonical_analysis_artifact_chunk_ids(
-    chunk_id: str,
-) -> None:
-    bundle = _MemoryBundle(
-        chunks={chunk_id: object()},
-        contributors={chunk_id: "analysis-artifacts"},
-    )
-
-    def forbidden_decode(_chunk_id: str) -> Any:
-        raise AssertionError("invalid analysis chunk identity must fail before decode")
-
-    bundle.decode_chunk = forbidden_decode  # type: ignore[method-assign]
-    with pytest.raises(ValueError, match="Unknown current session chunk"):
-        apply_cellucid_session_to_anndata(
-            bundle,
-            _adata(),
-            expected_dataset_id="exact",
         )
 
 
@@ -1243,11 +1198,7 @@ def test_user_defined_category_materializes_current_rle_uint16_codes() -> None:
     bundle = _MemoryBundle(
         chunks={
             "core/field-overlays": _field_overlays([field]),
-            "user-defined/codes/user_cat_1": _rle_codes(
-                3,
-                3,
-                [(1, 3)],
-            ),
+            "user-defined/codes/user_cat_1": _rle_codes(3, [(1, 3)]),
         }
     )
 
@@ -1270,11 +1221,7 @@ def test_user_defined_category_rejects_rle_length_before_allocation(
     bundle = _MemoryBundle(
         chunks={
             "core/field-overlays": _field_overlays([field]),
-            "user-defined/codes/user_cat_1": _rle_codes(
-                3,
-                0xFFFF_FFFF,
-                [(1, 0xFFFF_FFFF)],
-            ),
+            "user-defined/codes/user_cat_1": _rle_codes(0xFFFF_FFFF, [(1, 0xFFFF_FFFF)]),
         }
     )
     adata = _adata()
@@ -1378,103 +1325,64 @@ def test_bundle_enforces_web_writer_exact_current_root_manifest(
             CellucidSessionBundle(obsolete).list_chunk_ids()
 
 
-def test_bundle_accepts_web_percent_encoded_analysis_chunk_identity(
-    tmp_path: Path,
-) -> None:
-    chunk_id = (
-        "analysis/artifacts/bulk-gene/"
-        "bulk_genes%3Apage_1%3AIL-7/%CE%B1/page_1"
-    )
-    raw = b"current analysis artifact"
-    compressed = gzip.compress(raw, mtime=0)
-    meta = _chunk_meta(
-        chunk_id,
-        compressed,
-        codec="gzip",
-        contributor_id="analysis-artifacts",
-        priority="lazy",
-        uncompressed_bytes=len(raw),
-    )
-    path = _write_bundle(
-        tmp_path / "percent-encoded-analysis.cellucid-session",
-        [(meta, compressed)],
-    )
-
-    bundle = CellucidSessionBundle(path)
-    assert bundle.list_chunk_ids() == [chunk_id]
-    assert bundle.decode_chunk(chunk_id) == raw
-
-
-def test_on_disk_percent_encoded_analysis_inventory_applies_without_artifact_decode(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    artifact_id = (
-        "analysis/artifacts/bulk-gene/"
-        "bulk_genes%3Apage_1%3AIL-7/%CE%B1/page_1"
-    )
-    payloads: dict[str, Any] = {
-        "core/field-overlays": _field_overlays([]),
-        "cinematic/camera": {"opaque": True},
-        "core/state": {"opaque": True},
-        "ui/dockable-layout": {"opaque": True},
-        "analysis/windows": {"opaque": True},
-        "highlights/meta": _empty_highlights(),
-        "analysis/cache-inventory": {"artifactIds": [artifact_id]},
-        artifact_id: b"opaque heavy analysis artifact",
-    }
-    entries: list[tuple[dict[str, Any], bytes]] = []
-    for chunk_id, payload in payloads.items():
-        raw = (
-            bytes(payload)
-            if isinstance(payload, bytes | bytearray | memoryview)
-            else json.dumps(
-                payload,
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ).encode("utf-8")
+def test_bundle_reads_the_recorded_dataset_source(tmp_path: Path) -> None:
+    # The viewer records where the session's dataset was opened from
+    # (session/dataset-source-record.js) so it can open it first.
+    for index, source in enumerate(
+        [
+            None,
+            {"kind": "sample", "dataset": "suo"},
+            {"kind": "link", "locator": "zenodo:123:pbmc.h5ad", "dataset": "pbmc"},
+            {"kind": "remote", "url": "http://localhost:8765", "dataset": "a"},
+            {"kind": "file", "name": "suo.h5ad", "dataset": "suo"},
+        ]
+    ):
+        path = _write_bundle(
+            tmp_path / f"source-{index}.cellucid-session",
+            [],
+            root_extra={"source": source},
         )
-        stored = gzip.compress(raw, mtime=0)
-        meta = _application_chunk_meta(chunk_id, payload, chunks=payloads)
-        meta["storedBytes"] = len(stored)
-        meta["uncompressedBytes"] = len(raw)
-        entries.append((meta, stored))
-    path = _write_bundle(
-        tmp_path / "complete-percent-analysis.cellucid-session",
-        entries,
+        assert CellucidSessionBundle(path).dataset_source == source
+
+    for index, (source, message) in enumerate(
+        [
+            ({"kind": "folder", "name": "x", "dataset": "x"}, "source kind"),
+            ({"kind": "file", "dataset": "x"}, "source fields"),
+            ({"kind": "file", "name": "a\nb.h5ad", "dataset": "x"}, "source.name"),
+            ({"kind": "sample"}, "source fields"),
+            ({"kind": "sample", "dataset": "x", "locator": "y"}, "source fields"),
+            ({"kind": "link", "locator": " gh:a/b", "dataset": "x"}, "source.locator"),
+            ({"kind": "remote", "url": "javascript:alert(1)", "dataset": "x"}, "source.url"),
+            ("sample", "source kind"),
+        ]
+    ):
+        path = _write_bundle(
+            tmp_path / f"bad-source-{index}.cellucid-session",
+            [],
+            root_extra={"source": source},
+        )
+        with pytest.raises(ValueError, match=message):
+            CellucidSessionBundle(path).list_chunk_ids()
+
+    missing = tmp_path / "no-source.cellucid-session"
+    _write_bundle(missing, [])
+    manifest_text = missing.read_bytes()
+    assert b'"source":null' in manifest_text
+    without = manifest_text.replace(b',"source":null', b"")
+    without = (
+        without[: len(SESSION_BUNDLE_MAGIC)]
+        + struct.pack("<I", len(without) - len(SESSION_BUNDLE_MAGIC) - 4)
+        + without[len(SESSION_BUNDLE_MAGIC) + 4 :]
     )
-    bundle = CellucidSessionBundle(path)
-    decode_chunk = bundle.decode_chunk
-    decoded_ids: list[str] = []
-
-    def inventory_only_decode(chunk_id: str) -> Any:
-        if chunk_id == artifact_id:
-            raise AssertionError("heavy analysis artifact must remain opaque")
-        decoded_ids.append(chunk_id)
-        return decode_chunk(chunk_id)
-
-    monkeypatch.setattr(bundle, "decode_chunk", inventory_only_decode)
-    output = apply_cellucid_session_to_anndata(
-        bundle,
-        _adata(),
-        expected_dataset_id="exact",
-        add_highlights=False,
-        add_user_defined_fields=False,
-        store_uns=False,
-    )
-
-    assert output.n_obs == 3
-    assert decoded_ids == [
-        "analysis/cache-inventory",
-        "highlights/meta",
-        "core/field-overlays",
-    ]
+    missing.write_bytes(without)
+    with pytest.raises(ValueError, match="missing source"):
+        CellucidSessionBundle(missing).list_chunk_ids()
 
 
 def _complete_fingerprint(**changes: Any) -> dict[str, Any]:
     fingerprint: dict[str, Any] = {
-        "sourceType": "anndata",
         "datasetId": "exact",
+        "name": "Exact dataset",
         "cellCount": 3,
         "varCount": 2,
         **_mapping_fingerprint_keys(),
@@ -1493,10 +1401,11 @@ def _complete_fingerprint(**changes: Any) -> dict[str, Any]:
         (_complete_fingerprint(varCount=None), "missing varCount"),
         (_complete_fingerprint(cellOrder=None), "missing cellOrder"),
         (_complete_fingerprint(dataMapping=None), "missing dataMapping"),
-        (_complete_fingerprint(legacy=True), "unknown legacy"),
+        (_complete_fingerprint(name=None), "missing name"),
+        (_complete_fingerprint(sourceType="local-user"), "unknown sourceType"),
     ],
 )
-def test_bundle_requires_exact_six_key_dataset_fingerprint(
+def test_bundle_requires_exact_seven_key_dataset_fingerprint(
     tmp_path: Path,
     fingerprint: dict[str, Any],
     detail: str,
@@ -1514,8 +1423,8 @@ def test_bundle_accepts_exact_nullable_web_dataset_identity(
     tmp_path: Path,
 ) -> None:
     fingerprint = {
-        "sourceType": None,
         "datasetId": None,
+        "name": None,
         "cellCount": 0,
         "varCount": 0,
         **_mapping_fingerprint_keys(),
@@ -1588,42 +1497,52 @@ def test_bundle_bounds_gzip_inflation_by_the_declared_size(tmp_path: Path) -> No
     with pytest.raises(ValueError, match="uncompressedBytes"):
         CellucidSessionBundle(path).decode_chunk("gzip")
 
-def test_delta_codec_rejects_duplicates_and_trailing_bytes() -> None:
+
+def test_bundle_requires_sorted_unique_required_fields(tmp_path: Path) -> None:
+    good = _write_bundle(
+        tmp_path / "requires.cellucid-session",
+        [],
+        root_extra={"requires": {"obs": ["age", "cell_type"], "var": ["CD3E"]}},
+    )
+    assert CellucidSessionBundle(good).required_fields == {
+        "obs": ["age", "cell_type"],
+        "var": ["CD3E"],
+    }
+    for index, (requires, message) in enumerate(
+        [
+            ({"obs": ["b", "a"], "var": []}, "sorted"),
+            ({"obs": ["a", "a"], "var": []}, "sorted"),
+            ({"obs": [" a"], "var": []}, "trimmed"),
+            ({"obs": []}, "exactly obs and var"),
+            ({"obs": [], "var": [1]}, "trimmed"),
+        ]
+    ):
+        path = _write_bundle(
+            tmp_path / f"bad-requires-{index}.cellucid-session",
+            [],
+            root_extra={"requires": requires},
+        )
+        with pytest.raises(ValueError, match=message):
+            CellucidSessionBundle(path).list_chunk_ids()
+
+
+def test_cell_set_codec_rejects_duplicates_and_trailing_bytes() -> None:
     with pytest.raises(ValueError, match="strictly increasing"):
-        decode_delta_uvarint(_delta_indices([1, 1]), max_count=3, max_index=2)
+        decode_cell_set(_delta_indices([1, 1]), cell_count=3)
 
     with pytest.raises(ValueError, match="trailing bytes"):
-        decode_delta_uvarint(_delta_indices([1]) + b"\x00", max_count=3, max_index=2)
+        decode_cell_set(_delta_indices([1]) + b"\x00", cell_count=3)
 
 
 @pytest.mark.parametrize(
     ("payload", "expected_length", "expected_codes_type", "message"),
     [
         (_raw_u8_codes([0, 1]) + b"\x00", 2, "Uint8Array", "trailing bytes"),
-        (
-            bytes([2]) + _uvarint(1) + _uvarint(1) + _uvarint(0) + _uvarint(0),
-            1,
-            "Uint8Array",
-            "run",
-        ),
-        (
-            bytes([2]) + _uvarint(1) + _uvarint(1) + _uvarint(0) + _uvarint(2),
-            1,
-            "Uint8Array",
-            "exceeds",
-        ),
-        (
-            bytes([2]) + _uvarint(1) + _uvarint(1) + _uvarint(65_536) + _uvarint(1),
-            1,
-            "Uint8Array",
-            "declared code type",
-        ),
-        (
-            _rle_codes(2, 2, [(1, 1), (1, 1)]),
-            2,
-            "Uint8Array",
-            "distinct",
-        ),
+        (_rle_codes(1, [(0, 0)]), 1, "Uint8Array", "run"),
+        (_rle_codes(1, [(0, 2)]), 1, "Uint8Array", "fill the declared length"),
+        (_rle_codes(1, [(65_536, 1)]), 1, "Uint8Array", "declared code type"),
+        (_rle_codes(2, [(1, 1), (1, 1)]), 2, "Uint8Array", "distinct"),
+        (bytes([7]) + _uvarint(1) + bytes([0]), 1, "Uint8Array", "unknown encoding"),
     ],
 )
 def test_user_defined_codecs_reject_non_exact_payloads(
@@ -1643,8 +1562,8 @@ def test_user_defined_codecs_reject_non_exact_payloads(
 @pytest.mark.parametrize(
     ("payload", "expected_dtype"),
     [
-        (_rle_codes(2, 4, [(1, 3), (0, 1)]), np.dtype(np.uint8)),
-        (_rle_codes(3, 4, [(256, 3), (1, 1)]), np.dtype(np.uint16)),
+        (_rle_codes(4, [(1, 3), (0, 1)]), np.dtype(np.uint8)),
+        (_rle_codes(4, [(256, 3), (1, 1)]), np.dtype(np.uint16)),
     ],
 )
 def test_user_defined_codecs_preserve_current_rle_dtype(

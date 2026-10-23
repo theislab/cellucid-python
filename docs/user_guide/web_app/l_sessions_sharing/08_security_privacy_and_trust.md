@@ -25,8 +25,10 @@ Rule of thumb:
 Depending on what you did in the UI, a session bundle may include:
 
 - **Dataset identifiers**
-  - source type and dataset id used to load the dataset
-  - (for local folder loads) a display name for the folder
+  - the dataset id, counts and cell-order digest of the dataset it was saved on
+  - where the dataset was opened from, for a sample, a data link (the link
+    itself, including any access key it carries) or a server (its address);
+    nothing for a file opened from your own computer
 - **Field names and category labels**
   - including any renames you applied
   - including deleted/purged field registry state
@@ -37,10 +39,15 @@ Depending on what you did in the UI, a session bundle may include:
   - sets of cell indices belonging to groups (can be large)
 - **User-defined fields**
   - derived field definitions and exact per-cell categorical codes
-- **Analysis window configuration**
-  - which analysis modes were open and their settings
-- **Some caches/artifacts**
-  - sessions can include “accelerator” caches that may encode partial data-derived information
+- **Analysis configuration and results**
+  - which analyses were open (sidebar panel and floating windows), their settings
+  - their results: differential expression, marker genes, signatures and
+    correlations, i.e. per-gene statistics derived from the data
+- **Figure Export settings**
+  - including the figure title and axis labels you typed
+- **Where the dataset came from**
+  - the sample id, data link (including any access key the link carries), or
+    server address; for a local file, its file or folder name
 
 Practical implication:
 - Do not put patient identifiers or private sample barcodes into highlight/page names if you intend to share sessions.
@@ -113,17 +120,17 @@ Prefer:
 
 ### 3) Don’t publish sessions by accident
 
-If you are distributing an export folder publicly:
+If you are distributing a dataset file or a dataset catalog folder publicly:
 - do not include session bundles unless you intend them to be opened by anyone.
 
 ### 4) For high-sensitivity environments, share encrypted archives
 
 If your organization requires it:
-- share the export folder + sessions via encrypted storage or approved systems.
+- share the dataset file + sessions via encrypted storage or approved systems.
 
 ---
 
 ## Next steps
 
-- {doc}`05_share_workflows_links_bundles_exports` (recommended sharing patterns)
+- {doc}`05_share_workflows_links_sessions_data_files` (recommended sharing patterns)
 - {doc}`10_troubleshooting_sessions` (when a restore is rejected)

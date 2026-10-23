@@ -59,7 +59,7 @@ press **Confirm** in the Highlighting panel. See {doc}`11_screenshots` step 1.
 
 1) Open Highlighted Cells
    - Do you see at least one page with a non-zero cell count?
-2) Open Filtering / Active filters
+2) Open Filters
    - Do you have “0 visible cells” (or a very small number) due to stacked filters?
 3) For DE / Gene Signature / Marker Genes
    - Try searching for a well-known gene in the gene selector.
@@ -82,7 +82,7 @@ Safe fixes first:
      - the *full page membership*, or
      - only currently visible cells (in which case: build a new page from the visible subset).
 4) If gene expression is missing
-   - Use a loading method/export that includes expression (see {doc}`../b_data_loading/index`).
+   - Open a dataset that includes expression (`X`, a layer or `raw.X`; see {doc}`../b_data_loading/index`).
    - Re-load the dataset.
 
 ### Prevention
@@ -111,7 +111,7 @@ Safe fixes first:
 ### How to confirm
 
 - Check Page A / Page B sizes in the DE UI.
-- If the UI shows a progress tracker, see whether it stalls on “Loading & Computing” vs “Multiple Testing Correction”.
+- Read the running box under the button: whether it stays on `Testing genes` (how many genes are done, how much is read and how fast) or on `Applying multiple testing correction`. A run you do not want to wait for can be stopped with **Cancel**, and run again later.
 - If you see browser slowdown across the whole app, suspect memory pressure.
 
 ### Fix
@@ -260,7 +260,7 @@ things. It does not produce `NaN` from the UI.
 1) **You expected results to persist, but only settings persist**
    - Analysis windows restore layout and settings; results typically recompute.
 2) **Dataset identity mismatch**
-   - Sessions apply to a specific dataset identity; if you loaded a different dataset (or a differently-exported version), restoration may be partial.
+   - Sessions apply to a specific dataset identity; if you loaded a different dataset (or a differently-written version), restoration may be partial.
 3) **Local browser storage cleared / blocked**
    - Some persistence relies on browser storage; private browsing / strict policies can interfere.
 4) **You’re in a different view/snapshot**
@@ -275,10 +275,12 @@ things. It does not produce `NaN` from the UI.
 
 ### Fix
 
-1) Re-run analyses after restore
-   - Treat a restored session as “settings are back; compute again”.
-2) Ensure you loaded the same dataset export
-   - Use the same export folder/version and dataset id.
+1) Check what a session restores
+   - Settings come back for every analysis; differential expression, marker
+     genes, signatures and correlation also bring back their results. Quick
+     and Detailed views compute again from their settings.
+2) Ensure you loaded the same dataset
+   - Use the same dataset file (version) and dataset id.
 3) If windows fail to appear entirely
    - try restoring in a fresh tab,
    - verify in a clean profile with extensions disabled (extensions can block storage).
@@ -286,7 +288,7 @@ things. It does not produce `NaN` from the UI.
 ### Prevention
 
 - Save sessions only after you are happy with page naming and variable selection.
-- Keep dataset exports versioned so “the same dataset” stays the same across collaborators.
+- Keep dataset files versioned so “the same dataset” stays the same across collaborators.
 
 ---
 
@@ -294,25 +296,25 @@ things. It does not produce `NaN` from the UI.
 
 ### Likely causes (ordered)
 
-1) **Your Group By field has tiny categories**
+1) **Your Group by field has tiny categories**
    - Common when grouping by overly granular labels, or after heavy filtering in preprocessing.
 2) **You have many rare categories**
    - Even one category below the minimum can block the whole run in the current implementation.
 
 ### How to confirm
 
-- In the Marker Genes UI, inspect the chosen Group By field:
+- In the Marker Genes UI, inspect the chosen Group by field:
   - do you see many groups with very small counts?
 - If you have access to the data table in Python, compute per-category counts.
 
 ### Fix
 
-1) Choose a different Group By field
+1) Choose a different Group by field
    - Prefer stable, reasonably sized groups (e.g., `cell_type` over a very granular label).
 2) Collapse/merge rare categories upstream
-   - Merge rare labels into `Other` during preprocessing/export.
+   - Merge rare labels into `Other` during preprocessing.
 3) If you only need a subset of groups
-   - consider re-exporting a dataset that excludes those rare categories.
+   - consider writing a subset of the dataset that excludes those rare categories.
 
 ### Prevention
 
@@ -327,8 +329,8 @@ things. It does not produce `NaN` from the UI.
 1) **Gene list formatting**
    - In the current UI, genes are parsed by commas (`,`). Newline-only lists can be interpreted as one “gene”.
 2) **Genes not found in your dataset**
-   - The names you pasted may be a different vocabulary from the one the export
-     publishes, or differ only in casing. Each gene has one name and no alias.
+   - The names you pasted may be a different vocabulary from the one the dataset
+     names its genes with, or differ only in casing. Each gene has one name and no alias.
 3) **Gene expression missing**
    - Signature scoring requires expression.
 4) **Normalization misunderstanding**

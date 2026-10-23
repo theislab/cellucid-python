@@ -1,284 +1,105 @@
-# `obs`: Cell Metadata
+# `obs`: cell metadata
 
-**Audience:** everyone (especially if you want coloring, legends, filtering, and category summaries)  
-**Time:** 15–25 minutes  
-**Goal:** export metadata correctly and avoid category/quantization surprises.
+**Audience:** everyone
+**Time:** 10 minutes
+**Goal:** know how each kind of `obs` column is stored and what the viewer makes of it.
 
-`obs` is the cell-level metadata table:
+## What to pass
 
-- one row per cell
-- one column per metadata field
-
-In the viewer, `obs` powers:
-- categorical coloring (clusters, samples, conditions)
-- continuous coloring (QC metrics, scores)
-- legends and category lists
-- some filtering and summarization features
-
-`obs` is required.
-
-## Which columns get exported?
-
-By default, `cellucid_prepare()` exports **all columns** in `obs`.
-
-To export a subset, use:
+`obs` is an optional `data.frame` with **one row per cell**, in the cell order
+of the embeddings. Every column is stored. Without `obs` the store holds an
+`obs` data frame with the cell names and no columns.
 
 ```r
-cellucid_prepare(..., obs_keys = c("cluster", "sample", "score"))
-```
-
-## How `cellucid-r` decides “continuous” vs “categorical”
-
-Exactly four column types can be exported, and each one has exactly one kind:
-
-| Column type | Exported as |
-|---|---|
-| plain `numeric` (double or integer) | **continuous** |
-| `factor` | **categorical** |
-| plain `character` | **categorical** |
-| plain `logical` | **categorical** |
-
-Anything else stops the export. Nothing is quietly coerced into a catch-all
-“categorical” bucket:
-
-```text
-Observation field 'collected_on' must be a native numeric, logical, character,
-or factor vector.
-```
-
-That message covers `Date` and `POSIXct` columns, list columns, and any column
-carrying a class of its own — a `bit64::integer64` count, a `units` measurement,
-a `haven` labelled column. Those are refused rather than coerced, because
-coercing one would publish numbers whose meaning the attribute carried.
-
-### Recommendation (avoid surprises)
-
-Before export, convert the columns you care about into one of the four types:
-
-```r
-obs$cluster      <- factor(obs$cluster)          # a code column stored as "1","2","3"
-obs$collected_on <- as.character(obs$collected_on)  # a Date you want as a category
-obs$n_counts     <- as.numeric(obs$n_counts)     # an integer64 or units column
-```
-
-A character column of `"1"`, `"2"`, `"3"` is a legal export — it just becomes
-three categories rather than a continuous scale, so convert it if that is not
-what you meant.
-
-## Output files (what gets written)
-
-All `obs` binaries live under:
-- `<out_dir>/obs/`
-
-Every file is named by the field's **payload index**, not by its key. The index
-is the field's position in `obs_keys`, and `obs_manifest.json` is what maps it
-back to the column name. Continuous and categorical payloads share one `obs/`
-directory, so they share one index space: across `_continuousFields` and
-`_categoricalFields` together the indices run `0 … N-1`, each used once.
-
-### Continuous fields
-
-For a continuous field at payload index `0`:
-
-- float32 (default): `obs/0.values.f32`
-- 8-bit quantized: `obs/0.values.u8`
-- 16-bit quantized: `obs/0.values.u16`
-
-Quantized exports also record `min_val` and `max_val` in `obs_manifest.json` so the viewer can recover approximate real values.
-
-### Categorical fields
-
-For a categorical field at payload index `1`:
-
-- codes: `obs/1.codes.u8`, `obs/1.codes.u16` or `obs/1.codes.u32`
-- outlier quantiles: `obs/1.outliers.f32` (or `.u8/.u16` if quantized)
-
-The **categories list** (levels) is stored in `obs_manifest.json`.
-
-Missing values are encoded as a reserved integer:
-
-| Codes dtype | Missing marker |
-|---|---|
-| `uint8` | `255` |
-| `uint16` | `65535` |
-| `uint32` | `4294967295` |
-
-(r_package-category-label-display-text)=
-#### Category labels must read as the value they store
-
-A category label — a factor level, or a distinct value of a character column —
-is drawn **verbatim** in the legend, in the field selector, and in every
-exported figure. A character with no glyph therefore changes the stored value
-without changing the picture, so `cellucid_prepare()` rejects a label that:
-
-- is empty (`""`),
-- contains a control character (`U+0001`–`U+001F`, `U+007F`–`U+009F`, which
-  includes tab and newline),
-- contains a zero-width character (`U+200B` ZERO WIDTH SPACE, `U+2060` WORD
-  JOINER, or `U+FEFF`, the byte-order mark a spreadsheet leaves at the front of
-  a UTF-8 CSV), or
-- starts or ends with whitespace of any kind, including `U+00A0` NO-BREAK SPACE.
-
-It also rejects two labels in one field that a whitespace-collapsing renderer
-draws identically — `"T cell"` and `"T  cell"` are two legend rows with one
-appearance.
-
-Logical labels are unaffected. Case-only differences are not rejected:
-`"Liver"` and `"liver"` look different on screen, so they remain two categories.
-An unused factor level is checked like any other, because it is still published
-in `obs_manifest.json`.
-
-```{important}
-`cellucid_prepare()` never trims a label for you. Trimming rewrites an
-annotation you did not ask to change, and where both `"Liver"` and `"Liver "`
-exist it would merge two distinct categories into one and move cells between
-them.
-```
-
-The error names every offending label in the field at once, so one pass fixes
-the column:
-
-```r
-obs[["organ"]] <- factor(
-  trimws(as.character(obs[["organ"]]), whitespace = "[\\h\\v]")
+obs <- data.frame(
+  cell_type = factor(cell_type),
+  sample = sample_id,          # character, repeats
+  n_counts = n_counts,         # integer
+  pct_mito = pct_mito,         # double
+  is_doublet = is_doublet,     # logical
+  row.names = cell_barcodes
 )
 ```
 
-The same rule applies to `dataset_name`, `dataset_description`, `source_name`,
-`source_url`, and `source_citation`, which the viewer also prints verbatim.
-`dataset_description` is the one that may be empty: it defaults to `NULL`, and
-`NULL`, `""`, and leaving it out all publish the same empty description. The
-Python package enforces the identical rule in `prepare()` and accepts `None` and
-`""` the same way.
+Row names you set become the cell names (they must agree with the row names of
+`gene_expression` and the embeddings; see
+{doc}`02_input_requirements_global`). Column names become paths in the store
+and follow the path rules on that page; `_index` is reserved.
 
-## Quantization (continuous fields and categorical outliers)
+## How each column is stored
 
-### What quantization does
+The rules are anndata's own, so Python reads the same column types you had in R:
 
-Quantization maps finite floating values to integer bins:
+| R column | Stored as (anndata encoding) | In Python |
+|---|---|---|
+| factor | `categorical`: integer codes plus its levels, **in their order** | `pandas.Categorical` |
+| ordered factor | `categorical` with `ordered: true` | ordered `Categorical` |
+| character with a repeated or missing value | `categorical`, levels in code-point order | `Categorical` |
+| character with every value distinct and none missing | `string-array` | object strings |
+| logical without `NA` | `array`, bool | `bool` |
+| logical with `NA` | `nullable-boolean` (values + mask) | `boolean` |
+| integer without `NA` | `array`, int32 | `int32` |
+| integer with `NA` | `nullable-integer` (values + mask) | `Int32` |
+| double | `array`, float64; `NA` and `NaN` stored as NaN | `float64` |
 
-- 8-bit: `0..254`
-- 16-bit: `0..65534`
+Every column keeps its own type: an integer column is int32 because R's
+integer is int32, and a double column is float64 even when every value is a
+whole number. Python's `cellucid.prepare()` follows the same rule, so the same
+column written from R or from Python is the same element.
 
-Continuous fields reject `NA`, `NaN`, and infinities. The final integer value
-is reserved only for categorical missing codes and generated nullable
-categorical outlier quantiles.
+The character rule is what anndata's `strings_to_categoricals()` does on write:
+a column that repeats (a sample, a batch) becomes a categorical, and a column of
+unique strings (a barcode copy) stays a string array.
 
-### Quantizing continuous fields
+A missing value in a factor or a character column is stored as code `-1` (no
+category). Category codes take the integer type pandas gives them: int8 for
+fewer than 127 categories, int16 for fewer than 32,767, int32 beyond. There is no limit on the
+number of categories.
 
-Use:
-- `obs_continuous_quantization = 8` (recommended default for big exports), or
-- `obs_continuous_quantization = 16` (higher precision, larger)
+## What is refused
+
+- **A classed column with no AnnData encoding**, such as `Date`, `POSIXct`,
+  `difftime`, or a list column. Convert it first:
+
+  ```text
+  obs column 'day' is a Date column, which has no AnnData encoding Cellucid writes. Convert it first, for example with as.character() or as.numeric().
+  ```
+
+- **An infinite value** in a double column (a colour scale has no position for
+  it); use `NA` for a missing value instead:
+
+  ```text
+  obs column 'score' holds 1 infinite value (first at row 2). A colour scale has no position for an infinity; replace it with NA, which is written as a missing value.
+  ```
+
+- **A different number of rows** than the embeddings:
+  `obs has 2 rows, but the embeddings have 3 cells.`
+
+Both column checks happen while the store is being written, so the call stops
+with nothing at `out_path` (see {doc}`01_cellucid_prepare_overview`).
+
+## Choosing what the viewer shows
+
+`obs_keys` names the obs columns the viewer lists, in this order; every column
+is stored either way:
 
 ```r
-cellucid_prepare(..., obs_continuous_quantization = 8)
+obs_keys = c("cell_type", "sample", "pct_mito")
 ```
 
-### Quantizing categorical “outlier quantiles”
+It is stored as `uns['cellucid']['defaults']['obsKeys']`. Each name must be a
+column of `obs`, at most once.
 
-Categorical outlier quantiles are also continuous values, so they follow the same quantization setting:
+## Tips
 
-- if `obs_continuous_quantization` is set, outlier files are `.u8/.u16`
-- otherwise outlier files are float32 (`.f32`)
+- Turn a numeric cluster id into a factor (`factor(seurat_clusters)`) if you
+  want it coloured by category rather than on a continuous scale.
+- Set factor levels in the order you want the legend to show.
+- Category labels are stored exactly as given: `"T cell"` and `"T cell "` are
+  two categories.
 
-## Categorical centroids and outlier quantiles (why `latent_space` is required)
+## Next
 
-For each categorical field:
-
-### A) Centroids (embedding space)
-
-`cellucid-r` computes per-category centroids in embedding space (for each exported dimension).
-
-Behavior:
-- categories with fewer than `centroid_min_points` cells are skipped
-- “inlier-only” centroids using `centroid_outlier_quantile` (default `0.95`):
-  - compute distances to the centroid
-  - keep points up to the distance quantile
-  - recompute centroid using inliers (if enough points remain)
-
-These centroids are stored in the categorical entry in `obs_manifest.json`.
-
-Setting `centroid_outlier_quantile = NULL` skips centroid computation entirely
-and publishes an empty centroid list for every category. It does **not** switch
-off the per-cell outlier quantiles below — those are always written, and
-`centroid_min_points` is what gates them.
-
-### B) Outlier quantiles (latent space)
-
-`cellucid-r` computes a per-cell “how typical is this cell inside its category?” score:
-
-1) for each category (with at least `centroid_min_points` cells),
-2) compute a latent-space centroid,
-3) compute each cell’s distance to that centroid,
-4) convert distances to quantile ranks within that category.
-
-This is why `latent_space` is required.
-
-The computation is stated exactly, so `prepare()`, `cellucid_prepare()`,
-`cellucid serve` and the web app give the same bytes: the latent values are
-rounded to float32 and widened to float64, centroid sums are accumulated cell
-by cell in cell order, squared distances column by column, and the share of
-the category at that distance or closer is a float32. A shared conformance
-fixture pins those bytes in all three repositories.
-
-
-Cells in categories smaller than `centroid_min_points` get `NaN` outlier quantiles.
-
-## Categorical dtype selection (`obs_categorical_dtype`)
-
-Categorical codes can be written as `uint8`, `uint16` or `uint32`.
-
-Choose `obs_categorical_dtype` explicitly for every export. `uint8` stores at
-most 255 categories, `uint16` at most 65,535, and `uint32` at most
-4,294,967,295, for a field such as a barcode column with more than 65,535
-distinct values. Every categorical field uses the declared width, and a field
-that does not fit is rejected with the width that would hold it.
-
-## Naming
-
-Obs column names are recorded exactly in `obs_manifest.json` and are never used
-as filenames, so they carry no filename rule: any characters, any length, any
-case. `cell type (fine)` and `% mito` both export.
-
-Each exported key must be a non-empty string, **distinct** among the keys you
-export so a lookup by key resolves one field, and **text the viewer can draw
-verbatim** — no control or zero-width characters and no leading or trailing
-whitespace, the same rule category labels obey. A duplicate stops the export
-with `Observation field key 'cluster' is duplicated.`, naming the first repeat.
-
-Recommendation:
-- keep obs column names stable, because a renamed key is a different field to a
-  saved session
-
-## Edge cases (common in real datasets)
-
-### Continuous field contains a non-finite value
-
-Any `NA`, `NaN`, or infinity rejects the complete candidate.
-
-### Continuous field is constant
-
-If all valid values are the same, the field exports normally:
-- quantized, it takes the compact contract's constant case —
-  `minValue == maxValue` and every code `0` — and the viewer decodes it back to
-  the exact constant;
-- unquantized, it is a float32 payload like any other.
-
-The field still colours the embedding one flat colour, which is a property of
-the data rather than of the export.
-
-### Massive categorical fields
-
-Fields with thousands of categories are technically exportable, but often unusable in the UI (legends become too large and humans can’t interpret them).
-
-Recommendations:
-- collapse rare categories (“Other”)
-- export only the fields you need (`obs_keys`)
-
-## Troubleshooting pointers
-
-- “My numeric column became categorical” → check the R type (`str(obs$col)`).
-- “Export fails because uint8 capacity is exceeded” → use
-  `obs_categorical_dtype="uint16"`.
-- “Outlier files are all missing/NaN” → category counts below `centroid_min_points` or latent space issues.
-- Full symptom-based troubleshooting: {doc}`11_troubleshooting_prepare_export`
+- {doc}`05_var_gene_metadata`
+- {doc}`06_gene_expression_matrix`
+- The same topic for Python, `cellucid.prepare()`: {doc}`../../python_package/c_data_preparation_api/04_obs_cell_metadata`

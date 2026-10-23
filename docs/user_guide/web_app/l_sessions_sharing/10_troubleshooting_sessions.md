@@ -14,12 +14,13 @@
 |---|---|---|
 | File picker never opens | browser policy, embedded-context restriction, or handler error | use the ordinary browser tab, check Console, and retry from a direct click |
 | No dataset is loaded | sessions contain state, not the dataset | load the intended dataset first |
-| Dataset identity error | one of source type, dataset id, cell count, variable count, or cell order differs — four different causes with four different messages | read the exact message first: a dimension mismatch is fixed by switching dimension, the others by loading the exact published generation through the same route |
-| Manifest/chunk/profile error | file is not a complete current user bundle | obtain a fresh unchanged **Save State** file |
+| Dataset identity error | one of dataset id, cell count, variable count, data mapping, or cell order differs, or the dataset lacks a field or gene the session uses — each with its own message | read the exact message first, then load the exact dataset the session was saved on |
+| "not a Cellucid session file of format 2" | the file does not start with the session signature `CELLUCID_SESSION/2` | check that you picked a session file saved by this release |
+| Manifest/chunk/profile error | file is not a complete current user bundle | obtain a fresh unchanged file from **Save** |
 | Gzip, byte-length, truncation, or trailing-data error | corrupt or dishonest container | transfer/download the original again; do not edit it |
 | Progress disappears after Cancel or a newer load | intentional abort | no action; the older restore neither succeeded nor failed |
 | **Session fully restored**, but view was already similar | valid complete restore with a subtle visual delta | compare high-signal state below |
-| Load is slow | large validated code, highlight, or cache chunks | leave progress open or Cancel; close memory-heavy tabs if needed |
+| Load is slow | large validated code, highlight, or analysis-result chunks | leave progress open or Cancel; close memory-heavy tabs if needed |
 
 ## Know the success boundary
 
@@ -37,12 +38,12 @@ toast or panel status. If any step fails, earlier mutations roll back, no
 partial subset is accepted, and the same progress entry ends as **Loading
 failed** with the error.
 
-## Save State
+## Save
 
 ### The button produces no file
 
 1. Wait until the dataset and controls are ready.
-2. Click **Save State** again from the visible Session panel.
+2. Click **Save** again from the visible Session panel.
 3. Check the panel status and browser Console for `Failed to save state`.
 4. Check whether your browser or organization blocked downloads from the site
    or embedded Jupyter frame.
@@ -56,7 +57,7 @@ file extension or using a different serializer is not a fix.
 ### Saving takes a long time or the file is large
 
 The likely owners are millions of highlight indices, many categorical code
-columns, or analysis-cache artifacts. Save meaningful milestones:
+columns, or many analysis results. Save meaningful milestones:
 
 - delete obsolete highlight groups;
 - remove unneeded saved views;
@@ -66,12 +67,12 @@ columns, or analysis-cache artifacts. Save meaningful milestones:
 Do not remove chunks from a saved file. The current inventory is closed and a
 manually edited bundle is rejected.
 
-## Load State picker
+## Load picker
 
 ### Picker does not appear
 
 The picker must be opened by a direct user gesture. Close any covering modal,
-click **Load State** once, and inspect Console if nothing happens. Managed
+click **Load** once, and inspect Console if nothing happens. Managed
 browsers or embedded frames can apply file-input policies; use a standalone tab
 with the same application build when permitted.
 
@@ -90,8 +91,8 @@ It creates no restore and should show no red error.
 
 The fingerprint has exactly:
 
-- `sourceType`;
 - `datasetId`;
+- `name` (shown in messages, never compared);
 - `cellCount`;
 - `varCount`;
 - `cellOrder`, itself exactly the `embedding` the digest was taken over, its
@@ -99,11 +100,13 @@ The fingerprint has exactly:
   embedding's coordinates; and
 - `dataMapping`, the stored embeddings and arrays the dataset was shown with.
 
-All six must match, except that the data mapping's embeddings may differ when
-this dataset can show the ones the session names: they are restored. A GitHub load and a local folder load are different even
-when their files look identical. Fix the route or publication identity, then
-retry the unchanged bundle. Cellucid does not restore floating layout alone or
-skip filters/highlights.
+All but `name` must match, except that the data mapping's embeddings may
+differ when this dataset can show the ones the session names: they are
+restored. How the dataset was opened does not matter, but a file that states
+no id (`uns['cellucid']['id']`) takes one from its file name, so the same data
+opened as a renamed file, or from a catalog, can carry a different id. Open the
+dataset the message names, then retry the unchanged bundle. Cellucid does not
+restore floating layout alone or skip filters/highlights.
 
 Read the message before changing anything — each cause has its own:
 
@@ -124,9 +127,6 @@ Read the message before changing anything — each cause has its own:
   have"** (or gene names, expression matrix, latent space, vector fields): the
   session names an array this dataset does not have or cannot use. One it has
   is restored instead of refused.
-- **"This session was saved with … as its gene names"**: a prepared dataset
-  exported with one gene-name set cannot show another. The message names the
-  names on each side. Open the dataset version the session was saved on.
 - **"recorded its cell order on … which this dataset does not have"**: the
   embedding the session was saved in is not part of this dataset.
 - **"the same name and the same number of cells and genes, but the cell
@@ -135,14 +135,14 @@ Read the message before changing anything — each cause has its own:
   stored in a different order, or the same cells were exported again from a
   re-computed embedding. Load the version the session was saved on, or re-create
   the selections on this one.
-- **"saved before Cellucid started recording which cells a selection
-  contains"**: the file predates the cell-order record, so its selections can
-  never be confirmed. Re-create them and save a new session file. This one is
-  not repairable by editing the file.
-- **"saved by an earlier Cellucid release, before sessions recorded which
-  stored embeddings and arrays a dataset is shown with"**: the file predates
-  export format 3. Re-create the view on the current dataset and save a new
-  session file.
+- **"This session uses the observation fields … and the genes …, which the
+  dataset that is open now does not have"**: every key the session needs and
+  the dataset lacks is named. Open the dataset version the session was saved
+  on.
+- **"The category this selection was saved relative to no longer holds the
+  same cells"**: a highlight made from a category is stored relative to that
+  category, and the category's cells changed. Open the dataset version the
+  session was saved on.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/refusal-01-different-dataset.png
 :alt: A notification titled "Loading failed" reporting that the session was saved on a different dataset than the one open now, naming 3,696 cells and 3,753 genes when it was saved and 219,731 cells and 5,754 genes now, and advising to open the dataset the session was saved on.
@@ -174,7 +174,7 @@ include:
 - invalid JSON/binary tables; and
 - truncated, concatenated, trailing, or malformed gzip data.
 
-Obtain a fresh bundle from **Save State** in the current app. The reader accepts
+Obtain a fresh bundle from **Save** in the current app. The reader accepts
 only the exact schema produced by that current writer.
 
 ### You picked a file that is not a session at all
@@ -184,22 +184,22 @@ file. Session files are binary and their names are easy to confuse with the
 figures and exports saved beside them.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/refusal-02-not-a-session-file.png
-:alt: A notification titled "Loading failed" reading "Session file: Invalid session file (bad MAGIC header).", with a dismiss button at its right, after a file that is not a session bundle was chosen in Load State.
+:alt: A notification titled "Loading failed" reading "Session file: This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2).", with a dismiss button at its right, after a file that is not a session bundle was chosen with Load.
 :width: 760px
 
-`Invalid session file (bad MAGIC header).` means the file does not begin with
+`This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2).` means the file does not begin with
 the session container's signature — so it is not a `.cellucid-session` file,
 whatever it is named. Check that you picked the right file before investigating
 anything else.
 ```
 
-### Did you download an official `default.cellucid-session`?
+### Did you download a catalog's default session?
 
-That file is an internal, SHA-256-pinned five-chunk sample starting state. It is
-applied automatically only through the catalog capability and is intentionally
-not a generic manual session.
+That file is a SHA-256-pinned seven-chunk default session. It is applied
+automatically only when its dataset is opened from the catalog that names it,
+and is intentionally not a generic manual session.
 
-Choose the official sample, wait for its starting view, then use **Save State**
+Choose the dataset from the catalog, wait for its default view, then use **Save**
 to create a complete manual file. See {doc}`04_official_sample_states`.
 
 ## Cancel and replacement
@@ -225,12 +225,13 @@ First require terminal success. Then compare:
 5. active obs/var field and category legend;
 6. Active filters, including latent-space outlier filtering;
 7. highlight pages, group names, counts, and visibility;
-8. Camera Path keyframes, Loop, Autoplay, and actual playback state; and
-9. analysis windows and cache-backed results.
+8. Camera Path keyframes, Loop, Autoplay, and actual playback state;
+9. the analysis panel, analysis windows and their results; and
+10. Figure Export settings.
 
 Different viewport sizes can clamp floating panels so they remain reachable.
-That is expected. Missing fields, code columns, highlight membership, or cache
-artifacts are not: the strict operation should reject and roll back rather than
+That is expected. Missing fields, code columns, highlight membership, or
+analysis results are not: the strict operation should reject and roll back rather than
 report success.
 
 ## Progress is slow
@@ -254,12 +255,12 @@ Please include:
 
 1. footer build version;
 2. browser name/version, operating system, and device architecture;
-3. dataset source type, exact dataset id, cell count, and variable count;
-4. whether the operation was Save, file Load, URL Load, or automatic official
-   sample state;
+3. how the dataset was opened, exact dataset id, cell count, and variable count;
+4. whether the operation was Save, file Load, URL Load, or an automatic catalog
+   default session;
 5. the complete visible error and relevant Console stack;
 6. whether Cancel or a newer load was involved;
-7. the session file and immutable prepared generation, if sharing is allowed;
+7. the session file and the unchanged dataset file, if sharing is allowed;
    and
 8. the smallest reliable reproduction sequence.
 

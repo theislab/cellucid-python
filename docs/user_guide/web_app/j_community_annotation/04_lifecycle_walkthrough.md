@@ -57,8 +57,8 @@ and it does not contact GitHub until you ask it to.
 ## Step 3 — Sign in with GitHub
 
 The wizard's four steps are always visible down the left of the dialog, so you
-can see how far along you are: **Sign in with GitHub**, **Install the GitHub
-App**, **Select an annotation repository**, **Sync (pull / publish)**.
+can see how far along you are: **Sign in**, **Install app**,
+**Choose repository**, **Sync**.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-02-signin.png
 :alt: The GitHub sync dialog on step 1 of 4, headed "Sign in with GitHub", with a Continue with GitHub button and a header reading GitHub not connected, Repo not connected.
@@ -100,7 +100,7 @@ The list is paged and filterable because an organisation can expose thousands of
 repositories. If your repository is missing, it is almost always because the
 GitHub App has not been given access to it — use **Add repo**, then **Reload**.
 
-Step 3, **Select an annotation repository**, is where you actually pick one and
+Step 3, **Choose repository**, is where you actually pick one and
 press **Connect**. When the list is long enough to need it, step 3 also offers a
 filter box.
 
@@ -110,8 +110,7 @@ filter box.
 :alt: Step 3 of 4 of the wizard with a filter applied that matches no repository, showing the message "No repositories match this filter." above a status line reading "No repositories to display."
 :width: 1040px
 
-An empty result says `No repositories match this filter.` and the status line
-reads `No repositories to display.` This is a filter result, not a permission
+An empty result says `No repositories match this filter.` This is a filter result, not a permission
 problem: clear the filter to get the full list back.
 ```
 
@@ -146,7 +145,7 @@ An author decides which categorical columns the group may vote on.
 :alt: The Manage annotation section expanded, showing a categorical column picker with Add, Remove and Close buttons, and an Annotatable consensus settings block with a Threshold slider reading 50% and a Min annotators field.
 :width: 488px
 
-**Manage annotation** is present for everyone but only operable by an author.
+**Annotated columns** is present for everyone but only operable by an author.
 Pick a categorical column, press **Add**, and set the two numbers that decide
 consensus for it: **Threshold** and **Min annotators**. **Apply** stages the
 change locally; publishing writes it to `annotations/config.json`.

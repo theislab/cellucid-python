@@ -216,7 +216,7 @@ def test_checked_in_downstream_recipe_is_one_exact_current_contract() -> None:
     version = validate_release(tag=None)
     digest = validate_recipe(version)
 
-    assert version == "0.9.4"
+    assert version == "0.9.5"
     assert len(digest) == 64
     assert digest == digest.lower()
 

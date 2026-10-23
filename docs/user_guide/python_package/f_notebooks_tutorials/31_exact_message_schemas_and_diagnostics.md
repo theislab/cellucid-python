@@ -5,7 +5,7 @@ inventing message types or accepting undeclared fields.
 
 ## Prerequisites
 
-- A displayed viewer from `show(...)` or `show_anndata(...)`
+- A displayed viewer from `show_anndata(...)`
 - A viewer that has reached `ready`
 - Familiarity with Python dictionaries
 
@@ -51,12 +51,6 @@ The remaining fields are the exact payload for that discriminator. See
 {doc}`../e_jupyter_hooks/07_frontend_to_python_events` for every field and
 value constraint.
 
-```{note}
-`command_error` arrives only from the web build that emits `command_error`.
-Older builds — including the one currently published — apply or refuse a
-command silently, so this tutorial will not observe one.
-```
-
 ## Exercise the request/response diagnostics
 
 ### Ping → pong
@@ -95,7 +89,7 @@ print(snapshot["serverUrl"])
 ```python
 report = viewer.debug_connection(timeout=5)
 print(report["server_health"])
-print(report["dataset_identity_probes"])
+print(report["anndata_store_probes"])  # the AnnData store the viewer reads
 print(report["frontend_roundtrip"])
 print(report["frontend_debug_snapshot"])
 print(report["recent_events"])

@@ -24,11 +24,11 @@ This design avoids “special Jupyter extensions” and works across notebook fr
 **Prerequisites**
 - `pip install cellucid`
 - A notebook environment (classic, JupyterLab, VSCode, or Colab)
-- A dataset you can view via `show_anndata(...)` or `show(...)`
+- A dataset you can view via `show_anndata(...)`
 
 ## Fast path (what you can do)
 
-Once you have a `viewer` (from `show_anndata(...)` or `show(...)`), you can:
+Once you have a `viewer` (from `show_anndata(...)`), you can:
 
 - **Send commands (Python → viewer)**
   - highlight cells by index (`viewer.highlight_cells(...)`)
@@ -110,8 +110,8 @@ If your notebook is served on **HTTPS** (common on JupyterHub), browsers may blo
 Cellucid uses exactly the `client_server_url=` argument when one is supplied;
 otherwise it uses the bound server URL. It does not infer or probe a proxy.
 For Jupyter Server Proxy, Colab, or another reverse proxy, obtain the exact
-browser-reachable HTTP(S) base URL and pass it to `show(...)`,
-`show_anndata(...)`, or the viewer constructor. See
+browser-reachable HTTP(S) base URL and pass it to `show_anndata(...)` or the
+viewer constructor. See
 {doc}`13_security_cors_origins_and_mixed_content` and
 {doc}`03_supported_environments_matrix`.
 
@@ -119,7 +119,8 @@ browser-reachable HTTP(S) base URL and pass it to `show(...)`,
 
 - Multiple viewers: each viewer has a unique `viewerId`; events route by ID.
 - Large selections: sending huge index lists back and forth can be slow.
-- Backed AnnData (`.h5ad` backed mode): be careful with thread-safety in callbacks.
+- Callbacks run on the server's request threads: be careful with thread-safety
+  when they touch shared objects such as your `adata`.
 - Source-restricted environments: viewer/server startup fails directly when it
   cannot establish the configured exact UI generation.
 

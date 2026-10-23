@@ -10,20 +10,23 @@
 
 ## Different identity, even with similar files
 
-If a session was saved through GitHub and the same prepared files are later
-opened with the local **Prepared** picker, `sourceType` differs. If a remote
-publication changes its dataset id, `datasetId` differs. Either case rejects
-the complete restore.
+A session saved on a file opened from GitHub restores on the same file opened
+with the **Zarr folder**, **Zarr ZIP** or **H5AD** button, from a web address,
+or from a server: the route is not part of a dataset's identity, as long as the
+file states its own id in `uns['cellucid']['id']`. A file without one gets an
+id from how it was opened (its file name, its link), and then the route does
+matter. If a publication changes
+its dataset id, `datasetId` differs, and that rejects the complete restore.
 
 This is intentional. Cellucid will not extract the floating layout or skip only
-cell-indexed chunks. Load the exact route and dataset identity used by the
-sender, or create a fresh session after loading through the intended route.
+cell-indexed chunks. Load the dataset identity used by the sender, or create a
+fresh session after loading it.
 
 See {doc}`07_versioning_compatibility_and_dataset_identity`.
 
 ## Same fingerprint, changed content
 
-The fingerprint checks source type, dataset id, cell count, variable count, the
+The fingerprint checks dataset id, cell count, variable count, the
 data mapping, and a `cellOrder` record — a digest of the coordinates of the
 embedding the live view showed, plus that embedding and its dimension. It is
 not a hash of expression values, obs/var fields, category inventories, cell
@@ -35,8 +38,8 @@ identity and the same sizes, while leaving the displayed coordinates untouched,
 still passes the guard. Re-ordering cells or recomputing the embedding no longer
 does — both change the digest and are refused with their own message.
 
-Never reuse an identity for changed content. Publish a new prepared generation
-under a new immutable id and save a new session.
+Never reuse an identity for changed content. Publish the changed file under a
+new immutable id and save a new session.
 
 ## Eager and lazy scheduling
 
@@ -56,19 +59,22 @@ a red product failure is published.
 An ordinary current bundle always carries:
 
 - `cinematic/camera`, even when there are no keyframes; and
-- `analysis/cache-inventory`, even when there are no artifacts.
+- `analysis/windows` and `analysis/docked`, even when no analysis is open.
 
-Restoring those empty payloads clears a destination Camera Path or cache. It
+Restoring those empty payloads clears a destination Camera Path and closes
+floating analysis windows the session did not have. It
 does not preserve stale state from whatever you explored before loading the
 session. Saved playback state is restored exactly; autoplay begins only at a
 successful commit when the saved settings require it.
 
-## Analysis results versus saved cache artifacts
+## Analysis results in sessions
 
-Analysis window descriptors and the exact cache inventory can restore, but a
-session is not the canonical scientific-results archive. Export result tables
-for publication or downstream analysis. After restore, recompute any result
-that the session did not explicitly cache.
+Differential expression, marker-gene, signature and correlation results are
+saved with their analysis (in the sidebar panel or a floating window) and come
+back without being run again. A session is still not the canonical
+scientific-results archive: export result tables for publication or downstream
+analysis. A saved result that names a gene or category the open dataset lacks
+is refused.
 
 ## Different screens and browsers
 
@@ -87,33 +93,33 @@ Sessions grow with:
 - many highlight groups containing millions of indices;
 - many categorical user-defined fields;
 - many saved views; and
-- cached analysis artifacts.
+- many saved analysis results.
 
 The loader enforces stored and decoded limits, checks gzip output length before
 native decompression, and yields during heavy preflight/restore work so Cancel
 and newer loads remain responsive. You can keep ordinary workflows lighter by
-saving meaningful milestones, deleting obsolete highlights, and retaining only
-the analysis caches you expect collaborators to use.
+saving meaningful milestones and deleting obsolete highlights. A highlight
+that is a whole category costs a few bytes whatever its size: it is stored
+relative to the category.
 
 ## Missing field or changed schema
 
 A matching fingerprint does not make a missing field acceptable. If a saved
 active field, category inventory, code column, view descriptor, or analysis
-artifact no longer matches the loaded dataset, the exact contributor rejects
+result no longer matches the loaded dataset, the exact contributor rejects
 the bundle and the transaction rolls back. Cellucid does not quietly keep the
 current field or apply the remaining chunks.
 
-Load the unchanged prepared generation, or configure the changed dataset and
-use **Save State** to author a new current bundle.
+Load the unchanged dataset file, or configure the changed dataset and
+use **Save** to author a new current bundle.
 
-## Official sample defaults are not manual sessions
+## Catalog default sessions are not manual sessions
 
-The catalog's `default.cellucid-session` has an intentionally smaller,
-integrity-pinned profile that is applied only by the official starting-state
-path. Downloading it and choosing **Load State** is rejected because the manual
-reader requires explicit camera-path and cache-inventory chunks.
+A catalog's default session has an intentionally smaller, integrity-pinned
+profile that is applied only when its dataset is opened from that catalog. Downloading it and choosing **Load** is rejected because the manual
+reader requires the explicit camera-path chunk, which a default does not carry.
 
-Choose the sample first, then use **Save State** if you need a shareable manual
+Choose the dataset from the catalog first, then use **Save** if you need a shareable manual
 session. See {doc}`04_official_sample_states`.
 
 ## Next steps

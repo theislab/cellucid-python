@@ -3,8 +3,8 @@
 This page explains where Cellucid Python performance bottlenecks typically come from and how to profile them.
 
 It covers:
-- export-time performance (`prepare`)
-- server performance (exported vs AnnData)
+- preparation-time performance (`prepare`)
+- server performance
 - notebook performance (embedding + hooks)
 
 ---
@@ -21,58 +21,61 @@ Developer work should aim to improve one without catastrophically harming the ot
 
 ---
 
-## Export-time performance (`prepare`)
+## Preparation-time performance (`prepare`)
 
 ### Main cost drivers
 
-1) **Gene export is O(n_cells × n_genes)** (and writes one file per gene).
-2) **Connectivity export can be expensive** if the KNN graph is large.
-3) **Compression trades CPU for disk**.
-4) **Quantization trades precision for disk** (usually worth it for visualization).
+1) **Converting the expression matrix** to CSC float32 (a full copy of its
+   stored values).
+2) **Compressing chunks**: an `.h5ad` compresses on one thread; Zarr compresses
+   its chunks in parallel. On the 561,947-cell dataset of the specification an
+   `.h5ad` took 23 s, a `.zarr` folder 7 s.
+3) **Symmetry check of a large graph** (`connectivities` against its transpose).
 
 ### Practical tuning knobs
 
-- `var_quantization=8` is usually the best size/quality tradeoff for colormaps.
-- `compression=6` is a reasonable gzip default.
-- `gene_identifiers=[...]` dramatically reduces export size/time if you only need a gene panel.
+- `gene_identifiers=[...]` reduces size and time if you only need a gene panel.
+- Subset cells before the call.
+- There are no codec or precision knobs: the layout is the measured one
+  ({doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification`).
 
 ### Memory footguns
 
 - Dense gene expression matrices can explode memory.
-- Sparse matrices are preferred; `prepare` will convert to CSC for per-gene access.
+- Sparse matrices are preferred; `prepare` converts them to CSC for per-gene access.
 
 ---
 
 ## AnnData server performance
 
-AnnData mode is designed for convenience and lazy loading, but it has real bottlenecks:
+The Python server computes nothing per request: it answers
+range requests with the store's bytes from disk, on a threaded HTTP/1.1 server
+with keep-alive connections. The reading — and so the performance — is the web
+app's HDF5/Zarr reader (`cellucid/assets/js/data/h5ad.js`, `zarr.js`,
+`base-anndata-adapter.js`).
 
-- gene expression access is column-oriented (better with CSC)
-- caches exist (LRU for recently accessed genes) but can still grow
-- the HTTP server is single-process and largely sequential (standard library `HTTPServer`)
+What decides the cost:
+- matrix layout: a column-major (CSC) matrix reads one gene as one contiguous
+  range; a row-major (CSR) matrix costs a gene index the browser builds once,
+  on the first gene,
+- storage and latency between the server and the data (network filesystems,
+  tunnels),
+- an in-memory object or a store with browser-undecodable codecs, which is
+  written once to a temporary `.h5ad` at startup.
 
-Where to look:
-- `cellucid-python/src/cellucid/anndata_adapter.py`:
-  - CSR→CSC conversion cache
-  - gene expression LRU cache (a 256 MiB budget)
-  - centroid/outlier caches
+Measured on one Mac over localhost, for a 562k-cell × 8,192-gene `.h5ad` (CSR,
+gzip): startup 0.16 s, obs fields about 90 ms, 2D/3D UMAP about 40 ms each,
+the gene index about 2 s in the background from the moment the dataset opens
+(the browser measures a localhost link as fast as a disk), then a gene in a few
+ms and 100 genes in about 20 ms (1.3 s for a gene asked before the index is
+built), 1,000 cell rows 0.55 s, neighbour graph 0.65 s when drawn. The same object in memory: 0.8 s to
+write the temporary CSC `.h5ad` (925 MB), then first gene 8 ms and 100 genes
+68 ms.
 
 Practical guidance:
-- If users complain “gene coloring is slow”, check whether the backend is repeatedly converting formats or thrashing the LRU cache.
-
----
-
-## Exported server performance
-
-Exported mode is “as fast as your static files”:
-
-- file size and compression dominate
-- browser-side decompression of `.gz` files can become noticeable for huge arrays
-
-If exported mode is slow:
-- check export settings (quantization + compression),
-- check file sizes,
-- check client hardware limits (browser memory/GPU).
+- If users complain “gene coloring is slow”, profile the browser's reads in the
+  network tab first: count the range requests per gene and check the matrix
+  layout.
 
 ---
 
@@ -96,8 +99,7 @@ Guidance:
 
 Before optimizing, capture:
 - dataset size (`n_cells`, `n_genes`)
-- export settings (quantization/compression)
-- mode (exported vs AnnData)
+- whether `prepare()` wrote the file, and its container (`.h5ad`, `.zarr`, `.zarr.zip`)
 - rough timings (“prepare took 20 minutes”, “gene color-by takes 3 seconds”)
 
 ### Step 2 — Profile the Python side
@@ -121,7 +123,7 @@ In browser DevTools Network:
 ### Step 4 — Decide optimization strategy
 
 Common strategies:
-- reduce data size (quantize/subset)
+- reduce data size (subset cells or genes)
 - reduce recomputation (cache)
 - reduce per-request overhead (batch requests, avoid repeated conversions)
 
@@ -134,15 +136,15 @@ Common strategies:
 Expect:
 - large point arrays
 - heavy browser memory pressure
-- slow decompression if exported `.gz` is huge
+- a row-major (CSR) matrix: the gene index the browser builds on the first gene
 
 Mitigation:
-- encourage pre-export with quantization
+- recommend writing the file with `prepare()` (gene-major)
 - consider downsampling workflows in documentation
 
 ### Extremely high category counts
 
-Even if export succeeds, categories with tens of thousands of levels can become unusable in the UI.
+Even when a file is written, categories with tens of thousands of levels can become unusable in the UI.
 
 Mitigation:
 - document recommended practice (collapse categories, use higher-level labels).
@@ -151,23 +153,23 @@ Mitigation:
 
 ## Troubleshooting
 
-### Symptom: “Export folder is enormous”
+### Symptom: “The prepared file is enormous”
 
 Likely causes:
-- no quantization,
-- no compression,
-- exporting all genes.
+- every gene kept,
+- a dense expression matrix,
+- integer counts above 2^24 (stored as float64).
 
 Fix:
-- enable `var_quantization` + `compression`,
-- export fewer genes.
+- keep a gene panel with `gene_identifiers=[...]`,
+- pass a sparse matrix.
 
 ### Symptom: “AnnData server uses too much memory”
 
 Likely causes:
-- conversion to CSC doubles sparse matrix memory,
+- an in-memory object is written to a temporary CSC `.h5ad` (a copy of its matrices),
 - caches storing large arrays.
 
 Fix:
-- prefer pre-export for large datasets,
+- serve a path rather than an in-memory object for large datasets,
 - reduce gene interactions, or restart kernel to clear caches after exploration.

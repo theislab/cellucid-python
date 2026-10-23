@@ -300,5 +300,5 @@ Fix:
 ## Next steps
 
 - {doc}`23_programmatic_highlighting_and_selection_callbacks` (robust hooks patterns)
-- {doc}`21_prepare_exports_with_quantization_and_compression` (shareable exports)
+- {doc}`21_prepare_a_cellucid_ready_anndata` (a shareable file)
 - Web app selection details: {doc}`../../web_app/f_highlighting_selection/index`

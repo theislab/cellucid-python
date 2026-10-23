@@ -30,7 +30,7 @@ Cellucid is split across repositories:
 - **Python package** (this page): `cellucid-python/`
 - **Web app** (UI/rendering): `cellucid/` (see {doc}`../../web_app/p_developer_docs/index`)
 
-If you are changing the export format or hooks protocol, you will likely touch both repos.
+If you are changing the Cellucid-ready AnnData contract or the hooks protocol, you will likely touch both repos.
 
 ---
 
@@ -118,19 +118,20 @@ Doc-writing conventions live here:
 
 You can test with either:
 
-### Option A: exported folder (fastest + most representative)
+### Option A: a Cellucid-ready AnnData (fastest + most representative)
 
-1) Export your dataset:
+1) Prepare your dataset:
 
 ```python
 from cellucid import prepare
-# ... call prepare(...) to write an export folder ...
+# ... call prepare("my_dataset.h5ad", format="h5ad", ...) to write a Cellucid-ready AnnData ...
 ```
 
 2) Serve it:
 
 ```bash
-cellucid serve ./my_export
+# A file written by cellucid.prepare() names itself: no identity flags.
+cellucid serve ./my_dataset.h5ad
 ```
 
 ### Option B: AnnData server (convenient during iteration)

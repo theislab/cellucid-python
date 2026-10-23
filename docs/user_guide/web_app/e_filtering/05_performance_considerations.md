@@ -5,7 +5,7 @@
 **What you’ll learn:**
 - Why filtering can lag on large datasets (what scales with `n_cells`)
 - Which UI controls are “hot paths” (and how to use them safely)
-- Practical workflows that stay fast for large exports
+- Practical workflows that stay fast for large datasets
 
 **Prerequisites:**
 - A dataset loaded (ideally large enough to notice performance differences)
@@ -121,7 +121,7 @@ For continuous fields:
 
 1) Turn **Live filtering** to `Off`
 2) Drag Min/Max to the rough range you want
-3) Click `FILTER` once
+3) Click `Filter` once
 
 This avoids recomputing on every slider step.
 
@@ -139,7 +139,7 @@ the toggle before every drag.
 :alt: The continuous legend Filtering block with the Live filtering toggle reading Off, the hint below it reading Drag sliders then click Filter, Min and Max sliders with numeric readouts, and a black clickable FILTER button beside RESET with the mouse pointer on FILTER.
 :width: 428px
 
-The state you want on a large dataset: `Live filtering` **Off**, so `FILTER`
+The state you want on a large dataset: `Live filtering` **Off**, so `Filter`
 becomes clickable and one recomputation replaces one per slider step. While
 `Live filtering` is On the button is greyed out entirely, which is the quickest
 way to tell which mode you are in.
@@ -149,7 +149,7 @@ way to tell which mode you are in.
 
 When you’re exploring:
 - adjust one filter,
-- check the count line (“Showing X of Y points”),
+- check the count line (“Showing X of Y cells”),
 - then add the next filter.
 
 This makes it obvious which filter causes lag and which filter actually changes the visible set.

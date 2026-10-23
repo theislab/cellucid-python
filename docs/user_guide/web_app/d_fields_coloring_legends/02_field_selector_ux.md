@@ -15,12 +15,12 @@
 
 All field selection for coloring happens in the left sidebar:
 
-- **Coloring & Filtering** → the three selectors:
+- **Coloring & filtering** → the three selectors:
   - **Categorical obs**
   - **Continuous obs**
   - **Gene Expression**
 
-The legend and related controls appear underneath in the dashed **Display options** box.
+The legend and related controls appear underneath in the **Legend** section.
 
 :::{important}
 In multiview (live + snapshots), the sidebar controls apply to the **currently active view**.
@@ -100,7 +100,8 @@ Gene expression is usually a long list (thousands of genes), so the UI is a sear
 
 Keyboard shortcuts:
 - `↓` / `↑` move the highlighted result through the dropdown (opening it if
-  it is closed)
+  it is closed); they wrap from the last result to the first and back, and
+  `↑` with nothing highlighted starts at the last result
 - `Enter` selects the highlighted result, or the **top** result when none is
   highlighted
 - `Esc` closes the dropdown (and removes focus)
@@ -139,7 +140,7 @@ If nothing matches, the dropdown says so rather than going blank:
 :width: 480px
 
 The empty state names the number of genes **this** dataset publishes, which is
-the number you need in order to tell “I mistyped it” apart from “this export
+the number you need in order to tell “I mistyped it” apart from “this dataset
 does not contain it”. See {doc}`07_genes_in_the_built_in_samples`.
 ```
 
@@ -151,11 +152,11 @@ Loading a gene can take time (especially on remote datasets). While a gene is lo
 
 The dropdown holds exactly the gene names the loaded dataset published, plus any
 gene fields you created inside Cellucid. There is no second identifier to search
-instead and no alias table, so a name the export did not publish matches nothing
+instead and no alias table, so a name the file does not hold matches nothing
 even when the gene exists in the underlying study.
 
 That is worth knowing before you conclude a gene is missing from your data: the
-four human built-in samples publish only part of their prepared gene axis, for a
+four human built-in samples publish only part of their upstream gene axis, for a
 documented reason. See {doc}`07_genes_in_the_built_in_samples`.
 
 
@@ -223,7 +224,7 @@ If all selectors are cleared, there is no active field:
 
 ## Deleted Fields panel (Restore vs Confirm deletion)
 
-When you delete fields (or when Cellucid creates derived fields and hides the originals), a **Deleted Fields** section appears at the bottom of **Coloring & Filtering**.
+When you delete fields (or when Cellucid creates derived fields and hides the originals), a **Deleted Fields** section appears at the bottom of **Coloring & filtering**.
 
 It contains:
 - an **Obs** group (deleted obs fields)

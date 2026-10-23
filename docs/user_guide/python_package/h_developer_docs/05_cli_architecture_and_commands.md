@@ -22,18 +22,17 @@ That’s why:
 
 ### `cellucid serve`
 
-`serve` is the unified command that **auto-detects** what you gave it:
+`serve` **detects** which AnnData layout you gave it:
 
-- `.h5ad` → starts `AnnDataServer` with read-only backed access
-- `.zarr` directory → starts `AnnDataServer` after an eager Python load
-- directory with `dataset_identity.json` → starts `CellucidServer` (static files)
+- `.h5ad` file → starts `AnnDataServer`, which serves the file as it is
+- Zarr store folder, or zipped Zarr store (`.zip`) → starts `AnnDataServer`,
+  which serves the store as it is
+
+The viewer reads an AnnData store itself, with range requests.
 
 Examples:
 
 ```bash
-# Export folder
-cellucid serve ./my_export
-
 # AnnData file
 cellucid serve ./data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 
@@ -51,11 +50,23 @@ Common flags:
 
 AnnData-only flags:
 
-- `--latent-key KEY`: choose latent space for outlier quantiles (AnnData mode)
-- `--dataset-name NAME`: exact display name (required in AnnData mode)
-- `--dataset-id ID`: exact stable identifier (required in AnnData mode)
-- `--vector-field-default FIELD_ID`: exact default field ID (required when
-  direct AnnData contains more than one field)
+- `--latent-key KEY`: `obsm` latent space (scVI, PCA) the outlier filter
+  measures in
+- `--dataset-name NAME`: exact display name (default: the store's
+  `uns['cellucid']['name']`; required without it)
+- `--dataset-id ID`: exact stable identifier (default: the store's
+  `uns['cellucid']['id']`; required without it)
+- `--obs-key KEY` (repeatable), `--embedding-1d/2d/3d KEY[:COLUMNS]`,
+  `--knn KEY`, `--gene-id-column COLUMN`, `--expression X|raw|layer:NAME`,
+  `--vector-field-default FIELD_ID`, `--[no-]normalize-embeddings`,
+  `--centroid-min-points N`: launch choices, each checked against the
+  store's metadata before the server binds and handed to the viewer as a launch
+  default; one left out comes from `uns['cellucid']['defaults']`, else the
+  viewer's default rule
+
+Direct AnnData startup prints four steps: `[1/4] Detecting format`,
+`[2/4] Reading metadata`, `[3/4] Checking launch choices`,
+`[4/4] Starting server`.
 
 ---
 
@@ -66,18 +77,18 @@ Implementation lives in:
 
 Detection rules:
 
-1) A regular file is `h5ad` only when it has the exact `.h5ad` suffix.
-2) A directory is `zarr` only when it is a complete Zarr v2 root (both valid
-   `.zgroup` and `.zattrs`, with no `zarr.json`).
-3) A `.zarr` directory name alone does not establish the format.
-4) A non-Zarr directory is `exported` when `_list_exported_datasets(...)`
-   discovers one or more complete prepared datasets, including an exports root
-   with dataset subdirectories.
-5) Else → `unknown` (error).
+`_detect_data_format` asks `_anndata_files.classify_anndata_path`:
 
-Then:
-- `exported` → call `cellucid.server.serve(...)`
-- `h5ad`/`zarr` → call `cellucid.anndata_server.serve_anndata(...)`
+1) A regular file is `h5ad` when it has the exact `.h5ad` suffix, and `zarr`
+   when it is a `.zip` archive holding a Zarr store (a `.zgroup`, `.zmetadata`
+   or `zarr.json`).
+2) A directory is `zarr` when its root is a Zarr v3 (`zarr.json`) or v2
+   (`.zgroup`) group. A `.zarr` directory name alone does not establish the
+   format, and a valid store does not need it.
+3) Else → `unknown` (error: `Unable to detect format for: <path>. Expected an
+   .h5ad file, a Zarr store folder, or a zipped Zarr store (.zip).`).
+
+Then `h5ad`/`zarr` → `cellucid.anndata_server.serve_anndata(...)`.
 
 ---
 
@@ -93,8 +104,8 @@ in `cli._OPERATOR_ERROR_TYPES`:
 
 | Type | Reaches the CLI as |
 |---|---|
-| `ValueError` | a missing or inapplicable flag, an undetectable input, an incomplete export, an invalid `--allowed-host` |
-| `TypeError` | a manifest whose JSON is the wrong shape |
+| `ValueError` | a missing identity, an undetectable input, a launch choice the store does not have, an invalid `--allowed-host` |
+| `TypeError` | an argument of the wrong type |
 | `KeyError` | a named `obs` column, gene, or `obsm` key that is not in the data |
 | `RuntimeError` | no browser to open, a viewer-source generation that did not return HTTP 200 |
 | `OSError` | a taken port, an unbindable host, a privileged port, an unreadable file — including the `socket.gaierror` and `urllib` `URLError` subclasses |
@@ -134,9 +145,8 @@ how an embedding process configured logging.
 
 Confirm:
 - your path exists,
-- a file uses the exact `.h5ad` extension,
-- a directory is a complete Zarr v2/v3 root as described above,
-- or the directory contains one or more complete prepared datasets.
+- a file uses the exact `.h5ad` extension, or is a `.zip` holding a Zarr store,
+- a directory is a Zarr v2/v3 root as described above.
 
 ### Symptom: “The port is busy”
 
@@ -146,7 +156,7 @@ Stop the process using that port, choose another exact port, or request an
 operating-system-assigned port with `--port 0`:
 
 ```bash
-cellucid serve ./my_export --port 0
+cellucid serve ./data.h5ad --dataset-name "My dataset" --dataset-id my-dataset --port 0
 ```
 
 ### Symptom: “The browser opens but can’t reach the server”

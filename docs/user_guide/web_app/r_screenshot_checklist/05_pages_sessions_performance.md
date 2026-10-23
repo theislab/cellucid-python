@@ -1,8 +1,15 @@
 # Screenshot coverage audit — `l_sessions_sharing` and `n_benchmarking_performance`
 
+:::{important}
+Audited before Cellucid 0.9.5, which reads AnnData only. The capture
+instructions use the current controls, fixtures and sample catalog; where a
+record says what a page or an image showed at audit time (the **Prepared**
+button, a prepared export), that is history. {doc}`index` maps the old names.
+:::
+
 Audited read-only against `cellucid/assets/js` (session subsystem, notification
 center, `index.html` markup), `cellucid/tests/browser`, and
-`cellucid-datasets/exports-v3`. The app was **not** launched and no benchmark was
+the sample catalog then published (prepared, before 0.9.5). The app was **not** launched and no benchmark was
 run (a sibling unit holds the rendering-measurement lock). Every DOM id, button
 label, accordion title, and user-visible string quoted below was read out of the
 source, not inferred.
@@ -79,7 +86,7 @@ sequence is a single scripted Playwright run producing 14 captures. Steps 6 and
 | Parameter | Value | Why it is fixed |
 |---|---|---|
 | Viewport | 1440 × 900 CSS px, `deviceScaleFactor: 2` | Floating panels are clamped to the viewport on restore ({doc}`/user_guide/web_app/l_sessions_sharing/09_edge_cases`), so a BEFORE/AFTER pair captured at different sizes is not a valid comparison. |
-| Dataset | `#dataset-select` → option value `dataset:local-demo:pancreas` | 3,696 cells / 3,753 genes — loads in seconds; publishes 1D + 2D + 3D embeddings with `default_dimension: 3`; recognisable endocrinogenesis trajectory for a wet-lab reader. Verified in `cellucid-datasets/exports-v3/pancreas/dataset_identity.json`. |
+| Dataset | `#dataset-select` → option value `dataset:local-demo:pancreas` | 3,696 cells / 3,753 genes — loads in seconds; publishes 1D + 2D + 3D embeddings with `default_dimension: 3`; recognisable endocrinogenesis trajectory for a wet-lab reader. Verified in the sample catalog at audit time (prepared, before 0.9.5). |
 | Embedding | the 3D UMAP throughout | The session records the embedding each view shows and verifies its cell order against the embedding `cellOrder.embedding` names, whichever one is on screen, so the success path does not depend on it; keeping one embedding keeps the BEFORE/AFTER frames comparable. |
 | Theme / background | app defaults (light / Studio (light)) | Matches the reviewed official starting state, so the reset in step 10 is visually unambiguous. |
 | Welcome modal | dismissed with `Escape` (`#welcome-modal`) — see `tests/browser/helpers/welcome.mjs` | Otherwise it covers the sidebar in every frame. |
@@ -169,10 +176,10 @@ Output directory for every file: `_static/screenshots/sessions_sharing/`.
   something else moved too").
 - **File:** `session-lifecycle-06-before.png` · `:width: 1440px`
 
-### Step 7 — open the Session panel and press Save State
+### Step 7 — open the Session panel and press Save
 
 - **Interaction:** scroll the sidebar to `#session-state-controls`.
-- **Crop:** `#session-state-controls` only — the `Session state:` label, the
+- **Crop:** `#session-state-controls` only — the `Session file` title, the
   `i` info button, and the two buttons `#save-state-btn` / `#load-state-btn`.
 - **Cursor:** yes, **on `#save-state-btn`**.
 - **File:** `session-lifecycle-07-save-state-button.png` · `:width: 246px`
@@ -193,7 +200,7 @@ Output directory for every file: `_static/screenshots/sessions_sharing/`.
 
 ### Step 9 — the artifact the user actually receives
 
-The Save State path is `downloadBlob()` → an anchor `click()` → a browser
+The **Save** path is `downloadBlob()` → an anchor `click()` → a browser
 download (`downloadBlob()` in `session-serializer.js`, called from
 `downloadSession()`). There is **no** in-app artifact, no
 link, and no server upload. The browser's download shelf and the OS file dialog
@@ -204,7 +211,7 @@ are browser chrome — Playwright cannot capture them, and both would expose
   - `cd ~/Downloads` and set `PS1='$ '` so no path or username is rendered.
   - Run: `ls -lh cellucid-session-*.cellucid-session` then
     `head -c 96 cellucid-session-*.cellucid-session | xxd | head -6`.
-  - The hexdump shows the ASCII magic `CELLUCID_SESSION\n`, the 32-bit
+  - The hexdump shows the ASCII signature `CELLUCID_SESSION/2\n`, the 32-bit
     manifest length, and the opening of the JSON manifest — exactly the framing
     documented in {doc}`/user_guide/web_app/l_sessions_sharing/12_reference`.
 - **Crop:** the terminal window, ~900 px wide, dark theme.
@@ -227,7 +234,7 @@ are browser chrome — Playwright cannot capture them, and both would expose
   no filters, no highlights — and the reader can see there is nothing left over
   to fake the restore.
 
-### Step 11 — press Load State
+### Step 11 — press Load
 
 - **Crop:** `#session-state-controls`.
 - **Cursor:** yes, **on `#load-state-btn`**.
@@ -398,14 +405,14 @@ longer a reason to refuse it. Details under
 
 ## {doc}`/user_guide/web_app/l_sessions_sharing/03_save_restore_ux`
 
-- **explains** — The click-by-click Save State / Load State procedure, what
+- **explains** — The click-by-click **Save** / **Load** procedure, what
   happens under the hood, and naming/milestone best practice.
 - **has** — 1 figure, line 162, `data_loading/data-loading-session-panel.png`,
   `:width: 246px` (line 164). **Borrowed**, third use of the same file.
 - **verdict** — **SEQUENCE** (+ **STALE-RISK**)
 - **needs** — This page is the natural home for the full lifecycle. Embed steps
   1, 7, 8, 9, 11, 12, 13, 14 in order, each under its own sub-heading matching
-  the existing "Save State" / "Load State" structure. The proof pair (6 and 13)
+  the existing "Save" / "Load" structure. The proof pair (6 and 13)
   belongs here too, immediately under "How to confirm a restore worked".
   All parameters as specified in the LIFECYCLE section.
 - **notes** —
@@ -416,17 +423,18 @@ longer a reason to refuse it. Details under
     successfully**." There is no panel status; both strings are toasts in
     `#notification-center`.
   - The page correctly warns that the catalog's `default.cellucid-session` is
-    rejected by the manual loader. Re-verified against the shipped presets: all
-    five carry exactly five chunks (`core/field-overlays`, `core/state`,
-    `ui/dockable-layout`, `analysis/windows`, `highlights/meta`) in that order
-    and no `cinematic/camera` or `analysis/cache-inventory`, which the manual
-    profile requires. A Save State writes seven.
+    rejected by the manual loader. Session format 2 (re-verify once the presets
+    are regenerated): a published default carries exactly seven chunks
+    (`core/field-overlays`, `core/state`, `ui/dockable-layout`,
+    `ui/figure-export`, `analysis/windows`, `analysis/docked`,
+    `highlights/meta`) in that order and no `cinematic/camera`, which the
+    manual profile requires. A **Save** writes eight singletons.
 
 ## {doc}`/user_guide/web_app/l_sessions_sharing/04_official_sample_states`
 
 - **explains** — How a built-in sample's SHA-256-pinned starting state is
-  fetched, verified, and applied automatically, and why it is not a Load State
-  artifact.
+  fetched, verified, and applied automatically, and why it is not a file for
+  **Load**.
 - **has** — `none`
 - **verdict** — **ADD** (+ **STALE-RISK**)
 - **Do the presets have visible identities worth showing?** Yes, but not
@@ -453,20 +461,20 @@ longer a reason to refuse it. Details under
   3. **Do not** capture the rejection of a downloaded `default.cellucid-session`
      here — that image belongs on {doc}`/user_guide/web_app/l_sessions_sharing/09_edge_cases`, which is where the
      behaviour is catalogued.
-- **notes** — ~~**Stale value.** The page quotes a Suo `state_sha256` literal
-  that no longer matches the catalog.~~ **Done** — the page now shows the
-  field's *shape*, `"state_sha256": "<64 lowercase hexadecimal characters>"`,
-  and tells the reader to read the current value out of
-  `cellucid-datasets/exports-v3/datasets.json`. **This record quotes no digest
+- **notes** — ~~**Stale value.** The page quoted a Suo session digest literal
+  that no longer matched the catalog.~~ **Done** — the page now shows the
+  field's *shape*, `"sha256": "<64 lowercase hexadecimal characters>"` under a
+  dataset's `session`, and tells the reader to read the current value out of
+  `cellucid-datasets/anndata/datasets.json`. **This record quotes no digest
   either, deliberately:** while the finding stood open the catalog was
   regenerated again, so the "current" value written down here went stale on its
   own. A published state is rebuilt whenever the reviewed view or the session
   format changes; the catalog is the only place the digest can be read.
   Everything else on the page checks out:
-  the five-chunk profile, the `{ "states": [...] }` manifest root, the
+  the seven-chunk profile, the `{ "states": [...] }` manifest root, the
   `local-demo`-only opt-in, and the no-probe source list all match the source.
 
-## {doc}`/user_guide/web_app/l_sessions_sharing/05_share_workflows_links_bundles_exports`
+## {doc}`/user_guide/web_app/l_sessions_sharing/05_share_workflows_links_sessions_data_files`
 
 - **explains** — The three shareable artifacts (link to the dataset, session
   bundle, export folder), the "portable pair" rule, and three sender/recipient
@@ -475,16 +483,16 @@ longer a reason to refuse it. Details under
 - **verdict** — **ADD**
 - **Does the URL bar need to be visible, and is that safe?** **No, and it is not
   needed.** Cellucid's "share a link" means *a link to the dataset* — a public
-  URL or a GitHub `owner/repo/path` typed into `#github-repo-url` or the remote
+  URL or a GitHub `owner/repo/path` typed into `#data-link-url` or the remote
   server field — **not** a shareable app URL that encodes state. There is no
-  session-in-URL feature, and Save State is a plain file download. Photographing the browser's URL bar would therefore illustrate
+  session-in-URL feature, and **Save** is a plain file download. Photographing the browser's URL bar would therefore illustrate
   nothing on this page while risking a `localhost:PORT` or file path. Show the
   **in-app input fields** instead, which is where the link actually lives.
 - **needs** — Three images, each answering one of the page's three artifact
   types:
-  1. **Link:** crop the GitHub row — `#github-repo-url` pre-filled with a public
-     path (use `theislab/cellucid-datasets/exports-v3`) plus `#github-connect-btn`.
-     Cursor on `#github-connect-btn`.
+  1. **Link:** crop the GitHub row — `#data-link-url` pre-filled with a public
+     path (use `theislab/cellucid-datasets/anndata`) plus `#data-link-connect-btn`.
+     Cursor on `#data-link-connect-btn`.
      `share-link-github-input.png` · `:width: 246px`.
   2. **Bundle:** reuse `session-lifecycle-09-artifact-terminal.png` — the `ls`
      of the `.cellucid-session` file.
@@ -533,10 +541,10 @@ longer a reason to refuse it. Details under
 
   | # | Error | How to provoke it (scriptable) | Worth capturing? |
   |---|---|---|---|
-  | 1 | **Different dataset** — names both cell and gene counts | Save a session on `pancreas` (3,696 / 3,753). Reload, load `dataset:local-demo:garcia` (219,731 / 5,754). Load State the pancreas file. (`he` and `kanemaru` are unusable here: their published sample views currently fail to apply in headless Chromium and add two unrelated errors to the crop.) | **Yes — highest value.** The commonest real-world mistake, and the message names four concrete numbers. |
-  | 2 | **An embedding this dataset does not have** — "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have." | Open an `.h5ad` with an `X_tsne`, show it in a view, save. Open the same file without `X_tsne` (or an export without it), Load State. | **Yes — second highest.** It names the one array to restore, so a user does not conclude the dataset is corrupt. (A session saved while another embedding was on screen is no longer refused; see step 15.) |
-  | 3 | **Coordinates differ** (re-ordered rows *or* re-computed embedding) | Needs a second export with the same id and sizes but permuted rows. Clone `cellucid/tests/browser/fixtures/exports/current-ui-prepared` (120 cells, 6 genes, 2D only, 52 KB) into a scratch fixture, apply the same row permutation to `embeddings/0_2d.bin` and every `obs/` column, keep `dataset_identity.json` byte-identical. Save a session against the original, load the permuted clone, Load State. | **Yes**, but as the *third* image — it is rarer and its message is long. Note the fixture is 2D-only, so error #2 cannot be provoked on it. |
-  | 4 | **Pre-`cellOrder` file** (`SESSION_WITHOUT_CELL_IDENTITY_MESSAGE` in `session-context.js`) | Cannot be produced by the current app. Hand-write a bundle whose `datasetFingerprint` has exactly the four keys `sourceType`, `datasetId`, `cellCount`, `varCount`. Framing is documented in {doc}`/user_guide/web_app/l_sessions_sharing/12_reference` and implemented in `session/bundle/format.js`. | **Optional.** Capture only if a fixture author is willing to maintain a hand-built bundle. The message is self-explanatory in prose. |
+  | 1 | **Different dataset** — names both cell and gene counts | Save a session on `pancreas` (3,696 / 3,753). Reload, load `dataset:local-demo:garcia` (219,731 / 5,754). **Load** the pancreas file. (`he` and `kanemaru` are unusable here: their published sample views currently fail to apply in headless Chromium and add two unrelated errors to the crop.) | **Yes — highest value.** The commonest real-world mistake, and the message names four concrete numbers. |
+  | 2 | **An embedding this dataset does not have** — "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have." | Open an `.h5ad` with an `X_tsne`, show it in a view, save. Open the same file without `X_tsne` (or an export without it), **Load**. | **Yes — second highest.** It names the one array to restore, so a user does not conclude the dataset is corrupt. (A session saved while another embedding was on screen is no longer refused; see step 15.) |
+  | 3 | **Coordinates differ** (re-ordered rows *or* re-computed embedding) | Needs a second file with the same id and sizes but permuted rows. Read `cellucid/tests/browser/fixtures/catalog/current-ui.h5ad` (120 cells, 6 genes, 2D only) with anndata, permute its rows (`adata[order]`), keep `uns['cellucid']` unchanged, and write it to a scratch store. Save a session against the original, load the permuted clone, **Load**. | **Yes**, but as the *third* image — it is rarer and its message is long. Note the fixture is 2D-only, so error #2 cannot be provoked on it. |
+  | 4 | **Not a session file** (`NOT_A_SESSION_FILE_MESSAGE` in `session/bundle/format.js`) | **Load** any file that does not start with `CELLUCID_SESSION/2\n`. | **Optional.** The message is self-explanatory in prose. |
 
 - **needs** —
   - Crop for all four: `#notification-center`, the single red toast, full text
@@ -580,7 +588,7 @@ longer a reason to refuse it. Details under
     `session-lifecycle-01-picker.png` — **must** be taken on a `local-demo`
     sample, where the row renders a public catalog value, and the row must be
     checked frame by frame before publishing.
-  - **`#github-repo-url`** in `share-link-github-input.png` must contain only the
+  - **`#data-link-url`** in `share-link-github-input.png` must contain only the
     public `theislab/cellucid-datasets` path. Never a private org.
   - **The remote-server URL field** must be empty or public in any frame that
     includes it.
@@ -619,14 +627,15 @@ longer a reason to refuse it. Details under
      when you can see that nothing was published.
      `session-cancel-dismissed.png` · `:width: 400px`.
   2. **Official default rejected** (final section): download
-     `exports-v3/pancreas/default.cellucid-session`, choose Load State, supply it.
+     the Pancreas session the catalog names (`session.path` in
+     `cellucid-datasets/anndata/datasets.json`), choose **Load**, supply it.
      Crop the red toast in `#notification-center`. Cursor: no. The property that
-     makes it get refused is the five-chunk profile the manifest names
+     makes it get refused is the seven-chunk profile the manifest names
      `published-default` (`PUBLISHED_DEFAULT_STATIC_CHUNK_PROFILE` in the
      session serializer), not its size — **do not pin a byte count here.** The
      preset is regenerated
      whenever the session inventory changes, so the only current value is the
-     file itself in `cellucid-datasets/exports-v3/pancreas/`.
+     file itself, next to `cellucid-datasets/anndata/datasets.json`.
      `session-error-official-default-rejected.png` · `:width: 520px`. This is a
      mistake a curious user will genuinely make — the file is publicly
      downloadable from the datasets repo.
@@ -714,12 +723,11 @@ longer a reason to refuse it. Details under
      cropped to just the `xxd` output, so a reader can match the diagram to real
      bytes: `session-bundle-hexdump.png` · `:width: 900px`.
   - No app capture is appropriate; this page has no UI.
-- **notes** — Verified against the shipped artifacts: all five official
-  `default.cellucid-session` files begin with `CELLUCID_SESSION\n`, carry a
-  five-key `datasetFingerprint` including `cellOrder` with `dimension: 3` and a
-  16-hex digest, and list exactly the five chunks the page names, in the stated
-  order. The `state_sha256` values in the catalog are present for all five
-  samples. The implementation pointers at the end of the page all resolve to
+- **notes** — To re-verify once the presets are regenerated in session format
+  2: every official `default.cellucid-session` begins with
+  `CELLUCID_SESSION/2\n`, carries a six-key `datasetFingerprint` including
+  `cellOrder` and a 16-hex digest plus `requires`, and lists exactly the seven
+  chunks the page names, in the stated order. Each sample's `session` entry in the catalog carries its `sha256`. The implementation pointers at the end of the page all resolve to
   existing files.
 
 ---
@@ -933,7 +941,7 @@ that instruction and none of them shows it.
      category count and crop `#legend` showing the unusable legend, with
      `#coloring-filtering-section` framing it. No shipped sample has such a
      field; a scratch prepared fixture derived from
-     `tests/browser/fixtures/exports/current-ui-prepared` with a synthetic
+     `tests/browser/fixtures/catalog/current-ui.h5ad` with a synthetic
      high-cardinality column would be required.
      `perf-category-explosion-legend.png` · `:width: 246px`. Lower priority than
      the context-lost image — it needs a new fixture.
@@ -1064,7 +1072,7 @@ that instruction and none of them shows it.
    comment about why claiming otherwise would be an integrity failure of its own.
 
 5. ~~**A stale SHA-256 ships in {doc}`/user_guide/web_app/l_sessions_sharing/04_official_sample_states`.**~~ **Done** —
-   the page shows the field's shape and points at `exports-v3/datasets.json`. The
+   the page shows the field's shape and points at the catalog. The
    general rule this settled: **do not copy a regenerated value into prose.**
    Digests, preset byte sizes, and source line numbers all live somewhere that
    is rebuilt without the docs being touched; cite the file, the symbol, or the

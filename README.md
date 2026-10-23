@@ -16,7 +16,7 @@ Cellucid is a browser-first viewer for exploring large single-cell datasets in r
 - **GPU-accelerated WebGL rendering** with level-of-detail culling; a built-in
   synthetic benchmark measures what your own GPU sustains
 - **AnnData-first workflow** for the Scanpy ecosystem (`.h5ad` and Zarr supported)
-- **Shareable exports** you can host locally, on GitHub, or behind a server
+- **Cellucid-ready AnnData** (`prepare()`): one standard `.h5ad`, `.zarr` or `.zarr.zip`, laid out for fast browser reads, that you can host locally, on GitHub, on any web host, or behind a server
 - **Genes + metadata overlays** optimized for interactive querying
 - **Connectivity + dynamics**: KNN edges and animated vector fields (RNA velocity / drift)
 - **Collaboration**: community annotation voting with optional GitHub sync
@@ -51,7 +51,7 @@ describe.
 Try the web app (no setup):
 
 1. Open [cellucid.com](https://www.cellucid.com)
-2. Load a prepared folder, one `.h5ad`, or one `.zarr.zip` archive
+2. Open one `.h5ad`, a `.zarr` folder, or one `.zarr.zip` archive
 
 Or visualize an AnnData from Python/Jupyter:
 
@@ -65,7 +65,42 @@ show_anndata(
 )
 ```
 
-An `adata` straight out of Scanpy works as written.
+An `adata` straight out of Scanpy works as written. The viewer reads the data
+itself, as each view needs it: `cellucid serve data.h5ad` (or a Zarr store)
+hands it the file in place, and an in-memory object is written once to a
+temporary `.h5ad`.
+
+To share or host a dataset, write a Cellucid-ready AnnData once. It is still a
+standard AnnData, with the expression matrix gene-major and the dataset's name,
+citation and launch defaults in `uns['cellucid']`, so the browser reads one
+gene with one round trip and the file names itself (on a 562k-cell dataset
+over a simulated 80 ms link: opened in 0.25 s, the first gene in 0.09 s; see
+the specification's measured choices):
+
+```python
+from cellucid import prepare
+
+prepare(
+    "my_dataset.h5ad",
+    format="h5ad",
+    embeddings={"X_umap": adata.obsm["X_umap"]},
+    dataset_id="my-dataset",
+    dataset_name="My dataset",
+    obs=adata.obs,
+    var=adata.var,
+    gene_expression=adata.X,
+)
+```
+
+`format` is required: `"zarr"` (a folder of small files) for GitHub, which
+refuses files over 100 MB and serves many small files at once over HTTP/2;
+`"h5ad"` (or `"zarr.zip"`, the Zarr store in one file) for everything else —
+single-file hosts such as Zenodo, Figshare, Hugging Face, S3 or a lab server,
+local files, `cellucid serve` and Jupyter. The documentation's "Which format?"
+guide has the measurements.
+
+Then `cellucid serve my_dataset.h5ad`, `show_anndata("my_dataset.h5ad")`, or
+open the file in the web app.
 
 ## Documentation and ecosystem
 

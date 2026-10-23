@@ -49,7 +49,8 @@ Python analysis and browser interaction stay in one reproducible workflow.
 2. Confirm a selection into a highlight group; moving a lasso without
    confirming it does not emit the selection event used by the example.
 3. Run `viewer.debug_connection()` and check that `server_health.status` is
-   `ok` and that the dataset identity probe matches.
+   `ok` and that the served store answers its probe (`anndata_store_probes`:
+   a `206` range read).
 4. For a remote kernel, expose the server through your notebook deployment or
    an SSH tunnel and pass its exact base URL as `client_server_url=`.
 

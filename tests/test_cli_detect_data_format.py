@@ -1,140 +1,61 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
 
-def test_cli_detect_exported_root_dir(tmp_path: Path) -> None:
-    from cellucid.cli import _detect_data_format
-
-    exports_root = tmp_path / "exports"
-    exports_root.mkdir()
-
-    ds1 = exports_root / "ds1"
-    ds1.mkdir()
-    (ds1 / "dataset_identity.json").write_text(
-        '{"version": 3, "id": "ds1", "name": "ds1"}', encoding="utf-8"
-    )
-    (ds1 / "obs_manifest.json").write_text("{}", encoding="utf-8")
-    (ds1 / "embeddings").mkdir()
-    (ds1 / "embeddings" / "0_3d.bin").write_bytes(b"\x00")
-
-    assert _detect_data_format(exports_root) == "exported"
-
-
-@pytest.mark.parametrize("layout", ["root-points", "empty-embeddings"])
-def test_a_directory_without_embedding_payloads_is_not_detected_as_export(
-    tmp_path: Path,
-    layout: str,
-) -> None:
-    from cellucid.cli import _detect_data_format
-    from cellucid.server import CORSRequestHandler
-
-    dataset_dir = tmp_path / "unsupported"
-    dataset_dir.mkdir()
-    (dataset_dir / "dataset_identity.json").write_text(
-        '{"version": 3, "id": "unsupported", "name": "Unsupported"}',
-        encoding="utf-8",
-    )
-    (dataset_dir / "obs_manifest.json").write_text("{}", encoding="utf-8")
-    if layout == "root-points":
-        # An earlier layout: coordinates at the root, no embeddings/ axis.
-        (dataset_dir / ("points_" + "3d.bin")).write_bytes(b"\x00")
-    else:
-        (dataset_dir / "embeddings").mkdir()
-
-    with pytest.raises(ValueError, match="complete exported dataset"):
-        _detect_data_format(dataset_dir)
-    handler = CORSRequestHandler.__new__(CORSRequestHandler)
-    assert handler._is_dataset_dir(dataset_dir) is False
-
-
-def test_a_version_two_identity_is_refused_with_the_re_export_remedy(tmp_path: Path) -> None:
-    from cellucid.cli import _detect_data_format
-
-    dataset_dir = tmp_path / "old"
-    dataset_dir.mkdir()
-    (dataset_dir / "dataset_identity.json").write_text(
-        '{"version": ' + "2" + ', "id": "old", "name": "Old"}',
-        encoding="utf-8",
-    )
-    (dataset_dir / "obs_manifest.json").write_text("{}", encoding="utf-8")
-    (dataset_dir / "embeddings").mkdir()
-    (dataset_dir / "embeddings" / "0_2d.bin").write_bytes(b"\x00" * 8)
-
-    with pytest.raises(ValueError, match="version must be exactly 3.*Re-export"):
-        _detect_data_format(dataset_dir)
-
-
-def test_server_datasets_use_identity_id(tmp_path: Path) -> None:
-    from cellucid.server import CORSRequestHandler
-
-    dataset_dir = tmp_path / "my_folder_name"
-    dataset_dir.mkdir()
-    (dataset_dir / "obs_manifest.json").write_text("{}", encoding="utf-8")
-    (dataset_dir / "embeddings").mkdir()
-    (dataset_dir / "embeddings" / "0_3d.bin").write_bytes(b"\x00")
-    (dataset_dir / "dataset_identity.json").write_text(
-        json.dumps({"version": 3, "id": "stable_dataset_id", "name": "Nice Name"}), encoding="utf-8"
-    )
-
-    handler = CORSRequestHandler.__new__(CORSRequestHandler)
-    handler.data_dir = dataset_dir
-
-    datasets = handler._list_datasets()
-    assert datasets == [{"id": "stable_dataset_id", "path": "/", "name": "Nice Name"}]
-
-
-@pytest.mark.parametrize(
-    ("identity", "invalid_field"),
-    [
-        ({"version": 3, "name": "Nice Name"}, "dataset_id"),
-        ({"version": 3, "id": "stable-id"}, "dataset_name"),
-        ({"version": 3, "id": 7, "name": "Nice Name"}, "dataset_id"),
-        ({"version": 3, "id": "stable-id", "name": ""}, "dataset_name"),
-    ],
-)
-def test_server_rejects_malformed_identity_instead_of_using_directory_name(
-    tmp_path: Path,
-    identity: dict[str, object],
-    invalid_field: str,
-) -> None:
-    from cellucid.server import CORSRequestHandler
-
-    dataset_dir = tmp_path / "must-not-become-identity"
-    dataset_dir.mkdir()
-    (dataset_dir / "obs_manifest.json").write_text("{}", encoding="utf-8")
-    (dataset_dir / "embeddings").mkdir()
-    (dataset_dir / "embeddings" / "0_3d.bin").write_bytes(b"\x00")
-    (dataset_dir / "dataset_identity.json").write_text(
-        json.dumps(identity),
-        encoding="utf-8",
-    )
-
-    handler = CORSRequestHandler.__new__(CORSRequestHandler)
-    handler.data_dir = dataset_dir
-
-    with pytest.raises((TypeError, ValueError), match=invalid_field):
-        handler._list_datasets()
-
-
-def test_cli_requires_explicit_identity_for_direct_anndata(tmp_path: Path) -> None:
-    from cellucid.cli import _run_serve, create_parser
-
-    store = tmp_path / "fixture.zarr"
+def _write_zarr_store(store: Path) -> Path:
     store.mkdir()
     (store / ".zgroup").write_text('{"zarr_format":2}', encoding="utf-8")
     (store / ".zattrs").write_text("{}", encoding="utf-8")
+    return store
+
+
+def test_cli_detects_every_anndata_layout_and_nothing_else(tmp_path: Path) -> None:
+    from cellucid.cli import _detect_data_format
+
+    h5ad = tmp_path / "data.h5ad"
+    h5ad.write_bytes(b"")
+    assert _detect_data_format(h5ad) == "h5ad"
+    assert _detect_data_format(_write_zarr_store(tmp_path / "data.zarr")) == "zarr"
+    v3 = tmp_path / "v3.zarr"
+    v3.mkdir()
+    (v3 / "zarr.json").write_text('{"zarr_format":3,"node_type":"group"}', encoding="utf-8")
+    assert _detect_data_format(v3) == "zarr"
+
+    # A plain directory of other files is not an AnnData store.
+    folder = tmp_path / "folder"
+    folder.mkdir()
+    (folder / "notes.json").write_text("{}", encoding="utf-8")
+    assert _detect_data_format(folder) == "unknown"
+    assert _detect_data_format(tmp_path / "missing") == "unknown"
+    other = tmp_path / "data.csv"
+    other.write_text("a,b\n", encoding="utf-8")
+    assert _detect_data_format(other) == "unknown"
+
+
+def test_cli_reports_a_directory_that_is_not_a_store(tmp_path: Path, capsys) -> None:
+    from cellucid.cli import main
+
+    folder = tmp_path / "folder"
+    folder.mkdir()
+    assert main(["serve", str(folder), "--quiet"]) == 1
+    assert "Unable to detect format" in capsys.readouterr().err
+
+
+def test_cli_requires_an_identity_a_store_does_not_declare(tmp_path: Path) -> None:
+    from cellucid.cli import _run_serve, create_parser
+
+    store = _write_zarr_store(tmp_path / "fixture.zarr")
     args = create_parser().parse_args(["serve", str(store), "--quiet"])
 
-    # Both flags are named in one message; reporting only the first would send
+    # Both are named in one message; reporting only the first would send
     # someone who supplied neither back to the terminal twice for one mistake.
     with pytest.raises(
         ValueError,
-        match=r"--dataset-name and --dataset-id are required",
+        match=r"dataset_name and dataset_id are required.*--dataset-name/--dataset-id",
     ):
         _run_serve(args)
 
@@ -144,10 +65,7 @@ def test_cli_passes_exact_identity_without_backed_state_to_zarr(
 ) -> None:
     from cellucid.cli import _run_serve, create_parser
 
-    store = tmp_path / "fixture.zarr"
-    store.mkdir()
-    (store / ".zgroup").write_text('{"zarr_format":2}', encoding="utf-8")
-    (store / ".zattrs").write_text("{}", encoding="utf-8")
+    store = _write_zarr_store(tmp_path / "fixture.zarr")
     args = create_parser().parse_args(
         [
             "serve",
@@ -163,7 +81,6 @@ def test_cli_passes_exact_identity_without_backed_state_to_zarr(
             "total_counts",
             "--vector-field-default",
             "drift_umap",
-            "--vector-fields",
         ]
     )
 
@@ -181,6 +98,8 @@ def test_cli_passes_exact_identity_without_backed_state_to_zarr(
         web_cache_dir=None,
         allowed_hosts=None,
         latent_key=None,
+        normalize_embeddings=None,
+        centroid_min_points=None,
         dataset_name="CLI fixture",
         dataset_id="cli-fixture",
         obs_keys=["cell_type", "total_counts"],
@@ -189,25 +108,50 @@ def test_cli_passes_exact_identity_without_backed_state_to_zarr(
         knn_key=None,
         expression_source=None,
         vector_field_default="drift_umap",
-        serve_vector_fields=True,
     )
 
 
-def _write_cli_export(directory: Path) -> None:
-    directory.mkdir()
-    (directory / "dataset_identity.json").write_text(
-        json.dumps(
-            {
-                "version": 3,
-                "id": "cli-export",
-                "name": "CLI export",
-            }
-        ),
-        encoding="utf-8",
+@pytest.mark.parametrize(
+    ("flags", "normalize_embeddings", "centroid_min_points"),
+    [
+        (["--no-normalize-embeddings"], False, None),
+        (["--normalize-embeddings", "--centroid-min-points", "3"], True, 3),
+    ],
+)
+def test_cli_forwards_embedding_scaling_and_outlier_category_size(
+    tmp_path: Path,
+    flags: list[str],
+    normalize_embeddings: bool,
+    centroid_min_points: int | None,
+) -> None:
+    from cellucid.cli import _run_serve, create_parser
+
+    store = _write_zarr_store(tmp_path / "fixture.zarr")
+    args = create_parser().parse_args(
+        ["serve", str(store), "--quiet", "--dataset-name", "CLI", "--dataset-id", "cli", *flags]
     )
-    (directory / "obs_manifest.json").write_text("{}", encoding="utf-8")
-    (directory / "embeddings").mkdir()
-    (directory / "embeddings" / "0_2d.bin").write_bytes(b"\x00" * 8)
+
+    with mock.patch("cellucid.anndata_server.serve_anndata") as serve:
+        _run_serve(args)
+
+    assert serve.call_args.kwargs["normalize_embeddings"] is normalize_embeddings
+    assert serve.call_args.kwargs["centroid_min_points"] == centroid_min_points
+
+
+@pytest.mark.parametrize("value", ["0", "-2", "1.5", "ten"])
+def test_cli_refuses_a_centroid_min_points_that_is_not_a_positive_integer(
+    value: str,
+    capsys,
+) -> None:
+    from cellucid.cli import create_parser
+
+    with pytest.raises(SystemExit) as error:
+        create_parser().parse_args(["serve", "dataset", "--centroid-min-points", value])
+    assert error.value.code == 2
+    assert (
+        f"argument --centroid-min-points: expected a positive integer; got {value!r}"
+        in capsys.readouterr().err
+    )
 
 
 def test_cli_no_command_and_parse_errors_return_nonzero_without_system_exit(
@@ -241,46 +185,10 @@ def test_cli_quiet_and_verbose_are_mutually_exclusive() -> None:
     assert error.value.code == 2
 
 
-@pytest.mark.parametrize(
-    ("arguments", "message"),
-    [
-        (["--latent-key", "latent"], "--latent-key"),
-        (["--dataset-name", "Ignored"], "--dataset-name"),
-        (["--dataset-id", "ignored"], "--dataset-id"),
-        (["--obs-key", "cell_type"], "--obs-key"),
-        (
-            ["--vector-field-default", "velocity_umap"],
-            "--vector-field-default",
-        ),
-    ],
-)
-def test_cli_rejects_every_anndata_only_option_for_prepared_exports(
-    tmp_path: Path,
-    arguments: list[str],
-    message: str,
-) -> None:
-    from cellucid.cli import _run_serve, create_parser
-
-    export = tmp_path / "export"
-    _write_cli_export(export)
-    args = create_parser().parse_args(
-        ["serve", str(export), "--quiet", *arguments]
-    )
-    with (
-        mock.patch("cellucid.server.serve") as serve,
-        pytest.raises(ValueError, match=message),
-    ):
-        _run_serve(args)
-    serve.assert_not_called()
-
-
 def test_cli_rejects_removed_backed_mode_without_dispatch(tmp_path: Path) -> None:
     from cellucid.cli import main
 
-    store = tmp_path / "fixture.zarr"
-    store.mkdir()
-    (store / ".zgroup").write_text('{"zarr_format":2}', encoding="utf-8")
-    (store / ".zattrs").write_text("{}", encoding="utf-8")
+    store = _write_zarr_store(tmp_path / "fixture.zarr")
     with mock.patch("cellucid.anndata_server.serve_anndata") as serve:
         status = main(
             [
@@ -303,10 +211,7 @@ def test_cli_does_not_reclassify_import_error_by_message_text(
 ) -> None:
     from cellucid.cli import _run_serve, create_parser
 
-    store = tmp_path / "fixture.zarr"
-    store.mkdir()
-    (store / ".zgroup").write_text('{"zarr_format":2}', encoding="utf-8")
-    (store / ".zattrs").write_text("{}", encoding="utf-8")
+    store = _write_zarr_store(tmp_path / "fixture.zarr")
     args = create_parser().parse_args(
         [
             "serve",
@@ -328,51 +233,12 @@ def test_cli_does_not_reclassify_import_error_by_message_text(
         _run_serve(args)
 
 
-def test_cli_forwards_every_repeated_allowed_host_to_the_prepared_server(
-    tmp_path: Path,
-) -> None:
-    """`--allowed-host` is the operator's explicit reverse-proxy declaration."""
-    from cellucid.cli import _run_serve, create_parser
-
-    export = tmp_path / "export"
-    _write_cli_export(export)
-    args = create_parser().parse_args(
-        [
-            "serve",
-            str(export),
-            "--quiet",
-            "--allowed-host",
-            "hub.example.org",
-            "--allowed-host",
-            "other.example.org",
-        ]
-    )
-
-    with mock.patch("cellucid.server.serve") as serve:
-        _run_serve(args)
-
-    serve.assert_called_once_with(
-        data_dir=str(export),
-        port=8765,
-        host="127.0.0.1",
-        open_browser=True,
-        quiet=True,
-        serve_web_ui=True,
-        web_source_url="https://www.cellucid.com",
-        web_cache_dir=None,
-        allowed_hosts=["hub.example.org", "other.example.org"],
-    )
-
-
 def test_cli_forwards_every_repeated_allowed_host_to_the_anndata_server(
     tmp_path: Path,
 ) -> None:
     from cellucid.cli import _run_serve, create_parser
 
-    store = tmp_path / "fixture.zarr"
-    store.mkdir()
-    (store / ".zgroup").write_text('{"zarr_format":2}', encoding="utf-8")
-    (store / ".zattrs").write_text("{}", encoding="utf-8")
+    store = _write_zarr_store(tmp_path / "fixture.zarr")
     args = create_parser().parse_args(
         [
             "serve",
@@ -397,11 +263,10 @@ def test_cli_declares_no_allowed_host_by_default(tmp_path: Path) -> None:
     """No flag must mean exactly the loopback-only rule, not a wider one."""
     from cellucid.cli import _run_serve, create_parser
 
-    export = tmp_path / "export"
-    _write_cli_export(export)
-    args = create_parser().parse_args(["serve", str(export), "--quiet"])
+    store = _write_zarr_store(tmp_path / "fixture.zarr")
+    args = create_parser().parse_args(["serve", str(store), "--quiet"])
 
-    with mock.patch("cellucid.server.serve") as serve:
+    with mock.patch("cellucid.anndata_server.serve_anndata") as serve:
         _run_serve(args)
 
     assert serve.call_args.kwargs["allowed_hosts"] is None
@@ -413,10 +278,9 @@ def test_cli_reports_an_unsupported_allowed_host_without_serving(
 ) -> None:
     from cellucid.cli import main
 
-    export = tmp_path / "export"
-    _write_cli_export(export)
+    store = _write_zarr_store(tmp_path / "fixture.zarr")
     status = main(
-        ["serve", str(export), "--quiet", "--allowed-host", "*.example.org"]
+        ["serve", str(store), "--quiet", "--allowed-host", "*.example.org"]
     )
 
     assert status == 1

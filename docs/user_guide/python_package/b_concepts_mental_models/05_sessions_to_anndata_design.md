@@ -53,7 +53,7 @@ Plus optional debugging/provenance under:
 ### “Bundle first”: one artifact everywhere
 
 Everything is built around the `.cellucid-session` bundle:
-- web app Save/Load State
+- the web app's **Save** and **Load** buttons (**Session file**)
 - Jupyter no-download capture
 - Python application to AnnData
 
@@ -110,7 +110,7 @@ Guardrails:
 
 A `.cellucid-session` file is:
 
-1) MAGIC header: `CELLUCID_SESSION\n`  
+1) MAGIC header: `CELLUCID_SESSION/2\n` (session format 2; any other signature is refused)  
 2) `manifestByteLength` (u32 LE)  
 3) `manifest` JSON bytes (UTF‑8)  
 4) repeated chunks:
@@ -118,7 +118,9 @@ A `.cellucid-session` file is:
    - `chunkBytes` (codec applied, often gzip)
 
 The manifest contains:
-- dataset fingerprint
+- dataset fingerprint (id, display name, counts, cell order, data mapping)
+- the dataset source (sample, link, server, or local file name)
+- `requires`: the obs columns and genes the session uses
 - chunk IDs
 - chunk metadata (`kind`, `codec`, size guards)
 
@@ -129,6 +131,7 @@ from cellucid import CellucidSessionBundle
 
 bundle = CellucidSessionBundle("my.cellucid-session")
 bundle.dataset_fingerprint
+bundle.required_fields
 bundle.list_chunk_ids()[:20]
 ```
 
@@ -139,8 +142,11 @@ bundle.list_chunk_ids()[:20]
 ### Cell identity is index-based (today)
 
 Many dataset-dependent chunks align to **row position**:
-- highlight membership lists are indices
-- user-defined codes are arrays aligned to dataset order
+- highlight memberships are cell positions (sorted-delta varints, a bitset or
+  runs, whichever is smallest), or, for a whole category or most of one, a
+  reference to that category's cells checked by count and digest
+- user-defined codes are arrays aligned to dataset order (raw, runs, or packed
+  1, 2 or 4 bits per code)
 
 This is why exact fingerprint rejection exists.
 
@@ -148,8 +154,9 @@ This is why exact fingerprint rejection exists.
 
 The caller must supply `expected_dataset_id`. Python compares it with the
 bundle's `datasetId`, compares `cellCount` with the target AnnData, requires
-every key the `dataMapping` names to exist on it, and compares `varCount` with
-the gene count of the axis that mapping reads. Any mismatch raises `ValueError`
+every key the `dataMapping` names to exist on it, compares `varCount` with
+the gene count of the axis that mapping reads, and requires every obs column and
+gene listed in the manifest's `requires`. Any mismatch raises `ValueError`
 before any mutation is published.
 
 This prevents the worst failure mode:
@@ -157,21 +164,19 @@ This prevents the worst failure mode:
 
 ### `cellOrder` and `dataMapping`: recorded by the viewer, checked here
 
-The manifest fingerprint carries two records beside those four scalars, and both
+The manifest fingerprint carries two records beside those three scalars, and both
 are required. `cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
 16-character lowercase hexadecimal `digest` of the coordinates of that
-embedding. `embedding` is `{"key", "columns"}`: an exported embedding id with
-`columns: null`, or an AnnData `obsm` key with the 0-based columns that were
-read, one per dimension. It exists because the four scalars all
-survive a re-export of the same dataset from re-sorted input, and index-based
+embedding. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
+columns that were read, one per dimension. It exists because the three scalars
+all survive a rewrite of the same dataset from re-sorted input, and index-based
 selections would then silently denote different cells.
 
-`dataMapping` records which stored arrays the session was showing. Its `kind`
-is `"export"` — exactly `kind`, `embeddings` (`enabled`, the embeddings that are turned on, and
-`defaults`, the `1d`/`2d`/`3d` default of each dimension),
-`geneNames` (`"index"` or `"column:<name>"`), and `vectorFields` — or
-`"anndata"`, which adds `knn`, `expression` (`"X"`, `"raw"`, `"layer:<name>"`,
-or null), and `latent`.
+`dataMapping` records which stored arrays the session was showing: `kind`
+(`"anndata"`), `embeddings` (`enabled`, the embeddings that are turned on, and
+`defaults`, the `1d`/`2d`/`3d` default of each dimension), `knn`, `geneNames`
+(`"index"` or `"column:<name>"`), `expression` (`"X"`, `"raw"`,
+`"layer:<name>"`, or null), `latent`, and `vectorFields`.
 
 The two readers check them differently:
 
@@ -199,7 +204,7 @@ Meaning:
 Fix:
 - request a new bundle again from the *current* viewer instance.
 
-### Symptom: “Invalid session bundle MAGIC header”
+### Symptom: “This file is not a Cellucid session file of format 2 …”
 
 Meaning:
 - the upload is not a `.cellucid-session` file (corrupted bytes, wrong endpoint).

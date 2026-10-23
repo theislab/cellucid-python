@@ -14,7 +14,7 @@ from pathlib import Path
 import h5py
 
 import cellucid
-from cellucid.anndata_adapter import AnnDataAdapter
+from cellucid.data_mapping import EMBEDDING_KEY_PREFIX, parse_vector_field_key
 from cellucid.session_bundle import CellucidSessionBundle
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -113,6 +113,20 @@ def _notebook_files() -> list[Path]:
     return sorted(path for path in files if "_build" not in path.parts)
 
 
+def _without_doctest_output(source: str) -> str:
+    """The code of a doctest-style example: its ``>>>``/``...`` lines, unprompted.
+
+    An interactive transcript shows a call and what it printed; only the call
+    is Python, and only the call is checked against the current API.
+    """
+    lines = source.splitlines()
+    if not lines or not lines[0].startswith(">>>"):
+        return source
+    return "\n".join(
+        line[4:] for line in lines if line.startswith((">>> ", "... ")) or line in (">>>", "...")
+    )
+
+
 def _markdown_python_sources() -> Iterator[tuple[str, str]]:
     for path in _markdown_files():
         text = path.read_text(encoding="utf-8")
@@ -121,7 +135,7 @@ def _markdown_python_sources() -> Iterator[tuple[str, str]]:
                 continue
             source = textwrap.dedent(match.group("source"))
             line = text[: match.start("source")].count("\n") + 1
-            yield f"{path.relative_to(REPOSITORY_ROOT)}:{line}", source
+            yield f"{path.relative_to(REPOSITORY_ROOT)}:{line}", _without_doctest_output(source)
 
 
 def _notebook_python_sources() -> Iterator[tuple[str, str]]:
@@ -237,7 +251,6 @@ def test_runnable_python_examples_match_current_public_signatures() -> None:
         for name in cellucid.__all__
         if callable(getattr(cellucid, name))
     }
-    public_objects["from_file"] = AnnDataAdapter.from_file
     public_objects["apply_to_anndata"] = CellucidSessionBundle.apply_to_anndata
     signatures = {
         name: inspect.signature(public_object) for name, public_object in public_objects.items()
@@ -326,7 +339,9 @@ _FENCE = re.compile(r"^(?P<ticks>`{3,})(?P<info>.*)$")
 # subject of the example. The exemption is the failure the CLI itself prints for
 # exactly that mistake, so it cannot be spelled over a command that is being
 # recommended rather than diagnosed.
-_MISSING_IDENTITY_REPORT = re.compile(r"^Error: --dataset-(?:name|id)\b")
+_MISSING_IDENTITY_REPORT = re.compile(
+    r"^Error: (?:dataset_name and dataset_id are|dataset_(?:name|id) is) required\b"
+)
 
 
 def _fenced_block_of_each_line(text: str) -> list[int | None]:
@@ -366,10 +381,30 @@ def test_cli_examples_use_only_the_exact_current_contract() -> None:
             for block, line in zip(membership, lines, strict=True)
             if block is not None and _MISSING_IDENTITY_REPORT.match(line.strip())
         }
+        # A file written by ``cellucid.prepare()`` declares its own identity in
+        # ``uns['cellucid']``, so a block that says it serves one may omit the
+        # flags; it has to say so, in the block, where the reader copies from.
+        prepared_blocks = {
+            block
+            for block, line in zip(membership, lines, strict=True)
+            if block is not None and "cellucid.prepare()" in line
+        }
         for line_number, line in enumerate(lines, start=1):
-            if "cellucid serve" not in line or not re.search(r"\.(?:h5ad|zarr)\b", line):
+            # A command names its store after the subcommand; a line that only
+            # mentions `cellucid serve` (a quoted message listing where a file
+            # goes) is not a command.
+            if "cellucid serve" not in line or not re.search(
+                r"\.(?:h5ad|zarr)\b", line.split("cellucid serve", 1)[1]
+            ):
                 continue
-            if membership[line_number - 1] in diagnostic_blocks:
+            # The identity flags are optional for a store that declares
+            # uns['cellucid']['id'] and ['name'], so prose may name the bare
+            # command. A command in a code block is one a reader copies onto
+            # their own file, which usually declares no identity, so it names
+            # the dataset.
+            if membership[line_number - 1] is None:
+                continue
+            if membership[line_number - 1] in diagnostic_blocks | prepared_blocks:
                 continue
             if "--dataset-name" not in line or "--dataset-id" not in line:
                 failures.append(
@@ -493,86 +528,142 @@ def test_docs_do_not_reintroduce_removed_or_invented_runtime_contracts() -> None
     assert r".\.venv\Scripts\Activate.ps1" in installation_page
     assert r".\.venv\Scripts\activate.bat" in installation_page
 
-    server_source = (REPOSITORY_ROOT / "src/cellucid/server/_server.py").read_text(
-        encoding="utf-8"
-    )
     anndata_server_source = (REPOSITORY_ROOT / "src/cellucid/anndata_server.py").read_text(
         encoding="utf-8"
     )
-    for source in (server_source, anndata_server_source):
-        assert "one-time per web build" not in source
-        assert '"Viewer UI cache"' not in source
-        assert '"Viewer UI generation"' in source
-        assert '"establishing exact configured source"' in source
+    assert "one-time per web build" not in anndata_server_source
+    assert '"Viewer UI cache"' not in anndata_server_source
+    assert '"Viewer UI generation"' in anndata_server_source
+    assert '"establishing exact configured source"' in anndata_server_source
 
 
-def test_documented_vector_declarations_require_dimension_suffixes() -> None:
+#: The prepared-export world Cellucid removed: its server, its viewer, its
+#: on-disk format and its knobs. The Python guide, the README and the site home
+#: describe a Cellucid-ready AnnData instead, so none of these may come back.
+REMOVED_EXPORT_VOCABULARY = (
+    "CellucidViewer",
+    "CellucidServer",
+    "generate_datasets_manifest",
+    "var_quantization",
+    "obs_continuous_quantization",
+    "obs_categorical_dtype",
+    "latent_space=",
+    "out_dir=",
+    "dataset_identity.json",
+    "obs_manifest.json",
+    "var_manifest.json",
+    "connectivity_manifest.json",
+    "edges.src.bin",
+    "/?source=remote",
+    "Embedding(",
+    "export folder",
+    "export directory",
+    "exported directory",
+    "prepared export",
+)
+#: A call of the removed ``show(...)``/``serve(...)``/``pack(...)`` helpers,
+#: and not ``show_anndata(...)``/``serve_anndata(...)``.
+REMOVED_EXPORT_CALL = re.compile(r"(?<![\w.])(?:cellucid\.)?(?:show|serve|pack)\(")
+
+
+def test_python_guide_describes_no_prepared_export_contract() -> None:
+    pages = [
+        README,
+        DOCS_ROOT / "index.md",
+        *sorted((DOCS_ROOT / "user_guide" / "python_package").rglob("*.md")),
+        *sorted((DOCS_ROOT / "user_guide" / "python_package").rglob("*.ipynb")),
+    ]
+    failures: list[str] = []
+    for path in pages:
+        if "_build" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        relative = path.relative_to(REPOSITORY_ROOT)
+        lowered = text.lower()
+        for term in REMOVED_EXPORT_VOCABULARY:
+            if term.lower() in lowered:
+                failures.append(f"{relative}: describes removed {term!r}")
+        for match in REMOVED_EXPORT_CALL.finditer(text):
+            line = text[: match.start()].count("\n") + 1
+            failures.append(f"{relative}:{line}: calls removed {match.group(0)!r}")
+    assert not failures, "\n".join(failures)
+
+
+def test_documented_vector_declarations_follow_the_vector_field_key_rule() -> None:
+    """Every documented vector declaration binds by the vector-field key rule.
+
+    A vector field is ``obsm['<field>_<basis>']`` over ``obsm['X_<basis>']``
+    (:func:`cellucid.data_mapping.parse_vector_field_key`). A documented
+    ``obsm`` dictionary must therefore name the embedding each of its vector
+    keys is drawn over, and the removed per-dimension UMAP grammar is not
+    described as the current rule.
+    """
     all_text = "\n".join(
         path.read_text(encoding="utf-8") for path in [*_markdown_files(), *_notebook_files()]
     )
     stale_contract_phrases = [
         "Implicit keys are also supported",
         "**Fallback (implicit key",
-        "- Implicit: `<field>_<basis>`",
         "Style B: implicit dimension",
         "explicit_dim_suffix=True",
         "explicit_dim_suffix=False",
+        "<field>_umap_<d>d",
+        "<field>_umap_<n>d",
+        "<field>_umap_<1|2|3>d",
     ]
     for phrase in stale_contract_phrases:
-        assert phrase not in all_text
+        assert phrase not in all_text, phrase
 
     failures: list[str] = []
     for location, tree in _python_examples():
         for node in ast.walk(tree):
-            dictionaries: list[ast.Dict] = []
-            if isinstance(node, ast.Call):
-                for keyword in node.keywords:
-                    if keyword.arg == "obsm" and isinstance(keyword.value, ast.Dict):
-                        dictionaries.append(keyword.value)
-                    # prepare() binds each vector field to exported embedding
-                    # ids, so every value of its vector_fields= mapping is
-                    # itself a mapping of embedding id to array.
-                    if (
-                        _call_name(node) == "prepare"
-                        and keyword.arg == "vector_fields"
-                        and isinstance(keyword.value, ast.Dict)
-                    ):
-                        for value in keyword.value.values:
-                            if not isinstance(value, ast.Dict):
+            if not isinstance(node, ast.Call):
+                continue
+            for keyword in node.keywords:
+                # prepare() binds each vector field to the embedding it is
+                # drawn over, so every value of its vector_fields= mapping is
+                # a mapping of 'X_<basis>' embedding keys to arrays.
+                if (
+                    _call_name(node) == "prepare"
+                    and keyword.arg == "vector_fields"
+                    and isinstance(keyword.value, ast.Dict)
+                ):
+                    for value in keyword.value.values:
+                        if not isinstance(value, ast.Dict):
+                            failures.append(
+                                f"{location}:{value.lineno}: prepare vector field is not "
+                                "bound to embedding keys"
+                            )
+                            continue
+                        for key in value.keys:
+                            if (
+                                isinstance(key, ast.Constant)
+                                and isinstance(key.value, str)
+                                and not key.value.startswith(EMBEDDING_KEY_PREFIX)
+                            ):
                                 failures.append(
-                                    f"{location}:{value.lineno}: prepare vector field is not "
-                                    "bound to embedding ids"
+                                    f"{location}:{key.lineno}: prepare binds a vector field "
+                                    f"to {key.value!r}, which is not an 'X_<basis>' key"
                                 )
-
-            for dictionary in dictionaries:
-                for key in dictionary.keys:
-                    if (
-                        isinstance(key, ast.Constant)
-                        and isinstance(key.value, str)
-                        and key.value != "X_umap"
-                        and key.value.endswith("_umap")
+                # An obsm dictionary that declares a vector-looking key next to
+                # embeddings must name the embedding that key is drawn over.
+                if keyword.arg != "obsm" or not isinstance(keyword.value, ast.Dict):
+                    continue
+                keys = [
+                    key.value
+                    for key in keyword.value.keys
+                    if isinstance(key, ast.Constant) and isinstance(key.value, str)
+                ]
+                if not any(key.startswith(EMBEDDING_KEY_PREFIX) for key in keys):
+                    continue
+                for key in keys:
+                    if key.startswith(("velocity", "T_fwd", "T_bwd")) and (
+                        parse_vector_field_key(key, set(keys)) is None
                     ):
                         failures.append(
-                            f"{location}:{key.lineno}: unsuffixed vector declaration {key.value!r}"
+                            f"{location}:{keyword.value.lineno}: obsm vector {key!r} names no "
+                            f"embedding among {sorted(keys)}"
                         )
-
-            if not isinstance(node, ast.Assign):
-                continue
-            for target in node.targets:
-                if not isinstance(target, ast.Subscript):
-                    continue
-                if not (
-                    isinstance(target.value, ast.Attribute)
-                    and target.value.attr == "obsm"
-                    and isinstance(target.slice, ast.Constant)
-                    and isinstance(target.slice.value, str)
-                ):
-                    continue
-                key = target.slice.value
-                if key != "X_umap" and key.endswith("_umap"):
-                    failures.append(
-                        f"{location}:{target.lineno}: unsuffixed obsm vector declaration {key!r}"
-                    )
 
     assert not failures, "\n".join(failures)
 
@@ -591,27 +682,28 @@ def test_documented_multi_field_vector_defaults_use_exact_runtime_field_ids() ->
     }
     combined = "\n".join(page_text.values())
 
-    assert 'vector_field_default="velocity_umap"' in page_text[relative_paths[0]]
-    assert 'vector_field_default="velocity_umap"' in page_text[relative_paths[1]]
-    assert 'default_vector_field = "velocity_umap"' in page_text[relative_paths[1]]
-    assert "`velocity_umap` or\n  `T_fwd_umap`" in page_text[relative_paths[1]]
-    assert 'vector_field_default="velocity_umap"' in page_text[relative_paths[2]]
-    assert 'vector_field_default="T_fwd_umap"' in page_text[relative_paths[2]]
+    # A field is listed by the <field> part of '<field>_<basis>', so a launch
+    # default names `velocity` or `T_fwd`, never a full obsm key.
+    assert 'vector_field_default="velocity"' in page_text[relative_paths[0]]
+    assert 'vector_field_default="velocity"' in page_text[relative_paths[1]]
+    assert 'default_vector_field = "velocity"' in page_text[relative_paths[1]]
+    assert 'vector_field_default="velocity"' in page_text[relative_paths[2]]
+    assert 'vector_field_default="T_fwd"' in page_text[relative_paths[2]]
     assert not re.search(
-        r'\bvector_field_default\s*=\s*["\'](?:velocity|T_fwd)["\']',
+        r'\bvector_field_default\s*=\s*["\'](?:velocity|T_fwd)_umap\w*["\']',
         combined,
     )
-    assert 'default_vector_field = "velocity"' not in combined
+    assert 'default_vector_field = "velocity_umap"' not in combined
 
 
 def test_documented_embedding_requirements_use_exact_current_keys() -> None:
-    """Two paths read embeddings, and each page must state its own rule.
+    """Two paths name embeddings, and each page must state its own rule.
 
-    ``prepare()`` takes every embedding as an array in ``embeddings={...}`` and
-    reads no ``obsm`` key, so a preparation page must show that argument and no
-    ``X_umap_<n>d=`` argument. The readers -- the Python serve path and the
-    browser's own file picker -- do read ``obsm`` keys, and a plain ``X_umap``
-    at the dimension its column count states, so their pages must say so.
+    ``prepare()`` takes every embedding as an array in ``embeddings={...}``,
+    stored whole under its key, and names a dimension's default with
+    ``embedding_defaults``. The readers -- the Python serve path and the
+    browser's own file picker -- read ``obsm`` keys, and a plain ``X_umap`` at
+    the dimension its column count states, so their pages must say so.
     """
     reader_pages = [
         DOCS_ROOT
@@ -620,18 +712,11 @@ def test_documented_embedding_requirements_use_exact_current_keys() -> None:
         / "b_data_loading"
         / "03_browser_file_picker_tutorial.md",
     ]
+    preparation = DOCS_ROOT / "user_guide" / "python_package" / "c_data_preparation_api"
     preparation_pages = [
-        DOCS_ROOT
-        / "user_guide"
-        / "python_package"
-        / "c_data_preparation_api"
-        / "01_prepare_export_overview.md",
-        DOCS_ROOT
-        / "user_guide"
-        / "python_package"
-        / "c_data_preparation_api"
-        / "02_input_requirements_global.md",
-        DOCS_ROOT / "user_guide" / "python_package" / "c_data_preparation_api" / "index.md",
+        preparation / "01_prepare_overview.md",
+        preparation / "03_embeddings_and_coordinates.md",
+        preparation / "index.md",
     ]
 
     failures: list[str] = []
@@ -640,9 +725,7 @@ def test_documented_embedding_requirements_use_exact_current_keys() -> None:
         relative = path.relative_to(REPOSITORY_ROOT)
         if "embeddings=" not in text and "embeddings={" not in text:
             failures.append(f"{relative}: omits the embeddings= argument")
-        if "Embedding" not in text:
-            failures.append(f"{relative}: omits the Embedding type")
-        for removed in ("X_umap_1d=", "X_umap_2d=", "X_umap_3d="):
+        for removed in ("X_umap_1d=", "X_umap_2d=", "X_umap_3d=", "Embedding("):
             if removed in text:
                 failures.append(f"{relative}: documents removed argument {removed!r}")
 
@@ -659,47 +742,32 @@ def test_documented_embedding_requirements_use_exact_current_keys() -> None:
             )
 
     overview = preparation_pages[0].read_text(encoding="utf-8")
-    for required_minimum_artifact in (
-        "embeddings/",
-        "obs_manifest.json",
-        "dataset_identity.json",
-    ):
-        assert required_minimum_artifact in overview
-    assert "points_1d.bin(.gz)" not in overview
+    for container in ("`.h5ad`", "`.zarr`", "`.zarr.zip`", "uns['cellucid']"):
+        assert container in overview
+    embeddings_page = preparation_pages[1].read_text(encoding="utf-8")
+    for exact in ("embedding_defaults", "latent_key", "normalize_embeddings", "every column"):
+        assert exact in embeddings_page
 
     assert not failures, "\n".join(failures)
 
 
-def test_every_documented_connectivity_payload_is_the_weighted_current_contract() -> None:
-    connectivity_pages = {
-        path.relative_to(REPOSITORY_ROOT): path.read_text(encoding="utf-8")
-        for path in _markdown_files()
-        if "edges.src.bin" in path.read_text(encoding="utf-8")
-    }
-    assert connectivity_pages
-    failures: list[str] = []
-    for path, text in connectivity_pages.items():
-        if "edges.weights.f64.bin" not in text and "Float64 weight" not in text:
-            failures.append(f"{path}: source indices are documented without weights")
-        for stale_claim in (
-            "unweighted undirected edge list",
-            "writes two parallel arrays",
-            "writes two binary arrays",
-            "exactly symmetric, binary graph",
-            "matrix must already be square, finite, binary",
-            "Weighted graphs are rejected",
-        ):
-            if stale_claim in text:
-                failures.append(f"{path}: contains stale claim {stale_claim!r}")
-    assert not failures, "\n".join(failures)
-
-    format_pages = "\n".join(connectivity_pages.values())
-    for required_manifest_field in (
-        "weightsPath",
-        "weight_dtype",
-        "weight_bytes",
+def test_connectivity_docs_state_the_stored_graph_contract() -> None:
+    """``prepare(connectivities=...)`` stores one symmetric CSR float32 graph."""
+    page = (
+        DOCS_ROOT
+        / "user_guide"
+        / "python_package"
+        / "c_data_preparation_api"
+        / "07_connectivities_knn_graph.md"
+    ).read_text(encoding="utf-8")
+    normalized = " ".join(page.split())
+    for exact in (
+        "`obsp['connectivities']`, a CSR float32 matrix",
+        "**exactly symmetric**",
+        "zero on the diagonal",
+        "Connectivity matrix must be exactly symmetric.",
     ):
-        assert required_manifest_field in format_pages
+        assert exact in normalized, exact
 
 
 def test_server_and_jupyter_docs_state_exact_current_security_and_loading() -> None:
@@ -730,22 +798,25 @@ def test_server_and_jupyter_docs_state_exact_current_security_and_loading() -> N
     for claim in stale_zarr_claims:
         assert claim not in all_text
 
-    prepared_server_page = text_by_path[
+    python_server_page = text_by_path[
         Path(
             "docs/user_guide/python_package/d_viewing_apis/"
-            "05_python_serve_and_serve_anndata_quickstart.md"
+            "05_python_serve_anndata_quickstart.md"
         )
     ]
     advanced_server_page = text_by_path[
         Path("docs/user_guide/python_package/d_viewing_apis/09_server_mode_advanced.md")
     ]
-    for page in (prepared_server_page, advanced_server_page):
-        assert "/?source=remote" in page
+    for page in (python_server_page, advanced_server_page):
+        assert "anndata=true" in page
         assert "first paint" in page
+        assert "source=remote" not in page
 
     failures: list[str] = []
+    # ``?data=http://127.0.0.1:8000/`` names a static host for the web app to
+    # read from, not a Cellucid server's launch, so it is not a Viewer URL.
     bare_loopback_viewer = re.compile(
-        r"http://127\.0\.0\.1:(?:<port>|\d+)/"
+        r"(?<!data=)http://127\.0\.0\.1:(?:<port>|\d+)/"
         r"(?=(?:\s|[`)\],.;:]|$))"
     )
     launch_text_by_path = dict(text_by_path)
@@ -759,7 +830,7 @@ def test_server_and_jupyter_docs_state_exact_current_security_and_loading() -> N
         for line_number, line in enumerate(text.splitlines(), start=1):
             if bare_loopback_viewer.search(line):
                 failures.append(
-                    f"{path}:{line_number}: prepared/direct server launch "
+                    f"{path}:{line_number}: server launch "
                     "must use its exact printed Viewer URL"
                 )
 
@@ -848,7 +919,8 @@ def test_docs_preserve_closed_jupyter_session_and_zarr_contracts() -> None:
     assert "inplace=False` rejects a backed target" in session_reference
 
 
-def test_embedding_docs_require_a_defined_normalization_range() -> None:
+def test_embedding_docs_state_that_the_viewer_normalizes() -> None:
+    """``prepare()`` stores coordinates as given; the browser normalizes them."""
     page = (
         DOCS_ROOT
         / "user_guide"
@@ -856,11 +928,10 @@ def test_embedding_docs_require_a_defined_normalization_range() -> None:
         / "c_data_preparation_api"
         / "03_embeddings_and_coordinates.md"
     ).read_text(encoding="utf-8")
-    assert "all points identical is rejected" in page
-    assert "no finite normalization scale exists" in page
-    assert "nonzero finite range on at least one axis" in page
-    assert "collapsed point cloud" not in page
-    assert "export is “valid”" not in page
+    normalized = " ".join(page.split())
+    assert "Nothing is normalized or cropped." in normalized
+    assert "The viewer scales each embedding into its view" in normalized
+    assert "normalizes each embedding on its own" not in normalized
 
 
 def test_current_startup_screenshots_and_documented_defaults_are_exact() -> None:
@@ -905,8 +976,8 @@ def test_current_startup_screenshots_and_documented_defaults_are_exact() -> None
     assert "changes with every web release" in " ".join(quick_tour.split())
     assert "read yours off your own footer" in " ".join(glossary.split())
     assert "exact value in bug reports" in glossary
-    assert "Camera Path** accordion starts collapsed" in camera_page
-    assert "Community Annotation** accordion starts collapsed" in annotation_index
+    assert "Camera path** accordion starts collapsed" in camera_page
+    assert "Community annotation** accordion starts collapsed" in annotation_index
     assert "unless the user explicitly enables **Autoplay**" in camera_page
 
 
@@ -926,15 +997,16 @@ def test_standard_pancreas_sample_contract_is_documented_exactly() -> None:
         "`S_score`",
         "`G2M_score`",
         "33,476 exact weighted connectivity edges",
-        "one vector field, `velocity`, bound to the three UMAP embeddings",
-        "| `X_umap_1d` | UMAP | 1D | derived | yes |",
-        "| `X_pca` | PCA | 2D | source, first two components | no |",
-        "| `X_umap` | UMAP | 2D | source | yes |",
-        "| `X_umap_3d` | UMAP | 3D | derived | yes |",
+        "one vector field, `velocity` (the `obsm` arrays `velocity_umap_1d`, "
+        "`velocity_umap` and `velocity_umap_3d`",
+        "| `X_umap_1d` | 1 | derived | yes (1D default) | `velocity_umap_1d` |",
+        "| `X_umap` | 2 | source | yes (2D default) | `velocity_umap` |",
+        "| `X_umap_3d` | 3 | derived | yes (3D default) | `velocity_umap_3d` |",
+        "| `X_pca` | 50 | source | yes, components 1 and 2 as a 2D view, enabled by the starting view",
         "selector reports `velocity`",
         "f6cad69fd509be44c8453205309f4c3c3c37ba34",
         "27,998 ordered genes",
-        "SHA-256 generation digest covering all 3,775 exported files",
+        "SHA-256 store digest covering every file of `anndata/pancreas.zarr`",
         "recorded in `sources/pancreas.json` rather than repeated here",
         "GSE132188",
         "10.1242/dev.173849",
@@ -942,9 +1014,10 @@ def test_standard_pancreas_sample_contract_is_documented_exactly() -> None:
         assert exact_value in normalized
 
     assert "Suo remains the catalog default" in page
-    # The Pancreas vector field is `velocity`; `velocity_umap` is only the
-    # AnnData-mode field id.
-    assert "velocity_umap" not in page
+    # The file stores the field under scVelo's names for it on each UMAP
+    # (`<field>_<basis>`), which the viewer lists as the one field `velocity`.
+    assert "`velocity_umap` field" not in page
+    assert "velocity_umap_2d" not in page
     assert "compact Session statistics round both counts to **4K**" in normalized
     assert "**Showing all 3,696 points**" in normalized
     assert "default 3D embedding with **Orbit**" in normalized
@@ -961,12 +1034,15 @@ def test_standard_pancreas_sample_contract_is_documented_exactly() -> None:
     assert "sources/pancreas.json" in page
 
 
-def test_data_loading_matrix_uses_the_exact_prepared_picker_label() -> None:
+def test_data_loading_matrix_uses_the_exact_local_picker_labels() -> None:
     page = (
         DOCS_ROOT / "user_guide" / "web_app" / "b_data_loading" / "index.md"
     ).read_text(encoding="utf-8")
 
-    assert "| Browser Prepared picker |" in page
+    assert "| Browser Zarr folder picker, or drop the folder |" in page
+    assert "| Browser Zarr ZIP picker |" in page
+    assert "| Browser H5AD picker |" in page
+    assert "Prepared" not in page
     assert "Browser folder picker" not in page
 
 
@@ -980,21 +1056,21 @@ def test_remote_and_github_url_docs_require_exact_multi_dataset_selection() -> N
     ).read_text(encoding="utf-8")
 
     assert "?remote=https://data.example.org&dataset=study-a" in page
-    assert "?github=owner/repo/path&dataset=study-a" in page
-    assert "manifest containing exactly one dataset selects that sole" in page
+    assert "?data=gh:owner/repo/path&dataset=study-a" in page
+    assert "dataset list containing exactly one dataset selects that sole" in page
     assert "requires `dataset=<exact-dataset-id>`" in page
     assert "does not choose an arbitrary\n  catalog entry" in page
     assert "loads its first dataset" not in page
 
 
-def test_prepared_server_docs_open_the_catalog_without_guessing_a_dataset() -> None:
+def test_server_docs_open_the_one_served_dataset() -> None:
     pages = [
         (
             DOCS_ROOT
             / "user_guide"
             / "python_package"
             / "d_viewing_apis"
-            / "05_python_serve_and_serve_anndata_quickstart.md"
+            / "05_python_serve_anndata_quickstart.md"
         ),
         (
             DOCS_ROOT
@@ -1003,35 +1079,26 @@ def test_prepared_server_docs_open_the_catalog_without_guessing_a_dataset() -> N
             / "d_viewing_apis"
             / "09_server_mode_advanced.md"
         ),
-        (
-            DOCS_ROOT
-            / "user_guide"
-            / "python_package"
-            / "g_api_reference_coverage"
-            / "api"
-            / "server.md"
-        ),
     ]
-    combined = "\n".join(page.read_text(encoding="utf-8") for page in pages)
-    normalized = " ".join(combined.split())
-
-    assert "`server.viewer_url` opens the served catalog" in normalized
-    assert "catalog contains exactly one dataset" in normalized
-    assert "multiple datasets" in normalized
-    assert "exact dataset-id selection" in normalized
-    assert "never chooses the first entry" in normalized
-    assert "stray or partial subdirectory rejects the root" in normalized
-    assert "loads its first dataset" not in combined
+    for page in pages:
+        normalized = " ".join(page.read_text(encoding="utf-8").split())
+        assert "`server.viewer_url`" in normalized, page
+        assert "opens the one dataset the server lists at `/_cellucid/datasets`" in normalized, page
+        assert "loads its first dataset" not in normalized, page
 
 
-def test_debug_connection_docs_use_only_the_keyed_all_dataset_report() -> None:
+def test_debug_connection_docs_use_only_the_keyed_store_probe_report() -> None:
     markdown = "\n".join(path.read_text(encoding="utf-8") for path in _markdown_files())
-    assert markdown.count("dataset_identity_probes") >= 11
+    python_guide = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted((DOCS_ROOT / "user_guide" / "python_package").rglob("*.md"))
+    )
+    assert python_guide.count("anndata_store_probes") >= 11
+    assert "dataset_identity_probes" not in python_guide
     assert "dataset_identity_url" not in markdown
     assert "dataset_identity_error" not in markdown
     assert "recent frontend console warnings" not in markdown
     assert "recent frontend console warnings/errors" not in markdown
-    assert "every declared dataset identity under its exact id/path" in markdown
 
 
 def test_every_documented_screenshot_uses_its_intrinsic_responsive_width() -> None:
@@ -1148,7 +1215,7 @@ def test_screenshot_provenance_records_describe_the_published_images() -> None:
 
 # Every page that enumerates the viewer's hook decorators, and the name of the
 # heading or lead-in that makes the list read as complete. A hook added to
-# ``BaseViewer`` has to reach all of them: the web-app Jupyter tutorial silently
+# ``AnnDataViewer`` has to reach all of them: the web-app Jupyter tutorial silently
 # lost ``on_command_error`` because no check tied these lists to the class.
 HOOK_ENUMERATION_PAGES = (
     "docs/user_guide/web_app/b_data_loading/05_jupyter_tutorial.md",
@@ -1173,11 +1240,11 @@ COMMAND_ERROR_AVAILABILITY = re.compile(
 
 
 def test_every_documented_hook_list_matches_the_viewer_decorator_surface() -> None:
-    from cellucid.jupyter import BaseViewer
+    from cellucid.jupyter import AnnDataViewer
 
     hooks = {
         name
-        for name, member in inspect.getmembers(BaseViewer, lambda value: isinstance(value, property))
+        for name, member in inspect.getmembers(AnnDataViewer, lambda value: isinstance(value, property))
         if name.startswith("on_")
     }
     assert hooks == {
@@ -1265,3 +1332,114 @@ def test_every_documented_capability_body_matches_the_served_document() -> None:
             failures.append(f"{relative}: capability body does not match /_cellucid/protocol")
 
     assert not failures, "\n".join(failures)
+
+
+PREPARATION_DOCS = DOCS_ROOT / "user_guide" / "python_package" / "c_data_preparation_api"
+SPECIFICATION = PREPARATION_DOCS / "09_cellucid_ready_anndata_specification.md"
+
+
+def _table_keys(section: str) -> list[str]:
+    """The backticked first-column keys of the first Markdown table in ``section``."""
+    keys: list[str] = []
+    for line in section.splitlines():
+        if not line.startswith("| `"):
+            if keys:
+                break
+            continue
+        keys.extend(re.findall(r"`([A-Za-z0-9]+)`", line.split("|")[1]))
+    return keys
+
+
+def test_prepare_reference_signature_is_the_runtime_signature() -> None:
+    """The signature block in the API reference is ``inspect.signature(prepare)``."""
+    page = (
+        DOCS_ROOT / "user_guide" / "python_package" / "g_api_reference_coverage" / "api" / "prepare.md"
+    ).read_text(encoding="utf-8")
+    block = page.split("## Signature", 1)[1].split("```text", 1)[1].split("```", 1)[0]
+    documented: list[tuple[str, str | None]] = []
+    keyword_only = False
+    for raw in block.splitlines():
+        entry = raw.strip().rstrip(",")
+        if not entry or entry.endswith("(") or entry.startswith(")"):
+            continue
+        if entry == "*":
+            keyword_only = True
+            continue
+        name, _, default = entry.partition("=")
+        documented.append((name, default or None))
+        assert keyword_only or name == "out_path", name
+
+    signature = inspect.signature(cellucid.prepare)
+    runtime = [
+        (name, None if parameter.default is inspect.Parameter.empty else repr(parameter.default))
+        for name, parameter in signature.parameters.items()
+    ]
+    assert documented == runtime
+    assert [
+        name
+        for name, parameter in signature.parameters.items()
+        if parameter.kind is not inspect.Parameter.KEYWORD_ONLY
+    ] == ["out_path"]
+
+
+def test_specification_lists_exactly_the_uns_cellucid_keys_the_writer_and_viewer_use(
+    tmp_path: Path,
+) -> None:
+    """The ``uns['cellucid']`` and ``defaults`` tables match what ``prepare()`` writes.
+
+    The viewer's own key lists (``anndata-cellucid-metadata.js`` and
+    ``requireAnnDataLaunchDefaults``) are restated here; a change to either is
+    a change to the specification page and to this list together.
+    """
+    import anndata as ad
+    import numpy as np
+
+    text = SPECIFICATION.read_text(encoding="utf-8")
+    top = _table_keys(text.split("## 2. `uns['cellucid']`", 1)[1])
+    defaults = _table_keys(text.split("### `defaults`", 1)[1])
+    assert top == ["schema", "id", "name", "description", "citation", "source", "defaults", "outlierQuantiles", "session"]
+    assert defaults == [
+        "embedding1d",
+        "embedding2d",
+        "embedding3d",
+        "knn",
+        "expression",
+        "geneIdColumn",
+        "latentKey",
+        "vectorFieldDefault",
+        "obsKeys",
+        "normalizeEmbeddings",
+        "centroidMinPoints",
+    ]
+
+    rng = np.random.default_rng(0)
+    path = cellucid.prepare(
+        tmp_path / "every-key.h5ad",
+        format="h5ad",
+        embeddings={"X_umap": rng.normal(size=(6, 2)), "X_umap_3d": rng.normal(size=(6, 3))},
+        dataset_id="every-key",
+        dataset_name="Every key",
+        vector_fields={"velocity": {"X_umap": rng.normal(size=(6, 2))}},
+        dataset_description="All of them.",
+        citation_text="Doe 2026",
+        citation_url="https://example.org",
+        source_name="Synthetic",
+        source_url="https://example.org/source",
+        embedding_defaults={"1d": ("X_umap", [1]), "2d": "X_umap", "3d": "X_umap_3d"},
+        latent_key="X_umap_3d",
+        vector_field_default="velocity",
+        normalize_embeddings=False,
+        centroid_min_points=3,
+    )
+    written = ad.read_h5ad(path).uns["cellucid"]
+    assert set(written) <= set(top) - {"session"}
+    assert set(written["defaults"]) <= set(defaults)
+    # Everything prepare() can write is written here, except the two defaults
+    # it leaves to the viewer (knn, expression) and the four it needs obs/var for.
+    assert set(written) == set(top) - {"session"}
+    assert set(written["defaults"]) == set(defaults) - {
+        "knn",
+        "expression",
+        "obsKeys",
+        "geneIdColumn",
+    }

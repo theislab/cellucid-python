@@ -12,7 +12,7 @@
 
 ## What this feature is (one sentence)
 
-Cellucid’s **Vector Field Overlay** draws an animated **particle flow** on top of your embedding using **one vector per cell** (e.g., RNA velocity or transition drift vectors), so you can *see directionality* in a way that’s easy to understand.
+Cellucid’s **vector field overlay** draws an animated **particle flow** on top of your embedding using **one vector per cell** (e.g., RNA velocity or transition drift vectors), so you can *see directionality* in a way that’s easy to understand.
 
 ## The same view, overlay off and on
 
@@ -94,7 +94,7 @@ Cellucid turns your per-cell vectors into a visualization by:
 
 The renderer does not reconstruct a continuous biological trajectory between
 cells, infer transition probabilities, or follow a real cell through time.
-`Flow speed:`, `Trail length:`, turbulence, and post-processing change the
+`Flow speed`, `Trail length`, turbulence, and post-processing change the
 animation, not the stored vector values.
 
 ### A trail is not a streamline
@@ -114,7 +114,7 @@ Concretely:
   another follows one cell's vector extrapolated forwards. It is not a path the
   field implies, and it is not a trajectory.
 - **Curvature you see is not in the data.** What bends the streaks is
-  `Turbulence:`, a divergence-free noise term added to the motion. It ships
+  `Turbulence`, a divergence-free noise term added to the motion. It ships
   **on**, at `0.30` of its `0–1` range. Set it to `0` before reading the field's
   geometry.
 - **Coherence between neighbouring streaks is real.** Neighbouring cells whose
@@ -125,8 +125,8 @@ Concretely:
 
 Particle colour is the magnitude of the spawn cell's vector, divided by the
 **largest magnitude in this field for this dimension**, clamped to `0..1`, and
-looked up in `Color scheme:`. Particle size carries the same quantity, and the
-per-frame step length is proportional to the raw magnitude times `Flow speed:`.
+looked up in `Color scheme`. Particle size carries the same quantity, and the
+per-frame step length is proportional to the raw magnitude times `Flow speed`.
 
 Two consequences:
 
@@ -143,7 +143,7 @@ Two consequences:
 
 | It does not show | Why |
 |---|---|
-| A rate, a speed, or a time | The stored numbers are normalised embedding units per arbitrary step. `Flow speed:` is a display gain you choose. |
+| A rate, a speed, or a time | The stored numbers are normalised embedding units per arbitrary step. `Flow speed` is a display gain you choose. |
 | Any motion out of the embedding plane | The vectors on disk are already a projection. The component of the high-dimensional velocity that the embedding cannot express is gone before Cellucid sees the data. |
 | A trajectory, lineage, or transition probability | Nothing in the renderer integrates the field or follows a cell. |
 | Magnitudes comparable across dimensions or datasets | See above; and for the built-in Pancreas sample the 1D payload is on a different scale from the 2D and 3D payloads. |
@@ -168,7 +168,7 @@ keep drawing it.
 
 In the web app UI:
 
-- If the dataset has **no vector fields**, the **Vector Field Overlay** block will not appear.
+- If the dataset has **no vector fields**, the **Vector field** block will not appear.
 - If the dataset has vector fields but none for the **embedding the view shows**, the block appears, but **Show overlay** is disabled and the UI names the embeddings that have one (e.g., “Vector fields are bound to X_umap, X_umap_3d. Show one of them in this view to enable.”).
 
 ---
@@ -196,14 +196,12 @@ This is why the overlay exposes a **Flow speed** multiplier: it lets you tune vi
 The scaling is deliberately boring, and knowing that is what lets you trust the
 relative magnitudes:
 
-- The exporter validates the array (finite, right shape, right row count) and
-  applies **one isotropic scale factor** — the same one it applies to the
-  embedding itself. No filtering, no smoothing, no unit-normalisation, no
-  per-cell rescaling.
-- The app applies the same kind of scale again at load, which is exactly `1.0`
-  for a prepared export and the real normalisation for a direct
-  `h5ad://`/`zarr://` source. It then computes one global maximum magnitude,
-  used only for colour and size.
+- `prepare()` validates the array (finite, right shape, right row count) and
+  stores it as it is.
+- The app applies **one isotropic scale factor** at load — the same one it
+  applies to the embedding the field is bound to. No filtering, no smoothing,
+  no unit-normalisation, no per-cell rescaling. It then computes one global
+  maximum magnitude, used only for colour and size.
 
 So **relative magnitudes are preserved end to end** and **absolute units are
 lost**. What arrives on disk is what gets drawn, up to a single multiplier.
@@ -222,16 +220,15 @@ dimensions of that one sample are not on a common scale.
 
 ### Where the overlay data can come from (loading paths)
 
-Vector fields can arrive via multiple data loading workflows:
-
-- **Prepared exports**: vector field binaries live under `vectors/` and the dataset’s `dataset_identity.json` contains a `vector_fields` metadata block.
-- **AnnData in the browser / server / Jupyter**: vector fields start from
-  exact dimension-suffixed `adata.obsm` keys such as `velocity_umap_2d`, bound
-  to the UMAP of that dimension; any other `obsm` array that fits an embedding
-  (`velocity_pca` on `X_pca` columns 2 and 3) can be bound under **Session ›
-  Data mapping › Vector fields** (see
-  [Vector fields](../b_data_loading/13_data_mapping.md#vector-fields)).
-  A prepared export's bindings can be turned off there too.
+Every loading route reads the AnnData file the same way — in the browser, from
+a link or catalog, or served by a server or Jupyter. Vector fields start from
+scVelo's naming convention: an `adata.obsm` key `<field>_<basis>` is the field
+`<field>` drawn over the embedding `obsm['X_<basis>']` (`velocity_umap` over
+`X_umap`, `velocity_umap_3d` over `X_umap_3d`, `velocity_branches` over
+`X_branches`) when both have the same number of columns; any other `obsm`
+array that fits an embedding (a 2-column `drift` on `X_pca` columns 2 and 3)
+can be bound under **Session › Data mapping › Vector fields** (see
+[Vector fields](../b_data_loading/13_data_mapping.md#vector-fields)).
 
 The preparation contracts are documented in
 {doc}`../../python_package/c_data_preparation_api/08_vector_fields_velocity_displacement`;

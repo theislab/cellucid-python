@@ -57,7 +57,7 @@ emitting. The reasoning is in “Why the reader ships first” in
 {doc}`11_hooks_events_protocol_and_schema`, and the route itself is
 {ref}`documented here <python-protocol-capability-endpoint>`.
 
-If the event needs a convenience decorator, add a property on `BaseViewer`
+If the event needs a convenience decorator, add a property on `AnnDataViewer`
 similar to `on_selection`.
 
 ### Step A4 — Update Python event handling if needed
@@ -110,10 +110,10 @@ Important:
 
 Files:
 - `cellucid-python/src/cellucid/jupyter/_wire.py`
-- `cellucid-python/src/cellucid/jupyter/_base.py`
+- `cellucid-python/src/cellucid/jupyter/_viewer.py`
 
 Add the command to `_require_frontend_message` in `_wire.py`, then add a
-method on `BaseViewer`, e.g.:
+method on `AnnDataViewer`, e.g.:
 
 - `def set_threshold(self, value: float): self.send_message({"type": "setThreshold", "value": value})`
 

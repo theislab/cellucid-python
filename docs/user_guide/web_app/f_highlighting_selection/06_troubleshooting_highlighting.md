@@ -8,7 +8,7 @@ Format: **Symptom → likely causes → how to confirm → fix → prevention**.
 
 These checks solve most “it’s broken” reports in under a minute:
 
-1) **Read the line under the Highlight mode buttons.** A gesture the app
+1) **Read the line under the Tool buttons.** A gesture the app
    consumed but could not turn into a step explains itself there, in words.
    See **What the app tells you** below before assuming a tool is broken.
 2) **Filters:** are you filtering out the cells you expect to see?
@@ -27,7 +27,7 @@ These checks solve most “it’s broken” reports in under a minute:
      the Highlighting panel or on the selection bar at the bottom of the plot)?
      See {ref}`select-mode`.
 8) **Tool mode:** are you in the tool you think you are in (Lasso vs Proximity vs KNN vs Annotation based)?
-   - **Annotation based** additionally needs a coloured field. With none, the
+   - **Annotation** additionally needs a coloured field. With none, the
      panel replaces its `Alt+click` invitation with the sentence that asks for
      one; the other three tools never read the active field.
 9) **Where you released:** did the mouse come up over the plot, or over the
@@ -40,7 +40,7 @@ If these do not resolve it, jump to the symptom that matches what you see.
 
 ## What the app tells you
 
-Selection tools write one short line under the **Highlight mode** buttons in the
+Selection tools write one short line under the **Tool** buttons in the
 **Highlighting** panel. That is the only place these messages appear — they are
 not toasts and there is no message history, because every tool reuses the same
 one-line slot. Repeating a gesture that fails the same way repaints an identical
@@ -72,13 +72,13 @@ Two rules hold for every message in the table below:
 :width: 1440px
 
 Where to look. The pointer was pressed in empty space above the embedding;
-the explanation appears on the left, under the **Highlight mode** buttons. It is
+the explanation appears on the left, under the **Tool** buttons. It is
 appended to the mode's usual help text, not shown in its place.
 ```
 
 Which tools report which:
 
-- **“did not land on a cell”** comes from **Annotation based**, **KNN drag**,
+- **“did not land on a cell”** comes from **Annotation**, **KNN drag**,
   and **Proximity drag** — the tools that need a cell under the pointer to
   begin. Lasso does not need one, so it never reports this. Proximity reports it
   only when it cannot place a centre at all; with a candidate set already
@@ -211,7 +211,7 @@ What removes a selection depends on whether it is still in progress or saved:
 4) Browser/OS intercepts `Alt` in your environment (rare but possible).
 
 ### How to confirm
-- **Look under the Highlight mode buttons first.** If the app consumed the
+- **Look under the Tool buttons first.** If the app consumed the
   gesture and threw it away, it says so there in words. No message at all means
   the gesture never started, which is a different problem — one of the causes
   above.
@@ -238,7 +238,7 @@ What removes a selection depends on whether it is still in progress or saved:
 
 You released the mouse somewhere other than the plot — over the floating
 sidebar, over a notification toast that appeared mid-drag, or outside the
-browser window. The message under the **Highlight mode** buttons reads:
+browser window. The message under the **Tool** buttons reads:
 
 > That gesture ended outside the view, so nothing was selected.
 
@@ -282,8 +282,8 @@ based** selection, not only Lasso.
    a centre anyway — and it is not where you expected. See below.
 3) Your radius is too small (tiny drag) or too large (huge drag).
 4) Filters are hiding nearby cells; selection only considers visible cells.
-5) The camera is far out with **Visualization → Renderer settings →
-   Level-of-Detail (LOD)** enabled. The seed `Alt+click` picks the cell under
+5) The camera is far out with **Visualization → Performance →
+   Level of detail (LOD)** enabled. The seed `Alt+click` picks the cell under
    the pointer, and it can only land on a cell the view is actually drawing —
    so a zoomed-out camera can refuse a click over a region that does have
    cells in it. Only the seed click is affected; the drag that follows still
@@ -291,13 +291,13 @@ based** selection, not only Lasso.
 6) You expected screen-space selection; proximity is embedding-space distance.
 
 ### How to confirm
-- Read the line under the **Highlight mode** buttons: a refused click names
+- Read the line under the **Tool** buttons: a refused click names
   itself; a click that places a centre anyway does not.
 - Start by `Alt+click` directly on a clearly visible cell (zoom in).
 - Drag slowly and watch the overlay radius.
 - Temporarily disable filters and try again.
 - If a click is refused only when zoomed out, zoom in and seed again — or turn
-  **Level-of-Detail (LOD)** off for the seed click.
+  **Level of detail (LOD)** off for the seed click.
 
 ### Clicking empty space (what the centre actually is)
 When you `Alt+click` empty space and a candidate set already exists, the centre
@@ -322,7 +322,7 @@ on the selection.
 ## Symptom: “KNN drag says no neighbor graph is available (or does nothing)”
 
 ### Likely causes (ordered)
-1) Your dataset export does not include connectivities/edges.
+1) Your dataset holds no neighbour graph (`obsp`).
 2) Edges exist but are not loaded yet (often loaded when you enable “Show edges”).
 3) You are using a data loading mode that doesn’t provide connectivities.
 
@@ -330,12 +330,12 @@ on the selection.
 - Look for an edges/graph toggle (e.g., “Show edges”) and enable it.
 - If there is an edges overlay, confirm you can see edges.
 - If you cannot enable edges, assume connectivities are missing.
-- If the line under the **Highlight mode** buttons instead reads *“That click
+- If the line under the **Tool** buttons instead reads *“That click
   did not land on a cell…”*, the graph is not the problem: your `Alt+click`
   missed every point. Zoom in and seed the drag again.
 
 ### Fix
-- Re-export your dataset including connectivities (if you control the export pipeline).
+- Write your dataset again including connectivities (`obsp['connectivities']`), if you control how it is written.
 - Use lasso/proximity/annotation-based selection if you cannot load a graph.
 
 ### Prevention
@@ -359,7 +359,7 @@ on the selection.
 - Confirm the field of the view you click in (its legend; focus that view to see it in the field selector).
 - Temporarily disable filters and repeat the selection.
 - Try a known categorical field with obvious labels (e.g., `cell_type`) to validate semantics.
-- If **nothing at all** is selected, read the line under the **Highlight mode**
+- If **nothing at all** is selected, read the line under the **Tool**
   buttons. Three states are reported there and they mean different things:
   - *“Color by a field first…”* replaces the usual `Alt+click` invitation
     whenever no panel on screen is colored by a field. No press can select
@@ -374,7 +374,7 @@ on the selection.
 
 ### Fix
 - If the panel is asking for a field, choose a **Categorical obs** or
-  **Continuous obs** entry under **Coloring & Filtering**; `Alt+click` works
+  **Continuous obs** entry under **Coloring & filtering**; `Alt+click` works
   from that moment on.
 - For categorical:
   - use `Alt` to replace,
@@ -486,11 +486,11 @@ on the selection.
 
 ### Fix
 - Load the session on the dataset it was created from.
-- Obtain a fresh current **Save State** bundle if exact-format validation fails.
+- Save a fresh current bundle with **Save** if exact-format validation fails.
 - If you must change the dataset, you must recreate highlights (indices won’t match).
 
 ### Prevention
-- Keep dataset IDs stable and avoid reordering cells between exports if you rely on highlights.
+- Keep dataset IDs stable and avoid reordering cells between versions of a dataset if you rely on highlights.
 - Save “milestone sessions” before heavy editing.
 
 ---
@@ -515,14 +515,14 @@ on the selection.
 
 ### Prevention
 - When using Python control, treat “cell index = identity” and keep ordering stable.
-- Prefer pre-exported datasets for reproducibility.
+- Prefer a dataset file with a stable id (`prepare(dataset_id=...)`) for reproducibility.
 
 ---
 
 ## When to file a bug report
 
 If you believe you hit a real bug (not one of the expected edge cases), include:
-- The exact text of the line under the **Highlight mode** buttons at the moment
+- The exact text of the line under the **Tool** buttons at the moment
   it went wrong — or “no message at all”, which is itself a useful report
 - Browser + OS (and whether you’re on a laptop with integrated GPU)
 - Dataset format and rough size (`n_cells`, `n_genes`, whether connectivities exist)

@@ -1,5 +1,12 @@
 # Screenshot coverage — sections C, D, E
 
+:::{important}
+Audited before Cellucid 0.9.5, which reads AnnData only. The capture
+instructions use the current controls, fixtures and sample catalog; where a
+record says what a page or an image showed at audit time (the **Prepared**
+button, a prepared export), that is history. {doc}`index` maps the old names.
+:::
+
 Scope: `user_guide/web_app/c_core_interactions/` (8 pages),
 `user_guide/web_app/d_fields_coloring_legends/` (8 pages),
 `user_guide/web_app/e_filtering/` (9 pages).
@@ -104,6 +111,28 @@ Confirmed against the tree, not inherited from the original audit.
    `KNN Connectivity:`; `c_core_interactions/07_screenshots.md:95` is the only
    heading in the whole web-app guide that names the feature. The two teaching
    pages mention it only in passing (`03_render_modes…:30,50`).
+5. **The outlier filter's captures show the earlier control, and its new
+   states have none.** `filtering/outlier-slider-95`,
+   `filtering/panel-clusters-unfiltered`, `filtering/window-outlier-100-off`
+   and `filtering/window-outlier-95-applied` show a control labelled
+   `Outlier filter (latent space)` above the centroid checkboxes in a box titled
+   `Display options`; it is now `Outlier filter`, below **Show centroids**, in
+   the box titled **Legend** (`index.html` `#display-options-container`,
+   `#outlier-filter-container`). Recapture those four, then add one capture per
+   state of `ui/modules/outlier-filter-control.js`, each cropped to
+   `#outlier-filter-container` +8px at 1440×1000, 2×, for
+   {doc}`/user_guide/web_app/e_filtering/02_outlier_filtering_per_active_field`:
+
+   | Filename (`filtering/`) | State | How to reach it |
+   | --- | --- | --- |
+   | `outlier-no-latent` | no latent space chosen: slider disabled, the line naming what the filter measures and the file's suggested arrays, **Choose latent space** | `pancreas`, colour by `clusters`, **Session › Data mapping › Latent space** set to **None**, Apply |
+   | `outlier-cost-line` | quantiles to compute, nothing read yet: *“The first use reads the latent space … once …”* | `suo`, colour by `cell_type`, Latent space set to `X_pca` (the file stores them for `scanvi` only), Apply; do not move the slider |
+   | `outlier-progress-cancel` | computing: the progress bar, the line with bytes read, rate and time left, and **Cancel** | as `outlier-cost-line`, then move the slider to `95%` and capture while the bar runs (also capture the progress notification, `outlier-progress-notification`, cropped to the notification) |
+   | `outlier-too-small` | no category reaches `centroid_min_points`: slider disabled, *“No category of “clusters” has 1000 cells …”* | `serve_anndata` on the `pancreas` store with `centroid_min_points=1000` (its largest cluster, Ductal, has 916 cells), colour by `clusters` |
+   | `outlier-failed` | the latent space holds a NaN: the error line, and the latent space marked unusable in Data mapping | an `.h5ad` written with anndata itself (`prepare()` refuses non-finite embeddings) whose 10-column `obsm['X_bad']` holds one NaN, `cellucid serve … --latent-key X_bad`, move the slider |
+
+   Each needs a scenario in `docs/_tooling/screenshots/scenarios.mjs` and a
+   provenance record before it is referenced from a page.
 
 ### Resolved since the audit
 
@@ -168,7 +197,7 @@ All forty confirmed present in `cellucid/index.html`:
 
 ### Dataset facts
 
-Read from `cellucid-datasets/exports-v3/*/dataset_identity.json`:
+Read from each sample's identity in the sample catalog at audit time (prepared, before 0.9.5):
 
 | Sample id | Cells | Genes | Dimensions | Default | Connectivity | Useful fields |
 | --- | ---: | ---: | --- | ---: | --- | --- |
@@ -180,9 +209,10 @@ Read from `cellucid-datasets/exports-v3/*/dataset_identity.json`:
 
 Because all five publish 1D, 2D and 3D, the "dataset provides only one embedding
 dimension" state is **unreachable with any shipped sample**. Only the local
-fixture `cellucid/tests/browser/fixtures/exports/current-ui-prepared` reproduces
+fixture `cellucid/tests/browser/fixtures/catalog/current-ui.h5ad` reproduces
 it: 120 cells, **2D only**, one categorical field (`cell_type` =
-alpha/beta/gamma, `centroid_outlier_quantile: 0.95`), one continuous field
+alpha/beta/gamma; latent space `latent_space`, 3 columns, named as `latentKey`
+with no stored outlier quantiles), one continuous field
 (`score`), six genes (GAPDH, ACTB, CD3E, MS4A1, NKG7, LYZ). It cannot be used
 for anything 3D, orbit, smoke, or realistic-looking.
 

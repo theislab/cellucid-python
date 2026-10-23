@@ -3,13 +3,12 @@
 ``--embedding-1d/2d/3d KEY[:c0,c1]`` names a slot's obsm array and optionally
 its 0-based columns, ``--knn KEY`` the obsp neighbour graph, ``--gene-id-column``
 the var column that names genes, and ``--expression X|raw|layer:NAME`` the
-matrix values are read from. None of them means anything for a prepared export,
-which fixed all of it when it was written, so each is refused there by name.
+matrix values are read from. Each overrides the store's own
+``uns['cellucid']['defaults']`` for that choice.
 """
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest import mock
 
@@ -103,44 +102,6 @@ def test_omitted_mapping_flags_select_the_defaults(tmp_path: Path) -> None:
     assert kwargs["gene_id_column"] is None
     # None: X when present, else raw or a layer, reported as guessed.
     assert kwargs["expression_source"] is None
-
-
-def _prepared_export(tmp_path: Path) -> Path:
-    export = tmp_path / "export"
-    export.mkdir()
-    (export / "dataset_identity.json").write_text(
-        json.dumps({"version": 3, "id": "e", "name": "E"}),
-        encoding="utf-8",
-    )
-    (export / "obs_manifest.json").write_text("{}", encoding="utf-8")
-    (export / "embeddings").mkdir()
-    (export / "embeddings" / "0_2d.bin").write_bytes(b"\x00" * 8)
-    return export
-
-
-@pytest.mark.parametrize(
-    ("flag", "value"),
-    [
-        ("--embedding-1d", "X_line"),
-        ("--embedding-2d", "X_pca:0,1"),
-        ("--embedding-3d", "X_umap_3d"),
-        ("--knn", "connectivities"),
-        ("--gene-id-column", "gene_symbols"),
-        ("--expression", "raw"),
-    ],
-)
-def test_every_mapping_flag_is_refused_for_a_prepared_export(
-    tmp_path: Path,
-    flag: str,
-    value: str,
-) -> None:
-    args = create_parser().parse_args(["serve", str(_prepared_export(tmp_path)), "--quiet", flag, value])
-    with (
-        mock.patch("cellucid.server.serve") as serve,
-        pytest.raises(ValueError, match=f"{flag} may only be used with direct AnnData input"),
-    ):
-        _run_serve(args)
-    serve.assert_not_called()
 
 
 def test_the_replaced_connectivity_switch_no_longer_parses() -> None:

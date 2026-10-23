@@ -280,10 +280,6 @@ def validate_release(tag: str | None, *, verify_local_tags: bool = False) -> str
         "docs/user_guide/r_package/installation.md": (
             f"Version `{version}` from `packageVersion` <!-- CELLUCID_VERSION -->",
         ),
-        (
-            "docs/user_guide/python_package/c_data_preparation_api/"
-            "09_output_format_specification_exports_directory.md"
-        ): (f"`cellucid_data_version` is `{version}`. <!-- CELLUCID_VERSION -->",),
     }
     for relative_path, required_texts in exact_text.items():
         contents = _read(relative_path)

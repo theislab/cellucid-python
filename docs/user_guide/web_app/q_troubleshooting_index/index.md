@@ -49,7 +49,7 @@ app as it starts by default, and **Troubleshooting data loading** opens
 | The reason says | What it means | Go to |
 |---|---|---|
 | `WebGL2 is required but not supported in this browser.` | The browser gave the page no WebGL2 context: old browser, disabled hardware acceleration, a managed-device policy, or a remote-desktop session | {doc}`../a_orientation/02_system_requirements` |
-| Anything about a manifest, a dataset, or a server response | The launch parameters pointed at something that could not be read | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
+| Anything about a dataset catalog, a dataset, or a server response | The launch parameters pointed at something that could not be read | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
 | A blank page instead of a card, or “module script failed to load” | The app’s own files were not served correctly (wrong MIME type, opened via `file://`) | {doc}`../p_developer_docs/02_local_development_setup` |
 
 If JavaScript is disabled you get a plain sentence instead: *“Cellucid requires
@@ -85,36 +85,23 @@ The cause phrase tells you which class of failure it was:
 | “nothing is published at that address” | 404 — the path is wrong | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
 | “the server refused access” | 401 or 403 — it exists but you cannot read it | Check that the data is shared publicly, or that you are signed in |
 | “the server rejected the request” | Some other 4xx | Check the address |
-| **422**, with a body beginning `{"error": "non_finite_continuous_payload"` | The address was right. The server examined a gene or continuous column, found values it cannot publish, and refused to send them | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
 | “the server reported a problem of its own” | 5xx — not your fault | Wait and retry |
-| “not in a format Cellucid can read” | The bytes arrived but do not match the export format | Re-export with `cellucid prepare`; {doc}`../b_data_loading/07_folder_file_format_expectations_high_level_link_to_spec` |
-| “nothing readable came back” | Offline, DNS failure, **CORS**, or an address that simply is not a Cellucid export | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
+| “not in a format Cellucid can read” | The bytes arrived but are not an AnnData file Cellucid reads | Write it again with anndata (or `cellucid.prepare()`); {doc}`../b_data_loading/07_file_format_expectations` |
+| “nothing readable came back” | Offline, DNS failure, **CORS**, or an address that simply is not an AnnData file or dataset catalog | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
 
 :::{tip}
 **CORS is never named on the dataset path**, because the browser does not tell
 the page whether a request was blocked by CORS or simply answered with something
 unreadable. That is what “nothing readable came back” covers. If you host your
-own exports and the address is definitely right, check the CORS headers first —
+own datasets and the address is definitely right, check the CORS headers first —
 open DevTools → Network and look for a request with no response body.
-:::
-
-:::{note}
-**422 is the one 4xx that is not about the address.** When a gene or continuous
-obs column is requested from the Python AnnData server, the server validates it
-before sending anything, and refuses a column containing `NaN`, an infinity, or
-a value outside the `float32` range. The refusal is HTTP 422 with a JSON body —
-`error`, `kind`, `name`, `counts`, `examples` and a `message` — and the viewer
-quotes that body verbatim above its own explanation. Repair the values at the
-source; nothing in the viewer can place an infinity on a colour scale.
-{doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` walks
-through it.
 :::
 
 (size-limits)=
 ### It says something exceeded a limit
 
-Cellucid has no fixed size ceilings: a prepared export, a direct `.h5ad` or
-Zarr file and their metadata load at any size. What remains are the limits of
+Cellucid has no fixed size ceilings: an `.h5ad`, a Zarr store and their
+metadata load at any size. What remains are the limits of
 the browser itself, and each is reported by name rather than as a crash:
 
 - **An array the browser cannot allocate** is refused as too large, naming the
@@ -165,14 +152,14 @@ is fixed. Zoom in instead.
 
 | The message | Meaning | Go to |
 |---|---|---|
-| **“No gene matches”**, followed by your query and a count of how many gene names the dataset publishes | The gene is not in *this export*. The count is the point: an export often carries a chosen subset of the source data, so a real gene can be legitimately absent | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
+| **“No gene matches”**, followed by your query and a count of how many gene names the dataset publishes | The gene is not in *this dataset*. The count is the point: a dataset often carries a chosen subset of the source data, so a real gene can be legitimately absent | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
 | “This dataset publishes no gene expression fields, so no gene panel can be built.” | There is no expression data at all here, so no marker or gene analysis is possible | {doc}`../h_analysis/08_analysis_mode_genes_panel` |
 | `Gene "<name>" not found in dataset. Check spelling or try another gene.` | That specific gene is absent | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
-| **“Gene cannot be shown”**, a multi-line notification naming the gene, counting its `+Infinity` / `-Infinity` / `NaN` values and listing the first affected cells | The values arrived (or the server refused to send them) and cannot be placed on a colour scale. The active field never changed. This is a values problem, not a transport one — repair the data at the source | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
+| **“Gene cannot be shown”**, a multi-line notification naming the gene, counting its `+Infinity` / `-Infinity` / `NaN` values and listing the first affected cells | The values arrived and cannot be placed on a colour scale. The active field never changed. This is a values problem, not a transport one — repair the data at the source | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
 | `Field "X" has no value in any of N cells, so it has no colour scale.` | Every value in that column is `NaN`, so there is nothing to scale — usually a column that was never computed | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
 | “Failed to load field: …” | A field could not be loaded. Read the rest of the line: if it counts non-finite values it is the case above, otherwise the data could not be fetched | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends`, then {doc}`../b_data_loading/08_troubleshooting_data_loading` |
 | “Failed to load gene: …” / “Failed to load field: …” on the progress toast | The load never finished — a dropped connection, a stopped server, a refused payload. It is the terminal state of the `Loading …` toast; the reason arrives as a separate notification beside it | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
-| “No neighbor graph available for this dataset” | kNN selection needs connectivity, which this export does not include | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
+| “No neighbor graph available for this dataset” | kNN selection needs a neighbour graph (`obsp`), which this dataset does not hold | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
 
 :::{note}
 If you ever see a message containing a literal `{symbol}`, `{name}` or similar
@@ -298,10 +285,10 @@ Most “it’s broken” reports reduce to one of these mismatches:
    - {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`
 3) **Membership vs visibility**: highlight pages store membership; filters only change visibility.  
    - {doc}`../f_highlighting_selection/01_highlight_mental_model`
-4) **Dataset identity mismatch**: sessions/annotation won’t apply cleanly to a different dataset export/version.  
+4) **Dataset identity mismatch**: sessions/annotation won’t apply cleanly to a different dataset or version of it.  
    - {doc}`../b_data_loading/06_dataset_identity_why_it_matters`
-5) **What the export contains**: a gene or field that exists in your `.h5ad` need
-   not exist in the export made from it.  
+5) **What the dataset contains**: a gene or field in your source data need not
+   exist in the Cellucid-ready AnnData written from it.  
    - {doc}`../d_fields_coloring_legends/07_genes_in_the_built_in_samples`
 
 ---
@@ -327,7 +314,7 @@ Use this section when Cellucid doesn’t start, your environment blocks required
 | **Gzip decompression** (`DecompressionStream`) | Compressed payloads are refused before the request is made, with a message naming the missing support |
 | Web Workers | Only the benchmark’s off-thread data generation needs this |
 | `localStorage` | Community Annotation refuses to run; preferences stop persisting |
-| IndexedDB | Caches degrade **silently** — repeat analyses just get slower |
+| IndexedDB | Community Annotation **Pull** fails with a message; the annotation view on screen is kept |
 | Clipboard write | “Copy” actions report that you must select the text manually |
 
 Cellucid does **not** use the File System Access API, `SharedArrayBuffer`, or
@@ -348,10 +335,10 @@ This is for “my dataset won’t load”, “spinner forever”, “missing emb
 
 **First: identify your loading path**
 
-- Export folder (recommended) → {doc}`../b_data_loading/03_browser_file_picker_tutorial`
+- A local file or Zarr folder (H5AD, Zarr folder, Zarr ZIP) → {doc}`../b_data_loading/03_browser_file_picker_tutorial`
 - Server mode (`cellucid serve ...`) → {doc}`../b_data_loading/04_server_tutorial`
 - Jupyter notebook integration → {doc}`../b_data_loading/05_jupyter_tutorial`
-- GitHub-hosted exports → {doc}`../b_data_loading/02_local_demo_tutorial`
+- A link or a published dataset catalog → {doc}`../b_data_loading/14_open_from_link`, {doc}`../b_data_loading/02_local_demo_tutorial`
 
 If you’re not sure which applies: {doc}`../b_data_loading/01_loading_options_overview`.
 
@@ -360,7 +347,7 @@ If you’re not sure which applies: {doc}`../b_data_loading/01_loading_options_o
 1) Read the message and match it in {ref}`find-the-message` — the four
    “would not load” causes look alike and are not.  
 2) If demos fail too, this is likely an environment/browser issue → {doc}`../a_orientation/02_system_requirements`  
-3) If you loaded a large `.h5ad` directly in the browser, switch to server mode → {doc}`../b_data_loading/04_server_tutorial`  
+3) If you loaded a large cell-major `.h5ad`, wait for the reorganisation progress notice; `cellucid serve` hands a file to the same reader → {doc}`../b_data_loading/04_server_tutorial`  
 4) DevTools → Network: look for 404/CORS/timeout errors (don’t guess)  
 5) “Loaded but empty” can be filters/visibility → {doc}`../e_filtering/07_troubleshooting_filtering`
 
@@ -391,7 +378,7 @@ Use this section when Cellucid is slow, the canvas is blank, or you see WebGL-re
 2) Make the window smaller. This is the highest-yield single test.
 3) Switch to **Points** render mode while debugging (smoke + heavy overlays can hide root causes).  
 4) Clear snapshots. Then, if you need a comparison of a large dataset, turn on
-   Level-of-Detail first: every view draws every point again —
+   Level of detail first: every view draws every point again —
    {doc}`../n_benchmarking_performance/06_edge_cases_performance` explains it.
 5) If you see “WebGL context lost”: reload, then re-try with reduced load.
 
@@ -422,7 +409,7 @@ Selection/highlighting problems are often mismatches between:
 
 **Fast checks**
 
-1) Check **Active filters** (most “missing highlights” are just hidden): {doc}`../e_filtering/07_troubleshooting_filtering`  
+1) Check **Filters** (most “missing highlights” are just hidden): {doc}`../e_filtering/07_troubleshooting_filtering`  
 2) Confirm the active highlight page and that the group checkbox is enabled.  
 3) Confirm you are interacting with the intended panel: {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`  
 4) Confirm the tool’s modifier keys (`Alt`, `Shift+Alt`, `Ctrl/Cmd+Alt`), or on a
@@ -449,7 +436,7 @@ Analysis issues usually come from one of four root causes:
 
 1) Do you have a non-empty highlight page to analyze? → {doc}`../f_highlighting_selection/index`  
 2) Are you on the view you think you are (live vs snapshot)? → {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`  
-3) Does this export contain expression at all? If the panel says it publishes no
+3) Does this dataset contain expression at all? If the panel says it publishes no
    gene expression fields, no amount of configuration will help → {doc}`../h_analysis/08_analysis_mode_genes_panel`
 
 **Go to the deep dives**
@@ -489,7 +476,7 @@ sometimes a local path or source URL. See
 (community-annotation)=
 ## Community annotation issues
 
-This section is for problems in **Community Annotation** (GitHub sync, Pull/Publish, consensus, “why don’t I see other people’s votes?”).
+This section is for problems in **Community annotation** (GitHub sync, Pull/Publish, consensus, “why don’t I see other people’s votes?”).
 
 **Fast checks (fixes many reports)**
 
@@ -524,7 +511,7 @@ If you’re asking for help (or filing an issue), include:
 
 1) **Where you ran Cellucid** (hosted URL vs local app vs embedded in Jupyter)  
 2) **Browser + OS** (include versions)  
-3) **Dataset source and loading path** (export folder / server mode / Jupyter / GitHub)  
+3) **Dataset source and loading path** (local file / link / server mode / Jupyter)  
 4) **Dataset identity** (id/fingerprint, if available)  
 5) **Exact steps to reproduce** (numbered; include whether snapshots/filters/highlights were involved)  
 6) **The exact wording of the message**, not a paraphrase — the wording is what

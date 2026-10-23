@@ -99,21 +99,8 @@ _DATA_MAPPING_ORIGINS = frozenset(
     {"default", "best_guess", "session", "user", "notebook"}
 )
 
-# The optional pair a prepared export adds to its ``/_cellucid/datasets`` entry
-# when it ships a published default session. ``cellucid.server._state`` writes
-# it, ``cellucid.server._artifacts`` reads it back to decide which sidecars the
-# dataset may serve, and the viewer's local-demo source requires exactly this
-# manifest name -- so an entry carrying the pair is correct, not malformed, and
-# the diagnostic validator has to accept it or it loses the identity probes.
-#
-# The names are restated here rather than imported because this module holds
-# the standard library only; ``tests/test_diagnostic_dataset_list_contract.py``
-# asserts the two declarations agree, which is what was missing when the
-# published-state pair was added and the validator was not.
-_DATASET_ENTRY_FIELDS = frozenset({"id", "path", "name"})
-_PUBLISHED_STATE_FIELDS = frozenset({"state_manifest", "state_sha256", "state_bytes"})
-_PUBLISHED_STATE_MANIFEST_NAME = "state-snapshots.json"
-_SHA256_HEX_DIGITS = frozenset("0123456789abcdef")
+#: The one entry an AnnData server lists: the store the viewer reads in place.
+_ANNDATA_ENTRY_FIELDS = frozenset({"id", "name", "anndata"})
 
 # Longest ``command_error`` reason the viewer may report. The viewer truncates
 # its own text well below this, so the bound refuses an unbounded string
@@ -248,7 +235,12 @@ def _require_exact_json_value(
 
 
 def _require_debug_dataset_list(payload: object) -> list[dict[str, Any]]:
-    """Validate the exact dataset-list response used by diagnostics."""
+    """Validate the exact dataset-list response used by diagnostics.
+
+    An AnnData server lists one dataset: its id, its name, and the store the
+    viewer reads (``anndata``: the store's ``file`` under
+    ``_cellucid/anndata/`` and the launch ``defaults``).
+    """
     if type(payload) is not dict or set(payload) != {"datasets"}:
         raise TypeError("Dataset-list response must contain exactly 'datasets'")
     raw_datasets = payload["datasets"]
@@ -257,85 +249,41 @@ def _require_debug_dataset_list(payload: object) -> list[dict[str, Any]]:
 
     datasets: list[dict[str, Any]] = []
     dataset_ids: set[str] = set()
-    dataset_paths: set[str] = set()
     for index, entry in enumerate(raw_datasets):
-        if type(entry) is not dict or set(entry) not in (
-            _DATASET_ENTRY_FIELDS,
-            _DATASET_ENTRY_FIELDS | _PUBLISHED_STATE_FIELDS,
-        ):
-            raise TypeError(
-                f"Dataset-list entry {index} must contain exactly id, name, and path, "
-                "and may add state_manifest, state_sha256 and state_bytes only together"
-            )
+        if type(entry) is not dict or set(entry) != _ANNDATA_ENTRY_FIELDS:
+            raise TypeError(f"Dataset-list entry {index} must contain exactly id, name, and anndata")
         dataset_id = _require_exact_message_text(
-            entry["id"],
-            label=f"Dataset-list entry {index} id",
-            allow_whitespace=True,
+            entry["id"], label=f"Dataset-list entry {index} id", allow_whitespace=True
         )
-        dataset_name = _require_exact_message_text(
-            entry["name"],
-            label=f"Dataset-list entry {index} name",
-            allow_whitespace=True,
-        )
-        path = entry["path"]
-        if (
-            type(path) is not str
-            or not path.startswith("/")
-            or not path.endswith("/")
-            or any(
-                not (character.isascii() and (character.isalnum() or character in "/._-"))
-                for character in path
-            )
-            or (
-                path != "/" and any(segment in {"", ".", ".."} for segment in path[1:-1].split("/"))
-            )
-        ):
-            raise TypeError(
-                f"Dataset-list entry {index} path must be one exact absolute "
-                "portable directory route"
-            )
-        if path != "/" and path.count("/") != 2:
-            raise TypeError(
-                f"Dataset-list entry {index} path must identify one served dataset directory"
-            )
         if dataset_id in dataset_ids:
             raise ValueError(f"Dataset-list response duplicates id {dataset_id!r}")
-        if path in dataset_paths:
-            raise ValueError(f"Dataset-list response duplicates path {path!r}")
         dataset_ids.add(dataset_id)
-        dataset_paths.add(path)
-        validated: dict[str, Any] = {
-            "id": dataset_id,
-            "path": path,
-            "name": dataset_name,
-        }
-        if set(entry) >= _PUBLISHED_STATE_FIELDS:
-            manifest = entry["state_manifest"]
-            if manifest != _PUBLISHED_STATE_MANIFEST_NAME:
-                raise ValueError(
-                    f"Dataset-list entry {index} state_manifest must be exactly "
-                    f"{_PUBLISHED_STATE_MANIFEST_NAME}"
-                )
-            digest = entry["state_sha256"]
-            if (
-                type(digest) is not str
-                or len(digest) != 64
-                or any(character not in _SHA256_HEX_DIGITS for character in digest)
-            ):
-                raise ValueError(
-                    f"Dataset-list entry {index} state_sha256 must be exactly 64 "
-                    "lowercase hexadecimal characters"
-                )
-            state_bytes = entry["state_bytes"]
-            if type(state_bytes) is not int or state_bytes < 1:
-                raise ValueError(
-                    f"Dataset-list entry {index} state_bytes must be the default "
-                    "state's exact positive byte length"
-                )
-            validated["state_manifest"] = manifest
-            validated["state_sha256"] = digest
-            validated["state_bytes"] = state_bytes
-        datasets.append(validated)
+        anndata = entry["anndata"]
+        file = anndata.get("file") if type(anndata) is dict else None
+        if (
+            type(anndata) is not dict
+            or set(anndata) != {"file", "defaults"}
+            or type(anndata["defaults"]) is not dict
+            or type(file) is not dict
+            or type(file.get("url")) is not str
+            or not file["url"].startswith("_cellucid/anndata/")
+        ):
+            raise TypeError(
+                f"Dataset-list entry {index} anndata must name one served store "
+                "(file with a _cellucid/anndata/ url, and defaults)"
+            )
+        _require_exact_json_value(anndata, label=f"Dataset-list entry {index} anndata")
+        datasets.append(
+            {
+                "id": dataset_id,
+                "name": _require_exact_message_text(
+                    entry["name"],
+                    label=f"Dataset-list entry {index} name",
+                    allow_whitespace=True,
+                ),
+                "anndata": anndata,
+            }
+        )
     return datasets
 
 

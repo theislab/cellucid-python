@@ -26,7 +26,7 @@ This is the “no excuses” workflow that works for most people.
 2) **Make sure the correct view is active**
    - If you have snapshot views: click inside the panel you want to export (in grid compare) or switch to “edit selected view” to make it obvious.
 
-3) **Open** the **Figure Export** panel (left sidebar).
+3) **Open** the **Figure export** panel (left sidebar).
 
 4) **Choose plot size**
    - Start with **Screen (half)** or **1200 × 900**.
@@ -51,7 +51,7 @@ This is the “no excuses” workflow that works for most people.
 
 ## Where the Figure Export panel lives
 
-Figure export is controlled from the **Figure Export** panel in the left sidebar.
+Figure export is controlled from the **Figure export** panel in the left sidebar.
 
 ```{figure} ../../../_static/screenshots/figure_export/panel-overview.png
 :alt: The Figure Export panel with its four collapsed groups — Framing, Labels and Annotations, Style, Download — above the Export button, with the pointer on Export.
@@ -72,8 +72,8 @@ expecting to see them side by side.
 
 **Are export settings saved?**
 
-- Figure export settings are **not stored in session bundles** (by design).
-- Treat export settings as “ephemeral UI”: if you care about reproducing a figure later, record the settings or rely on embedded metadata in the exported artifact (see {doc}`05_metadata_and_provenance`).
+- Yes: every setting in this panel (size, frame, background, fonts, labels, legend, preview, format, DPI, SVG strategy, **Export all views**) is saved in a session bundle and restored by **Load**.
+- The exported artifact also embeds metadata (see {doc}`05_metadata_and_provenance`).
 
 ---
 

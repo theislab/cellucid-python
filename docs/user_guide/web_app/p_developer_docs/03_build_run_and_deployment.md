@@ -51,8 +51,10 @@ Any static host works (GitHub Pages, Netlify, S3+CloudFront, Cloudflare Pages, n
      under `assets/external/` and served from the app's own origin; the only
      external script origin allowed is Google's tag manager. Adding a CDN
      dependency requires editing this policy, which is the intended friction.
-   - `script-src` also carries `'wasm-unsafe-eval'`, which is what lets the
-     bundled HDF5 WebAssembly module compile without granting general `eval`.
+   - `script-src` grants no code evaluation: neither `'unsafe-eval'` nor
+     `'wasm-unsafe-eval'`. The app compiles no WebAssembly (`.h5ad` and Zarr
+     files are read by its own JavaScript readers), and
+     `tests/data-loading-contract.test.mjs` fails if either is granted.
    - If you move CSP into an HTTP header (recommended for production), keep it consistent with required endpoints (datasets, GitHub worker, analytics).
    - If you edit the inline JSON-LD `<script type="application/ld+json">`, the CSP hash in `script-src` must be updated or the browser will block it.
 
@@ -71,39 +73,46 @@ Any static host works (GitHub Pages, Netlify, S3+CloudFront, Cloudflare Pages, n
 
 ---
 
-## Host datasets (exports) safely
+## Host datasets safely
 
-Many Cellucid workflows involve hosting datasets separately from the app (e.g. GitHub-hosted exports, an institutional HTTP server, or a CDN).
+Many Cellucid workflows involve hosting datasets separately from the app (e.g. a dataset catalog on GitHub Pages, an institutional HTTP server, or a CDN).
 This section highlights server behaviors that commonly break loading.
 
 ### 1) CORS: allow the app origin to fetch your dataset files
 
-If you load a dataset hosted at `https://example.org/my_export/` from `https://www.cellucid.com`, your dataset host must send CORS headers like:
+If you load a dataset hosted at `https://example.org/my_datasets/` from `https://www.cellucid.com`, your dataset host must send CORS headers like:
 - `Access-Control-Allow-Origin: https://www.cellucid.com`
 
 For a development or internal server, you may choose to allow `*` (public datasets only).
 
 This requirement has no alternate browser-side transport: if the dataset host
-does not authorize the app origin, host the export on an endpoint whose CORS
+does not authorize the app origin, host the files on an endpoint whose CORS
 policy you control.
 
-### 2) Don’t “helpfully” auto-decompress `.gz` exports
+### 2) Serve AnnData bytes as they are, and honour `Range`
 
-Cellucid’s data loader treats URLs ending in `.gz` as **gzip-compressed files** and transparently decompresses them in the browser (using `DecompressionStream`).
+Cellucid reads an `.h5ad`, a Zarr ZIP or a Zarr store's chunks in place with
+HTTP range requests (`Range: bytes=a-b`), and decompresses chunks itself
+(using `DecompressionStream`).
 
 That means:
-- The `.gz` response body must be the *actual gzipped bytes*.
-- Your server should **not** apply `Content-Encoding: gzip` to these already-compressed files.
-
-If a server auto-decompresses `.bin.gz` (or adds `Content-Encoding: gzip`), the browser will deliver already-decompressed bytes and Cellucid will attempt to decompress again → load failure.
+- The host must answer a range request with `206 Partial Content` and exactly
+  those bytes; a host that ignores `Range` makes every read download the whole
+  file.
+- The host should **not** apply `Content-Encoding: gzip` to these files: byte
+  ranges then address the transformed stream, not the file.
+- The file's size must be known (`HEAD` with `Content-Length`, or the
+  provider's own listing).
 
 ### 3) Avoid returning HTML for missing JSON/binary files
 
 Some static hosts return a friendly HTML page for 404s.
 From the app’s perspective, that looks like:
-- “JSON parse failed”
-- “Invalid binary length”
+- “JSON parse failed” (`datasets.json`, Zarr metadata)
 - “Unexpected token `<`”
+
+A Zarr store folder on a web host is read key by key, and an absent key must be
+a real `404`: Zarr reads a missing chunk as fill values.
 
 Always verify that a missing asset is a real `404` (not `200` with HTML).
 

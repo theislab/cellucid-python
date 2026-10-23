@@ -1,11 +1,11 @@
 # Landing Pages
 
-These pages answer the “what is this?” and “how do I get started?” questions for the **R export workflow**.
+These pages answer the “what is this?” and “how do I get started?” questions for the **R workflow**: writing a Cellucid-ready AnnData store from R.
 
 This documentation is intentionally written for mixed audiences:
 - **Wet lab / non-technical users**: step-by-step “do this, then that” instructions.
 - **Computational users**: explicit shapes/dtypes, performance considerations, and edge cases.
-- **Developers/maintainers**: file format details and reproducibility notes.
+- **Developers/maintainers**: store layout details and reproducibility notes.
 
 **Recommended reading order**
 
@@ -28,7 +28,7 @@ What the R package does today, what it doesn’t do yet, and how it fits into th
 :link: 04_quick_start_3_levels
 :link-type: doc
 
-Copy/paste: a tiny toy export, a “real dataset” export, and an advanced export with performance options.
+Copy/paste: a tiny toy store, a “real dataset” store, and an advanced store with launch defaults and a single-file `.zarr.zip`.
 :::
 
 :::{grid-item-card} {octicon}`checklist;1.5em;sd-mr-1` Supported Inputs & Workflows

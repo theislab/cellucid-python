@@ -31,8 +31,8 @@ to inspect the loaded default dataset first.
 :alt: Loaded Suo point cloud on a light grid with Community Annotation and Camera Path collapsed and a dated Build line in the sidebar footer.
 :width: 1440px
 
-The fresh loaded state uses the light grid background. **Community Annotation** and
-**Camera Path** start collapsed, and the footer reports the exact web build
+The fresh loaded state uses the light grid background. **Community annotation** and
+**Camera path** start collapsed, and the footer reports the exact web build
 identity. Yours will read a later build than this capture — the value changes
 with every web release, which is why bug reports should quote your own.
 ```
@@ -88,8 +88,9 @@ counts for every built-in sample are listed in
 - The dataset info panel shows non‑zero counts.
 
 :::{note}
-You can also load your own data from **Local data** (Prepared, H5AD, or Zarr
-ZIP) or from a **Remote server**, but those workflows are documented in
+You can also load your own data from **Files** (H5AD, Zarr ZIP, or Zarr folder)
+or from a running server through the **Server** field, but those workflows
+are documented in
 {doc}`../b_data_loading/index`.
 :::
 
@@ -103,7 +104,7 @@ ZIP) or from a **Remote server**, but those workflows are documented in
 4) In Orbit, drag to rotate, use the wheel or trackpad to zoom, and
    right-drag (or Shift-drag) to pan.
 
-The app does not start camera motion by default. **Camera Path** starts
+The app does not start camera motion by default. **Camera path** starts
 collapsed, its top transport is absent until at least two keyframes exist, and
 playback begins when you select **Play**. If you explicitly enable
 **Autoplay**, a ready path starts immediately and starts again when that
@@ -111,7 +112,7 @@ setting is restored from a session.
 
 ### 3) Color by a field (metadata or gene expression)
 
-1) Open **Coloring & Filtering**.
+1) Open **Coloring & filtering**.
 2) Pick one:
    - **Categorical obs** (clusters, batch, sample),
    - **Continuous obs** (QC metrics, scores), or
@@ -144,7 +145,7 @@ which is what you would want a marker gene to do.
 
 ### 4) Keep a snapshot (small multiple)
 
-1) Open **Compare Views** → **Multiview**.
+1) Open **Compare views** → **Views**.
 2) Click **Keep view**.
 3) You should see a new numbered badge/panel.
 
@@ -158,7 +159,7 @@ This is how you compare hypotheses side‑by‑side without losing your current 
 
 If you want a keyboard-first workflow, the UI supports:
 
-- `Alt` + drag for area selection (and other shortcuts; see the in‑app “Keyboard Shortcuts” accordion).
+- `Alt` + drag for area selection (and other shortcuts; see the in‑app “Keyboard shortcuts” accordion).
 
 On a phone or tablet, turn on **Select mode** on the selection bar at the
 bottom of the plot (or in the Highlighting panel) and draw with one finger
@@ -169,8 +170,8 @@ clears the selection without the menu.
 
 Pick one:
 
-- **Save State** (Session accordion) to download a `.cellucid-session` bundle you can reopen later.
-- **Figure Export** to export a publication‑ready figure of the current view(s).
+- **Save** under **Session file** (Session accordion) to download a `.cellucid-session` bundle you can reopen later.
+- **Figure export** to export a publication‑ready figure of the current view(s).
 
 For a bug report, scroll to the sidebar footer and include its exact **Build**
 value. It identifies the web files you exercised and is separate from the

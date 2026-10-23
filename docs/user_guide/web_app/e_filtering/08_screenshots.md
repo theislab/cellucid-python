@@ -36,7 +36,7 @@ Scenario `filtering-type-category-visibility`.
 :alt: The Filtering block of the continuous legend, headed Filtering and Visible range, with the help line Adjust limits, then click FILTER or enable Live filtering, a Live filtering toggle reading Off, the hint Drag sliders then click Filter, Min and Max sliders with numeric readouts, and black FILTER and RESET buttons with the mouse pointer on FILTER.
 :width: 428px
 
-**Numeric range.** With `Live filtering` off, `FILTER` becomes clickable and
+**Numeric range.** With `Live filtering` off, `Filter` becomes clickable and
 applies the range once. Scenario `filtering-type-numeric-range`.
 ```
 
@@ -44,7 +44,7 @@ applies the range once. Scenario `filtering-type-numeric-range`.
 :alt: The same Filtering block with the Live filtering toggle reading On, the hint Changes apply as you drag, and a pale grey FILTER button under the mouse pointer beside a black RESET button.
 :width: 428px
 
-**The same block with `Live filtering` on.** `FILTER` is greyed out and cannot
+**The same block with `Live filtering` on.** `Filter` is greyed out and cannot
 be clicked, because the range is already being applied on every slider step.
 Scenario `filtering-button-disabled-live-on`.
 ```

@@ -262,16 +262,16 @@ recent rejections after the fact.
 
 ### `data_mapping`
 
-The viewer reports its *data mapping* — which stored array fills each
-embedding slot, the bound vector fields, and for an AnnData source the
-neighbour graph, the gene names, the expression matrix and the latent space.
+The viewer reports its *data mapping* (always `kind: "anndata"`) — the
+enabled embeddings and each dimension's default, the bound vector fields (each
+`{"key": <obsm key>, "embedding": {"key", "columns"}}`), the neighbour graph,
+the gene names, the expression matrix and the latent space.
 It sends one after the dataset loads and another whenever the mapping changes.
 
 ```{note}
 The viewer sends this event only to a `cellucid` that lists `data_mapping`
-among the events of `GET /_cellucid/protocol`, as this release does; an older
-package never receives an event it would reject. A viewer older than this
-release never sends it.
+among the events of `GET /_cellucid/protocol`, so the package never receives an
+event it would reject.
 ```
 
 Posted record:
@@ -285,7 +285,10 @@ Posted record:
   "origin": "default",
   "mapping": {
     "kind": "anndata",
-    "embeddings": {"1d": null, "2d": {"key": "X_umap", "columns": [0, 1]}, "3d": null},
+    "embeddings": {
+      "enabled": [{"key": "X_umap", "columns": [0, 1]}],
+      "defaults": {"1d": null, "2d": {"key": "X_umap", "columns": [0, 1]}, "3d": null}
+    },
     "knn": null,
     "geneNames": "index",
     "expression": "X",

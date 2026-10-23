@@ -9,7 +9,7 @@ DATA_LOADING = DOCS_ROOT / "user_guide" / "web_app" / "b_data_loading"
 CUSTOM_REPOSITORY = DATA_LOADING / "11_custom_dataset_repository.md"
 SERVER_GUIDE = DATA_LOADING / "04_server_tutorial.md"
 JUPYTER_GUIDE = DATA_LOADING / "05_jupyter_tutorial.md"
-REFERENCE_VALUE = "theislab/cellucid-demo-custom-datasets/exports"
+REFERENCE_VALUE = "theislab/cellucid-demo-custom-datasets/catalog"
 
 
 def _read(path: Path) -> str:
@@ -59,27 +59,13 @@ def test_custom_repository_guide_publishes_the_exact_current_catalog_contract() 
     guide = _read(CUSTOM_REPOSITORY)
     normalized = " ".join(guide.split())
 
-    assert f"```text\n   {REFERENCE_VALUE}\n   ```" in guide
-    assert "resolves deterministically to the `main` branch" in guide
-    assert "does not probe `master`, `gh-pages`, or any other branch" in guide
-    assert "owner/repo@release-2026/path/to/exports" in guide
-    assert "owner/repo/release-2026/path/to/exports" in guide
+    # Shorthand reads the default branch as GitHub resolves HEAD: no probing.
+    assert "reads the repository's default branch (`main`, `master` or any other)" in normalized
+    assert "Cellucid never probes branch names" in normalized
+    assert "{doc}`15_host_on_github`" in guide
+    assert "owner/repo@release-2026/path/to/catalog" in guide
+    assert "owner/repo/release-2026/path/to/catalog" in guide
     assert "`generate_datasets.py`" in guide
-    assert "one root-level" in normalized
-    assert "there are no tests, validation harness" in normalized
-    assert "workflows, `.github/` directory, or site assets" in normalized
-    # The root enumeration went stale silently once already: it kept claiming
-    # "that is all" after LICENSE and the policy files were added. Pin every
-    # name it now lists so the next addition fails here instead of shipping.
-    for policy_file in (
-        "LICENSE",
-        "CONTRIBUTING.md",
-        "SECURITY.md",
-        "SUPPORT.md",
-        "CODE_OF_CONDUCT.md",
-    ):
-        assert f"`{policy_file}`" in guide
-    assert "cross-references this guide" in normalized
 
     for dataset_id, n_cells, n_genes in (
         ("synthetic-cell-types-2d", 72, 8),
@@ -88,28 +74,27 @@ def test_custom_repository_guide_publishes_the_exact_current_catalog_contract() 
     ):
         assert f"`{dataset_id}`" in guide
         assert f"{n_cells} cells, {n_genes} genes" in guide
-        assert f"?github={REFERENCE_VALUE}&dataset={dataset_id}" in guide
 
+    # The catalog lists AnnData files (schema 2); names, counts and citations
+    # come from each file, never from the catalog.
+    assert '"schema": 2' in guide
     for exact_catalog_rule in (
-        "`version`, `default`, and `datasets`",
-        "`version` is exactly `1`",
-        "unique `id`",
-        "safe relative",
-        "ends in `/`",
-        "`name`, `description`, `n_cells`, and `n_genes`",
-        "exactly matches the canonical value",
-        "validates `datasets.json` and every",
-        "listed `dataset_identity.json`",
+        "`schema`, `default`, and `datasets`",
+        "`schema` is exactly `2`",
+        "Every `id` is unique and follows the portable id rule",
+        "names a Zarr store folder (ending in `/`), an `.h5ad`, or a `.zarr.zip`",
+        "with its exact `bytes` and lowercase `sha256`",
+        "Names, descriptions, citations and counts are not in the catalog",
     ):
         assert exact_catalog_rule in normalized
-
-    assert 'generate_datasets_manifest(\n    "./exports",\n    default_dataset="study-a",' in guide
-    assert "cellucid serve ./exports --no-browser" in guide
-    assert "/?source=remote" in guide
-    assert (
-        "https://raw.githubusercontent.com/theislab/"
-        "cellucid-demo-custom-datasets/main/exports/datasets.json"
-    ) in guide
+    for removed in (
+        "`version`",
+        "dataset_identity.json",
+        "generate_datasets_manifest",
+        "/?source=remote",
+        "**Prepared**",
+    ):
+        assert removed not in guide
 
 
 def test_loading_guides_do_not_reintroduce_stale_branch_or_server_routes() -> None:
@@ -118,26 +103,31 @@ def test_loading_guides_do_not_reintroduce_stale_branch_or_server_routes() -> No
         "try common defaults",
         "owner/repo/gh-pages/exports",
         "http://127.0.0.1:8765/health",
-        'generate_datasets_manifest("./exports")',
+        "generate_datasets_manifest",
         "Dataset Connections",
         "Browse local data",
+        "**Prepared**",
+        "exportsBaseUrl",
+        "state-snapshots.json",
+        "/?source=remote",
     ):
         assert stale_text not in combined
 
-    assert "http://127.0.0.1:8765/_cellucid/health" in combined
-    assert "http://127.0.0.1:8765/_cellucid/datasets" in combined
+    assert "/_cellucid/health" in combined
+    assert "/_cellucid/datasets" in combined
     assert "**Session**" in combined
-    assert "**Local data:**" in combined
-    assert "**Prepared**" in combined
+    assert "**Files**" in combined
+    assert "**Zarr folder**" in combined
     assert "**H5AD**" in combined
     assert "**Zarr ZIP**" in combined
+    assert "?sampleCatalog=" in combined
 
 
 def test_real_pancreas_server_and_jupyter_evidence_is_wired_into_the_guides() -> None:
     server_guide = _read(SERVER_GUIDE)
 
-    # ``cellucid serve`` on a prepared export prints the *absolute* directory it
-    # resolved (``server/_server.py`` calls ``print_detail("Path", str(self.data_dir))``),
+    # ``cellucid serve`` prints the *absolute* path it resolved
+    # (``anndata_server.py`` calls ``print_detail("Path", str(store.path))``),
     # so a photograph of this command necessarily bakes the capture host's path
     # into the image pixels, where no scan can find it. The transcripts therefore
     # ship as verbatim ``text`` blocks, never as screenshots.
@@ -147,61 +137,37 @@ def test_real_pancreas_server_and_jupyter_evidence_is_wired_into_the_guides() ->
     assert "```{figure} ../../../_static/screenshots/server/serve-anndata-cli.png" not in (
         server_guide
     )
-    assert "$ cellucid serve ./pancreas_export --no-browser" in server_guide
-    assert "      Path: /path/to/pancreas_export" in server_guide
-    assert "[1/3] Validating dataset..." in server_guide
-    assert "3,696 cells" in server_guide
-    assert "3,753 genes" in server_guide
-    assert "486-file web cache" in server_guide
-    assert "--web-source-url http://127.0.0.1:4183" in server_guide
-    assert "/?source=remote" in server_guide
     assert "/?anndata=true" in server_guide
-
-    # The direct-AnnData startup prints a different URL from the prepared one, and
-    # both are transcribed, so neither can quietly become the other.
+    assert "/?source=remote" not in server_guide
     assert "$ cellucid serve pbmc_demo.h5ad \\" in server_guide
-    assert "Mode: read-only backed h5ad" in server_guide
+    assert "      Format: h5ad file" in server_guide
 
-    # The prepared-export server runs three steps; the direct-AnnData server runs
-    # five. The step counts are the part of a transcript that goes stale first,
+    # The step counts are the part of a transcript that goes stale first,
     # because a new reported phase renumbers every line after it, so every
-    # numbered header of both transcripts is pinned here.
-    for prepared_step in (
-        "[1/3] Validating dataset...",
-        "[2/3] Loading dataset info...",
-        "[3/3] Starting server...",
-    ):
-        assert prepared_step in server_guide
+    # numbered header is pinned here.
     for anndata_step in (
-        "[1/5] Detecting format...",
-        "[2/5] Loading AnnData...",
-        "[3/5] Analyzing dataset...",
-        "[4/5] Building manifests...",
-        "[5/5] Starting server...",
+        "[1/4] Detecting format...",
+        "[2/4] Reading metadata...",
+        "[3/4] Checking launch choices...",
+        "[4/4] Starting server...",
     ):
         assert anndata_step in server_guide
-    assert "runs five numbered steps instead of three" in server_guide
-    assert "[1/4]" not in server_guide
-    assert "[4/4]" not in server_guide
+    assert "[1/3]" not in server_guide
+    assert "[1/5]" not in server_guide
+    assert "[5/5]" not in server_guide
 
-    # Step 2 reports the adapter build as it happens. A silent minute in a
-    # startup that takes minutes is the complaint these lines answer, so the
-    # page has to quote the labels a reader will actually be staring at. A
-    # capability that was not asked for reports nothing here, because nothing
-    # was read: its state is named once, in step 3.
-    for step_two_line in (
-        "      Obs columns: classifying 3",
-        "      Embeddings: resolving obsm keys",
-        "      Embeddings: 2D from obsm['X_umap']",
-        "      Connectivity: reading obsp['connectivities']",
+    # Step 2 reads metadata only, and step 3 prints every launch choice it
+    # accepted, so the page quotes the lines a reader will be staring at.
+    for step_line in (
+        "      Cells: 4,096",
+        "      obsm: X_umap",
+        "      obsp: connectivities",
+        "      embedding2d: {'key': 'X_umap', 'columns': [1, 0]}",
+        "      knn: connectivities",
+        "Consolidated metadata: built in memory (.zmetadata)",
+        "Serving: a decodable copy, written once to a temporary .h5ad",
     ):
-        assert step_two_line in server_guide
-    assert "      Centroids: one per categorical field and embedding" in server_guide
-
-    # Both optional capabilities report their own state in step 3, so a reader
-    # can tell a graph they own from a graph they lack, and likewise an overlay.
-    assert "      Vector fields: no" in server_guide
-    assert "      Connectivity: not served (obsp['connectivities'] is present" in server_guide
+        assert step_line in server_guide
 
     # A bare ``X_umap`` fills the slot of its own column count, a named slot
     # wins, and only an object the default rule cannot read is guessed.
@@ -211,27 +177,25 @@ def test_real_pancreas_server_and_jupyter_evidence_is_wired_into_the_guides() ->
     assert "fills the slot of its own column count" in normalized_server_guide
     assert "`--embedding-1d`, `--embedding-2d`, and `--embedding-3d`" in normalized_server_guide
     assert "deterministic best guess" in normalized_server_guide
-    assert "Error: Cellucid found nothing to plot." in server_guide
+    assert "Cellucid found nothing to plot." in server_guide
     assert "has shape (4096, 10)" not in server_guide
 
-    # Connectivity on the direct-AnnData path is opt-in, and its report has
-    # three states rather than two. ``not served`` is the one that goes missing
-    # first, because it is the state that only exists now.
-    assert "Connectivity: yes (35,167 edges)" in server_guide
-    assert (
-        "Connectivity: not served (obsp['connectivities'] is present; pass "
-        "knn_key='connectivities', or --knn connectivities, to draw it)"
-    ) in server_guide
-    assert "Connectivity: no`" in server_guide
+    # The viewer reads the store itself: the server publishes its bytes and
+    # the launch choices, and none of the removed server-side work comes back.
+    assert "/_cellucid/anndata/<dataset_id>.h5ad" in server_guide
+    assert '"knn": "connectivities"' in server_guide
     assert "--knn connectivities" in server_guide
     assert 'knn_key="connectivities"' in server_guide
-    assert "serve_connectivity" not in server_guide
-    assert "--connectivity" not in server_guide
-    assert "Off by default" in server_guide
-    # Any page naming the source-index payload must name the weights too.
-    assert "connectivity/edges.src.bin" in server_guide
-    assert "edges.weights.f64.bin" in server_guide
-    assert "Float64 weight" in server_guide
+    for removed in (
+        "serve_connectivity",
+        "--connectivity",
+        "--vector-fields",
+        "serve_vector_fields",
+        "backed",
+        "_cellucid/mapping",
+        "AnnDataAdapter",
+    ):
+        assert removed not in server_guide
 
     # A wildcard bind prints an origin a browser can open, never the wildcard.
     assert "Bound to every network interface. From another machine:" in server_guide
@@ -270,16 +234,10 @@ def test_real_pancreas_server_and_jupyter_evidence_is_wired_into_the_guides() ->
     assert "no-argument" not in jupyter_gallery
 
     overview = _read(DATA_LOADING / "01_loading_options_overview.md")
-    local_demo = _read(DATA_LOADING / "02_local_demo_tutorial.md")
-    assert "Browser **Prepared** picker" in overview
-    assert "**Prepared** file picker" in local_demo
+    picker = _read(DATA_LOADING / "03_browser_file_picker_tutorial.md")
+    assert "The **H5AD**, **Zarr ZIP** and **Zarr folder** buttons under **Files**" in overview
     assert "Browser **Folder** picker" not in overview
-    assert "**Folder** file picker" not in local_demo
-    assert "I clicked Folder" not in _read(
-        DATA_LOADING / "03_browser_file_picker_tutorial.md"
-    )
-    assert "deliberately exports only the checked-in source file's real 2-D UMAP" in local_demo
-    assert "shows how the real Pancreas dataset creates the 1-D" not in local_demo
+    assert "I clicked **Zarr folder**" in picker
 
 
 def test_python_and_r_sharing_navigation_points_to_the_reference_repository() -> None:
@@ -291,14 +249,9 @@ def test_python_and_r_sharing_navigation_points_to_the_reference_repository() ->
         / "03_choose_your_workflow_decision_tree.md",
         DOCS_ROOT
         / "user_guide"
-        / "python_package"
-        / "d_viewing_apis"
-        / "07_exported_directory_mode_show_and_serve.md",
-        DOCS_ROOT
-        / "user_guide"
         / "r_package"
         / "d_viewing_loading"
-        / "02_host_exports_for_sharing.md",
+        / "02_host_stores_for_sharing.md",
     )
     for path in paths:
         assert "11_custom_dataset_repository" in _read(path), path

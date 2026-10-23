@@ -125,3 +125,4 @@ Fix:
 
 - Apply session bundles back to AnnData: {doc}`11_session_bundles_apply_session_to_anndata`
 - Full troubleshooting: {doc}`14_troubleshooting_hooks`
+- What a session holds, from the web app's side: {doc}`../../web_app/l_sessions_sharing/02_what_gets_saved_and_restored`

@@ -14,7 +14,11 @@ import copy
 from pathlib import Path
 from typing import Any
 
-from ..data_mapping import mapped_var_count, require_mapping_matches_anndata
+from ..data_mapping import (
+    mapped_var_count,
+    require_mapping_matches_anndata,
+    resolve_gene_names,
+)
 from ..session_bundle import CellucidSessionBundle
 from ..session_bundle import _validate_fingerprint as _validate_bundle_fingerprint
 from ._chunks import _validate_current_chunk_inventory
@@ -48,7 +52,6 @@ def _validate_fingerprint(
         fp = _validate_bundle_fingerprint(fingerprint)
     except ValueError as error:
         raise ValueError(f"session datasetFingerprint is invalid: {error}") from error
-    _require_nonempty_string(fp["sourceType"], label="datasetFingerprint.sourceType")
     dataset_id = _require_nonempty_string(
         fp["datasetId"],
         label="datasetFingerprint.datasetId",
@@ -79,15 +82,44 @@ def _validate_fingerprint(
     if var_count != expected_var_count:
         axis = (
             "adata.raw.n_vars"
-            if mapping["kind"] == "anndata" and mapping["expression"] == "raw"
+            if mapping["expression"] == "raw"
             else "genes on a mapping without expression"
-            if mapping["kind"] == "anndata" and mapping["expression"] is None
+            if mapping["expression"] is None
             else "adata.n_vars"
         )
         raise ValueError(
             f"Dataset fingerprint mismatch: varCount {var_count} != {axis} {expected_var_count}"
         )
     return copy.deepcopy(fp)
+
+
+def _require_session_fields(adata: Any, requires: Any, mapping: dict[str, Any]) -> None:
+    """Refuse an AnnData that lacks a field the session uses, naming all of them.
+
+    ``requires`` lists the obs columns and the genes -- named under the
+    session's data mapping, as the viewer named them -- that a view shows or
+    filters on or a highlight group is bound to.
+    """
+    if not isinstance(requires, dict) or set(requires) != {"obs", "var"}:
+        raise ValueError("bundle.manifest.requires must have exactly obs and var")
+    obs_keys = set(adata.obs.columns)
+    missing_obs = [key for key in requires["obs"] if key not in obs_keys]
+    missing_var: list[str] = []
+    if requires["var"]:
+        gene_names = set(resolve_gene_names(adata, mapping).names)
+        missing_var = [key for key in requires["var"] if key not in gene_names]
+    if not missing_obs and not missing_var:
+        return
+    parts: list[str] = []
+    if missing_obs:
+        plural = "" if len(missing_obs) == 1 else "s"
+        parts.append(f"the obs column{plural} " + ", ".join(repr(key) for key in missing_obs))
+    if missing_var:
+        plural = "" if len(missing_var) == 1 else "s"
+        parts.append(f"the gene{plural} " + ", ".join(repr(key) for key in missing_var))
+    raise ValueError(
+        "This session uses " + " and ".join(parts) + ", which this AnnData does not have."
+    )
 
 
 def _build_uns(
@@ -148,7 +180,55 @@ def apply_cellucid_session_to_anndata(
     store_uns: bool = True,
     return_summary: bool = False,
 ) -> Any | tuple[Any, ApplySummary]:
-    """Apply a validated session atomically to the exact matching AnnData dataset."""
+    """Apply a validated session atomically to the exact matching AnnData dataset.
+
+    Every check -- dataset identity, shape, cell order, the obs columns and
+    genes the session uses, chunk inventory, bounds, and target-column
+    conflicts -- runs before ``adata`` (or its copy) is changed, so a failed
+    application leaves nothing half-written.
+
+    Parameters
+    ----------
+    bundle : CellucidSessionBundle, str, or Path
+        The session, or the path of a ``.cellucid-session`` file.
+    adata : anndata.AnnData
+        The dataset the session was saved on, in the same cell order.
+    expected_dataset_id : str
+        Required. The dataset id the session must have been saved on.
+    inplace : bool
+        Change ``adata`` itself instead of a copy. A backed AnnData needs
+        ``inplace=True``.
+    add_highlights : bool
+        Add one boolean ``obs`` column per highlight group.
+    highlights_prefix : str
+        Prefix of each highlight column, followed by the group id.
+    add_user_defined_fields : bool
+        Add the session's user-defined cell fields as ``obs`` columns.
+    user_defined_prefix : str
+        Prefix of each user-defined field column, followed by its key.
+    include_deleted_user_defined_fields : bool
+        Also add user-defined fields that were deleted in the session.
+    store_uns : bool
+        Record the manifest, dataset fingerprint, and added columns in
+        ``adata.uns['cellucid']['session']``.
+    return_summary : bool
+        Also return an ``ApplySummary`` listing the added ``obs`` columns.
+
+    Returns
+    -------
+    anndata.AnnData or tuple of (anndata.AnnData, ApplySummary)
+        The changed AnnData (``adata`` itself when ``inplace=True``), with the
+        summary when ``return_summary=True``.
+
+    Raises
+    ------
+    TypeError
+        An argument of the wrong type, or a malformed bundle.
+    ValueError
+        The session does not match ``adata`` or ``expected_dataset_id``, uses
+        a field ``adata`` lacks, holds an unknown or invalid chunk, or would
+        overwrite an existing ``obs`` column.
+    """
     expected_dataset_id = _require_nonempty_string(
         expected_dataset_id,
         label="expected_dataset_id",
@@ -193,6 +273,7 @@ def apply_cellucid_session_to_anndata(
         adata,
         expected_dataset_id=expected_dataset_id,
     )
+    _require_session_fields(adata, bundle.manifest["requires"], fingerprint["dataMapping"])
     raw_chunk_ids = bundle.list_chunk_ids()
     if not isinstance(raw_chunk_ids, list) or any(
         not isinstance(item, str) for item in raw_chunk_ids
@@ -208,7 +289,7 @@ def apply_cellucid_session_to_anndata(
         bundle,
         chunk_ids,
         n_obs=int(adata.n_obs),
-        obs_index=adata.obs_names,
+        obs=adata.obs,
         prefix=highlights_prefix,
         existing_columns=existing_columns,
         materialize=add_highlights,

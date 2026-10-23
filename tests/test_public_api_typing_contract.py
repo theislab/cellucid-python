@@ -107,6 +107,20 @@ def test_a_wrong_keyword_argument_is_a_consumer_visible_type_error(tmp_path: Pat
     assert "[call-arg]" in output
 
 
+def test_a_missing_or_unknown_format_is_a_consumer_visible_type_error(tmp_path: Path) -> None:
+    """``format`` has no default, and only its three values type-check."""
+    output = _run_mypy_on_consumer(
+        "import cellucid\n\n"
+        'cellucid.prepare("a.h5ad", embeddings={}, dataset_id="a", dataset_name="A")\n'
+        'cellucid.prepare("a.loom", format="loom", embeddings={}, dataset_id="a", dataset_name="A")\n'
+        'cellucid.prepare("a.zarr", format="zarr", embeddings={}, dataset_id="a", dataset_name="A")\n',
+        tmp_path,
+    )
+    assert f'{CONSUMER_MODULE}:3: error: Missing named argument "format" for "prepare"' in output
+    assert f'{CONSUMER_MODULE}:4: error: Argument "format" to "prepare" has incompatible type' in output
+    assert f"{CONSUMER_MODULE}:5:" not in output
+
+
 def test_importing_cellucid_stays_lazy() -> None:
     """The ``TYPE_CHECKING`` re-exports must not run, or import cost regresses."""
     probe = (

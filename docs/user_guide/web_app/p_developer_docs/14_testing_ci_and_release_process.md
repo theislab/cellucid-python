@@ -207,7 +207,7 @@ Before deploying:
 1) Run the manual smoke tests on a clean browser profile.
 2) Confirm no console errors on load.
 3) Confirm dataset loading works in the target deployment environment (CORS, mixed content, CSP).
-4) Confirm `.gz` exports are not double-decompressed by the host (see {doc}`03_build_run_and_deployment`).
+4) Confirm the dataset host answers range requests with `206` and does not re-encode AnnData files (see {doc}`03_build_run_and_deployment`).
 5) Confirm session save/load and export still work.
 6) If community annotation is enabled, confirm worker origin + CORS allowlist are correct (see `cellucid/assets/js/app/community-annotations/REPO_SETUP.md`).
 

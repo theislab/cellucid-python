@@ -1,6 +1,6 @@
 # Extension point: add an export renderer
 
-This guide explains how to extend the **Figure Export** subsystem by adding a new renderer or export format option.
+This guide explains how to extend the **Figure export** subsystem by adding a new renderer or export format option.
 
 Before you start, read:
 - {doc}`12_figure_export_architecture`

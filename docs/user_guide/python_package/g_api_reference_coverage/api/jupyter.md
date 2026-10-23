@@ -5,9 +5,8 @@
 ```
 
 This page documents the notebook-facing APIs:
-- **Fastest notebook preview:** {func}`~cellucid.show_anndata` (serve AnnData directly)
-- **Reproducible notebook view:** {func}`~cellucid.show` (view an exported dataset directory)
-- **Interactive control:** viewer objects ({class}`~cellucid.AnnDataViewer`, {class}`~cellucid.CellucidViewer`) support hooks + Python→frontend commands
+- **Notebook view:** {func}`~cellucid.show_anndata` (any AnnData: an object, an `.h5ad`, a Zarr store, or a file written by {func}`~cellucid.prepare`)
+- **Interactive control:** the viewer object ({class}`~cellucid.AnnDataViewer`) supports hooks + Python→frontend commands
 
 ---
 
@@ -44,12 +43,12 @@ What you should see:
 - Progress while the complete configured web generation is fetched, verified,
   and published for this startup (unless output is quiet).
 
-### B) “I already exported a dataset folder”
+### B) “I have a file written by `prepare()`”
 
 ```python
-from cellucid import show
+from cellucid import show_anndata
 
-viewer = show("./my_export")
+viewer = show_anndata("my_study.h5ad")  # it names itself (uns['cellucid'])
 ```
 
 ---
@@ -60,19 +59,19 @@ viewer = show("./my_export")
 
 Cellucid always runs in a browser context (the viewer UI), but you choose **where it appears**:
 - **Notebook embedding**: viewer appears inline (this page).
-- **Browser tab**: use {func}`~cellucid.serve` / {func}`~cellucid.serve_anndata` / `cellucid serve …` (see {doc}`server`).
+- **Browser tab**: use {func}`~cellucid.serve_anndata` / `cellucid serve …` (see {doc}`server`).
 
-### 2) Choosing `show_anndata` vs `show`
+### 2) Opening what you have, or a prepared file
 
-Use {func}`~cellucid.show_anndata` when:
+Open the object or file you have when:
 - you’re iterating quickly in analysis notebooks,
-- you don’t want to write an export folder yet,
-- you can accept slower loads and less shareable artifacts.
+- you want the viewer to read the `.h5ad` or Zarr store you already have, in
+  place.
 
-Use {func}`~cellucid.show` when:
-- you want reproducibility (the export folder is a concrete artifact),
-- you want speed (pre-quantized, pre-packed binaries),
-- you want to share the dataset directory or host it.
+Open a file written by {func}`~cellucid.prepare` when:
+- you want reproducibility (the file is a concrete, self-naming artifact),
+- you want speed (a gene-major matrix: every gene is one small read),
+- you want to share the dataset or host it.
 
 ### 3) A minimal “hooks” example (viewer → Python)
 
@@ -130,11 +129,9 @@ See {doc}`sessions` for what a session bundle contains and how to apply it back 
 
 ## Deep path (how notebook embedding works)
 
-### What starts when you call `show(...)` / `show_anndata(...)`
+### What starts when you call `show_anndata(...)`
 
-1. A **local HTTP server** starts (on `127.0.0.1:<port>`).
-   - Exported data: {class}`~cellucid.CellucidServer`
-   - AnnData mode: {class}`~cellucid.AnnDataServer`
+1. A **local HTTP server** ({class}`~cellucid.AnnDataServer`) starts (on `127.0.0.1:<port>`).
 2. The exact verified viewer generation is served from that same origin.
 3. The viewer UI posts interaction events back to the local server at `/_cellucid/events` (selections at `/_cellucid/selection`).
 4. The Python viewer routes those events to your hook callbacks (e.g., `@viewer.on_selection`).
@@ -158,33 +155,30 @@ If that happens, pass the exact browser-reachable HTTP(S) base URL as
 .. autofunction:: show_anndata
 ```
 
-#### `show`
-
-```{eval-rst}
-.. autofunction:: show
-```
-
 ### Classes (see dedicated page)
 
-- {class}`~cellucid.AnnDataViewer` and {class}`~cellucid.CellucidViewer` are documented on {doc}`viewers`.
+- {class}`~cellucid.AnnDataViewer` is documented on {doc}`viewers`.
 
 ---
 
 ## Edge cases (do not skip)
 
 ### Data size and performance
-- Very large `adata.X` can be slow in AnnData mode; consider exporting with {func}`~cellucid.prepare`.
-- A `.h5ad` path is always opened read-only-backed; a `.zarr` path is loaded
-  eagerly.
+- An `.h5ad` path or Zarr store is read by the viewer in place, with HTTP range
+  requests: only what a view needs is read, and nothing is loaded into the
+  kernel's memory.
+- An in-memory object is written once to a temporary `.h5ad` (sparse matrices
+  column-major, uncompressed) when the viewer starts, and the file is removed
+  when the viewer stops or Python exits. For a large object, passing the path
+  it was read from skips that write.
 
 ### “My embedding is not 2D/3D”
 - Cellucid supports 1D/2D/3D embeddings; if the embedding is missing or has an unexpected shape, you’ll see missing plot / errors.
 
 ### Duplicate gene identifiers
-- Direct AnnData viewing rejects duplicate gene names during adapter
-  construction; provide a distinct name through `var.index` or `gene_id_column`
-  (see {doc}`export` and {doc}`adapters`). Names are not filenames, so only
-  exact duplicates collide.
+- The viewer makes repeated gene names unique (`MATR3`, `MATR3-1`), so every
+  gene stays reachable; name genes by another `var` column with
+  `gene_id_column` when the index holds identifiers you do not search by.
 
 ---
 
@@ -280,11 +274,11 @@ Likely causes:
 
 How to confirm:
 - Wait for readiness: `viewer.wait_for_ready()`.
-- In AnnData mode, print `adata.obs.columns` and confirm the field exists.
+- Print `adata.obs.columns` and confirm the field exists.
 
 Fix:
 - Use the exact field name.
-- Prefer exporting with {func}`~cellucid.prepare` for stable field naming across sessions.
+- Prefer a file written by {func}`~cellucid.prepare` for stable field naming across sessions.
 
 ---
 
@@ -347,7 +341,7 @@ Fix:
   ```
 - The report includes:
   - server health/info probes,
-  - `dataset_identity_probes`, keyed by every exact declared dataset id/path,
+  - `anndata_store_probes`, keyed by every exact listed dataset id,
   - detected notebook context (Jupyter/Colab/VSCode),
   - viewer UI cache status,
   - recent events and readiness state.
@@ -357,5 +351,5 @@ Fix:
 ## See also
 
 - {doc}`server` for browser-tab workflows and SSH tunneling
-- {doc}`export` for reproducible exports (`prepare(...)`)
+- {doc}`prepare` for Cellucid-ready AnnData files (`prepare(...)`)
 - {doc}`sessions` for `.cellucid-session` bundles (capture + apply)

@@ -137,7 +137,7 @@ def test_the_contract_detects_a_bare_reference() -> None:
 
     for literal in (
         "vector_fields",  # API parameter that collides with a generated page
-        "dataset_identity.json",
+        "cellucid-web-assets.json",
         "local-user",
         "prepare()",
         "cellucid/assets/css/README.md",

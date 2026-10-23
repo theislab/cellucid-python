@@ -18,7 +18,7 @@
 
 Open:
 
-- Left sidebar → **Performance Benchmark** accordion
+- Left sidebar → **Benchmark** accordion
 
 It includes:
 - six quick presets: 500K, 1M, 5M, 10M, 20M, 40M points,
@@ -75,13 +75,13 @@ It is especially useful for answering questions like:
 
 ## Quick start (3 minutes)
 
-1) Open **Performance Benchmark** in the left sidebar.
+1) Open **Benchmark** in the left sidebar.
 2) Click a preset like **500K** or **1M**.
 3) Click **Load Synthetic Data**.
 4) Orbit/pan/zoom for ~10 seconds and watch:
    - **FPS**
-   - **Frame Time**
-   - **GPU Memory**
+   - **Frame time**
+   - **GPU memory**
 5) If it feels slow, click **Analyze Performance** and read the “What to do” list.
 
 If you want a copy/paste summary for a bug report, click **Copy Situation Report**.
@@ -99,7 +99,7 @@ If you’re comparing two builds or changes, make the benchmark comparable:
 3) Start in points mode (smoke mode is a different workload).
 4) Use the same preset count and the same pattern.
 5) Let FPS stabilize for ~5–10 seconds, then record the metric.
-6) Wait for **Timing Details** to appear before trusting p95 — it needs at least
+6) Wait for **Timing details** to appear before trusting p95 — it needs at least
    30 sampled frames.
 
 If you want statistics, repeat the run 3–5 times and report the median.
@@ -117,18 +117,18 @@ eight options, in the order they appear:
 
 | Pattern | What it produces | Use it to test |
 |---|---|---|
-| **Model Surface** *(default)* | Points sampled over a loaded 3D model surface | A dense, structured shell — the pattern the acceptance samples used |
+| **Model surface** *(default)* | Points sampled over a loaded 3D model surface | A dense, structured shell — the pattern the acceptance samples used |
 | **Atlas-like** | Many groups spread across the space | “Many groups across space” intuition |
-| **Batch Effects** | Offset duplicate structure | Overlapping-population intuition |
-| **Gaussian Clusters** | Compact blobs | The closest analogue to a clustered embedding |
-| **Uniform Random** | Points everywhere, no structure | The harshest case for LOD and frustum culling |
+| **Batch effects** | Offset duplicate structure | Overlapping-population intuition |
+| **Gaussian clusters** | Compact blobs | The closest analogue to a clustered embedding |
+| **Uniform random** | Points everywhere, no structure | The harshest case for LOD and frustum culling |
 | **Octopus** | Radiating arms | Elongated, trajectory-like structure |
-| **3D Spirals** | Interleaved spiral arms | Fine structure that LOD can destroy visibly |
+| **3D spirals** | Interleaved spiral arms | Fine structure that LOD can destroy visibly |
 | **Flat UMAP** | A dense 2D manifold | The common 2D-embedding shape |
 
-If you are testing *rendering limits*, Uniform Random is often the harshest,
+If you are testing *rendering limits*, Uniform random is often the harshest,
 because nothing can be culled. If you are testing *realistic single-cell
-scenes*, Gaussian Clusters or Atlas-like are more representative.
+scenes*, Gaussian clusters or Atlas-like are more representative.
 
 Generation is seeded, so the same pattern and count produce the same points on
 every run, and it happens on a worker thread — the interface stays responsive
@@ -147,11 +147,11 @@ generation time.
 |---|---|---|
 | **Points** | count | How many synthetic points were published |
 | **FPS** | whole frames per second | Derived from recent frame times |
-| **Frame Time** | `X.XX ms`, sometimes with a `CPU Y.YY ms` line under it | Wall time for a frame; the second line is the main-thread time spent issuing the last frame's draw calls (not GPU time), shown only when the browser's coarse timer resolves it above zero |
-| **GPU Memory** | `N.N MB`, or `~N.N MB (estimate)` | Reported where the browser exposes it; otherwise estimated from the point count |
+| **Frame time** | `X.XX ms`, sometimes with a `CPU Y.YY ms` line under it | Wall time for a frame; the second line is the main-thread time spent issuing the last frame's draw calls (not GPU time), shown only when the browser's coarse timer resolves it above zero |
+| **GPU memory** | `N.N MB`, or `~N.N MB (estimate)` | Reported where the browser exposes it; otherwise estimated from the point count |
 | **LOD Level** | `Full`, or `Level N` | Which level of detail the renderer settled on |
-| **Visible Points** | count | How many points survived LOD and culling |
-| **Timing Details → min / p95 / max** | `X.XX ms` each | Frame-time distribution. Appears only once at least 30 frames have been sampled |
+| **Visible points** | count | How many points survived LOD and culling |
+| **Timing details → min / p95 / max** | `X.XX ms` each | Frame-time distribution. Appears only once at least 30 frames have been sampled |
 | **Generated in … ms** | whole ms | How long the synthetic set took to build |
 
 :::{important}
@@ -189,10 +189,10 @@ GPU specifically, that is the tool — not the headline FPS.
 **LOD level and visible points**
 
 - LOD exists to reduce the number of rendered points when zoomed out.
-- If LOD reduces **Visible Points** and FPS improves, the renderer is adapting
+- If LOD reduces **Visible points** and FPS improves, the renderer is adapting
   successfully.
-- If **Visible Points** stays high and FPS stays low, try LOD in Visualization —
-  and lower `Force LOD level:` too when you need to go past `Auto`'s floor of
+- If **Visible points** stays high and FPS stays low, try LOD in Visualization —
+  and lower `Force LOD level` too when you need to go past `Auto`'s floor of
   `min(2,000,000, cells ÷ 8)` points,
   a smaller window, a smaller point size, or turning antialiasing off. Shader
   quality did not change frame time measurably on the hardware measured, in 2D
@@ -224,7 +224,7 @@ The **Analyze Performance** button runs a short measurement and produces:
 - a **Problems Found** list naming one primary bottleneck and any contributing
   ones,
 - a prioritized **What to do** checklist,
-- and a collapsed **Show detailed stats** block with the per-phase overheads.
+- and a collapsed **Detailed stats** block with the per-phase overheads.
 
 The bottleneck names it can print are `GPU`, `CPU`, `Fragment/Fill Rate`,
 `Vertex Processing`, `LOD Selection`, `Frustum Culling`, `Frame Stuttering`,

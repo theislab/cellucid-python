@@ -3,8 +3,12 @@ Planning the ``obs`` columns that carry a session's highlight pages.
 
 One boolean column is planned per enabled highlight group, named from the page
 and group labels, with the group's declared metadata recorded alongside it. The
-cell indices come from the delta-uvarint chunk the group names, and every index
-is checked against the AnnData's cell count before any column is built.
+cell indices come from the cell-set chunk the group names
+(:func:`cellucid.session_codecs.decode_cell_set`), and every index is checked
+against the AnnData's cell count before any column is built. A category group
+may be stored relative to its category's cells: those are read from
+``adata.obs[fieldKey] == categoryName``, and a column whose category no longer
+holds the cells the session recorded is refused.
 """
 
 from __future__ import annotations
@@ -16,7 +20,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from ..session_codecs import decode_delta_uvarint
+from ..session_codecs import cell_set_needs_reference, decode_cell_set
 from ._primitives import (
     _require_category_primitive,
     _require_exact_bool,
@@ -59,14 +63,9 @@ def _validate_highlight_group_metadata(group: dict[str, Any], *, label: str) -> 
         raise ValueError(f"{label}.cellCount must be positive")
     if group_type in {"category", "range"}:
         _require_field_key(group["fieldKey"], label=f"{label}.fieldKey")
-        _require_nonnegative_int(group["fieldIndex"], label=f"{label}.fieldIndex")
         if group["fieldSource"] not in {"obs", "var"}:
             raise ValueError(f"{label}.fieldSource must be 'obs' or 'var'")
     if group_type == "category":
-        _require_nonnegative_int(
-            group["categoryIndex"],
-            label=f"{label}.categoryIndex",
-        )
         _require_category_primitive(
             group["categoryName"],
             label=f"{label}.categoryName",
@@ -78,12 +77,41 @@ def _validate_highlight_group_metadata(group: dict[str, Any], *, label: str) -> 
             raise ValueError(f"{label}.rangeMin must not exceed rangeMax")
 
 
+def _category_reference(obs: pd.DataFrame, group: dict[str, Any], *, label: str) -> np.ndarray:
+    """The cells of a category group's category, ascending.
+
+    The viewer stores a category group relative to these cells when that is
+    smaller; the decoder checks their count and digest against the ones it
+    recorded, so a column whose category changed is refused, never misread.
+    """
+    if group["type"] != "category" or group["fieldSource"] != "obs":
+        raise ValueError(
+            f"{label} is stored relative to a category, and it is not a category "
+            "group on an obs field"
+        )
+    field_key = group["fieldKey"]
+    matching = [index for index, key in enumerate(obs.columns) if key == field_key]
+    if len(matching) != 1:
+        raise ValueError(
+            f"{label} is stored relative to the category {group['categoryName']!r} of "
+            f"obs field {field_key!r}, which must exist exactly once in adata.obs"
+        )
+    values = obs.iloc[:, matching[0]].astype(object).to_numpy()
+    category = group["categoryName"]
+    members = np.fromiter(
+        (type(value) is type(category) and value == category for value in values),
+        dtype=bool,
+        count=values.size,
+    ) if isinstance(category, bool) else values == category
+    return np.flatnonzero(np.asarray(members, dtype=bool)).astype(np.uint32)
+
+
 def _plan_highlights(
     bundle: Any,
     chunk_ids: set[str],
     *,
     n_obs: int,
-    obs_index: pd.Index,
+    obs: pd.DataFrame,
     prefix: str,
     existing_columns: set[str],
     materialize: bool,
@@ -183,10 +211,15 @@ def _plan_highlights(
                 raise TypeError(f"{membership_chunk_id} must decode to binary bytes")
             if membership_meta["uncompressedBytes"] != len(raw_membership):
                 raise ValueError(f"{membership_chunk_id} uncompressedBytes must match its payload")
-            indices = decode_delta_uvarint(
+            reference = (
+                _category_reference(obs, raw_group, label=group_label)
+                if cell_set_needs_reference(raw_membership)
+                else None
+            )
+            indices = decode_cell_set(
                 raw_membership,
-                max_count=n_obs,
-                max_index=n_obs - 1,
+                cell_count=n_obs,
+                reference=reference,
             )
             if len(indices) != cell_count:
                 raise ValueError(
@@ -203,7 +236,7 @@ def _plan_highlights(
                 plans.append(
                     _ColumnPlan(
                         name=column_name,
-                        values=pd.Series(mask, index=obs_index, copy=False),
+                        values=pd.Series(mask, index=obs.index, copy=False),
                         metadata={
                             "kind": "highlight",
                             "group_id": group_id,

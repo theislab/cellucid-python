@@ -16,7 +16,8 @@
 // Ports: the application is served by the web repository's own browser-test
 // server, so this honours the same two variables it does —
 // CELLUCID_BROWSER_TEST_PORT and CELLUCID_BROWSER_TEST_SAMPLE_PORT — and adds
-// CELLUCID_DOCS_EXPORTS_PORT (default: main port + 2) for the dataset host.
+// CELLUCID_DOCS_CATALOG_PORT (default: main port + 2) for the sample catalog
+// host (`cellucid-datasets/anndata/`, read through `?sampleCatalog=`).
 // Set them when another run already owns the default 4173/4174.
 //
 // ---------------------------------------------------------------------------
@@ -101,7 +102,7 @@ import { promisify } from 'node:util';
 
 import { clearOverlay, OVERLAY_ROOT_ID, paintOverlay } from './overlay.mjs';
 import { SCENARIOS } from './scenarios.mjs';
-import { startExportsServer } from './serve-exports.mjs';
+import { startCatalogServer } from './serve-catalog.mjs';
 
 const run = promisify(execFile);
 
@@ -118,6 +119,35 @@ const WEB_REPO =
 const DATASETS_REPO =
   process.env.CELLUCID_DATASETS_REPO ??
   path.join(WORKSPACE, 'cellucid-datasets');
+
+/**
+ * The sample catalog folder the scenarios load: `datasets.json` (schema 2) and
+ * the AnnData stores it lists, as published at
+ * https://theislab.github.io/cellucid-datasets/anndata/. Refused by name when
+ * the datasets checkout does not hold it, rather than letting every scenario
+ * time out on an empty dataset list.
+ *
+ * @returns {Promise<string>}
+ */
+async function requireSampleCatalog() {
+  const root = path.join(DATASETS_REPO, 'anndata');
+  let catalog;
+  try {
+    catalog = JSON.parse(await readFile(path.join(root, 'datasets.json'), 'utf8'));
+  } catch (error) {
+    throw new Error(
+      `No sample catalog at ${root}/datasets.json (${error.code ?? error.message}). ` +
+        'The scenarios load the AnnData sample datasets of cellucid-datasets; ' +
+        'set CELLUCID_DATASETS_REPO to a checkout that holds anndata/.'
+    );
+  }
+  if (catalog?.schema !== 2 || !Array.isArray(catalog.datasets)) {
+    throw new Error(
+      `${root}/datasets.json is not a schema 2 dataset catalog.`
+    );
+  }
+  return root;
+}
 
 /** Every capture uses this CSS viewport; it is the app's documentation size. */
 const VIEWPORT = Object.freeze({ width: 1440, height: 1000 });
@@ -144,22 +174,22 @@ async function resolvePorts() {
     pathToFileURL(path.join(WEB_REPO, 'scripts', 'browser-test-ports.mjs'))
   );
   const { host, port, samplePort, origin } = module.resolveBrowserTestPorts();
-  const exportsPort = Number(
-    process.env.CELLUCID_DOCS_EXPORTS_PORT ?? String(port + 2)
+  const catalogPort = Number(
+    process.env.CELLUCID_DOCS_CATALOG_PORT ?? String(port + 2)
   );
   if (
-    !Number.isInteger(exportsPort) ||
-    exportsPort < 1024 ||
-    exportsPort > 65535 ||
-    exportsPort === port ||
-    exportsPort === samplePort
+    !Number.isInteger(catalogPort) ||
+    catalogPort < 1024 ||
+    catalogPort > 65535 ||
+    catalogPort === port ||
+    catalogPort === samplePort
   ) {
     throw new RangeError(
-      'CELLUCID_DOCS_EXPORTS_PORT must be a free port between 1024 and 65535 ' +
-        `that differs from ${port} and ${samplePort}; received ${exportsPort}.`
+      'CELLUCID_DOCS_CATALOG_PORT must be a free port between 1024 and 65535 ' +
+        `that differs from ${port} and ${samplePort}; received ${catalogPort}.`
     );
   }
-  return { host, port, samplePort, exportsPort, origin };
+  return { host, port, samplePort, catalogPort, origin };
 }
 
 /**
@@ -414,8 +444,8 @@ async function applyStep(page, step) {
   if ('hover' in step) return page.hover(step.hover);
   if ('press' in step) return page.keyboard.press(step.press);
   if ('waitForStable' in step) {
-    // The application rebuilds the field selectors when the observation
-    // manifest arrives, which is *after* the point count settles. A selection
+    // The application rebuilds the field selectors when the obs field list
+    // arrives, which is *after* the point count settles. A selection
     // made in that window is silently discarded — `selectOption` reports
     // success and the control comes back holding a different value. Waiting
     // for the element's markup to stop changing is the honest fix; retrying the
@@ -712,9 +742,14 @@ async function captureScenario(browser, scenario, urls) {
     }
 
     const url = new URL('/index.html', urls.appOrigin);
-    url.searchParams.set('exportsBaseUrl', `${urls.exportsOrigin}/`);
+    url.searchParams.set('sampleCatalog', `${urls.catalogOrigin}/`);
     if (scenario.dataset != null) url.searchParams.set('dataset', scenario.dataset);
-    for (const [key, value] of Object.entries(scenario.query ?? {})) {
+    // A query may depend on the run's origins (a `?data=` link to a loopback
+    // host), so it can be a function of `urls`.
+    const query = typeof scenario.query === 'function'
+      ? scenario.query(urls)
+      : scenario.query ?? {};
+    for (const [key, value] of Object.entries(query)) {
       url.searchParams.set(key, value);
     }
     await page.goto(url.toString(), { waitUntil: 'domcontentloaded' });
@@ -724,11 +759,23 @@ async function captureScenario(browser, scenario, urls) {
     // does. It must be *waited for* before Escape is sent: the overlay paints
     // before its key handler is wired, and an early Escape is swallowed, which
     // leaves the overlay covering every later capture.
+    // A startup that names its data exactly (a `?data=` link, a server)
+    // keeps onboarding hidden, so the overlay is waited for only until
+    // startup is either showing it or done without it.
     const welcome = page.locator('#welcome-modal');
-    await welcome.waitFor({ state: 'visible' });
-    if (scenario.keepWelcome !== true) {
-      await page.keyboard.press('Escape');
-      await welcome.waitFor({ state: 'hidden' });
+    await page.waitForFunction(
+      () => document.getElementById('welcome-modal')?.classList.contains('hidden') === false
+        || document.documentElement.dataset.startupPhase === 'ready',
+      undefined,
+      { timeout: 120_000 }
+    );
+    if (await welcome.isVisible()) {
+      if (scenario.keepWelcome !== true) {
+        await page.keyboard.press('Escape');
+        await welcome.waitFor({ state: 'hidden' });
+      }
+    } else if (scenario.keepWelcome === true) {
+      throw new Error(`${scenario.id}: the welcome overlay never opened.`);
     }
 
     const steps = scenario.steps ?? [];
@@ -896,8 +943,10 @@ async function main() {
   const ports = await resolvePorts();
   const { chromium } = require('playwright');
 
-  const exportsRoot = path.join(DATASETS_REPO, 'exports-v3');
-  const exportsServer = await startExportsServer(exportsRoot, ports.exportsPort);
+  const catalogServer = await startCatalogServer(
+    await requireSampleCatalog(),
+    ports.catalogPort
+  );
   const appServer = await startApplicationServer(ports);
   const browser = await chromium.launch();
 
@@ -914,7 +963,7 @@ async function main() {
       '-'
     );
     process.stdout.write(
-      `app ${ports.origin}  exports ${exportsServer.origin}  ` +
+      `app ${ports.origin}  catalog ${catalogServer.origin}  ` +
         `chromium ${browser.version()}  web@${shortRevision}\n\n`
     );
     if (revisionIsProvisional(revision)) {
@@ -933,7 +982,10 @@ async function main() {
       try {
         captured = await captureScenario(browser, scenario, {
           appOrigin: ports.origin,
-          exportsOrigin: exportsServer.origin,
+          // The web repository's permissive-CORS mirror, which answers
+          // single-range requests: the host a data link reads a file from.
+          sampleOrigin: `http://${ports.host}:${ports.samplePort}`,
+          catalogOrigin: catalogServer.origin,
         });
       } catch (error) {
         // One broken scenario must not cost the whole sweep. The failure is
@@ -1038,7 +1090,7 @@ async function main() {
   } finally {
     await browser.close();
     await appServer.close();
-    await exportsServer.close();
+    await catalogServer.close();
   }
 
   if (failures.length > 0) {

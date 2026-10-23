@@ -90,7 +90,7 @@ class HookRegistry:
         Report whether at least one callback is registered for an event.
 
         A caller that reports an event itself when nothing is listening -- as
-        :class:`~cellucid.jupyter.BaseViewer` does for ``command_error`` -- uses
+        :class:`~cellucid.jupyter.AnnDataViewer` does for ``command_error`` -- uses
         this to stand aside once the notebook has taken the event over.
 
         Args:

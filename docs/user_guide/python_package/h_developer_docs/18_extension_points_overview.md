@@ -4,7 +4,7 @@ This page is a map of **safe ways to extend Cellucid Python** and a decision gui
 
 If you are planning a change, start here before coding:
 
-- export format changes → {doc}`19_extension_point_add_new_export_feature`
+- Cellucid-ready AnnData changes → {doc}`07_prepare_writer_architecture`
 - hooks/protocol changes → {doc}`20_extension_point_add_new_hook_event_or_command`
 
 ---
@@ -15,7 +15,7 @@ If you are planning a change, start here before coding:
 
 Examples:
 - add a helper function (e.g., vector field utilities)
-- add a CLI subcommand that doesn’t change the export format
+- add a CLI subcommand that doesn’t change the Cellucid-ready AnnData contract
 - add docs pages or notebooks
 - improve error messages, validation, performance inside existing contracts
 
@@ -27,8 +27,8 @@ Usually touches:
 ### Contract changes (requires coordination)
 
 Examples:
-- new files in the export folder
-- changes to manifest schemas
+- new elements or `uns['cellucid']` keys in the Cellucid-ready AnnData
+- new launch defaults
 - new hook event types or new frontend command types
 - changes to session bundle chunk codecs
 
@@ -36,7 +36,7 @@ These must be coordinated with:
 - the web app loader and UI behavior (`cellucid/` repo)
 
 Start with:
-- {doc}`08_export_format_spec_and_invariants`
+- {doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification`
 - {doc}`11_hooks_events_protocol_and_schema`
 - web app developer docs: {doc}`../../web_app/p_developer_docs/index`
 
@@ -63,17 +63,18 @@ Checklist:
 3) import heavy deps inside command handler
 4) document in {doc}`05_cli_architecture_and_commands`
 
-### C) Add a new export feature (new file or new manifest fields)
+### C) Add something to the Cellucid-ready AnnData (a new element or `uns['cellucid']` key)
 
 This is the most coordination-heavy extension point.
 
 Checklist:
-- follow {doc}`19_extension_point_add_new_export_feature`
-- update both:
-  - `prepare_data/` (export writer)
-  - `anndata_adapter.py` + `anndata_server.py` (dynamic mode parity), if applicable
-- update the web app loader to consume it
-- update the export spec docs
+- read {doc}`07_prepare_writer_architecture`
+- update together:
+  - `prepare_data/` (the Python writer) and cellucid-r's `cellucid_prepare()`
+  - the web app's AnnData reader (`cellucid/assets/js/data/anndata/`, and
+    `anndata-cellucid-metadata.js` / `requireAnnDataLaunchDefaults` for a key)
+  - `_launch_defaults.py` for a launch default, so the server accepts it too
+  - {doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification`
 
 ### D) Add a new hook event or command
 
@@ -107,21 +108,20 @@ When adding new fields/files:
 
 ## Troubleshooting
 
-### Symptom: “I added a feature but it works only in AnnData mode”
+### Symptom: “I added a key to `uns['cellucid']` and the viewer refuses the file”
 
 Cause:
-- you updated `AnnDataAdapter` but not `prepare`, or vice versa.
+- the web app refuses any key it does not know, so a misspelt default never
+  passes unnoticed.
 
 Fix:
-- decide if the feature should exist in both modes,
-- implement in both code paths, and update docs accordingly.
+- add the key to the web app's `anndata-cellucid-metadata.js` (or
+  `requireAnnDataLaunchDefaults`) in the same change, and to cellucid-r.
 
-### Symptom: “I added a new file but the viewer never requests it”
+### Symptom: “I added an element but the viewer never reads it”
 
 Cause:
-- the web app doesn’t know it exists (manifest/schema missing),
-- or it is not hooked into the loader path.
+- the web app's AnnData reader is not hooked up to it.
 
 Fix:
-- update the export manifest/identity to advertise it,
-- update the web app loader logic.
+- update the web app's reader in the same change.

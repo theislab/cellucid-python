@@ -12,7 +12,7 @@ them. Nothing on this page assumes you have read the mode pages first.
 :class: note
 
 - **Dataset:** the built-in **Pancreatic endocrinogenesis (scVelo)** sample —
-  3,696 cells, 3,753 genes, 8 cell types. Pick it from **Sample datasets** in the
+  3,696 cells, 3,753 genes, 8 cell types. Pick it from **Sample dataset** in the
   Session panel.
 - **View:** 2D embedding, coloured by `cell_type`, light theme.
 - **Window:** 1440 × 1000 CSS pixels, captured at 2× pixel density.
@@ -34,10 +34,10 @@ user thinks analysis is broken.
 
 Making a page takes two actions, and **both are required**:
 
-1. In **Coloring & Filtering**, choose a **Categorical obs** field —
+1. In **Coloring & filtering**, choose a **Categorical obs** field —
    `cell_type` here. Annotation selection reads the clicked cell's value on the
    active field, so with no active field the tool never starts.
-2. In **Highlighting**, leave the mode on **Annotation based**, then
+2. In **Highlighting**, leave the mode on **Annotation**, then
    **Alt+click** any cell. Every cell sharing that cell's annotation value is
    picked up at once. The panel now reads `Step 1: 262 cells`.
 
@@ -140,19 +140,21 @@ they change how fast the run goes, never what it computes.
 
 ## Step 4 — Let it run
 
-Press **Run Differential Expression**. The button reads `Running...` and a
-progress bar appears with a named phase.
+Press **Run Differential Expression**. The button reads `Running…`, and a box
+under it says what the run covers, what it is doing, and offers **Cancel**.
 
 ```{figure} ../../../_static/screenshots/analysis/de-running.png
-:alt: The Differential Expression panel mid-run. The button is disabled and reads "Running...", and a progress bar above it shows the phase "Loading & Computing" with a gene count and an estimated time.
-:width: 488px
+:alt: The Differential Expression panel mid-run. The button reads "Running…" and is disabled; under it the cost line "Tests 2,000 genes in 1,000 vs 3,000 cells.", then a box titled "Differential expression" with "2,000 genes in Beta cells (1,000 cells) vs Rest of Beta cells (3,000 cells)", "Testing genes: 0 of 2,000 genes", a progress bar, and a Cancel button.
+:width: 464px
 
-Phase 1 of 2, `Loading & Computing`: every gene is fetched and tested. Phase 2,
-`Multiple Testing Correction`, applies the false-discovery-rate adjustment across
-all of them at once and is usually over in an instant.
+Step 1 of 2, `Testing genes`: every gene is read and tested, counted as it goes.
+Step 2, `Applying multiple testing correction`, adjusts the false-discovery rate
+across all of them at once and is usually over in an instant.
 ```
 
-Changing anything in the form while a run is in flight cancels it. That is
+**Cancel** stops the run, its reads and its computations, and keeps nothing; the
+box then reads `Differential expression cancelled` with **Run again**.
+Changing anything in the form while a run is in flight cancels it too. That is
 deliberate — a result that no longer matches the form on screen would be worse
 than no result.
 
@@ -222,7 +224,7 @@ reconstructed from this table alone.
 - **Not tested (< 10 cells with a value)** — genes skipped before testing,
   because one of the two groups had fewer than 10 cells with a measured value for
   that gene. They have no p-value and no adjusted p-value, and they are not part
-  of the correction. It reads `0` here because this export stores a value for
+  of the correction. It reads `0` here because this dataset stores a value for
   every cell; on a sparser dataset it will not.
 - **Significant** — tested genes passing **both** the current p-value threshold
   and the current fold-change threshold. The row label restates the two cutoffs
@@ -323,8 +325,10 @@ or you will not be able to reconstruct the run later. See
 {doc}`09_exporting_analysis_results` for every mode's schema.
 :::
 
-To keep the *setup* rather than the numbers, save a session — see
-{doc}`../l_sessions_sharing/index`. Settings are restored; results are recomputed.
+To keep the setup and the result, save a session — see
+{doc}`../l_sessions_sharing/index`. Settings are restored, and so are the
+results of differential expression, marker genes, signatures and correlation;
+Quick and Detailed views are recomputed from their settings.
 
 ---
 

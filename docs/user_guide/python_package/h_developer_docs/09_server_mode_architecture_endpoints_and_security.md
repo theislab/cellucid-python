@@ -1,38 +1,27 @@
 # Server mode architecture, endpoints, and security
 
-This page documents the Python HTTP servers that power Cellucid:
+This page documents the Python HTTP server that powers Cellucid: it serves
+*one AnnData store* (`.h5ad` or Zarr) whose bytes the web app reads itself.
 
-- serving *export folders* (static files), and
-- serving *AnnData directly* (dynamic “virtual files”).
-
-It also covers the web-asset proxy, event endpoints (hooks), and security caveats.
+It also covers the web-asset delivery, event endpoints (hooks), and security caveats.
 
 ---
 
-## The two servers (and why both exist)
+## The server (`AnnDataServer`)
 
-### 1) Exported dataset server (`CellucidServer`)
-
-Use when:
-- you already ran `prepare(...)`,
-- you want fastest load times,
-- you want to share/host a stable export folder.
+Every entry point — `cellucid serve`, `serve_anndata`, `show_anndata` — runs
+it, for an `.h5ad`, a Zarr store folder (v2 or v3), a zipped Zarr store, or an
+in-memory `AnnData`, with nothing converted.
 
 Implementation:
-- `cellucid-python/src/cellucid/server/`
+- `cellucid-python/src/cellucid/anndata_server.py` (routes, launch choices)
+- `cellucid-python/src/cellucid/_anndata_files.py` (classifying the store,
+  reading its metadata, the temporary `.h5ad`)
 
-### 2) AnnData server (`AnnDataServer`)
+The server is a threaded HTTP/1.1 server with keep-alive connections, because
+the browser reads one file with many range requests.
 
-Use when:
-- you want convenience during iteration,
-- you want read-only backed access to `.h5ad`, or an eager load from `.zarr`,
-- you don’t want to write an export folder yet.
-
-Implementation:
-- `cellucid-python/src/cellucid/anndata_server.py`
-- `cellucid-python/src/cellucid/anndata_adapter.py` (the “virtual export” layer)
-
-Both servers share:
+Its shared building blocks:
 - CORS rules
 - exact web-generation establishment and delivery
 - hooks event endpoint (`/_cellucid/events`)
@@ -46,7 +35,7 @@ Shared code:
 
 ## Common endpoints
 
-These endpoints exist in both server modes:
+These endpoints are always served:
 
 ### `GET /`
 
@@ -108,48 +97,6 @@ reads, so it cannot announce a capability the notebook would then reject.
 Implementation:
 - `_protocol_capability_document` in `src/cellucid/jupyter/_wire.py`
 
-(python-mapping-embeddings-endpoint)=
-### `GET /_cellucid/mapping/embeddings/{obsm}/{c0-c1-c2}.bin` (AnnData servers only)
-
-One `obsm` array of the candidate catalog, read at 1 to 3 zero-based columns
-(`{obsm}` is its index in the catalog's `obsm` list, the columns are joined by
-`-`, for example `3/0-1.bin`). The served mapping turns on every narrow `obsm`
-array beside the served defaults, but `dataset_identity.json` lists only the
-defaults, so this is where the viewer reads the others when a view first shows
-one. The array is checked (finite, float32-representable, non-zero range) and
-normalized exactly as a served embedding is; the same key at the same columns
-as a served embedding returns the same bytes. A route that names no usable
-dense array at valid columns answers 404; an array that fails the check
-answers 422 with the reason.
-
-(python-mapping-candidates-endpoint)=
-### `GET /_cellucid/mapping/candidates.json` (AnnData servers only)
-
-The data mapping an AnnData server serves, and every array it could serve:
-
-```bash
-curl -s http://127.0.0.1:8765/_cellucid/mapping/candidates.json | python -m json.tool
-```
-
-`defaults` is the data mapping this server serves — the embedding of each
-dimension (`obsm` key and 0-based columns), the neighbour graph (`knn`), the
-gene names, the expression matrix, the latent space and the vector bindings —
-in the exact shape a session fingerprint records it. The viewer reads it when it
-opens a dataset served from AnnData, because the graph and the expression matrix
-the server chose are not visible in `dataset_identity.json`, and writes it into
-every session it saves. `obsm`, `obsp`, `var`, `X`, `layers` and `raw` list every
-candidate array with its shape, dtype and whether it can be used; `guessed` names
-the embedding slots the server best-guessed. A server that serves prepared
-exports has no such route.
-
-The document is built from metadata alone — shapes and dtypes, never array
-values — on the first request, and then frozen.
-
-Implementation:
-- `AnnDataAdapter.get_mapping_candidates()` and `get_data_mapping()` in
-  `src/cellucid/anndata_adapter.py`; the catalog itself is
-  `build_anndata_candidates` in `src/cellucid/data_mapping.py`.
-
 ### `POST /_cellucid/events`
 
 Frontend → Python hooks/events channel:
@@ -189,70 +136,119 @@ Implementation:
 
 ---
 
-## Exported server details
-
-### Dataset listing: `GET /_cellucid/datasets`
-
-The exported server can serve:
-- a single dataset directory, or
-- a directory containing multiple dataset subdirectories.
-
-`/_cellucid/datasets` lists what’s available (used for multi-dataset browsing).
-
-Detection rules:
-- a dataset is a directory containing a valid version-3
-  `dataset_identity.json`, an object-valued `obs_manifest.json`, and a non-empty
-  `embeddings/` directory; the files served from it are exactly the
-  `embeddings.items[*].file` paths the identity declares;
-- once any immediate child is a dataset candidate, every immediate
-  subdirectory must be one complete current dataset. Stray directories reject
-  the root;
-- `CellucidServer.viewer_url` opens the catalog. A sole entry may auto-open;
-  multiple entries require an exact id and are never resolved by list order.
-
-### Static file serving
-
-Exported datasets are served as static files.
-
-That means:
-- there is no on-the-fly recomputation,
-- and `.gz` files are served as raw gzip bytes (the viewer decompresses them).
-
----
-
 ## AnnData server details
 
-The AnnData server implements a set of HTTP routes that mimic the export format.
+The AnnData server computes nothing per request. The web app's own HDF5/Zarr
+reader reads the store in place; the server names the dataset, serves the
+store's bytes, and states the launch choices.
 
-Examples:
+### Startup
 
-- `/dataset_identity.json`
-- `/obs_manifest.json`
-- `/var_manifest.json`
-- `/embeddings/<index>_<dim>d.bin`
-- `/vectors/<field index>_<embedding index>.bin`
-- `/obs/<index>.values.f32`
-- `/var/<index>.values.f32`
+`AnnDataServer(...)` runs three numbered steps before `start()` adds the
+fourth:
 
-`<index>` is the payload index the corresponding manifest entry declares in its
-element `[0]`; identifiers never appear in a route. Only the exact unpadded
-decimal form resolves, so `/var/0.values.f32` is served and `/var/00.values.f32`
-is a 404.
+1. `[1/4] Detecting format` — classify the path (`.h5ad` file, zipped Zarr
+   store, Zarr v2/v3 store folder) and resolve the dataset identity:
+   `dataset_name`/`dataset_id` as given, else `uns['cellucid']['name']`/`['id']`;
+   a store with neither is refused. An in-memory object, and a store holding an
+   array whose codec the browser cannot decode, is written once to a temporary
+   `.h5ad` (sparse `X`, layers and `raw.X` column-major, uncompressed), removed
+   when the server stops or Python exits.
+2. `[2/4] Reading metadata` — cell and gene counts and the names of the stored
+   elements; no array is read.
+3. `[3/4] Checking launch choices` — every choice named (`embedding_keys`,
+   `knn_key`, `expression_source`, `gene_id_column`, `latent_key`,
+   `vector_field_default`, `obs_keys`, `normalize_embeddings`,
+   `centroid_min_points`) must exist in the store
+   and have a usable shape. For a Zarr folder without consolidated metadata, the
+   server builds it in memory here.
+4. `[4/4] Starting server` — establish the viewer generation and bind.
 
-Key behaviors:
+### `GET /_cellucid/datasets`
 
-- **loading behavior**: H5AD is read-only backed; Zarr is loaded eagerly
-- **gzip behavior**: an exact unsuffixed binary route may return
-  `Content-Encoding: gzip` when the request advertises gzip support; `.gz` route
-  variants return `404`
-- **one rooted route contract**: data paths such as `/embeddings/0_2d.bin` are served
-  exactly at the root; dataset-prefixed variants return `404`.
+One dataset, its store, and the launch choices that were set:
+
+```json
+{
+  "datasets": [
+    {
+      "id": "pbmc-demo",
+      "name": "PBMC demo",
+      "anndata": {
+        "file": {"url": "_cellucid/anndata/pbmc-demo.h5ad", "kind": "h5ad",
+                 "layout": "file", "size": 2799976},
+        "defaults": {"embedding2d": {"key": "X_umap", "columns": [1, 0]},
+                     "knn": "connectivities"}
+      }
+    }
+  ]
+}
+```
+
+- `file.url` is relative to the server's base URL (the server cannot know the
+  address a browser reaches it by, through a tunnel or a proxy). `kind` is
+  `"h5ad"` or `"zarr"`; `layout` is `"file"`, `"zip"` or `"folder"`; `size` is
+  given for a file and absent for a folder.
+- `defaults` holds only the launch choices given at startup. A choice left out
+  is taken from the store's own `uns['cellucid']['defaults']`, else the viewer's
+  default rule ({doc}`../../web_app/b_data_loading/13_data_mapping`).
+
+### `GET /_cellucid/health` and `GET /_cellucid/info`
+
+`/_cellucid/health` answers
+`{"status": "ok", "type": "anndata", "version", "format", "n_cells", "n_genes"}`,
+with `format` `"h5ad"` or `"zarr"`. `/_cellucid/info` carries the same
+`version`, `type`, `format`, `n_cells` and `n_genes`, plus `host` and `port`.
+
+### The store: `/_cellucid/anndata/<dataset_id>…`
+
+The route is named by the dataset id, so the local file name is never
+published:
+
+- `/_cellucid/anndata/<dataset_id>.h5ad` — an `.h5ad` file;
+- `/_cellucid/anndata/<dataset_id>.zarr.zip` — a zipped Zarr store;
+- `/_cellucid/anndata/<dataset_id>.zarr/<key>` — a Zarr store folder, key by
+  key. An absent key answers `404`, which a Zarr reader takes as "absent" (an
+  unwritten chunk is its fill value); a key may not leave the store.
+
+Every answer is exact: `GET` and `HEAD`, a single `Range` answered with `206`
+and `Content-Range`, an unsatisfiable or multiple range refused with `416`,
+`Accept-Ranges: bytes`, and an `ETag`. CORS exposes `Accept-Ranges`,
+`Content-Encoding`, `Content-Length`, `Content-Range` and `ETag`, so the
+viewer's reader can see them. The viewer sends nothing but one `Range`
+header, a CORS-safelisted request, so no preflight is made.
+
+What a request costs is kept small, because a browser reads a file with
+thousands of them:
+
+- a file's bytes go from the page cache to the socket with `sendfile`
+  (`socket.sendfile`), never read into Python, and are never compressed;
+- `TCP_NODELAY` on every connection, so a small answer is not held back
+  waiting for the client to acknowledge its headers;
+- the listen backlog is the platform's maximum, so the six connections a page
+  opens at once never wait for a retry.
+
+The browser may keep what it read: store bytes are sent with
+`Cache-Control: no-cache` and a strong `ETag` (the file's size, modification
+time and inode), so a reload revalidates them (`If-None-Match`, answered
+`304 Not Modified` with no body) instead of downloading them again. A file that
+changed has a new `ETag`: a range asked with `If-Range` naming the old one is
+answered with the whole current file, and the viewer refuses to mix two
+versions of a file it has open.
+
+```bash
+curl -sI -H 'Range: bytes=0-7' http://127.0.0.1:8765/_cellucid/anndata/pbmc-demo.h5ad
+```
+
+Implementation:
+- `AnnDataRequestHandler` in `src/cellucid/anndata_server.py`; the web app's
+  reader of this document is `assets/js/data/served-anndata.js`.
 
 ---
 
 ## Verified web generation (why the UI loads from the server)
 
-Both servers establish the configured exact source generation:
+The server establishes the configured exact source generation:
 
 - when the browser requests `/index.html` or `/assets/...`,
 - the Python server downloads those files from `https://www.cellucid.com`,
@@ -352,17 +348,12 @@ For a deeper threat-model discussion:
 
 ### Symptom: “I can open `/` but dataset files 404”
 
-Exported mode:
-- confirm you are serving the directory that actually contains `obs_manifest.json` and points files.
-
-AnnData mode:
-- confirm the requested path matches server routes (see `AnnDataRequestHandler`).
-
-Use:
+- read `file.url` from `/_cellucid/datasets` and request exactly that route
+  (see `AnnDataRequestHandler`); any other path under `/_cellucid/anndata/` is a
+  `404`.
 
 ```bash
-curl -I http://127.0.0.1:8765/obs_manifest.json
-curl -I http://127.0.0.1:8765/embeddings/0_2d.bin
+curl -s http://127.0.0.1:8765/_cellucid/datasets | python -m json.tool
 ```
 
 ### Symptom: “Hooks don’t fire”

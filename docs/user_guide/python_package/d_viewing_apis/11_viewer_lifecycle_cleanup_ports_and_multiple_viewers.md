@@ -9,7 +9,7 @@ This page is about running Cellucid viewers/servers safely over long sessions:
 
 **Audience**
 - Notebook users (most common source of “why is my port in use?”)
-- Anyone serving `.h5ad` in backed mode (file handles matter)
+- Anyone viewing an in-memory `AnnData` (each viewer writes a temporary `.h5ad`)
 
 ## The three lifecycles you might be in
 
@@ -22,13 +22,13 @@ If you close the terminal or the process dies, the viewer stops working.
 
 ### 2) Python server lifecycle (non-notebook)
 
-- Start (blocking): `serve(...)` / `serve_anndata(...)`
-- Start (non-blocking): `CellucidServer(...).start_background()`, `AnnDataServer(...).start_background()`
+- Start (blocking): `serve_anndata(...)`
+- Start (non-blocking): `AnnDataServer(...).start_background()`
 - Stop: `server.stop()`
 
 ### 3) Notebook viewer lifecycle
 
-`show(...)` / `show_anndata(...)` returns a viewer object that:
+`show_anndata(...)` returns a viewer object that:
 - starts a server in the background, and
 - embeds an iframe that points at that server.
 
@@ -47,8 +47,9 @@ In notebooks, it’s very common to:
 
 Calling `viewer.stop()`:
 - stops the server,
-- closes AnnData file handles (important for `.h5ad` backed mode),
-- and frees memory used by internal caches.
+- closes its port,
+- and removes the temporary `.h5ad` an in-memory `AnnData` was written to (an
+  `.h5ad` or Zarr path is served in place and left untouched).
 
 ```{note}
 Cellucid registers an interpreter-exit cleanup handler that logs shutdown
@@ -74,7 +75,7 @@ handle any failure before interpreter teardown.
 
 ### Choosing a fixed port (useful for SSH tunnels)
 
-The convenience functions `show(...)` and `show_anndata(...)` do not expose `port` directly.
+The convenience function `show_anndata(...)` does not expose `port` directly.
 If you need a fixed port, instantiate the viewer class:
 
 ```python
@@ -90,13 +91,6 @@ viewer = AnnDataViewer(
 viewer.display()
 ```
 
-```python
-from cellucid import CellucidViewer
-
-viewer = CellucidViewer("/path/to/export_dir", port=8765, height=600)
-viewer.display()
-```
-
 ## Multiple viewers: what’s safe and what’s risky
 
 ### Safe patterns
@@ -108,7 +102,8 @@ viewer.display()
 
 - Creating many viewers in a loop without calling `stop()` → lots of servers, lots of open sockets, possible file-handle exhaustion.
 - Using `show_anndata(adata, dataset_name=..., dataset_id=...)` on a huge
-  in-memory `AnnData` repeatedly → repeated conversions/caches can spike memory.
+  in-memory `AnnData` repeatedly → each call writes another temporary `.h5ad`
+  until its viewer is stopped; pass the file's path instead when it is on disk.
 
 ## Cleanup strategies in notebooks
 

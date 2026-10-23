@@ -12,16 +12,13 @@
 Before deep-diving, answer:
 
 1) Are you loading:
-   - an **export folder** (recommended),
-   - a browser-selected **`.h5ad`** or **Zarr ZIP** file,
-   - a Python-served **`.h5ad` / `.zarr`** path,
-   - a **server-backed Viewer URL** (the exact printed
-     `/?source=remote` for prepared data or `/?anndata=true` for direct
-     AnnData),
+   - a browser-selected **`.h5ad`**, **Zarr ZIP** or **Zarr folder**,
+   - a Python-served **`.h5ad` / Zarr store** path (the exact printed
+     **Viewer URL**, `/?anndata=true`),
    - a **remote server** (`?remote=...`, only when the viewer origin can fetch that scheme),
-   - a **GitHub exports root** (`?github=...`),
-   - or a **self-hosted exports root** on a static host or CDN
-     (`?exportsBaseUrl=...`, which drives the `Sample datasets:` dropdown)?
+   - a **GitHub dataset catalog** (`?data=gh:...`),
+   - or another **data link** (`?data=...`: a catalog folder on a static host
+     or CDN, CELLxGENE, GEO, or an `.h5ad` / Zarr address)?
 2) Is it **browser-only** (no Python running) or **server-backed** (Python process running)?
 
 If you’re unsure, start with {doc}`01_loading_options_overview`.
@@ -39,10 +36,12 @@ If you’re unsure, start with {doc}`01_loading_options_overview`.
 ### Step 2 — Confirm you’re not fighting the wrong workflow
 
 Common mismatch:
-- Trying to load a very large `.h5ad` directly in the browser (often fails due to memory).
+- Trying to open a file from your computer that lives on a remote machine.
 
-If your `.h5ad` is large:
-- switch to server mode: {doc}`04_server_tutorial`
+A large `.h5ad` or Zarr store opens in the browser at any size: it is read in
+place, as each view needs it. If the file is on a remote machine, serve it from
+there instead of copying it: {doc}`04_server_tutorial`. `cellucid serve` hands
+the file to the same reader in the browser.
 
 ### Step 3 — Capture the “shape” of the failure
 
@@ -68,22 +67,23 @@ and the middle clause is the one that identifies the layer:
 | the server refused access | Reached, but not public | Repository visibility |
 | the server rejected the request | Reached, but the request was malformed | Your address |
 | the server reported a problem of its own | Reached; the far side failed | Wait, then retry |
-| what is published there is larger than Cellucid opens in a browser | Reached, readable, valid — and more than this browser could allocate, or over a metadata ceiling | The export size and the machine's memory. Serve it instead ({doc}`04_server_tutorial`), open it on a machine with more memory, or publish a smaller export. The ceilings are tabulated in {doc}`../q_troubleshooting_index/index` |
-| what is published there is not in a format Cellucid can read | Reached and readable, but not a Cellucid export | Re-export with `prepare()` |
+| what is published there is larger than Cellucid opens in a browser | Reached, readable, valid — and more than this browser could allocate | The file size and the machine's memory. Serve it instead ({doc}`04_server_tutorial`), open it on a machine with more memory, or publish a smaller file. The ceilings are tabulated in {doc}`../q_troubleshooting_index/index` |
+| what is published there is not in a format Cellucid can read | Reached and readable, but not an AnnData file Cellucid reads | Write it again with anndata (or `cellucid.prepare()`) |
 | nothing readable came back — the connection may have failed, or that address may not hold Cellucid data | Ambiguous: no usable response arrived | Your network *and* your address |
 
 An address the field cannot use never reaches this table. A GitHub path that is
-not `owner/repo/exports`, `owner/repo@branch/exports`, or a GitHub URL, and a
-remote address with a trailing slash, a `?…` query, or no `http(s)://`, are
-refused before any request is made, with one message about the address itself
-(for example `Invalid GitHub path. Use format: owner/repo/exports (or
-owner/repo@branch/exports), or paste a GitHub URL.`). An empty field asks for an
+not `owner/repo/folder`, `owner/repo@branch/folder`, a file path or a GitHub
+URL, and a remote address with a trailing slash, a `?…` query, or no
+`http(s)://`, are refused before any request is made, with one message about
+the address itself (for example `Invalid GitHub path. Use format:
+owner/repo/folder (or owner/repo@branch/folder) for a folder holding
+datasets.json, owner/repo/path/file.h5ad, or paste a GitHub URL.`). An empty field asks for an
 address the same way.
 
 :::{warning}
 Read the size row and the format row as opposites. *Larger than Cellucid opens
-in a browser* means the export is perfectly valid and merely too big, so
-re-exporting it produces the same bytes and meets the same wall. That row's fix
+in a browser* means the file is perfectly valid and merely too big, so
+writing it again produces the same bytes and meets the same wall. That row's fix
 is a different loading path, not a different file.
 :::
 
@@ -110,7 +110,7 @@ for example `The selected file is not a valid HDF5/H5AD file…` or
 
 ## Symptom → diagnosis → fix (common issues)
 
-### Symptom: “I clicked Prepared / H5AD / Zarr ZIP, but nothing happens”
+### Symptom: “I clicked H5AD / Zarr ZIP / Zarr folder, but nothing happens”
 
 **Likely causes (ordered)**
 1) **You cancelled the file chooser.** This is by far the most common cause and
@@ -119,8 +119,8 @@ for example `The selected file is not a valid HDF5/H5AD file…` or
 2) You denied the file or directory permission prompt.
 3) The app is embedded in a context that blocks file access.
 4) A managed-browser policy disabled local file access.
-5) The selected object does not match the control: directory for **Prepared**,
-   `.h5ad` for **H5AD**, or one `.zarr.zip`/`.zip` for **Zarr ZIP**.
+5) The selected object does not match the control: a `.zarr` folder for
+   **Zarr folder**, `.h5ad` for **H5AD**, or one `.zarr.zip`/`.zip` for **Zarr ZIP**.
 
 **How to confirm**
 - Click the same button again and confirm the dialog. Silence after a *confirmed*
@@ -162,7 +162,7 @@ progress notice shows how far that is.
   http://127.0.0.1:8765/_cellucid/health
   ```
 
-- If using GitHub, open the raw manifest URL in a new tab after substituting
+- If using GitHub, open the raw catalog URL in a new tab after substituting
   your exact owner, repository, branch, and path:
 
   ```text
@@ -170,9 +170,10 @@ progress notice shows how far that is.
   ```
 
 **Fix**
-- Large `.h5ad` → use server mode or export first:
-  - server: {doc}`04_server_tutorial`
-  - export + folder picker: {doc}`03_browser_file_picker_tutorial`
+- Large cell-major `.h5ad` → wait for the reorganisation notice to finish,
+  or save the matrix column-major (CSC), which needs none. This is the same
+  whether the file is opened in the browser or served
+  ({doc}`04_server_tutorial`).
 - Server mode → ensure URL/port matches the terminal output.
 - GitHub → try a different network, disable blockers, or switch to server mode.
 
@@ -180,13 +181,16 @@ progress notice shows how far that is.
 
 ### Symptom: “It says Cellucid found nothing to plot”
 
-A browser-selected `.h5ad` or Zarr ZIP without a UMAP is not refused: it opens
-on a best guess (see {doc}`13_data_mapping`). Only a file with no drawable
-`obsm` array at all is refused, with the same message from both readers:
+An `.h5ad` or Zarr store without a UMAP — selected in the browser, opened from
+a link, or served from Python — is not refused: it opens on a best guess (see
+{doc}`13_data_mapping`). Only a file with no drawable `obsm` array at all is
+refused, with this message:
 
 ```text
 Cellucid found nothing to plot. It needs an obsm array with one row per cell
-(<n_cells>) and at least one numeric column. obsm holds: <each entry>.
+(<n_cells>) and at least one numeric column. obsm holds: <each entry>. Add a
+2-D embedding to obsm (for example with sc.tl.umap in Scanpy), then open the
+data again.
 ```
 
 The list names every `obsm` entry with its shape and, for a dense array, why it
@@ -198,7 +202,6 @@ was not used: `X_df (table)`, `X_sparse (sparse 10,000 × 5)`,
 - AnnData has no dense numeric `obsm` array with one row per cell, or every
   such array holds a NaN, an infinity, a value too large for 32-bit floats, or
   the same coordinates for every cell.
-- Export folder is missing its embedding files (`embeddings/` in a format-3 export).
 
 **How to confirm**
 - AnnData (Python):
@@ -207,14 +210,12 @@ was not used: `X_df (table)`, `X_sparse (sparse 10,000 × 5)`,
   print(adata.obsm.keys())
   ```
 
-- Exports: check that every file `dataset_identity.json["embeddings"]` declares exists in the export folder.
 
 **Fix**
-- Compute an embedding (for example `sc.tl.umap(adata)`), fix the array the message names, or re-export with embeddings.
+- Compute an embedding (for example `sc.tl.umap(adata)`) or fix the array the message names.
 - If the file opens but shows the wrong embedding, turn the one you want on
   (and make it the default) under **Session › Data mapping**
   ({doc}`13_data_mapping`), or show it in a view with **View N shows**.
-- Prefer exports for the smoothest experience.
 
 ---
 
@@ -238,31 +239,30 @@ was not used: `X_df (table)`, `X_sparse (sparse 10,000 × 5)`,
 
 **Fix**
 - WebGL issues → see {doc}`../a_orientation/02_system_requirements`
-- NaN/Inf → clean/recompute embeddings and re-export.
+- NaN/Inf → clean/recompute embeddings and write the file again.
 
 ---
 
 ### Symptom: “Fields list is empty / missing expected metadata”
 
 **Likely causes**
-- `obs` is empty or was not exported.
+- `obs` is empty, or the file's launch defaults name only some columns
+  (`uns['cellucid']['defaults']['obsKeys']`).
 - Field names changed (session/expectations mismatch).
 
 **How to confirm**
 - AnnData: `print(adata.obs.head())`
-- Exports: verify `obs_manifest.json` exists and `dataset_identity.json["obs_fields"]` is non-empty.
 
 **Fix**
-- Ensure `obs` is populated before exporting.
-- Re-export with `obs=adata.obs` (and appropriate categorical/continuous handling).
+- Ensure `obs` is populated before writing the file.
 
 :::{note}
 An `obs` column or gene name that starts or ends with whitespace, or that
 contains a control or zero-width character (`U+200B`, `U+2060`, `U+FEFF`), is
 not a name Cellucid can show exactly. Both writers refuse it, and an `.h5ad` or
 Zarr opened directly is refused when it loads, with a message such as
-`Invalid compact_v2 obs manifest: field name "cell_type " cannot be displayed
-exactly: Field name cannot have leading/trailing whitespace`. Rename the column
+`Invalid obs field list: field name "cell_type " cannot be displayed exactly:
+Field name cannot have leading/trailing whitespace`. Rename the column
 (for example `adata.obs.columns = adata.obs.columns.str.strip()`) and open the
 file again.
 :::
@@ -279,42 +279,36 @@ file again.
 
 **How to confirm**
 - AnnData: `print(adata.X is None)`, `print(adata.n_vars)`, `print(adata.var.head())`
-- Exports: ensure `var_manifest.json` and `var/` exist (gene expression exported).
-  The files under `var/` are numbered, so read the names out of
-  `var_manifest.json` rather than out of the directory listing.
 
 **Fix**
-- For an `.h5ad`, a Zarr ZIP or a served AnnData, choose the matrix and the gene names under **Session › Data mapping › Genes** (see [Genes and expression](13_data_mapping.md#genes-and-expression)).
-- Provide a valid gene expression matrix, and name the genes from the `var` column your readers will search — `gene_id_column=...` in server/Jupyter mode, `var_gene_id_column=...` when exporting.
-- For very large datasets, use server mode (best reliability): {doc}`04_server_tutorial`
+- Choose the matrix and the gene names under **Session › Data mapping › Genes** (see [Genes and expression](13_data_mapping.md#genes-and-expression)).
+- Provide a valid gene expression matrix, and name the genes from the `var` column your readers will search — `gene_id_column=...` in server/Jupyter mode, `var_gene_id_column=...` with `prepare()`.
+- For a large row-major (CSR) matrix, the first gene waits while the browser
+  builds a gene index, once; later genes read only their own entries. A
+  column-major (CSC) matrix needs no index.
 
 ---
 
 ### Symptom: “Vector field overlay toggle is disabled / no fields appear”
 
 **Likely causes (ordered)**
-1) You are on a Python path (`cellucid serve`, `serve_anndata()`,
-   `show_anndata()`) and did not pass `--vector-fields` /
-   `serve_vector_fields=True`. The overlay is **off by default** there; the
-   three browser pickers need no such flag.
-2) The dataset truly has no vector fields (common).
-3) Vector fields exist, but they weren’t exported / served (missing `vectors/` or wrong server path).
-4) Naming mismatch: vectors are present but not discoverable (e.g., not `*_umap_2d` / `*_umap_3d`).
-5) Dimension mismatch: you only have 2D vectors but you’re looking at 3D (or vice versa).
+1) The dataset truly has no vector fields (common).
+2) The field was refused when the overlay first showed it (a value that cannot
+   be drawn); it is then listed disabled under **Session › Data mapping ›
+   Vector fields** with the reason.
+3) Naming mismatch: vectors are present but not discoverable (not `<field>_<basis>` after an `X_<basis>` embedding in the file with the same number of columns; e.g. `velocity_umap_2d` beside a bare `X_umap` with no `X_umap_2d`, which must be named `velocity_umap`).
+4) Dimension mismatch: you only have 2D vectors but you’re looking at 3D (or vice versa).
 
 **How to confirm**
-- **Python server or notebook**: read step 3 of the terminal startup report, or
-  check `dataset_identity.json` for a `vector_fields` block. See
-  {doc}`04_server_tutorial` and {doc}`05_jupyter_tutorial`.
-- **Exports**:
-  - Open `<export_dir>/dataset_identity.json` and search for `vector_fields`.
-  - Confirm `<export_dir>/vectors/` exists and contains `*_2d.bin(.gz)` / `*_3d.bin(.gz)` files.
-- **AnnData**:
-  - Print `adata.obsm.keys()` and look for `velocity_umap_2d`-style entries.
+- Open **Session ›
+  Data mapping › Vector fields**, which lists every `obsm` array that fits an
+  embedding and what is bound; in a notebook, `viewer.data_mapping["vectorFields"]`
+  lists the bindings. See {doc}`13_data_mapping` and {doc}`05_jupyter_tutorial`.
+- In Python, print `adata.obsm.keys()` and look for `<field>_<basis>` entries such as `velocity_umap` beside `X_umap`.
 
 **Fix**
-- Restart the server or viewer with `--vector-fields` / `serve_vector_fields=True`.
-- Provide/export vector fields using the supported conventions and re-load the dataset.
+- Bind the array to its embedding under **Session › Data mapping › Vector fields**.
+- Name the vector arrays by the supported convention and open the dataset again.
 - Switch to the dimension that actually has vectors (2D vs 3D).
 
 For overlay behavior and deeper diagnostics, see:
@@ -323,23 +317,22 @@ For overlay behavior and deeper diagnostics, see:
 
 ---
 
-### Symptom: “GitHub connect says `datasets.json not found`”
+### Symptom: “Open from link says the folder holds no `datasets.json`”
 
 **Likely causes (ordered)**
-1) Wrong repo path (pointing at the dataset folder instead of the exports root).
-2) Missing `datasets.json` (you didn’t generate/commit it).
-3) The files are not on `main`, but the shorthand omitted `@branch`.
+1) Wrong repository path (pointing at another folder than the catalog folder).
+2) Missing `datasets.json` (you didn’t write/commit it).
+3) The files are not on the repository's default branch, but the shorthand omitted `@branch`.
 4) Corporate network blocks `raw.githubusercontent.com`.
 
 **How to confirm**
-- Cellucid raises two notifications, and the first one names the exact address
-  it requested:
+- The notification names the exact folder Cellucid read:
 
   ```text
-  Resource not found: https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>/datasets.json
+  https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>/ holds no datasets.json, so it is not a dataset catalog. …
   ```
 
-- Open that URL in a browser tab. If it 404s there, the path or branch is wrong.
+- Open that folder's `datasets.json` in a browser tab. If it 404s there, the path or branch is wrong.
 
 ```{figure} ../../../_static/screenshots/data_loading/fail-github-catalog-not-found.png
 :alt: Two stacked Cellucid notifications, the upper naming the raw.githubusercontent.com URL that returned not found, the lower explaining that the GitHub repository could not be reached and asking the reader to check for a typo.
@@ -350,14 +343,14 @@ request that failed.
 ```
 
 **Fix**
-- Generate and commit `datasets.json` at the exports root.
-- Confirm you’re pointing Cellucid at the exports root, not at `.../pbmc_demo/`.
-- Shorthand without `@branch` always resolves to `main`; use
+- Write and commit `datasets.json` in the catalog folder
+  ({doc}`07_file_format_expectations`).
+- Or link to one file or Zarr store folder directly; it needs no catalog.
+- Shorthand without `@branch` reads the repository's default branch; use
   `owner/repo@branch/path` for another branch.
 - If blocked, use server mode or a different network.
 
-Compare your repository with the known-good
-`theislab/cellucid-demo-custom-datasets/exports` connection in
+Compare your repository with the known-good reference repository in
 {doc}`11_custom_dataset_repository`, then see {doc}`02_local_demo_tutorial`.
 
 ---
@@ -376,7 +369,7 @@ indistinguishable from the browser's side.
 **Likely causes**
 - Wrong URL (host/port mismatch) — this and a dead server produce the same
   message.
-- You pasted the **Viewer URL** into the `Remote server:` field. That field
+- You pasted the **Viewer URL** into the **Server** field. That field
   wants the bare origin the banner prints as **Local URL**
   (`http://127.0.0.1:8765`) and refuses a trailing slash, a `?…` query, or a
   fragment.
@@ -420,8 +413,8 @@ address and try again without reloading the page.
 
 If you hit one of these, switching workflows saves time:
 
-- **Large `.h5ad` in browser** → switch to server mode or exports.
-- **GitHub too large / blocked** → switch to server mode or host exports on an accessible HTTP server.
+- **Large `.h5ad` on a remote machine** → serve it from there over an SSH tunnel.
+- **GitHub too large / blocked** → write the dataset as a Zarr store folder, switch to server mode, or host the files on an accessible HTTP server.
 - **File picker blocked** → switch to server mode.
 
 ---
@@ -429,7 +422,7 @@ If you hit one of these, switching workflows saves time:
 ## What to include when asking for help (so others can debug quickly)
 
 Copy/paste:
-- your loading path (Prepared / H5AD / Zarr ZIP / server / GitHub)
+- your loading path (H5AD / Zarr ZIP / Zarr folder / link / server / GitHub)
 - approximate dataset size: `n_cells`, `n_genes`
 - browser + OS
 - any console error text
@@ -442,7 +435,7 @@ Copy/paste:
 - Loading options map: {doc}`01_loading_options_overview`
 - Local file picker: {doc}`03_browser_file_picker_tutorial`
 - Server mode: {doc}`04_server_tutorial`
-- GitHub exports workflow: {doc}`02_local_demo_tutorial`
+- Publishing a dataset catalog: {doc}`02_local_demo_tutorial`
 - Complete custom repository reference: {doc}`11_custom_dataset_repository`
 - Dataset identity: {doc}`06_dataset_identity_why_it_matters`
 - Vector fields overlay: {doc}`../i_vector_field_velocity/index`

@@ -76,7 +76,7 @@ Related: {doc}`../d_fields_coloring_legends/03_color_by_behavior` (exact behavio
 
 **Edge cases to watch**
 - **All zeros + log scale**: if you turn on log scale for a gene that is zero in most cells, many points can become “None” gray (log undefined at 0). That can look like “missing data”.
-- **Very narrow numeric range**: if everything looks the same color, use “Rescale colorbar to slider range” so small differences are visible.
+- **Very narrow numeric range**: if everything looks the same color, use “Rescale to range” so small differences are visible.
 
 ---
 
@@ -189,7 +189,7 @@ control label.
 
 | Key | Action |
 |---|---|
-| `?` | Open the in-app “Keyboard Shortcuts” section |
+| `?` | Open the in-app “Keyboard shortcuts” section |
 | `h` | Toggle sidebar visibility |
 | `f` | Toggle fullscreen |
 | `r` | Reset the camera |
@@ -384,7 +384,7 @@ Related:
 - The color domain is not rescaled to your current slider range.
 
 **Fix**
-- Turn on **Rescale colorbar to slider range** (see {doc}`../d_fields_coloring_legends/03_color_by_behavior`).
+- Turn on **Rescale to range** (see {doc}`../d_fields_coloring_legends/03_color_by_behavior`).
 
 ---
 
@@ -411,7 +411,7 @@ Related:
 
 **Fix**
 - Press `o` (Orbit) or `p` (Planar).
-- Use Reset Camera (see {doc}`../c_core_interactions/02_camera_controls_advanced`).
+- Use Reset camera (see {doc}`../c_core_interactions/02_camera_controls_advanced`).
 - Reduce motion: avoid pointer lock; prefer small, deliberate movements.
 
 ---

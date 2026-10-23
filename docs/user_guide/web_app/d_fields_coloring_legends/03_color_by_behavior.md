@@ -20,7 +20,7 @@ However, many legend interactions change **visibility**, not just color:
 - narrowing a numeric range hides cells outside the range,
 - enabling outlier filtering hides outliers (when supported).
 
-This is why the UI groups it as **Coloring & Filtering**.
+This is why the UI groups it as **Coloring & filtering**.
 
 ---
 
@@ -39,9 +39,9 @@ category system entirely, and that has two visible consequences:
 
 - Those cells are drawn in the neutral grey at **full opacity**, they get no
   legend row, and they are counted in no per-category count. They still count
-  toward `Showing X of Y points`.
+  toward `Showing X of Y cells`.
 - **No categorical filter can hide them.** Unchecking every row, or clicking
-  `Hide All`, leaves them on screen. This is the usual explanation for “I hid
+  `Hide all`, leaves them on screen. This is the usual explanation for “I hid
   every category and grey points are still there”. See
   {doc}`../e_filtering/01_filtering_mental_model` for how that fits the rest of
   the filter stack.
@@ -116,18 +116,16 @@ the prefix `Failed to load field:`. Both are walked through in
 :::
 
 :::{note}
-In practice the log-scale case is the one you will meet. A **prepared export
-cannot contain `NaN` or an infinity** in a continuous obs field or a gene: both
-the Python and the R writer refuse to publish one, and both refuse with counts
-rather than a bare complaint — *“Continuous obs field 'qc_score' cannot be
-published: of 18,142,044 cells, 12 NaN, 3 +Inf. First affected cells: …”*.
+In practice the log-scale case is the one you will meet. A file written by
+`prepare()` or `cellucid_prepare()` **cannot contain an infinity** in a
+continuous obs field, or any non-finite value in gene expression: both
+writers refuse one, with counts rather than a bare complaint. A `NaN` in a
+continuous obs column is kept: it is stored as a missing value and drawn in
+the neutral grey.
 
-So a `NaN` grey only appears when you open a raw `.h5ad` or Zarr archive
-directly in the browser, or serve one with `serve_anndata` / `show_anndata`,
-where the values are read as they are. In server mode a gene or continuous
-column that is not entirely finite is refused at the request: the server answers
-HTTP 422 and puts the same counted reason in the body, which the viewer quotes
-back to you.
+Every file is read as it is, however it is opened, so a `NaN` grey appears
+wherever the file holds one. An infinity is refused when the gene or column is
+read, with the same counted reason.
 :::
 
 ### Filtering vs coloring (two separate concepts)
@@ -138,7 +136,7 @@ Continuous legends expose a **visible range** (min/max sliders).
 - The *color domain* decides how the remaining values map onto the colormap.
 
 If you filter but keep the color domain wide, visible points can look “washed out”.
-That’s why Cellucid also provides **Rescale colorbar to slider range**.
+That’s why Cellucid also provides **Rescale to range**.
 
 ### Log scale (coloring only)
 
@@ -163,7 +161,7 @@ The legend prints this rule beside the toggle itself, as
 - A field that *does* have positive values but whose **currently selected
   colour range excludes them** rejects the change with
   `Log color scale requires the selected color range to include a positive
-  value.` Widen the range, or turn off **Rescale colorbar to slider range**,
+  value.` Widen the range, or turn off **Rescale to range**,
   and try again.
 
 So “I turned log scale on and everything went grey” can never be caused by a
@@ -173,9 +171,9 @@ place.
 
 ---
 
-## Rescale colorbar to slider range (contrast control)
+## Rescale to range (contrast control)
 
-The toggle **Rescale colorbar to slider range** controls the color domain:
+The toggle **Rescale to range** controls the color domain:
 
 - **Off**: colors are mapped using the field’s full data range  
   (useful for consistent comparisons across different filters / views).
@@ -184,27 +182,27 @@ The toggle **Rescale colorbar to slider range** controls the color domain:
 
 Practical example:
 1) Filter a QC score to a tight range (e.g., “good cells only”).
-2) Turn **Rescale colorbar to slider range** on so the remaining variation is visible.
+2) Turn **Rescale to range** on so the remaining variation is visible.
 
 ---
 
-## Live filtering vs FILTER (performance + predictability)
+## Live filtering vs Filter (performance + predictability)
 
 Continuous legends support two ways to apply the numeric filter:
 
 - **Live filtering: On** (default)  
-  Moving sliders immediately updates visibility — and `FILTER` is greyed out
+  Moving sliders immediately updates visibility — and `Filter` is greyed out
   and unclickable while it is on, with the tooltip
   `Turn off Live filtering to use Filter`. That is the intended state, not a
   fault.
 - **Live filtering: Off**  
-  Move sliders freely, then click **FILTER** to apply once.
+  Move sliders freely, then click **Filter** to apply once.
 
 When you might turn Live filtering off:
 - very large datasets where recomputing visibility on every slider tick feels slow,
 - remote desktop / low-power machines where UI responsiveness matters.
 
-The **RESET** button is clickable in both states and restores the full numeric
+The **Reset** button is clickable in both states and restores the full numeric
 range for that field, snapping both sliders back to `0` and `100`.
 
 :::{warning}
@@ -215,7 +213,7 @@ switching between kept views, and loading a session — and it is not stored in 
 those before you start dragging.
 :::
 
-The screenshot of the disabled `FILTER` button, and the rest of the filter
+The screenshot of the disabled `Filter` button, and the rest of the filter
 inventory, are in
 {doc}`../e_filtering/04_common_filter_types_document_every_filter_the_ui_exposes`.
 
@@ -230,7 +228,7 @@ The Min/Max sliders are normalized to **0–100%** of the field’s numeric rang
 
 The UI shows the corresponding numeric value next to each slider so you don’t have to reason in percent.
 
-The two sliders cannot cross. Dragging `Min` past `Max` pushes `Max` along with
+The two sliders cannot cross. Dragging `Minimum` past `Maximum` pushes `Maximum` along with
 it (and vice versa), so pushing one all the way collapses the range to a single
 value rather than being refused.
 
@@ -239,8 +237,8 @@ value rather than being refused.
 from the UI is therefore one hundredth of the field's full data range, and
 there is no box to type an exact number into. Read the printed numeric readout
 beside each slider to see what you actually selected, and do finer gating
-upstream — in Python or R, before export. Export-time quantization compounds
-with this; see {doc}`../e_filtering/06_edge_cases_filtering`.
+upstream — in Python or R, before you write the file; see
+{doc}`../e_filtering/06_edge_cases_filtering`.
 :::
 
 ---
@@ -264,21 +262,37 @@ If you want “filter by gene, color by clusters” workflows, treat this as a c
 
 ---
 
-## Outlier filter (latent space)
+## Outlier filter
 
-Some fields provide a per-cell **latent outlier quantile** (a dataset-provided statistic).
-When available, the UI shows:
+For a categorical field, each cell has a **latent outlier quantile**: its
+distance to its category's centre in a latent space (an `obsm` array such as
+`X_scVI` or `X_pca`, never the 2D/3D layout), as the share of its category at
+that distance or closer. The **Legend** box shows:
 
-- **Outlier filter (latent space)** slider in Display options
+- an **Outlier filter** slider, below **Show centroids**, with a line under it
+  when there is something to say.
 
 Semantics:
 - `100%` means **no outlier filtering**.
 - Lower values remove more outliers:
-  - `95%` removes cells above the 95th percentile of the outlier score (top ~5% most outlier-like).
+  - `95%` hides the farthest ~5% of every category.
 
 Important details:
-- Outlier filtering only applies when the current active field supports it (that’s when the control is visible).
-- Derived/user-defined categorical fields created by merges/deletions typically do **not** carry latent outlier stats, so the outlier control may disappear after you “edit” a field.
+- Outlier filtering applies only while the categorical field it was set on is the active field.
+- It needs a latent space, which Cellucid never picks for you: the file's
+  (`prepare(latent_key=...)`), the launch's (`--latent-key`), or yours under
+  **Data mapping › Latent space**. Without one the slider is greyed out with a
+  **Choose latent space** button
+  ([Turning it on](../e_filtering/02_outlier_filtering_per_active_field.md#turning-it-on-choose-a-latent-space)).
+- The quantiles are got on the slider's first move below `100%` for a field
+  (picking the field reads nothing): read from the file when it stores them
+  for that latent space, at once; otherwise computed in the browser, reading
+  the latent space once, with a progress bar and **Cancel**, after which every
+  other field filters at once. A session saved with a threshold below `100%`,
+  or a latent-space change while a field's filter is in use, gets them at once
+  ([Stored or computed](../e_filtering/02_outlier_filtering_per_active_field.md#stored-or-computed)).
+- A categorical field created by merging or deleting categories has no outlier
+  quantiles, so the outlier control is hidden after you “edit” a field.
 
 ---
 
@@ -293,7 +307,7 @@ Key workflow pattern:
 1) Filter using one field (e.g., continuous QC metric).
 2) Switch the active field to something else (e.g., clusters) to color by it.
 
-The filters remain active (and are summarized in **Active filters**) until you reset them.
+The filters remain active (and are summarized in **Filters**) until you reset them.
 
 :::{important}
 Clearing the active field (choosing **None**) makes points gray, but it does **not** clear existing obs filters.
@@ -305,12 +319,12 @@ Clearing the active field (choosing **None**) makes points gray, but it does **n
 
 Before assuming something is broken:
 
-1) Look at **Coloring & Filtering**:
+1) Look at **Coloring & filtering**:
    - Is the active field actually the one you intended (categorical vs continuous vs gene)?
 2) Look at the **legend**:
    - Is log scale on?
    - Is rescale on (which changes contrast)?
-3) Look at **Active filters**:
+3) Look at **Filters**:
    - Are you hiding categories on another field?
    - Did you narrow a continuous range earlier?
 4) Look for the neutral “None” gray:

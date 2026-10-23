@@ -25,7 +25,7 @@ If you expose a Cellucid server to an untrusted network, you must assume:
 
 ## Network surfaces
 
-### 1) Dataset servers (exported + AnnData)
+### 1) The dataset server (`AnnDataServer`)
 
 Binding:
 - default host is `127.0.0.1` (local only)

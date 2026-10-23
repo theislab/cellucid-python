@@ -101,7 +101,7 @@ Sessions keep each view's embedding. See
   3D flies again whenever it shows a 3D embedding.
 
 :::{tip}
-If switching leaves you “lost in space” (empty-looking view), click **Reset Camera**.
+If switching leaves you “lost in space” (empty-looking view), click **Reset camera**.
 :::
 
 ---
@@ -187,5 +187,5 @@ listed there, the dataset does not carry it (a data preparation issue).
 
 **Fix:**
 
-1) Click **Reset Camera**.
+1) Click **Reset camera**.
 2) Clear filters/outlier thresholds.

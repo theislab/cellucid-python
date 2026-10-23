@@ -28,6 +28,14 @@ MIB_INLINE = re.compile(r"\b1024\s*\*\s*1024")
 CLASSES = {"FORMAT", "PLAT", "HOST", "PERF", "MSG"}
 
 ALLOWLIST: dict[str, tuple[str, str]] = {
+    "src/cellucid/prepare_data/_inputs.py:FLOAT32_EXACT_INTEGER_LIMIT": (
+        "FORMAT",
+        "The largest integer float32 holds exactly (2**24); counts above it are stored as float64.",
+    ),
+    "src/cellucid/prepare_data/_inputs.py:_FLOAT32_MAX": (
+        "FORMAT",
+        "The largest finite float32; a larger magnitude would be stored as an infinity.",
+    ),
     "scripts/normalize_sdist.py:MAX_NORMALIZED_SDIST_BYTES": (
         "PLAT",
         "PyPI's upload limit for one distribution file (100 MB).",
@@ -49,11 +57,11 @@ ALLOWLIST: dict[str, tuple[str, str]] = {
         "Bounds the build-id string read from a downloaded index.html "
         "(the web app writes a date and a short hash).",
     ),
-    "src/cellucid/continuous_payload_diagnosis.py:NON_FINITE_EXAMPLE_LIMIT": (
+    "src/cellucid/_non_finite.py:NON_FINITE_EXAMPLE_LIMIT": (
         "MSG",
         "How many offending values a diagnosis quotes; every value is still checked.",
     ),
-    "src/cellucid/jupyter/_base.py:_DEBUG_COMMAND_ERROR_LIMIT": (
+    "src/cellucid/jupyter/_viewer.py:_DEBUG_COMMAND_ERROR_LIMIT": (
         "MSG",
         "How many viewer command errors debug_connection() quotes.",
     ),
@@ -84,18 +92,6 @@ ALLOWLIST: dict[str, tuple[str, str]] = {
     "src/cellucid/_server_base.py:MAX_EVENT_BODY_BYTES": (
         "HOST",
         "One posted viewer event record; selections and sessions have their own routes.",
-    ),
-    "src/cellucid/server/_handler.py:_READ_CHUNK_BYTES": (
-        "PERF",
-        "The size of one read while a served artifact is streamed.",
-    ),
-    "src/cellucid/anndata_mapping.py:DEFAULT_MAPPING_CACHE_BYTES": (
-        "PERF",
-        "How many decoded mapping arrays stay cached; a larger one is read again, never refused.",
-    ),
-    "src/cellucid/anndata_adapter.py:GENE_EXPRESSION_CACHE_BYTES": (
-        "PERF",
-        "How many decoded gene columns stay cached; others are read again, never refused.",
     ),
 }
 

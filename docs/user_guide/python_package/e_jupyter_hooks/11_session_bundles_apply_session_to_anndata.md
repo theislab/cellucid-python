@@ -25,6 +25,10 @@ The main workflow is:
 adata2 = viewer.apply_session_to_anndata(adata, inplace=False)
 ```
 
+On an `AnnDataViewer` this uses the server's dataset ID (`server.dataset_id`:
+the `dataset_id` you passed, or the data's `uns['cellucid']['id']`) as the
+expected ID.
+
 ### Explicit two-step
 
 ```python
@@ -91,38 +95,40 @@ A session bundle's `datasetFingerprint` has exactly six required fields:
 
 | Field | Checked by `apply_cellucid_session_to_anndata` |
 |---|---|
-| `sourceType` | must be a non-empty string |
 | `datasetId` | must equal `expected_dataset_id` |
+| `name` | not checked: the dataset's display name (or null), for messages |
 | `cellCount` | must equal `adata.n_obs` |
 | `dataMapping` | every key it names must exist on `adata` |
 | `varCount` | must equal the gene count of the mapped axis: `adata.raw.n_vars` for `expression: "raw"`, `0` when the mapping reads no expression, else `adata.n_vars` |
 | `cellOrder` | shape only |
 
-Application requires `expected_dataset_id`. Counts, the dataset ID, and the
-mapping must match exactly; a mismatch raises `ValueError` before the target is
-mutated.
+Beside the fingerprint, the manifest's `requires` lists every obs column and
+gene the session uses (`{"obs": [...], "var": [...]}`, genes named under the
+session's data mapping); each must exist on `adata`, and all missing ones are
+named in one error.
+
+Application requires `expected_dataset_id`. Counts, the dataset ID, the
+mapping and the required fields must match exactly; a mismatch raises
+`ValueError` before the target is mutated.
 
 In practice, if you subset/shuffle your AnnData after the session was created, you will almost always have a mismatch.
 
 ### `dataMapping`: which arrays the session showed
 
-`dataMapping` records which stored arrays the session was showing. Its `kind`
-is `"export"` — exactly `kind`, `embeddings` (the `1d`/`2d`/`3d` slots),
-`geneNames` (`"index"` or `"column:<name>"`), and `vectorFields` — or
-`"anndata"`, which adds `knn`, `expression` (`"X"`, `"raw"`, `"layer:<name>"`,
-or null), and `latent`. For an AnnData mapping, Python requires each named `obsm`
-embedding to exist and be wide enough for its columns, and the named `obsp`
-graph, latent space, layer or `raw`, and gene-name column to exist. An export
-mapping names exported embedding ids, which an `AnnData` need not carry, so only
-its gene-name column is checked.
+`dataMapping` records which stored arrays the session was showing: `kind`
+(`"anndata"`), `embeddings` (the enabled embeddings and the `1d`/`2d`/`3d`
+defaults), `knn`, `geneNames` (`"index"` or `"column:<name>"`), `expression`
+(`"X"`, `"raw"`, `"layer:<name>"`, or null), `latent`, and `vectorFields`.
+Python requires each named `obsm` embedding to exist and be wide enough for its
+columns, and the named `obsp` graph, latent space, layer or `raw`, and
+gene-name column to exist.
 
 ### `cellOrder`: shape-checked here, enforced in the viewer
 
 `cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
 16-character lowercase hexadecimal `digest` of the coordinates of that
-embedding. `embedding` is `{"key", "columns"}`: an exported embedding id with
-`columns: null`, or an AnnData `obsm` key with the 0-based columns that were
-read, one per dimension. It is what stops a dataset republished under the same
+embedding. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
+columns that were read, one per dimension. It is what stops a dataset republished under the same
 name with the same cell and gene counts but a different row order from silently
 re-pointing every saved selection at different cells.
 

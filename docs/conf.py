@@ -22,7 +22,7 @@ try:
 
     release = version = __version__
 except Exception:
-    release = version = "0.9.4"  # CELLUCID_VERSION
+    release = version = "0.9.5"  # CELLUCID_VERSION
 
 # -- General configuration ---------------------------------------------------
 extensions = [

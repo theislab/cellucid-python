@@ -22,18 +22,21 @@ gene names and expression matrix Cellucid reads, the latent space outlier
 filters measure in, and the vector fields it draws on which embedding.
 
 It is the last group of the **Session** panel, **Data mapping**, below
-**Session file**. Its **Embeddings** list is a checklist; **Read from file**
-lists the rest.
+**Session file**. Its **Embeddings** list is a checklist; each further group
+has its own disclosure.
 
-| What you opened | What you can change |
-|---|---|
-| An `.h5ad` file or a Zarr ZIP, read in the browser or served from Python (a notebook or the command-line server) | Turn any numeric `obsm` array on or off, at any 1 to 3 of its columns, as many column selections as you like; choose any `obsp` graph, `X`, a layer or `raw.X` named by the var index or any var column, any dense `obsm` array as the latent space, and any `obsm` array that fits an embedding as its vector field |
-| A prepared dataset (sample, folder, GitHub, self-hosted) | Turn the embeddings it was exported with on or off, choose each dimension's default, and choose among the gene-name sets and vector fields it was exported with |
+Every dataset is an AnnData file (an `.h5ad` or a Zarr store, opened in the
+browser, from a link or the samples, or served from Python), and for every one
+you can turn any numeric `obsm` array on or off, at any 1 to 3 of its columns,
+as many column selections as you like; and choose any `obsp` graph, `X`, a
+layer or `raw.X` named by the var index or any var column, any dense `obsm`
+array as the latent space, and any `obsm` array that fits an embedding as its
+vector field.
 
-A served file opens with the server's defaults (`--embedding-1d/-2d/-3d`, or
-its best guess) and every other narrow `obsm` array turned on; the server reads
-any array the checklist turns on when a view first shows it, and so for every
-other choice.
+A served file is read by the same reader in the browser as a file you open
+yourself: the server only hands over its bytes. Everything this page says about
+a file read in the browser holds for it; only the choices it opens with can
+differ (see [Launch defaults](#launch-defaults)).
 
 Turning an embedding on loads nothing. Its coordinates are read the first time
 a view shows it. After Embeddings, one disclosure per further group follows:
@@ -49,10 +52,9 @@ applied with the embeddings as one step.
 Open **Session › Data mapping › Embeddings**. Each row is one embedding:
 
 - the checkbox turns it on (views can show it) or off;
-- its name (`UMAP`, `PCA (unintegrated)`, `PCA 1,2,3`; a long one takes a
+- its name (`UMAP`, `t-SNE`, `PCA 1,2,3`; a long one takes a
   second line, and hovering it shows the array and columns) and its dimension
-  (`3D`). For an array read from an AnnData file the dimension is a button
-  with a chevron: it opens the row's editor, described under
+  (`3D`). The dimension is a button with a chevron: it opens the row's editor, described under
   [Dimension and columns](#dimension-and-columns-of-an-array);
 - for an embedding that is on, a second line: **Default** marks the one
   embedding per dimension that a view switched to that dimension shows first,
@@ -63,16 +65,14 @@ Open **Session › Data mapping › Embeddings**. Each row is one embedding:
 
 What is listed:
 
-- For a file read in the browser, every `obsm` array except vector fields
-  (`<field>_umap_<d>d`). An array 1 to 3 columns wide is offered at all of its
+- Every `obsm` array except vector fields (a key `<field>_<basis>` beside an
+  `X_<basis>` in the same file, such as `velocity_umap` beside `X_umap`; see
+  [Vector fields](#vector-fields)). An array 1 to 3 columns wide is offered at all of its
   columns, a wider one at its first three; either can be changed (see below). Entries that cannot be
   drawn are listed with the reason, and cannot be turned on: `obsm table, not
   an array`, `sparse obsm arrays cannot be plotted`.
-- For a prepared dataset, every embedding it was exported with.
-
-When a file opens, every embedding of a prepared dataset is on. For a file
-read in the browser, the defaults are on, and so is every other array that is
-1 to 3 columns wide; a wider array is on only when it is a default.
+When a file opens, the defaults are on, and so is every other array that is 1
+to 3 columns wide; a wider array is on only when it is a default.
 
 Changes are staged: nothing loads until you press **Apply**, and **Revert**
 drops them. Turning the default of a dimension off makes the first other
@@ -156,8 +156,33 @@ When nothing in `obsm` can be drawn, the file is refused with a list of what
 ```text
 Cellucid found nothing to plot. It needs an obsm array with one row per cell
 (10,000) and at least one numeric column. obsm holds: X_df (table),
-spatial (10,000 × 2, NaN at cell 17).
+spatial (10,000 × 2, NaN at cell 17). Add a 2-D embedding to obsm (for example
+with sc.tl.umap in Scanpy), then open the data again.
 ```
+
+## Launch defaults
+
+What an AnnData file opens with — each dimension's embedding, the neighbour
+graph, the expression matrix and gene names, the latent space, the vector field
+the overlay opens on, the obs columns shown, embedding normalization and the
+fewest cells a category needs for outlier quantiles — is decided per choice,
+in this order:
+
+1. The launch option, when the file is served and the option was set:
+   `cellucid serve --embedding-2d`, `--knn`, `--expression`,
+   `--gene-id-column`, `--latent-key`, `--vector-field-default`, `--obs-key`,
+   or the matching `serve_anndata()` / `show_anndata()` keyword
+   (`embedding_keys`, `knn_key`, `expression_source`, `gene_id_column`,
+   `latent_key`, `vector_field_default`, `obs_keys`, `normalize_embeddings`,
+   `centroid_min_points`). The server checks each
+   name against the file's metadata before it starts, and passes only the
+   options that were set.
+2. The file's own `uns['cellucid']['defaults']`, when it declares them.
+3. The rule this page describes for that choice (the UMAP, else the best guess;
+   `obsp['connectivities']`; `X`; the var index; no latent space; each
+   `<field>_<basis>` vector field bound to its `X_<basis>`; every obs column).
+
+Every choice can still be changed under **Data mapping** once the file is open.
 
 ## Several embeddings at once
 
@@ -197,7 +222,7 @@ one whose name contains `norm` or `log`, then any other, with `counts` and
 `raw_counts` last (alphabetically within each). The line under the menus then
 says "Expression is guessed: this file has no X." A served file opens on
 `cellucid serve --expression` (`show_anndata(..., expression_source=...)`)
-when it names one, and on the same rule otherwise.
+when it names one (see [Launch defaults](#launch-defaults)).
 
 **Gene names** lists the var index and every column of the var table the
 chosen matrix uses (`raw.var` for `raw.X`). Text, categorical and integer
@@ -233,31 +258,40 @@ coloured by, before anything changes. Then:
 - Analysis windows close, since what they computed came from the previous
   values.
 
-A prepared dataset offers the gene-name sets `prepare()` exported, such as
-`symbol` and `gene_id`; its expression matrix is fixed.
-
 ## Latent space
 
-The **Latent space** disclosure chooses where a categorical field's outlier
-filter measures distance: each cell's distance to its category's centre in
-that space, as the share of its category at that distance or closer (see
-{doc}`../e_filtering/02_outlier_filtering_per_active_field`). Its menu lists
-**None** and every dense `obsm` array with its width, as
-`X_scVI · 10 columns`; an array that is sparse or a table is listed disabled with the reason. A
-latent space of any size works: a file opened in the browser streams it from
-disk in row slabs. A file opened in
-the browser starts with **None**; a served file starts with
-`cellucid serve --latent-key` (`show_anndata(..., latent_key=...)`), or None.
+The **Latent space** disclosure (**Outliers in**) chooses where a
+categorical field's outlier filter measures distance: each cell's distance to
+its category's centre in that space, as the share of its category at that
+distance or closer (see
+{doc}`../e_filtering/02_outlier_filtering_per_active_field`). It is never the
+2D/3D layout, and Cellucid never picks one for you. Its menu lists **None**
+and every dense `obsm` array that is not a vector field, with its width, as
+`X_scVI · 10 columns`; the latent space the file stores outlier quantiles for
+is marked `outliers stored`, and filters at once. An array that is sparse or
+a table is listed disabled with the reason.
 
-Apply reads the space, checks every value (finite, representable as a 32-bit
-float) and computes the quantiles of every categorical field a view has
-loaded before anything changes; a space with a bad value is refused in the
-server's words ("NaN at cell 5") and stays unavailable. Then each field's
-outlier filter uses the new quantiles in every view, and its threshold is
-kept: "hide the farthest 5%" means the same in any space. **None** removes the
-outlier filters. The browser computes exactly what `prepare()` and
-`cellucid serve` compute, off the main thread: for ten million cells in a
-ten-column space, about 0.8 s per categorical field.
+The dataset starts on the file's own `uns['cellucid']['defaults']['latentKey']`
+(written by `prepare(latent_key=...)` or `cellucid_prepare(latent_key = ...)`),
+or on the launch option (`cellucid serve --latent-key`,
+`serve_anndata(..., latent_key=...)`, `show_anndata(..., latent_key=...)`);
+otherwise on **None**, and the outlier control is shown disabled with a
+**Choose latent space** button that opens this setting
+([Turning it on](../e_filtering/02_outlier_filtering_per_active_field.md#turning-it-on-choose-a-latent-space)).
+
+**Apply** reads nothing. Every outlier threshold is kept — "hide the farthest
+5%" means the same in any space — the previous space's quantiles are dropped,
+and a field whose outlier filter is in use gets its quantiles in the new
+space at once, with a progress bar and **Cancel**. Any other field gets them
+on its slider's first move: read from the file when it stores them for this
+space, otherwise computed in the browser's reader worker from the latent
+space, which is read once and kept in memory within Cellucid's budget
+([Stored or computed](../e_filtering/02_outlier_filtering_per_active_field.md#stored-or-computed)).
+The browser computes exactly the bytes `prepare()` stores. A latent space of
+any size works: it is streamed from the file in row slabs. A space holding a
+missing value (NaN) or a value beyond float32 fails at its first read with a
+message naming the cell, and is marked unusable. **None** turns the outlier
+filters off until a latent space is chosen again.
 
 ## Vector fields
 
@@ -265,20 +299,44 @@ The **Vector fields** disclosure chooses which `obsm` arrays are drawn as
 vectors (velocity, drift) on which embedding. It lists every embedding that is
 turned on, each with a checkbox per array that fits it:
 
-- an array exactly as wide as the embedding's dimension, read whole
-  (`velocity_umap_2d` on `X_umap`);
-- or an array as wide as the embedding's own array, read at the same columns
-  (`velocity_pca` on `X_pca[2,3]` reads columns 2 and 3).
+- an array as wide as the embedding's own array, read at the same columns
+  (`velocity_umap` on `X_umap`; `velocity_pca` on `X_pca[2,3]` reads columns 2
+  and 3);
+- or an array exactly as wide as the embedding's dimension, read whole (a
+  2-column `drift` on `X_pca[0,1]`).
 
-Arrays named for the embedding come first, marked **suggested**: the default
-rule's `<field>_umap_<d>d` for a UMAP, and `<name>_<basis>` for `X_<basis>`
-(`velocity_umap`, as scVelo writes it). `X_…` arrays are embeddings and are
-not offered. A file opened in the browser starts with the default rule:
-`<field>_umap_<d>d` is bound to the UMAP of that dimension. A served file
-starts with that rule when `cellucid serve --vector-fields`
-(`show_anndata(..., serve_vector_fields=True)`) asks for it, and with none
-otherwise. A prepared dataset lists the bindings it was exported with, and any
-of them can be turned off.
+Arrays named for the embedding come first, marked **suggested**. The name
+follows scVelo's convention, the vector-field key rule: an `obsm` key
+`<field>_<basis>` is the field `<field>` drawn over `X_<basis>`, for any basis
+(`velocity_umap` over `X_umap`, `velocity_umap_3d` over `X_umap_3d`,
+`velocity_branches` over `X_branches`, `T_fwd_umap` over `X_umap`). A key that
+starts with `X_` names an embedding, never a vector, and is not offered. When
+the key splits at more than one `_` into a field and a basis whose `X_<basis>`
+the file holds, the longest basis wins: with both `X_umap_3d` and `X_3d`,
+`velocity_umap_3d` is `velocity` over `X_umap_3d`. Matching is exact and
+case-sensitive.
+
+A file starts with the default rule: each `<field>_<basis>` is bound to every
+enabled view of `X_<basis>` when both are usable arrays with the same number of
+columns, read at that view's columns (`velocity_pca`, 50 columns, over
+`X_pca`, 50 columns, shown at columns `[0, 1]`). Every field of one basis is
+bound (`velocity_umap` and `T_fwd_umap` both on `X_umap`). A vector named for
+an embedding of another width, or one that cannot be read, is still not
+offered as an embedding, but stays unbound until you bind it here. A
+`velocity_umap_2d` beside a bare `X_umap`, with no `X_umap_2d`, names no
+embedding in the file, so it is no vector field at all but an ordinary `obsm`
+array (listed among the embeddings): rename it `velocity_umap`, as scVelo
+writes it, or bind it here. A key with no such split is likewise an ordinary
+array.
+
+The overlay lists a field bound to the embedding it is named for under its
+`<field>` part, so the arrays of one field on every embedding are one field:
+`velocity_umap`, `velocity_umap_3d` and `velocity_branches` are all the field
+`velocity`. An array you bind to another embedding is listed under its own
+`obsm` key. `uns['cellucid']['defaults']['vectorFieldDefault']` or
+`cellucid serve --vector-field-default`
+(`show_anndata(..., vector_field_default=...)`) names the field the overlay
+opens on, by that field id (`velocity`).
 
 An embedding a field is bound to stays on in the checklist until the field is
 unbound. Apply replaces the bindings and turns the overlay off; nothing is read until
@@ -298,9 +356,10 @@ from `sc.pp.neighbors(key_added=…)`, and any other square matrix with one row
 per cell. A matrix that is not square, or not as large as the dataset, is
 listed disabled with the reason.
 
-A file opened in the browser starts with `obsp['connectivities']` when it has
-one. A served file starts with the graph `cellucid serve --knn KEY` (or
-`show_anndata(..., knn_key=...)`) named, or none.
+A file starts with `obsp['connectivities']` when it has one; a served file
+starts with the graph `cellucid serve --knn KEY` (or
+`show_anndata(..., knn_key=...)`) names instead. Either way the graph is read
+only when edges are drawn or the KNN drag tool is used.
 
 Apply reads the graph and checks it before anything changes. It must be
 symmetric, with a zero diagonal and no negative, infinite or missing weight.
@@ -316,18 +375,23 @@ reason until the dataset is opened again. After a graph changes, shown
 connectivity edges are redrawn from it, the KNN drag tool uses it on its next
 drag, and **Dataset › Connectivity** counts its edges.
 
-## What stays fixed
+## Where each group starts
 
-**Read from file** lists what a dataset is read with but cannot change.
-Every other group has its own disclosure:
+Every group can be changed; this is what each one shows when the dataset
+opens:
 
-| Group | Prepared dataset | File read in the browser | Served file |
-|---|---|---|---|
-| Neighbour graph | fixed by `prepare()` (not listed) | menu; starts on `connectivities` | menu; starts on `--knn` |
-| Gene names | menu of the exported name sets (fixed with one) | menu; starts on the var index | menu; starts on `--gene-id-column` |
-| Expression | fixed by `prepare()` (not listed) | menu; starts on `X` | menu; starts on `--expression` |
-| Latent space | fixed by `prepare()` (not listed) | menu; starts on None | menu; starts on `--latent-key` |
-| Vector fields | checkboxes of the exported bindings (fixed with none) | checkboxes; `<field>_umap_<d>d` bound to `X_umap_<d>d` or `X_umap` | checkboxes; the same rule with `--vector-fields`, else none |
+| Group | File read in the browser | Served file |
+|---|---|---|
+| Neighbour graph | `connectivities` | `--knn`, else as in the browser |
+| Gene names | the var index | `--gene-id-column`, else as in the browser |
+| Expression | `X` | `--expression`, else as in the browser |
+| Latent space | the file's `latentKey`, else None | `--latent-key`, else as in the browser |
+| Vector fields | each `<field>_<basis>` bound to `X_<basis>` when both have the same number of columns | the same rule |
+
+A file that declares `uns['cellucid']['defaults']` starts on those (`knn`,
+`geneIdColumn`, `expression`, `latentKey`, `vectorFieldDefault`, and the
+embeddings of each dimension); a choice a server names on its command line
+takes precedence over the file's.
 
 ## Sessions
 
@@ -348,7 +412,9 @@ embedding it shows. Loading the session restores both:
   which this dataset does not have." A gene a view was coloured by is
   restored on the saved gene list, and the gene count is checked against that
   list (`raw.X` has its own). Outlier thresholds are restored with the
-  latent space they were set in.
+  latent space they were set in, by getting their quantiles (stored or
+  computed, with progress and **Cancel**); a notification names each threshold
+  that could not be restored.
 
 See {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
 
@@ -375,8 +441,8 @@ file cannot be opened.
 
 An embedding that is on but shown by no view costs nothing until a view shows
 it. Once shown, its coordinates stay in memory while a view shows it, and
-afterwards in a cache bounded by a quarter of the device memory the browser
-reports (at least 512 MiB; 512 MiB where the browser does not report it), so switching back is immediate. The least recently shown is released
+afterwards in a cache bounded by a sixteenth of the device memory (1 GiB on a
+16 GiB machine; see {ref}`memory-budgets`), so switching back is immediate. The least recently shown is released
 first, and everything no view shows is released when memory runs short or the
 page has been hidden for ten minutes; it is read again when a view shows it.
 
@@ -384,6 +450,7 @@ page has been hidden for ten minutes; it is read again when a view shows it.
 
 ## Next steps
 
-- {doc}`03_browser_file_picker_tutorial` — open an `.h5ad` or Zarr ZIP.
+- {doc}`03_browser_file_picker_tutorial` — open an `.h5ad`, a Zarr folder or a Zarr ZIP.
 - {doc}`08_troubleshooting_data_loading` — when a file does not open.
 - {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples` — multiview.
+- {doc}`../../python_package/g_api_reference_coverage/api/viewers` — read and change the mapping from a notebook; `cellucid serve`'s mapping flags are in {doc}`../../python_package/g_api_reference_coverage/api/cli`.

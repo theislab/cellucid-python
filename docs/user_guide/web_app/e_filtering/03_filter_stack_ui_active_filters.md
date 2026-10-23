@@ -1,9 +1,9 @@
-# Filter stack UI (Active filters)
+# Filter stack UI (Filters panel)
 
 **Audience:** everyone (wet lab + computational users)  
 **Time:** 5–10 minutes  
 **What you’ll learn:**
-- How to find and interpret the Active filters list
+- How to find and interpret the Filters list
 - How to disable vs remove a filter safely
 - How to debug “why did points disappear?” using the filter stack
 
@@ -15,7 +15,7 @@
 
 ## Fast path: “I want my cells back”
 
-1) Open the **Active filters** panel.
+1) Open the **Filters** panel.
 2) Temporarily disable filters one-by-one (keep notes on which one changes the count).
 3) Remove the filter only after you’re sure you don’t need it.
 4) If you still see fewer cells than expected, check for:
@@ -27,37 +27,37 @@
 
 ## Practical path: what each control means (exact semantics)
 
-The Active filters UI is the **source of truth** for current visibility — for
+The Filters UI is the **source of truth** for current visibility — for
 every filter you can create in the UI. The one thing it cannot show is a
 per-cell visibility mask set from a notebook with `viewer.set_visibility()`,
 which is applied before all of these and has no row here; that is the only way
-`Showing X of N points` and `No filters active` can disagree. See
+`Showing X of N cells` and `No filters active` can disagree. See
 {doc}`01_filtering_mental_model` and
 {doc}`../b_data_loading/05_jupyter_tutorial`.
 
 :::{important}
-Its label in the app is **`Active filters (selected view only):`**, not just
-“Active filters”. The parenthesis is the whole story: this block describes one
-view, and in multiview a different panel can have a completely different list.
+Its label in the app is **`Filters`**, and its `i` help says what the label
+does not: it lists the filters of the **selected view**. In multiview a
+different panel can have a completely different list.
 :::
 
 It has two parts:
 
 - A **count line**:
-  - `Showing all N points` (no filtering), or
-  - `Showing X of N points` (some points hidden)
+  - `Showing all N cells` (no filtering), or
+  - `Showing X of N cells` (some cells hidden)
 - A **filter list** (“stack”):
   - each entry is one active filter in the current view
 
 ### Empty state
 
-If no filters are active, the list shows `No filters active`:
+If no filters are active, the list shows `No filters active.`:
 
 ```{figure} ../../../_static/screenshots/filtering/active-filters-empty.png
 :alt: A block headed ACTIVE FILTERS (SELECTED VIEW ONLY) with a small circled i button beside the heading, the line Showing all 3,696 points, and a bordered area containing the words No filters active.
 :width: 480px
 
-The resting state. In the browser, `Showing all N points` and `No filters
+The resting state. In the browser, `Showing all N cells` and `No filters
 active` always agree — if they ever disagree, you are either looking at a
 different view or a notebook has set a visibility mask (see above).
 ```
@@ -87,7 +87,7 @@ Each filter row includes:
 - a **checkbox**:
   - checked = filter enabled (affects visibility)
   - unchecked = filter disabled (does not affect visibility)
-  - its tooltip reads `Disable this filter` / `Enable this filter`
+  - its tooltip reads `Turn this filter off` / `Turn this filter on`
 - a **text summary** (human-readable):
   - continuous range: `Field: min – max`, both bounds to two decimal places
   - categorical hides: `Field: hiding A, B, C, D` — at most four names, then
@@ -118,14 +118,14 @@ it.
 
 There are three common ways to stop a filter from affecting visibility:
 
-1) **Disable** (checkbox in Active filters)
+1) **Disable** (checkbox in Filters)
    - best for debugging and A/B comparisons
    - preserves the filter configuration (range/category choices)
 2) **Reset** (in the legend UI)
-   - continuous: click `RESET` in the continuous legend
+   - continuous: click `Reset` in the continuous legend
    - outliers: set outlier slider back to `100%`
-   - categorical: click `Show All` in the categorical legend
-3) **Remove** (× in Active filters)
+   - categorical: click `Show all` in the categorical legend
+3) **Remove** (× in Filters)
    - does the reset for you (full range / show all / outlier=100%)
    - also re-enables the filter (it becomes a “no-op” and typically disappears from the list)
    - the legend redraws to match: range sliders return to the ends, the category checkboxes are ticked again, and the outlier slider returns to `100%`
@@ -157,19 +157,19 @@ carry a `visible / available` suffix; the outlier row carries none.
 
 :::{note}
 **Category and numeric-range filters carry per-filter counts. Outlier filters
-do not** — an outlier row only ever moves the overall `Showing X of Y points`
+do not** — an outlier row only ever moves the overall `Showing X of Y cells`
 line. That is a property of the row, not a sign that the outlier filter is
 inactive.
 :::
 
 ### View/snapshot awareness (easy pitfall)
 
-Active filters is **view-scoped**:
+Filters is **view-scoped**:
 
 - In single-view mode, you only have the live view so it feels global.
 - In Live + Snapshots mode, each snapshot can have a different filter stack.
 
-If you’re in grid mode, click the view/snapshot you care about first, then check Active filters.
+If you’re in grid mode, click the view/snapshot you care about first, then check Filters.
 
 ---
 

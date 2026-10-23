@@ -19,6 +19,6 @@ Inspect the first failing dataset request and its response body. A viewer-asset
 problem and a dataset-server problem are separate paths and should be diagnosed
 separately.
 
-See {doc}`../d_viewing_apis/06_jupyter_show_and_show_anndata_quickstart`,
+See {doc}`../d_viewing_apis/06_jupyter_show_anndata_quickstart`,
 {doc}`../d_viewing_apis/10_notebook_widget_mode_advanced`, and
 {doc}`../d_viewing_apis/15_troubleshooting_viewing`.

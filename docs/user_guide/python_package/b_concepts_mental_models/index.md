@@ -18,7 +18,7 @@ If you prefer learning by doing, you can skim this chapter and jump to:
 
 Cellucid is a **web app** (the viewer UI). `cellucid-python` is a helper toolkit that:
 - prepares data for the viewer (`prepare(...)`),
-- serves data to the viewer (`serve(...)`, `show(...)`, `show_anndata(...)`),
+- serves data to the viewer (`cellucid serve`, `serve_anndata(...)`, `show_anndata(...)`),
 - and optionally lets Python and the browser talk to each other (hooks/events, sessions).
 
 In notebooks, a “viewer object” is just a **Python handle** for a running viewer instance.
@@ -35,10 +35,10 @@ Python (kernel) ──starts──▶ local HTTP server ──serves──▶ we
 
 ## Reading order (recommended)
 
-1) {doc}`01_what_is_a_viewer_object` (what you get back from `show(...)` / `show_anndata(...)`)
+1) {doc}`01_what_is_a_viewer_object` (what you get back from `show_anndata(...)`)
 2) {doc}`02_data_flows` (what runs where: Python vs browser vs server)
 3) {doc}`03_state_persistence_and_scope` (what persists, what resets, and why)
-4) {doc}`04_dataset_identity_and_reproducibility` (stable IDs, exports, and “paper-ready” workflows)
+4) {doc}`04_dataset_identity_and_reproducibility` (stable IDs, versioned files, and “paper-ready” workflows)
 5) {doc}`05_sessions_to_anndata_bridge` (pulling session state into Python and mutating AnnData safely)
    - Optional deep dive: {doc}`05_sessions_to_anndata_design`
 6) {doc}`06_privacy_security_and_offline_vs_online` (what leaves your machine, and how to run offline)
@@ -70,14 +70,14 @@ Where data lives (disk/server/browser), how the viewer loads it, and how hooks r
 :link: 03_state_persistence_and_scope
 :link-type: doc
 
-Live viewer state vs durable session bundles vs reproducible export folders (and what resets when).
+Live viewer state vs durable session bundles vs reproducible dataset files (and what resets when).
 :::
 
 :::{grid-item-card} {octicon}`shield-check;1.5em;sd-mr-1` Dataset identity
 :link: 04_dataset_identity_and_reproducibility
 :link-type: doc
 
-How to choose stable dataset IDs, version exports, and avoid “session applied to wrong data”.
+How to choose stable dataset IDs, version dataset files, and avoid “session applied to wrong data”.
 :::
 
 :::{grid-item-card} {octicon}`repo;1.5em;sd-mr-1` Sessions → AnnData
@@ -105,7 +105,7 @@ What stays local, what can be exposed on a network, and how to make offline usag
 :link: 07_performance_mental_model_and_scaling
 :link-type: doc
 
-Export-time vs view-time costs, lazy loading, caching, and practical scaling advice.
+Preparation-time vs view-time costs, lazy loading, caching, and practical scaling advice.
 :::
 
 :::{grid-item-card} {octicon}`bug;1.5em;sd-mr-1` Debugging

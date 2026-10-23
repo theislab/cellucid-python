@@ -23,13 +23,11 @@ A notebook viewer is:
 Implementation:
 - `cellucid-python/src/cellucid/jupyter/`
 
-Key classes:
-- `BaseViewer`: shared notebook embedding + hooks/event handling
-- `CellucidViewer`: serves an export folder via `CellucidServer`
-- `AnnDataViewer`: serves AnnData via `AnnDataServer`
+Key class:
+- `AnnDataViewer` (`jupyter/_viewer.py`): serves AnnData via `AnnDataServer`,
+  and owns the notebook embedding and hook/event handling
 
-Convenience functions:
-- `show(...)` → `CellucidViewer`
+Convenience function:
 - `show_anndata(...)` → `AnnDataViewer`
 
 ### Identity and routing
@@ -49,10 +47,10 @@ The viewer URL is built from the **client-reachable server URL** plus query para
 - `jupyter=true`
 - `viewerId=<id>`
 - `viewerToken=<token>`
-- `anndata=true` (only for AnnDataViewer)
+- `anndata=true`
 
 Key method:
-- `BaseViewer._get_client_server_url()`
+- `AnnDataViewer._get_client_server_url()`
 
 ### Why this is complicated
 
@@ -113,7 +111,7 @@ The embedded viewer posts events to:
 
 The server routes events by `viewerId` to the correct viewer callback.
 
-In Python, `BaseViewer`:
+In Python, `AnnDataViewer`:
 - records the event into `viewer.state` (latest snapshot),
 - hands each event to the `wait_for_event(...)` calls waiting for it, and keeps
   the most recent events for `debug_connection()`,
@@ -174,7 +172,7 @@ Likely causes (ordered):
 
 How to confirm:
 - run `viewer.debug_connection()` and read:
-  - `server_health`, `dataset_identity_probes`, `viewer_index_probe`,
+  - `server_health`, `anndata_store_probes`, `viewer_index_probe`,
     `frontend_roundtrip`.
 
 Fix:

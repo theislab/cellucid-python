@@ -5,7 +5,7 @@ This section is the “slow, safe, and complete” path through Cellucid.
 It is intentionally written for **mixed audiences** and uses “layered” writing:
 
 1) **Fast path (wet lab / non-technical / new to Python)** — copy/paste, minimal choices, clear success criteria.
-2) **Practical path (computational users)** — reproducible exports, scale/performance, workflow integration.
+2) **Practical path (computational users)** — reproducible datasets, scale/performance, workflow integration.
 3) **Deep path (expert / developer)** — event schemas, session bundles, debugging, edge-case behavior.
 
 ## What Cellucid is (and what it is not)
@@ -13,15 +13,15 @@ It is intentionally written for **mixed audiences** and uses “layered” writi
 **Cellucid** is a **web app** (the interactive viewer UI).
 
 **`cellucid-python`** (this repo) is the **helper package** that:
-- prepares datasets into a viewer-friendly export format (`cellucid.prepare(...)`)
-- serves datasets over HTTP (`cellucid.serve(...)`, `cellucid.serve_anndata(...)`)
-- embeds the web app in notebooks (`cellucid.show(...)`, `cellucid.show_anndata(...)`)
+- writes Cellucid-ready AnnData files (`cellucid.prepare(...)`)
+- serves AnnData over HTTP (`cellucid serve`, `cellucid.serve_anndata(...)`)
+- embeds the web app in notebooks (`cellucid.show_anndata(...)`)
 - enables Python↔frontend bidirectional communication (hooks/events and commands)
 
 `cellucid-annotation` is a separate repo for community annotation workflows.
 
-`cellucid-r` provides the R export workflow. These tutorials focus on Python
-servers, notebook embedding, hooks, and Python-side preparation.
+`cellucid-r` writes the same Cellucid-ready AnnData from R. These tutorials
+focus on Python servers, notebook embedding, hooks, and Python-side preparation.
 
 ## At a glance
 
@@ -44,13 +44,13 @@ All notebook/tutorial docs in this section live here:
 
 This folder contains:
 - narrative tutorial pages (`.md`)
-- {doc}`prepare_pancreas`, which builds and validates a compact prepared export
+- {doc}`prepare_pancreas`, which writes and checks a compact Cellucid-ready AnnData
 - {doc}`jupyter_pancreas`, which exercises embedding, hooks, and sessions
 - a checked-in real Pancreas H5AD in `datasets/`
 
 ## The one mental model that explains 90% of issues
 
-When you call `show(...)` or `show_anndata(...)` in a notebook, Cellucid does two things:
+When you call `show_anndata(...)` in a notebook, Cellucid does two things:
 
 1) Starts a **local HTTP server** in Python (serving data + viewer UI assets)
 2) Displays an **iframe** in your notebook pointing to that server
@@ -123,9 +123,9 @@ In every remote case, pass the resulting browser-reachable HTTP(S) base as
 
 ## What success looks like
 
-- {doc}`prepare_pancreas` reports the checked 2-D embedding, selected
-  observation fields, and exported genes; its prepared viewer opens, then the
-  temporary export is removed cleanly.
+- {doc}`prepare_pancreas` writes the Cellucid-ready AnnData, reads it back with
+  its `uns['cellucid']` identity and gene-major matrix, opens it, then removes
+  the temporary file cleanly.
 - {doc}`jupyter_pancreas` reports `n_cells=2531` and `dimensions=2`, renders
   the real `clusters` field, and materializes the viewer highlight back into
   AnnData.
@@ -170,5 +170,5 @@ This report is designed to answer:
 ## Next steps
 
 - If you are new: {doc}`01_beginner_notebooks_wet_lab_friendly`
-- If you want reproducible exports: {doc}`21_prepare_exports_with_quantization_and_compression`
+- If you want a shareable Cellucid-ready AnnData: {doc}`21_prepare_a_cellucid_ready_anndata`
 - If you want hooks/callbacks: {doc}`23_programmatic_highlighting_and_selection_callbacks`

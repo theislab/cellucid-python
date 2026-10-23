@@ -21,7 +21,7 @@ This is the “bridge” between exploratory visualization and reproducible anal
 **Prerequisites**
 - A notebook environment
 - `pip install cellucid`
-- An `AnnData` (or an export folder from `prepare(...)`)
+- An `AnnData` (or a Cellucid-ready AnnData file from `prepare(...)`)
 
 ---
 
@@ -186,7 +186,7 @@ viewer.send_message({"type": "highlight", "cells": [1, 2, 3], "color": "#ff0000"
 ```
 
 ```{note}
-The viewer must be displayed before messages can be delivered. The `show(...)` / `show_anndata(...)` helpers display automatically in notebook contexts.
+The viewer must be displayed before messages can be delivered. The `show_anndata(...)` helper displays automatically in notebook contexts.
 ```
 
 ---

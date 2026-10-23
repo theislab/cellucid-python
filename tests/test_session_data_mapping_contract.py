@@ -31,9 +31,10 @@ _PROFILES = {
     "cinematic/camera": ("cinematic-camera", "json", "Cinematic camera path", True),
     "core/state": ("core-state", "json", "Core state", True),
     "ui/dockable-layout": ("dockable-layout", "json", "Floating panels", False),
-    "analysis/windows": ("analysis-windows", "json", "Analysis windows", True),
+    "ui/figure-export": ("figure-export", "json", "Figure export", False),
+    "analysis/windows": ("analysis-windows", "binary", "Analysis windows", True),
+    "analysis/docked": ("analysis-docked", "binary", "Docked analysis", True),
     "highlights/meta": ("highlights-meta", "json", "Highlight metadata", True),
-    "analysis/cache-inventory": ("analysis-artifacts", "json", "Analysis cache inventory", True),
 }
 
 
@@ -51,12 +52,13 @@ class _Bundle:
             "cinematic/camera": {"notDecoded": True},
             "core/state": {"notDecoded": True},
             "ui/dockable-layout": {"notDecoded": True},
+            "ui/figure-export": {"notDecoded": True},
             "analysis/windows": {"notDecoded": True},
+            "analysis/docked": {"notDecoded": True},
             "highlights/meta": {
                 "pages": [{"id": "page_1", "name": "Page 1", "color": "#2563eb", "highlightedGroups": []}],
                 "activePageId": "page_1",
             },
-            "analysis/cache-inventory": {"artifactIds": []},
         }
         chunks = []
         for chunk_id, (contributor_id, kind, label, dataset_dependent) in _PROFILES.items():
@@ -77,6 +79,8 @@ class _Bundle:
         self.manifest = {
             "createdAt": "2026-10-18T00:00:00.000Z",
             "datasetFingerprint": fingerprint,
+            "source": None,
+            "requires": {"obs": [], "var": []},
             "chunks": chunks,
         }
 
@@ -142,8 +146,8 @@ def _fingerprint(mapping: dict[str, Any], *, var_count: int = 3) -> dict[str, An
     slot, embedding = next((slot, ref) for slot, ref in defaults.items() if ref is not None)
     dimension = int(slot[0])
     return {
-        "sourceType": "anndata",
         "datasetId": "exact",
+        "name": None,
         "cellCount": 2,
         "varCount": var_count,
         "cellOrder": {
@@ -187,22 +191,11 @@ def test_a_matching_anndata_mapping_is_applied_and_recorded() -> None:
     assert recorded["cellOrder"]["embedding"] == {"key": "X_pca", "columns": [3, 1]}
 
 
-def test_an_export_mapping_checks_only_its_gene_name_column() -> None:
-    mapping = {
-        "kind": "export",
-        "embeddings": _embeddings(
-            [{"key": "exported_id", "columns": None}],
-            {"key": "exported_id", "columns": None},
-        ),
-        "geneNames": "column:gene_symbols",
-        "vectorFields": [],
-    }
-    _apply(_Bundle(_fingerprint(mapping)), _adata())
-
-    absent = copy.deepcopy(mapping)
-    absent["geneNames"] = "column:not_there"
-    with pytest.raises(ValueError, match="geneNames uses var column 'not_there'"):
-        _apply(_Bundle(_fingerprint(absent)), _adata())
+def test_a_session_saved_with_the_removed_export_kind_is_refused() -> None:
+    mapping = _anndata_mapping()
+    mapping["kind"] = "export"
+    with pytest.raises(ValueError, match='kind must be "anndata"'):
+        _apply(_Bundle(_fingerprint(mapping)), _adata())
 
 
 @pytest.mark.parametrize(

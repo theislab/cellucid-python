@@ -1,330 +1,99 @@
 # Seurat Recipe
 
-**Audience:** Seurat users (wet lab + computational)  
-**Time:** 20–45 minutes (depends on dataset size)  
-**What you’ll do:** extract data from a Seurat object → export → open in the Cellucid web app
-
-This recipe exports a Seurat object using `cellucid::cellucid_prepare()`.
+**Audience:** Seurat users (wet lab + computational)
+**Time:** 10–20 minutes
+**What you'll do:** extract the inputs from a Seurat v5 object → write a
+Cellucid-ready AnnData store → open it in the Cellucid web app.
 
 ```{note}
-`cellucid-r` does not depend on Seurat. This page shows how to *extract* the needed inputs from Seurat.
+`cellucid-r` does not depend on Seurat. This page shows how to *extract* the
+inputs from a Seurat object; the code needs `Seurat` (or `SeuratObject`) and
+`Matrix` installed.
 ```
 
 ## Prerequisites
 
-- A Seurat object `seu`
-  - must have a UMAP (or other) reduction you want to visualize
-  - should have a latent space (PCA is typical)
-- R packages:
-  - `cellucid`
-  - `Seurat`
-  - `Matrix` (recommended)
+- A Seurat object `seu` with at least one reduction to plot (UMAP is typical).
+- R packages: `cellucid`, `Seurat`, `Matrix`.
 
-## Step 0 — Decide what you want to export
-
-Before writing code, decide:
-
-1) Which embedding?
-   - 2D UMAP (most common)
-   - 3D UMAP (if you computed 3 components)
-2) Which latent space?
-   - PCA is typical
-3) Which metadata columns (`obs`) matter?
-   - clusters, sample, batch, QC metrics, scores…
-4) Do you need gene expression?
-   - exporting all genes can be huge; consider a gene panel
-5) Do you need a connectivity graph?
-   - Seurat stores graphs; exporting them is optional
-
-If you don’t know yet:
-- start with embeddings + a handful of obs columns + a small gene panel
-
-## Step 1 — Load packages and the Seurat object
+## The whole recipe
 
 ```r
 library(cellucid)
 library(Seurat)
-library(Matrix)
 
-# Example:
 # seu <- readRDS("my_seurat_object.rds")
-```
 
-## Step 2 — Choose a stable cell order
+# Expression: Seurat keeps genes x cells; cellucid_prepare() takes cells x genes.
+# A Seurat v5 assay split into layers needs JoinLayers() first.
+expr <- Matrix::t(GetAssayData(seu, assay = "RNA", layer = "data"))
 
-Cellucid uses row order as cell identity, so we pick a canonical order and reuse it everywhere.
+# The shared-nearest-neighbour graph links every cell to itself; the stored
+# graph must have a zero diagonal.
+graph <- seu@graphs[["RNA_snn"]]
+Matrix::diag(graph) <- 0
 
-```r
-cells <- colnames(seu)
-stopifnot(length(cells) > 0)
-```
-
-## Step 3 — Extract embeddings (UMAP 2D / 3D)
-
-### 2D UMAP
-
-```r
-umap <- Embeddings(seu, reduction = "umap")
-umap2 <- umap[, 1:2, drop = FALSE]
-umap2 <- umap2[cells, , drop = FALSE]
-```
-
-### Optional: 3D UMAP
-
-Only do this if you actually computed a 3D UMAP (e.g., `RunUMAP(..., n.components = 3)`).
-
-```r
-# umap3 <- umap[, 1:3, drop = FALSE]
-# umap3 <- umap3[cells, , drop = FALSE]
-```
-
-## Step 4 — Extract a latent space (PCA is typical)
-
-```r
-pca <- Embeddings(seu, reduction = "pca")
-pca <- pca[cells, , drop = FALSE]
-latent_space <- pca
-```
-
-```{note}
-If you don’t have PCA, you can use the embedding as latent space (less ideal, but valid):
-`latent_space <- umap2`
-```
-
-## Step 5 — Build `obs` (cell metadata)
-
-Seurat metadata lives in `seu@meta.data` (rows = cells).
-
-```r
-obs_all <- seu@meta.data
-obs_all <- obs_all[cells, , drop = FALSE]
-```
-
-### Optional: select only a subset of obs columns
-
-Exporting dozens/hundreds of columns is allowed, but can be noisy in the UI.
-
-```r
-obs_keys <- c("seurat_clusters", "orig.ident", "nCount_RNA", "nFeature_RNA")
-obs_keys <- intersect(obs_keys, colnames(obs_all))
-obs <- obs_all[, obs_keys, drop = FALSE]
-```
-
-Make sure key columns are the types you want:
-
-```r
-obs$seurat_clusters <- factor(obs$seurat_clusters)
-```
-
-## Step 6 — (Optional) Export gene expression + `var`
-
-Declare the optional inputs up front so Step 8 can pass them unconditionally. If
-you skip this whole step, they stay `NULL` and no gene expression is exported:
-
-```r
-gene_var <- NULL
-expr_cxg <- NULL
-gene_panel <- NULL
-```
-
-### 6.1 Choose which assay/slot to export
-
-Common Seurat choices:
-- `slot="data"`: log-normalized (often best for visualization)
-- `slot="counts"`: raw counts (can have huge dynamic range)
-
-```r
-assay_name <- DefaultAssay(seu)  # often "RNA"
-expr_gxc <- GetAssayData(seu, assay = assay_name, slot = "data")  # genes x cells
-```
-
-### 6.2 Align cells and transpose to cells × genes
-
-`GetAssayData` returns **genes × cells**. Cellucid expects **cells × genes**.
-
-```r
-expr_gxc <- expr_gxc[, cells, drop = FALSE]
-expr_cxg <- Matrix::t(expr_gxc)
-```
-
-### 6.3 Build `var` (gene metadata)
-
-The simplest `var` is a data.frame with rownames set to the gene IDs you want users to search.
-
-```r
-gene_ids <- rownames(expr_gxc)
-gene_var <- data.frame(symbol = gene_ids, stringsAsFactors = FALSE)
-rownames(gene_var) <- gene_var$symbol
-```
-
-:::{note}
-The variable is called `gene_var`, not `var`, because `var()` is a base R
-function: a script that only *sometimes* defines `var` will silently pass the
-function along when it does not. Name the argument explicitly at the call site
-(`var = gene_var`).
-:::
-
-### 6.4 Optional: export a gene panel instead of all genes
-
-Exporting every gene can be huge. A panel often gives a better experience.
-
-```r
-gene_panel <- c("MS4A1", "CD3D", "NKG7")
-gene_panel <- intersect(gene_panel, rownames(gene_var))
-```
-
-## Step 7 — (Optional) Export connectivities (Seurat graphs)
-
-Seurat graphs often live in `seu@graphs`, for example:
-- `RNA_snn` (shared nearest neighbor graph)
-
-```r
-conn <- NULL
-if ("RNA_snn" %in% names(seu@graphs)) {
-  conn <- seu@graphs$RNA_snn
-  conn <- conn[cells, cells]
-}
-```
-
-```{note}
-`cellucid_prepare()` accepts weighted graphs that are finite, non-negative,
-exactly symmetric in topology and weight, and exactly zero on the diagonal.
-Sparse inputs must not store explicit zeros or duplicate coordinates. Inspect
-the Seurat graph deliberately before this call; Cellucid preserves accepted
-weights and rejects invalid structure instead of symmetrizing, coalescing, or
-binarizing it.
-```
-
-## Step 8 — Run `cellucid_prepare()`
-
-Pick an output directory (best: a fresh folder per export iteration):
-
-```r
-out_dir <- file.path(getwd(), "exports", "seurat_export")
-dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-```
-
-### Recommended “starter” settings
-
-- `force=TRUE` while iterating
-- `obs_continuous_quantization=8` for smaller metadata
-- if exporting expression: `var_quantization=8` and/or `gene_identifiers=gene_panel`
-
-Every Seurat reduction can be exported side by side — `Embeddings(seu, "tsne")`
-under `X_tsne`, two PCA components through `cellucid_embedding(columns = ...)` —
-as long as its rows follow the same `cells` order. When a dimension has more
-than one, add `embedding_defaults = c("2d" = "X_umap")`.
-
-```r
-cellucid_prepare(
-  latent_space = latent_space,
-  obs = obs,
+store <- cellucid_prepare(
+  out_path = "seurat_dataset.zarr",
+  format = "zarr",
   embeddings = list(
-    X_umap = cellucid_embedding(umap2, label = "UMAP", source_key = "umap")
-    # X_umap_3d = umap3,  # optional
-    # X_pca = cellucid_embedding(Embeddings(seu, "pca")[cells, ], columns = c(1, 2)),
+    X_umap = Embeddings(seu, reduction = "umap"),
+    X_pca = Embeddings(seu, reduction = "pca")
   ),
-  obs_categorical_dtype = "uint16",
-  dataset_name = "Seurat Export",
-  dataset_id = "seurat_export",
-  out_dir = out_dir,
-  force = TRUE,
-  compression = 6,
-  obs_continuous_quantization = 8,
-  var = gene_var,
-  gene_expression = expr_cxg,
-  gene_identifiers = gene_panel,
-  var_quantization = if (is.null(expr_cxg)) NULL else 8,
-  connectivities = conn
+  dataset_id = "seurat-dataset",
+  dataset_name = "My Seurat dataset",
+  obs = seu[[]],
+  gene_expression = expr,
+  connectivities = graph,
+  embedding_defaults = c("2d" = "X_umap"),
+  latent_key = "X_pca",
+  obs_keys = c("seurat_clusters", "orig.ident", "nCount_RNA")
 )
 ```
 
-## Step 9 — Quick validation
+Open `seurat_dataset.zarr` on a web host, or write `seurat_dataset.zarr.zip` with
+`format = "zarr.zip"` and open it with **Zarr ZIP** ({doc}`../d_viewing_loading/01_open_stores_in_cellucid_web_app`).
 
-```r
-list.files(out_dir, recursive = TRUE)
-ident <- jsonlite::read_json(file.path(out_dir, "dataset_identity.json"), simplifyVector = TRUE)
-ident$stats
-```
+## What each input becomes
 
-Confirm:
-- `n_cells` matches your Seurat object
-- `n_genes` matches the exported gene panel (if you used one)
+| Seurat | Argument | In the store |
+| --- | --- | --- |
+| `Embeddings(seu, "umap")` | `embeddings$X_umap` | `obsm['X_umap']`, every column, float32 |
+| `Embeddings(seu, "pca")` | `embeddings$X_pca` | `obsm['X_pca']`; `latent_key = "X_pca"` makes it the space outlier quantiles are computed in |
+| `seu[[]]` (the metadata) | `obs` | `obs`: factors stay categoricals with their level order, numbers stay numbers |
+| `GetAssayData(seu, layer = "data")` | `gene_expression` (transposed) | `X`, gene-major float32 CSC |
+| `rownames(seu)` | (the column names of `expr`) | the `var` index (gene names) |
+| `seu@graphs[["RNA_snn"]]` | `connectivities` | `obsp['connectivities']`, float32 CSR |
 
-## Step 10 — Open in the Cellucid web app
+Every input carries the cell names (`colnames(seu)`), and `cellucid_prepare()`
+checks that they agree in the same order; they become the `obs` index.
 
-Follow: {doc}`../d_viewing_loading/01_open_exports_in_cellucid_web_app`
+## Choices and variants
 
-**What success looks like**
-- The web app loads points quickly.
-- You can color by your `obs` fields.
-- If you exported gene expression, you can search genes and color by them.
+- **A 3D UMAP.** Compute it under its own name, for example
+  `RunUMAP(seu, dims = 1:30, n.components = 3, reduction.name = "umap3d")`, and
+  add `X_umap_3d = Embeddings(seu, "umap3d")` to `embeddings`.
+- **Only some genes.** Pass `gene_identifiers = c("CD3E", "MS4A1", …)`; the
+  store then holds only those columns of `X`.
+- **Gene symbols beside other ids.** Pass a `var` data frame (one row per gene,
+  row names `rownames(seu)`) and name the column the viewer shows with
+  `var_gene_id_column`.
+- **SCTransform data.** Use `GetAssayData(seu, assay = "SCT", layer = "data")`.
+- **The kNN graph instead of SNN.** `RNA_nn` is not symmetric, and the stored
+  graph must be: symmetrize it first, for example
+  `graph <- seu@graphs[["RNA_nn"]]; graph <- (graph + Matrix::t(graph)) / 2;
+  Matrix::diag(graph) <- 0`.
+- **Dataset description and citation.** Add `dataset_description`,
+  `citation_text`, `citation_url`, `source_name`, `source_url`.
 
----
+## Troubleshooting
 
-## Edge cases and common gotchas
-
-### “My metadata columns turned into categories”
-
-A plain `numeric` column is continuous; a `factor`, `character`, or `logical`
-column is a category. Coerce the columns you care about with `as.numeric()` or
-`factor()`. Any other type — a `Date`, a list column, a classed numeric — is not
-reclassified but **rejected**, with
-`Observation field '<key>' must be a native numeric, logical, character, or
-factor vector.`
-See: {doc}`../c_data_preparation_api/04_obs_cell_metadata`
-
-### “I exported and got a gigantic folder”
-
-You probably exported too many genes for your cell count.
-Use:
-- `gene_identifiers` (gene panels)
-- `var_quantization=8`
-- `compression=6`
-
-### “My UMAP is missing / Embeddings(...) errors”
-
-Check which reductions exist:
-
-```r
-Reductions(seu)
-```
-
-### “Cell order mismatch”
-
-Always reorder:
-- embeddings
-- metadata
-- expression columns/rows
-- connectivity matrix
-
-using the same `cells` vector.
-
----
-
-## Troubleshooting (symptom → fix)
-
-### Symptom: export fails with shape mismatches
-
-Most common causes:
-- expression orientation is wrong (genes × cells vs cells × genes)
-- you subset a matrix but not the others
-
-Confirm:
-- `dim(expr_cxg)` is `(n_cells, n_genes)`
-- `nrow(obs) == nrow(umap2) == nrow(latent_space)`
-
-Fix:
-- reorder/transpose explicitly (Steps 2–6)
-
-### Symptom: web app loads but fields look wrong
-
-Likely cause:
-- row order mismatch (the export “worked” but you exported misaligned inputs)
-
-Fix:
-- rebuild using a single `cells <- colnames(seu)` ordering and reorder everything.
-
-More:
-- export-time troubleshooting: {doc}`../c_data_preparation_api/11_troubleshooting_prepare_export`
-- loading-time troubleshooting: {doc}`../i_troubleshooting_index/04_web_app_loading_issues`
+- *"gene_expression has … rows, but the embeddings have … cells"* — you passed
+  genes x cells; transpose with `Matrix::t()`.
+- *"Connectivity diagonal values must all be exactly zero"* — set
+  `Matrix::diag(graph) <- 0`.
+- *"Connectivity matrix must be exactly symmetric"* — use `RNA_snn`, or
+  symmetrize as above.
+- *"obs column '…' is a … column, which has no AnnData encoding"* — convert that
+  metadata column with `as.character()` or `as.numeric()`, or drop it.
+- More: {doc}`../c_data_preparation_api/11_troubleshooting_prepare`.

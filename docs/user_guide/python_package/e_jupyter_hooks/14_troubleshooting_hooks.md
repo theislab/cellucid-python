@@ -15,7 +15,9 @@ report
 
 This report includes:
 - server probes (`/_cellucid/health`, `/_cellucid/info`, `/_cellucid/datasets`)
-- `dataset_identity_probes`, keyed by every exact declared dataset id/path
+- `anndata_store_probes`, keyed by every exact listed dataset id (a `HEAD` and
+  a one-byte `Range` read of the served AnnData store, which a readable store
+  answers with `206` and `Content-Range`)
 - ping/pong roundtrip (Python → iframe → Python)
 - a frontend “debug snapshot” (iframe URL/origin/user agent)
 - recent accepted-event counts grouped by exact event type
@@ -163,10 +165,6 @@ Calling `viewer.highlight_cells(...)` / `viewer.set_color_by(...)` / `viewer.res
    generation.
 
 ### How to confirm
-- Rejections are reported only by the web build that emits `command_error`.
-  Older builds — including the one currently published — refuse a command
-  silently, so on those the two checks below stay empty even when cause 1 is
-  what happened.
 - A rejected command prints to `sys.stderr` as soon as the viewer reports it:
   ```text
   [cellucid] viewer.set_color_by(...) did not take effect in the viewer: ...

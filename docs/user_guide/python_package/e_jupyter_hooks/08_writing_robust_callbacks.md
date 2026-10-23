@@ -118,12 +118,15 @@ See {doc}`09_viewer_state_and_wait_for_event`.
 
 ## Deep path: threading and AnnData pitfalls
 
-### Backed `.h5ad` and thread safety
+### Your `adata` and thread safety
 
-When you run
-`show_anndata("data.h5ad", dataset_name="My dataset", dataset_id="my-dataset")`,
-AnnData is opened read-only-backed.
-Depending on your stack (h5py/hdf5), concurrent access from multiple threads can be unsafe.
+`show_anndata(...)` does not open your data in Python while the viewer runs:
+the viewer reads the `.h5ad` file or Zarr store itself, and an in-memory object
+is written once to a temporary `.h5ad`. The `adata` your callbacks touch is
+therefore only yours — but callbacks run on the server's request threads, and
+if you opened that object backed (`anndata.read_h5ad(..., backed="r")`),
+concurrent access from several threads can be unsafe depending on your
+h5py/HDF5 stack.
 
 Recommendations:
 - avoid slicing backed AnnData inside hook callbacks,

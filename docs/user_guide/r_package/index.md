@@ -1,20 +1,20 @@
 # R Package Guide
 
-This guide documents the **`cellucid` R package** (repo: `cellucid-r`): how to export single-cell data from R into the **Cellucid viewer export format** so you can explore it in the **Cellucid web app**.
+This guide documents the **`cellucid` R package** (repo: `cellucid-r`): how to write single-cell data from R as a **Cellucid-ready AnnData** — a standard AnnData Zarr store (a `.zarr` folder or one `.zarr.zip` file) — so you can explore it in the **Cellucid web app**, or read it in Python with `anndata`.
 
 ```{note}
-`cellucid-r` is an export-focused package. It does **not** embed the viewer in R yet (no RStudio widget / Shiny integration yet).
+`cellucid-r` prepares data. It does **not** embed the viewer in R yet (no RStudio widget / Shiny integration yet).
 
 If you want notebook embedding, servers, and programmatic control, see the {doc}`../python_package/index` docs instead.
 
-For the web UI experience after export (loading, filtering, analysis, sessions, community annotation), see {doc}`../web_app/index`.
+For the web UI experience after opening a store (filtering, analysis, sessions, community annotation), see {doc}`../web_app/index`.
 ```
 
-:::{admonition} Active package version — 0.9.4
+:::{admonition} Active package version — 0.9.5
 :class: note
 <!-- CELLUCID_VERSION -->
 
-Version **0.9.4** is the active Cellucid for R source and documentation
+Version **0.9.5** is the active Cellucid for R source and documentation
 version and the CRAN submission release. The
 [CRAN package index](https://cran.r-project.org/web/packages/available_packages_by_name.html)
 is authoritative for registry availability. Check an installed environment
@@ -28,8 +28,8 @@ matching CRAN and official-source installation paths.
 - “I have a Seurat object” → {doc}`e_integrations_recipes/01_seurat_recipe`
 - “I have a SingleCellExperiment” → {doc}`e_integrations_recipes/02_singlecellexperiment_recipe`
 - “I just have matrices/data.frames” → {doc}`e_integrations_recipes/03_raw_matrices_and_data_frames_recipe`
-- “I want to understand what gets written to disk” → {doc}`b_concepts_mental_models/01_what_is_an_export_folder`
-- “I want to export vector fields (velocity/drift overlays)” → {doc}`c_data_preparation_api/08_vector_fields_velocity_displacement`
+- “I want to understand what gets written to disk” → {doc}`b_concepts_mental_models/01_what_is_a_cellucid_ready_anndata`
+- “I want to add vector fields (velocity/drift overlays)” → {doc}`c_data_preparation_api/08_vector_fields_velocity_displacement`
 - “I want a full end-to-end walkthrough” → {doc}`f_notebooks_tutorials/index`
 - “Something failed” → {doc}`i_troubleshooting_index/index`
 
@@ -42,7 +42,7 @@ matching CRAN and official-source installation paths.
 :link: installation
 :link-type: doc
 
-Install version 0.9.4 from the source currently available to you, verify the <!-- CELLUCID_VERSION -->
+Install version 0.9.5 from the source currently available to you, verify the <!-- CELLUCID_VERSION -->
 loaded package, and diagnose dependency or environment problems.
 :::
 
@@ -57,21 +57,21 @@ Quick starts and “what is this?” explanations for mixed audiences.
 :link: b_concepts_mental_models/index
 :link-type: doc
 
-How R exports map to the browser viewer, plus dataset identity and reproducibility.
+What a Cellucid-ready AnnData store is, how it reaches the browser, plus dataset identity and reproducibility.
 :::
 
 :::{grid-item-card} {octicon}`package-dependencies;1.5em;sd-mr-1` Data Preparation API
 :link: c_data_preparation_api/index
 :link-type: doc
 
-Deep documentation of `cellucid_prepare()` including shapes, dtypes, edge cases, and file outputs.
+Deep documentation of `cellucid_prepare()` including shapes, dtypes, edge cases, and the store layout.
 :::
 
 :::{grid-item-card} {octicon}`browser;1.5em;sd-mr-1` Viewing & Loading
 :link: d_viewing_loading/index
 :link-type: doc
 
-How to open exported folders in the Cellucid web app, and how to host them for sharing.
+How to open `.zarr` folders and `.zarr.zip` files in the Cellucid web app, and how to host them for sharing.
 :::
 
 :::{grid-item-card} {octicon}`versions;1.5em;sd-mr-1` Integrations & Recipes
@@ -106,7 +106,7 @@ Implementation notes, testing/release guidance, and codebase architecture for `c
 :link: i_troubleshooting_index/index
 :link-type: doc
 
-Symptom → diagnosis → fix across installation, exports, and web app loading.
+Symptom → diagnosis → fix across installation, data preparation, and web app loading.
 :::
 
 ::::

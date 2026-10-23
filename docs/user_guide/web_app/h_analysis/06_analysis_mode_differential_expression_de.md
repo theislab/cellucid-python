@@ -41,8 +41,8 @@ DE in Cellucid is **exploratory**:
 
 In **Analysis → Differential Expression**, you select:
 
-- **Page A:** (dropdown)
-- **Page B:** (dropdown)
+- **Page A** (dropdown)
+- **Page B** (dropdown)
 
 If you have many pages, the selector shows:
 - base pages under **Pages**
@@ -106,19 +106,20 @@ Cellucid supports two statistical methods:
 
 Implementation notes:
 - Cellucid computes the U statistic from a full, tie-aware rank pass over the two selected groups.
+- The rank pass walks each gene's non-zero values only: every zero is tied with every other zero, so the zeros are one rank block whose size is the zero count. The ranks, the U statistic, the tie correction and the p-value are exactly the numbers a pass over every cell gives.
 - The U statistic is not histogram-binned or sampled.
 - The p-value is exact when both comparison groups contain fewer than 50 finite values and there are no ties.
 - Otherwise, the p-value uses the exact U statistic with a tie- and continuity-corrected asymptotic reference distribution.
 
 Practical implication:
-- large groups retain the exact U statistic, but use asymptotic inference and can require substantially more compute time than Welch’s t-test.
+- large groups retain the exact U statistic, but use asymptotic inference. Both tests cost about the same: the work grows with a gene's non-zero values, not with the number of cells.
 
 ### 2) t-test = Welch’s t-test
 
 - Parametric test comparing means.
 - Uses Welch’s formulation (does not assume equal variances).
 
-This can be faster than Wilcoxon on some datasets, but is less robust to heavy non-normality/outliers.
+It is less robust than Wilcoxon to heavy non-normality and outliers. Its means and variances are the exact two-pass sample moments of each group's values in cell order.
 
 For analysis-wide scope and assumptions, see {doc}`01_analysis_mental_model`.
 
@@ -218,18 +219,27 @@ Upregulated/downregulated are defined by the sign of log2FC (Page A relative to 
 
 Both halves of the panel are reported, which is what makes the false-discovery
 rate reconstructable from this table alone. *Not tested* reads `0` here because
-this export stores a value for every cell; on a sparser matrix it will not.
+this dataset stores a value for every cell; on a sparser matrix it will not.
 ```
 
 ### While it runs
 
 ```{figure} ../../../_static/screenshots/analysis/de-running.png
-:alt: The Differential Expression panel mid-run, with the run button disabled and reading "Running..." and a progress bar above it labelled with the phase "Loading & Computing".
-:width: 488px
+:alt: The Differential Expression panel mid-run. The button reads "Running…" and is disabled; under it the cost line "Tests 2,000 genes in 1,000 vs 3,000 cells.", then a box titled "Differential expression" with "2,000 genes in Beta cells (1,000 cells) vs Rest of Beta cells (3,000 cells)", "Testing genes: 0 of 2,000 genes", a progress bar, and a Cancel button.
+:width: 464px
 
-The two phases are named literally: `Loading & Computing`, then
-`Multiple Testing Correction`. Changing any control while a run is in flight
-cancels it.
+The box under the button says what the run covers, which step runs
+(`Testing genes`, then `Applying multiple testing correction`), how many genes
+are done of how many, how much has been read and how long is left. **Cancel**
+stops the run; so does changing any control.
+```
+
+```{figure} ../../../_static/screenshots/analysis/de-cancelled.png
+:alt: The Differential Expression panel after Cancel. The run button reads "Run differential expression" again; below it a box titled "Differential expression cancelled" reads "Cancelled after 2.3 s. Nothing was kept." with a Run again button.
+:width: 464px
+
+A cancelled run keeps nothing and is not an error. **Run again** runs the form
+as it stands. See {doc}`02_analysis_ui_overview` for what Cancel stops.
 ```
 
 ### Volcano plot
@@ -336,13 +346,20 @@ numbers.
 Use **Performance Settings** (collapsible) to tune:
 
 - **Batch size**: how many genes to preload ahead of compute (higher can be faster but uses more memory).
-- **Memory budget**: limits how many gene vectors can be in flight without crashing the browser.
-- **Network parallelism**: how many genes are loaded (fetched and decoded into memory) at once. When the export is served over the network, the downloads of the genes queued after them run further ahead on their own: as many at once as the connection needs to stay full, kept compressed until each gene's turn, so a run is bound by the connection's bandwidth rather than its round trips. A second run on the same dataset reuses those downloads instead of requesting the genes again.
-- **Compute parallelism**: number of concurrent genes computed (bounded by worker pool size and memory).
+- **Memory budget**: limits how many gene vectors can be in flight without crashing the browser. The default is a sixteenth of the device memory the browser lets the page estimate (512 MB on an 8 GB machine, 1 GB on a 16 GB one); the choices run from a thirty-second to half of it.
+- **Network parallelism**: how many gene loads a run keeps asked for at once; the reader reads the genes asked for together as one batch.
+- **Compute parallelism**: how many genes are computed at once. *Auto* uses every analysis worker: one per CPU core, less one core for the page and one for the reader that feeds the workers (8 workers on a 10-core machine). The choices go up to that number.
+
+How a run is computed, and what bounds it:
+
+- Two named groups of a large dataset are read **by cell**, every gene in one read, when that reads less than every gene's column. The genes are then tested in runs, a run of genes per worker.
+- Otherwise each gene's column is read once and moved to a worker without a copy. The two groups were sent to every worker once at the start of the run, so the page never gathers a group's values, including for a *rest of* page.
+- The tests walk each gene's non-zero values only (see the method notes above), so testing is a small share of a run: what remains is reading the genes.
+
+Measured on a 561,947-cell, 8,192-gene dataset on a 10-core laptop (Wilcoxon, every gene): two cell types of 4,737 and 3,995 cells in 0.34 s; the two largest types (55,096 and 48,640 cells) in 3.7 s; one 266-cell type against the rest of the dataset in 2.1 s. In each case almost all of the time is the read of the expression matrix.
 
 Recommended workflow for very large datasets:
 - start with smaller pages (more targeted groups),
-- consider t-test if Wilcoxon is too slow,
 - export results and do full DE offline for publication workflows.
 
 ---

@@ -15,7 +15,7 @@
 Cellucid is primarily a **client-side web app**: your data is loaded into your browser and rendered locally.
 Cellucid does not upload your dataset’s *contents* anywhere, but:
 
-- some workflows **do fetch data over the network** (remote servers, GitHub-hosted exports),
+- some workflows **do fetch data over the network** (remote servers, datasets opened from a link or a GitHub repository),
 - the public deployment **sends usage analytics to Google**: which features you
   use and how loads go, with your dataset described only by coarse shape
   (cell-count range, dimensions) — never its name, file name or contents (see the
@@ -25,7 +25,7 @@ Cellucid does not upload your dataset’s *contents* anywhere, but:
 
 If you are using sensitive data, the safe workflow is usually:
 
-> self-host or run the app locally + use local prepared exports + avoid
+> self-host or run the app locally + open local files (H5AD, Zarr) + avoid
 > GitHub/community features + review exported artifact metadata before sharing.
 
 :::{important}
@@ -80,8 +80,8 @@ URL, or an error message — and an event that does not fit is dropped whole.
 ### What is sent
 
 - **One page view per visit**, with the page address reduced to
-  `https://www.cellucid.com/`: the query string — dataset ids, `remote=` and
-  `github=` addresses, `exportsBaseUrl` — is never part of it.
+  `https://www.cellucid.com/`: the query string — dataset ids, `remote=`
+  addresses, `data=` links, `sampleCatalog` — is never part of it.
 - **`app_ready`** — how long startup took (milliseconds and a range such as
   `1-3s`) and whether a dataset opened.
 - **`startup_failure`** — where startup stopped (a fixed phase name), which kind
@@ -90,14 +90,14 @@ URL, or an error message — and an event that does not fit is dropped whole.
 
   | Field | Example content |
   |---|---|
-  | loading method | `local-user-prepared`, `local-user-h5ad`, `remote-connect`, `github-url-param`, … |
-  | source kind | `local-user`, `remote`, `github`, `local-demo`, … |
+  | loading method | `local-user-h5ad`, `local-user-zarr-folder`, `remote-connect`, `data-url-param`, … |
+  | source kind | `local-user`, `remote`, `link`, `local-demo`, `jupyter` |
   | outcome and duration | `success`, `3812` ms, `3-10s` |
   | cell and gene count **ranges** | `10k-100k`, `1M-10M` — never the exact counts |
   | obs field count, embedding dimensions | `14`, `2+3` |
   | how its embeddings were chosen, how many it could show and how many it opened with turned on (each a **range**) | `default` or `best_guess`; `1`, `2-3`, `4-9`, `10+` |
   | connectivity / vector field present | yes/no |
-  | writer version of the export | `0.9.2` |
+  | whether the default session its catalog names was applied | `none`, `restored`, `failed`, … |
   | dataset id | **only for the deployment's own public sample datasets** |
   | on failure | a fixed error code and class, and the HTTP status |
 
@@ -122,8 +122,8 @@ URL, or an error message — and an event that does not fit is dropped whole.
 **Loading a local file sends no name.** Its values never leave the browser, and
 on the public site only the descriptors in the table do: the loading method,
 outcome, duration, count ranges, dimensions, whether its embeddings were a
-best guess, and writer version. Its name, its id, its `obsm` keys and the text
-of any error stay in the browser.
+best guess, and whether it has a graph or a vector field. Its name, its id,
+its `obsm` keys and the text of any error stay in the browser.
 :::
 
 ### How to avoid it entirely
@@ -140,7 +140,7 @@ Pick any one of these; each is sufficient:
   is loaded as an optional part. Prefer one of the first two all the same,
   because they remove the code path rather than the request.
 
-Naming exports neutrally (`cohort_a` rather than the study name) is a sensible
+Naming datasets neutrally (`cohort_a` rather than the study name) is a sensible
 habit regardless, since the same string also lands in figure metadata and
 session bundles.
 
@@ -153,13 +153,12 @@ If you only read one thing, read this.
 
 | Workflow | Where the dataset is read from | Does dataset **content** traverse the network? | What reaches analytics on the public site? | Typical privacy risk |
 |---|---|---:|---:|---|
-| **Local demo** (`source=local-demo`) | Hosted demo exports | Yes (demo files are downloaded) | Load descriptors and the public sample's id | Low (public demo), but still trackable traffic |
-| **Local prepared export folder** (directory picker) | Your local disk | No (files read locally) | Coarse shape only — no name or id | Low–medium: only count ranges and dimensions are reported; the folder name can still leak via screenshots and figure metadata |
-| **Local `.h5ad` / `.zarr`** (file picker) | Your local disk | No (files read locally) | Coarse shape only — no name or id | Low–medium: as above, plus large local file access and potential local caching |
+| **Sample datasets** (`source=local-demo`) | The hosted sample catalog | Yes (the parts of the sample files a view needs are downloaded) | Load descriptors and the public sample's id | Low (public samples), but still trackable traffic |
+| **Local `.h5ad`, `.zarr` folder or `.zarr.zip`** (file picker or drop) | Your local disk | No (files read locally) | Coarse shape only — no name or id | Low–medium: only count ranges and dimensions are reported; the file name can still leak via screenshots and figure metadata |
 | **Remote server** (`remote=...`) | A server you connect to (often `127.0.0.1`) | Yes (files or chunks downloaded from that server) | Coarse shape only — never the server address | Depends: can be "local-only" or a true data transfer |
-| **GitHub-hosted exports** (`github=owner/repo/...`) | GitHub raw content | Yes (downloaded from GitHub) | Coarse shape only — never the repository path | High if data is private; also GitHub access logs exist |
+| **Data links** (`data=...`: GitHub, CELLxGENE, GEO, Zenodo, any web address) | The host the link names | Yes (the parts a view needs are downloaded) | Coarse shape only — never the link | High if data is private; the host's access logs exist |
 | **Jupyter embedded viewer** | A local Python server + iframe bridge | Yes (browser ↔ local server) | No — the notebook viewer is never on a production hostname | Usually low if truly local, but can be risky if ports are exposed |
-| **Community Annotation** (GitHub sync) | GitHub API + repo contents, through Cellucid's auth proxy | Yes | That the feature was used | You are explicitly publishing annotations/votes to GitHub; treat as public unless repo is private and access-controlled |
+| **Community annotation** (GitHub sync) | GitHub API + repo contents, through Cellucid's auth proxy | Yes | That the feature was used | You are explicitly publishing annotations/votes to GitHub; treat as public unless repo is private and access-controlled |
 
 Two nuances that matter:
 
@@ -237,24 +236,23 @@ Related: {doc}`../j_community_annotation/index` (token lifetime and storage).
 #### IndexedDB (larger local cache; persists until cleared)
 
 IndexedDB holds larger cached payloads that would be unreasonable to store in
-`localStorage`. Cellucid uses **two** databases:
+`localStorage`. Cellucid keeps one thing there:
 
 - **Community Annotation file cache** — the raw annotation JSON downloaded from
   GitHub, for speed and offline-ish behaviour.
-- **Marker cache** — the results of marker-discovery runs, including the
-  computed statistic arrays. Only results for a prepared export that records
-  its export time (`created_at`) are written here; results for a dataset
-  without one stay in memory for that load.
+
+Marker-discovery results (including the computed statistic arrays) are **not**
+stored there: they are kept in memory for the dataset load they were computed
+on and are gone when the tab closes. An AnnData file records no write time that
+would prove a stored result still matches its values.
 
 Privacy implications:
 - If you use Community Annotation on sensitive repos, cached copies of
   annotation JSON can exist locally until cleared.
-- The marker cache is **derived from your expression data**. It is not the
-  matrix, but a per-gene statistic table for named groups is not a preference
-  either. On a shared machine, clear it along with everything else.
 
-If IndexedDB is unavailable (private browsing, strict policy), the marker cache
-degrades silently — you get no warning, just slower repeat analyses.
+If IndexedDB is unavailable (private browsing, strict policy), Community
+Annotation **Pull** fails and says so, without replacing the annotation view
+on screen; nothing else needs IndexedDB.
 
 ---
 
@@ -314,7 +312,7 @@ If you self-host the app, the “app host” changes, but the model is the same.
 
 ### 3) Optional services (feature-dependent)
 
-- **Community Annotation** does **not** talk to GitHub directly. Sign-in and all
+- **Community annotation** does **not** talk to GitHub directly. Sign-in and all
   repository reads and writes go through a Cellucid-operated authentication
   proxy, which holds the app credentials and relays to the GitHub API. Your
   GitHub token is sent to that proxy on every annotation request — not to
@@ -391,7 +389,7 @@ This is convenient, but it means URLs can leak information in:
 
 If you are privacy-constrained, prefer sharing:
 - a session bundle via an approved channel, or
-- an export folder via approved storage
+- the dataset file via approved storage
 and keep URLs “clean”.
 
 ---
@@ -479,12 +477,13 @@ Use this as a starting point for approvals and internal documentation.
    - local disk only vs remote server vs GitHub
 3) **If the public host is used, what does it report about your data?**
    - No name, id, path or error text: only the loading method, outcome,
-     duration, cell/gene count ranges, field count, dimensions and the export's
-     writer version (a dataset id only for the public sample datasets). See
+     duration, cell/gene count ranges, field count, dimensions and whether it
+     has a graph or a vector field (a dataset id only for the public sample
+     datasets). See
      {ref}`analytics`.
 4) **What local persistence exists?**
    - `localStorage` preferences **and Community Annotation session content**,
-     IndexedDB annotation and marker caches, browser HTTP cache
+     the IndexedDB annotation file cache, browser HTTP cache
 5) **If a local server is used, what is its bind address?**
    - `127.0.0.1` (default) vs `0.0.0.0`. Reads are unauthenticated either way.
 6) **What artifacts will be shared?**

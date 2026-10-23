@@ -1,191 +1,102 @@
-# Embeddings and Coordinates
+# Embeddings and coordinates
 
-**Audience:** everyone exporting (especially if your dataset “looks wrong” in the viewer)  
-**Time:** 10 minutes  
-**Goal:** understand how embeddings are passed and how Cellucid normalizes them.
+**Audience:** everyone
+**Time:** 10 minutes
+**Goal:** pass embeddings correctly and choose what the viewer shows first.
 
-Cellucid visualizes cells as points. The positions of those points come from one or more **embeddings**.
+## What to pass
 
-In `cellucid-r`, every embedding is passed in one argument, `embeddings`: a
-named list mapping an embedding id to a coordinate matrix or to a
-`cellucid_embedding()`. At least one is required, and **any number may share a
-dimension** — a UMAP and a t-SNE in 2D, a 3D UMAP, two principal components.
+`embeddings` is a **named list**; each name is an `obsm` key and each value has
+one row per cell:
 
 ```r
-library(cellucid)
-
-cellucid_prepare(
-  latent_space = pca,
-  obs = obs,
-  embeddings = list(
-    X_umap = cellucid_embedding(umap_2d, label = "UMAP", source_key = "umap"),
-    X_tsne = cellucid_embedding(tsne_2d, label = "t-SNE", source_key = "tsne"),
-    X_pca = cellucid_embedding(pca, columns = c(1, 2), label = "PC 1 / PC 2"),
-    X_umap_3d = umap_3d
-  ),
-  embedding_defaults = c("2d" = "X_umap"),
-  out_dir = "exports/my_dataset",
-  dataset_name = "My dataset",
-  dataset_id = "my-dataset-v1",
-  obs_categorical_dtype = "uint16"
+embeddings = list(
+  X_umap = umap,        # cells x 2
+  X_umap_3d = umap3,    # cells x 3
+  X_pca = pca           # cells x 50
 )
 ```
 
-## What “embedding” means (practical)
+Each value may be a numeric matrix, a numeric `data.frame`, a `Matrix` matrix,
+or a plain numeric vector (one column). At least one embedding is required, and
+all must have the same number of rows; that number is the cell count of the
+whole store.
 
-An embedding is any numeric coordinate matrix with:
-- rows = cells
-- 1, 2, or 3 plotted columns
+## How they are stored
 
-The values do not have to come from UMAP specifically. You can export t-SNE,
-PCA, diffusion maps, spatial coordinates, and so on. A plain matrix of 1, 2, or
-3 columns — or a plain length-`n_cells` numeric vector, for 1D — is plotted
-whole, and its column count is its dimension.
+Each embedding is stored **whole**, as `obsm[<name>]`:
 
-## `cellucid_embedding()`: columns, label, provenance
+- every column, not only the first two or three;
+- as float32, at its own coordinates (nothing is centred or scaled);
+- in chunks of whole rows, every column in each chunk
+  ({doc}`09_cellucid_ready_anndata_specification`).
 
-```r
-cellucid_embedding(values, columns = NULL, label = NULL, source_key = NULL)
-```
+The viewer chooses which columns to plot and, unless told otherwise, scales
+them to its view. A 50-column PCA is therefore one array, from which the viewer
+can show columns 1-2 in 2D or 1-3 in 3D, and which can also serve as the latent
+space for outlier quantiles.
 
-- `values`: the coordinate matrix (a base R `matrix`, a `data.frame` whose every
-  column is a plain numeric vector, or a `Matrix::Matrix`), or a numeric vector
-  for one column.
-- `columns`: the **1-based** columns to plot, one per axis, so their count (1,
-  2, or 3) is the dimension. Required when `values` has more than three
-  columns; otherwise every column is plotted. The export records them 0-based,
-  as `cellucid-python` does: `columns = c(4, 2)` is written as `[3, 1]`.
-- `label`: the text the viewer shows for this embedding; defaults to the id.
-- `source_key`: provenance, such as the reduction name; recorded in
-  `dataset_identity.json` and changes nothing else.
+Values must be finite and within the float32 range
+({doc}`02_input_requirements_global`). Names follow the path rules on the same
+page.
 
-Only the selected columns are read, so a non-finite value in an unselected
-principal component does not stop the export.
+## What the viewer shows first
 
-## Which embedding is shown first: `embedding_defaults`
-
-`embedding_defaults` names the embedding each dimension shows first, as a named
-character vector or list such as `c("2d" = "X_umap")`. It is required for every
-dimension that has more than one embedding; a dimension with exactly one uses it.
-The viewer opens in the highest dimension the export carries.
-
-```text
-2 2D embeddings were supplied (c("X_tsne", "X_umap")), so embedding_defaults must name the one shown first, for example embedding_defaults = c("2d" = "X_tsne").
-```
-
-## Embedding validation rules
-
-`cellucid-r` enforces:
-- `embeddings` is a named list with at least one entry, and every id obeys the
-  field-identity rule (non-empty, distinct, drawable exactly as stored),
-- each value is a 2D matrix-like object or a numeric vector,
-- a value wider than 3 columns is passed through `cellucid_embedding(columns = ...)`,
-- `columns` are distinct whole numbers within the array,
-- all embeddings have the same number of rows (`n_cells`),
-- `n_cells` is between 1 and 2,147,483,647.
-
-It rejects `NA`, `NaN`, infinities, nonnumeric matrices, and embeddings without
-a positive finite coordinate range before publication.
-
-:::{note}
-A `data.frame` column that carries a class — a `units` column, a `bit64::integer64`
-column, or any S3 class of your own — is refused rather than silently unclassed,
-because `as.matrix()` would drop the attribute that says what the numbers mean.
-Convert deliberately before the call.
-:::
-
-## Embedding normalization (important!)
-
-Before writing `embeddings/<index>_<dim>d.bin`, `cellucid-r` normalizes **each
-embedding on its own**:
-
-1) Compute per-axis min/max of the plotted columns.
-2) Find the maximum axis range across axes.
-3) Center the embedding at the midpoint of the min/max box.
-4) Scale so the max range spans ~2 units.
-
-In code terms (matches `cellucid-r` implementation):
-
-- `center = (axis_mins + axis_maxs) / 2`
-- `scale_factor = 2 / max(axis_maxs - axis_mins)`
-- `coords_normalized = (coords - center) * scale_factor`
-
-A zero range has no substitute. If every point shares one coordinate on every
-axis, `max(axis_maxs - axis_mins)` is `0`, and rather than invent a scale nobody
-chose, `cellucid_prepare()` stops before writing anything:
-
-```text
-Embedding coordinates must span a positive finite coordinate range.
-```
-
-A range that is merely *small* is still positive, so it is accepted and scaled
-up like any other.
-
-### Why normalize?
-
-Normalization makes:
-- camera defaults behave consistently,
-- vector fields scale correctly (each is scaled with the factor of the embedding it is bound to),
-- and exports more comparable across datasets.
-
-## File encoding details (for debugging)
-
-Each embedding is one file, `embeddings/<index>_<dim>d.bin`, where `<index>` is
-its position after sorting by dimension and then by id. It contains:
-- float32 values
-- little-endian
-- row-major order
-
-“Row-major” means:
-- cell 1’s coordinates are stored first,
-- then cell 2’s, etc.
-
-You can sanity-check a tiny export by reading the default 2D embedding:
+Without launch defaults the viewer picks an embedding for each view dimension
+itself, by name: a UMAP before a t-SNE before other layouts, and PCA, scVI,
+Harmony or other latent-space names last. To decide yourself, use `embedding_defaults`:
 
 ```r
-identity <- jsonlite::read_json(file.path(out_dir, "dataset_identity.json"))
-item <- identity$embeddings$items[[identity$embeddings$defaults[["2d"]]]]
-path <- file.path(out_dir, item$file)
-con <- if (endsWith(path, ".gz")) gzfile(path, open = "rb") else file(path, open = "rb")
-on.exit(close(con), add = TRUE)
+# The 2D view shows X_umap (its first two columns).
+embedding_defaults = c("2d" = "X_umap")
 
-vals <- readBin(con, what = "numeric", size = 4, endian = "little", n = n_cells * 2)
-coords <- matrix(vals, ncol = 2, byrow = TRUE)
-head(coords)
+# The 3D view shows columns 1, 2 and 3 of X_pca.
+embedding_defaults = list(
+  "2d" = "X_umap",
+  "3d" = list(key = "X_pca", columns = 1:3)
+)
 ```
 
-## Edge cases
+- The names are `"1d"`, `"2d"`, and `"3d"`, each at most once.
+- A value is an `embeddings` name, plotted by its first columns; it needs at
+  least as many columns as the dimension.
+- Or `list(key = , columns = )`: exactly as many distinct, whole, 1-based
+  column numbers as the dimension. They are stored 0-based, as AnnData indexes
+  them (`columns = 1:3` is stored as `[0, 1, 2]`).
 
-### Constant embeddings (all points identical)
+These are stored in `uns['cellucid']['defaults']` as `embedding1d`,
+`embedding2d`, and `embedding3d`.
 
-An embedding in which every point sits at the same coordinate is **rejected**,
-not exported: `Embedding coordinates must span a positive finite coordinate
-range.` It usually means the extraction returned the wrong object, or the
-reduction was never computed.
+## Related launch defaults
 
-A *nearly* constant embedding is a different case. Any positive range is scaled
-up to span ~2 units, so it exports normally, and what you see in the viewer —
-one tight clump — is the separation your embedding actually has.
+- `latent_key = "X_pca"`: the latent space the viewer's outlier filter
+  measures in (`defaults['latentKey']`), such as PCA or scVI, never a 2D/3D
+  layout. It must be one of the `embeddings`. The outlier quantiles of every
+  categorical obs column (each cell's distance to its category's centre, as
+  the share of its category at that distance or closer) are computed here and
+  stored in `uns['cellucid']['outlierQuantiles']`
+  ({doc}`09_cellucid_ready_anndata_specification`), so the viewer filters outliers at
+  once instead of reading the whole latent space to compute them.
+- `normalize_embeddings = FALSE`: show embeddings at their own coordinates
+  instead of scaled to the view (`defaults['normalizeEmbeddings']`).
+- `centroid_min_points`: the fewest cells a category needs to get outlier
+  quantiles (10 when not set).
 
-### Several embeddings, several dimensions
+Every default is optional and stored only when set. In the viewer, all of them
+can be changed under **Session › Data mapping**
+({doc}`../../web_app/b_data_loading/13_data_mapping`).
 
-The dataset identity file records every embedding under `embeddings.items` —
-its `label`, `dimension`, exact `file`, and `source` (`key` and 0-based
-`columns`) — plus `embeddings.defaults` and `default_dimension` (the highest
-dimension exported). Adding an embedding renumbers the files after it, so always
-resolve a file through `dataset_identity.json`.
+## Common mistakes
 
-### “My dataset is mirrored / rotated”
+- **A matrix with a different number of rows** than the others:
+  `All embeddings must have one row per cell: 'X_umap' has 3 rows and 'X_b' has 2.`
+- **Non-finite coordinates**: `Embedding 'X_umap' must contain only finite values.`
+  followed by counts and the first positions.
+- **A default the embedding cannot fill**:
+  `embedding_defaults[["3d"]] names 'X_umap', which has 2 columns; a 3d view needs 3.`
 
-Normalization does not rotate embeddings; it only centers and scales.
-If a dataset looks rotated, that’s usually just a different embedding convention.
+## Next
 
-## Troubleshooting pointers
-
-- `Embedding '…' has 10 columns, and an embedding plots 1, 2, or 3 of them` →
-  pass `cellucid_embedding(values, columns = c(1, 2))`.
-- `… so embedding_defaults must name the one shown first` → add
-  `embedding_defaults = c("2d" = "X_umap")`.
-- Viewer loads but points appear “squashed” → likely a coordinate issue (range extremes/outliers).
-- Vector fields look wrong → see {doc}`08_vector_fields_velocity_displacement` (they are scaled by the normalization factor of their embedding).
-- Exports in format 3 need a viewer release that reads format 3.
+- {doc}`04_obs_cell_metadata`
+- {doc}`08_vector_fields_velocity_displacement`
+- The same topic for Python, `cellucid.prepare()`: {doc}`../../python_package/c_data_preparation_api/03_embeddings_and_coordinates`

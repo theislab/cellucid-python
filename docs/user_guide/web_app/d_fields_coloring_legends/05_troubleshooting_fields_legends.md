@@ -17,19 +17,19 @@ If you’re new to the concepts, read these first:
 
 Before deep debugging, check these three things:
 
-1) **Active field**: In **Coloring & Filtering**, is the correct selector active?
+1) **Active field**: In **Coloring & filtering**, is the correct selector active?
    - Categorical obs vs Continuous obs vs Gene Expression
 2) **Legend toggles**:
    - Is **Log color scale** on (and your data has zeros/negatives)?
-   - Is **Rescale colorbar to slider range** on (changing contrast)?
-3) **Active filters**:
+   - Is **Rescale to range** on (changing contrast)?
+3) **Filters**:
    - Do you have hidden categories or a narrowed numeric range from earlier?
 
 Most “bugs” are one of these.
 
 ---
 
-## Symptom: “The legend is missing / Display options is empty”
+## Symptom: “The legend is missing / the Legend section is empty”
 
 ### Likely causes (ordered)
 
@@ -39,7 +39,7 @@ Most “bugs” are one of these.
 
 ### How to confirm
 
-- In **Coloring & Filtering**, check:
+- In **Coloring & filtering**, check:
   - Categorical obs dropdown value
   - Continuous obs dropdown value
   - Gene Expression input (is a gene selected?)
@@ -97,7 +97,7 @@ Most “bugs” are one of these.
 - For (2): turn off **Log color scale**, or choose a gene/field with positive values.
 - For (3): repair the values at the source — reloading cannot change the
   outcome. See {ref}`undrawable-continuous-payload`.
-- For (4): reload the dataset; if it persists, inspect export integrity.
+- For (4): reload the dataset; if it persists, check the column in the AnnData file itself.
 
 :::{note}
 “The field has **no** positive values at all” is not a possible cause here:
@@ -125,8 +125,8 @@ picture this way.
    refused too — usually a column that was never computed, or an empty
    expression layer served instead of the normalized one.
 3) The values are outside what `float32` can carry (an overflow or an
-   underflow). Only the writers and the AnnData server report this kind; it is
-   refused for the same reason.
+   underflow). Only the writers report this kind; it is refused for the same
+   reason.
 
 ### How to confirm
 
@@ -149,18 +149,9 @@ For a payload with nothing in it:
 > Field "leiden_score" has no value in any of 18,142,044 cells, so it has no colour scale.  
 > Every value is NaN, which Cellucid reads as "not measured here".
 
-If the values live on an AnnData server rather than in an export, the server
-refuses the request before it sends a byte, and the message shows that instead:
-
-> Gene "GATA3" could not be loaded: the server answered 422.  
-> The server said: `{"error": "non_finite_continuous_payload", …}`  
-> The server examined this payload and will not publish it.  
-> Repair the values at the source and reload. Nothing in the viewer can work around a value that has no position on a colour scale.
-
-The JSON body carries `kind`, `name`, `counts` (`total`, `offending`, `nan`,
-`positive_infinity`, `negative_infinity`, `float32_overflow`,
-`float32_underflow`), `examples` and a `message`, so DevTools → Network names
-the gene and the reason without any further digging.
+A file served by `cellucid serve`, `serve_anndata` or `show_anndata` is read
+by the viewer itself, so its gene or column is refused with these same
+messages.
 
 ### Fix
 
@@ -173,8 +164,8 @@ a colour scale.
    - dense: `np.nan_to_num(adata.X, copy=False)`
 2) For a continuous obs column:
    - `adata.obs["<key>"] = adata.obs["<key>"].replace([np.inf, -np.inf], np.nan)`
-3) Then re-run `prepare()` (or restart `serve_anndata` / `show_anndata`) and
-   reload the dataset.
+3) Then re-run `prepare()` (or save the file again and restart
+   `cellucid serve` / `serve_anndata` / `show_anndata`) and reload the dataset.
 
 If you meant the infinities as “missing”, replace them with `NaN` rather than
 with `0`: Cellucid draws `NaN` as the neutral grey meaning “not measured here”,
@@ -183,10 +174,11 @@ whereas `0` is a real measurement and will be coloured as one.
 ### Prevention
 
 - Check a column before you publish it: `np.isfinite(values).all()`.
-- Prepared exports cannot carry this problem — both the Python and the R writer
-  refuse a non-finite continuous obs field or gene at preparation time, with the
-  same counts and the same first-affected indices. If you hit this at all, you
-  are reading a raw `.h5ad`/Zarr in the browser or serving one live.
+- A file written by `prepare()` or `cellucid_prepare()` cannot carry this
+  problem — both writers refuse an infinity in a continuous obs field, and any
+  non-finite value in gene expression, with the same counts and the same
+  first-affected indices. If you hit this at all, the file was written another
+  way.
 
 ---
 
@@ -194,9 +186,9 @@ whereas `0` is a real measurement and will be coloured as one.
 
 ### Likely causes (ordered)
 
-1) The dataset export did not include that obs column.
+1) The AnnData file does not hold that obs column.
 2) The column exists but is classified differently than you expect:
-   - categorical vs continuous split is decided during export.
+   - categorical vs continuous follows the column's dtype in the file (`category` vs numeric).
 3) The field was deleted (soft-deleted) and is sitting in **Deleted Fields**.
 4) You’re looking at a different dataset (dataset identity mismatch).
 
@@ -204,17 +196,20 @@ whereas `0` is a real measurement and will be coloured as one.
 
 - Check whether the dropdown shows:
   - `(no categorical obs fields)` or `(no continuous obs fields)`
-- Scroll to the bottom of **Coloring & Filtering** and look for **Deleted Fields**.
+- Scroll to the bottom of **Coloring & filtering** and look for **Deleted Fields**.
 - If you recently edited/merged categories:
   - the original field may have been moved to Deleted Fields and replaced by a derived field (e.g., `clusters (merged)`).
 
 ### Fix
 
 1) If it’s in **Deleted Fields** → click **Restore**.
-2) If it’s missing from the export:
-   - re-export with the column included (cellucid-python `prepare()` / your export pipeline).
+2) If it’s missing from the file:
+   - check **Session › Data mapping**, which may have turned the column off;
+   - otherwise add the column to `obs` and save the file again (or write it with
+     `prepare(obs=...)`).
 3) If it landed in the “wrong” dropdown:
-   - treat it as that type for now (you can still use it), and adjust export typing later.
+   - treat it as that type for now (you can still use it), and change the
+     column's dtype in `obs` later (for example `.astype("category")`).
 
 ### Prevention
 
@@ -226,24 +221,25 @@ whereas `0` is a real measurement and will be coloured as one.
 
 ### Likely causes (ordered)
 
-1) The dataset has no gene expression (var fields) available in the export.
-2) The dataset loaded, but var metadata failed to load.
+1) The dataset file has no expression matrix (`X`, `raw/X` or a layer).
+2) **Session › Data mapping** has no expression matrix chosen.
 
 ### How to confirm
 
 - If the **Gene Expression** row is not visible at all, the dataset likely has no var fields.
 - Check dataset info (if available) for gene count.
-- DevTools → Network:
-  - look for `var_manifest.json` (or equivalent) requests failing.
+- Open **Session › Data mapping › Genes** and check which
+  matrix is chosen.
 
 ### Fix
 
 - Use obs fields instead (categorical/continuous).
-- If you expected genes, re-export with gene expression enabled.
+- If you expected genes, write the file with its expression matrix
+  (`prepare(gene_expression=...)`, or keep `X` when saving the AnnData).
 
 ### Prevention
 
-- For very large gene matrices, prefer server-backed or lazy-loading workflows (server mode / Jupyter integration) so the app can load genes on demand efficiently.
+- For very large gene matrices, store them column-major (CSC): each gene is then one contiguous read, with no gene index to build first.
 
 ---
 
@@ -252,8 +248,8 @@ whereas `0` is a real measurement and will be coloured as one.
 ### Likely causes (ordered)
 
 1) The gene is published under a different name than the one you typed.
-2) The gene is not in this export at all — preparation published only some of
-   the source’s genes.
+2) The gene is not in this dataset at all — the file holds only some of the
+   source’s genes.
 3) The search is substring-based; a short query matches many genes, and Enter
    picks the top match unless you first move the highlight with the arrow keys.
 4) The gene list is present but very large; your query is too broad.
@@ -273,7 +269,7 @@ whereas `0` is a real measurement and will be coloured as one.
 
 The four human samples — Suo, Garcia, He, and Kanemaru — publish only the genes
 whose Ensembl accession resolved to a symbol, which is between 45.1% and 70.2%
-of the gene axis of the file each was prepared from. A gene that is genuinely in
+of the gene axis of the file each was built from. A gene that is genuinely in
 the study can therefore be absent, under any spelling. The rule, the per-sample
 counts, and what to do instead are in
 {doc}`07_genes_in_the_built_in_samples`.
@@ -284,16 +280,17 @@ counts, and what to do instead are in
    ArrowDown/ArrowUp and press Enter.
 2) If the name you expected is not there, it is either published under another
    name or not published at all:
-   - check which `var` column the export named its genes from
-     (`prepare(var_gene_id_column=...)`, `show_anndata(gene_id_column=...)`);
-   - if that column does not contain your name either, the gene is absent from
-     the export and no viewer setting brings it back — re-export the dataset
-     with the genes and names you need, or load the source through server mode
-     or Jupyter.
+   - check which `var` column names the genes, and choose another under
+     **Session › Data mapping › Genes** (the file's default is
+     `uns['cellucid']['defaults']['geneIdColumn']`, written by
+     `prepare(var_gene_id_column=...)`);
+   - if no column contains your name, the gene is absent from the file and no
+     viewer setting brings it back — write the dataset again with the genes
+     you need.
 
 ### Prevention
 
-- Name genes in your export with the vocabulary your readers will type — the
+- Name genes in your dataset with the vocabulary your readers will type — the
   symbols on your figures, not an accession they would have to look up — and
   say which vocabulary it is for collaborators.
 
@@ -310,27 +307,27 @@ counts, and what to do instead are in
 
 ### How to confirm
 
-- Check **Active filters**:
+- Check **Filters**:
   - if it lists anything other than “No filters active”, filters are applied.
 - For categorical fields:
   - look for unchecked categories.
 - For continuous fields:
   - look at Min/Max sliders and the numeric readouts.
 - For outliers:
-  - check **Outlier filter (latent space)** percent (if visible).
+  - check the **Outlier filter** percent in the Legend box (categorical fields only).
 
 ### Fix
 
 1) For categorical filters:
-   - click **Show All** in the categorical legend.
+   - click **Show all** in the categorical legend.
 2) For continuous filters:
-   - click **RESET** in the continuous legend filtering section.
+   - click **Reset** in the continuous legend filtering section.
 3) For outlier filtering:
    - set the outlier slider back to `100%` (or switch to a field without outlier filtering).
 
 ### Prevention
 
-- Watch **Active filters** as your “single source of truth” for why points are missing.
+- Watch **Filters** as your “single source of truth” for why points are missing.
 
 ---
 
@@ -348,8 +345,8 @@ counts, and what to do instead are in
 ### Fix
 
 - Clear the filter(s) that removed those cells:
-  - categorical: Show All on the other field(s)
-  - continuous: RESET range filters
+  - categorical: Show all on the other field(s)
+  - continuous: Reset range filters
 
 ### Prevention
 
@@ -363,20 +360,21 @@ counts, and what to do instead are in
 
 1) You filtered to a narrow range but kept the color domain wide (rescale is off).
 2) The field is nearly constant (very low dynamic range).
-3) You’re coloring by a quantized/low-bit-depth export (banding/steps).
+3) The stored values themselves take few distinct levels (integer counts,
+   binned scores), which shows as banding/steps.
 
 ### How to confirm
 
 - If you have a narrow Min/Max slider range:
-  - check whether **Rescale colorbar to slider range** is Off.
+  - check whether **Rescale to range** is Off.
 - Toggle rescale On and see if contrast improves.
 
 ### Fix
 
-1) Turn **Rescale colorbar to slider range** On.
+1) Turn **Rescale to range** On.
 2) Choose a more appropriate colormap (Viridis/Cividis are good defaults).
-3) If values are quantized and you need more precision:
-   - re-export with higher precision settings (cellucid-python export knobs).
+3) If the stored values are coarse and you need more precision:
+   - store the column as floating point upstream and write the file again.
 
 ### Prevention
 
@@ -505,7 +503,7 @@ refused.
 ### Fix
 
 - There is no in-app undo for confirmed deletion.
-- Re-load/re-export the dataset if you need the original column again.
+- Reload the dataset if you need the original column again.
 
 ### Prevention
 
@@ -517,9 +515,10 @@ refused.
 
 ### Likely causes (ordered)
 
-1) Large dataset + slow storage/network (remote export host).
+1) Large dataset + slow storage/network (remote data host).
 2) Browser memory pressure (many genes loaded in one session).
-3) You’re not using server-backed / lazy workflows for large matrices.
+3) The matrix is row-major (CSR), so the first gene waits while the browser
+   builds a gene index, once per matrix.
 
 ### How to confirm
 
@@ -527,18 +526,15 @@ refused.
 - DevTools → Performance/Memory: memory grows as you load many genes.
 
 :::{note}
-A gene request that *fails* against the Python AnnData server is not a
-performance problem and no longer looks like one. The server validates the
-column before it sends a byte, and a column that is not entirely finite is
-answered **HTTP 422** with a JSON body naming the gene and counting the offending
-values — so the Network tab tells you the cause directly. See
-{ref}`undrawable-continuous-payload`. Slowness is the separate problem this
-section is about.
+A gene that is *refused* is not a performance problem: a column that is not
+entirely finite is refused with a notification naming the gene and counting the
+offending values. See {ref}`undrawable-continuous-payload`. Slowness is the
+separate problem this section is about.
 :::
 
 ### Fix
 
-- Prefer server-backed or local server workflows for very large gene matrices.
+- Store a very large gene matrix column-major (CSC), so no gene index is built first.
 - Avoid loading hundreds of genes in one session unless necessary.
 - If the browser becomes unstable, reload and use a smaller set of genes.
 
@@ -572,9 +568,9 @@ section is about.
 ## Still stuck?
 
 If you can reproduce the issue, capture:
-- a screenshot of **Coloring & Filtering** (showing selectors + legend + active filters),
+- a screenshot of **Coloring & filtering** (showing selectors + legend + active filters),
 - the browser console output around the failure,
-- and your dataset export metadata (obs/var manifests).
+- and the dataset's `obs` and `var` columns (`adata.obs.dtypes`, `adata.var.head()`).
 
 Then continue debugging from:
 - {doc}`../q_troubleshooting_index/index` (broader issues)

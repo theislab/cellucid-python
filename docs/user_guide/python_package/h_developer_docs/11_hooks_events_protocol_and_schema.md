@@ -82,9 +82,9 @@ Routing:
 - the viewer updates state and triggers hooks
 
 Python implementation:
-- `cellucid-python/src/cellucid/jupyter/_base.py`
+- `cellucid-python/src/cellucid/jupyter/_viewer.py`
   - `_register_viewer_for_messages`
-  - `BaseViewer._handle_frontend_message`
+  - `AnnDataViewer._handle_frontend_message`
 
 ### Event validation in Python
 
@@ -119,7 +119,7 @@ Python sends commands by:
    - `viewerToken`
 
 This is implemented in:
-- `cellucid-python/src/cellucid/jupyter/_base.py` (`BaseViewer.send_message`)
+- `cellucid-python/src/cellucid/jupyter/_viewer.py` (`AnnDataViewer.send_message`)
 
 The set of public command helpers (Python methods) lives in the viewer class (e.g. `highlight_cells`, `set_color_by`, etc.).
 
@@ -129,7 +129,7 @@ The set of public command helpers (Python methods) lives in the viewer class (e.
 
 The posted event body must be a native JSON object with exact non-empty `type`,
 `viewerId`, and `viewerToken` routing fields. The transport authenticates and
-removes `viewerToken`; `BaseViewer` then validates the complete type-specific
+removes `viewerToken`; `AnnDataViewer` then validates the complete type-specific
 record before callbacks receive the routing-free payload.
 
 Below are the expected shapes for core events.
@@ -201,7 +201,7 @@ and not with an individual call. Adding a `requestId` to the commands is not a
 compatible change: the viewer validates each command's key set exactly, so a
 new field would make every command fail on an already-deployed web build.
 
-`BaseViewer` prints this event to `sys.stderr` when no `command_error` hook is
+`AnnDataViewer` prints this event to `sys.stderr` when no `command_error` hook is
 registered, because the command methods are one-way — `set_color_by` has
 already returned `None` by the time the rejection arrives on the server thread,
 and nothing can make it raise without blocking every command on a browser round
@@ -396,5 +396,5 @@ Cause:
 - indices are positional; you changed row order between “what the UI is showing” and “what Python is indexing”.
 
 Fix:
-- keep the same AnnData row order as the server/export,
+- keep the same AnnData row order as the served dataset,
 - or use stable identifiers and explicit mapping for cross-dataset transfer.

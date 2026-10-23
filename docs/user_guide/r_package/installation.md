@@ -2,15 +2,15 @@
 
 **Audience:** everyone  
 **Time:** 5–15 minutes (depending on your setup)  
-**Goal:** install Cellucid for R, verify version 0.9.4, and choose the correct <!-- CELLUCID_VERSION -->
+**Goal:** install Cellucid for R, verify version 0.9.5, and choose the correct <!-- CELLUCID_VERSION -->
 source for current registry availability
 
 :::{note}
-**Active package version: 0.9.4.** Version 0.9.4 is the CRAN submission
+**Active package version: 0.9.5.** Version 0.9.5 is the CRAN submission
 release. The
 [CRAN package index](https://cran.r-project.org/web/packages/available_packages_by_name.html)
 is authoritative for registry availability. Use the CRAN command below when
-the index lists `cellucid` 0.9.4; otherwise install the active source from the
+the index lists `cellucid` 0.9.5; otherwise install the active source from the
 official GitHub repository.
 :::
 
@@ -18,7 +18,7 @@ official GitHub repository.
 
 - **R:** `cellucid` currently targets **R ≥ 4.3.0**.
 - **Hard dependency:** `jsonlite`
-- **Optional but recommended:** `Matrix` (sparse matrices + connectivities)
+- **Optional but recommended:** `Matrix` (sparse expression matrices and neighbour graphs)
 - **Source builds:** Rtools on Windows, the Xcode Command Line Tools on macOS,
   or a C toolchain plus R development headers on Linux
 
@@ -29,22 +29,23 @@ Those packages are only needed if you want to follow the Seurat/SCE recipes in t
 
 ## Install Cellucid
 
-### From CRAN when version 0.9.4 is listed
+### From CRAN when version 0.9.5 is listed
 <!-- CELLUCID_VERSION -->
 
-When the CRAN package index lists `cellucid` 0.9.4, install it with: <!-- CELLUCID_VERSION -->
+When the CRAN package index lists `cellucid` 0.9.5, install it with: <!-- CELLUCID_VERSION -->
 
 ```r
 install.packages("cellucid")
 ```
 
-If the index does not list version 0.9.4 yet, use the official source <!-- CELLUCID_VERSION -->
+If the index does not list version 0.9.5 yet, use the official source <!-- CELLUCID_VERSION -->
 installation below.
 
 ### From the official source repository
 
-These routes compile Cellucid's small native export-lock primitive and
-therefore require the source-build toolchain listed above. A platform CRAN
+These routes compile Cellucid's one small C routine (the CRC-32 checksum of
+the `.zarr.zip` writer) and therefore require the source-build toolchain
+listed above. A platform CRAN
 binary, when available, does not require a local compiler.
 
 #### Option A: `remotes` (simple, common)
@@ -70,15 +71,15 @@ packageVersion("cellucid")
 
 You should see:
 - No error on `library(cellucid)`
-- Version `0.9.4` from `packageVersion` <!-- CELLUCID_VERSION -->
+- Version `0.9.5` from `packageVersion` <!-- CELLUCID_VERSION -->
 
 ## Optional dependencies (recommended)
 
 ### `Matrix`
 
-If you plan to export:
+If you plan to write:
 - sparse gene expression matrices (common), or
-- connectivity matrices (`connectivities=`),
+- a neighbour graph (`connectivities=`),
 
 install Matrix:
 
@@ -144,4 +145,4 @@ packageVersion("cellucid")
 
 ## Next steps
 
-- Ready to export? Go to {doc}`a_landing_pages/04_quick_start_3_levels`.
+- Ready to write your first store? Go to {doc}`a_landing_pages/04_quick_start_3_levels`.

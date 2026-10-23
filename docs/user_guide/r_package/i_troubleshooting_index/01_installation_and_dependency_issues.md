@@ -55,23 +55,34 @@ options(repos = c(CRAN = "https://cloud.r-project.org"))
 install.packages("jsonlite")
 ```
 
-## Symptom: “Matrix package is required …”
+## Symptom: “The Matrix package is required to store connectivities.”
 
-You’ll see this if you try to export:
-- sparse gene expression matrices, or
-- connectivities,
-without Matrix installed.
+You passed `connectivities` as a base R matrix without `Matrix` installed.
+(`Matrix` is also what you need to hold a sparse `gene_expression` in the first
+place.)
 
 **Fix**
 ```r
 install.packages("Matrix")
 ```
 
+## Symptom: installing from GitHub fails with a compiler error
+
+**Likely cause**
+- The package compiles one small C file (the CRC-32 checksum of the
+  `.zarr.zip` writer), and no C toolchain is installed.
+
+**Fix**
+- Windows: install Rtools. macOS: `xcode-select --install`. Linux: a C
+  compiler plus the R development headers (for example `r-base-dev`).
+- Or install a platform binary from CRAN once the index lists the package; see
+  {doc}`../installation`.
+
 ## Symptom: “Seurat / SingleCellExperiment not installed”
 
 These are optional and only required for the recipe/tutorial pages.
 
-If you only want the minimal workflow, you can export from matrices/data.frames:
+If you only want the minimal workflow, start from matrices and data frames:
 - {doc}`../e_integrations_recipes/03_raw_matrices_and_data_frames_recipe`
 
 ## Symptom: “I updated but R still loads an old version”

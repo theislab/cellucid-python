@@ -51,7 +51,7 @@ If a cell is filtered out:
 - but it can still be part of an existing highlight group from earlier (it’s just not visible right now).
 
 Filters are the *only* thing that narrows what a gesture can pick up. LOD/downsampling
-does not: with Level-of-Detail enabled and the camera zoomed out, a lasso, proximity drag,
+does not: with Level of detail enabled and the camera zoomed out, a lasso, proximity drag,
 or KNN growth also takes unfiltered cells the view is not drawing at that moment
 ({doc}`01_highlight_mental_model`). The `Alt+click` that seeds annotation-based, proximity,
 and KNN selection is the exception — it can only land on a cell the view is drawing.
@@ -95,12 +95,12 @@ floating sidebar, over a notification toast, outside the window — is abandoned
 on purpose, because the polygon or radius you finished behind a panel would
 select cells the panel was covering. Nothing is committed, no step is recorded,
 no undo is spent, and your standing selection is repainted exactly as it was.
-The tool explains it under the **Highlight mode** buttons: *“That gesture ended
+The tool explains it under the **Tool** buttons: *“That gesture ended
 outside the view, so nothing was selected.”*
 
 ### Rule 5: a gesture the app cannot serve says so
 Every gesture the app consumes but cannot turn into a step writes one line under
-the **Highlight mode** buttons — a click that hit no cell, a cell with no value
+the **Tool** buttons — a click that hit no cell, a cell with no value
 on the field of the panel you pressed, a panel colored by no field, a gesture
 that resolved to the selection you already had.
 That line is the first thing to read when a tool “does nothing”; the full list
@@ -123,7 +123,7 @@ The candidate set can persist across tool switches, but per-tool undo/redo histo
 
 | Tool | Best for | Space | 2D vs 3D | Requires extra data | Common gotcha |
 |---|---|---|---|---|---|
-| **Annotation based** | “Select all cells like this one” (category) or “cells in this value range” (continuous) | Field space | Works in both; reads the field of the view you click in | A categorical or continuous color-by field | Selects only *visible* cells in that category/range |
+| **Annotation** | “Select all cells like this one” (category) or “cells in this value range” (continuous) | Field space | Works in both; reads the field of the view you click in | A categorical or continuous color-by field | Selects only *visible* cells in that category/range |
 | **Lasso** | Drawing around a region in the plot | Screen-space polygon (projection) | In 3D it selects by projection | None | In 3D it can include points “behind” your intended region |
 | **Proximity drag** | Selecting a local blob by distance | Embedding-space radius | In 2D it behaves like a disk; in 3D like a sphere | None | If you miss-click, center may be wrong (or nothing happens) |
 | **KNN drag** | Selecting along the neighbor graph (manifold-aware) | Graph distance (degree) | Independent of camera; still view-filtered | Connectivity/edges must be loaded | A press before the graph has loaded only starts the load; with no graph at all, “No neighbor graph available for this dataset” |
@@ -194,7 +194,7 @@ it is still true, because nothing has been confirmed.
 - “It selected fewer than expected”: filters are hiding some category members.
 - “It selected way too many”: your continuous range is too wide; reduce drag distance or intersect with a lasso.
 - “Nothing happens, and the panel says *Color by a field first*”: no panel on
-  screen is colored by a field — choose one under **Coloring & Filtering**.
+  screen is colored by a field — choose one under **Coloring & filtering**.
   That sentence replaces the `Alt+click` invitation exactly while no press
   could select anything, so the panel and the viewer never disagree. More
   symptoms: {doc}`06_troubleshooting_highlighting`.
@@ -252,7 +252,7 @@ To approximate a “3D volume selection”:
 ### Multi-view behavior
 In grid multi-view, a selection gesture is read on the panel you press, and
 view focus stays where it was: `Alt+click`, `Alt+drag` and a Select mode tap
-never make that panel the active view. **Annotation based** selection uses the
+never make that panel the active view. **Annotation** selection uses the
 field that panel is colored by and only the cells that panel shows, even when
 the focused view is colored by a different field; the range label of a
 continuous drag is that panel's range. Lasso applies to the specific panel you
@@ -263,11 +263,14 @@ Proximity and KNN likewise grow from the cell under the pointer in the panel
 you pressed, and their circles are drawn clipped to that panel.
 
 ### Performance considerations
-Lasso preview can be expensive on very large datasets because it may need to evaluate many points repeatedly while you draw.
-If lasso feels laggy:
-- filter down to fewer visible cells first,
-- draw shorter/fewer lasso segments (avoid long slow drags),
-- consider proximity or KNN selection.
+When you press, the lasso projects every visible cell of that panel once
+(the camera does not move during the gesture). Each pointer move after that
+tests only the cells near the newly drawn segment, so the preview stays
+interactive however long the path grows (hundreds of vertices are normal for a
+hand-drawn loop) and however many cells the panel shows. On very large
+datasets the first projection runs in short slices while you start drawing;
+the preview appears as soon as it completes, and releasing earlier still
+selects exactly the enclosed cells.
 
 ---
 
@@ -306,7 +309,7 @@ Practical implications:
 If you click empty space:
 - with no existing candidate set there is no meaningful center, so the gesture
   never starts and the tool says *“That click did not land on a cell, so there
-  is nothing to select…”* under the **Highlight mode** buttons.
+  is nothing to select…”* under the **Tool** buttons.
 - with an existing candidate set the tool places a center anyway, where your
   click ray crosses the plane through that selection’s centroid facing the
   camera — that is, *where you clicked, at the selection’s depth*. This is what
@@ -319,8 +322,10 @@ If you click empty space:
 - You want to add/subtract small blobs cleanly (less projection ambiguity than lasso in 3D).
 
 ### Performance considerations
-Proximity preview can be expensive for huge datasets because it can scan many points while you drag.
-If it lags, reduce visible cells first (filters) or use a smaller radius/fewer drags.
+When you press, proximity measures every visible cell's distance from the
+centre once. Each pointer move after that re-tests only the cells between the
+previous radius and the new one, so growing or shrinking the circle costs the
+cells it sweeps, not a scan of the dataset.
 
 ---
 
@@ -336,13 +341,13 @@ What you see:
   graph for KNN mode”* notification that turns into *“Neighbor graph ready
   (N edges)”*. An `Alt+click` made before that finishes only starts the load
   and selects nothing; seed the drag again once the graph is ready.
-- A dataset exported without connectivities raises one warning notification,
+- A dataset without a neighbour graph raises one warning notification,
   *“No neighbor graph available for this dataset”*, and KNN drag selects
   nothing.
 
 Practical fix:
 - load connectivity/edges for your dataset (often via a “Show edges” toggle), or
-- re-export your dataset including connectivities.
+- write your dataset again including connectivities (`obsp['connectivities']`).
 
 ### Gesture
 1) Choose **KNN drag** mode.

@@ -4,8 +4,7 @@ The viewer records which cell ordering a session was saved against, so a dataset
 republished with the same name and counts but a different row order cannot
 silently re-point every saved selection at different cells. The digest is over
 the coordinates of one embedding, so the record names that embedding: an
-exported embedding id with ``columns: null``, or an AnnData ``obsm`` key with
-the 0-based columns read. The record and the data mapping are both required;
+AnnData ``obsm`` key with the 0-based columns read. The record and the data mapping are both required;
 the viewer refuses a session without them and so does this reader. The digest
 itself cannot be re-derived here, which is the viewer's job; its shape is.
 """
@@ -19,21 +18,24 @@ import pytest
 
 from cellucid.session_bundle import _validate_fingerprint
 
-_EXPORT_MAPPING: dict[str, Any] = {
-    "kind": "export",
+_KEYED_MAPPING: dict[str, Any] = {
+    "kind": "anndata",
     "embeddings": {
         "enabled": [
-            {"key": "X_tsne", "columns": None},
-            {"key": "X_umap", "columns": None},
-            {"key": "X_umap_3d", "columns": None},
+            {"key": "X_tsne", "columns": [0, 1]},
+            {"key": "X_umap", "columns": [0, 1]},
+            {"key": "X_umap_3d", "columns": [0, 1, 2]},
         ],
         "defaults": {
             "1d": None,
-            "2d": {"key": "X_tsne", "columns": None},
-            "3d": {"key": "X_umap_3d", "columns": None},
+            "2d": {"key": "X_tsne", "columns": [0, 1]},
+            "3d": {"key": "X_umap_3d", "columns": [0, 1, 2]},
         },
     },
+    "knn": None,
     "geneNames": "index",
+    "expression": "X",
+    "latent": None,
     "vectorFields": [],
 }
 
@@ -53,25 +55,25 @@ _ANNDATA_MAPPING: dict[str, Any] = {
 
 def _fingerprint(*, mapping: dict[str, Any] | None = None, **overrides: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
-        "sourceType": "local-demo",
         "datasetId": "pancreas",
+        "name": "Pancreas",
         "cellCount": 3696,
         "varCount": 3753,
         "cellOrder": {
-            "embedding": {"key": "X_tsne", "columns": None},
+            "embedding": {"key": "X_tsne", "columns": [0, 1]},
             "dimension": 2,
             "digest": "0123456789abcdef",
         },
-        "dataMapping": copy.deepcopy(_EXPORT_MAPPING if mapping is None else mapping),
+        "dataMapping": copy.deepcopy(_KEYED_MAPPING if mapping is None else mapping),
     }
     base.update(overrides)
     return base
 
 
-def test_a_complete_export_fingerprint_is_accepted() -> None:
+def test_a_complete_fingerprint_is_accepted() -> None:
     validated = _validate_fingerprint(_fingerprint())
-    assert validated["cellOrder"]["embedding"] == {"key": "X_tsne", "columns": None}
-    assert validated["dataMapping"] == _EXPORT_MAPPING
+    assert validated["cellOrder"]["embedding"] == {"key": "X_tsne", "columns": [0, 1]}
+    assert validated["dataMapping"] == _KEYED_MAPPING
 
 
 def test_a_complete_anndata_fingerprint_is_accepted() -> None:
@@ -91,7 +93,7 @@ def test_every_embedding_dimension_is_accepted(dimension: int) -> None:
     _validate_fingerprint(
         _fingerprint(
             cellOrder={
-                "embedding": {"key": "X_tsne", "columns": None},
+                "embedding": {"key": "X_tsne", "columns": list(range(dimension))},
                 "dimension": dimension,
                 "digest": "a" * 16,
             }
@@ -105,7 +107,7 @@ def test_the_cell_order_embedding_need_not_be_a_dimension_default() -> None:
     _validate_fingerprint(
         _fingerprint(
             cellOrder={
-                "embedding": {"key": "X_umap", "columns": None},
+                "embedding": {"key": "X_umap", "columns": [0, 1]},
                 "dimension": 2,
                 "digest": "a" * 16,
             }
@@ -113,7 +115,7 @@ def test_the_cell_order_embedding_need_not_be_a_dimension_default() -> None:
     )
 
 
-_EMBEDDING = {"key": "X_tsne", "columns": None}
+_EMBEDDING = {"key": "X_tsne", "columns": [0, 1]}
 
 
 @pytest.mark.parametrize(
@@ -150,13 +152,9 @@ _EMBEDDING = {"key": "X_tsne", "columns": None}
             {"embedding": {"key": "", "columns": None}, "dimension": 2, "digest": "a" * 16},
             "cellOrder.embedding.key must be a non-empty string",
         ),
-        (
-            {"embedding": {"key": "X_tsne", "columns": [0, 1]}, "dimension": 2, "digest": "a" * 16},
-            "cellOrder.embedding.columns must be null",
-        ),
     ],
 )
-def test_a_malformed_export_cell_order_is_rejected(cell_order: Any, message: str) -> None:
+def test_a_malformed_cell_order_is_rejected(cell_order: Any, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         _validate_fingerprint(_fingerprint(cellOrder=cell_order))
 
@@ -182,7 +180,7 @@ def test_an_anndata_cell_order_lists_one_column_per_axis(
         _validate_fingerprint(fingerprint)
 
 
-@pytest.mark.parametrize("missing", ["cellOrder", "dataMapping", "varCount"])
+@pytest.mark.parametrize("missing", ["cellOrder", "dataMapping", "varCount", "name"])
 def test_every_fingerprint_field_is_required(missing: str) -> None:
     incomplete = _fingerprint()
     del incomplete[missing]
@@ -199,12 +197,13 @@ def test_an_unknown_fingerprint_field_is_still_rejected() -> None:
     ("change", "message"),
     [
         ({"kind": "h5ad"}, "dataMapping.kind must be"),
-        ({"knn": None}, "dataMapping fields: unknown knn"),
+        ({"kind": "export"}, "dataMapping.kind must be"),
+        ({"dimension": 2}, "dataMapping fields: unknown dimension"),
         ({"geneNames": "symbols"}, "dataMapping.geneNames must be"),
         (
             {
                 "embeddings": {
-                    "enabled": [{"key": "X_tsne", "columns": None}],
+                    "enabled": [{"key": "X_tsne", "columns": [0, 1]}],
                     "defaults": {"1d": None, "2d": None, "3d": None},
                 }
             },
@@ -214,7 +213,7 @@ def test_an_unknown_fingerprint_field_is_still_rejected() -> None:
             {
                 "embeddings": {
                     "enabled": [],
-                    "defaults": {"1d": None, "2d": {"key": "X_tsne", "columns": None}, "3d": None},
+                    "defaults": {"1d": None, "2d": {"key": "X_tsne", "columns": [0, 1]}, "3d": None},
                 }
             },
             "dataMapping.embeddings.enabled must list at least one embedding",
@@ -222,28 +221,32 @@ def test_an_unknown_fingerprint_field_is_still_rejected() -> None:
         (
             {
                 "embeddings": {
-                    "enabled": [{"key": "X_tsne", "columns": None}],
-                    "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None},
+                    "enabled": [{"key": "X_tsne", "columns": [0, 1]}],
+                    "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": [0, 1]}, "3d": None},
                 }
             },
             r"dataMapping.embeddings.defaults.2d must be one of the enabled embeddings",
         ),
         (
-            {"embeddings": {"1d": None, "2d": {"key": "X_tsne", "columns": None}, "3d": None}},
+            {"embeddings": {"1d": None, "2d": {"key": "X_tsne", "columns": [0, 1]}, "3d": None}},
             "dataMapping.embeddings fields: missing defaults, enabled; unknown 1d, 2d, 3d",
         ),
         (
-            {"vectorFields": [{"field": "velocity", "embedding": {"key": "X_draw_graph_fa", "columns": None}}]},
+            {
+                "vectorFields": [
+                    {"key": "velocity_draw_graph_fa", "embedding": {"key": "X_draw_graph_fa", "columns": [0, 1]}}
+                ]
+            },
             r"dataMapping.vectorFields\[0\] is bound to an embedding that is not enabled",
         ),
         (
-            {"vectorFields": [{"field": "velocity", "embedding": {"key": "X_tsne", "columns": None}}] * 2},
+            {"vectorFields": [{"key": "velocity_tsne", "embedding": {"key": "X_tsne", "columns": [0, 1]}}] * 2},
             "dataMapping.vectorFields repeats a binding",
         ),
     ],
 )
 def test_a_malformed_data_mapping_is_rejected(change: dict[str, Any], message: str) -> None:
-    mapping = copy.deepcopy(_EXPORT_MAPPING)
+    mapping = copy.deepcopy(_KEYED_MAPPING)
     mapping.update(change)
     with pytest.raises(ValueError, match=message):
         _validate_fingerprint(_fingerprint(mapping=mapping))
@@ -256,3 +259,15 @@ def test_the_returned_fingerprint_is_a_copy() -> None:
     validated["dataMapping"]["embeddings"]["enabled"][0]["key"] = "changed"
     assert fingerprint["dataMapping"]["embeddings"]["defaults"]["2d"]["key"] == "X_tsne"
     assert fingerprint["dataMapping"]["embeddings"]["enabled"][0]["key"] == "X_tsne"
+
+
+def test_an_unknown_source_type_is_refused() -> None:
+    with pytest.raises(ValueError, match="unknown sourceType"):
+        _validate_fingerprint(_fingerprint(sourceType="local-demo"))
+
+
+def test_the_dataset_name_is_a_trimmed_string_or_null() -> None:
+    assert _validate_fingerprint(_fingerprint(name=None))["name"] is None
+    for name in ("", " Pancreas", 3):
+        with pytest.raises(ValueError, match="datasetFingerprint.name"):
+            _validate_fingerprint(_fingerprint(name=name))

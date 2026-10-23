@@ -1180,7 +1180,7 @@
       "id": "sessions-refusal-not-a-session-file",
       "topic": "sessions_sharing",
       "name": "refusal-02-not-a-session-file",
-      "describes": "A notification titled \"Loading failed\" reading \"Session file: Invalid session file (bad MAGIC header).\", with a dismiss button at its right, after a file that is not a session bundle was chosen in Load State.",
+      "describes": "A notification titled \"Loading failed\" reading \"Session file: This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2).\", with a dismiss button at its right, after a file that is not a session bundle was chosen in Load State.",
       "dataset": "pancreas",
       "theme": "light",
       "viewport": "1440x1000",

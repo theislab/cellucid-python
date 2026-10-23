@@ -5,7 +5,7 @@ Provides seamless integration with Jupyter notebooks for visualizing
 cellucid datasets directly in notebook cells.
 
 Usage:
-    from cellucid.jupyter import CellucidViewer, show, show_anndata
+    from cellucid.jupyter import show_anndata
 
     # Quick visualization
     viewer = show_anndata(
@@ -50,27 +50,20 @@ The module is a package. Its submodules are:
     standard library only.
 ``_hooks``
     :class:`HookRegistry` and :class:`ViewerState`.
-``_base``
-    :class:`BaseViewer`, notebook-context detection, the HTTP event-routing
-    bridge, and interpreter-exit cleanup.
-``_exported`` / ``_anndata``
-    :class:`CellucidViewer` and :func:`show` for a prepared export directory;
-    :class:`AnnDataViewer` and :func:`show_anndata` for an AnnData object.
+``_viewer``
+    :class:`AnnDataViewer` and :func:`show_anndata` for an AnnData file, store
+    or object, notebook-context detection, the HTTP event-routing bridge, and
+    interpreter-exit cleanup.
 """
 
-from ._anndata import AnnDataViewer, show_anndata
-from ._base import BaseViewer, cleanup_all
-from ._exported import CellucidViewer, show
 from ._hooks import HookCallback, HookRegistry, ViewerState
+from ._viewer import AnnDataViewer, cleanup_all, show_anndata
 
 __all__ = [
     "AnnDataViewer",
-    "BaseViewer",
-    "CellucidViewer",
     "HookCallback",
     "HookRegistry",
     "ViewerState",
     "cleanup_all",
-    "show",
     "show_anndata",
 ]

@@ -1,4 +1,4 @@
-# Compatibility matrix (must be explicit)
+# Compatibility matrix
 
 **Audience:** notebook users, IT-restricted environments, power users  
 **Time:** 10–15 minutes  
@@ -33,8 +33,8 @@ Cellucid has two different network surfaces:
 
 | Feature | Source access required? | Notes |
 |---|---:|---|
-| `cellucid serve exports/...` with its viewer | Yes, at startup | The server downloads, stages, byte-verifies, and atomically publishes the complete source generation before binding its HTTP server. |
-| `show(...)` / `show_anndata(...)` | Yes, at startup | The notebook viewer uses the same establishment contract. |
+| `cellucid serve data.h5ad` with its viewer | Yes, at startup | The server downloads, stages, byte-verifies, and atomically publishes the complete source generation before binding its HTTP server. |
+| `show_anndata(...)` | Yes, at startup | The notebook viewer uses the same establishment contract. |
 | `cellucid serve ... --no-web-ui` | No | Explicit data-endpoint-only mode; no viewer is served. |
 | Hosted web app (`cellucid.com`) | Yes | The browser loads the website directly. |
 | `ensure_web_ui_cached(force=True)` | Yes | Establishes the complete source generation now. |
@@ -127,7 +127,7 @@ If it fails:
   - `client_server_url`
   - `allowed_hosts`
   - `server_health`
-  - `dataset_identity_probes`
+  - `anndata_store_probes`
   - `frontend_roundtrip` and `frontend_debug_snapshot`
 
 ## Security / browser constraints (what’s going on under the hood)

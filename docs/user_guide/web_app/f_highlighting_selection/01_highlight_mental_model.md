@@ -80,7 +80,7 @@ switching to *“N of M highlighted cells visible”*.
 Internally, Cellucid identifies a cell by its **index**: `0..(n_cells-1)` in the loaded dataset’s order.
 
 This makes highlights **dataset-dependent**:
-if you reorder/re-export your dataset, “cell #123” may no longer refer to the same biological cell.
+if you reorder your dataset or write it again, “cell #123” may no longer refer to the same biological cell.
 
 :::{important}
 Session restore rejects and rolls back the complete operation if the saved
@@ -142,8 +142,8 @@ That includes:
 - standard filters ({doc}`../e_filtering/index`),
 - view-specific filters in multi-view snapshots (if snapshots have independent filters).
 
-It does **not** include LOD/downsampling. With **Visualization → Renderer settings →
-Level-of-Detail (LOD)** enabled ({doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke`),
+It does **not** include LOD/downsampling. With **Visualization → Performance →
+Level of detail (LOD)** enabled ({doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke`),
 a zoomed-out camera makes Cellucid draw only a subset of the points — but a lasso,
 proximity drag, or KNN growth still evaluates every unfiltered cell. So a gesture can
 select cells the view is not currently drawing, and the group you confirm can be larger
@@ -222,7 +222,7 @@ Large highlights can make sessions much larger; see {doc}`05_edge_cases_highligh
 - Anything if you reload without restoring a session
 
 ### Dataset binding (important)
-Highlights are dataset-dependent. If the session’s dataset fingerprint doesn’t match your currently loaded dataset, Cellucid restores only dataset-agnostic layout and skips highlight data.
+Highlights are dataset-dependent. If the session’s dataset fingerprint doesn’t match your currently loaded dataset, Cellucid rejects the whole restore: nothing, highlights included, is applied.
 
 ---
 
@@ -303,8 +303,8 @@ The highlight UI distinguishes:
 If you zoom/pan and see “visible highlighted” change, you may be seeing LOD behavior rather than filters.
 
 ### Session storage (high level)
-For session bundles, highlight memberships are stored as dataset-dependent chunks and compressed (delta-encoded indices + varint + gzip).
-This is efficient for typical selections but can still be large for very big groups.
+For session bundles, each highlight group's membership is one dataset-dependent chunk, stored in whichever encoding is smallest for it (sorted gaps, a bitset over all cells, or runs of consecutive cells) and gzip-compressed.
+A group made from a whole category is stored relative to that category and costs a few bytes whatever its size; on restore the category's cells are recomputed and checked against the saved count and digest.
 
 ### Python/Jupyter synchronization (implemented)
 

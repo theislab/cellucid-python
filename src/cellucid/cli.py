@@ -2,11 +2,12 @@
 Cellucid CLI - Unified Command Line Interface
 
 This module provides a single entry point for all cellucid command-line operations:
-- serve: Serve data (auto-detects h5ad, zarr, or pre-exported)
+- serve: Serve an AnnData file or store (.h5ad, a Zarr store folder, or a
+  zipped Zarr store) to the viewer, which reads it itself
 
 Usage:
-    cellucid serve /path/to/exported_data
     cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example
+    cellucid serve /path/to/my_dataset.zarr  # written by cellucid.prepare()
     cellucid --version
 """
 
@@ -36,7 +37,7 @@ ISSUE_TRACKER_URL = "https://github.com/theislab/cellucid-python/issues"
 # side decides whether a traceback is printed.
 #
 # These types are the ones an *operator condition* arrives as: a flag that is
-# missing or does not apply, a path that is not a dataset, a manifest that does
+# missing or does not apply, a path that is not a dataset, a file that does
 # not parse, a port another program already holds, an optional package that is
 # not installed. Cellucid raises the first group deliberately through the
 # exception taxonomy its documentation defines -- ``ValueError``, ``TypeError``,
@@ -167,40 +168,17 @@ def _detect_data_format(path: Path) -> str:
 
     Returns:
         'h5ad' - HDF5-based AnnData file
-        'zarr' - Zarr-based AnnData store
-        'exported' - Pre-exported cellucid dataset
+        'zarr' - Zarr-based AnnData store (a folder, or zipped)
         'unknown' - Unable to detect format
     """
+    from ._anndata_files import classify_anndata_path
 
     if not path.exists():
         return "unknown"
-
-    from .anndata_adapter import _classify_anndata_path
-
-    if path.is_file():
-        try:
-            return _classify_anndata_path(path)
-        except ValueError:
-            return "unknown"
-
-    if not path.is_dir():
+    try:
+        return classify_anndata_path(path).kind
+    except ValueError:
         return "unknown"
-
-    declares_zarr = (
-        path.suffix == ".zarr" or (path / ".zgroup").exists() or (path / ".zattrs").exists()
-    )
-    if declares_zarr:
-        try:
-            return _classify_anndata_path(path)
-        except ValueError:
-            return "unknown"
-
-    from .server._datasets import _list_exported_datasets
-
-    if _list_exported_datasets(path):
-        return "exported"
-
-    return "unknown"
 
 
 def _add_serve_subparser(subparsers, common_parser: argparse.ArgumentParser) -> None:
@@ -208,14 +186,15 @@ def _add_serve_subparser(subparsers, common_parser: argparse.ArgumentParser) -> 
     serve_parser = subparsers.add_parser(
         "serve",
         parents=[common_parser],
-        help="Serve data (auto-detects h5ad, zarr, or pre-exported)",
-        description="Serve data for visualization. Automatically detects format.",
+        help="Serve an AnnData file or store (.h5ad, Zarr folder, or zipped Zarr)",
+        description="Serve an AnnData file or store to the viewer, which reads it itself.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Auto-detection:
-    - .h5ad files -> served directly via AnnData
-    - .zarr directories -> served directly via AnnData
-    - Export directories (or exports roots with multiple datasets) -> served as pre-exported data
+Formats (detected):
+    - .h5ad files
+    - Zarr store folders (v2 or v3) and zipped Zarr stores (.zip)
+    A store written by cellucid.prepare() names itself (uns['cellucid']), so
+    --dataset-name and --dataset-id are needed only for other AnnData.
 
 Examples:
     # Serve an h5ad file (auto-detected)
@@ -224,8 +203,8 @@ Examples:
     # Serve a zarr store (auto-detected)
     cellucid serve /path/to/data.zarr --dataset-name Example --dataset-id example
 
-    # Serve pre-exported data (auto-detected)
-    cellucid serve /path/to/exported_dataset
+    # Serve a Cellucid-ready AnnData written by cellucid.prepare()
+    cellucid serve /path/to/my_dataset.zarr
 
     # Serve only named obs columns, leaving out one Cellucid cannot serve
     cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \\
@@ -237,10 +216,9 @@ Examples:
     # Behind jupyter-server-proxy, name the proxy's host explicitly
     cellucid serve /path/to/data --allowed-host hub.example.org
 
-    # Serve the neighbor graph and the velocity overlay, both off by default
-    # because each is read and checked in full before the server binds
+    # Open on a chosen neighbor graph and velocity field
     cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example \\
-        --knn connectivities --vector-fields
+        --knn connectivities --vector-field-default velocity
 
     # Choose what is plotted: t-SNE in 2D, PCA components 1 and 2 in a second
     # run, and expression from a layer named by the gene-symbol column
@@ -265,29 +243,38 @@ Examples:
     serve_parser.add_argument(
         "data_path",
         type=str,
-        help="Path to h5ad file, zarr directory, or pre-exported dataset",
+        help="Path to an .h5ad file or a Zarr store (folder or .zip)",
     )
-    # AnnData-specific options. Supplying one for another format is an error.
     serve_parser.add_argument(
         "--latent-key",
         type=str,
         default=None,
         metavar="KEY",
-        help="Explicit obsm latent-space key for AnnData centroid outliers",
+        help="obsm latent space (scVI, PCA) the outlier filter measures in",
+    )
+    serve_parser.add_argument(
+        "--centroid-min-points",
+        type=_positive_int,
+        default=None,
+        metavar="N",
+        help=(
+            "Fewest cells a category needs for the outlier filter to measure it "
+            "(default: the store's own, else 10)"
+        ),
     )
     serve_parser.add_argument(
         "--dataset-name",
         type=str,
         default=None,
         metavar="NAME",
-        help="Explicit dataset name (required for h5ad and zarr)",
+        help="Dataset name (default: the store's uns['cellucid']['name'], required without it)",
     )
     serve_parser.add_argument(
         "--dataset-id",
         type=str,
         default=None,
         metavar="ID",
-        help="Explicit stable dataset identifier (required for h5ad and zarr)",
+        help="Stable dataset identifier (default: the store's uns['cellucid']['id'], required without it)",
     )
     serve_parser.add_argument(
         "--obs-key",
@@ -297,9 +284,8 @@ Examples:
         dest="obs_key",
         metavar="KEY",
         help=(
-            "Exact AnnData obs column to serve; repeat once per column. "
-            "Every column is served when this is omitted. Naming the columns "
-            "leaves out one Cellucid cannot serve, such as a datetime column"
+            "Exact AnnData obs column the viewer shows; repeat once per column, "
+            "in order. Every column is shown when this is omitted"
         ),
     )
     serve_parser.add_argument(
@@ -307,19 +293,7 @@ Examples:
         type=str,
         default=None,
         metavar="FIELD_ID",
-        help="Exact default field id when AnnData contains multiple UMAP vector fields",
-    )
-
-    serve_parser.add_argument(
-        "--vector-fields",
-        action="store_true",
-        default=None,
-        dest="vector_fields",
-        help=(
-            "Serve the obsm '<field>_umap_<n>d' vector arrays as an animated "
-            "overlay. Off by default: every declared field is read and checked "
-            "before the server binds"
-        ),
+        help="Vector field the overlay opens on: <field> of an obsm '<field>_<basis>' array drawn over 'X_<basis>'",
     )
 
     for dimension in (1, 2, 3):
@@ -337,16 +311,24 @@ Examples:
         )
 
     serve_parser.add_argument(
+        "--normalize-embeddings",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Scale every embedding into the viewer's coordinate range; the no- "
+            "form shows the coordinates as stored (default: the store's own, "
+            "else scaled)"
+        ),
+    )
+
+    serve_parser.add_argument(
         "--knn",
         type=str,
         default=None,
         metavar="KEY",
         help=(
-            "AnnData obsp matrix to serve as the neighbor graph, usually "
-            "'connectivities'. Off by default: reading it costs time and memory "
-            "proportional to the stored neighbor count, which on a large dataset "
-            "is the longest part of startup. A matrix that is not symmetric, "
-            "such as 'distances', is refused"
+            "AnnData obsp matrix the viewer draws as the neighbor graph, usually "
+            "'connectivities'; read only when a view draws it"
         ),
     )
 
@@ -373,6 +355,17 @@ Examples:
     )
 
     serve_parser.set_defaults(func=_run_serve)
+
+
+def _positive_int(value: str) -> int:
+    """Parse a positive integer flag value, refusing anything else by name."""
+    try:
+        number = int(value, 10)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected a positive integer; got {value!r}") from None
+    if number < 1:
+        raise argparse.ArgumentTypeError(f"expected a positive integer; got {value!r}")
+    return number
 
 
 def _parse_embedding_flag(value: str, *, flag: str) -> str | tuple[str, list[int]]:
@@ -407,123 +400,44 @@ def _run_serve(args: argparse.Namespace) -> None:
         if not data_path.exists():
             raise FileNotFoundError(f"Path not found: {data_path}")
         raise ValueError(
-            f"Unable to detect format for: {data_path}. Expected an exact .h5ad "
-            "file, complete Zarr store, or complete prepared Cellucid generation."
+            f"Unable to detect format for: {data_path}. Expected an .h5ad file, a Zarr "
+            "store folder, or a zipped Zarr store (.zip)."
         )
 
-    if data_format == "exported":
-        inapplicable = [
-            flag
-            for flag, supplied in (
-                ("--latent-key", args.latent_key is not None),
-                ("--dataset-name", args.dataset_name is not None),
-                ("--dataset-id", args.dataset_id is not None),
-                ("--obs-key", args.obs_key is not None),
-                (
-                    "--vector-field-default",
-                    args.vector_field_default is not None,
-                ),
-                ("--embedding-1d", args.embedding_1d is not None),
-                ("--embedding-2d", args.embedding_2d is not None),
-                ("--embedding-3d", args.embedding_3d is not None),
-                ("--knn", args.knn is not None),
-                ("--gene-id-column", args.gene_id_column is not None),
-                ("--expression", args.expression is not None),
-                ("--vector-fields", args.vector_fields is not None),
-            )
-            if supplied
-        ]
-        if inapplicable:
-            raise ValueError(
-                f"{', '.join(inapplicable)} may only be used with direct AnnData input. "
-                "A prepared export already declares its identity and its columns in "
-                "dataset_identity.json, so remove the flag and run the command again."
-            )
-        # Pre-exported dataset - use standard server
-        from .server import serve
+    # The viewer reads the store; the server names it, as given here or as
+    # its uns['cellucid'] declares.
+    from .anndata_server import serve_anndata
 
-        serve(
-            data_dir=str(data_path),
-            port=args.port,
-            host=args.host,
-            open_browser=not args.no_browser,
-            quiet=args.quiet,
-            serve_web_ui=not args.no_web_ui,
-            web_source_url=args.web_source_url,
-            web_cache_dir=args.web_cache_dir,
-            allowed_hosts=args.allowed_host,
+    embedding_keys = {
+        f"{dimension}d": _parse_embedding_flag(
+            getattr(args, f"embedding_{dimension}d"),
+            flag=f"--embedding-{dimension}d",
         )
-    else:
-        # AnnData (h5ad or zarr) - use AnnData server.
-        #
-        # Both flags are reported together. Naming only the first sends someone
-        # who supplied neither back to the terminal twice for one mistake.
-        missing_identity = [
-            flag
-            for flag, value in (
-                ("--dataset-name", args.dataset_name),
-                ("--dataset-id", args.dataset_id),
-            )
-            if not isinstance(value, str) or not value
-        ]
-        if missing_identity:
-            verb = "are" if len(missing_identity) > 1 else "is"
-            raise ValueError(
-                f"{' and '.join(missing_identity)} {verb} required when serving h5ad or "
-                "zarr data. An .h5ad file and a Zarr store carry no Cellucid identity of "
-                "their own, so name the dataset on the command line, for example: "
-                '--dataset-name "My study" --dataset-id my-study-v1'
-            )
-        if args.vector_field_default is not None and not args.vector_fields:
-            raise ValueError(
-                "--vector-field-default selects among served vector fields, and "
-                "vector fields are not being served. Add --vector-fields to serve "
-                "them, or drop --vector-field-default."
-            )
-        if not args.quiet:
-            console_print(
-                "\nImporting dependencies (anndata, numpy, scipy)...",
-                end=" ",
-                flush=True,
-            )
-
-        from .anndata_server import serve_anndata
-
-        if not args.quiet:
-            console_print("done")
-
-        embedding_keys = {
-            f"{dimension}d": _parse_embedding_flag(
-                getattr(args, f"embedding_{dimension}d"),
-                flag=f"--embedding-{dimension}d",
-            )
-            for dimension in (1, 2, 3)
-            if getattr(args, f"embedding_{dimension}d") is not None
-        }
-        adapter_options = {
-            "latent_key": args.latent_key,
-            "gene_id_column": args.gene_id_column,
-            "dataset_name": args.dataset_name,
-            "dataset_id": args.dataset_id,
-            "obs_keys": args.obs_key,
-            "embedding_keys": embedding_keys or None,
-            "knn_key": args.knn,
-            "expression_source": args.expression,
-            "vector_field_default": args.vector_field_default,
-            "serve_vector_fields": bool(args.vector_fields),
-        }
-        serve_anndata(
-            data=str(data_path),
-            port=args.port,
-            host=args.host,
-            open_browser=not args.no_browser,
-            quiet=args.quiet,
-            serve_web_ui=not args.no_web_ui,
-            web_source_url=args.web_source_url,
-            web_cache_dir=args.web_cache_dir,
-            allowed_hosts=args.allowed_host,
-            **adapter_options,
-        )
+        for dimension in (1, 2, 3)
+        if getattr(args, f"embedding_{dimension}d") is not None
+    }
+    serve_anndata(
+        data=str(data_path),
+        port=args.port,
+        host=args.host,
+        open_browser=not args.no_browser,
+        quiet=args.quiet,
+        serve_web_ui=not args.no_web_ui,
+        web_source_url=args.web_source_url,
+        web_cache_dir=args.web_cache_dir,
+        allowed_hosts=args.allowed_host,
+        latent_key=args.latent_key,
+        gene_id_column=args.gene_id_column,
+        normalize_embeddings=args.normalize_embeddings,
+        centroid_min_points=args.centroid_min_points,
+        dataset_name=args.dataset_name,
+        dataset_id=args.dataset_id,
+        obs_keys=args.obs_key,
+        embedding_keys=embedding_keys or None,
+        knn_key=args.knn,
+        expression_source=args.expression,
+        vector_field_default=args.vector_field_default,
+    )
 
 
 def _report_error(message: str) -> None:
@@ -709,10 +623,10 @@ For more information, see:
     https://github.com/theislab/cellucid-python
 
 Quick start:
-    # Serve any data (format auto-detected)
+    # Serve an AnnData file or store (format detected)
     cellucid serve /path/to/data.h5ad --dataset-name Example --dataset-id example
     cellucid serve /path/to/data.zarr --dataset-name Example --dataset-id example
-    cellucid serve /path/to/exported_data
+    cellucid serve /path/to/my_dataset.zarr  # written by cellucid.prepare()
 
 Use 'cellucid serve --help' for more options.
 """,

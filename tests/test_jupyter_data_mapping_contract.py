@@ -16,9 +16,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from _serverless_viewer import serverless_viewer
 
 import cellucid.jupyter as jupyter
-import cellucid.jupyter._base as jupyter_base
+import cellucid.jupyter._viewer as jupyter_viewer
 import cellucid.jupyter._wire as wire
 
 CONFORMANCE = Path(__file__).parent / "fixtures" / "data_mapping_conformance.json"
@@ -30,12 +31,6 @@ ANNDATA_MAPPING: dict[str, Any] = {
     "geneNames": "index",
     "expression": "X",
     "latent": None,
-    "vectorFields": [],
-}
-EXPORT_MAPPING: dict[str, Any] = {
-    "kind": "export",
-    "embeddings": {"enabled": [{"key": "X_umap", "columns": None}], "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None}},
-    "geneNames": "index",
     "vectorFields": [],
 }
 
@@ -77,7 +72,7 @@ def test_the_capability_document_lists_both_halves() -> None:
     document = wire._protocol_capability_document()
     assert "setDataMapping" in document["commands"]
     assert "data_mapping" in document["events"]
-    assert jupyter_base._COMMAND_PYTHON_CALLERS["setDataMapping"] == "viewer.set_data_mapping(...)"
+    assert jupyter_viewer._COMMAND_PYTHON_CALLERS["setDataMapping"] == "viewer.set_data_mapping(...)"
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +185,7 @@ def test_command_error_may_name_set_data_mapping() -> None:
 
 
 def test_the_viewer_holds_the_latest_reported_mapping() -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     assert viewer.data_mapping is None
     assert viewer.data_mapping_origin is None
     hooked: list[dict[str, Any]] = []
@@ -215,14 +210,14 @@ def test_the_viewer_holds_the_latest_reported_mapping() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _viewer_with_mapping(mapping: dict[str, Any]) -> jupyter.BaseViewer:
-    viewer = jupyter.BaseViewer()
+def _viewer_with_mapping(mapping: dict[str, Any]) -> jupyter.AnnDataViewer:
+    viewer = serverless_viewer()
     viewer._handle_frontend_message(_event(viewer._viewer_id, mapping=copy.deepcopy(mapping)))
     return viewer
 
 
 def test_set_data_mapping_needs_a_reported_mapping() -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     with pytest.raises(RuntimeError, match="has not reported its data mapping yet"):
         viewer.set_data_mapping(knn="connectivities")
 
@@ -232,7 +227,6 @@ def test_set_data_mapping_needs_a_reported_mapping() -> None:
     [
         (ANNDATA_MAPPING, {"kind": "export"}, TypeError, "cannot change the mapping kind"),
         (ANNDATA_MAPPING, {"embedding": {}}, TypeError, "unknown field"),
-        (EXPORT_MAPPING, {"knn": "connectivities"}, TypeError, "unknown field"),
         (ANNDATA_MAPPING, {"expression": "layers:x"}, ValueError, "expression"),
         (
             ANNDATA_MAPPING,

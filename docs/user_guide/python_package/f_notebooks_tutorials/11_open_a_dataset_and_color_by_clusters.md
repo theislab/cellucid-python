@@ -24,7 +24,7 @@ It assumes **zero knowledge** of Cellucid, and only minimal Python.
 - A dataset in one of these forms:
   - an in-memory `AnnData`
   - a `.h5ad` file
-  - a `.zarr` store directory
+  - a Zarr store (a folder, or zipped as `.zip`)
 
 ---
 
@@ -352,4 +352,4 @@ Fix:
 
 - {doc}`12_find_marker_genes_and_export_a_figure` (go from clusters → marker genes → figure)
 - {doc}`13_compare_two_groups_and_interpret_results` (compare groups safely)
-- {doc}`21_prepare_exports_with_quantization_and_compression` (reproducible, shareable exports)
+- {doc}`21_prepare_a_cellucid_ready_anndata` (a reproducible, shareable file)

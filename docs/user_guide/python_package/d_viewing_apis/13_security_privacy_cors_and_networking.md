@@ -17,7 +17,7 @@ This page documents the security/privacy model of Cellucid viewing workflows, es
 
 ### Your dataset
 
-In the recommended workflows (`cellucid serve`, `show`, `show_anndata`):
+In the recommended workflows (`cellucid serve`, `serve_anndata`, `show_anndata`):
 - your **dataset bytes are served by your local Python server**,
 - and your **browser downloads the dataset from that local server**.
 
@@ -75,7 +75,8 @@ Binding to `0.0.0.0` makes the server reachable from other machines on the netwo
 This can expose:
 - embeddings and cell metadata (obs fields),
 - gene expression values,
-- and any other exported artifacts the server can serve.
+- and everything else in the file — the whole `.h5ad` or Zarr store, byte
+  for byte, including `uns` and every layer.
 
 ```{warning}
 CORS does not “secure” a server. CORS is a browser policy; any machine that can reach your server can still download data using non-browser clients (curl, Python, etc.).

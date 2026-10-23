@@ -29,12 +29,12 @@ snippets, each with a **Copy** button.
 
 The snippets reopen the *dataset*, not your view of it. To share a camera,
 colouring, filters and highlights as well, save a session file and send it
-with the link; see {doc}`05_share_workflows_links_bundles_exports`.
+with the link; see {doc}`05_share_workflows_links_sessions_data_files`.
 
 ## Link
 
 A plain link to the public site, for example
-`https://www.cellucid.com/?github=owner/repo/exports&dataset=atlas`. It points
+`https://www.cellucid.com/?data=gh:owner/repo/exports&dataset=atlas`. It points
 at www.cellucid.com even when you are running your own copy of the app, and it
 carries only the parameters that pick the dataset.
 
@@ -43,7 +43,7 @@ carries only the parameters that pick the dataset.
 Markdown for a README, a wiki page or an issue:
 
 ```markdown
-[![Open in Cellucid](https://www.cellucid.com/assets/img/open-in-cellucid.svg)](https://www.cellucid.com/?github=owner/repo/exports&dataset=atlas)
+[![Open in Cellucid](https://www.cellucid.com/assets/img/open-in-cellucid.svg)](https://www.cellucid.com/?data=gh:owner/repo/exports&dataset=atlas)
 ```
 
 It renders as a small badge that opens the dataset in one click — the same
@@ -55,7 +55,7 @@ exports (see {doc}`../b_data_loading/11_custom_dataset_repository`).
 HTML for a lab website, a project page or a paper's supplementary site:
 
 ```html
-<iframe src="https://www.cellucid.com/?github=owner/repo/exports&dataset=atlas"
+<iframe src="https://www.cellucid.com/?data=gh:owner/repo/exports&dataset=atlas"
         title="Cellucid: atlas" width="100%" height="640"
         style="border: 0;" allow="fullscreen" loading="lazy"></iframe>
 ```

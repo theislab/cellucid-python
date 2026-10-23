@@ -12,7 +12,7 @@ pip install cellucid
 
 If you remember one sentence:
 
-> `cellucid` turns your data (often AnnData) into something the **Cellucid web app** can load, and it can also **serve/embed** the web app so you can use it from the CLI and notebooks.
+> `cellucid` opens your AnnData in the **Cellucid web app** — served from your machine, or embedded in a notebook — and writes **Cellucid-ready AnnData** files that load fastest and can be shared or hosted anywhere.
 
 ```{note}
 Cellucid itself is a **web app** (the viewer UI). `cellucid-python`,
@@ -24,15 +24,17 @@ integrations around that viewer.
 
 At a high level, the Python package supports three related workflows:
 
-1) **View immediately (no export): AnnData → viewer**  
+1) **View immediately: AnnData → viewer**  
    - Notebook: `show_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")`
-     (or use the same required identity arguments with `"data.h5ad"`)
+     (or the same identity arguments with `"data.h5ad"`; both may be omitted
+     when the data declares `uns['cellucid']['name']` and `['id']`)
    - Browser: `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`
 
-2) **Export for speed + sharing: arrays → export folder → viewer**  
-   - Python: `prepare(..., out_dir="exports/my_dataset")`
-   - Then view in a browser: `cellucid serve exports/my_dataset`  
-     (or embed in a notebook: `show("exports/my_dataset")`)
+2) **Prepare for speed + sharing: arrays → Cellucid-ready AnnData → viewer**  
+   - Python: `prepare("my_dataset.h5ad", format="h5ad", embeddings=..., dataset_id=..., dataset_name=..., ...)`
+   - Then view in a browser: `cellucid serve my_dataset.h5ad`  
+     (or embed in a notebook: `show_anndata("my_dataset.h5ad")`), or host the
+     file and open it from a link
 
 3) **Notebook integration (bidirectional): viewer ↔ Python**  
    - Send commands to the UI (highlight, color-by, visibility, reset camera)
@@ -41,10 +43,11 @@ At a high level, the Python package supports three related workflows:
 ### The other Cellucid repos (how they relate)
 
 - **Cellucid web app**: the browser UI you click around in (rendering, filters, highlights, analysis, figure export, sessions).
-- **`cellucid` (cellucid-python)**: export/serve/embed data + hooks/events for notebooks.
+- **`cellucid` (cellucid-python)**: prepare/serve/embed AnnData + hooks/events for notebooks.
 - **`cellucid-annotation`**: community annotation workflows (multi-user, GitHub-backed collaboration).
-- **`cellucid-r`**: prepares Seurat, SingleCellExperiment, matrices, and data
-  frames as Cellucid export folders; see {doc}`../../r_package/index`.
+- **`cellucid-r`**: writes the same Cellucid-ready AnnData from Seurat,
+  SingleCellExperiment, matrices, and data frames; see
+  {doc}`../../r_package/index`.
 
 ## Fast path (wet lab / beginner / non-technical)
 
@@ -52,7 +55,7 @@ If you’re a wet lab scientist or a non-technical collaborator, it helps to thi
 
 - You usually open **a dataset in the browser** (Cellucid web app).
 - That dataset is either:
-  - an **export folder** someone generated for you, or
+  - an **AnnData file** (`.h5ad`, `.zarr`, `.zarr.zip`) someone gave you or published, or
   - a dataset served by a collaborator’s machine/server.
 
 **What you typically do next (in the web app)**
@@ -70,39 +73,42 @@ A loaded dataset in Cellucid: the sidebar controls the active view while the cat
 
 ## Practical path (computational users)
 
-For computational users, the main question is: **Do I export first, or do I serve AnnData directly?**
+For computational users, the main question is: **Do I open my AnnData as it is, or prepare it first?**
 
-### Option A — AnnData direct (fast iteration; slower viewing)
+### Option A — open it as it is (fast iteration, nothing converted)
 
 Use this when:
-- you want to **inspect a dataset quickly** without deciding export options yet,
+- you want to **inspect a dataset quickly**,
 - you’re working interactively and don’t care about a shareable on-disk artifact *yet*.
 
 Typical entry points:
-- Notebook: direct AnnData viewing with required `dataset_name` and
-  `dataset_id`
+- Notebook: direct AnnData viewing with `dataset_name` and `dataset_id`
+  (taken from `uns['cellucid']` when the data declares them)
 - Browser: `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`
 
 Tradeoffs:
 - Very little setup
-- `.h5ad` uses read-only backed access; `.zarr` is loaded eagerly in Python.
-- Slower than exports for repeated use and large datasets
+- The viewer reads the `.h5ad` file or Zarr store itself, in place, with HTTP
+  range requests: only the bytes a view needs are transferred, and nothing is
+  converted first. An in-memory object is written once to a temporary `.h5ad`.
 - Not a deterministic “artifact” you can hand to collaborators
 
-### Option B — Export-first (reproducible + fast viewing; more setup)
+### Option B — prepare first (fastest viewing; one more step)
 
 Use this when:
-- you want the **fastest** experience in the web app,
-- you want a **shareable export folder** for collaborators or papers,
-- you want explicit control over **compression/quantization** and output size.
+- you want the **fastest** experience in the web app (a gene-major matrix makes
+  every gene one small read),
+- you want a **shareable file** for collaborators or papers that opens with a
+  name, a citation, and chosen defaults,
+- you will host the dataset on the web.
 
 Typical entry points:
-- Python: `prepare(..., out_dir="exports/my_dataset")`
-- Then view: `cellucid serve exports/my_dataset` (or open the folder in the web app)
+- Python: `prepare("my_dataset.h5ad", format="h5ad", embeddings=..., dataset_id=..., dataset_name=..., ...)`
+- Then view: `cellucid serve my_dataset.h5ad` (or open the file in the web app)
 
 Tradeoffs:
 - Fast loading and consistent performance
-- Reproducible artifact you can archive/share
+- Still a standard AnnData: every AnnData tool reads it
 - Can be hosted (static) or served locally
 - Requires you to choose inputs (embeddings, latent space, obs, etc.)
 
@@ -110,17 +116,17 @@ Tradeoffs:
 
 Cellucid-python supports viewing from:
 - **In-memory AnnData** (notebook/server)
-- **`.h5ad` file** (server and notebook; default: lazy loading via backed mode)
-- **`.zarr` store** (server and notebook; loaded eagerly in Python)
-- **Pre-exported directory** created by `prepare(...)`
+- **`.h5ad` file** (server and notebook; read in place by the viewer)
+- **Zarr store**, a folder or zipped (`.zip`) (server and notebook; read in
+  place by the viewer)
+- **Cellucid-ready AnnData** written by `prepare(...)` — any of the above
 
 ## Deep path (developer / maintainer)
 
 The architecture is intentionally simple:
 
-- A **local HTTP server** serves either:
-  - files in an **export folder**, or
-  - “virtual files” generated from **AnnData** on demand.
+- A **local HTTP server** serves the bytes of one **AnnData** store (`.h5ad`
+  or Zarr), which the viewer reads itself with HTTP range requests.
 - The **viewer UI** is a web app.
   - In CLI/notebook/server workflows, the Python server establishes the exact
     complete UI generation declared by the configured source inventory, then
@@ -137,12 +143,12 @@ If you maintain or extend `cellucid`, the “mental model” to keep in mind is:
 
 ## Key terms (used throughout this guide)
 
-- **Export folder**: a directory of `.json` manifests + binary files that the web app loads.
-- **Dataset identity**: `dataset_identity.json` (name/id/metadata; helps reproducibility).
-- **Embedding**: one `embeddings/<index>_<dim>d.bin` file per embedding, any number per dimension.
+- **Cellucid-ready AnnData**: a standard AnnData written by `prepare()` for fast browser reads.
+- **Dataset identity**: `uns['cellucid']['id']` and `['name']` (or `dataset_id`/`dataset_name` passed when serving); sessions are keyed by the id.
+- **Embedding**: an `obsm` array the viewer plots, any number per dimension.
 - **`obs` fields**: per-cell metadata (categorical or continuous).
 - **`var` / gene expression**: per-gene metadata + expression values (optional).
-- **Viewer**: a notebook object that embeds the UI and exposes hooks/commands (`CellucidViewer` / `AnnDataViewer`).
+- **Viewer**: a notebook object that embeds the UI and exposes hooks/commands (`AnnDataViewer`).
 - **Hooks / events**: selection/hover/click/ready callbacks from the UI back into Python.
 
 ## Edge cases and limitations (high-level)
@@ -169,7 +175,7 @@ publishes them locally only after complete verification.
 ### “I installed `cellucid` but I don’t see anything”
 
 Most common causes:
-- you ran `show(...)` or `show_anndata(...)` **outside** a notebook environment;
+- you ran `show_anndata(...)` **outside** a notebook environment;
   the helper returns a viewer without displaying or printing it, so open
   `viewer.viewer_url` explicitly,
 - the exact viewer generation could not be established, so viewer construction

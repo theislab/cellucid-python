@@ -37,13 +37,5 @@ docs/_autosummary/
 *.tmp
 *.swp
 
-# Local data artifacts
-# data/**
-!data/.gitkeep
-!data/raw/.gitkeep
-!data/experiments/.gitkeep
-data/raw/**
-data/experiments/**
-project_context.txt
 /docs/user_guide/python_package/examples/datasets
 /.cellucid-maintenance

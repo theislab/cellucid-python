@@ -24,8 +24,7 @@ Commands are one-way: `viewer.set_color_by(...)` returns `None` whether the
 viewer applied it or refused it. A refusal comes back as a `command_error`
 event, printed to `sys.stderr` and listed by
 `viewer.debug_connection()["recent_events"]["command_errors"]`. Handle it in
-code with `@viewer.on_command_error`. Only the web build that emits
-`command_error` sends it; older builds refuse a command silently.
+code with `@viewer.on_command_error`.
 
 ## Event payload rejected
 

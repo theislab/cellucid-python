@@ -5,16 +5,16 @@ Pick the row that matches the last thing that happened.
 | Where you are stuck | Page |
 |---|---|
 | `install.packages()` / `library(cellucid)` fails | {doc}`01_installation_and_dependency_issues` |
-| `cellucid_prepare()` stops, or the export looks wrong | {doc}`02_data_preparation_issues` |
-| The export folder ran but looks incomplete or unreadable | {doc}`03_export_format_and_validation_issues` |
-| The folder exists but the web app will not load it | {doc}`04_web_app_loading_issues` |
-| The export is too slow, too large, or too big to share | {doc}`05_performance_and_disk_usage_issues` |
+| `cellucid_prepare()` stops, or the store looks wrong | {doc}`02_data_preparation_issues` |
+| The store was written but looks incomplete or unreadable | {doc}`03_store_format_and_validation_issues` |
+| The store exists but the web app will not open it | {doc}`04_web_app_loading_issues` |
+| Writing is slow, or the store is too big to share | {doc}`05_performance_and_disk_usage_issues` |
 
 ```{note}
-This index is the map. The exhaustive export-time guide, symptom by symptom,
-is {doc}`../c_data_preparation_api/11_troubleshooting_prepare_export`, and the
-web app has its own loading guide at
-{doc}`../../web_app/b_data_loading/08_troubleshooting_data_loading`.
+This index is the map. The full guide to `cellucid_prepare()` errors, symptom by
+symptom, is {doc}`../c_data_preparation_api/11_troubleshooting_prepare`, and
+every error message is listed in
+{doc}`../g_api_reference_coverage/02_error_messages_and_exceptions_document_patterns`.
 ```
 
 ::::{grid} 1 1 2 2
@@ -24,40 +24,38 @@ web app has its own loading guide at
 :link: 01_installation_and_dependency_issues
 :link-type: doc
 
-Missing package, wrong library path, blocked GitHub, absent `jsonlite` or
-`Matrix`, stale loaded version.
+Missing package, wrong library path, blocked GitHub, no C toolchain, absent
+`jsonlite` or `Matrix`, stale loaded version.
 :::
 
 :::{grid-item-card} {octicon}`package;1.5em;sd-mr-1` Data Preparation
 :link: 02_data_preparation_issues
 :link-type: doc
 
-The four root causes behind most `cellucid_prepare()` failures, in priority
-order.
+The root causes behind most `cellucid_prepare()` failures, in priority order.
 :::
 
-:::{grid-item-card} {octicon}`checklist;1.5em;sd-mr-1` Export Format and Validation
-:link: 03_export_format_and_validation_issues
+:::{grid-item-card} {octicon}`checklist;1.5em;sd-mr-1` Store Format and Validation
+:link: 03_store_format_and_validation_issues
 :link-type: doc
 
-Missing files, `.gz` confusion, empty `var/`, gene search finding nothing,
-`datasets.json` not found.
+Checking a store with anndata, hidden metadata files, a `.zarr.zip` that will
+not open, genes or defaults missing.
 :::
 
 :::{grid-item-card} {octicon}`browser;1.5em;sd-mr-1` Web App Loading
 :link: 04_web_app_loading_issues
 :link-type: doc
 
-Folder picker refusing the selection, endless spinner, blank canvas, CORS,
-fields that look wrong.
+Folder picker leaving out files, links refused, blank canvas, fields that look
+wrong.
 :::
 
 :::{grid-item-card} {octicon}`meter;1.5em;sd-mr-1` Performance and Disk Usage
 :link: 05_performance_and_disk_usage_issues
 :link-type: doc
 
-Exports that take forever, repositories too big for GitHub, and filesystem
-file-count limits.
+Slow writes, large stores, many files, and hosts that serve single files.
 :::
 
 ::::

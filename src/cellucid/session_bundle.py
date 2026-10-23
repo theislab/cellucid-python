@@ -8,8 +8,8 @@ This implements the same framing format as the web app:
 3) manifest JSON bytes (UTF-8)
 4) repeated chunks: [chunkByteLength (u32 LE), chunkBytes...]
 
-The manifest contains exactly ``createdAt``, ``datasetFingerprint``, and ordered
-``chunks`` metadata. Chunk payloads are either JSON or binary and may be
+The manifest contains exactly ``createdAt``, ``datasetFingerprint``, ``source``
+(where the dataset can be opened from, or null) and ordered ``chunks`` metadata. Chunk payloads are either JSON or binary and may be
 gzip-compressed.
 """
 
@@ -25,13 +25,20 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 from .data_mapping import (
-    ANNDATA_KIND,
     DataMappingError,
     validate_data_mapping,
     validate_embedding_ref,
 )
 
-SESSION_BUNDLE_MAGIC = b"CELLUCID_SESSION\n"
+#: The session format this release reads, and its file signature.
+SESSION_FORMAT_VERSION = 2
+SESSION_BUNDLE_MAGIC = f"CELLUCID_SESSION/{SESSION_FORMAT_VERSION}\n".encode("ascii")
+#: The web app's sentence for a file without that signature
+#: (`NOT_A_SESSION_FILE_MESSAGE` in `bundle/format.js`).
+NOT_A_SESSION_FILE_MESSAGE = (
+    f"This file is not a Cellucid session file of format {SESSION_FORMAT_VERSION} "
+    f"(it does not start with CELLUCID_SESSION/{SESSION_FORMAT_VERSION})."
+)
 U32_BYTES = 4
 #: The most bytes one frame (the manifest, or one stored chunk) can hold: its
 #: length is a u32, so this is the format's limit, not a policy. Every inflate
@@ -43,14 +50,31 @@ MAX_SAFE_INTEGER = (1 << 53) - 1
 _MANIFEST_KEYS = {
     "createdAt",
     "datasetFingerprint",
+    "source",
+    "requires",
     "chunks",
 }
-# The fingerprint ties a session to one dataset and to one data mapping. Every
-# key is required: the viewer refuses a session without its cell-order record,
-# and a reader that accepted one would apply selections the viewer would refuse.
+# Where the session's dataset can be opened from, so loading the session in the
+# viewer can open it first: a sample of the page's catalog, a data link (its
+# ``?data=`` value) or a Cellucid server; or the name of the local file or
+# folder it was opened from, which the viewer can only ask for. Null for a
+# notebook.
+_SOURCE_KEYS_BY_KIND = {
+    "sample": {"kind", "dataset"},
+    "link": {"kind", "locator", "dataset"},
+    "remote": {"kind", "url", "dataset"},
+    "file": {"kind", "name", "dataset"},
+}
+_REQUIRES_KEYS = {"obs", "var"}
+_CONTROL_CHARACTER_RE = re.compile(r"[\x00-\x1f\x7f]")
+# The fingerprint ties a session to one dataset and to one data mapping, not to
+# the route the dataset was opened through. Every key is required: the viewer
+# refuses a session without its cell-order record, and a reader that accepted
+# one would apply selections the viewer would refuse. ``name`` is the dataset's
+# display name, recorded for messages only.
 _FINGERPRINT_KEYS = {
-    "sourceType",
     "datasetId",
+    "name",
     "cellCount",
     "varCount",
     "cellOrder",
@@ -123,12 +147,12 @@ def _validate_fingerprint(value: Any) -> dict[str, Any]:
         raise ValueError(
             "Invalid session manifest (datasetFingerprint fields: " + "; ".join(details) + ")"
         )
-    for key in ("sourceType", "datasetId"):
+    for key in ("datasetId", "name"):
         item = value[key]
-        if item is not None and (not isinstance(item, str) or not item):
+        if item is not None and (not isinstance(item, str) or not item or item != item.strip()):
             raise ValueError(
                 f"Invalid session manifest (datasetFingerprint.{key} must be "
-                "a non-empty string or null)"
+                "a non-empty trimmed string or null)"
             )
     for key in ("cellCount", "varCount"):
         _require_exact_nonnegative_int(
@@ -140,23 +164,22 @@ def _validate_fingerprint(value: Any) -> dict[str, Any]:
         mapping = validate_data_mapping(value["dataMapping"], label="datasetFingerprint.dataMapping")
     except DataMappingError as error:
         raise ValueError(f"Invalid session manifest ({error})") from error
-    cell_order = _validate_cell_order(value["cellOrder"], kind=mapping["kind"])
+    cell_order = _validate_cell_order(value["cellOrder"])
     canonical = dict(value)
     canonical["cellOrder"] = cell_order
     canonical["dataMapping"] = mapping
     return canonical
 
 
-def _validate_cell_order(value: Any, *, kind: str) -> dict[str, Any]:
+def _validate_cell_order(value: Any) -> dict[str, Any]:
     """Validate the cell-order record that ties a session to a cell ordering.
 
     The viewer records a digest of the coordinates a session was saved against,
     so a dataset republished with the same name and counts but a different row
     order cannot silently re-point every saved selection at different cells.
     The digest is over one embedding, and every embedding is normalized on its
-    own, so the record names that embedding -- an exported embedding id with
-    ``columns: null``, or an AnnData ``obsm`` key with the 0-based columns read
-    -- and the dimension it was drawn in.
+    own, so the record names that embedding -- an AnnData ``obsm`` key with the
+    0-based columns read -- and the dimension it was drawn in.
     """
     if not isinstance(value, dict):
         raise ValueError(
@@ -190,13 +213,77 @@ def _validate_cell_order(value: Any, *, kind: str) -> dict[str, Any]:
     try:
         embedding = validate_embedding_ref(
             value["embedding"],
-            kind=kind,
-            dimension=dimension if kind == ANNDATA_KIND else None,
+            dimension=dimension,
             label="datasetFingerprint.cellOrder.embedding",
         )
     except DataMappingError as error:
         raise ValueError(f"Invalid session manifest ({error})") from error
     return {"embedding": embedding, "dimension": dimension, "digest": digest}
+
+
+def _validate_text(value: Any, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or not value
+        or value != value.strip()
+        or _CONTROL_CHARACTER_RE.search(value) is not None
+    ):
+        raise ValueError(f"Invalid session manifest ({label} must be a non-empty, unpadded string)")
+    return value
+
+
+def _validate_source(value: Any) -> dict[str, str] | None:
+    """Validate the recorded dataset source (the viewer's dataset-source-record)."""
+    if value is None:
+        return None
+    kind = value.get("kind") if isinstance(value, dict) else None
+    keys = _SOURCE_KEYS_BY_KIND.get(kind) if isinstance(kind, str) else None
+    if keys is None:
+        raise ValueError(
+            'Invalid session manifest (source kind must be "sample", "link", "remote" or "file")'
+        )
+    if set(value) != keys:
+        raise ValueError(
+            "Invalid session manifest (source fields must be exactly " + ", ".join(sorted(keys)) + ")"
+        )
+    for key in sorted(keys - {"kind"}):
+        _validate_text(value[key], f"source.{key}")
+    if kind == "remote" and not value["url"].startswith(("https://", "http://")):
+        raise ValueError("Invalid session manifest (source.url must be an http(s) address)")
+    return dict(value)
+
+
+def _utf16_key(value: str) -> bytes:
+    """Sort key matching JavaScript string order (UTF-16 code units)."""
+    return value.encode("utf-16-be", "surrogatepass")
+
+
+def _validate_requires(value: Any) -> dict[str, list[str]]:
+    """Validate the manifest's ``requires``: the dataset fields the session uses.
+
+    Each list holds the dataset's own keys (obs columns; gene names under the
+    session's data mapping), sorted as JavaScript sorts strings and unique.
+    """
+    if not isinstance(value, dict) or set(value) != _REQUIRES_KEYS:
+        raise ValueError("Invalid session manifest (requires must have exactly obs and var)")
+    out: dict[str, list[str]] = {}
+    for source in ("obs", "var"):
+        keys = value[source]
+        if not isinstance(keys, list):
+            raise ValueError(f"Invalid session manifest (requires.{source} must be an array)")
+        for index, key in enumerate(keys):
+            if not isinstance(key, str) or not key or key != key.strip():
+                raise ValueError(
+                    f"Invalid session manifest (requires.{source}[{index}] must be a "
+                    "non-empty trimmed string)"
+                )
+            if index > 0 and not _utf16_key(keys[index - 1]) < _utf16_key(key):
+                raise ValueError(
+                    f"Invalid session manifest (requires.{source} must be sorted and "
+                    "without duplicates)"
+                )
+        out[source] = list(keys)
+    return out
 
 
 def _validate_manifest(manifest: Any) -> list[dict[str, Any]]:
@@ -217,6 +304,8 @@ def _validate_manifest(manifest: Any) -> list[dict[str, Any]]:
             "Invalid session manifest (createdAt must be an exact UTC millisecond timestamp)"
         )
     _validate_fingerprint(manifest["datasetFingerprint"])
+    _validate_source(manifest["source"])
+    _validate_requires(manifest["requires"])
 
     chunks = manifest["chunks"]
     if not isinstance(chunks, list):
@@ -334,6 +423,12 @@ class CellucidSessionBundle:
 
     The reader is streaming-friendly: it indexes chunk offsets once, and only
     reads/decompresses chunk payloads on demand.
+
+    Parameters
+    ----------
+    path : str or Path
+        The ``.cellucid-session`` file; ``~`` is expanded. A missing file
+        raises ``FileNotFoundError``.
     """
 
     def __init__(self, path: str | Path):
@@ -365,7 +460,11 @@ class CellucidSessionBundle:
         store_uns: bool = True,
         return_summary: bool = False,
     ) -> Any:
-        """Apply this exact bundle atomically to its matching AnnData dataset."""
+        """Apply this exact bundle atomically to its matching AnnData dataset.
+
+        Same as :func:`~cellucid.apply_cellucid_session_to_anndata` with this
+        bundle; see it for the parameters, the return value, and the errors.
+        """
         from .anndata_session import apply_cellucid_session_to_anndata
 
         return apply_cellucid_session_to_anndata(
@@ -394,6 +493,29 @@ class CellucidSessionBundle:
         fp = self.manifest.get("datasetFingerprint")
         assert isinstance(fp, dict)
         return fp
+
+    @property
+    def dataset_source(self) -> dict[str, str] | None:
+        """Where the session's dataset was opened from, or ``None``.
+
+        ``{"kind": "sample", "dataset"}``, ``{"kind": "link", "locator",
+        "dataset"}`` (``locator`` is the ``?data=`` value), ``{"kind":
+        "remote", "url", "dataset"}`` or ``{"kind": "file", "name",
+        "dataset"}`` (the local file or folder name); ``None`` for a session
+        saved in a notebook.
+        """
+        source = self.manifest["source"]
+        return None if source is None else dict(source)
+
+    @property
+    def required_fields(self) -> dict[str, list[str]]:
+        """The dataset fields the session uses: ``{"obs": [...], "var": [...]}``.
+
+        Every obs column and gene (named under the session's data mapping) that
+        a view shows or filters on, or that a highlight group is bound to.
+        """
+        requires = self.manifest["requires"]
+        return {"obs": list(requires["obs"]), "var": list(requires["var"])}
 
     def list_chunk_ids(self) -> list[str]:
         self._ensure_indexed()
@@ -447,9 +569,9 @@ class CellucidSessionBundle:
             return
 
         with self.path.open("rb") as f:
-            magic = _read_exact(f, len(SESSION_BUNDLE_MAGIC))
+            magic = f.read(len(SESSION_BUNDLE_MAGIC))
             if magic != SESSION_BUNDLE_MAGIC:
-                raise ValueError("Not a .cellucid-session file (invalid MAGIC header)")
+                raise ValueError(NOT_A_SESSION_FILE_MESSAGE)
 
             manifest_len = _read_u32_le(f)
             if manifest_len <= 0:

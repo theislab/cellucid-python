@@ -5,10 +5,9 @@ Every capture on this page came out of the running web application, at a fixed
 control it shows rather than from hand-chosen pixels.
 
 The browser-engine acceptance captures used a deterministic synthetic AnnData
-fixture. That acceptance path replaced the prepared dataset with its Zarr ZIP
-representation, replaced that with the H5AD representation, and then restored
-the prepared dataset through the visible controls. Each replacement asserted the
-120-cell, 6-gene dataset shape, 2D Planar navigation, hidden camera transport,
+fixture. That acceptance path opened it as a Zarr ZIP, replaced that with the
+H5AD representation, and then reopened the Zarr ZIP through the visible
+controls. Each replacement asserted the 120-cell, 6-gene dataset shape, 2D Planar navigation, hidden camera transport,
 settled notifications, and the absence of browser-console, page, and HTTP
 errors.
 
@@ -19,28 +18,28 @@ than an empty application.
 ## Loading and session controls
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Session panel with the Pancreas sample loaded: a dataset summary table, a Sample datasets dropdown, H5AD, Zarr ZIP and Prepared buttons, Remote server and GitHub data fields each with a Connect button, and Save State and Load State buttons.
+:alt: The Session panel with the Pancreas sample loaded: a Dataset summary table, then the Open data group with a Sample dataset dropdown, the file buttons under Files, and Server and Open from link fields each with a Connect button, then the Session file group with Save and Load buttons.
 :width: 524px
 
 The Session panel in its settled state, with the standard Pancreas sample
-loaded. Every loading path has its own labelled group, and Save State and Load
-State stay beside the dataset controls. Both connection buttons read
+loaded. Every loading path has its own label under **Open data**, and **Save**
+and **Load** sit under **Session file**, below them. Both connection buttons read
 **Connect** once the app is ready.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/choose-local-data-control.png
-:alt: Close-up of the Local data controls with a mouse pointer on the full-width Prepared button below the H5AD and Zarr ZIP buttons.
+:alt: Close-up of the Files controls: the H5AD and Zarr ZIP buttons side by side, a full-width button below them, and a mouse pointer on it.
 :width: 496px
 
-The three local-data controls. **Prepared** opens a directory chooser; **H5AD**
-and **Zarr ZIP** open single-file choosers.
+The buttons under **Files**. **Zarr folder** (the full-width button) opens a
+folder chooser; **H5AD** and **Zarr ZIP** open single-file choosers.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/connect-remote-server.png
-:alt: Close-up of the Remote server control with a loopback URL typed into the field and a mouse pointer on the Connect button.
+:alt: Close-up of the Server control with a loopback URL typed into the field and a mouse pointer on the Connect button.
 :width: 496px
 
-The **Remote server** control, holding the address a running `cellucid serve`
+The **Server** control, holding the address a running `cellucid serve`
 printed as its **Local URL** — the bare origin, `http://127.0.0.1:8765`. This
 field is not where the **Viewer URL** goes: it refuses a trailing slash, a
 `?…` query, and a fragment. The Viewer URL belongs in the browser address bar.
@@ -48,10 +47,10 @@ See {doc}`04_server_tutorial`.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/connect-github-catalog.png
-:alt: Close-up of the GitHub data control with an owner/repo/exports path typed into the field and a mouse pointer on the Connect button.
+:alt: Close-up of the Open from link control with an owner/repo path typed into the field and a mouse pointer on the Connect button.
 :width: 496px
 
-The **GitHub data** control, holding an exports-root path.
+The **Open from link** control, holding a GitHub catalog folder path.
 ```
 
 ## Direct H5AD load
@@ -123,7 +122,7 @@ A remote-server address with nothing listening behind it.
 :alt: Two stacked notifications, the upper naming the raw.githubusercontent.com URL that returned not found and the lower stating that the GitHub repository could not be reached.
 :width: 776px
 
-A GitHub path pointing at a repository rather than at its exports root. The
+A GitHub path pointing at a repository rather than at its catalog folder. The
 first notification names the exact URL that 404'd.
 ```
 
@@ -139,8 +138,8 @@ dataset is still loaded and still interactive.
 
 The picker captures above isolate browser-file behavior. The server workflow is
 captured against real data in {doc}`04_server_tutorial`, which includes the
-prepared-export startup, the direct-H5AD startup and its `?anndata=true` Viewer
-URL, the complete `--help` output, and both common startup failures.
+H5AD startup and its `?anndata=true` Viewer URL, the complete `--help` output,
+and the common startup failures.
 
 Jupyter embedding is captured in
 {doc}`../../python_package/f_notebooks_tutorials/05_jupyter_embedding_hooks_sessions_gallery`,

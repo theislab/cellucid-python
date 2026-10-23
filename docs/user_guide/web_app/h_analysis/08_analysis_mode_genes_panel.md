@@ -35,7 +35,7 @@ How it differs from DE:
 
 ### 1) Group By (categorical obs field)
 
-You pick a categorical obs field under **Group By:** (e.g., `cell_type`).
+You pick a categorical obs field under **Group by** (e.g., `cell_type`).
 
 Cellucid then builds groups as:
 - one group per category label (e.g., `B cell`, `T cell`, …),
@@ -65,18 +65,36 @@ If enabled, Cellucid can reuse cached marker results for the same dataset + grou
 and only when the group-by field still assigns exactly the same cells to the same groups.
 Editing that field — merging two categories, or moving one to unassigned — changes the grouping, so the
 next run is recomputed rather than read from the cache.
-Results are also tied to the loaded data generation. A prepared export carries
-its export time (`created_at` in `dataset_identity.json`), so its results are
-kept across page loads and are never reused for a re-export under the same
-`dataset_id`. A dataset without one — an `.h5ad` or Zarr opened directly, for
-example — keeps results only for the current load: reopening the file, even
-under the same name, computes markers afresh.
+Results are also tied to the loaded data generation: they are kept only for
+the current load. Reopening the dataset, even under the same `dataset_id`,
+computes markers afresh, so a result is never reused for changed expression
+values.
 This can make repeated runs much faster.
 
 ### 5) Performance Settings (collapsible)
 
 Marker discovery can be heavy. The same performance controls used by DE apply here:
 - batch size, memory budget, network parallelism, and compute parallelism.
+
+Each gene is read once and moved to an analysis worker without a copy; the
+worker tests every group against the rest in one pass over the gene's non-zero
+values. Progress and partial results reach the panel at most once per frame.
+
+Under **Discover Markers** the panel says what a run will read
+(`Reads 3,753 genes in 3,696 cells, testing each category of celltype against
+the rest.`). While it runs, a box names the step (`Discovering markers`,
+`Building expression matrix`, `Clustering`) with how many genes are done of how
+many, how much is read and how long is left, and **Cancel**; its notification
+offers the same. A cancelled run keeps nothing, not even in the marker cache,
+and reads `Marker genes cancelled` with **Run again**. Choosing more heatmap
+genes after a run (Top 10/20/100/All) reads them as a job of its own,
+`Marker genes heatmap`, which can be cancelled from its notification. See
+{doc}`02_analysis_ui_overview` for what Cancel stops.
+The workers also return every gene's mean in every group, so the heatmap of
+the markers (and a later heatmap of more of them) is built from those means
+without reading the genes again. Measured on a 561,947-cell, 8,192-gene
+dataset with 69 cell types on a 10-core laptop: all genes against all groups
+in about 2.3 s, almost all of it reading the expression matrix.
 
 ---
 
@@ -95,7 +113,7 @@ For each gene and group, Cellucid computes (conceptually):
 - `adjustedPValue` via Benjamini–Hochberg (computed per group across genes)
 - `percentInGroup`, `percentOutGroup` = percent of cells with expression `> 0`
 
-Wilcoxon always uses exact, tie-aware ranks. For low-cardinality values (including quantized prepared data), Cellucid aggregates exact counts per distinct value; high-cardinality values are ranked through an exact linear-time radix ordering of the measured cells. Its p-value is exact only when both comparison groups contain fewer than 50 finite values and there are no ties; otherwise inference uses the exact U statistic with a tie- and continuity-corrected asymptotic reference distribution. See {doc}`01_analysis_mental_model` for analysis-wide scope and assumptions.
+Wilcoxon always uses exact, tie-aware ranks. Every zero ties with every other zero, so the zeros are one rank block whose size per group is the group's zero count; the non-zero values are counted per distinct value when they are few (such as integer counts) and otherwise ranked through an exact linear-time radix ordering. The ranks, U statistics and tie correction are the numbers a pass over every cell gives. Welch's test uses each group's mean and centred second moments about it and about the mean of all grouped cells. Its p-value is exact only when both comparison groups contain fewer than 50 finite values and there are no ties; otherwise inference uses the exact U statistic with a tie- and continuity-corrected asymptotic reference distribution. See {doc}`01_analysis_mental_model` for analysis-wide scope and assumptions.
 
 Markers are filtered by thresholds (typically controlled in the expanded view):
 - p-value/FDR threshold (default ~0.05)
@@ -184,12 +202,19 @@ When a group has no markers to show, the message distinguishes the two reasons:
 
 - A heatmap of genes (rows) vs groups (columns).
 - Optional clustering of rows/columns (distance + linkage choices).
-- Clustering n genes (or groups) takes about 100 bytes of memory per pair,
-  so about 100 MB for 1,000 genes and 1.6 GB for 4,000. It must fit the
-  analysis **memory budget** (Performance settings; 512 MB by default, enough
-  for about 2,270 genes). A larger request is refused with the size it needs,
-  before clustering starts. Raise the budget, use fewer genes, or turn that
-  axis's clustering off.
+- Clustering is exact agglomerative clustering: each step merges the two
+  closest clusters (on equal distances, the pair listed first) and updates the
+  merged cluster's distances by the linkage rule, in double precision. It runs
+  in the analysis workers, so the page stays responsive: the distances are
+  computed in parallel blocks and the merges found in one worker from them:
+  about 0.15 s for 3,000 genes × 69 groups, rows and columns, on an M1 Pro.
+- Clustering n genes (or groups) holds one 8-byte distance per pair, so about
+  4 MB for 1,000 genes, 61 MB for 4,000 and 256 MB for 8,192. It must fit the
+  analysis **memory budget** (Performance settings; by default a sixteenth of
+  the device memory, 512 MB on an 8 GB machine, enough for about 11,580
+  genes, and 1 GB on a 16 GB one). A larger request is refused with the size it
+  needs, before clustering starts. Raise the budget, use fewer genes, or turn
+  that axis's clustering off.
 - Plot options usually include:
   - p-value threshold / log2FC threshold
   - use adjusted vs raw p-values
@@ -261,8 +286,8 @@ or a heavily subset gene panel is the usual reason.
 
 If “Use cached results” is enabled:
 - reruns may return instantly with the same markers.
-- a re-export or a reopened file is a new data generation and is recomputed;
-  only an export with an unchanged `created_at` is answered from the cache.
+- a reopened dataset is a new data generation and is recomputed; only runs
+  within the same load are answered from the cache.
 Disable caching if you want a fresh recompute.
 
 ---
@@ -290,7 +315,7 @@ Fix:
 Fix:
 - reduce Performance Settings (lower batch size, lower parallelism) to avoid memory pressure,
 - keep fewer tabs/windows open,
-- consider server mode for large datasets (data loading + memory stability).
+- store a large expression matrix column-major (CSC), so genes are read without a gene index pass first.
 
 ---
 

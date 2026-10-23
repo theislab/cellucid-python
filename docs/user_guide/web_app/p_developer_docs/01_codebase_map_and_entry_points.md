@@ -49,7 +49,7 @@ cellucid/
 └── assets/
     ├── css/                       # Design system + themes
     ├── external/                  # Vendored third-party libraries, served from
-    │                              #   this origin (plotly, gl-matrix, h5wasm).
+    │                              #   this origin (plotly, gl-matrix).
     │                              #   Nothing is loaded from a CDN; the page CSP
     │                              #   would block it. plotly.min.js carries one
     │                              #   local, test-pinned patch (violin density;
@@ -77,16 +77,17 @@ cellucid/
         │   └── registries/            # Shared registration points
         ├── data/                  # Data sources + binary loaders + h5ad/zarr adapters
         ├── dev/                   # benchmark.js — the measurement harness behind
-        │                          #   the Performance Benchmark panel. Lazily
+        │                          #   the Benchmark panel. Lazily
         │                          #   imported; never on the product render path.
         ├── rendering/             # WebGL viewer + shaders + overlays (smoke, highlight, etc.)
         └── utils/                 # Shared utilities (debug, theme, style manager, exact records)
 ```
 
 :::{note}
-There is no `assets/exports/` directory. Demo datasets are **not** in this
-repository — they live in `cellucid-datasets` and are reached through an exports
-base URL. See {doc}`09_data_loading_pipeline_and_caching`.
+Sample datasets are **not** in this repository — they live in
+`cellucid-datasets` as a dataset catalog (AnnData files plus `datasets.json`)
+and are reached through the sample catalog URL (the
+`cellucid-sample-catalog` meta element in `index.html`). See {doc}`09_data_loading_pipeline_and_caching`.
 :::
 
 :::{tip}
@@ -179,8 +180,8 @@ These show up everywhere (state, UI, analysis, sessions):
 - **Visibility**: what points are currently shown after filters/outliers.
 - **Highlight**: annotation overlay on top of visibility (can exist even for filtered-out points).
 - **Highlight page**: independent collection of highlight groups; switching pages changes overlay state.
-- **Representation**: one embedding (an export's embedding id, or an `obsm`
-  key at 1 to 3 of its columns) a view can show, identified by its
+- **Representation**: one embedding (an `obsm` key at 1 to 3 of its
+  columns) a view can show, identified by its
   `layoutKey`. The data mapping turns any number on and names each
   dimension's default; a view's **dimension level** (1D/2D/3D) is that of the
   representation it shows.

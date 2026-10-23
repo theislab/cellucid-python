@@ -165,7 +165,7 @@ Rules:
   ```
 
 - **Keep bare backticks for things that really are literals**: filenames and
-  paths (`dataset_identity.json`), JSON keys and API parameters
+  paths (`cellucid-web-assets.json`), JSON keys and API parameters
   (`vector_fields`), CSS classes, code identifiers, and literal values
   (`local-user`). Converting one of those to `{doc}` is a regression that no
   test will catch — `vector_fields` happens to collide with a generated API page

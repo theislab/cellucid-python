@@ -107,7 +107,7 @@ The `ui/` layer also has directories this page does not otherwise cover:
 | Module | File | Owns |
 |---|---|---|
 | Dataset controls | `ui/modules/dataset-controls.js` | dataset dropdown + dataset info block |
-| Dataset connections | `ui/modules/dataset-connections.js` | local-user picker, remote server connect, GitHub connect |
+| Dataset connections | `ui/modules/dataset-connections.js` | local-user picker, remote server connect, Open from link |
 | Session controls | `ui/modules/session-controls.js` | save/load `.cellucid-session` buttons |
 | Data mapping controls | `ui/modules/data-mapping-controls.js` | Session › Data mapping: the Embeddings checklist (on/off, defaults, column selections), Apply/Revert, Read from file |
 
@@ -201,7 +201,12 @@ the embedding the active view shows (the vector-field block: a field is bound
 to one embedding). See `cellucid/assets/js/app/state-serializer/README.md`.
 
 Examples:
-- Figure export section is excluded (`cellucid/index.html` and the figure-export UI code).
+- Figure export section is excluded from the generic control inventory; its
+  settings are saved as one validated record instead (`ui/figure-export`,
+  `exportSessionSettings()`/`importSessionSettings()` of the panel).
+- The docked analysis panels are excluded likewise; the comparison module's
+  `exportSessionState()`/`importSessionState()` record them (`analysis/docked`).
+- `#hp-antialias` is never captured (a device capability); the theme is.
 - Benchmark section is excluded.
 - Dataset connection controls are excluded (sessions assume the dataset is already loaded).
 - Community annotation UI state is excluded (auth/network-driven).

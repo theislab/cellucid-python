@@ -5,7 +5,7 @@
 **What you’ll learn:**
 - Every camera/navigation knob in the UI (and when it applies)
 - Keyboard shortcuts that affect camera/navigation
-- What “Reset Camera” does (and what it doesn’t)
+- What “Reset camera” does (and what it doesn’t)
 - Persistence: what is saved in sessions vs browser preferences
 
 ---
@@ -15,7 +15,7 @@
 All navigation/camera controls are in:
 
 - **Navigation** accordion
-- **Camera Path** accordion → saved positions, timing, and interpolation
+- **Camera path** accordion → saved positions, timing, and interpolation
 
 The controls shown depend on the current navigation **Mode**:
 
@@ -36,8 +36,8 @@ Camera Path animates between camera positions that you save explicitly:
 4) Select **Play** in that bar to start movement, or enable **Autoplay** directly
    below **Loop playback**.
 
-Autoplay is off by default. Enabling it starts a ready path immediately. Save
-State records the setting; after a complete successful Load State operation,
+Autoplay is off by default. Enabling it starts a ready path immediately. A
+saved session records the setting; after a complete successful **Load**,
 an enabled ready path starts without another Play action. **Loop playback**
 controls whether it repeats or stops at the final keyframe. With zero or one
 saved position, the top playback bar is not available and Autoplay waits until
@@ -112,7 +112,7 @@ These work unless you’re typing in an input/select.
 - `Shift`: move faster (all modes)
 - `F`: fullscreen
 - `H`: toggle sidebar
-- `?`: open the in-app “Keyboard Shortcuts” section
+- `?`: open the in-app “Keyboard shortcuts” section
 
 :::{note}
 If you press keys and nothing happens, click the canvas once (focus issues are the #1 cause). For more, see {doc}`06_troubleshooting_core_interactions`.
@@ -124,7 +124,7 @@ If you press keys and nothing happens, click the canvas once (focus issues are t
 
 There are two different “reset” concepts:
 
-1) **Reset Camera button** (in the UI)
+1) **Reset camera button** (in the UI)
    - Resets the camera.
    - Also restores many visualization + navigation UI controls to their initial
      defaults (captured at app init).
@@ -148,7 +148,7 @@ Practical implication: if you want “start over visually”, use the **button**
 
 Cellucid uses multiple persistence layers:
 
-- **Session bundles (`.cellucid-session`)**: Save/Load State captures camera
+- **Session bundles (`.cellucid-session`)**: **Save** and **Load** capture camera
   state, Camera Path keyframes, timing, interpolation, navigation interaction
   controls, Loop playback, Autoplay, and the other current UI control values.
 - **Browser preferences (`localStorage`)**: small UI preferences like background/theme can persist across reloads.

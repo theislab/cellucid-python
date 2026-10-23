@@ -23,7 +23,8 @@ This is the fastest sanity check that:
 - An `AnnData` object named `adata` (or a path to `.h5ad`/`.zarr`)
 
 ```{note}
-If you don’t have an `AnnData` handy, you can still follow this guide using a pre-exported directory and `cellucid.show("./export_dir")`.
+If you have a file written by `cellucid.prepare()`, `show_anndata("my_dataset.h5ad", height=600)`
+opens it under the name and id it declares.
 ```
 
 ## Step 1 — Create and display a viewer
@@ -44,12 +45,12 @@ viewer = show_anndata(
 viewer
 ```
 
-### Option B: show a pre-exported dataset directory
+### Option B: show a Cellucid-ready AnnData file
 
 ```python
-from cellucid import show
+from cellucid import show_anndata
 
-viewer = show("./exports/my_dataset", height=600)
+viewer = show_anndata("my_dataset.h5ad", height=600)  # written by cellucid.prepare()
 viewer
 ```
 

@@ -13,7 +13,7 @@ When things feel broken, these are the safest global actions:
 1) Press `Esc` (exits pointer lock and often clears confusing focus state)
 2) Switch navigation mode to **Orbit** (`O`)
 3) Click the canvas once (restore focus)
-4) Click **Reset Camera**
+4) Click **Reset camera**
 5) If multiview is confusing, select the view you mean in **Compare views** and/or clear kept views
 
 If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/02_system_requirements`.
@@ -41,7 +41,7 @@ If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/0
 1) Press `Esc`.
 2) Switch to **Orbit** mode (`O`).
 3) Click and drag on the canvas.
-4) If you still feel “lost”, click **Reset Camera**.
+4) If you still feel “lost”, click **Reset camera**.
 
 ### Prevention
 
@@ -182,7 +182,7 @@ If the canvas is blank or you see WebGL errors, jump to {doc}`../a_orientation/0
 
 ### Fix
 
-- Clear snapshots (Compare Views → Clear), then switch to smoke.
+- Clear snapshots (Compare views → Clear), then switch to smoke.
 
 ---
 
@@ -254,7 +254,7 @@ Full details and prevention: {doc}`../a_orientation/02_system_requirements` → 
 
 ### Fix
 
-1) Click **Reset Camera**.
+1) Click **Reset camera**.
 2) Clear filters/outlier thresholds.
 3) Check the view's navigation mode: Planar for 1D and 2D, Orbit for 3D. A mode you chose for that view in that dimension before is kept.
 

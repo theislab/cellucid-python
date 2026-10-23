@@ -13,7 +13,7 @@ directly.
 :alt: The Performance Benchmark panel before any run, showing the six point-count presets from 500K to 40M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons; the live performance readout is omitted.
 :width: 516px
 
-The **Performance Benchmark** accordion as it appears before a run: six presets
+The **Benchmark** accordion as it appears before a run: six presets
 from 500K to 40M, a custom point count, the data pattern selector, and the three
 actions. The live metric grid that opening the panel shows below **Load
 Synthetic Data** is omitted from the capture; its fields are documented in
@@ -39,7 +39,7 @@ they can be checked against the interface and do not decay.
 :alt: Cellucid Performance Benchmark rendering a 10-million-point GLB model surface while showing the live synthetic-data controls and renderer metrics.
 :width: 1440px
 
-Build 2026-07-26.4 rendering the 10-million-point Model Surface pattern in
+Build 2026-07-26.4 rendering the 10-million-point Model surface pattern in
 Chromium on an Apple M1 Pro. Read this as evidence that a ten-million-point
 scene renders and reports coherent statistics, not as a frame rate to expect.
 ```

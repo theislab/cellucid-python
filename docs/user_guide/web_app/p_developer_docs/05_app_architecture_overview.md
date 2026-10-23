@@ -32,7 +32,7 @@ main.js (orchestrator)
   ├─ createDataState()  → app/state/core/data-state.js (typed arrays + state managers)
   ├─ initUI()           → app/ui/core/ui-coordinator.js (DOM + modules)
   ├─ data sources       → data/data-source-manager.js (local/remote/GitHub/Jupyter)
-  ├─ data loaders       → data/data-loaders.js (binary + manifests + h5ad/zarr adapters)
+  ├─ data loaders       → data/data-loaders.js (h5ad/zarr AnnData adapters)
   ├─ sessions           → app/session/session-serializer.js (.cellucid-session bundles)
   ├─ analysis           → app/analysis/* (compute backends + plots + UI)
   └─ admits deferred controls once their listeners exist
@@ -72,7 +72,7 @@ The high-level startup flow is:
    privacy blocker refuses them. Then it sets up the `DataSourceManager`.
 5) The app decides what to load first — it resolves the startup selection
    (source, dataset id, load method) but loads nothing yet:
-   - URL params (`?remote=…`, `?github=…`, `?dataset=…`) may override the default demo.
+   - URL params (`?remote=…`, `?data=gh:…`, `?dataset=…`) may override the default demo.
    - Jupyter context (iframe) may register a Jupyter data source and select its dataset.
 6) The app publishes the empty runtime and initializes the UI coordinator
    (`initUI`), which wires the sidebar modules to state/viewer.
@@ -84,10 +84,11 @@ The high-level startup flow is:
    (`ui.loadStartupDataset` → `reloadActiveDatasetInPlace`), under the same
    transaction owner as every later change, so any choice the user makes while
    it loads replaces it:
-   - dataset metadata, `dataset_identity.json`, `obs_manifest.json`, optional
-     `var_manifest.json` and the connectivity manifest
+   - the AnnData file opened in the reader worker, then the identity, obs and
+     var inventories and the graph description the AnnData adapter builds from
+     it
    - points buffers (embedding positions, colors, outlier quantiles, etc.)
-   - the published sample view, when the catalog advertises one
+   - the default session, when the dataset's catalog names one
    A failure of this load that nothing superseded is the terminal startup
    failure; otherwise startup publishes `ready` when it settles.
 
@@ -110,11 +111,11 @@ Cellucid supports multiple data sources through a single coordinator:
   - Produces a **dataset base URL** (`baseUrl`) used by the low-level loaders.
 
 Common sources:
-- **local-demo**: datasets loaded from an exports base URL (configured via `<meta name="cellucid-exports-base-url" ...>` or `?exportsBaseUrl=...`; in production this typically points at a separate `cellucid-datasets` host)
-- **local-user**: the three browser controls for a prepared directory, one
-  H5AD file, or one portable Zarr ZIP
-- **remote**: connects to a `cellucid-python` server (lazy loading; best for large h5ad/zarr)
-- **github-repo**: reads exports from a GitHub repo/path (sharing; no server)
+- **local-demo**: the sample dataset list, read from a dataset catalog (`datasets.json` and the AnnData files it lists) at the sample catalog URL (configured via `<meta name="cellucid-sample-catalog" ...>` or `?sampleCatalog=...`; in production `https://theislab.github.io/cellucid-datasets/anndata/`)
+- **local-user**: the three browser controls (and drag and drop) for one H5AD
+  file, one Zarr store folder, or one portable Zarr ZIP
+- **remote**: connects to a `cellucid-python` server; for an `.h5ad` or Zarr store it names, the browser's AnnData reader reads the store in place with range requests
+- **link**: data opened from a link: a GitHub repo/path, CELLxGENE, GEO, or any web address of an `.h5ad`, a Zarr ZIP, a Zarr store folder or a dataset catalog folder (sharing; no server)
 - **jupyter**: a special source used when running inside an embedded notebook viewer
 
 Deep dive: {doc}`09_data_loading_pipeline_and_caching`.
@@ -185,7 +186,7 @@ Cellucid has multiple persistence-like mechanisms; they are different and must n
    - Documented in: {doc}`04_configuration_env_vars_and_feature_flags` and {doc}`../o_accessibility_privacy_security/02_privacy_model`.
 
 3) **URL state** (deep links)
-   - `?dataset=…`, `?remote=…`, `?github=…`, `?annotations=…`.
+   - `?dataset=…`, `?remote=…`, `?data=gh:…`, `?annotations=…`.
    - Code: `cellucid/assets/js/app/url-state.js`.
 
 Deep dive: {doc}`10_sessions_persistence_and_serialization`.

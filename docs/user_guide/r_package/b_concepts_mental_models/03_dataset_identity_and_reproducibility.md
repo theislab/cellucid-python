@@ -1,126 +1,88 @@
 # Dataset Identity and Reproducibility
 
 **Audience:** computational users, maintainers, anyone sharing datasets  
-**Time:** 10–15 minutes  
-**Goal:** understand what makes an export “the same dataset” and how to make exports reproducible.
+**Time:** 10 minutes  
+**Goal:** understand what a store says about itself, and how to make stores reproducible.
 
-Every export folder includes:
+## What the store says about itself: `uns['cellucid']`
 
-- `dataset_identity.json`
+Every store carries a mapping in `uns['cellucid']`, plus `uns['title']`:
 
-This file is the viewer’s “source of truth” for:
-- how many cells exist (and how many genes were exported; respects `gene_identifiers`),
-- which embeddings are available (1D/2D/3D),
-- what obs fields exist (categorical vs continuous),
-- whether connectivity/vector fields are present,
-- and what export settings were used (compression/quantization).
+| Key | From | Notes |
+|---|---|---|
+| `schema` | always `1` | the layout version of this mapping |
+| `id` | `dataset_id` | the dataset's stable identifier |
+| `name` | `dataset_name` | also written as `uns['title']` |
+| `description` | `dataset_description` | only when supplied |
+| `citation` | `citation_text`, `citation_url` | `{text, url}`; only when supplied, `url` optional |
+| `source` | `source_name`, `source_url` | `{name, url}`; only when supplied, `url` optional |
+| `defaults` | the launch-default arguments | only the ones you set |
+| `outlierQuantiles` | `latent_key`, `centroid_min_points` | only with `latent_key`: `latentKey`, `minPoints`, and `fields`, one float32 quantile per cell for each categorical `obs` column |
 
-## What counts as “dataset identity” in Cellucid?
+`defaults` may hold `embedding1d` / `embedding2d` / `embedding3d`
+(`embedding_defaults`; an obsm key, or `{key, columns}` with 0-based columns),
+`geneIdColumn` (`var_gene_id_column`), `latentKey` (`latent_key`),
+`vectorFieldDefault` (`vector_field_default`, the field name, which is also
+the id the viewer lists, such as `velocity`), `obsKeys` (`obs_keys`), `normalizeEmbeddings`
+(`normalize_embeddings`), and `centroidMinPoints` (`centroid_min_points`).
+Every key you leave out stays the viewer's own choice.
 
-In practice, identity is a combination of:
+## What counts as “the same dataset”
 
-1) **The dataset ID** (`id` in `dataset_identity.json`)
-2) **The dataset structure** (n_cells, embeddings, field keys, etc.)
-3) **The stable meaning of row order** (cell ordering across files)
+1) **The dataset id** (`uns['cellucid']['id']`). Sessions and community
+   annotations are keyed on it, whichever way the store is opened (a local
+   folder, a `.zarr.zip`, a link).
+2) **The cells, in order.** Row order is cell identity, and the cell names in
+   `obs` record it.
+3) **The fields.** A session refers to obs columns, genes, and embeddings by name.
 
-If you want share links, session bundles, or community annotation to behave predictably, you need to treat identity as a first-class concept.
+## The rules for `dataset_id` and `dataset_name`
 
-## How `cellucid-r` accepts `dataset_id`
+Both are required; `cellucid_prepare()` never derives or rewrites them.
 
-`dataset_id` and `dataset_name` are required explicit arguments.
-`cellucid_prepare()` does not derive or rewrite either value.
+- `dataset_id`: 1–180 ASCII letters, digits, `.`, `_`, or `-`, starting with a
+  letter or digit, not ending with `.`, and not a Windows device name — safe in
+  every address and file name built from it.
+- `dataset_name`, `dataset_description`, `citation_text`, `source_name`: shown
+  verbatim, so no control or zero-width characters and no leading or trailing
+  whitespace (an empty `dataset_description` is allowed).
+- `citation_url`, `source_url`: absolute `http://` or `https://` addresses, each
+  only together with its text (`citation_text`, `source_name`).
 
-`dataset_id` names the dataset's directory and appears in share links, so it is
-the one identifier in an export that really is a path component: 1–180 ASCII
-bytes, starting with a letter or digit, otherwise only letters, digits, `.`,
-`_`, or `-`, not ending with `.`, and not a Windows device name. Exported obs
-keys, gene IDs, and vector-field IDs carry none of those rules — they are
-manifest entries, not filenames (see
-{doc}`../c_data_preparation_api/02_input_requirements_global`).
+Use a stable, versioned id such as `pbmc3k_v1` or `mouse_brain_atlas_2024-08`.
 
-`dataset_name` is shown to the reader verbatim, so it obeys the display-text
-rule instead: non-empty, no control or zero-width characters, and no leading or
-trailing whitespace.
+## Reproducibility checklist
 
-### Recommendation
-
-- Set `dataset_id` to a stable identifier that represents the exact dataset
-  generation.
-- Use something stable and versioned, like:
-  - `pbmc3k_v1`
-  - `mouse_brain_atlas_2024-08`
-  - `projectX_patient12_v2`
-
-## Reproducibility checklist (practical)
-
-### 1) Record your export script
-
-Store the exact R code used to produce the export folder alongside the export (or in a repo).
-
-Pass `created_at` while you are there. By default `dataset_identity.json`
-records the moment the export ran, so two runs of the same script differ in one
-byte range for no scientific reason. Supplying an exact UTC-seconds timestamp
-makes the identity file reproducible:
-
-```r
-cellucid_prepare(..., created_at = "2026-03-01T09:00:00Z")
-```
-
-Record provenance in the same call rather than in a README beside it —
-`source_name`, and optionally `source_url` and `source_citation`, travel with
-the export and are shown to whoever opens it. `source_name` is required as soon
-as either of the other two is supplied.
-
-### 2) Freeze the inputs
-
-If your source object (Seurat/SCE) is mutable, make sure you know:
-- which assay/slot you exported (counts vs logcounts vs scaled)
-- which reduction you used (UMAP vs tSNE; 2D vs 3D)
-- which metadata columns you exported
-
-### 3) Make “row order” explicit
-
-When exporting from Seurat/SCE:
-- choose a cell ID vector (e.g. `cells <- colnames(seu)`)
-- explicitly reorder every input to match that order
-
-This prevents “it works on my machine” bugs when objects are subset/reordered.
-
-### 4) Version your exports
-
-If you re-export the same biological dataset after changes (filters, normalization, different embedding):
-- keep the old folder (don’t overwrite silently),
-- bump `dataset_id` or encode a version in `out_dir`,
-- and write a short changelog for collaborators.
-
-## Where dataset identity shows up in the UI
-
-Cellucid uses identity information to:
-- show dataset names and stats,
-- decide what fields/embeddings exist,
-- and (in broader workflows) reason about session compatibility.
-
-For the web app’s perspective on sessions and compatibility, see:
-- {doc}`../../web_app/l_sessions_sharing/07_versioning_compatibility_and_dataset_identity`
+1) **Keep the script.** Store the exact R code that wrote the store.
+2) **The bytes are reproducible.** The same inputs give a byte-identical store,
+   folder or `.zarr.zip`: nothing time- or machine-dependent is written (ZIP
+   entries carry a fixed 1980-01-01 timestamp).
+3) **Record provenance in the call.** `citation_text`/`citation_url` and
+   `source_name`/`source_url` travel with the store and are shown to whoever
+   opens it.
+4) **Freeze the inputs.** Note which assay/layer, which reductions, and which
+   metadata columns you used.
+5) **Make row order explicit.** Give `obs`, `gene_expression`, and the
+   embeddings their cell names: `cellucid_prepare()` checks that they agree and
+   stops at the first row where they do not.
+6) **Version the dataset.** After a change that alters cells, fields, or
+   embeddings, write a new store under a new `dataset_id` rather than
+   overwriting the old one.
 
 ## Troubleshooting
 
-### Symptom: “I exported again but the viewer still shows old fields”
+### Symptom: “already exists; pass force = TRUE to replace it”
 
-**Likely cause**
-- You reused an existing `out_dir` with `force=FALSE`, so the complete
-  candidate was rejected.
+**Cause:** a store is already at `out_path`.
 
-**Fix**
-- Re-run with `force=TRUE` for an intentional atomic replacement, or choose a
-  fresh output folder.
+**Fix:** pass `force = TRUE` to replace it (the old store stays until the new
+one is complete), or choose a new path. A folder that is not a Zarr store is
+never replaced.
 
-### Symptom: “My collaborator’s session doesn’t apply to my export”
+### Symptom: “My collaborator’s session doesn’t apply to my store”
 
-**Likely causes**
-- Different `dataset_id`
-- Different cell order / different `n_cells`
-- Different field keys (renamed columns)
+**Likely causes:** a different `dataset_id`, a different cell order or number
+of cells, or renamed columns.
 
-**Fix**
-- Align on a stable dataset identity plan; don’t overwrite exports without versioning.
+**Fix:** agree on one `dataset_id` per dataset version, and write a new id when
+the data changes.

@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlparse
 
-from ._contracts import _protected_export_directories
+from ._contracts import _protected_directories
 from ._server_base import (
     CELLUCID_WEB_URL,
     WEB_ASSET_INVENTORY_FILENAME,
@@ -150,7 +150,7 @@ def _protected_cache_directories() -> frozenset[Path]:
     ``cellucid/__init__.py`` deliberately keeps free of numpy, pandas, scipy,
     and tqdm.
     """
-    return _protected_export_directories()
+    return _protected_directories()
 
 
 def _require_dedicated_cache_dir(value: str | Path) -> Path:
@@ -612,7 +612,10 @@ def _activate_staged_generation(stage: Path, cache_dir: Path) -> None:
 
 
 def get_web_cache_dir() -> Path:
-    """Return the exact current web cache directory."""
+    """Return the default web cache directory (it may not exist yet).
+
+    Pass ``web_cache_dir=`` to a viewer or server to use another directory.
+    """
     return _web_cache_dir()
 
 
@@ -624,6 +627,16 @@ def clear_web_cache(*, cache_dir: str | Path | None = None) -> Path:
     directory, the home directory, and the directory holding every home are
     refused before anything is inspected or removed, whether they are named
     directly, through ``~``, or through a symbolic link.
+
+    Parameters
+    ----------
+    cache_dir : str or Path, optional
+        The cache directory to remove; :func:`get_web_cache_dir` when None.
+
+    Returns
+    -------
+    Path
+        The absolute path of the directory removed (or already absent).
     """
     resolved = _require_cache_dir(cache_dir)
     with _CACHE_LOCK:

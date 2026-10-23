@@ -12,7 +12,7 @@ Most Cellucid failures fall into one of these buckets:
 
 1) **The exact viewer generation cannot be established or served**
 2) **The browser can’t reach the Python server** (port/network/tunnel/proxy)
-3) **The dataset can’t be interpreted** (missing embeddings/manifests)
+3) **The dataset can’t be interpreted** (no plottable embedding, an undecodable array, stale Zarr metadata)
 4) **Hooks/events aren’t being delivered** (routing/viewerId mismatch)
 5) **Session capture/apply fails** (not ready, requestId gating, exact dataset fingerprint mismatch)
 
@@ -31,7 +31,7 @@ report
 
 This returns a structured dict that checks:
 - server probes (`/_cellucid/health`, `/_cellucid/info`, `/_cellucid/datasets`)
-- every declared dataset identity under its exact id/path
+- the served store of every listed dataset, keyed by its exact id
 - whether the verified viewer UI (`/index.html`) is being served
 - a Python → frontend roundtrip (ping/pong)
 - a frontend debug snapshot (iframe URL/origin/user agent)
@@ -41,9 +41,10 @@ This returns a structured dict that checks:
 
 - `server_health` / `server_health_error`
   - If this fails: the server isn’t reachable (port/network problem).
-- `dataset_identity_probes`
-  - Every declared dataset id maps to its exact path, URL, and parsed identity,
-    or to that dataset’s explicit probe error.
+- `anndata_store_probes`
+  - Every listed dataset id maps to its store's URL and the answer to a `HEAD`
+    and a one-byte `Range` read (a readable store answers `206` with
+    `Content-Range`), or to that probe's explicit error.
 - `viewer_index_probe` / `viewer_index_probe_error`
   - If this fails: the active verified generation is not being served.
 - `frontend_roundtrip`

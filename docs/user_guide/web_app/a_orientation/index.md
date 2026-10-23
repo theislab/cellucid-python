@@ -35,7 +35,7 @@ Definitions of “view”, “snapshot”, “field”, “dimension”, “high
 :link: 05_which_workflow_is_for_me_decision_tree
 :link-type: doc
 
-Choose the right path: AnnData in Python, prepared export folder, or a shareable hosted dataset.
+Choose the right path: a file on your disk, a link, AnnData in Python, or a shareable hosted dataset.
 :::
 
 :::{grid-item-card} {octicon}`gear;1.5em;sd-mr-1` System Requirements

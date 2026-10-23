@@ -92,12 +92,11 @@ state with Python, and stop the local viewer cleanly.
 
 | What you have | Best first path | Why |
 |---|---|---|
-| A prepared Cellucid folder | {doc}`Browser Prepared picker <user_guide/web_app/b_data_loading/03_browser_file_picker_tutorial>` | Fast local exploration with no separate server |
-| An H5AD of any size, or a portable Zarr ZIP | {doc}`Browser file picker <user_guide/web_app/b_data_loading/03_browser_file_picker_tutorial>` | One direct local selection, no Python installed |
-| A large H5AD, Zarr directory, or prepared catalog | {doc}`Python server <user_guide/web_app/b_data_loading/04_server_tutorial>` | Exact server-side validation and on-demand browser gene requests |
+| An H5AD of any size, a Zarr folder, or a portable Zarr ZIP | {doc}`Browser file picker <user_guide/web_app/b_data_loading/03_browser_file_picker_tutorial>` | One direct local selection or drop, no Python installed |
+| An H5AD or Zarr store on another machine | {doc}`Python server <user_guide/web_app/b_data_loading/04_server_tutorial>` | The browser reads it in place, over an SSH tunnel if needed |
 | An in-memory `AnnData` object | {doc}`Jupyter integration <user_guide/web_app/b_data_loading/05_jupyter_tutorial>` | A tight analysis-to-visualization loop |
-| A public collection of prepared datasets | {doc}`Custom repository guide <user_guide/web_app/b_data_loading/11_custom_dataset_repository>` | No running server; exact catalog and share links |
-| A static host or CDN you already control | {doc}`Self-hosted exports root <user_guide/web_app/b_data_loading/11_custom_dataset_repository>` | `?exportsBaseUrl=` fills the app's own `Sample datasets:` dropdown from your catalog |
+| A public collection of datasets | {doc}`Custom repository guide <user_guide/web_app/b_data_loading/11_custom_dataset_repository>` | No running server; exact catalog and share links |
+| A static host or CDN you already control | {doc}`Publish a dataset catalog <user_guide/web_app/b_data_loading/02_local_demo_tutorial>` | `?data=` opens your catalog from one link; `?sampleCatalog=` fills the app's own **Sample dataset** dropdown from it |
 
 The {doc}`complete data-loading map
 <user_guide/web_app/b_data_loading/01_loading_options_overview>` explains the
@@ -130,7 +129,7 @@ contracts—from a first notebook to a reproducible deployment.
 :link: user_guide/r_package/index
 :link-type: doc
 
-Prepare the same browser-ready format from matrices, Seurat, or
+Write the same Cellucid-ready AnnData from matrices, Seurat, or
 SingleCellExperiment, then validate and share it through the same viewer.
 :::
 
@@ -139,10 +138,10 @@ SingleCellExperiment, then validate and share it through the same viewer.
 ## One ecosystem, clear handoffs
 
 - [cellucid](https://github.com/theislab/cellucid) is the web application.
-- [cellucid-python](https://github.com/theislab/cellucid-python) prepares,
-  serves, and embeds data.
-- [cellucid-r](https://github.com/theislab/cellucid-r) prepares the same export
-  contract from R.
+- [cellucid-python](https://github.com/theislab/cellucid-python) writes
+  Cellucid-ready AnnData, serves AnnData, and embeds the viewer in notebooks.
+- [cellucid-r](https://github.com/theislab/cellucid-r) writes the same
+  Cellucid-ready AnnData from R.
 - [cellucid-datasets](https://github.com/theislab/cellucid-datasets) hosts the
   public sample catalog, including the standard Pancreas dataset.
 - [cellucid-demo-custom-datasets](https://github.com/theislab/cellucid-demo-custom-datasets)

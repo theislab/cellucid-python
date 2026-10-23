@@ -9,7 +9,7 @@ This page documents how to test `cellucid-python` locally and what CI currently 
 Tests live under:
 - `cellucid-python/tests/`
 
-The suite covers AnnData and Zarr loading, prepared exports, exact scientific
+The suite covers AnnData and Zarr loading, the Cellucid-ready AnnData writer, exact scientific
 value and identity contracts, HTTP routes and server lifecycle, Jupyter
 messaging, sessions, vector fields, cache and path confinement, documentation,
 cross-platform repository paths, and release artifacts. Changes to a public
@@ -97,13 +97,13 @@ General principles:
 
 Core test categories:
 
-1) Export format:
-   - `prepare(...)` produces required files
-   - manifests reference existing files
-   - quantization markers and min/max are correct
+1) The Cellucid-ready AnnData writer (`tests/test_prepare_anndata_contract.py`):
+   - every output (`.h5ad`, Zarr v2/v3, `.zarr.zip`) reads back exactly with anndata
+   - chunks, codecs, consolidated metadata, and `uns['cellucid']` match the specification
+   - every refusal happens before anything is written
 2) Server routes:
    - health/info endpoints
-   - AnnData server route handlers return bytes with correct length/dtype
+   - the AnnData server answers store routes with exact `Range`/`206`/`HEAD`/`ETag` bytes
 3) Notebook event plumbing:
    - `_handle_frontend_message` correctly updates `viewer.state`
    - hook registry triggers expected callbacks

@@ -15,16 +15,13 @@ Public API definition:
 
 | Category | Symbol | Kind | Primary docs page |
 |---|---|---|---|
-| Export | {func}`~cellucid.prepare` | function | {doc}`api/export` |
+| Data preparation | {func}`~cellucid.prepare` | function | {doc}`api/prepare` |
 | Jupyter | {func}`~cellucid.show_anndata` | function | {doc}`api/jupyter` |
-| Jupyter | {func}`~cellucid.show` | function | {doc}`api/jupyter` |
 | Jupyter | {class}`~cellucid.AnnDataViewer` | class | {doc}`api/viewers` |
-| Jupyter | {class}`~cellucid.CellucidViewer` | class | {doc}`api/viewers` |
 | Server | {func}`~cellucid.serve_anndata` | function | {doc}`api/server` |
-| Server | {func}`~cellucid.serve` | function | {doc}`api/server` |
 | Server | {class}`~cellucid.AnnDataServer` | class | {doc}`api/server` |
-| Server | {class}`~cellucid.CellucidServer` | class | {doc}`api/server` |
-| Adapters | {class}`~cellucid.AnnDataAdapter` | class | {doc}`api/adapters` |
+| Web cache | {func}`~cellucid.get_web_cache_dir` | function | {doc}`api/server` |
+| Web cache | {func}`~cellucid.clear_web_cache` | function | {doc}`api/server` |
 | Sessions | {class}`~cellucid.CellucidSessionBundle` | class | {doc}`api/sessions` |
 | Sessions | {func}`~cellucid.apply_cellucid_session_to_anndata` | function | {doc}`api/sessions` |
 | Vector fields | {func}`~cellucid.compute_transition_drift` | function | {doc}`api/vector_fields` |
@@ -62,7 +59,7 @@ For each **public function/class**, documentation is “complete” when it cont
 - NaN/Inf and constant-value behavior (where relevant)
 
 ### 5) Troubleshooting (mandatory)
-At least 8–15 symptom→diagnosis→fix entries for major entry points (`prepare`, `show_anndata`, `serve`, sessions).
+At least 8–15 symptom→diagnosis→fix entries for major entry points (`prepare`, `show_anndata`, `serve_anndata`, sessions).
 
 ### 6) Cross-links
 - Link to the relevant user-guide chapter(s) where the long-form workflows live.

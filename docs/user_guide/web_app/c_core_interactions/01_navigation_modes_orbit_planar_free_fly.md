@@ -65,7 +65,7 @@ that is what people actually get lost looking for.
 :width: 472px
 
 **Planar** — a keyboard speed slider and two different checkboxes. Orbit and
-Planar both label their slider `Keyboard speed:`; the value beside it is on a
+Planar both label their slider `Keyboard speed`; the value beside it is on a
 different scale in each, because one scales rotation and the other pan.
 ```
 

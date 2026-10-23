@@ -1,6 +1,6 @@
 # Figure export architecture
 
-This page documents the Cellucid **Figure Export** subsystem: how SVG/PNG export reproduces the current view (WYSIWYG), how large datasets are handled safely, and where to add new export renderers.
+This page documents the Cellucid **Figure export** subsystem: how SVG/PNG export reproduces the current view (WYSIWYG), how large datasets are handled safely, and where to add new export renderers.
 
 ## At a glance
 
@@ -70,14 +70,28 @@ PNG export uses Canvas2D for composition, but rasterizes points via WebGL2:
 - this preserves shader-accurate appearance (e.g. 3D sphere shading)
 - avoids maintaining two independent point renderers
 
-The point passes draw on WebGL2 contexts the export keeps for the page's
-lifetime (`webgl-point-rasterizer.js`): one per antialiasing setting, plus one
-for each pass that overlaps another. A pass leases a canvas and returns it
-with `releaseWebglRasterCanvas` once its pixels are copied; the canvas shrinks
-to one pixel and its context stays for the next pass. Creating and losing a
-context per pass cost a context and a shader compile every time, and made
-WebKitGTK/WPE abort the page on a GL call made without a current context
-during the teardown.
+Every per-cell pass and every encode runs in the export worker
+(`utils/figure-export-worker.js`, reached through
+`utils/figure-export-worker-client.js`), never on the page's main thread:
+
+- the point passes draw on OffscreenCanvas WebGL2 contexts the worker keeps for
+  the page's lifetime (`webgl-point-rasterizer.js`), one per antialiasing
+  setting; a pass returns its frame with `transferToImageBitmap()` and the
+  canvas shrinks to one pixel. Creating and losing a context per pass cost a
+  context and a shader compile every time, and made WebKitGTK/WPE abort the
+  page on a GL call made without a current context during the teardown;
+- the page copies each frame onto the plot's device pixels, then hands the
+  composed canvas to the worker as an ImageBitmap, where
+  `OffscreenCanvas.convertToBlob` encodes it (the encoder `toBlob` uses, so the
+  bytes are the same) and the metadata chunks are added;
+- axis bounds and the vector strategies' circle markup are computed there too;
+  the markup returns as one Blob, so the SVG is assembled from Blob parts and
+  never exists as one string.
+
+Each rendered file opens a worker session: a typed array is copied to the
+worker once per session, and closing the session releases it. An export that is
+cancelled rejects its pending requests at once; the worker's late answers are
+discarded.
 
 The PNG exporter also embeds metadata via UTF-8 PNG `iTXt` chunks:
 - `Software`, `Website`, `Creation Time`, `Dataset`, `Dataset ID`, `Color Field`,

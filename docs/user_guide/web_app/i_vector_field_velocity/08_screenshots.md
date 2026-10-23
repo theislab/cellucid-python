@@ -22,7 +22,7 @@ The 2D **Planar** capture shows `velocity` with the initial 15K density,
 :alt: The real Pancreas 2D velocity particle flow with every Advanced Visual Settings group expanded.
 :width: 1440px
 
-The same real 2D field with **Advanced Visual Settings** expanded. Particle,
+The same real 2D field with **Advanced visual settings** expanded. Particle,
 trail, HDR/bloom, color-grading, and cinematic controls change the rendering,
 not the stored per-cell vectors.
 ```

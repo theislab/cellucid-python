@@ -6,48 +6,57 @@
 
 This page documents **server-mode** usage: open Cellucid in a browser tab while a local server serves the data.
 
-You have three equivalent entry points:
-- **CLI:** `cellucid serve …` (recommended for most users; auto-detects format)
-- **Python (exported data):** {func}`~cellucid.serve` / {class}`~cellucid.CellucidServer`
-- **Python (AnnData):** {func}`~cellucid.serve_anndata` / {class}`~cellucid.AnnDataServer`
+You have two equivalent entry points:
+- **CLI:** `cellucid serve …` (recommended for most users; detects the format)
+- **Python:** {func}`~cellucid.serve_anndata` / {class}`~cellucid.AnnDataServer`
+
+Both take an `.h5ad` file, a Zarr store (folder or zipped), or (in Python) an
+in-memory `AnnData`.
 
 ---
 
 ## Fast path (beginner-friendly)
 
-### A) Serve anything (auto-detected) from the terminal
+### A) Serve from the terminal
 
 ```bash
-# Exported folder, .h5ad, or .zarr are all supported:
-cellucid serve /path/to/data
+# .h5ad, Zarr store folder, or zipped Zarr store:
 cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 cellucid serve /path/to/data.zarr --dataset-name "My dataset" --dataset-id my-dataset
+cellucid serve /path/to/data.zarr.zip --dataset-name "My dataset" --dataset-id my-dataset
 ```
+
+`--dataset-name` and `--dataset-id` default to the store's own
+`uns['cellucid']['name']` and `uns['cellucid']['id']` (every file
+{func}`~cellucid.prepare` writes declares both); name the dataset when the store
+declares none.
 
 Then open the printed URL (or let it auto-open).
 
-### B) Serve an exported dataset from Python
+### B) Serve from Python
 
 ```python
-from cellucid import serve
+from cellucid import serve_anndata
 
-serve("./my_export")  # blocks until Ctrl+C
+serve_anndata("my_study.h5ad")  # a prepared file names itself; blocks until Ctrl+C
 ```
 
 ---
 
 ## Practical path (deployment patterns)
 
-### 1) Exported dataset vs AnnData mode
+### 1) A prepared file or any AnnData
 
-**Exported dataset** (recommended for speed + reproducibility):
-- Create with {func}`~cellucid.prepare` (see {doc}`export`)
-- Serve with {func}`~cellucid.serve` or `cellucid serve ./my_export`
+**A Cellucid-ready AnnData** (recommended for speed + reproducibility):
+- Create with {func}`~cellucid.prepare` (see {doc}`prepare`)
+- Serve with {func}`~cellucid.serve_anndata` or `cellucid serve my_study.h5ad`
 
-**AnnData mode** (convenient, often slower):
+**Any other AnnData**:
 - Serve with {func}`~cellucid.serve_anndata` or
   `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`
-- Useful during exploratory analysis when you don’t want to write an export yet
+- The viewer reads the `.h5ad` file or Zarr store itself, in place, with HTTP
+  range requests; the server serves the store's bytes and computes nothing per
+  request. An in-memory object is first written once to a temporary `.h5ad`.
 
 ### 2) Local machine vs remote server (HPC / cloud VM)
 
@@ -57,20 +66,20 @@ serve("./my_export")  # blocks until Ctrl+C
 **Remote server + SSH tunnel** (recommended for HPC):
 1. On the remote machine (where the data lives):
    ```bash
-   cellucid serve /path/to/data --host 127.0.0.1 --port 8765 --no-browser
+   cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset --host 127.0.0.1 --port 8765 --no-browser
    ```
 2. On your laptop:
    ```bash
    ssh -L 8765:127.0.0.1:8765 user@remote
    ```
 3. In your laptop browser:
-   - Open the printed prepared-export Viewer URL:
-     `http://127.0.0.1:8765/?source=remote`
+   - Open the printed Viewer URL:
+     `http://127.0.0.1:8765/?anndata=true`
 
 **Direct LAN access** (use carefully):
 - Bind to `0.0.0.0` to make the server accessible to other machines on the network:
   ```bash
-  cellucid serve /path/to/data --host 0.0.0.0
+  cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset --host 0.0.0.0
   ```
 - This is also what a compute node needs when the tunnel has to terminate on a
   different machine, such as a cluster login node — see
@@ -79,10 +88,16 @@ serve("./my_export")  # blocks until Ctrl+C
   port reads the dataset. Do this only if you understand your network/security
   posture.
 
-### 3) Connectivity is asked for, not assumed (AnnData mode)
+### 3) Launch choices
 
-Serving an AnnData object directly leaves the `obsp['connectivities']` neighbor
-graph **off by default**. Ask for it explicitly:
+Every AnnData option is optional: `embedding_keys`, `knn_key`,
+`expression_source`, `gene_id_column`, `obs_keys`, `latent_key`,
+`vector_field_default`, `normalize_embeddings`, and `centroid_min_points`.
+Each one you set is checked against the store's metadata before the server
+binds (a named `obsm`, `obsp`, layer, or column must exist) and handed to the viewer as a launch default. One you leave unset is
+taken from the store's own `uns['cellucid']['defaults']`, else the viewer
+applies its default rule; see
+{doc}`../../../web_app/b_data_loading/13_data_mapping`.
 
 ```bash
 cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset \
@@ -100,27 +115,13 @@ server = serve_anndata(
 )
 ```
 
-**Off (the default).** `adata.obsp['connectivities']` is never read. The dataset
-identity reports `has_connectivity: false` with `n_edges: null`, and
-`connectivity_manifest.json` and the three `connectivity/edges.*` routes —
-`edges.src.bin`, `edges.dst.bin`, and `edges.weights.f64.bin` (Float64 weights)
-— answer 404.
+No choice costs startup time: the viewer reads the neighbour graph the first
+time a view draws it, and a vector field when the overlay shows it. Naming an
+element the store does not have is an error before the bind, for example
+`knn_key names obsp['connectivities'], which this store does not have.`
 
-**On.** The whole graph is read and validated *before the server binds*, because
-the manifest the viewer fetches first declares the edge count and the neighbor
-maximum. Asking for connectivity on an object whose `obsp` holds no
-`connectivities` matrix is an error at startup, not silence.
-
-**Why off is the default.** On a large object, building the edge list is the
-single longest part of startup — a 50-neighbor graph over millions of cells is
-hundreds of millions of stored neighbors — and most sessions never draw the
-graph.
-
-`--knn KEY` and `knn_key=` apply to direct AnnData input only.
-Passing `--knn` with a prepared export directory is rejected, like
-every other AnnData-only flag: an export already holds the connectivity
-artifacts or it does not, and {func}`~cellucid.serve` publishes exactly what is
-there.
+A choice you set overrides the store's own `uns['cellucid']['defaults']` for
+this server only; the file is not changed.
 
 ### 4) Which URL the banner prints
 
@@ -137,8 +138,6 @@ A wildcard bind prints the loopback origin plus the machine's own name; see {doc
   name of its own. A hostname that resolves back to loopback names nothing
   outside the machine, so it is reported as no origin at all rather than as a
   URL that cannot travel.
-- A prepared-export server prints the same shape with its own viewer query,
-  `/?source=remote`.
 - An IPv6 literal bind is bracketed as a URL requires: `http://[::1]:8765`.
 - Open the exact Viewer URL the banner printed. `0.0.0.0` is never printed as a
   URL because nothing can connect to it.
@@ -149,7 +148,13 @@ A wildcard bind prints the loopback origin plus the machine's own name; see {doc
 
 ### What the server provides
 
-- Static or virtual endpoints for dataset files (exported data or AnnData-backed “virtual files”)
+- The store's bytes under
+  `/_cellucid/anndata/<dataset_id>.h5ad`, `<dataset_id>.zarr.zip`, or
+  `<dataset_id>.zarr/<key>`, with `Range`, `206 Partial Content`,
+  `Content-Range`, `HEAD`, and `ETag` answered exactly. A Zarr store folder is
+  served key by key (404 for an absent key), with consolidated metadata built in
+  memory when the store has none. The route is named by the dataset id, so the
+  local file name is never published.
 - CORS headers so the viewer UI can request data
 - `Host` validation ahead of routing: only one well-formed authority naming
   `localhost` or a loopback IP literal on the bound port is served, which is what
@@ -161,19 +166,18 @@ A wildcard bind prints the loopback origin plus the machine's own name; see {doc
   - `/_cellucid/info`
   - `/_cellucid/datasets`
   - `/_cellucid/protocol` (which wire capabilities this `cellucid` accepts)
-  - `/_cellucid/mapping/candidates.json` (AnnData servers: the data mapping
-    being served, which the viewer records in sessions, and every candidate array)
-- AnnData mode only: further data-mapping routes under `/_cellucid/mapping/`
-  (embeddings, centroids, vectors, `knn`, `genes` and
-  `latent` routes addressed by catalog position; 404 for an unknown index, 422
-  `{"error", "key", "reason"}` when an entry's values fail their load-time check). The
-  route table is in
-  {doc}`../../../web_app/b_data_loading/04_server_tutorial`, and the service
-  behind it is {class}`cellucid.anndata_mapping.AnnDataMapping`.
-- `/_cellucid/info` always carries the package `version`. A viewer that meets
-  a `dataset_identity.json` version it does not read asks this route and
-  reports "This Cellucid server (X.Y.Z) is older than the viewer; update it
-  with pip install -U cellucid."
+- `/_cellucid/datasets` is
+  `{"datasets": [{"id", "name", "anndata": {"file": {"url", "kind", "layout", "size"}, "defaults": {...}}}]}`.
+  `url` is the store's route relative to the server's base URL, `kind` is
+  `h5ad` or `zarr`, `layout` is `file`, `zip`, or `folder`, `size` is given for
+  a file only, and `defaults` holds only the launch choices you set.
+  `/_cellucid/health` is
+  `{"status": "ok", "type": "anndata", "version", "format", "n_cells", "n_genes"}`,
+  and `/_cellucid/info` adds the bound `host` and `port`. The server is
+  threaded and keeps connections alive (HTTP/1.1), because a browser reads one
+  file with many range requests. The full route table is in
+  {doc}`../../../web_app/b_data_loading/04_server_tutorial`.
+- `/_cellucid/info` always carries the package `version`.
 
 ### Viewer UI hosting and source requirements
 
@@ -186,28 +190,23 @@ If the runtime cannot fetch and verify the exact source generation, startup
 raises before binding the server. Use `--web-cache-dir PATH` or the
 `web_cache_dir=` argument to select its publication directory.
 
-### Startup progress (direct AnnData: five steps)
+### Startup progress (direct AnnData: four steps)
 
-Opening a large object spends minutes before the socket is bound, so each phase
-reports as it happens:
+Startup prints four numbered steps: `[1/4] Detecting format`,
+`[2/4] Reading metadata`, `[3/4] Checking launch choices`, `[4/4] Starting
+server`. Steps 1 to 3 read metadata only, never an array. The transcript is in
+{doc}`../../../web_app/b_data_loading/04_server_tutorial`.
 
-Startup prints five numbered steps; the transcript is in {doc}`../../../web_app/b_data_loading/04_server_tutorial`.
-
-- Step 2 reports the adapter build itself: the obs columns being classified, the
-  `obsm` key resolution and the exact key resolved for each dimension, the
-  vector-field scan, and — only when you asked for it — the connectivity read.
-- Step 4 is the manifest and centroid phase. It has its own step because it is
-  real work on a large object, not a formality after the load succeeds.
-- `Connectivity` in step 3 has three states, not two:
-  - `yes (N edges)` — the graph was asked for, read, and validated;
-  - `not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)` — a graph exists and was not asked for;
-  - `no` — the object has no graph. Checking `obsp` membership is a key lookup,
-    not a read of the matrix, so naming the middle state costs nothing that
-    opting out was meant to save.
-
-A **prepared export** runs three steps instead, unchanged:
-`[1/3] Validating dataset`, `[2/3] Loading dataset info`, `[3/3] Starting
-server`.
+- Step 2 prints the cell and gene counts and the `obsm`, `obs`, `obsp`, and
+  `layers` entries the store holds.
+- Step 3 prints every launch choice it accepted, and
+  `Consolidated metadata: built in memory (…)` for a Zarr store folder that
+  has none.
+- A store holding an array the browser cannot decode (an HDF5 filter other than
+  gzip, shuffle, Fletcher-32, or LZF, such as Blosc, Zstandard, szip, or
+  scaleoffset; a Zarr codec such as bz2, lzma, or zfpy) prints
+  `Browser cannot decode:` with the arrays, and is read once with anndata and
+  served from a temporary `.h5ad`.
 
 ---
 
@@ -216,20 +215,19 @@ server`.
 ### Functions
 
 ```{eval-rst}
-.. autofunction:: serve
+.. autofunction:: serve_anndata
 ```
 
+The viewer's web build is cached locally (see
+{doc}`../../d_viewing_apis/09_server_mode_advanced`):
+
 ```{eval-rst}
-.. autofunction:: serve_anndata
+.. autofunction:: get_web_cache_dir
+.. autofunction:: clear_web_cache
 ```
 
 ### Classes
 
-```{eval-rst}
-.. autoclass:: CellucidServer
-   :members:
-   :show-inheritance:
-```
 
 ```{eval-rst}
 .. autoclass:: AnnDataServer
@@ -256,30 +254,11 @@ server`.
 - Cellucid servers are designed for local/private use (not hardened for public internet exposure).
 
 ### “The graph is there, but the viewer will not draw edges”
-- In AnnData mode the neighbor graph is opt-in. Without `--knn connectivities` (or
-  `knn_key="connectivities"`) the server never reads `obsp['connectivities']`,
-  and the connectivity manifest and edge routes answer 404.
-- Step 3 of startup says so explicitly: `Connectivity: not served
-  (obsp['connectivities'] is present; pass knn_key='connectivities', or
-  --knn connectivities, to draw it)`.
-- A prepared export is different: it serves the connectivity artifacts it
-  contains, so re-export with `connectivities=` if they are missing.
-
-### “The dataset directory contains multiple datasets”
-- {class}`~cellucid.CellucidServer` supports serving a directory that contains multiple exported datasets as subfolders.
-- `server.viewer_url` opens that served catalog without embedding an arbitrary
-  dataset id. One unique entry is selected automatically; multiple entries
-  require an exact dataset-id selection.
-- Confirm the exact ids and paths by visiting `/_cellucid/datasets`.
-- Once any immediate child is recognized as a dataset candidate, **every**
-  immediate subdirectory must be one complete current export. A stray or
-  partial subdirectory rejects the root instead of being silently omitted.
-
-### “Exported folder missing some files”
-- `CellucidServer` validates the complete declared prepared-artifact inventory
-  during construction.
-- Missing required metadata, point files, or any artifact declared by a
-  current manifest raises before a socket is bound.
+- The viewer draws `obsp['connectivities']` by default. A graph
+  stored under another key is drawn when you name it with `--knn KEY` (or
+  `knn_key="KEY"`), or pick it under **Session › Data mapping**.
+- A file written by {func}`~cellucid.prepare` holds a graph only when
+  `connectivities=` was passed.
 
 ---
 
@@ -301,16 +280,16 @@ Fix:
 
 ### Symptom: “I can open `/_cellucid/health` but the dataset won’t load”
 Likely causes:
-- You served a directory that is not a valid exported dataset (missing manifests/points files).
-- You served a parent folder with multiple datasets but opened the wrong path.
+- The store holds no plottable embedding in `obsm`, or a shape mismatch.
+- A Zarr store folder's consolidated metadata is stale.
 
 How to confirm:
-- Visit `/_cellucid/datasets` and confirm the dataset path you intended exists.
-- Try fetching `dataset_identity.json` and `obs_manifest.json` in the browser.
+- Visit `/_cellucid/datasets` and confirm the store route and launch choices.
+- Read the viewer's own error; `viewer.debug_connection()` probes the store.
 
 Fix:
-- Serve the correct dataset directory (the folder produced by `prepare(...)`).
-- Or re-export with {func}`~cellucid.prepare`.
+- Name the embedding with `embedding_keys`, or write the file again with
+  {func}`~cellucid.prepare`.
 
 ---
 
@@ -342,14 +321,17 @@ Fix:
 
 ---
 
-### Symptom: “It works for small datasets but crashes/gets slow for large ones”
+### Symptom: “It works for small datasets but gets slow for large ones”
 Likely causes:
-- AnnData mode is generating virtual files on demand and may hit memory/CPU limits.
+- A high-latency link between browser and server: the viewer reads a store
+  with many range requests.
+- The first gene of a row-major (CSR) expression matrix: the browser builds a
+  gene index over the matrix once.
 
 Fix:
-- Export with {func}`~cellucid.prepare` (quantization + compression) and serve the exported directory.
-- Use read-only-backed `.h5ad` input when staying in AnnData mode; Zarr input
-  is loaded eagerly.
+- Run the server on the machine that holds the data and tunnel to it.
+- Store a matrix you open often column-major (CSC), so one gene is one
+  contiguous read.
 
 ---
 
@@ -372,18 +354,8 @@ Fix:
 
 ---
 
-### Symptom: direct AnnData startup says “Importing dependencies…” and feels stuck
-What’s happening:
-- The first import may be slow in fresh environments because large scientific dependencies are loaded.
-
-Fix:
-- Wait once (subsequent runs are faster in the same process).
-- If it truly hangs, run with `--verbose` and check for import errors.
-
----
-
 ## See also
 
 - {doc}`cli` for CLI options and examples
-- {doc}`export` for `prepare(...)` and export layout
+- {doc}`prepare` for `prepare(...)` and the Cellucid-ready AnnData
 - {doc}`jupyter` for notebook embedding

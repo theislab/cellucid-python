@@ -93,7 +93,7 @@ If your annotators include wet-lab scientists, reduce cognitive load:
 
 ### 0.2 Dataset Checklist (Technical + Scientific)
 
-- You have a **stable dataset id** (Cellucid uses `dataset_identity.json["id"]`).
+- You have a **stable dataset id** (Cellucid uses `uns['cellucid']['id']` in the dataset file).
 - You have at least one **categorical obs column** suitable for annotation (e.g. `leiden`, `cluster`, `cell_type_coarse`).
 - The **category labels** for that column are stable (or you are ready to “freeze” them before annotation begins).
 - You know your intended audience:
@@ -161,7 +161,7 @@ As an author you control annotation through three layers:
 3) **Moderation merges** (`annotations/moderation/merges.json`, optional)
    - Used to merge duplicates so votes combine cleanly.
 
-Everything else (suggestions, votes, comments) comes from the community (one file per user).
+Everything else (suggestions, votes, comments) comes from the community (one file per user, with one section per dataset).
 
 ### What to edit (and what not to)
 
@@ -179,8 +179,20 @@ Community annotation is scoped by dataset id. If the id changes, existing annota
 
 ### How dataset id is determined
 
-- For pre-exported datasets, Cellucid reads `dataset_identity.json["id"]`.
-- When exporting via `cellucid.prepare(...)`, you can set `dataset_id=...`.
+- For a file that states its id in `uns['cellucid']['id']`, Cellucid uses that
+  id, whatever opened it: the sample menu, a data link, a server, a notebook,
+  or the local **H5AD**, **Zarr folder** or **Zarr ZIP** button. The same file
+  keeps the same annotations everywhere.
+- A file without one gets an id from how it was opened: a data link gives a
+  stable one, such as `cellxgene:<dataset id>` or `geo:<GSE>:<file>`
+  ({doc}`../b_data_loading/14_open_from_link`); a local file gets one from its
+  file name. See {doc}`../b_data_loading/06_dataset_identity_why_it_matters`.
+- When writing the file with `cellucid.prepare(...)`, set `dataset_id=...`.
+
+One repository can annotate several datasets. Each contributor's file keeps a
+separate section per dataset, so two datasets that share a field and a
+category label (for example `leiden` / `0`) never share suggestions, votes or
+merges.
 
 Example (recommended):
 
@@ -188,24 +200,27 @@ Example (recommended):
 from cellucid import prepare
 
 prepare(
-    # ... data args ...
+    "my_atlas.zarr",
+    format="zarr",
     embeddings={"X_umap": adata.obsm["X_umap"]},
-    out_dir="./my_export",
+    obs=adata.obs,
     dataset_id="my_atlas_v1",  # keep this stable for the entire annotation round
     dataset_name="My Atlas (v1)",
-    obs_categorical_dtype="uint16",
 )
 ```
 
 How to confirm:
 
-1) Open `my_export/dataset_identity.json`
-2) Verify the `id` field is what you expect.
+```python
+import anndata as ad
+
+ad.read_zarr("my_atlas.zarr").uns["cellucid"]["id"]  # 'my_atlas_v1'
+```
 
 :::{tip}
 Treat dataset id like a **contract**:
 
-- If you re-export with small technical changes but the same clusters and meaning, keep the same id.
+- If you write the file again with small technical changes but the same clusters and meaning, keep the same id.
 - If you change clustering, category labels, or biological meaning, use a new id and create a new round (or a new `supportedDatasets[]` entry).
 :::
 
@@ -363,7 +378,7 @@ For large groups, a dedicated branch reduces accidental changes to `main` and ma
   - Dataset ids must be unique.
 
 - `supportedDatasets[].datasetId`
-  - Must match `dataset_identity.json["id"]` of the dataset currently open in Cellucid.
+  - Must match the dataset id of the dataset currently open in Cellucid (shown in its dataset info).
   - If the currently loaded dataset id is missing:
     - **annotators are blocked** (cannot Pull / view annotations)
     - **authors can still connect** (with a confirmation) and Publish an updated config to unblock everyone
@@ -586,12 +601,12 @@ the accepted Worker source and then verify the live root and browser lifecycle.
 ## 7) Connect the Repo From Cellucid (Author Bootstrap)
 
 1) Load your dataset in Cellucid.
-2) Open the **Community Annotation** accordion.
+2) Open the **Community annotation** accordion.
 3) Click **Connect repo**. If this dataset already has a repository connection,
    use **Connect GitHub…** or **GitHub sync…** as shown.
 4) Complete **Continue with GitHub**, enable/reload repositories if needed,
    select the repo, click **Connect**, then **Pull latest**.
-5) Confirm you see author-only controls (e.g. **MANAGE ANNOTATION**).
+5) Confirm you see author-only controls (e.g. **Annotated columns**).
 
 ### Dataset mismatch (the most common “why can’t annotators Pull?” issue)
 
@@ -609,7 +624,7 @@ Role is derived from GitHub permissions on the annotation repo:
 - author = `maintain` or `admin`
 - annotator = everything else
 
-If you are an author, you should see author-only UI blocks such as **MANAGE ANNOTATION**.
+If you are an author, you should see author-only UI blocks such as **Annotated columns**.
 
 If you do not:
 
@@ -621,9 +636,9 @@ If you do not:
 
 ## 8) Enable/Disable Annotatable Columns (Author UI)
 
-Once connected, open **MANAGE ANNOTATION** inside the Community Annotation accordion:
+Once connected, open **Annotated columns** inside the Community Annotation accordion:
 
-1) Select the categorical obs field you want to control (dropdown labeled **Categorical obs:**).
+1) Select the categorical obs field you want to control (dropdown labeled **Categorical obs**).
 2) Click **Add** to include it in annotation.
 3) Optionally adjust consensus settings (Section 9).
 4) Click **Publish** so others receive the settings on Pull.
@@ -654,7 +669,7 @@ For mixed audiences (computational + wet-lab):
 
 ## 9) Tune Consensus Rules Per Column
 
-Inside **MANAGE ANNOTATION**, after you select a column that is already annotatable, you will see **Annotatable consensus settings**:
+Inside **Annotated columns**, after you select a column that is already annotatable, you will see **Consensus settings**:
 
 - **Threshold** slider (maps to `threshold` in `annotations/config.json`)
 - **Min annotators** input (maps to `minAnnotators`)
@@ -665,7 +680,7 @@ Inside **MANAGE ANNOTATION**, after you select a column that is already annotata
 :alt: The Manage annotation section expanded, showing the categorical obs picker with Add, Remove and Close buttons above an Annotatable consensus settings block containing a Threshold slider, a Min annotators field, and Apply and Reset buttons.
 :width: 488px
 
-**Annotatable consensus settings** appear only once you select a column that is
+**Consensus settings** appear only once you select a column that is
 already annotatable — the block belongs to the selected column, not to the
 repository. The **Threshold** slider is in whole percent; the stored value is a
 signed fraction spanning −1 to +1, because confidence itself is signed.
@@ -799,11 +814,11 @@ be validated before Pull.
 
 ---
 
-## 11) Build a Derived Consensus Column (Optional, Local)
+## 11) Build a Consensus Column (Optional, Local)
 
 Cellucid can build a local derived categorical obs column for visualization:
 
-1) Open **DERIVED CONSENSUS COLUMN**.
+1) Open **Consensus column**.
 2) Choose an annotatable source column (e.g. `leiden`).
 3) Choose a **New column key** (e.g. `community_cell_type`).
 4) Set threshold / min annotators (used only for this derived column).
@@ -827,9 +842,9 @@ The derived column uses the threshold/minAnnotators you set in the derived-colum
 
 ## 12) Export a Consensus Snapshot (For Downstream Tools)
 
-Inside **CONSENSUS SNAPSHOT + LOCAL CACHE**:
+Inside **Snapshot and cache**:
 
-- **Consensus snapshot (cellucid-consensus.json)** → **Download**
+- **Snapshot and cache** → **Download** (`cellucid-consensus.json`)
 
 This produces a JSON snapshot built in your browser from the locally cached raw GitHub files (it is not written back to GitHub).
 
@@ -946,7 +961,7 @@ For non-technical collaborators, a screenshot of the status panel + error messag
 
 ### GitHub App install / repo not appearing
 
-- **Repo does not appear under “Select an annotation repository”**
+- **Repo does not appear under “Choose repository”**
   - Causes:
     - the Cellucid GitHub App is not installed for the repo owner
     - the app was installed for “Only selected repositories” and the repo is not selected

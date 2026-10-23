@@ -45,29 +45,28 @@ Obs fields are cell-level columns such as:
 - pseudotime / diffusion pseudotime / latent dimensions (if exported as obs)
 
 In the UI, obs fields appear in two dropdowns:
-- **Coloring & Filtering → Categorical obs**
-- **Coloring & Filtering → Continuous obs**
+- **Coloring & filtering → Categorical obs**
+- **Coloring & filtering → Continuous obs**
 
 ### Var (variables) = per-gene (feature) values per cell
 
 Var fields are feature-level “things you can color by”, most commonly **genes**.
 
 In the UI, var fields appear as:
-- **Coloring & Filtering → Gene Expression** (search box + dropdown results)
+- **Coloring & filtering → Gene Expression** (search box + dropdown results)
 
 :::{important}
 Cellucid treats gene expression as **continuous**: selecting a gene always creates a continuous-style legend (colorbar + sliders).
 :::
 
-For a prepared dataset the var axis is whatever the export published — the
-genes and their names, decided when the dataset was prepared. It is not
-necessarily every gene the study measured, and Cellucid neither knows nor can
-recover what was left out. For the built-in samples this is documented: see
-{doc}`07_genes_in_the_built_in_samples`. An exported dataset with several
-gene-name sets can switch between them.
+The var axis is whatever the file holds — the genes and their names, decided
+when the file was written. It is not necessarily every gene the study
+measured, and Cellucid neither knows nor can recover what was left out. For the
+built-in samples this is documented: see
+{doc}`07_genes_in_the_built_in_samples`.
 
-For an AnnData file (opened in the browser, served, or shown from a notebook)
-the var axis is that of the chosen expression matrix — `X`, a layer, or
+However the AnnData file is opened (in the browser, served, or shown from a
+notebook), the var axis is that of the chosen expression matrix — `X`, a layer, or
 `raw.X`, which has its own gene list — named by the var index or a var column.
 Both are chosen under **Session › Data mapping › Genes**; see
 {doc}`../b_data_loading/13_data_mapping`.
@@ -134,7 +133,7 @@ would otherwise need paragraphs for:
 
 From a user perspective, a field can come from:
 
-1) **Your dataset export** (the “source-of-truth” columns and genes you provided).
+1) **Your dataset** (the “source-of-truth” columns and genes you provided).
 2) **A derived field created inside Cellucid** (user-defined fields), for example:
    - duplicating a field (“(copy)”),
    - deleting/merging categories (“(edited)” / “(merged)”),
@@ -165,9 +164,8 @@ This matters because derived fields are still “real fields”:
   drawn in the single colour from the middle of the colormap, and the Min/Max
   sliders have nothing to divide — see
   {doc}`../e_filtering/06_edge_cases_filtering`.
-- Constant fields and constant genes are published, not dropped: the export
-  format encodes them as `minValue == maxValue` with every code `0`, and the
-  viewer decodes that back to the exact constant. A gene detected in no cell of
+- Constant fields and constant genes are kept, not dropped: the viewer reads
+  the exact constant from the file. A gene detected in no cell of
   a published subset is therefore still in the gene menu, at its exact value.
 
 ### Negative values + log scale

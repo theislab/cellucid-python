@@ -1,5 +1,12 @@
 # Screenshot coverage audit — sections I, J, K
 
+:::{important}
+Audited before Cellucid 0.9.5, which reads AnnData only. The capture
+instructions use the current controls, fixtures and sample catalog; where a
+record says what a page or an image showed at audit time (the **Prepared**
+button, a prepared export), that is history. {doc}`index` maps the old names.
+:::
+
 Scope: `cellucid-python/docs/user_guide/web_app/{i_vector_field_velocity, j_community_annotation, k_figure_export}`.
 Every `.md` in all three sections was read in full. Docs were **not** modified; this file is the only output.
 
@@ -51,9 +58,9 @@ All paths below are relative to `cellucid-python/docs/` unless absolute.
 
 Verified from the existing browser specs, so the screenshot tool can reuse a proven path.
 
-**Real datasets.** `cellucid-datasets/exports-v3/datasets.json` — `pancreas` is the **only bundled sample carrying `vector_fields`** (`suo`, `garcia`, `he`, `kanemaru` have none, so the entire velocity block is `display:none` on them). Pancreas = *Pancreatic endocrinogenesis (scVelo)*, 3696 cells, `default_field: "velocity"`, bound to the embeddings `X_umap_1d`, `X_umap` (2D), and `X_umap_3d` (not to the 2D `X_pca`), `embeddings.default_dimension: 3`. **The "3,696 cells / independent 1D, 2D, 3D" claim in `i/08` is verified correct.**
+**Real datasets.** The sample catalog (audited before 0.9.5) — `pancreas` is the **only bundled sample carrying `vector_fields`** (`suo`, `garcia`, `he`, `kanemaru` have none, so the entire velocity block is `display:none` on them). Pancreas = *Pancreatic endocrinogenesis (scVelo)*, 3696 cells, `default_field: "velocity"`, bound to the embeddings `X_umap_1d`, `X_umap` (2D), and `X_umap_3d` (not to the 2D `X_pca`), `embeddings.default_dimension: 3`. **The "3,696 cells / independent 1D, 2D, 3D" claim in `i/08` is verified correct.**
 
-**Deterministic fixture.** `/?exportsBaseUrl=${ENCODED_EXPORTS_BASE_URL}&dataset=current-ui-prepared` → "Current UI prepared fixture", 120 points. `ENCODED_EXPORTS_BASE_URL` is from `cellucid/tests/browser/helpers/origins.mjs`; dismiss the welcome modal with `dismissWelcome(page)` from `cellucid/tests/browser/helpers/welcome.mjs` (asserts `#welcome-modal`, presses Escape). **This fixture is right for contract tests and wrong for documentation** — see `k/02`.
+**Deterministic fixture.** `/?sampleCatalog=<the browser-test catalog>&dataset=current-ui` → "Current UI prepared fixture", 120 points. The browser-test catalog address comes from `cellucid/tests/browser/helpers/origins.mjs`; dismiss the welcome modal with `dismissWelcome(page)` from `cellucid/tests/browser/helpers/welcome.mjs` (asserts `#welcome-modal`, presses Escape). **This fixture is right for contract tests and wrong for documentation** — see `k/02`.
 
 **Velocity is a Figure-Export blocker.** `figure-export/utils/overlay-fidelity.js` (`VELOCITY_OVERLAY_CONTROL_ID = 'velocity-overlay-enabled'`) blocks export while the overlay is on. **All velocity imagery must be canvas/viewport capture of `#glcanvas`, never Figure Export output.**
 
@@ -276,7 +283,7 @@ Plus one small extra: the **info popover**. The page says "A small `i` button be
 
 **NONE (justified)** for edge cases 3 (wrong basis), 5 (NaN/Inf), 6 (huge magnitudes), 7 (row-order mismatch) and all three *Environment* cases: these are diagnosed in Python or the console, and the failure mode of 7 is explicitly "renders but is misleading" — a screenshot of a misleading render, presented as documentation, is worse than no screenshot.
 
-**notes** — Edge case 3 says "the current detection rules are UMAP-oriented (e.g. `velocity_umap_2d`)". Confirmed against `cellucid-python/src/cellucid/vector_fields.py` naming `<field>_umap_<dim>d`. No staleness found on this page.
+**notes** — Edge case 3 describes the default binding by scVelo's naming convention (`<field>_<basis>` bound to `X_<basis>` when both have the same number of columns, e.g. `velocity_umap` to `X_umap`). Confirmed against `cellucid/assets/js/data/data-mapping.js` (`parseVectorFieldKey`, `defaultVectorBindings`) and `cellucid-python/src/cellucid/data_mapping.py` (`parse_vector_field_key`). No staleness found on this page.
 
 ---
 
@@ -296,7 +303,7 @@ Plus one small extra: the **info popover**. The page says "A small `i` button be
 
 **notes**
 - The three "Common error messages" quoted at the bottom (`No 2D/3D vector field found for "…" in obsm`, `Vector field "…" has N dimensions, expected D`, `vectors length X !== expected Y`) were **not** re-verified against source in this pass — flag for the doc-accuracy sweep, not for screenshots.
-- The Python snippets reference `cellucid.add_transition_drift_to_obsm(...)` and `prepare(...)`. The user's objective mentions *"Sometimes you may need jupyter or terminal screenshots when showing the data loader paths."* This page is the strongest candidate in section I: **a Jupyter capture of `adata.obsm.keys()` showing `velocity_umap_2d` next to `X_umap_2d`** would make §"How do I add vector fields to my dataset?" concrete. Suggested: `vector_field_velocity/jupyter-obsm-keys.png`, notebook cell + output only, `:width: 700px`. Note that `cellucid.prepare(...)` is used in the snippets while the agent-verified Python entry point is `prepare_data(...)` — worth confirming which alias the package exports before capturing a terminal/notebook image that would bake the wrong name in.
+- The Python snippets reference `cellucid.add_transition_drift_to_obsm(...)` and `cellucid.prepare(...)`; both are the package's exported names (`cellucid/__init__.py`). The user's objective mentions *"Sometimes you may need jupyter or terminal screenshots when showing the data loader paths."* This page is the strongest candidate in section I: **a Jupyter capture of `adata.obsm.keys()` showing `velocity_umap` next to `X_umap`** would make §"How do I add vector fields to my dataset?" concrete. A vector field binds to its embedding by scVelo's naming convention: the `obsm` array `<field>_<basis>` is drawn as the field `<field>` over the embedding `X_<basis>` (`velocity_umap` over `X_umap`, `T_fwd_branches` over `X_branches`; `cellucid/vector_fields.py`), so the capture should show such a pair. Suggested: `vector_field_velocity/jupyter-obsm-keys.png`, notebook cell + output only, `:width: 700px`.
 
 ---
 
@@ -327,7 +334,7 @@ The *content* is good and, unusually, fully verifiable: I read all three at full
 - `pancreas-velocity-3d.png` — 3D Orbit. Note the orbit-anchor dot is visible mid-canvas; either turn `Show orbit anchor` off or mention it. Keep `:width: 1440px`.
 
 **notes**
-- The page's provenance claim — "3,696 cells with independent 1D, 2D, and 3D UMAP embeddings, a 2D PCA view, and one `velocity` field bound to each of the three UMAPs" — is **verified** against `cellucid-datasets/exports-v3/pancreas/dataset_identity.json` (embeddings `X_umap_1d`, `X_pca`, `X_umap`, `X_umap_3d`; `embeddings.default_dimension 3`; `vector_fields.fields.velocity.files` binds `vectors/0_0.bin.gz`, `vectors/0_2.bin.gz`, and `vectors/0_3.bin.gz` to the three UMAPs). `overlay-controls.png` and `pancreas-velocity-3d.png` still show the field's previous name, `velocity_umap`, in the **Vector field** selector; their re-shoots must show `velocity`.
+- The page's provenance claim — "3,696 cells with independent 1D, 2D, and 3D UMAP embeddings, a 2D PCA view, and one `velocity` field bound to each of the three UMAPs" — is **verified** against the Pancreas sample's identity at audit time (prepared, before 0.9.5; embeddings `X_umap_1d`, `X_pca`, `X_umap`, `X_umap_3d`; `embeddings.default_dimension 3`; the field `velocity` bound to the three UMAPs). `overlay-controls.png` and `pancreas-velocity-3d.png` still show the field's previous name, `velocity_umap`, in the **Vector field** selector; their re-shoots must show `velocity`.
 - The 3D caption says the view is "colored by `clusters`". `CATEGORICAL OBS: clusters` is indeed visible in the crop, but the particle layer at 60 % opacity almost completely occludes the point cloud, so the *claim* is not visible in the *image*. Either lower `Opacity:` to ~35 % for that capture or drop the colour claim from the caption.
 - This page is where the "skipped parameter pairs" decision from `i/04` should be recorded, and where the honest statement about `Flow speed:` being unrepresentable in a still belongs.
 
@@ -480,7 +487,7 @@ contract host, one per document (`user-v1`, `config-v1`, `merges-v1`). The exact
 because `tests/test_canonical_url_contract.py` pins bare-apex URLs to that page.
 
 Deep link used by the spec:
-`/?exportsBaseUrl=<encoded>&dataset=<id>&annotations=team%2Flabels%40main&acceptance=<tag>`
+`/?sampleCatalog=<encoded>&dataset=<id>&annotations=team%2Flabels%40main&acceptance=<tag>`
 
 **(B2) Load the app on a real dataset**, then `dismissWelcome(page)` (`#welcome-modal` → Escape).
 For documentation use `?dataset=pancreas` (3696 real cells, real cluster labels) — **not** `current-ui-prepared`.

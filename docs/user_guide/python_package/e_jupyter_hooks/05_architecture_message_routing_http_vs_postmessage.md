@@ -20,8 +20,8 @@ Cellucid’s notebook integration is designed to:
 ┌─────────────────────────────── Notebook Kernel ───────────────────────────────┐
 │                                                                               │
 │  Python: cellucid-python                                                      │
-│   - BaseViewer / CellucidViewer / AnnDataViewer                               │
-│   - CellucidServer / AnnDataServer                                            │
+│   - AnnDataViewer                                                             │
+│   - AnnDataServer                                                             │
 │   - /_cellucid/events (hooks)                                                 │
 │   - /_cellucid/selection (binary selections)                                  │
 │   - /_cellucid/session_bundle (uploads)                                       │
@@ -66,7 +66,7 @@ Security:
 - so Cellucid authenticates commands using a per-viewer `viewerToken` rather than strict origin allowlisting.
 
 Where to look:
-- Python send path: `cellucid-python/src/cellucid/jupyter/_base.py` (`BaseViewer.send_message`)
+- Python send path: `cellucid-python/src/cellucid/jupyter/_viewer.py` (`AnnDataViewer.send_message`)
 - JS receive path: `cellucid/assets/js/data/jupyter-source.js` (`_handleMessage`)
 
 ### Channel B: iframe → Python (events) via HTTP POST
@@ -80,7 +80,7 @@ Where to look:
 - JS send path: `cellucid/assets/js/data/jupyter-source.js` (`_postEventToPython`)
 - Python receive path: `cellucid-python/src/cellucid/_server_base.py` (`handle_event_post`)
 - Python routing path: `cellucid-python/src/cellucid/_server_base.py` (`route_event`)
-- Python hook dispatch: `cellucid-python/src/cellucid/jupyter/_base.py` (`_handle_frontend_message`) and `jupyter/_hooks.py` (`HookRegistry`)
+- Python hook dispatch: `cellucid-python/src/cellucid/jupyter/_viewer.py` (`_handle_frontend_message`) and `jupyter/_hooks.py` (`HookRegistry`)
 
 ## How the iframe URL is chosen (mixed-content avoidance)
 
@@ -93,7 +93,7 @@ Cellucid’s solution:
    dataset server.
 2. When the notebook is HTTPS/remote, prefer a notebook proxy URL (Jupyter Server Proxy).
 
-In the notebook output HTML (`BaseViewer._generate_viewer_html`):
+In the notebook output HTML (`AnnDataViewer._generate_viewer_html`):
 - it builds a `directSrc` (often loopback),
 - it also tries a `proxySrc` of the form:
 
@@ -162,12 +162,12 @@ viewer._handle_frontend_message(event)
 
 ## Threading / reentrancy notes
 
-Events arrive on the HTTP server’s request-handling thread.
+Events arrive on the HTTP server’s request-handling threads.
 
 Implications:
 - keep callbacks fast,
 - avoid long-running work directly in the hook handler,
-- be careful when touching backed AnnData from multiple threads.
+- be careful when touching the same AnnData object from several threads.
 
 See {doc}`08_writing_robust_callbacks`.
 
@@ -175,7 +175,7 @@ See {doc}`08_writing_robust_callbacks`.
 
 Use `viewer.debug_connection()` to collect:
 - server health/info probes
-- `dataset_identity_probes`, keyed by every exact declared dataset id/path
+- `anndata_store_probes`, keyed by every exact listed dataset id
 - ping/pong roundtrip
 - a frontend “debug snapshot” (`location.href`, origin, user agent)
 - recent accepted-event counts by exact type

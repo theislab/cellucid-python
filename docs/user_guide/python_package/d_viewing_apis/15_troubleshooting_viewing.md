@@ -2,8 +2,8 @@
 
 This page is symptom-driven troubleshooting for:
 - `cellucid serve …` (CLI server mode),
-- `serve(...)` / `serve_anndata(...)` (Python server mode),
-- `show(...)` / `show_anndata(...)` (notebook embedding).
+- `serve_anndata(...)` (Python server mode),
+- `show_anndata(...)` (notebook embedding).
 
 If you’re new, skim the “Quick triage” section first.
 
@@ -14,7 +14,7 @@ If you’re new, skim the “Quick triage” section first.
 ### 1) What workflow are you using?
 
 - Terminal/browser → you’re in **server mode** (`cellucid serve …`)
-- Notebook iframe → you’re in **notebook mode** (`show` / `show_anndata`)
+- Notebook iframe → you’re in **notebook mode** (`show_anndata`)
 
 This matters because notebook mode adds extra failure modes (HTTPS mixed content, notebook proxies).
 
@@ -33,32 +33,22 @@ If this doesn’t load, the viewer can’t load either.
 Open the exact **Viewer URL** printed by the server:
 
 ```text
-Prepared export: http://127.0.0.1:<port>/?source=remote
-Direct AnnData:  http://127.0.0.1:<port>/?anndata=true
+http://127.0.0.1:<port>/?anndata=true
 ```
 
 A wildcard bind prints the loopback origin plus the machine's own name; see
 {doc}`12_remote_servers_ssh_tunneling_and_cloud`.
 
-If this fails:
-- exported folders may be incomplete, or
-- AnnData server may have crashed while generating metadata.
+If this fails, the server may have stopped.
 
 ### 4) Did one field fail, or did everything fail?
 
 A viewer that loads, draws points, and refuses exactly one gene or one
-continuous `obs` column is not a broken server. The direct-AnnData server checks
-each continuous column for finiteness before it sends a byte, and answers
-**HTTP 422** with a JSON diagnosis when the column cannot be drawn. Fetch the
-route by hand and read the body:
-
-```bash
-curl -s "http://127.0.0.1:<port>/var/0.values.f32" | python -m json.tool
-```
-
-Use `GET`, not `curl -I`: a `HEAD` returns the `422` status with no body, and
-the body is the whole diagnosis. See
-[a gene or column that cannot be drawn](#symptom-a-gene-or-column-is-found-but-cannot-be-drawn-http-422).
+continuous `obs` column is not a broken server. The viewer checks each
+continuous column as it reads it, and a column holding an infinity is refused
+with a notification titled `Gene cannot be shown` that counts the offending
+values and names the first affected cells. See
+[a gene or column that cannot be drawn](#symptom-a-gene-or-column-is-found-but-cannot-be-drawn).
 
 ### 5) If you are in a notebook: run a structured debug report
 
@@ -100,8 +90,7 @@ This failure occurs before the viewer server is published.
 - the selected `web_cache_dir` is not writable
 
 ### How to confirm
-- read the exception raised by `cellucid serve`, `show(...)`, or
-  `show_anndata(...)`
+- read the exception raised by `cellucid serve` or `show_anndata(...)`
 - exercise the same establishment contract directly with
   `ensure_web_ui_cached(force=True)`
 
@@ -123,21 +112,18 @@ cellucid serve /path/to/data --web-cache-dir /path/to/cache
 ## Symptom: Viewer loads but dataset is blank / stuck loading
 
 ### Likely causes (ordered)
-- export directory is missing required files (manifests or `embeddings/` binaries)
-- you passed the wrong directory (parent folder vs dataset folder)
-- AnnData mode: no plottable embedding in `obsm`, or a shape mismatch
+- no plottable embedding in `obsm`, or a shape mismatch
+- a Zarr store folder whose consolidated metadata is stale (written before
+  later edits to the store)
 
 ### How to confirm
 - open `/_cellucid/datasets` and see what it lists
-- open `/dataset_identity.json` and check:
-  - `stats.n_cells`
-  - `embeddings.items` and `embeddings.defaults`
-- in AnnData mode: check `adata.obsm.keys()` and shapes
+- check `adata.obsm.keys()` and shapes; `/_cellucid/datasets` names the
+  store's route and the launch choices the server passed
 
 ### Fix
-- for exports: validate your folder layout (see {doc}`07_exported_directory_mode_show_and_serve`)
-- for AnnData: confirm which `obsm` array each slot shows (the startup report
-  names it), or name one with `embedding_keys` (see
+- confirm which `obsm` array each slot shows (**Session › Data mapping** names
+  it), or name one with `embedding_keys` (see
   {doc}`08_anndata_mode_show_anndata_and_serve_anndata`)
 
 ---
@@ -154,26 +140,19 @@ cellucid serve /path/to/data --web-cache-dir /path/to/cache
   other `obsm` arrays (UMAP-like names first, latent spaces such as PCA last),
   and a wide array is then shown in 2D at columns 0 and 1
 - nothing in your object is renamed, assigned, or written back — resolution is a
-  read, and a served `.h5ad` is opened read-only-backed
+  read, and the server only reads the store's bytes
 
 ### How to confirm
-- the startup transcript names the array each slot resolved to, and marks a
-  guessed one:
-
-```text
-      Embeddings: resolving obsm keys
-      Embeddings: 2D from obsm['X_tsne'] (guessed)
-```
-
-- or open `/dataset_identity.json` and read `embeddings.items`, whose `source`
-  records the `obsm` key and columns of each served embedding
+- **Session › Data mapping** names the array each slot shows, and marks a
+  guessed one
+- a file written by `prepare()`: `adata.uns["cellucid"]["defaults"]` holds the
+  `embedding1d`/`embedding2d`/`embedding3d` it opens on
 
 ### Fix
 - name the array you want: `embedding_keys={"2d": "X_umap_harmony"}` or
   `--embedding-2d X_umap_harmony`; `embedding_keys={"2d": ("X_pca", [0, 1])}` or
   `--embedding-2d X_pca:0,1` for chosen columns of a wide array
-- `prepare()` shares none of this: it exports exactly the arrays you pass in
-  `embeddings=`, and never looks at `obsm` keys
+- or write the choice into the file once: `prepare(..., embedding_defaults=...)`
 
 Full rules: {doc}`08_anndata_mode_show_anndata_and_serve_anndata`.
 
@@ -193,7 +172,7 @@ Full rules: {doc}`08_anndata_mode_show_anndata_and_serve_anndata`.
 The message lists every `obsm` entry and says why it was not used:
 
 ```text
-Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,696) and at least one numeric column. obsm holds: X_df (table), spatial (3,696 × 2, NaN at cell 17).
+Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,696) and at least one numeric column. obsm holds: X_df (table), spatial (3,696 × 2, NaN at cell 17). Add a 2-D embedding to obsm (for example with sc.tl.umap in Scanpy), then open the data again.
 ```
 
 ### Fix
@@ -201,17 +180,17 @@ Cellucid found nothing to plot. It needs an obsm array with one row per cell (3,
   names (the first non-finite cell is given)
 - or name a usable array explicitly with `embedding_keys` / `--embedding-<n>d`
 - a dimensional key whose array does not have exactly its own column count is an
-  error, not a reinterpretation: `X_umap_3d` holding `(n_obs, 2)` fails
-  construction rather than being served as 2D
-- serving a `.h5ad` or `.zarr` path? Re-save the file after a repair
+  error, not a reinterpretation: `X_umap_3d` holding `(n_obs, 2)` is refused
+  rather than shown as 2D
+- serving a `.h5ad` or Zarr path? Re-save the file after a repair
 
 ---
 
-## Symptom: “obs field '…' has unsupported dtype”
+## Symptom: “Observation field '…' has unsupported dtype”
 
 ### Likely causes (ordered)
 - `adata.obs` carries a `datetime64`, timedelta, or period column; Cellucid
-  serves categorical, boolean, numeric, string, and object columns only
+  shows categorical, boolean, numeric, and string columns only
 
 ### How to confirm
 
@@ -221,7 +200,7 @@ print(adata.obs.dtypes)
 
 ### Fix
 - convert the column: `adata.obs["collection_date"] = adata.obs["collection_date"].astype(str)`
-- or leave it out by naming the columns to serve:
+- or leave it out by naming the columns to show:
 
 ```python
 show_anndata(
@@ -241,8 +220,7 @@ show_anndata(
 ### Likely causes (ordered)
 - your gene IDs are not in `var.index` (default)
 - wrong `gene_id_column`
-- the chosen gene names are duplicated, or carry invisible characters; AnnData
-  construction rejects them
+- the name is repeated in the chosen gene axis and is shown as `NAME-1`
 
 ### How to confirm
 
@@ -255,12 +233,12 @@ print(adata.var.columns)
 - pass `gene_id_column="..."` to `show_anndata(...)` / `serve_anndata(...)`
 - ensure the chosen gene ID field is unique
 
-This symptom is about a gene the server never found. A gene it *did* find and
+This symptom is about a gene the viewer never found. A gene it *did* find and
 then refused is the next section.
 
 ---
 
-## Symptom: a gene or column is found but cannot be drawn (HTTP 422)
+## Symptom: a gene or column is found but cannot be drawn
 
 The gene is in `var.index`, the search offers it, you select it — and the viewer
 answers with a notification titled `Gene cannot be shown`. Everything else keeps
@@ -268,49 +246,30 @@ working.
 
 ### What happened
 
-Cellucid publishes continuous values as finite float32, because a colour scale
-has no position for an infinity: one `+Inf` makes a field's range infinite and
-collapses every other cell onto one colour. The direct-AnnData server checks each
-continuous column before it sends a byte and answers **HTTP 422** with a JSON
-diagnosis instead of serving it.
-
-On this path neither an infinity nor a `NaN` is published, and both produce this
-same 422. `NaN` is drawable only when the browser reads your `.h5ad` or `.zarr`
-itself, where Cellucid renders it as the neutral grey meaning "not measured
-here"; the Python server publishes finite float32 and nothing else. If the body
-below counts `nan` and nothing else, check that column first — an all-`NaN`
-column usually means it was never computed rather than that it broke.
+A colour scale needs a finite minimum and maximum. `NaN` is drawn as the
+neutral grey meaning “no value here”, but one `+Inf` makes a field's range
+infinite and collapses every other cell onto one colour, so the viewer refuses a
+gene or continuous `obs` column holding an infinity. It checks each column as it
+reads it, one column at a time, as you select it.
 
 ### How to confirm
 
-Fetch the route with `GET` and read the body; `curl -I` sends a `HEAD`, which
-returns the status with no body:
+The notification is the diagnosis. It names the gene or field, counts the
+offending values by kind out of all cells, lists the first affected cell
+indices, and gives a repair one-liner:
 
-```bash
-curl -s "http://127.0.0.1:<port>/var/0.values.f32" | python -m json.tool
+```text
+Gene "A2ML1" contains 12 infinite values, so it has no colour scale.
+Of 18,142,044 cells: 12 +Infinity.
+First affected cells: 4,127, 88,301, 250,994, 1,004,112, 7,730,015, ….
+NaN is drawn as missing; an infinity is not a value on any scale.
+Repair the expression matrix before serving or preparing it — for example `adata.X.data[~np.isfinite(adata.X.data)] = 0` for a sparse matrix, or `np.nan_to_num(adata.X, copy=False)` for a dense one — then reload.
 ```
 
-The `application/json` body names the field, counts the offenders by kind
-(`nan`, `positive_infinity`, `negative_infinity`, `float32_overflow`,
-`float32_underflow`), gives `total` and `offending`, and lists the first
-offending cell indices in `examples`:
-
-```json
-{
-  "error": "non_finite_continuous_payload",
-  "kind": "gene",
-  "name": "A2ML1",
-  "counts": { "total": 18142044, "offending": 12, "positive_infinity": 12 },
-  "examples": [4127, 88301, 250994, 1004112, 7730015],
-  "message": "Gene 'A2ML1' cannot be published: of 18,142,044 cells, 12 +Inf. …"
-}
-```
-
-Read `counts` before acting: twelve cells out of eighteen million and every cell
-in the column arrive as the same status and want opposite responses. The two
-float32 counts are values that are finite in your object and stop being finite —
-or stop being nonzero — once narrowed to float32. `kind` is `"gene"` for a
-`/var/…` route and `"field"` for `/obs/…`.
+Read the counts before acting: twelve cells out of eighteen million and every
+cell in the column want opposite responses. A column whose every value is `NaN`
+is reported separately (`has no value in any of … cells`); it usually means the
+column was never computed.
 
 ### Fix
 
@@ -324,14 +283,13 @@ np.nan_to_num(adata.X, copy=False)                    # dense expression
 adata.obs["score"] = adata.obs["score"].replace([np.inf, -np.inf], np.nan).fillna(0)
 ```
 
-Serving a `.h5ad` or `.zarr` path rather than an in-memory object? Re-save after
+Serving a `.h5ad` or Zarr path rather than an in-memory object? Re-save after
 the repair.
 
 :::{note}
-A prepared export cannot reach this state: `prepare()` refuses the same values
-with the same counted diagnosis. Exporting once is also how to find every
-affected gene at once — the export scans them all, while the server refuses one
-per request as you select it.
+`prepare()` refuses the same values with a counted diagnosis. Running it once
+is also how to find every affected value at once — it scans the whole matrix,
+while the viewer refuses one column at a time as you select it.
 :::
 
 ---
@@ -359,46 +317,42 @@ Deep dive: {doc}`10_notebook_widget_mode_advanced`.
 ## Symptom: Vector field / velocity overlay is missing
 
 ### Likely causes (ordered)
-- vectors not present (exports: missing `vector_fields` metadata; AnnData: missing `obsm` keys)
-- naming mismatch (e.g. `velocity_umap2d` vs `velocity_umap_2d`)
-- dimension mismatch (you have 2D vectors but are viewing 3D)
+- vectors not present (no `<field>_<basis>` key beside an `X_<basis>` in `obsm`)
+- naming mismatch: the key names no embedding the object holds (e.g.
+  `velocity_umap_2d` beside a bare `X_umap` with no `X_umap_2d` — this no
+  longer binds; scVelo's `velocity_umap` does)
+- width mismatch: the vector does not have as many columns as its embedding
+- the view shows another embedding (you have vectors for `X_umap` but are
+  viewing `X_umap_3d`)
 
 ### How to confirm
-- exports: open `/dataset_identity.json` and search for `vector_fields`
-- AnnData: inspect `adata.obsm.keys()` for `*_umap_2d` / `*_umap_3d`
+- inspect `adata.obsm.keys()` for a `<field>_<basis>` key beside each
+  `X_<basis>` (`velocity_umap` beside `X_umap`) and compare their shapes
+- the view must show the embedding the field is named for: a vector is drawn
+  only over its own embedding
 
 ### Fix
-- rename keys to the supported convention
-- ensure you have vectors for the dimension you’re viewing
+- rename keys to scVelo's `<field>_<basis>` convention (`velocity_umap_2d` →
+  `velocity_umap` beside `X_umap`), or bind the array under
+  **Session › Data mapping › Vector fields**
+- ensure you have vectors for the embedding you’re viewing
 
 ---
 
 ## Symptom: the neighbor-graph overlay is missing
 
 ### Likely causes (ordered)
-- connectivity is **opt-in and off by default** on the direct-AnnData path, so a
-  `.h5ad` straight out of `sc.pp.neighbors()` serves without a graph
-- exports: the export was written without `connectivities=`, so it holds no
-  connectivity artifacts to serve
+- the store has no `obsp['connectivities']`, and no `knn_key` named another
+  graph (a file written by `prepare()` without `connectivities=` has none)
+- the named graph is not symmetric (such as `distances`), and the viewer
+  refused it when it read it
 
 ### How to confirm
-- read the `Connectivity` line of the step 3 dataset report, which has three
-  states:
-
-```text
-      Connectivity: yes (33,476 edges)
-      Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)
-      Connectivity: no
-```
-
-- or open `/dataset_identity.json` and read `stats.has_connectivity` and
-  `stats.n_edges`; with connectivity off they are `false` and `null`
-- `connectivity_manifest.json`, `connectivity/edges.src.bin`,
-  `connectivity/edges.dst.bin`, and `connectivity/edges.weights.f64.bin` answer
-  404 while it is off
+- `print(list(adata.obsp.keys()))`; `/_cellucid/datasets` shows `"knn"` under
+  `defaults` when the server was given one
 
 ### Fix
-- in Python, pass `knn_key="connectivities"`:
+- in Python, name the graph with `knn_key`:
 
 ```python
 viewer = show_anndata(
@@ -418,38 +372,31 @@ cellucid serve /path/to/data.h5ad \
   --knn connectivities
 ```
 
+- or choose a graph in the viewer under **Session › Data mapping**
 - the keyword is accepted by `show_anndata(...)`, `serve_anndata(...)`,
-  `AnnDataViewer(...)`, `AnnDataServer(...)`, `AnnDataAdapter(...)`, and
-  `AnnDataAdapter.from_file`; `--knn connectivities` is AnnData-only and is rejected
-  for a prepared export, like every other AnnData-only flag
-- asking for a graph the object does not carry is now an error, not silence:
-  `knn_key names obsp['connectivities'],
-  which this object does not have.` Compute one with `sc.pp.neighbors(adata)` first
+  `AnnDataViewer(...)`, and `AnnDataServer(...)`
+- naming a graph the store does not carry stops the server before it binds:
+  `knn_key names obsp['connectivities'], which this store does not have.`
+  Compute one with `sc.pp.neighbors(adata)` first
 
-### Expect it to cost time
-Reading the graph is the single longest part of starting a server on a large
-object — a 50-neighbor graph over millions of cells is hundreds of millions of
-stored neighbors — which is why it is off unless asked for. When asked for, the
-whole graph is read and validated **before** the server binds, because the first
-document the viewer fetches is the manifest, and the manifest declares the exact
-edge count and neighbor maximum.
-
-`prepare()` is unchanged and was already opt-in through its own
-`connectivities=` argument, and a prepared export serves whatever artifacts it
-holds.
+The graph is read only when a view draws it, so it costs nothing at startup.
 
 ---
 
 ## Symptom: Performance is extremely slow / browser crashes
 
 ### Likely causes (ordered)
-- using browser `.h5ad` loading instead of Python-backed mode
-- loading a large in-memory AnnData or Zarr store
+- the first gene of a large row-major (CSR) matrix: the browser builds a gene
+  index once, and later genes are fast
+- a large in-memory AnnData, written once to a temporary `.h5ad` before the
+  server binds
 - huge categorical fields or heavy overlays
 
 ### Fix
-- use `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`
-- export once (`prepare`) and use export mode
+- serve a path rather than an in-memory object:
+  `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`
+- write a Cellucid-ready AnnData once (`prepare`) and open that: its matrix is
+  gene-major, so no gene index is built
 - reduce or remove pathological fields (very high cardinality)
 
 Performance guide: {doc}`14_performance_scaling_and_lazy_loading`.
@@ -461,21 +408,20 @@ Performance guide: {doc}`14_performance_scaling_and_lazy_loading`.
 Please capture:
 
 - the exact command you ran (`cellucid serve ...`), including flags
-- whether the input was export vs `.h5ad` vs `.zarr`
-- the full startup transcript: the numbered steps, the `Embeddings: … from
-  obsm[…]` line, the `Connectivity` line, and the banner
+- whether the input was `.h5ad` vs Zarr store vs in-memory, and whether
+  `prepare()` wrote it
+- the full startup transcript: the numbered steps and the banner
 - the last `Error:` line verbatim — it is written after everything else, and it
   names the one condition to correct
 - the output of:
   - `/_cellucid/health`
   - `/_cellucid/info`
-- if one gene or one continuous field failed: the full JSON body of the `422`
-  response for its `/var/<index>.values.f32` or `/obs/<index>.values.f32` route,
-  fetched with `GET` — it already names the field, counts the NaN, `+Inf`,
-  `-Inf`, float32-overflow, and float32-underflow values, and lists the first
-  offending cell indices
+  - `/_cellucid/datasets`
+- if one gene or one continuous field failed: the full text of its
+  `Gene cannot be shown` notification — it already names the field, counts the
+  offending values, and lists the first affected cell indices
 - in notebooks: `viewer.debug_connection()` output
-- if safe: `dataset_identity.json` (or at least its `stats` block)
+- if safe: `adata.uns["cellucid"]` of the file
 
 This will save you (and maintainers) a lot of back-and-forth.
 

@@ -18,10 +18,9 @@ If you are new, start with:
 ### Creating a viewer
 
 ```python
-from cellucid import show, show_anndata
+from cellucid import show_anndata
 ```
 
-- `show("./export_dir", height=600) -> CellucidViewer`
 - `show_anndata(...) -> AnnDataViewer`, with this closed call surface:
 
   ```text
@@ -31,12 +30,14 @@ from cellucid import show, show_anndata
       *,
       latent_key=None,
       gene_id_column=None,
-      normalize_embeddings=True,
-      centroid_outlier_quantile=0.95,
-      centroid_min_points=10,
-      dataset_name=<required string>,
-      dataset_id=<required string>,
+      normalize_embeddings=None,
+      centroid_min_points=None,
+      dataset_name=None,
+      dataset_id=None,
       obs_keys=None,
+      embedding_keys=None,
+      knn_key=None,
+      expression_source=None,
       vector_field_default=None,
       client_server_url=None,
       web_source_url="https://www.cellucid.com",
@@ -45,9 +46,15 @@ from cellucid import show, show_anndata
   )
   ```
 
-  `obs_keys` names the exact `adata.obs` columns to serve; every column is served
-  when it is omitted. `vector_field_default` is required when direct AnnData
-  declares more than one vector field. The convenience function does not accept `port`; construct
+  `dataset_name` and `dataset_id` default to `uns['cellucid']['name']` and
+  `uns['cellucid']['id']`, and are required when the data declares neither.
+  Every launch choice (`latent_key` through `vector_field_default`) is optional:
+  each one named is checked against the data's metadata before the server
+  starts and handed to the viewer as a launch default; one left unset is taken
+  from `uns['cellucid']['defaults']`, else the viewer's default rule.
+  `obs_keys` names the exact `adata.obs` columns the viewer shows; every column
+  is shown when it is omitted. `vector_field_default` names the vector field the
+  overlay opens on. The convenience function does not accept `port`; construct
   `AnnDataViewer` for a fixed port.
 
 ### Basic properties
@@ -115,8 +122,8 @@ Data mapping (the viewer reports it because this package lists `data_mapping` in
 ### Connectivity / cache utilities
 
 - `viewer.debug_connection(timeout=5.0)` → structured connectivity report,
-  including `dataset_identity_probes`, keyed by every exact server-declared
-  dataset id/path, and `recent_events["command_errors"]`, the most recent
+  including `anndata_store_probes`, keyed by every exact listed dataset id (a
+  `HEAD` and a one-byte `Range` read of the served AnnData store), and `recent_events["command_errors"]`, the most recent
   commands the viewer rejected
 - `viewer.ensure_web_ui_cached(force=True, show_progress=True)` → establish the
   complete source UI generation
@@ -279,7 +286,7 @@ Returns server metadata (version, mode, etc.).
 
 ### `GET /_cellucid/datasets`
 
-Returns dataset listings (one dataset in AnnData mode; one or many in exported mode).
+Returns the one dataset the server serves: its id, name, store route and launch choices.
 
 ### `GET /_cellucid/protocol`
 
@@ -334,7 +341,7 @@ Behavior:
 - requires a pre-registered pending request
 - streams upload to a temp file
 - hard size cap: **512MB**
-- validates a MAGIC header (`CELLUCID_SESSION\n`)
+- validates the session format 2 MAGIC header (`CELLUCID_SESSION/2\n`)
 
 ---
 

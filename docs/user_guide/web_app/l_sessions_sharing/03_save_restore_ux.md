@@ -4,7 +4,7 @@
 **Time:** 10–20 minutes  
 **What you’ll learn:**
 - Where the session controls live in the UI
-- The exact steps to Save State and Load State
+- The exact steps to save and load a session file
 - How to confirm the one complete restore outcome
 - Best practices for naming, organizing, and sharing session files
 
@@ -18,37 +18,37 @@
 In the left sidebar:
 
 1) Open **Session** (the accordion that also contains dataset loading controls).
-2) Find the block labeled **Session state**.
+2) Find the group labeled **Session file**.
 3) Use:
-   - **Save State** (downloads a `.cellucid-session` file)
-   - **Load State** (opens a file picker and restores a `.cellucid-session` file)
+   - **Save** (downloads a `.cellucid-session` file)
+   - **Load** (opens a file picker and restores a `.cellucid-session` file)
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-01-session-controls.png
-:alt: The Session accordion showing a dataset summary table, the sample dataset picker, local, remote-server and GitHub loading controls, and a Session state block containing Save State and Load State buttons.
+:alt: The Session accordion showing the Dataset summary table, the Open data group with the Sample dataset picker, the Files buttons and the Server and Open from link fields, the Session file group containing Save and Load buttons, and the Data mapping group.
 :width: 524px
 
-The **Session** accordion. Everything that brings a dataset in sits above, and
-**Session state** sits at the bottom — the order matches the rule that the
-dataset must be loaded before a session is restored onto it.
+The **Session** accordion. Everything that brings a dataset in sits under
+**Open data**, and **Session file** sits below it — a session is restored onto
+a dataset, which **Load** opens first when the session records where it is.
 ```
 
 ---
 
 ## Fast path (wet lab / non-technical): “save my work”
 
-### Save State
+### Save
 
-1) Click **Save State**.
+1) Click **Save**.
 2) Wait for a “Session saved successfully” notification.
 3) Find the downloaded file in your browser’s downloads.
    - It will end in `.cellucid-session`.
    - The default name includes a timestamp (so files don’t overwrite each other).
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-02-save-state-action.png
-:alt: The Session state block with a mouse pointer over the Save State button, beside the Load State button.
+:alt: The Session file group with a mouse pointer over the Save button, beside the Load button.
 :width: 488px
 
-**Save State** and **Load State** sit side by side. Save downloads a file
+**Save** and **Load** sit side by side. **Save** downloads a file
 immediately; nothing is uploaded anywhere.
 ```
 
@@ -64,13 +64,23 @@ The default filename looks like
 `cellucid-session-2026-08-01T15-18-20.cellucid-session`: a fixed prefix and the
 save time, so repeated saves never overwrite each other.
 
-### Load State
+### Load
 
-1) Load the same dataset first.
-2) Click **Load State**.
-3) Choose the `.cellucid-session` file.
-4) Wait for the restore's progress notification to finish as **Loaded** with
+1) Click **Load**.
+2) Choose the `.cellucid-session` file.
+3) Wait for the restore's progress notification to finish as **Loaded** with
    **Session fully restored.**
+
+A session records where its dataset was opened from: a sample dataset, a data
+link (**Open from link** or `?data=`), or a Cellucid server. When another
+dataset — or none — is open, **Load** opens that one first ("Opening the
+session's dataset from …") and then applies the session. A session saved on a
+dataset opened from your own computer or in a notebook records no source:
+open that dataset yourself before loading the session.
+
+A session saved on a link records the link. A link that carries its own access
+key — a Dropbox share link, a signed bucket address — is then in the session
+file too, so share such a session only with people who may open the data.
 
 If a dataset is still loading when you choose the file, a notification says
 the session is waiting for it, and the session is applied as soon as that
@@ -102,32 +112,32 @@ where they were when it was saved.
 ```
 
 :::{note}
-This file-picker workflow is for a state you or a collaborator saved. Official
-built-in samples are different: their catalog-advertised, integrity-verified
-static starting state applies automatically after the scientific dataset is
-published. See {doc}`04_official_sample_states`.
+This file-picker workflow is for a state you or a collaborator saved. A
+dataset opened from a catalog is different: the default session its catalog
+names (the built-in samples have one) is integrity-verified and applies
+automatically after the scientific dataset is published. See
+{doc}`04_official_sample_states`.
 
-The catalog's internal `default.cellucid-session` is not an ordinary manual
-bundle. If you download it and choose **Load State**, the strict manual loader
-rejects its intentionally smaller five-chunk profile. Choose the sample and
-then use **Save State** to create a portable manual bundle.
+A catalog's default session is not an ordinary manual bundle. If you download it and choose **Load**, the strict manual loader
+rejects its intentionally smaller seven-chunk profile. Choose the sample and
+then use **Save** to create a portable manual bundle.
 :::
 
 ---
 
 ## Practical path (computational): what happens under the hood
 
-### Save State is a file download
+### Save is a file download
 
-When you click **Save State**:
+When you click **Save**:
 - Cellucid captures state from multiple subsystems (camera, filters, highlights, etc.).
 - It writes a single-file bundle and triggers a browser download.
 
 There is no server upload by default.
 
-### Load State is ordered and atomic
+### Load is ordered and atomic
 
-When you click **Load State** and pick a file:
+When you click **Load** and pick a file:
 
 1) Cellucid validates the whole container, current chunk inventory, exact
    dataset fingerprint, and declared byte bounds.
@@ -153,8 +163,8 @@ After loading:
    - A dataset mismatch rejects everything; see
      {doc}`07_versioning_compatibility_and_dataset_identity`.
 3) Confirm the high-signal state after success:
-   - active field (Coloring & Filtering section)
-   - Active filters panel (should match what you remember)
+   - active field (Coloring & filtering section)
+   - Filters panel (should match what you remember)
    - snapshot layout (grid vs single)
    - Camera Path and playback state
    - highlight memberships and analysis windows
@@ -181,12 +191,12 @@ Start from the defaults:
 :alt: The renderer settings block at its defaults, with Shader quality set to Full (lighting plus fog), Level-of-Detail unchecked, and Frustum culling unchecked.
 :width: 480px
 
-Defaults: **Shader quality** `Full (lighting + fog)`, **Level-of-Detail (LOD)**
+Defaults: **Shader quality** `Full (lighting + fog)`, **Level of detail (LOD)**
 off, **Frustum culling** off. The **Force LOD level** slider is hidden while LOD
 is off, because it has nothing to act on.
 ```
 
-Change all four, then **Save State**:
+Change all four, then click **Save**:
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-06-renderer-controls-changed.png
 :alt: The renderer settings block with Shader quality set to Light (circular, no lighting), Level-of-Detail checked, Force LOD level set to 4, and Frustum culling checked.
@@ -198,7 +208,7 @@ level** slider.
 ```
 
 Reload the app with the same dataset — which puts all four back to the defaults
-above — and **Load State** the file:
+above — and **Load** the file:
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-08-renderer-controls-restored.png
 :alt: The renderer settings block after restoring the session, showing Shader quality Light, Level-of-Detail checked, Force LOD level 4, and Frustum culling checked, matching the saved state exactly.
@@ -228,9 +238,12 @@ to fail the whole restore rather than diverge quietly.
 
 ### 1) Treat the dataset + session as a pair
 
-Because sessions do not contain the dataset:
-- store the `.cellucid-session` file next to the dataset export folder,
-- or store a clear pointer to where the dataset is hosted (URL/GitHub path).
+Sessions do not contain the dataset. A session saved on a sample, a data link
+or a server points to it and opens it; one saved on a local file or in a
+notebook does not:
+- store the `.cellucid-session` file next to the dataset file,
+- or host the dataset (see {doc}`../b_data_loading/14_open_from_link`) and save
+  the session on the hosted copy, so the session opens it by itself.
 
 ### 2) Use a naming convention that encodes intent
 
@@ -250,7 +263,7 @@ Why:
 Sessions can become large when they include:
 - many highlight groups with huge memberships,
 - many user-defined categorical fields,
-- analysis caches.
+- many analysis results.
 
 Save milestones like:
 - “after QC filters + first labeling”
@@ -271,15 +284,15 @@ Workflow:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
+:alt: The Cellucid Session panel: the Dataset summary, the Open data group with Sample dataset, Files, Server and Open from link, the Session file group with its Save and Load buttons, and the Data mapping group.
 :width: 524px
 
-The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
+The Session panel gathers every loading path under **Open data** and keeps the **Save** and **Load** buttons under **Session file**, directly below it.
 ```
 
 ---
 
 ## Next steps
 
-- {doc}`04_official_sample_states` (understand automatic, integrity-verified static starting states for official samples)
-- {doc}`05_share_workflows_links_bundles_exports` (how to send sessions to humans safely)
+- {doc}`04_official_sample_states` (understand automatic, integrity-verified default sessions named by a catalog)
+- {doc}`05_share_workflows_links_sessions_data_files` (how to send sessions to humans safely)

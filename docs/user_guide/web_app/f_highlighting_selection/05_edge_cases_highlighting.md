@@ -49,7 +49,7 @@ If you’re actively stuck, use {doc}`06_troubleshooting_highlighting` (it’s o
 - Highlight pages and highlight groups (membership) do not change when you switch fields.
 
 **Common gotcha**
-- You are in **Annotation based** mode, and you switch to a field that is not selectable (or has missing values). `Alt+click` may appear to “stop working” because the tool has no meaningful selection rule for that field.
+- You are in **Annotation** mode, and you switch to a field that is not selectable (or has missing values). `Alt+click` may appear to “stop working” because the tool has no meaningful selection rule for that field.
 
 **Best practice**
 - If you are mid-selection, confirm/cancel before switching the active field to avoid mixing steps driven by different semantics.
@@ -92,7 +92,7 @@ graph-based and do not read the coloured field at all.
 
 **How to reason about it**
 - If you care about mutually exclusive labels, use pages (separate workspaces),
-  then turn them into a real categorical column with `Create Categorical`, which
+  then turn them into a real categorical column with `Create categorical`, which
   makes you decide explicitly what happens to a cell that is in two of them —
   see {doc}`03_highlight_ui`.
 
@@ -153,7 +153,7 @@ Highlight groups store explicit arrays of indices, and highlight recomputation s
 
 **What to try**
 - Zoom in: highlights are easiest to see when points are not subpixel-sized.
-- Raise **Point size (log)** under **Visualization** to make the drawn points —
+- Raise **Point size** under **Visualization** to make the drawn points —
   and therefore their halos — larger.
 - Switch to a simpler color-by (e.g., a single color) just to visually validate highlights.
 - Change background mode to increase contrast.
@@ -211,11 +211,11 @@ This approximates a 3D volume by combining multiple 2D “cuts”.
 
 **Why**
 - KNN selection requires a connectivity graph.
-- The graph may not be present in the dataset export, or it may not be loaded yet.
+- The graph may not be present in the dataset, or it may not be loaded yet.
 
 **What to do**
 - Enable/show edges (if the UI has a “Show edges” toggle).
-- Re-export your dataset including connectivities.
+- Write your dataset again including connectivities (`obsp['connectivities']`).
 - Use lasso/proximity/annotation-based selection if connectivity is not available.
 
 ---

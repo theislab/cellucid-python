@@ -1,139 +1,116 @@
 # Supported Inputs and Workflows
 
 **Audience:** computational users and “power” wet lab users  
-**Time:** 10–15 minutes  
+**Time:** 10 minutes  
 **Goal:** know exactly what `cellucid_prepare()` expects and how to avoid the most common gotchas.
 
 ## The supported workflow (high level)
 
-1) Extract arrays/data.frames from your R object(s) (Seurat, SingleCellExperiment, or raw matrices).
+1) Extract matrices and data frames from your R object(s) (Seurat, SingleCellExperiment, or raw matrices).
 2) Call `cellucid::cellucid_prepare(...)`.
-3) Open the output folder in the Cellucid web app.
+3) Open the `.zarr` folder or `.zarr.zip` file in the Cellucid web app.
 
 ```{note}
-The web app is the viewer UI. The R package is for export only (for now).
-If you want server mode and notebook embedding, see {doc}`../../python_package/index`.
+The web app is the viewer UI. The R package prepares data only.
+For server mode and notebook embedding, see {doc}`../../python_package/index`.
 ```
 
 ## What inputs are supported?
 
 ### Required inputs
 
-`cellucid_prepare()` requires:
+These five carry no default; leaving one out stops the call with
+`cellucid_prepare() is missing 1 required argument:` and what a valid value is.
 
-- **At least one embedding**, in `embeddings`: a named list of coordinate
-  matrices or `cellucid_embedding()` values, any number per dimension
-  - a plain matrix has 1, 2, or 3 columns; a wider one is passed as
-    `cellucid_embedding(values, columns = c(1, 2))` with 1-based columns
-- **`latent_space`**:
-  - numeric matrix-like, shape `(n_cells, n_dims)`
-- **`obs`**:
-  - `data.frame` with `n_cells` rows
-- **`obs_categorical_dtype`**, **`dataset_name`**, and **`dataset_id`**:
-  - these three carry no default at all, so leaving one out stops the call with
-    `cellucid_prepare() is missing 1 required argument:` and what a valid value
-    would be
-
-Why `latent_space` is required: it is used to compute **per-cell outlier quantiles** for categorical fields (see {doc}`../c_data_preparation_api/04_obs_cell_metadata`).
+- **`out_path`**: a folder path ending in `.zarr` for `format = "zarr"`, or a file path ending in `.zarr.zip` for `format = "zarr.zip"`
+- **`format`**: `"zarr"` (a folder of small files, for GitHub) or `"zarr.zip"` (one file, for everything else: single-file hosts such as Zenodo, Figshare, Hugging Face, S3 or a lab server, local files, `cellucid serve` and Jupyter); there is no default, because only you know where the store goes ({doc}`../c_data_preparation_api/index`)
+- **`embeddings`**: a named list of matrices with one row per cell, any number
+  of them, any width (`list(X_umap = umap, X_pca = pca)`); each name becomes an `obsm` key
+- **`dataset_id`**: a portable identifier (ASCII letters, digits, `.`, `_`, `-`)
+- **`dataset_name`**: the name shown in the viewer
 
 ### Optional inputs
 
-- **Gene expression (`gene_expression`)**:
-  - matrix-like, shape `(n_cells, n_genes)`
-  - can be dense `matrix` or sparse `Matrix` (recommended)
-- **Gene metadata (`var`)**:
-  - `data.frame`, shape `(n_genes, n_var_columns)`; required when `gene_expression` is provided
-- **Alternative gene names (`var_gene_name_columns`)**:
-  - character vector of `var` columns offered as extra name sets in the viewer
-- **Subset genes (`gene_identifiers`)**:
-  - character vector of gene IDs to export (reduces disk use)
-- **Connectivity (`connectivities`)**:
-  - matrix or `Matrix::Matrix`, shape `(n_cells, n_cells)`
-  - exported as unique undirected edge pairs
-- **Vector fields (`vector_fields`)**:
-  - named list of fields, each a named list binding arrays to exported
-    embedding ids, used for velocity/displacement overlays:
-    `list(velocity = list(X_umap = v2))`
+- **`obs`**: `data.frame` of cell metadata, one row per cell
+- **`gene_expression`**: cells × genes, dense `matrix` or sparse `Matrix` (recommended)
+- **`var`**: `data.frame`, one row per gene; only together with `gene_expression`
+- **`gene_identifiers`**: the genes to store (default: all)
+- **`connectivities`**: cells × cells neighbour graph
+- **`vector_fields`**: per-cell vectors drawn over a UMAP, `list(velocity = list(X_umap = v2))`
+- **Metadata**: `dataset_description`, `citation_text`, `citation_url`, `source_name`, `source_url`
+- **Launch defaults**: `embedding_defaults`, `latent_key`, `obs_keys`,
+  `var_gene_id_column`, `vector_field_default`, `normalize_embeddings`,
+  `centroid_min_points`; with `latent_key`, the outlier quantiles of every
+  categorical `obs` column are stored too
+- **Output**: `force` (replace an existing store)
 
 ## Accepted types (what “matrix-like” means)
 
 | Input | Accepted |
 |---|---|
-| embeddings, latent space, vector fields | base R `matrix`, a `data.frame` whose every column is a plain numeric vector, or a `Matrix::Matrix` |
-| `gene_expression` | base R `matrix`, numeric `data.frame`, or a real `Matrix` sparse matrix (`dgCMatrix` is read column by column without densifying the whole thing) |
-| `connectivities` | base R numeric or logical `matrix`, or a real, logical, or pattern `Matrix` sparse matrix (recommended) |
-| `obs` | `data.frame`, whose exported columns are plain `numeric`, `factor`, `character`, or `logical` — nothing else |
+| embeddings, vector fields | base numeric `matrix`, a `data.frame` whose every column is a plain numeric vector, a `Matrix` matrix, or a plain numeric vector (one column) |
+| `gene_expression` | a `Matrix` sparse matrix (stored as CSC, never densified), or a base numeric `matrix`, numeric `data.frame`, or dense `Matrix` |
+| `connectivities` | a `Matrix` matrix (recommended), or a base numeric or logical `matrix` (needs `Matrix` installed) |
+| `obs`, `var` columns | `factor`, `character`, `logical`, `integer`, `numeric` |
 
 ```{warning}
-A `data.frame` column carrying a class of its own — `bit64::integer64`, a
-`units` measurement, a `Date` — is **refused**, not silently converted, because
-`as.matrix()` would drop the attribute that says what the numbers mean. Convert
-deliberately before the call.
+A column or matrix carrying a class of its own — `bit64::integer64`, a `units`
+measurement, a `Date` — is **refused**, not silently converted, because the
+conversion would drop the attribute that says what the values mean. Convert it
+deliberately (for example with `as.character()` or `as.numeric()`) before the call.
 ```
 
 ## Shapes and orientation (the #1 source of bugs)
 
-Cellucid’s export format assumes:
-
-- **rows = cells**
-- **columns = dimensions / genes / components**
-
-Concretely:
+Rows are **cells**; columns are dimensions, genes, or components.
 
 | Input | Expected shape |
 |---|---|
-| a 2D embedding | `(n_cells, 2)` |
-| `latent_space` | `(n_cells, n_latent_dims)` |
+| an embedding | `(n_cells, k)`, any `k ≥ 1` |
 | `obs` | `n_cells` rows |
 | `gene_expression` | `(n_cells, n_genes)` |
 | `var` | `n_genes` rows |
 | `connectivities` | `(n_cells, n_cells)` |
-| vector field (2D) | `(n_cells, 2)` |
+| a vector field | `(n_cells, k)`, `k` = the column count of the embedding it is drawn over |
+| `cellucid_transition_drift()`'s `transition_matrix` | `(n_cells, n_cells)` |
 
 ```{warning}
-Many R containers store expression as **genes × cells**. For Cellucid export you almost always need to transpose:
+Many R containers store expression as **genes × cells**. You almost always need to transpose:
 
-- Seurat: `GetAssayData(seu, slot = "data")` is usually genes × cells → use `Matrix::t(...)`
-- SingleCellExperiment: `assay(sce, "logcounts")` is genes × cells → use `Matrix::t(...)`
+- Seurat: `GetAssayData(seu, layer = "data")` is genes × cells → `Matrix::t(...)`
+- SingleCellExperiment: `assay(sce, "logcounts")` is genes × cells → `Matrix::t(...)`
+
+`cellucid_prepare()` checks the dimensions but never guesses the orientation;
+a square matrix can be the wrong way round and still match both axes.
 ```
 
-## Cell identity = row order
+## Cell identity = row order (and row names)
 
-There is no separate “cell ID” file in the export folder. Instead:
+Row `i` of every input is the same cell. The store's cell names (`obs_names`)
+come from the row names of `obs`, `gene_expression`, and the embeddings; where
+several of them carry row names, they must be **the same names in the same
+order**, or the call stops and names the first row where they disagree. With
+no row names at all, cells are named `"0"` to `"n - 1"`, as anndata names them.
 
-> Cell `i` is “whatever is in row `i`”.
+## Names that become paths
 
-That means you must keep the **same cell order** across:
-- embeddings
-- `latent_space`
-- `obs`
-- gene expression rows
-- connectivity matrix rows/cols
-- vector fields
-
-If your source object has cell IDs (Seurat/SCE), use them to explicitly align inputs before export.
-
-## Common limitations (know these early)
-
-- **Gene expression is “one file per gene”** in the export format; exporting 20k+ genes is possible but can be slow and creates many files.
-- **Every exported identifier is exact**: obs keys, gene IDs, and vector-field
-  IDs are recorded verbatim in the manifests and are never rewritten. They are
-  not filenames, so they only have to be non-empty, distinct within their axis,
-  and free of invisible characters; `dataset_id` is the exception and must be a
-  portable path component (see
-  {doc}`../c_data_preparation_api/02_input_requirements_global`).
+Every `obs`/`var` column name and every `obsm` key becomes a folder in the
+store, so it must be a portable file name: no `/ \ : * ? " < > |` or control
+character, no trailing space or dot, not a Windows device name, not `_index`
+for a column, and distinct from its neighbours by more than letter case. See
+{doc}`../c_data_preparation_api/02_input_requirements_global`.
 
 ## Recommended workflow decision tree
 
-- If you have a **Seurat object** → start with {doc}`../e_integrations_recipes/01_seurat_recipe`
-- If you have a **SingleCellExperiment** → start with {doc}`../e_integrations_recipes/02_singlecellexperiment_recipe`
-- If you have **raw matrices** → start with {doc}`../e_integrations_recipes/03_raw_matrices_and_data_frames_recipe`
+- **Seurat object** → {doc}`../e_integrations_recipes/01_seurat_recipe`
+- **SingleCellExperiment** → {doc}`../e_integrations_recipes/02_singlecellexperiment_recipe`
+- **Raw matrices** → {doc}`../e_integrations_recipes/03_raw_matrices_and_data_frames_recipe`
 
 Then:
-- Export → {doc}`../c_data_preparation_api/index`
-- Open in browser → {doc}`../d_viewing_loading/index`
+- Write the store → {doc}`../c_data_preparation_api/index`
+- Open it in the browser → {doc}`../d_viewing_loading/index`
 
 ## Next steps
 
-- Want a copy/paste example? {doc}`04_quick_start_3_levels`
-- Want the full API documentation? {doc}`../c_data_preparation_api/index`
+- Copy/paste example: {doc}`04_quick_start_3_levels`
+- Full API documentation: {doc}`../c_data_preparation_api/index`

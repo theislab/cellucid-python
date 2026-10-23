@@ -180,9 +180,11 @@ A matching-dataset `.cellucid-session` saves and restores:
 - whether **Link cameras** is on, and every view's own camera and navigation
   mode;
 - every view's embedding (as the embedding key and columns, so it is restored
-  onto the same array), field, filters and label.
+  onto the same array), field and filters;
+- whether each view shows centroid points and centroid labels.
 
-Restoration recreates the kept views rather than storing GPU buffers. The
+A view's label and filter summary are recomputed from its field and filters.
+Restoration recreates each kept view once rather than storing GPU buffers. The
 dataset itself is never embedded in the session. See
 {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored` and
 {doc}`../l_sessions_sharing/07_versioning_compatibility_and_dataset_identity`.

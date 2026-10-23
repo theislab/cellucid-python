@@ -12,9 +12,14 @@ maintainers serving official starting states
 
 ## Design invariants
 
-- A session stores declarative application state, not the prepared dataset.
-- The generic reader accepts exactly one current schema and restores the
-  complete document all-or-nothing.
+- A session stores declarative application state, not the dataset.
+- The generic reader accepts exactly one session format — the version named
+  in the file's signature, currently 2 — and restores the complete document
+  all-or-nothing. A file of an earlier format is refused by its signature,
+  before anything else is read; there is no migration.
+- A session stores choices, not what the dataset already holds: labels, filter
+  summaries, field and category positions, and per-cell gene values are
+  recomputed or re-read on restore.
 - Manifest, chunk profiles, framing, byte lengths, decoded payloads, and the
   complete dataset fingerprint are exact contracts.
 - Row indices are only restored against a dataset whose cell ordering is proven
@@ -35,10 +40,11 @@ maintainers serving official starting states
   `cellucid/assets/js/app/session/session-serializer.js`
 - Transaction/context and exact fingerprint:
   `cellucid/assets/js/app/session/session-context.js`
-- Container framing:
+- Container framing and format version:
   `cellucid/assets/js/app/session/bundle/format.js`
-- gzip/DEFLATE codec:
-  `cellucid/assets/js/app/session/codecs/gzip.js`
+- Codecs: `cellucid/assets/js/app/session/codecs/` — `gzip.js` (gzip/DEFLATE),
+  `varint.js`, `cell-set.js` (highlight memberships), `typed-json.js`
+  (analysis settings and results)
 - Feature owners:
   `cellucid/assets/js/app/session/contributors/`
 - State capture helpers:
@@ -50,20 +56,34 @@ maintainers serving official starting states
 
 The container is:
 
-1. `CELLUCID_SESSION\n`;
+1. the 19-byte signature `CELLUCID_SESSION/2\n` (`SESSION_FORMAT_VERSION` in
+   `bundle/format.js`; a file that does not begin with it is refused with
+   `NOT_A_SESSION_FILE_MESSAGE`);
 2. unsigned 32-bit little-endian manifest length;
 3. exactly that many UTF-8 JSON bytes; and
 4. for every manifest chunk, an unsigned 32-bit stored length plus exact stored
    payload bytes.
 
-The manifest has exactly `createdAt`, `datasetFingerprint`, and `chunks`.
-`datasetFingerprint` has exactly `sourceType`, `datasetId`, `cellCount`,
-`varCount`, `cellOrder`, and `dataMapping`. `cellOrder` has exactly `embedding`
+The manifest has exactly `createdAt`, `datasetFingerprint`, `source`,
+`requires`, and `chunks`. `source` (`session/dataset-source-record.js`) is
+where the dataset was opened from — a sample, a data link's locator, a server
+address, or a local file's or folder's name (`{kind: 'file', name, dataset}`),
+with the dataset id — or `null` (a notebook); **Load** reads only the manifest
+first and, when another dataset (or none) is open and the source can be opened
+(not a local file), opens it through the same connection controls a person
+would use before the restore runs. `requires` (`collectRequiredFields()` in
+`session-context.js`) is `{obs, var}`: the sorted dataset keys of every
+observation field and gene a view shows or filters on or a highlight group is
+bound to (a renamed field by its original key; user-defined fields excluded).
+`datasetFingerprint` has exactly `datasetId`, `name`, `cellCount`, `varCount`,
+`cellOrder`, and `dataMapping`; `name` is the dataset's display name or
+`null`, used in messages and never compared. `cellOrder` has exactly `embedding`
 (the embedding reference of the layout the live view shows), `dimension` (that
 layout's dimension, the integer 1, 2, or 3) and `digest` (16 lowercase
 hexadecimal characters). `dataMapping` is the dataset's canonical data mapping
-(`data/data-mapping.js`): its embeddings are `{enabled, defaults}`, the
-embeddings that are turned on and each dimension's default. Each chunk has
+(`data/data-mapping.js`), always of `kind` `"anndata"`: its embeddings are
+`{enabled, defaults}`, the embeddings that are turned on and each dimension's
+default, and its vector bindings are `{key, embedding}`. Each chunk has
 exactly:
 
 - `id`
@@ -76,39 +96,69 @@ exactly:
 - `storedBytes`
 - `uncompressedBytes`
 
-There is deliberately no `version`, `dependsOn`, compatibility marker, or
-extension bag.
+The format version lives in the signature only; there is no `dependsOn`,
+compatibility marker, or extension bag.
 
 ## Closed current inventory
 
-Generic Save State always emits the current singleton profiles:
+A generic **Save** always emits the current singleton profiles, in
+contributor order:
 
 | ID | Owner | Priority | Kind/codec |
 |---|---|---|---|
 | `core/field-overlays` | `field-overlays` | eager | JSON/gzip |
+| `cinematic/camera` | `cinematic-camera` | eager | JSON/gzip |
 | `core/state` | `core-state` | eager | JSON/gzip |
 | `ui/dockable-layout` | `dockable-layout` | eager | JSON/gzip |
-| `analysis/windows` | `analysis-windows` | eager | JSON/gzip |
+| `ui/figure-export` | `figure-export` | eager | JSON/gzip |
+| `analysis/windows` | `analysis-windows` | eager | binary (typed JSON)/gzip |
+| `analysis/docked` | `analysis-docked` | eager | binary (typed JSON)/gzip |
 | `highlights/meta` | `highlights-meta` | eager | JSON/gzip |
-| `analysis/cache-inventory` | `analysis-artifacts` | eager | JSON/gzip |
-| `cinematic/camera` | `cinematic-camera` | eager | JSON/gzip |
 
-`analysis/cache-inventory` and `cinematic/camera` are mandatory even when
-empty. Their emptiness means replace the destination cache/path with empty
-state.
+`cinematic/camera` is mandatory even when empty; its emptiness means replace
+the destination path with an empty one. `ui/figure-export` is the record
+`exportSessionSettings()` of the figure-export panel returns (versioned within
+itself, validated by `figure-export/utils/session-settings.js`).
+`analysis/docked` is `comparisonModule.exportSessionState()` — the open mode
+and every initialized mode's settings and result — and `analysis/windows` is
+`{windows}`, each window's mode, geometry, settings and result.
 
 Dynamic chunks are also closed:
 
 - `user-defined/codes/<fieldId>`: one binary/gzip chunk per categorical
   user-defined field; eager exactly for target live/snapshot active fields,
-  lazy otherwise;
+  lazy otherwise; and
 - `highlights/cells/<groupId>`: one lazy binary/gzip membership chunk per
-  highlight group; and
-- `analysis/artifacts/bulk-gene/<cacheKey>`: lazy binary/gzip chunks exactly
-  matching the ordered cache inventory.
+  highlight group, in group order.
 
-Static profile aliases, missing unused codes, extra artifacts, priority lies,
-label changes, or reordered contributor groups are invalid.
+Static profile aliases, missing unused codes, priority lies, label changes, or
+reordered contributor groups are invalid.
+
+### Payload encodings
+
+- **Highlight cells** (`codecs/cell-set.js`): byte 0 selects sorted-delta
+  uvarints (0), a bitset over all cells (1), runs of uvarint gap and length
+  (2), a bitset over the cells of a reference category (3) or the whole
+  reference category (4); the writer keeps the smallest. 3 and 4 apply to a
+  category group on a dataset observation field; they carry the category's
+  size and a 32-bit order-independent digest (`digestCellSet()`), and the
+  reader recomputes both from the loaded field and refuses a difference.
+- **User-defined codes** (`contributors/user-defined-codes.js`): an encoding
+  byte, the uvarint cell count, then raw codes at the declared width (0), runs
+  of uvarint value and length (1), or codes packed at 1, 2 or 4 bits (2); the
+  writer keeps the smallest.
+- **Analysis** (`codecs/typed-json.js`): a u32 JSON length, JSON in which the
+  k-th typed numeric array is `{"$typed": k}`, then each array as a dtype
+  byte, a uvarint length and its little-endian elements. Objects are rebuilt
+  with own properties, so a `__proto__` key in a crafted file is data, not a
+  prototype.
+- **Core state**: a kept view records its id, embedding, camera, active field,
+  filters and centroid toggles; the live view its camera and centroid toggles
+  beside the top-level embedding, filters and active field. A view's label and
+  filter summary are recomputed when it is rebuilt. Highlight groups record
+  `fieldKey`/`categoryName`, not positions. `#hp-antialias` is never captured
+  (a device capability); the theme is captured and restored through its owner
+  like any other control.
 
 ## Capture ordering
 
@@ -132,11 +182,15 @@ The public file and URL entry points use one owner-controlled restore:
 
 1. a newer restore supersedes and awaits the older owner;
 2. framing streams under stored-byte and aggregate limits;
-3. the exact manifest/profile/order and dataset fingerprint validate;
+3. the exact manifest/profile/order and dataset fingerprint validate, the
+   session's data mapping is applied, and every key of `requires` is checked
+   (`describeMissingRequiredFields()` names every missing one);
 4. small reversible owner snapshots are registered;
 5. eager chunks decode/apply in order;
-6. lazy chunks decode/apply in the same awaited operation, with macrotask
-   yielding where needed;
+6. lazy chunks decode/apply in the same awaited operation, yielding a
+   macrotask (`utils/yield-macrotask.js`) between chunks — never an animation
+   frame, which does not run in a background tab or an off-screen notebook
+   iframe;
 7. every transaction participant prepares;
 8. every participant commits in order;
 9. the final UI refresh commits; and
@@ -156,15 +210,20 @@ error's cause rather than replacing the primary diagnosis.
 Avoid cloning cell-scale arrays:
 
 - field overlays retain and reattach exact prior categorical typed-array
-  references;
-- the analysis data layer replaces Map/LRU container ownership and can restore
-  the exact prior containers;
-- in-flight cache writers must be generation-isolated so they cannot cross the
-  replacement boundary; and
+  references; and
 - cinematic restore snapshots keyframes, navigation/settings, and actual
   stopped/playing/paused runtime state.
 
-The cache inventory verifies exact count and order during transaction prepare.
+The core state rebuilds the view graph in one pass
+(`state-serializer/multiview.js`): every field, gene and embedding any view
+names is requested together and the embeddings are pinned until the views are
+built (`preloadSessionViews()` in `contributors/core-state.js`); each kept view
+is replayed once on the live view — filters, active field, embedding — and
+published; the live view's own state is applied last. Nothing is reset to a
+base state between views, because each replay applies a complete state.
+
+Analysis panels, analysis windows and figure-export settings are applied in
+the transaction's presentation stage, after every state participant commits.
 Cinematic autoplay may begin only after successful commit. Rollback restores
 the previous playback state rather than merely copying the autoplay checkbox.
 
@@ -194,11 +253,11 @@ written into the manifest at save and re-derived from live state at restore:
 
 | Field | Derived from | Notes |
 |---|---|---|
-| `sourceType` | `dataSourceManager.getCurrentSourceType()` | `null` only when no data-source manager owns the loaded state |
-| `datasetId` | `dataSourceManager.getCurrentDatasetId()` | same nullability |
+| `datasetId` | `dataSourceManager.getCurrentIdentityId()` | the dataset's identity id, whatever route opened it (a local folder's `local-user:` key is not used); `null` only when no data-source manager owns the loaded state |
+| `name` | `dataSourceManager.getCurrentMetadata().name` | trimmed display name or `null`; informational, not compared |
 | `cellCount` | `state.pointCount` | |
 | `varCount` | the dataset's own var fields in `state.varData.fields` | user-defined fields (for example a duplicated gene) are not counted, so a session that added one still matches the freshly loaded dataset |
-| `cellOrder.embedding` | `state.getViewLayoutKey('live')`, named under the data mapping | an export's embedding id with `columns: null`, or an `obsm` key with its 0-based columns |
+| `cellOrder.embedding` | `state.getViewLayoutKey('live')`, named under the data mapping | `{key, columns}`: an `obsm` key with its 0-based columns |
 | `cellOrder.dimension` | `state.getViewDimensionLevel('live')` | exactly 1, 2, or 3 |
 | `cellOrder.digest` | `digestCellOrder(state.positionsArray, cellOrder.dimension)` | 16 lowercase hex characters |
 | `dataMapping` | `state.getDataMapping()` | a canonical data mapping |
@@ -213,10 +272,9 @@ session and published preset keeps matching.
 
 ### Why `cellOrder` exists
 
-Selections, categorical codes, and cached analysis values persist as raw
-dataset row indices. The four scalars all survive a row permutation: re-export
-a dataset at the same id from re-sorted input and `sourceType`, `datasetId`,
-`cellCount`, and `varCount` are unchanged, so every restored index would denote
+Selections and categorical codes persist as raw dataset row indices. The three scalars all survive a row permutation: write
+a dataset again at the same id from re-sorted input and `datasetId`, `cellCount`, and
+`varCount` are unchanged, so every restored index would denote
 a different cell with nothing to detect it.
 
 Observation and variable names were the alternative and do not work here — they
@@ -243,18 +301,16 @@ screen, so a session saved on the 2D t-SNE opens while a 3D UMAP is shown.
 ### Validation and comparison
 
 `assertDatasetFingerprint(value, context)` validates one record from untrusted
-input: exact six-key set, nullable strings for the source identity, safe
-integers for the counts, a `dataMapping` that is valid and already canonical,
-and `cellOrder` with exactly an embedding reference of that mapping's kind,
-`dimension` in 1–3 and a `/^[0-9a-f]{16}$/` digest. It runs two checks before
-the schema check: a record whose key set is exactly the four pre-`cellOrder`
-keys is refused with `SESSION_WITHOUT_CELL_IDENTITY_MESSAGE`, and a record with
-`cellOrder` but no `dataMapping` with `SESSION_WITHOUT_DATA_MAPPING_MESSAGE`,
-rather than either being reported as a schema violation. `session-serializer.js` calls it from `validateManifest()`, so this
-refusal happens before any contributor is consulted.
+input: exact six-key set, nullable strings for the id and name, safe integers
+for the counts, a `dataMapping` that is valid and already canonical, and
+`cellOrder` with exactly an embedding reference (`{key, columns}`),
+`dimension` in 1–3 and a `/^[0-9a-f]{16}$/` digest. `session-serializer.js`
+calls it from `validateManifest()`, so a malformed record is refused before any
+contributor is consulted. Files of the earlier format never reach it: their
+signature is refused first.
 
 `datasetFingerprintMatches(a, b)` validates both records and then compares
-every field. `verifySessionFingerprint(ctx, saved)` returns `null` when the
+every field but `name`. `verifySessionFingerprint(ctx, saved)` returns `null` when the
 saved record can be restored here and otherwise the sentence the session
 controls surface verbatim; `_restoreFromBundleSource()` throws that string as a
 `RangeError`.
@@ -265,13 +321,14 @@ session only named another embedding would make them distrust a sound dataset:
 
 | Cause | Detected by | Message |
 |---|---|---|
-| A session file written before `cellOrder` existed | `assertDatasetFingerprint` during manifest validation | says the file predates cell-content recording, so its selections can never be confirmed, and asks for the selections to be re-created and saved again |
-| A session file with `cellOrder` but no `dataMapping` | `assertDatasetFingerprint` during manifest validation | says the file was saved by an earlier release, and asks for the view to be re-created and saved again |
-| A different dataset | the counts differ, or the counts agree but the source or dataset id differs | names the saved and current cell and gene counts, or both identities, and asks for the dataset the session was saved on |
+| A file without the format-2 signature | the signature, in `bundle/reader.js` | `NOT_A_SESSION_FILE_MESSAGE`: "This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2)." |
+| A different dataset | the counts differ, or the counts agree but the dataset id differs | names the saved and current cell and gene counts, or both identities (`"<name>" (id "<id>")`), and asks for the dataset the session was saved on |
 | An embedding this dataset cannot show | an enabled embedding of the saved mapping is neither enabled now nor one the dataset can show | "This session shows obsm['X_tsne'] columns [0, 1], which this dataset does not have." (or the reason it cannot be plotted) |
 | A different neighbour graph, gene names, expression matrix, latent space or vector fields | that group of `dataMapping` differs | names the group and both values |
 | An embedding that is gone | `cellOrder.embedding` names no layout of this dataset, or cannot be loaded | names the embedding |
 | A re-ordered dataset | `cellOrder.digest` differs, everything else matches | says the dataset has the same name and the same cell and gene counts but its cell coordinates differ, so every saved selection could mark the wrong cells |
+| Fields or genes the session uses are missing | `describeMissingRequiredFields()` after the session's mapping is applied | names every missing observation field and gene at once |
+| A category highlight whose category changed | `decodeCellSet()` while the membership chunk restores | "The category this selection was saved relative to no longer holds the same cells." |
 
 A session whose enabled embeddings or defaults differ from the open dataset's,
 but which the dataset can show, is not refused: `restoreSessionDataMapping()`
@@ -282,15 +339,12 @@ previous mapping.
 
 None of these messages carry identifiers or internal vocabulary.
 
-A file predating the record is refused rather than accepted. Accepting it would
-mean keeping exactly the unverifiable state the record exists to eliminate,
-permanently, for every file already written.
-
 `datasetDependent: false` remains useful profile metadata for the
 dockable-layout owner, but it does not authorize layout-only salvage from a
 mismatched bundle. The entire operation rejects and rolls back. This applies to
 `restorePublishedDefaultState()` too: the published-default profile shares
-`validateManifest()` and the same fingerprint comparison, so an advertised
+`validateManifest()`, the same fingerprint comparison and the same `requires`
+check, so an advertised
 `default.cellucid-session` must carry `cellOrder` and `dataMapping`, and its
 `cellOrder` must name an embedding the dataset has.
 
@@ -301,16 +355,22 @@ republication under an unchanged identity is now detected instead of trusted.
 
 ## Official sample profile
 
-Catalog-advertised `default.cellucid-session` uses a separate exact profile:
+Catalog-advertised `default.cellucid-session` uses a separate exact profile
+(`PUBLISHED_DEFAULT_STATIC_CHUNK_PROFILE` in `session/published-default.js`):
 
 1. `core/field-overlays`
 2. `core/state`
 3. `ui/dockable-layout`
-4. `analysis/windows`
-5. `highlights/meta`
+4. `ui/figure-export`
+5. `analysis/windows`
+6. `analysis/docked`
+7. `highlights/meta`
 
-The catalog advertises the state manifest, the bundle's SHA-256 and its exact
-byte length (`state_bytes`) together. A published default has no size limit:
+Only `cinematic/camera` is dropped when publishing, and only when it is empty;
+the trim (`trimToPublishedDefault()`) keeps `requires` and rebinds the
+fingerprint, `name` included, to the published identity. The catalog's
+`session` entry advertises the file's path, its SHA-256 and its exact byte
+length (`bytes`) together. A published default has no size limit:
 the read stops past the declared length, each chunk inflates only to its own
 declared `uncompressedBytes`, and the loader verifies the manifest, the length
 and the digest and
@@ -318,9 +378,9 @@ applies this profile only through `restorePublishedDefaultState()` after the
 scientific dataset is published and while the dataset selection generation is
 still current.
 
-Do not route this five-chunk artifact through generic Load State. A browser test
-for the advertised path must author a real five-chunk fixture; reusing generic
-Save State output is invalid by construction.
+Do not route this seven-chunk artifact through the generic **Load** path. A browser test
+for the advertised path must author a real seven-chunk fixture; reusing generic
+**Save** output is invalid by construction.
 
 ## Cancellation outcomes
 
@@ -359,10 +419,13 @@ fixture, consumer, and published artifact together.
 
 Generic sessions do not contain:
 
-- prepared points, observation tables, or full expression matrices;
-- dataset picker/URL/GitHub/Jupyter connection state;
+- dataset points, observation tables, or full expression matrices;
+- connection state beyond the manifest's `source` record (a sample id, a
+  link's locator, a server's address, or a local file's name; nothing for
+  Jupyter);
+- per-cell gene values an analysis read (they are re-read from the dataset);
+- the antialiasing preference (a device capability);
 - Community Annotation authentication, votes, or repository workflow;
-- Figure Export controls;
 - Benchmarking controls;
 - notifications, hover, focus, pending selections, or in-flight requests; or
 - DOM, worker, network, and WebGL runtime objects.

@@ -76,8 +76,8 @@ http://127.0.0.1:8765/?anndata=true
 
 ```{note}
 This works because your browser connects to *your laptop* at `localhost:8765`, and SSH forwards that traffic to the remote machine’s `localhost:8765`.
-Use the exact Viewer URL printed by the remote command. The H5AD command above
-prints `?anndata=true`; a prepared export prints `?source=remote`.
+Use the exact Viewer URL printed by the remote command; it ends in
+`?anndata=true`.
 ```
 
 ## Common variations
@@ -248,7 +248,7 @@ If you run Cellucid inside a container and want to access it from the host machi
 Example:
 
 ```bash
-cellucid serve /data/export_dir --host 0.0.0.0 --port 8765 --no-browser
+cellucid serve /data/pbmc.h5ad --dataset-name "PBMC" --dataset-id pbmc --host 0.0.0.0 --port 8765 --no-browser
 ```
 
 A container's loopback interface belongs to the container, so a published port

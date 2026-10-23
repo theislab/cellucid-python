@@ -12,7 +12,7 @@ If you want the guided flow first:
 
 ## Community Annotation Accordion (Sidebar)
 
-You’ll find **Community Annotation** in the left sidebar.
+You’ll find **Community annotation** in the left sidebar.
 The accordion starts collapsed.
 
 ### Entry button states
@@ -67,7 +67,7 @@ Open it from the Community Annotation accordion.
 
 This modal is a 4-step wizard:
 
-### 1) Sign in with GitHub
+### 1) Sign in
 
 - Button: **Continue with GitHub**
 
@@ -84,7 +84,7 @@ Step 1 of 4. The four step names stay visible down the left, and the header
 tracks the dataset, the GitHub identity, and the bound repository throughout.
 ```
 
-### 2) Install the GitHub App
+### 2) Install app
 
 Buttons:
 
@@ -101,7 +101,7 @@ Step 2 of 4. The status line always states the exact count and page, because an
 organisation can expose thousands of repositories.
 ```
 
-### 3) Select an annotation repository
+### 3) Choose repository
 
 - Filter input: **Filter repositories…**
 - Repos are shown as cards (public/private).
@@ -127,7 +127,7 @@ What “connect” means:
   - `annotations/moderation/merges.schema.json`
   - `annotations/users/`
 
-### 4) Sync (Pull / Publish)
+### 4) Sync
 
 Buttons:
 
@@ -217,7 +217,7 @@ Common publish pitfalls:
 
 ## Profile (Optional) and “Your identity” Modal
 
-In the Community Annotation accordion, you will see **Profile (optional)**.
+In the Community Annotation accordion, you will see the optional **Profile** block.
 
 Buttons:
 
@@ -226,10 +226,10 @@ Buttons:
 
 The “Your identity” modal includes:
 
-- **Name:** free text used to search ORCID (e.g. “Alice Smith”)
-- **Affiliation / role:** free text (e.g. “Theis Lab, Postdoc”)
-- **LinkedIn:** handle only (no URL; lowercase `a-z0-9-`)
-- **ORCID:** accepts a checksum-valid ORCID iD and auto-suggests matches
+- **Name**: free text used to search ORCID (e.g. “Alice Smith”)
+- **Affiliation / role**: free text (e.g. “Theis Lab, Postdoc”)
+- **LinkedIn**: handle only (no URL; lowercase `a-z0-9-`)
+- **ORCID**: accepts a checksum-valid ORCID iD and auto-suggests matches
 - **Save** / **Cancel**
 
 Notes:
@@ -249,21 +249,21 @@ Notes:
 
 ---
 
-## MANAGE ANNOTATION (Author Only)
+## Annotated columns (author only)
 
-Accordion title: **MANAGE ANNOTATION**
+Collapsible title: **Annotated columns**
 
 You must be an **author** (GitHub maintain/admin on the repo) to use these controls.
 
 Controls:
 
-- Dropdown: **Categorical obs:** (choose a categorical column)
+- Dropdown: **Categorical obs** (choose a categorical column)
 - Buttons:
   - **Add**: add the selected column to the annotatable list
   - **Remove**: remove the selected column from the annotatable list
   - **Close** / **Reopen**: lock/unlock annotator interaction for this column
 
-Per-column consensus settings (shown only when the column is annotatable):
+Per-column **Consensus settings** (shown only when the column is annotatable):
 
 - **Threshold** slider (maps to `annotations/config.json` threshold)
 - **Min annotators** numeric input
@@ -276,7 +276,7 @@ Remember: config changes become shared only after the author clicks **Publish** 
 :alt: The Manage annotation section expanded, showing a categorical obs dropdown with Add, Remove and Close buttons, and an Annotatable consensus settings block with a Threshold slider reading 50 percent, a Min annotators field, and Apply and Reset buttons.
 :width: 488px
 
-**Manage annotation** with a column already annotatable, so the per-column
+**Annotated columns** with a column already annotatable, so the per-column
 consensus settings are shown. **Threshold** is edited in whole percent; it is
 stored as a signed fraction whose full range is −100 % to +100 %, because
 confidence is itself signed.
@@ -296,31 +296,30 @@ column that was never opened has no prefix at all.
 
 ---
 
-## DERIVED CONSENSUS COLUMN (Optional)
+## Consensus column (optional)
 
-Accordion title: **DERIVED CONSENSUS COLUMN**
+Collapsible title: **Consensus column**
 
 This section builds a local categorical obs column for visualization:
 
-- Dropdown: **Annotatable column:**
-- Input: **New column key:**
+- Dropdown: **Annotatable column**
+- Input: **New column key**
 - Settings:
-  - **Consensus threshold:**
-  - **Min annotators:**
+  - **Consensus threshold**
+  - **Min annotators**
 - Button: **Build derived column**
 
 This does not publish anything; it is a local view helper.
 
 ---
 
-## CONSENSUS SNAPSHOT + LOCAL CACHE
+## Consensus snapshot + local cache
 
-Accordion title: **CONSENSUS SNAPSHOT + LOCAL CACHE**
+Collapsible title: **Snapshot and cache**
 
 ### Consensus snapshot
 
-- Label: **Consensus snapshot (cellucid-consensus.json)**
-- Button: **Download**
+- Button: **Download** (its tooltip reads `Download cellucid-consensus.json`)
 
 Downloads a locally built `cellucid-consensus.json` snapshot (not written back
 to GitHub). Pull first when the export must include the newest shared files.
@@ -348,7 +347,7 @@ Two different clears exist (they do different things):
 
 The annotation “session” above is separate from Cellucid's portable
 `.cellucid-session` files. Community Annotation is intentionally excluded from
-ordinary Save State/Load State bundles. GitHub tokens remain tab-scoped in
+the ordinary bundles **Save** and **Load** handle. GitHub tokens remain tab-scoped in
 `sessionStorage`; annotation intent and pulled-file caches retain their own
 dataset/repo/branch/user scope. See
 {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
@@ -514,7 +513,7 @@ Checklist:
   - annotator = everything else
 - Fix: ensure your GitHub account has maintain/admin access, then reconnect and Pull.
 
-#### Repo does not show up under “Select an annotation repository”
+#### Repo does not show up under “Choose repository”
 
 - Ensure the GitHub App is installed on the repo owner and includes this repo.
 - If installed with “Only select repositories”, add the repo explicitly.

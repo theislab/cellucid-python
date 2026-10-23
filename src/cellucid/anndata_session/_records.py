@@ -33,4 +33,3 @@ class _ColumnPlan:
 class _CurrentChunkInventory:
     ids: set[str]
     metadata_by_id: dict[str, dict[str, Any]]
-    analysis_artifact_ids: tuple[str, ...]

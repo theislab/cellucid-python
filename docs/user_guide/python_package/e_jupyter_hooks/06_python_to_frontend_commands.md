@@ -69,14 +69,6 @@ When the viewer rejects a command — an unknown field, an out-of-range index, a
 malformed color — it reports the failure back over the event channel as a
 `command_error` event.
 
-```{note}
-Only the web build that emits `command_error` reports these. Older builds —
-including the one currently published — refuse a command silently, so on those
-the checks below find nothing and a refused command still looks like a
-successful one. See {doc}`07_frontend_to_python_events` for why Python accepts
-the event before the viewer sends it.
-```
-
 Cellucid prints it:
 
 ```text
@@ -109,7 +101,7 @@ See {doc}`07_frontend_to_python_events` for the exact record.
 
 ## Command catalog (public Python API)
 
-All of these are methods on the `viewer` object returned by `show(...)` or `show_anndata(...)`.
+All of these are methods on the `viewer` object returned by `show_anndata(...)`.
 
 | Python method | Purpose | Frontend message type |
 |---|---|---|
@@ -117,7 +109,7 @@ All of these are methods on the `viewer` object returned by `show(...)` or `show
 | `viewer.highlight_cells(cell_indices, color="#ff0000")` | Highlight specific cells by index | `"highlight"` |
 | `viewer.clear_highlights()` | Remove highlights | `"clearHighlights"` |
 | `viewer.set_color_by(field)` | Change active color-by field | `"setColorBy"` |
-| `viewer.set_visibility(cells=None, visible=True)` | Hide/show specific cells (or all) | `"setVisibility"` |
+| `viewer.set_visibility(cell_indices=None, visible=True)` | Hide/show specific cells (or all) | `"setVisibility"` |
 | `viewer.reset_view()` | Reset camera | `"resetCamera"` |
 | `viewer.set_data_mapping(**fields)` | Change what the viewer plots and reads, and wait for it to apply | `"setDataMapping"` |
 
@@ -207,7 +199,7 @@ this one is answered: the viewer replies with a `data_mapping` event of origin
 
 `viewer.set_data_mapping(**fields)` replaces the named top-level fields of the
 mapping the viewer last reported (`embeddings`, `vectorFields`, `geneNames`,
-and for an AnnData source `knn`, `expression`, `latent`; never `kind`),
+`knn`, `expression`, `latent`; never `kind`, which is always `"anndata"`),
 validates the result, sends it, and returns the mapping the viewer reports
 back. It raises `RuntimeError` before sending when the viewer has not reported
 a mapping yet, `TypeError` for an unknown field, `ValueError` for an invalid
@@ -219,9 +211,6 @@ viewer.set_data_mapping(
     embeddings={"1d": None, "2d": {"key": "X_pca", "columns": [0, 1]}, "3d": None},
 )
 ```
-
-A viewer older than this release does not understand this command. It also
-never reports a mapping, so `set_data_mapping()` raises before sending one.
 
 ### `ping` / `debug_snapshot` (internal, used by `viewer.debug_connection()`)
 

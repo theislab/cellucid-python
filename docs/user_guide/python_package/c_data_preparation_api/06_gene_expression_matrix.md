@@ -1,224 +1,50 @@
 # Gene expression matrix
 
-**Audience:** everyone exporting genes (computational users will care most)  
-**Time:** 30–90 minutes depending on dataset size and number of genes exported  
-**Goal:** export gene expression in a way that is accurate for visualization and manageable in size/time
-
-Exporting gene expression is optional — but it’s what enables:
-- gene search,
-- gene overlays (color-by gene),
-- and gene-driven analysis features in the web app.
-
-It is also the easiest way to create a gigantic, slow export if you do it naively.
-
----
-
-## Fast path (a practical, safe default)
-
-For small/medium datasets, a good starting point is:
-
-- export a curated gene list (markers/HVGs),
-- enable 8-bit quantization,
-- enable gzip compression.
-
-```python
-from cellucid import prepare
-
-marker_genes = ["MS4A1", "CD3D", "LYZ", "NKG7"]
-
-prepare(
-    ...,
-    embeddings={"X_umap": adata.obsm["X_umap"]},
-    dataset_name="My study",
-    dataset_id="my-study-v1",
-    obs_categorical_dtype="uint16",
-    gene_expression=adata.X,
-    var=adata.var,
-    var_gene_id_column=None,
-    gene_identifiers=marker_genes,
-    var_quantization=8,
-    compression=6,
-    force=True,
-)
-```
-
-If you try to export all genes for a large dataset and things get slow or huge, jump to:
-- {doc}`10_performance_tuning_guide_prepare_export`
-
----
-
-## Practical path (computational users)
-
-### Supported input types and required shape
-
-`gene_expression` may be:
-- a dense `numpy.ndarray`, or
-- a `scipy.sparse` matrix.
-
-Required shape:
-
-```text
-(n_cells, n_genes)
-```
-
-AnnData’s `adata.X` is typically already `(n_cells, n_genes)`.
-
-If you are not using AnnData, be careful:
-- many pipelines store expression as `(n_genes, n_cells)` and require a transpose before export.
-
-### Alignment with `var`
-
-If you provide `gene_expression`, you must also provide `var`, and:
-
-- `len(var) == gene_expression.shape[1]`
-- `var.iloc[j]` corresponds to `gene_expression[:, j]`
-
-This is the most common cause of “wrong gene values”.
-
-### What gets written on disk (important for performance)
-
-Cellucid exports expression as **dense per-gene vectors**:
-
-- for each gene, write a vector of length `n_cells` under `var/`
-- write an index (`var_manifest.json`) so the web app can fetch genes on demand
-
-This means:
-- the number of files under `var/` is approximately the number of exported genes,
-- exporting “all genes” can create tens of thousands of files,
-- even if your input matrix is sparse, the on-disk representation is per-gene dense vectors (gzip helps for many zeros).
-
-### Quantization (`var_quantization`)
-
-`var_quantization` controls how values are stored:
-- `None` → store `float32` (lossless for float32)
-- `8` → quantize each gene to `uint8` (lossy; ~4× smaller than float32)
-- `16` → quantize each gene to `uint16` (lossy; ~2× smaller than float32)
-
-Quantization rules (current exporter):
-- quantization is **per gene** (each gene gets its own min/max),
-- gene values must be real and finite and must remain finite after conversion
-  to the viewer's `float32` domain; otherwise the complete candidate is
-  rejected before publication,
-- codes and bounds derive from those exact viewer-visible values; a source
-  range that collapses to one `float32` value is published as a constant gene,
-  while an individual nonzero source value may round to zero if the range
-  remains non-collapsed,
-- `minValue`/`maxValue` are stored in `var_manifest.json` and used for dequantization.
-
-Dequantization in the web app is:
-
-```text
-value = minValue + q * (maxValue - minValue) / maxQuant
-```
-
-Where `maxQuant = 254` (8-bit) or `65534` (16-bit).
-
-A gene expressed at one level in every exported cell — including a gene
-detected in no exported cell at all, which is routine once an atlas is subset
-to one lineage — is published as a constant gene: `minValue == maxValue` and
-every code `0`. The formula above is exact for it, so the browser recovers the
-constant itself rather than an approximation. See
-{ref}`How a quantized continuous payload decodes <python_package-quantized-continuous-payloads>`.
-
-Practical guidance:
-- For visualization and interactive exploration, 8-bit is usually fine.
-- If users rely on subtle gradients (scores, near-zero expression differences), prefer 16-bit or float32.
-
-### Missing/invalid values
-
-- NaN, infinities, complex values, and values outside the finite `float32`
-  range are rejected before publication.
-- Negative values are allowed (quantization uses min/max and will encode them).
-
-If validation reports NaN/Inf:
-- confirm your preprocessing (e.g., division by zero, log of negative values),
-- correct the input rather than substituting a display value.
-
-### Choosing what expression to export (counts vs normalized)
-
-Cellucid does not decide what “expression” means.
-You choose the matrix you export.
-
-Common choices:
-- log1p-normalized expression (good for visualization)
-- scaled/z-scored expression (good for certain contrasts; includes negative values)
-- raw counts (often dominated by library size; not ideal for color-by without normalization)
-
-Make the choice explicit in your pipeline and in dataset metadata.
-
----
-
-## Size and performance expectations (rules of thumb)
-
-The raw data volume is roughly:
-
-- float32: `4 * n_cells * n_genes` bytes
-- 8-bit: `1 * n_cells * n_genes` bytes
-- 16-bit: `2 * n_cells * n_genes` bytes
-
-But real-world exports differ because:
-- the exporter writes **one file per gene** (filesystem overhead),
-- gzip compression can greatly reduce size for sparse-ish data,
-- but compression increases CPU time.
-
-Practical implication:
-- Large datasets (hundreds of thousands of cells) should not export “all genes” unless you have a very specific reason.
-
-If you need full gene access on large datasets, prefer server mode:
-- {doc}`../d_viewing_apis/09_server_mode_advanced`
-
----
-
-## Edge cases and common footguns
-
-- **Wrong orientation** (`genes × cells`): fix by transposing to `(cells × genes)`.
-- **Mismatch between `var` and matrix columns**: leads to wrong gene names/values.
-- **Duplicate or undrawable gene names**: the complete candidate is rejected
-  before publication (see {doc}`05_var_gene_metadata`). A name is not a path, so
-  characters like `/` are fine; invisible characters are not.
-- **All-zero genes**: export is valid but gene overlays will be flat.
-- **NaNs introduced by preprocessing**: common after invalid log transforms or normalization artifacts.
-- **Huge file counts**: tens of thousands of gene files can be slow on some filesystems (especially networked).
-
----
-
-## Troubleshooting (gene expression)
-
-### Symptom: gene search is missing / disabled
-
-Meaning:
-- `var_manifest.json` is missing (you didn’t export genes or export was skipped).
-
-Fix:
-- export with `gene_expression` + `var`, and re-export with `force=True`.
-
-### Symptom: export folder exploded in size
-
-Likely causes:
-- exported too many genes,
-- quantization disabled (float32),
-- compression disabled.
-
-Fix:
-- export a curated gene list,
-- enable `var_quantization=8` and `compression=6`,
-- or use server mode instead of static exports for full gene access.
-
-### Symptom: export is extremely slow
-
-Likely causes:
-- large `n_genes` (file count),
-- compression enabled on a slow CPU,
-- writing to a slow disk/network filesystem.
-
-Fix:
-- export fewer genes,
-- disable compression during iteration,
-- write to a local SSD and move the export later.
-
----
-
-## Next steps
-
-- Optional KNN graph export: {doc}`07_connectivities_knn_graph`
-- Performance and scaling guidance: {doc}`10_performance_tuning_guide_prepare_export`
+**Audience:** everyone with gene expression
+**Time:** 10 minutes
+**Goal:** know what `gene_expression=` becomes and why it reads fast
+
+`gene_expression` is the cells × genes matrix the viewer colours by: any scipy
+sparse format, or a dense NumPy array. It is stored as `X`.
+
+## What is stored
+
+| Input | `X` |
+|---|---|
+| sparse (CSR, CSC, COO, sparse arrays) | `csc_matrix`: gene-major, sorted indices, duplicates summed, stored zeros dropped |
+| dense | a dense array, chunked in tall strips of genes |
+
+Values are stored as **float32**. Integer counts are exact in float32 up to
+2^24 (16,777,216); when any integer count of the genes stored (after
+`gene_identifiers`) is larger, the whole matrix is stored as float64 so every
+count reads back as given. Fractional values
+(normalized, log-transformed) are rounded to float32 once, when written. Every
+value must be finite and within float32's range.
+
+Pass the matrix you want to colour by: raw counts, normalized values, or a
+layer (`gene_expression=adata.layers["log1p"]`). Only one matrix is stored.
+
+## Why gene-major
+
+The viewer reads one gene at a time (colouring by it) or a batch of genes (an
+analysis). In a CSC matrix a gene is one contiguous range of `data` and
+`indices`, read with a single range request; in a CSR matrix the browser must
+first scan every stored entry to build a gene index. On a 561,947-cell dataset
+the first gene took 86 ms from the prepared file and 4,110 ms from the same
+data stored CSR, over a simulated 80 ms / 50 MB/s link
+({doc}`10_performance_and_storage`).
+
+## Sizes
+
+`X/data` and `X/indices` are cut into chunks of 65,536 values and deflated —
+the indices after a byte shuffle, the values as they are, which is how real
+expression values compress best; on the dataset above a gene cost 8.6 KB
+stored (2.0 KB of values, 6.6 KB of indices), against 13.1 KB in the CSR
+float64 input. The full layout
+is in {doc}`09_cellucid_ready_anndata_specification`.
+
+## Next
+
+- {doc}`07_connectivities_knn_graph`
+- {doc}`10_performance_and_storage`
+- The same topic for R, `cellucid_prepare()`: {doc}`../../r_package/c_data_preparation_api/06_gene_expression_matrix`

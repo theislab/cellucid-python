@@ -17,8 +17,8 @@ Import errors, interpreter mismatches, and installation checks.
 :link: 02_data_preparation_issues
 :link-type: doc
 
-Shape, dtype, identity, embedding, metadata, expression, graph, and export
-validation.
+Shape, dtype, identity, embedding, metadata, expression, and graph validation
+in `prepare()`.
 :::
 
 :::{grid-item-card} Viewer embedding
@@ -46,7 +46,7 @@ Viewer IDs, callbacks, event validation, and session-bundle requests.
 :link: 06_performance_and_memory_issues
 :link-type: doc
 
-Separate export time, I/O, browser rendering, and analysis costs.
+Separate preparation time, I/O, browser rendering, and analysis costs.
 :::
 
 :::{grid-item-card} HPC and remote access

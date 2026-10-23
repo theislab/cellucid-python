@@ -11,23 +11,24 @@ This page is a **symptom → diagnosis → fix** guide for filtering issues.
 :width: 480px
 
 This is the block every answer on this page starts from. Scroll to the bottom
-of **Coloring & Filtering** to find it.
+of **Coloring & filtering** to find it.
 ```
 
-1) Look at **Active filters (selected view only)**:
-   - What does it say: `Showing X of Y points`?
+1) Look at **Filters**:
+   - What does it say: `Showing X of Y cells`?
    - Which filters are listed?
 2) Confirm you’re in the **right view**:
    - In Live + Snapshots mode, click the snapshot you care about first.
 3) If a filter exists, try **disable-before-delete**:
    - uncheck a filter to test impact, then decide to remove/reset.
 4) If you used continuous filtering:
-   - check whether `Live filtering` is `Off` (then you must click `FILTER`).
+   - check whether `Live filtering` is `Off` (then you must click `Filter`).
 5) If you used gene filtering:
    - confirm the gene is still the active field (gene filters don’t apply once you switch to obs).
 6) If you used outlier filtering:
-   - confirm the outlier slider is visible and set below `100%`,
-   - and confirm the outlier filter is not marked `(disabled)` in Active filters.
+   - confirm the outlier slider is enabled (a latent space is chosen) and set below `100%`,
+   - confirm no progress bar is still running under it,
+   - and confirm the outlier filter is not marked `(disabled)` in Filters.
 
 ---
 
@@ -36,7 +37,7 @@ of **Coloring & Filtering** to find it.
 ### Symptom
 
 - The canvas looks empty.
-- Active filters shows: `Showing 0 of N points`.
+- Filters shows: `Showing 0 of N cells`.
 
 ```{figure} ../../../_static/screenshots/filtering/window-zero-visible-cells.png
 :alt: The whole application window showing a blank light grid with no points at all, every legend row unchecked and greyed reading 0 of its own total, and the sidebar reading Showing 0 of 3,696 points above a single clusters hiding row.
@@ -56,7 +57,7 @@ the reassurance: the data loaded, and one filter row is hiding all of it.
 
 ### How to confirm
 
-1) In **Active filters**, disable filters one-by-one.
+1) In **Filters**, disable filters one-by-one.
 2) Watch the count line after each toggle:
    - when it jumps above 0, you found (at least) one culprit.
 3) If you’re in grid mode, click the live view and compare counts.
@@ -65,15 +66,15 @@ the reassurance: the data loaded, and one filter row is hiding all of it.
 
 Use the fastest safe resets:
 
-- Continuous filter: click `RESET` in the continuous legend (or remove the filter row).
-- Categorical filter: click `Show All` in the categorical legend (or remove the filter row).
+- Continuous filter: click `Reset` in the continuous legend (or remove the filter row).
+- Categorical filter: click `Show all` in the categorical legend (or remove the filter row).
 - Outlier filter: set outlier slider to `100%` (or remove the filter row).
 - Gene filter: widen the range, or switch away from gene field if you did not intend to filter by gene.
 
 ### Prevention
 
 - Apply filters one at a time and watch the count line.
-- For large datasets, turn `Live filtering` off and apply once via `FILTER`.
+- For large datasets, turn `Live filtering` off and apply once via `Filter`.
 - In multiview, name snapshots after the filter state you intended (so you notice when you’re in the wrong view).
 
 ---
@@ -94,22 +95,22 @@ Use the fastest safe resets:
 
 ### How to confirm
 
-1) In **Active filters**, verify the list is actually empty.
-2) If it is empty but you still see fewer points, confirm the count line says `Showing all N points`.
-3) Switch to the live view (if snapshots exist) and compare the Active filters list there.
+1) In **Filters**, verify the list is actually empty.
+2) If it is empty but you still see fewer points, confirm the count line says `Showing all N cells`.
+3) Switch to the live view (if snapshots exist) and compare the Filters list there.
 
 ### Fix
 
-1) Remove or reset the remaining filters (Active filters is the checklist).
+1) Remove or reset the remaining filters (Filters is the checklist).
 2) If you’re in multiview:
    - click the view you want to fix,
    - then remove/reset filters there.
 3) If categories still look “off” after removing category filters:
-   - use `Show All` in the categorical legend to fully restore.
+   - use `Show all` in the categorical legend to fully restore.
 
 ### Prevention
 
-- Treat Active filters as the single source of truth; don’t rely on memory of what you changed.
+- Treat Filters as the single source of truth; don’t rely on memory of what you changed.
 - Prefer disabling filters while debugging, then remove once you’re sure.
 
 ---
@@ -123,16 +124,20 @@ Use the fastest safe resets:
 ### Likely causes (ordered)
 
 1) The slider is still at `100%` (no outlier filtering).
-2) The active field does not provide outlier quantiles (so filtering cannot apply).
-3) The outlier filter is disabled in Active filters (shows `(disabled)`).
-4) Many cells have missing outlier quantiles (e.g., categories too small), so fewer cells are affected.
-5) Your dataset simply doesn’t have many “extreme” points for this field.
+2) No latent space is chosen: the slider is greyed out and the line under it
+   says *“Choose the latent space in Data mapping”*.
+3) The quantiles are still being read or computed (a progress bar under the
+   slider), or you cancelled that read, which put the slider back at `100%`.
+4) The outlier filter is disabled in Filters (shows `(disabled)`).
+5) Many cells have missing outlier quantiles (categories smaller than
+   `centroid_min_points`, or no category), so fewer cells are affected.
+6) Your dataset simply doesn’t have many “extreme” points for this field.
 
 ### How to confirm
 
-1) Confirm the outlier slider is visible at all — it only appears when the
-   active field carries outlier statistics, and never for a continuous field or
-   a gene.
+1) Confirm the outlier slider is visible and enabled — it appears for every
+   categorical field of the file (never for a continuous field, a gene, or a
+   field you created), and the line under it says why it cannot filter yet.
 
 ```{figure} ../../../_static/screenshots/filtering/window-outlier-100-off.png
 :alt: The whole application window coloured by clusters with the Outlier filter (latent space) slider parked at its right end reading 100 percent, loose points scattered around the coloured groups, and the sidebar reading Showing all 3,696 points above No filters active.
@@ -150,20 +155,24 @@ appears once the threshold drops below `99.99%`.
 
 ### Fix
 
-1) Switch to a categorical field that supports outlier filtering (often clusters).
-2) Set outlier to `95–99%` for typical usage (avoid `50%` unless you truly mean it).
-3) If the filter is disabled, re-enable it in Active filters.
-4) If you created a derived/edited categorical field and the slider disappeared:
-   - switch back to the original field, or re-export with the desired field upstream.
+1) If no latent space is chosen, press **Choose latent space** and pick one
+   (see [Turning it on](02_outlier_filtering_per_active_field.md#turning-it-on-choose-a-latent-space)).
+2) Wait for the progress bar to finish; the filter applies at the slider's
+   value when the distances arrive
+   ([Stored or computed](02_outlier_filtering_per_active_field.md#stored-or-computed)).
+3) Set outlier to `95–99%` for typical usage (avoid `50%` unless you truly mean it).
+4) If the filter is disabled, re-enable it in Filters.
+5) If you created a derived/edited categorical field and the slider disappeared:
+   - switch back to the original field, or add the desired field to `obs` upstream.
 
 ### Prevention
 
 - Use outlier filtering as a “clean up clusters” tool, not a general QC replacement.
-- Keep in mind it is active-field scoped (it stops applying if you switch to fields without outlier stats).
+- Keep in mind it is active-field scoped (it stops applying when you switch to another field; its threshold is kept for when you come back).
 
 ---
 
-## “My continuous sliders change, but nothing happens until I click FILTER”
+## “My continuous sliders change, but nothing happens until I click Filter”
 
 ### Symptom
 
@@ -175,25 +184,24 @@ appears once the threshold drops below `99.99%`.
 
 ### How to confirm
 
-- In the continuous legend, check the `Live filtering` toggle state, or read
-  the one-line hint under it: `Changes apply as you drag` means on,
-  `Drag sliders, then click Filter` means off.
+- In the continuous legend, check the `Live filtering` switch state; while
+  it is on, hovering `Filter` shows `Turn off Live filtering to use Filter`.
 
 ### Fix
 
-- Click `FILTER`, or toggle `Live filtering` back to `On`.
+- Click `Filter`, or toggle `Live filtering` back to `On`.
 
 ### Prevention
 
-- For very large datasets, keep Live filtering `Off` and apply changes with `FILTER` to stay responsive.
+- For very large datasets, keep Live filtering `Off` and apply changes with `Filter` to stay responsive.
 
 ---
 
-## “The FILTER button is greyed out and won’t click”
+## “The Filter button is greyed out and won’t click”
 
 ### Symptom
 
-- `FILTER` is pale and nothing happens when you click it.
+- `Filter` is pale and nothing happens when you click it.
 
 ### Likely causes (ordered)
 
@@ -203,7 +211,7 @@ appears once the threshold drops below `99.99%`.
 :alt: The continuous legend Filtering block with the Live filtering toggle reading On, the hint Changes apply as you drag, and a pale grey FILTER button under the mouse pointer next to a black RESET button.
 :width: 428px
 
-`FILTER` is deliberately disabled while `Live filtering` is on, because the
+`Filter` is deliberately disabled while `Live filtering` is on, because the
 range is already applied on every slider step. Its tooltip says so:
 `Turn off Live filtering to use Filter`.
 ```
@@ -240,14 +248,14 @@ apply-once workflow below helps.
 
 ### How to confirm
 
-1) Turn Live filtering `Off` and apply once with `FILTER`. If performance improves, the bottleneck is repeated recomputation.
+1) Turn Live filtering `Off` and apply once with `Filter`. If performance improves, the bottleneck is repeated recomputation.
 2) Disable filters one-by-one and see which one causes the biggest delay.
 3) Switch to a simpler render mode (points) and retry.
 
 ### Fix
 
 1) Use apply-once workflows:
-   - Live filtering `Off` → adjust → `FILTER`.
+   - Live filtering `Off` → adjust → `Filter`.
 2) Reduce the number of enabled filters:
    - remove “dead” filters that don’t change visible/available counts.
 3) Reduce visualization load while filtering:

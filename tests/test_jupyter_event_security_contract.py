@@ -16,11 +16,11 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
+from _serverless_viewer import serverless_viewer
 
 import cellucid._server_base as server_base
 import cellucid.jupyter as jupyter
-import cellucid.jupyter._base as jupyter_base
-import cellucid.jupyter._exported as jupyter_exported
+import cellucid.jupyter._viewer as jupyter_viewer
 import cellucid.jupyter._wire as wire
 from cellucid.anndata_server import AnnDataServer
 
@@ -143,9 +143,12 @@ def _known_inbound_events(viewer_id: str) -> list[tuple[str, dict[str, object], 
                 "requestId": None,
                 "origin": "default",
                 "mapping": {
-                    "kind": "export",
-                    "embeddings": {"enabled": [{"key": "X_umap", "columns": None}], "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None}},
+                    "kind": "anndata",
+                    "embeddings": {"enabled": [{"key": "X_umap", "columns": [0, 1]}], "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": [0, 1]}, "3d": None}},
+                    "knn": None,
                     "geneNames": "index",
+                    "expression": "X",
+                    "latent": None,
                     "vectorFields": [],
                 },
             },
@@ -153,9 +156,12 @@ def _known_inbound_events(viewer_id: str) -> list[tuple[str, dict[str, object], 
                 "requestId": None,
                 "origin": "default",
                 "mapping": {
-                    "kind": "export",
-                    "embeddings": {"enabled": [{"key": "X_umap", "columns": None}], "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None}},
+                    "kind": "anndata",
+                    "embeddings": {"enabled": [{"key": "X_umap", "columns": [0, 1]}], "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": [0, 1]}, "3d": None}},
+                    "knn": None,
                     "geneNames": "index",
+                    "expression": "X",
+                    "latent": None,
                     "vectorFields": [],
                 },
             },
@@ -247,22 +253,25 @@ def _event_request(
 # The exact current fingerprint shape: a session names the embedding its cell
 # order was digested over and the data mapping it was saved with.
 _FINGERPRINT = {
-    "sourceType": None,
     "datasetId": None,
+    "name": None,
     "cellCount": 0,
     "varCount": 0,
     "cellOrder": {
-        "embedding": {"key": "X_umap", "columns": None},
+        "embedding": {"key": "X_umap", "columns": [0, 1]},
         "dimension": 2,
         "digest": "0123456789abcdef",
     },
     "dataMapping": {
-        "kind": "export",
+        "kind": "anndata",
         "embeddings": {
-            "enabled": [{"key": "X_umap", "columns": None}],
-            "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None},
+            "enabled": [{"key": "X_umap", "columns": [0, 1]}],
+            "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": [0, 1]}, "3d": None},
         },
+        "knn": None,
         "geneNames": "index",
+        "expression": "X",
+        "latent": None,
         "vectorFields": [],
     },
 }
@@ -272,6 +281,8 @@ def _empty_session_bundle() -> bytes:
     manifest = {
         "createdAt": "2026-07-26T00:00:00.000Z",
         "datasetFingerprint": _FINGERPRINT,
+        "source": None,
+        "requires": {"obs": [], "var": []},
         "chunks": [],
     }
     manifest_bytes = json.dumps(
@@ -288,6 +299,8 @@ def _corrupt_gzip_session_bundle() -> bytes:
     manifest = {
         "createdAt": "2026-07-26T00:00:00.000Z",
         "datasetFingerprint": _FINGERPRINT,
+        "source": None,
+        "requires": {"obs": [], "var": []},
         "chunks": [
             {
                 "id": "corrupt",
@@ -550,7 +563,7 @@ def test_event_post_reports_callback_absence_and_failure_without_false_success()
 
 
 def test_failed_viewer_hook_does_not_publish_partial_event_state() -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
 
     def fail(_event: dict[str, object]) -> None:
         raise RuntimeError("hook failed")
@@ -573,7 +586,7 @@ def test_failed_viewer_hook_does_not_publish_partial_event_state() -> None:
 
 
 def test_every_known_inbound_event_preserves_its_exact_payload() -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     delivered: list[dict[str, object]] = []
     viewer.register_hook("message", delivered.append)
 
@@ -591,7 +604,7 @@ def test_every_known_inbound_event_preserves_its_exact_payload() -> None:
 def test_inbound_event_rejects_every_undeclared_property_before_callback_dispatch(
     event_index: int,
 ) -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     delivered: list[dict[str, object]] = []
     viewer.register_hook("message", delivered.append)
     _event_name, message, _expected_payload = _known_inbound_events(viewer._viewer_id)[event_index]
@@ -631,7 +644,7 @@ def test_inbound_event_rejects_every_undeclared_property_before_callback_dispatc
 def test_inbound_event_rejects_unknown_types_missing_fields_and_routing_extras(
     message: dict[str, object],
 ) -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     delivered: list[dict[str, object]] = []
     viewer.register_hook("message", delivered.append)
     candidate = dict(message)
@@ -658,7 +671,7 @@ def _command_error(viewer_id: str, **overrides: object) -> dict[str, object]:
 def test_command_error_reaches_every_notebook_surface(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     handled: list[dict[str, object]] = []
     viewer.register_hook("command_error", handled.append)
 
@@ -679,7 +692,7 @@ def test_command_error_reaches_every_notebook_surface(
 
 
 def test_command_error_wakes_a_notebook_blocked_on_wait_for_event() -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     viewer.register_hook("command_error", lambda _event: None)
     received: list[dict[str, Any]] = []
 
@@ -710,7 +723,7 @@ def test_command_error_wakes_a_notebook_blocked_on_wait_for_event() -> None:
 def test_unhandled_command_error_is_printed_where_the_notebook_looks(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     observed: list[dict[str, object]] = []
     viewer.register_hook("message", observed.append)
 
@@ -767,7 +780,7 @@ def test_command_error_rejects_unnamed_commands_and_unbounded_reasons(
     match: str,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     delivered: list[dict[str, object]] = []
     viewer.register_hook("message", delivered.append)
 
@@ -783,7 +796,7 @@ def test_command_error_rejects_unnamed_commands_and_unbounded_reasons(
 
 
 def test_command_error_accepts_the_longest_declared_reason() -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     handled: list[dict[str, object]] = []
     viewer.register_hook("command_error", handled.append)
 
@@ -831,13 +844,13 @@ def test_the_published_commands_are_exactly_the_commands_python_can_send() -> No
     published = wire._protocol_capability_document()["commands"]
 
     # `_COMMAND_PYTHON_CALLERS` is declared in a different module, and every key
-    # of it names a real `BaseViewer` method, so a command published here is one
+    # of it names a real `AnnDataViewer` method, so a command published here is one
     # a notebook can actually issue.
-    assert set(published) == set(jupyter_base._COMMAND_PYTHON_CALLERS)
+    assert set(published) == set(jupyter_viewer._COMMAND_PYTHON_CALLERS)
 
 
 def test_every_published_command_may_be_named_by_a_command_error() -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     handled: list[dict[str, object]] = []
     viewer.register_hook("command_error", handled.append)
     published = wire._protocol_capability_document()["commands"]
@@ -856,7 +869,7 @@ def test_every_published_command_may_be_named_by_a_command_error() -> None:
 
 
 def test_command_error_arrives_through_the_authenticated_http_path() -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     handled: list[dict[str, object]] = []
     viewer.register_hook("command_error", handled.append)
     viewer._activate()
@@ -889,7 +902,7 @@ def test_command_error_arrives_through_the_authenticated_http_path() -> None:
 
 
 def test_event_http_path_rejects_undeclared_property_without_hook_delivery() -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     delivered: list[dict[str, object]] = []
     viewer.register_hook("click", delivered.append)
     viewer._activate()
@@ -923,7 +936,7 @@ def test_event_http_path_rejects_undeclared_property_without_hook_delivery() -> 
         viewer.stop()
 
 
-def _selection_path(viewer: jupyter.BaseViewer, *, source: str = "lasso") -> str:
+def _selection_path(viewer: jupyter.AnnDataViewer, *, source: str = "lasso") -> str:
     from urllib.parse import urlencode
 
     query = urlencode(
@@ -941,7 +954,7 @@ def test_selection_route_delivers_a_large_selection_exactly() -> None:
     # uint32 and several MB as a JSON array, beyond the event endpoint's 1 MiB
     # limit and the browser's 64 KiB keepalive budget. The binary route takes
     # it whole and every hook surface sees the exact ascending cell list.
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     delivered: list[dict[str, object]] = []
     viewer.register_hook("selection", delivered.append)
     viewer._activate()
@@ -986,7 +999,7 @@ def test_selection_route_refuses_malformed_bodies_before_any_hook(
     expected_status: int,
     expected_message: bytes,
 ) -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     delivered: list[dict[str, object]] = []
     viewer.register_hook("selection", delivered.append)
     viewer._activate()
@@ -1016,7 +1029,7 @@ def test_selection_route_refuses_malformed_bodies_before_any_hook(
 
 
 def test_selection_route_authenticates_before_reading_the_body() -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     delivered: list[dict[str, object]] = []
     viewer.register_hook("selection", delivered.append)
     viewer._activate()
@@ -1063,7 +1076,7 @@ def test_selection_route_authenticates_before_reading_the_body() -> None:
 
 @pytest.mark.parametrize("event_type", ["selection", "session_bundle"])
 def test_event_endpoint_refuses_events_only_a_binary_route_may_build(event_type: str) -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     delivered: list[dict[str, object]] = []
     viewer.register_hook("message", delivered.append)
     viewer._activate()
@@ -1100,7 +1113,7 @@ def test_event_endpoint_refuses_events_only_a_binary_route_may_build(event_type:
     [[0, 2], b"", b"\x00\x00\x00", struct.pack("<2I", 3, 3), struct.pack("<2I", 3, 2)],
 )
 def test_selection_validator_reads_only_the_exact_binary_body(cells: object) -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     with pytest.raises((TypeError, ValueError), match="selection cells"):
         viewer._handle_frontend_message(
             {
@@ -1386,27 +1399,10 @@ def test_early_post_refusal_reaches_client_despite_unread_body(
 
 
 def _routing_snapshot() -> tuple[dict[str, object], set[object]]:
-    return dict(server_base._event_callbacks), set(jupyter_base._active_viewers)
+    return dict(server_base._event_callbacks), set(jupyter_viewer._active_viewers)
 
 
-def test_missing_prepared_data_does_not_change_viewer_registries(
-    tmp_path: Path,
-) -> None:
-    before = _routing_snapshot()
-
-    with pytest.raises(FileNotFoundError, match="Data directory"):
-        jupyter.CellucidViewer(
-            tmp_path / "missing",
-            auto_open=False,
-        )
-
-    assert _routing_snapshot() == before
-
-
-@pytest.mark.parametrize("viewer_type", ["prepared", "anndata"])
 def test_server_start_failure_rolls_back_viewer_registration_and_server_resources(
-    viewer_type: str,
-    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     instances: list[object] = []
@@ -1424,32 +1420,17 @@ def test_server_start_failure_rolls_back_viewer_registration_and_server_resource
             self.stop_calls += 1
 
     before = _routing_snapshot()
-    if viewer_type == "prepared":
-        # ``CellucidViewer._start_server`` resolves ``CellucidServer`` in the
-        # module that defines the viewer, so the patch has to name that module.
-        monkeypatch.setattr(jupyter_exported, "CellucidServer", FailingServer)
+    import cellucid.anndata_server as anndata_server
 
-        def constructor() -> object:
-            return jupyter.CellucidViewer(
-                tmp_path,
-                auto_open=False,
-            )
-
-    else:
-        import cellucid.anndata_server as anndata_server
-
-        monkeypatch.setattr(anndata_server, "AnnDataServer", FailingServer)
-
-        def constructor() -> object:
-            return jupyter.AnnDataViewer(
-                _minimal_adata(),
-                auto_open=False,
-                dataset_name="Failed viewer",
-                dataset_id="failed-viewer",
-            )
+    monkeypatch.setattr(anndata_server, "AnnDataServer", FailingServer)
 
     with pytest.raises(RuntimeError, match="server start failed"):
-        constructor()
+        jupyter.AnnDataViewer(
+            _minimal_adata(),
+            auto_open=False,
+            dataset_name="Failed viewer",
+            dataset_id="failed-viewer",
+        )
 
     assert len(instances) == 1
     assert instances[0].stop_calls == 1
@@ -1457,7 +1438,6 @@ def test_server_start_failure_rolls_back_viewer_registration_and_server_resource
 
 
 def test_display_failure_rolls_back_started_server_and_viewer_registries(
-    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     instances: list[object] = []
@@ -1482,21 +1462,25 @@ def test_display_failure_rolls_back_started_server_and_viewer_registries(
         raise RuntimeError("display failed")
 
     # Each patch names the module where the caller resolves the symbol:
-    # ``CellucidServer`` in the viewer module, ``_detect_jupyter_context`` in
-    # the base module whose ``__init__`` calls it.
-    monkeypatch.setattr(jupyter_exported, "CellucidServer", StartedServer)
+    # ``AnnDataServer`` in the server module the viewer imports it from,
+    # ``_detect_jupyter_context`` in the viewer module whose ``__init__`` calls it.
+    import cellucid.anndata_server as anndata_server
+
+    monkeypatch.setattr(anndata_server, "AnnDataServer", StartedServer)
     monkeypatch.setattr(
-        jupyter_base,
+        jupyter_viewer,
         "_detect_jupyter_context",
         lambda: {"in_jupyter": True},
     )
-    monkeypatch.setattr(jupyter.CellucidViewer, "display", fail_display)
+    monkeypatch.setattr(jupyter.AnnDataViewer, "display", fail_display)
     before = _routing_snapshot()
 
     with pytest.raises(RuntimeError, match="display failed"):
-        jupyter.CellucidViewer(
-            tmp_path,
+        jupyter.AnnDataViewer(
+            _minimal_adata(),
             auto_open=True,
+            dataset_name="Failed viewer",
+            dataset_id="failed-viewer",
         )
 
     assert len(instances) == 1
@@ -1521,7 +1505,7 @@ def test_selection_bound_is_the_wire_format_and_memory_only() -> None:
 def test_a_waited_for_event_survives_any_burst_of_later_events() -> None:
     # The event is handed to the waiter as it is recorded, so the 10,000
     # hover events behind it cannot push it out of a bounded log first.
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     received: list[dict[str, Any]] = []
 
     def wait() -> None:

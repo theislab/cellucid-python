@@ -47,7 +47,7 @@ If you paste one gene per line, also include commas or convert to comma-separate
 Gene matching rules (practical):
 - matching is **exact** to the one name each gene is published under,
 - no alias mapping is applied: Cellucid ships no symbol table and performs no
-  lookup, so a name your export does not publish matches nothing,
+  lookup, so a name your dataset does not hold matches nothing,
 - treat matching as case-sensitive.
 
 :::{note}
@@ -59,7 +59,7 @@ publish a subset; see
 
 ### 2) Pages (“Compare pages”)
 
-You select pages under **Compare pages:**.
+You select pages under **Compare pages**.
 By default, if you have pages and haven’t selected anything, the UI will often start by selecting all pages.
 
 Gene Signature supports derived pages:
@@ -86,6 +86,14 @@ Notes:
   align exactly; a missing or misaligned payload terminates the analysis.
 - If a cell has zero finite gene values, its score becomes NaN and is excluded
   from summary statistics and plots.
+- Each gene is read once, as a whole column: from an AnnData source, only its
+  non-zero entries, which are the cells' values with every absent entry a zero
+  (a gene already loaded for colouring is read from memory instead). The cost
+  of a score grows with the genes' non-zero entries in the selected pages, not
+  with genes × cells.
+- Sum and mean add each cell's values gene by gene, in the order of the list,
+  in single precision; the same list in another order can differ in the last
+  digit.
 
 :::{note}
 Signature scores are computed on the expression values present in your dataset.
@@ -147,7 +155,7 @@ If you need per-cell mapping:
 
 - **Unknown gene**: scoring terminates; correct the gene list before rerunning.
 - **Duplicate genes in the list**: refused before scoring with `Gene "…" is listed more than once`; list each gene once (to weight a gene, compute the score in Python).
-- **Huge signatures (hundreds of genes)**: can be slow and may stress browser memory.
+- **Huge signatures (hundreds of genes)**: each gene is one read, so the time grows with the gene count over a slow link; the scoring itself costs the genes' non-zero entries, and the median additionally sorts each cell's values.
 - **Housekeeping-dominated signatures**: scores track library size/QC rather than biology.
 
 ---

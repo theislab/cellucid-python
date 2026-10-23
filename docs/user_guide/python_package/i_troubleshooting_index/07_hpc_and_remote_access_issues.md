@@ -88,8 +88,7 @@ inside the cluster network and not using a tunnel at all.
 That was a defect, now fixed: the wildcard was printed where a URL belonged.
 Current versions print the loopback origin plus the machine's own name. Through a
 tunnel, always use the loopback Viewer URL including its query —
-`http://127.0.0.1:8765/?anndata=true` for direct AnnData, `/?source=remote` for a
-prepared export.
+`http://127.0.0.1:8765/?anndata=true`.
 
 ### `421 Misdirected Request`
 
@@ -107,20 +106,21 @@ then start the tunnel *after* you know the number.
 
 ### Startup prints nothing for minutes
 
-It is working, not hung. A large object spends that time inside step 2 of five,
-building the adapter. The steps report as they go:
+A direct AnnData server reads only the store's metadata before it binds, so
+steps 1 to 3 are short. Two waits are labelled. A store holding arrays the
+browser cannot decode is read once with anndata and written to a temporary
+`.h5ad`; step 1 says so:
 
 ```text
-[2/5] Loading AnnData...
-      Mode: read-only backed h5ad
-      Obs columns: classifying 34
-      Embeddings: resolving obsm keys
-      Embeddings: 2D from obsm['X_umap']
+[1/4] Detecting format...
+      Path: /scratch/you/atlas.zarr
+      Format: Zarr v2 store folder
+      Browser cannot decode: X/data (bz2), obsm/X_umap (bz2)
+      Serving: a decodable copy, written once to a temporary .h5ad
 ```
 
-If you asked for connectivity on a large graph, the `Connectivity: reading
-obsp['connectivities']` line is followed by the longest wait of the run, and a
-graph above 50,000,000 stored neighbors logs a warning saying so.
+And `[4/4] Starting server...` establishes the viewer generation, which on a
+node with slow outbound network access takes a while the first time.
 
 ### Startup aborts while establishing the web build
 
@@ -149,29 +149,23 @@ messages:
 
 ### The neighbor-graph overlay is not there
 
-Connectivity is served only when asked for. The dataset report says which state
-you are in:
+The viewer reads an `obsp` matrix only when a view draws the graph. Check which
+matrix it opened with under **Session › Data mapping › Neighbour graph**, or
+name one at launch with `--knn connectivities` (`knn_key="connectivities"` in
+Python); that costs no startup time.
 
-```text
-      Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)
-```
+### `knn_key names obsp['connectivities'], which this store does not have`
 
-Add `--knn connectivities` on the command line, or `knn_key="connectivities"` in
-Python, and expect startup to take longer: the whole graph is read and validated
-before the server binds.
-
-### `knn_key names obsp['connectivities'], which this object does not have`
-
-You asked for a graph this object does not carry. Compute one with
-`sc.pp.neighbors(adata)` before serving, or serve without asking for it.
+You named a graph the store does not carry. Compute one with
+`sc.pp.neighbors(adata)` and save the file again, or leave `knn_key` unset.
 
 ### The wrong embedding is shown, or `Cellucid found nothing to plot`
 
 A bare `X_umap` of 1, 2, or 3 columns fills the slot of its own width. Without
-any `X_umap*` key, a slot is guessed and the startup report marks it
-`(guessed)`; name the array you want with `--embedding-2d KEY` (or
-`--embedding-2d KEY:0,1` for chosen columns). When nothing can be plotted, the
-message lists every `obsm` entry and why it was not used.
+any `X_umap*` key, the viewer guesses a slot and reports it as guessed; name
+the array you want with `--embedding-2d KEY` (or `--embedding-2d KEY:0,1` for
+chosen columns). When nothing can be plotted, the viewer's message lists every
+`obsm` entry and why it was not used.
 
 ## Related pages
 

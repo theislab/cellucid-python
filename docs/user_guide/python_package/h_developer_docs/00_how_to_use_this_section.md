@@ -6,7 +6,7 @@ It is written for mixed audiences:
 
 - **Wet lab / beginner / non-scientific**: you may still land here when something “technical” breaks (Jupyter embedding, servers, ports). Use the *Fast path* boxes and the Troubleshooting sections; skip the implementation details.
 - **Computational users**: use this section when you need to understand performance, formats, or reproducibility beyond “copy/paste the quickstart”.
-- **Developers / maintainers**: use this section to make changes without accidentally breaking export compatibility, security assumptions, or notebook environments.
+- **Developers / maintainers**: use this section to make changes without accidentally breaking the Cellucid-ready AnnData contract, security assumptions, or notebook environments.
 
 :::{important}
 This is *not* the web app developer documentation. The web app code lives in `cellucid/`.
@@ -30,29 +30,35 @@ For most work, you will bounce between:
 
 ---
 
-## The three “modes” you must keep straight
+## The three things you must keep straight
 
 Almost every developer confusion in Cellucid comes from mixing these up:
 
-### 1) **Pre-exported dataset mode** (recommended for sharing + performance)
+### 1) **Writing a Cellucid-ready AnnData** (`prepare()`)
 
-- Python writes an export folder via `cellucid.prepare(...)`.
-- The viewer loads static files like `embeddings/<index>_<dim>d.bin(.gz)`, `obs_manifest.json`, `var_manifest.json`.
-- A lightweight HTTP server (`cellucid.server.CellucidServer`) serves those files.
+- Python checks arrays and data frames and writes one standard AnnData
+  (`.h5ad`, `.zarr`, `.zarr.zip`) laid out for browser range reads, with
+  `uns['cellucid']` naming the dataset.
+- Nothing is served; the result opens anywhere an AnnData opens.
 
-Start reading: {doc}`07_prepare_export_pipeline_architecture` → {doc}`08_export_format_spec_and_invariants` → {doc}`09_server_mode_architecture_endpoints_and_security`
+Start reading: {doc}`07_prepare_writer_architecture` →
+{doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification`
 
-### 2) **AnnData server mode** (convenient, slower, great for iteration)
+### 2) **Serving AnnData** (nothing converted)
 
-- You point Cellucid at an in-memory AnnData, an `.h5ad`, or a `.zarr`.
-- The Python server synthesizes “virtual export files” on demand.
-- The browser viewer still thinks it’s loading the export format, but there are no on-disk export files.
+- You point Cellucid at an in-memory AnnData, an `.h5ad`, a Zarr store folder,
+  or a zipped Zarr store.
+- The Python server computes nothing: it names the dataset, serves the store's
+  bytes under `/_cellucid/anndata/<dataset_id>…` with exact HTTP range
+  answers, and states the launch choices in `/_cellucid/datasets`.
+- The web app's own HDF5/Zarr reader reads the store in place. An in-memory
+  object is first written once to a temporary `.h5ad`.
 
 Start reading: {doc}`09_server_mode_architecture_endpoints_and_security` → {doc}`01_codebase_architecture`
 
 ### 3) **Notebook embedding mode** (Jupyter iframe + hooks/events)
 
-- A server runs (exported or AnnData).
+- A server runs (serving one AnnData).
 - The notebook displays an iframe pointed at that server.
 - Python controls the iframe via `postMessage` (Python → frontend), and receives events via HTTP POST (frontend → Python).
 
@@ -85,7 +91,7 @@ Rule of thumb:
 
 To get a bug fixed quickly, include:
 
-- **Which mode**: export folder vs AnnData server vs Jupyter embedding.
+- **Which mode**: `prepare()` vs AnnData server vs Jupyter embedding.
 - **Version info**:
   - `python -c "import cellucid; print(cellucid.__version__)"`
   - Python version + OS

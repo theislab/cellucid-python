@@ -1,23 +1,24 @@
-# Viewing APIs (serve / serve_anndata / show / show_anndata + loading options)
+# Viewing APIs (cellucid serve / serve_anndata / show_anndata + loading options)
 
 Cellucid is a **web app** (WebGL viewer UI). `cellucid-python` gives you **Python + CLI entry points** to open that viewer against *your data*.
 
 There are two big “modes”:
 
-- **Server mode** (terminal/browser): `cellucid serve …`, `serve(…)`, `serve_anndata(…)`
-- **Notebook mode** (Jupyter iframe): `show(…)`, `show_anndata(…)`
+- **Server mode** (terminal/browser): `cellucid serve …`, `serve_anndata(…)`
+- **Notebook mode** (Jupyter iframe): `show_anndata(…)`
 
-And two big “data shapes”:
-
-- **Exported directory** (recommended): a folder produced by `cellucid.prepare(…)`
-- **AnnData direct** (convenient): `.h5ad`, `.zarr`, or an in-memory `AnnData`
+All of them take AnnData: an `.h5ad` file, a Zarr store (folder or `.zip`), or
+an in-memory `AnnData`. The viewer reads a file in place, with range requests;
+an in-memory object is written once to a temporary `.h5ad` first. A file
+written by {func}`~cellucid.prepare` (a Cellucid-ready AnnData) reads fastest
+and names itself, so it needs no `dataset_name`/`dataset_id`.
 
 ## At a glance
 
 **Audience**
 - Wet lab / non-technical: copy/paste the quickstarts and use the decision tree.
-- Computational: focus on data format tradeoffs: exported directories,
-  read-only-backed `.h5ad`, and eagerly loaded `.zarr`.
+- Computational: focus on data format tradeoffs: `.h5ad` files, Zarr stores,
+  and in-memory objects, prepared or not.
 - Power user / developer: focus on networking (SSH tunnels), caching, and debug endpoints.
 
 **Time**
@@ -26,14 +27,14 @@ And two big “data shapes”:
 
 **Prerequisites**
 - `pip install cellucid`
-- One of: an export directory, a `.h5ad`, a `.zarr`, or an in-memory `AnnData`
+- One of: a `.h5ad`, a Zarr store (folder or `.zip`), or an in-memory `AnnData`
 
 ## Where to start
 
 - Not sure what to do → {doc}`03_choose_your_workflow_decision_tree`
 - Want a terminal “just show me the viewer” flow → {doc}`04_cli_cellucid_serve_quickstart`
-- Want a scripted Python server (non-notebook) → {doc}`05_python_serve_and_serve_anndata_quickstart`
-- Want a notebook embed (Jupyter/VSCode/Colab) → {doc}`06_jupyter_show_and_show_anndata_quickstart`
+- Want a scripted Python server (non-notebook) → {doc}`05_python_serve_anndata_quickstart`
+- Want a notebook embed (Jupyter/VSCode/Colab) → {doc}`06_jupyter_show_anndata_quickstart`
 - Something failed → {doc}`15_troubleshooting_viewing`
 
 ## Quick start (copy/paste)
@@ -45,8 +46,8 @@ pip install cellucid
 cellucid serve /path/to/data.h5ad \
   --dataset-name "My study" \
   --dataset-id my-study-v1
-# For .zarr, use the same required identity flags.
-# or: cellucid serve /path/to/export_dir
+# A Zarr store (folder or .zip) takes the same flags; a file written by
+# cellucid.prepare() names itself and needs neither.
 ```
 
 Open the printed **Viewer URL** in your browser. Stop with **Ctrl+C**.
@@ -64,12 +65,12 @@ viewer = show_anndata(
 )
 ```
 
-### Exported dataset (fastest + most reproducible)
+### A Cellucid-ready AnnData (fastest + names itself)
 
 ```python
-from cellucid import show
+from cellucid import show_anndata
 
-viewer = show("./export_dir", height=600)
+viewer = show_anndata("pbmc_cellucid.h5ad", height=600)  # written by cellucid.prepare()
 ```
 
 ## Read once: how the exact viewer generation is served
@@ -77,7 +78,7 @@ viewer = show("./export_dir", height=600)
 ```{important}
 By design, the Python server serves **both**:
 
-1) your dataset API (e.g. `/dataset_identity.json`, `/embeddings/0_3d.bin`, `/var/<index>.values.f32`), and
+1) your data: the AnnData store's bytes under `/_cellucid/anndata/`, which the viewer reads itself with range requests, and
 2) the **viewer UI** (HTML/JS/CSS) by downloading it from `https://www.cellucid.com` and caching it locally.
 
 This verified same-origin generation approach:
@@ -93,11 +94,12 @@ directory with `web_cache_dir=...`.
 ## Relationship to the web app + other repos
 
 - **Cellucid (web app)** is the UI you interact with.
-- **cellucid-python** (this documentation) is how you run servers, export data, and embed the viewer in notebooks.
+- **cellucid-python** (this documentation) is how you run servers, write Cellucid-ready AnnData files, and embed the viewer in notebooks.
 - **cellucid-annotation** is a separate repo for community annotation workflows (publish/vote/audit).
-- **cellucid-r** writes export folders that load in the web app. Python owns the
-  server, notebook-embedding, and programmatic viewer APIs documented in this
-  chapter; see {doc}`../../r_package/index` for R workflows.
+- **cellucid-r** writes the same Cellucid-ready AnnData from R
+  (`cellucid_prepare()`). Python owns the server, notebook-embedding, and
+  programmatic viewer APIs documented in this chapter; see
+  {doc}`../../r_package/index` for R workflows.
 
 ## Serving from somewhere that is not your laptop
 
@@ -109,8 +111,10 @@ directory with `web_cache_dir=...`.
 
 ## Related docs
 
-- Web-app-centric loading docs: {doc}`../../web_app/b_data_loading/01_loading_options_overview`
-- Exporting (`prepare`) docs: {doc}`../c_data_preparation_api/index`
+- Web-app-centric loading docs: {doc}`../../web_app/b_data_loading/01_loading_options_overview`,
+  with the server ({doc}`../../web_app/b_data_loading/04_server_tutorial`) and
+  Jupyter ({doc}`../../web_app/b_data_loading/05_jupyter_tutorial`) walkthroughs
+- Preparing an AnnData (`prepare`): {doc}`../c_data_preparation_api/index`
 - Hooks (Python ↔ frontend events/commands): {doc}`../e_jupyter_hooks/index`
 
 ```{toctree}

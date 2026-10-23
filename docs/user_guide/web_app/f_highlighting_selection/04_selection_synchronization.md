@@ -41,7 +41,7 @@ Highlighting feels “simple” until you use multi-view snapshots, change filte
 | **Dataset identity** | Global | N/A | Cell indices are meaningful only for a specific dataset ordering. |
 
 :::{important}
-If a session’s dataset fingerprint does not match the currently loaded dataset, dataset-dependent state (including highlights) is intentionally skipped on restore.
+If a session’s dataset fingerprint does not match the currently loaded dataset, the whole restore is rejected: no state, highlights included, is applied.
 :::
 
 ---
@@ -135,7 +135,7 @@ Selection tools only select cells that are **not filtered out**. This is intenti
 - it prevents selecting cells you have deliberately excluded,
 - it makes selection consistent across multi-view where each panel may have different filters.
 
-LOD/downsampling is not part of this rule. With Level-of-Detail enabled, a gesture still
+LOD/downsampling is not part of this rule. With Level of detail enabled, a gesture still
 evaluates unfiltered cells the view is not drawing at the current zoom, so a lasso can
 select more cells than you can see ({doc}`01_highlight_mental_model`).
 

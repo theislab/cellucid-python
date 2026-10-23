@@ -1,9 +1,9 @@
 """
-Shared base classes for Cellucid HTTP servers.
+Shared building blocks of the Cellucid HTTP server.
 
-This module contains the common functionality used by both:
-- CellucidServer (serves pre-exported data)
-- AnnDataServer (serves AnnData directly)
+The HTTP server class, byte ranges, CORS and ``Host`` checks, the notebook
+event and session-bundle routing, the web-build cache paths and the console
+banner that :class:`cellucid.anndata_server.AnnDataServer` is built from.
 
 It's an internal module (prefixed with _) and not part of the public API.
 """
@@ -15,6 +15,7 @@ import ipaddress
 import json
 import logging
 import math
+import re
 import shutil
 import socket
 import stat
@@ -28,9 +29,12 @@ from html.parser import HTMLParser
 from http import HTTPStatus
 from http.server import HTTPServer as _StandardHTTPServer
 from pathlib import Path
+from socketserver import ThreadingMixIn
 from typing import TYPE_CHECKING, Any, BinaryIO, NoReturn, TypeGuard, cast
 
 from ._console import console_print
+from .session_bundle import NOT_A_SESSION_FILE_MESSAGE as _NOT_A_SESSION_FILE_MESSAGE
+from .session_bundle import SESSION_BUNDLE_MAGIC as _SESSION_BUNDLE_MAGIC
 
 if TYPE_CHECKING:
     from http.client import HTTPMessage
@@ -85,8 +89,58 @@ class CellucidHTTPServer(_StandardHTTPServer):
         super().handle_error(request, client_address)
 
 
-# Session bundle upload protocol (used for Jupyter "no download" capture).
-SESSION_BUNDLE_MAGIC = b"CELLUCID_SESSION\n"
+class CellucidThreadingHTTPServer(ThreadingMixIn, CellucidHTTPServer):
+    """A :class:`CellucidHTTPServer` that answers every connection in its own thread.
+
+    A browser reading a file in place keeps several range requests in flight
+    and reuses its connections (HTTP/1.1 keep-alive); one thread would answer
+    them one connection at a time. Handler threads are daemons, so an idle
+    kept-alive connection never holds up shutdown.
+    """
+
+    daemon_threads = True
+    block_on_close = False
+    # A page opens its six connections to a host at once (and a notebook's
+    # proxies more); the standard backlog of five would make one wait for a
+    # connection retry, so the platform's own maximum is asked for.
+    request_queue_size = socket.SOMAXCONN
+
+
+_BYTE_RANGE_PATTERN = re.compile(r"bytes=(\d{0,20})-(\d{0,20})")
+
+
+def parse_byte_range(value: str | None, size: int) -> tuple[int, int] | None:
+    """Resolve one ``Range`` header against a resource of ``size`` bytes.
+
+    Returns the inclusive ``(start, end)`` interval, or None when there is no
+    header. One interval is accepted: ``bytes=a-b``, ``bytes=a-`` or the suffix
+    ``bytes=-n``. Anything else, or an interval outside the resource, raises
+    ``ValueError`` and is answered 416.
+    """
+    if value is None:
+        return None
+    if type(size) is not int or size < 0:
+        raise ValueError("Resource size must be a non-negative integer.")
+    match = _BYTE_RANGE_PATTERN.fullmatch(value)
+    if match is None or (not match.group(1) and not match.group(2)):
+        raise ValueError("Range must contain one exact byte interval.")
+    if size == 0:
+        raise ValueError("An empty resource has no satisfiable byte range.")
+    if match.group(1):
+        start = int(match.group(1))
+        end = int(match.group(2)) if match.group(2) else size - 1
+        if start >= size or end < start:
+            raise ValueError("Range is outside the resource.")
+        return start, min(end, size - 1)
+    suffix_length = int(match.group(2))
+    if suffix_length <= 0:
+        raise ValueError("Range suffix length must be positive.")
+    return max(0, size - suffix_length), size - 1
+
+
+# Session bundle upload protocol (used for Jupyter "no download" capture): the
+# upload is checked against the one signature the session reader accepts.
+SESSION_BUNDLE_MAGIC = _SESSION_BUNDLE_MAGIC
 
 
 def _session_bundle_capacity() -> int:
@@ -1134,7 +1188,7 @@ class CORSMixin:
         # from the compressed length.
         self.send_header(
             "Access-Control-Expose-Headers",
-            "Content-Encoding, Content-Length, Content-Range",
+            "Accept-Ranges, Content-Encoding, Content-Length, Content-Range, ETag",
         )
         if self.allow_caching:
             self.send_header("Cache-Control", "public, max-age=3600")
@@ -1158,45 +1212,6 @@ class CORSMixin:
         if not head_only:
             self._response_writer().write(body)
 
-    def send_binary(
-        self,
-        data: bytes,
-        content_type: str = "application/octet-stream",
-        head_only: bool = False,
-        compressed: bool = False,
-        vary_accept_encoding: bool = False,
-    ):
-        """Send binary data with exact encoding and cache-variation headers."""
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", len(data))
-        if compressed:
-            self.send_header("Content-Encoding", "gzip")
-        if vary_accept_encoding:
-            self.send_header("Vary", "Accept-Encoding")
-        # Note: CORS headers are added by end_headers() override in subclasses
-        self.end_headers()
-        if not head_only:
-            self._response_writer().write(data)
-
-    def send_json_error(self, code: int, payload: dict):
-        """Send a refusal that describes itself, as JSON.
-
-        A plain-text status line is enough for "not found". It is not enough for
-        a payload the server examined and refused: the reason names a gene or a
-        column and counts what is wrong with it, and a reader that has to parse
-        that back out of prose cannot present it. The browser reads this body
-        and shows the message it carries.
-        """
-        body = json.dumps(payload).encode("utf-8")
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", len(body))
-        # Note: CORS headers are added by end_headers() override in subclasses
-        self.end_headers()
-        if getattr(self, "command", "") != "HEAD":
-            self._response_writer().write(body)
-
     def send_error_response(self, code: int, message: str):
         """Send an error response with CORS headers."""
         self.send_response(code)
@@ -1204,6 +1219,18 @@ class CORSMixin:
         body = message.encode("utf-8")
         self.send_header("Content-Length", len(body))
         # Note: CORS headers are added by end_headers() override in subclasses
+        self.end_headers()
+        if getattr(self, "command", "") != "HEAD":
+            self._response_writer().write(body)
+
+    def send_range_not_satisfiable(self, size: int) -> None:
+        """Answer 416 for a ``Range`` header :func:`parse_byte_range` refused."""
+        body = b"Requested byte range is not satisfiable"
+        self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Range", f"bytes */{size}")
+        self.send_header("Accept-Ranges", "bytes")
         self.end_headers()
         if getattr(self, "command", "") != "HEAD":
             self._response_writer().write(body)
@@ -1564,7 +1591,7 @@ class CORSMixin:
             if content_length < magic_length:
                 raise _RequestContractError(
                     HTTPStatus.BAD_REQUEST,
-                    "Session bundle is truncated before its MAGIC header",
+                    _NOT_A_SESSION_FILE_MESSAGE,
                 )
             magic = _read_exact_request_body(
                 self._read_request_body,
@@ -1573,7 +1600,7 @@ class CORSMixin:
             if magic != SESSION_BUNDLE_MAGIC:
                 raise _RequestContractError(
                     HTTPStatus.BAD_REQUEST,
-                    "Session bundle has an invalid MAGIC header",
+                    _NOT_A_SESSION_FILE_MESSAGE,
                 )
 
             with tempfile.NamedTemporaryFile(

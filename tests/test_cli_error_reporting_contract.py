@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import argparse
 import errno
-import json
 import platform
 import socket
 import sys
@@ -35,64 +34,22 @@ SERVER_TUTORIAL = (
 
 
 def _prepared_export(root: Path) -> Path:
+    """A Cellucid-ready AnnData that declares its own identity in ``uns``."""
+    import numpy as np
+    import pandas as pd
+
+    from cellucid import prepare
+
     root.mkdir(parents=True)
-    (root / "dataset_identity.json").write_text(
-        json.dumps(
-            {
-                "version": 3,
-                "id": "cli-export",
-                "name": "CLI export",
-                "description": "",
-                "stats": {
-                    "n_cells": 1,
-                    "n_genes": 0,
-                    "n_obs_fields": 0,
-                    "n_categorical_fields": 0,
-                    "n_continuous_fields": 0,
-                    "has_connectivity": False,
-                    "n_edges": None,
-                },
-                "embeddings": {
-                    "default_dimension": 2,
-                    "defaults": {"2d": "X_umap"},
-                    "items": {
-                        "X_umap": {
-                            "label": "X_umap",
-                            "dimension": 2,
-                            "file": "embeddings/0_2d.bin",
-                            "source": {"key": "X_umap", "columns": [0, 1]},
-                        }
-                    },
-                },
-                "obs_fields": [],
-                "export_settings": {
-                    "compression": None,
-                    "var_quantization": None,
-                    "obs_continuous_quantization": None,
-                    "obs_categorical_dtype": "uint16",
-                },
-            }
-        ),
-        encoding="utf-8",
+    return prepare(
+        root / "cli-export.h5ad",
+        format="h5ad",
+        embeddings={"X_umap": np.zeros((2, 2), dtype=np.float32)},
+        dataset_id="cli-export",
+        dataset_name="CLI export",
+        gene_expression=np.ones((2, 1), dtype=np.float32),
+        var=pd.DataFrame(index=["gene-1"]),
     )
-    (root / "obs_manifest.json").write_text(
-        json.dumps(
-            {
-                "_format": "compact_v2",
-                "n_points": 1,
-                "centroid_outlier_quantile": None,
-                "latent_key": "latent_space",
-                "compression": None,
-                "_obsSchemas": {},
-                "_continuousFields": [],
-                "_categoricalFields": [],
-            }
-        ),
-        encoding="utf-8",
-    )
-    (root / "embeddings").mkdir()
-    (root / "embeddings" / "0_2d.bin").write_bytes(b"\x00" * 8)
-    return root
 
 
 def _zarr_store(root: Path) -> Path:
@@ -127,8 +84,9 @@ def test_a_missing_dataset_identity_names_every_missing_flag_at_once(
 
     assert status == 1
     message = _assert_operator_report(capsys.readouterr().err)
-    assert message.startswith("Error: --dataset-name and --dataset-id are required")
-    assert '--dataset-name "My study" --dataset-id my-study-v1' in message
+    assert message.startswith("Error: dataset_name and dataset_id are required")
+    assert "uns['cellucid']" in message
+    assert "--dataset-name/--dataset-id on the command line" in message
 
 
 def test_a_single_missing_identity_flag_names_only_that_flag(
@@ -149,8 +107,8 @@ def test_a_single_missing_identity_flag_names_only_that_flag(
 
     assert status == 1
     message = _assert_operator_report(capsys.readouterr().err)
-    assert message.startswith("Error: --dataset-id is required")
-    assert "--dataset-name and" not in message
+    assert message.startswith("Error: dataset_id is required")
+    assert "dataset_name and" not in message
 
 
 def test_a_taken_port_is_reported_as_a_port_the_operator_can_change(
@@ -220,28 +178,6 @@ def test_a_missing_path_is_reported_without_a_traceback(
     assert status == 1
     message = _assert_operator_report(capsys.readouterr().err)
     assert "Path not found" in message
-
-
-def test_an_anndata_only_flag_on_a_prepared_export_is_reported_without_a_traceback(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    from cellucid.cli import main
-
-    status = main(
-        [
-            "serve",
-            str(_prepared_export(tmp_path / "export")),
-            "--quiet",
-            "--dataset-name",
-            "Ignored",
-        ]
-    )
-
-    assert status == 1
-    message = _assert_operator_report(capsys.readouterr().err)
-    assert "--dataset-name" in message
-    assert "dataset_identity.json" in message
 
 
 def test_an_unrecognized_input_is_reported_without_a_traceback(
@@ -398,7 +334,7 @@ def test_a_headless_machine_without_a_browser_is_told_to_use_no_browser(
     from cellucid.cli import main
 
     with mock.patch(
-        "cellucid.server.serve",
+        "cellucid.anndata_server.serve_anndata",
         side_effect=RuntimeError("Could not open the browser for http://127.0.0.1:8765/"),
     ):
         status = main(["serve", str(_prepared_export(tmp_path / "export")), "--quiet"])
@@ -415,7 +351,7 @@ def test_an_internal_defect_keeps_its_traceback_and_asks_for_a_bug_report(
     from cellucid.cli import main
 
     with mock.patch(
-        "cellucid.server.serve",
+        "cellucid.anndata_server.serve_anndata",
         side_effect=AttributeError("'NoneType' object has no attribute 'shape'"),
     ):
         status = main(["serve", str(_prepared_export(tmp_path / "export")), "--quiet"])
@@ -454,7 +390,7 @@ def test_interrupting_the_server_is_not_reported_as_an_error(
 ) -> None:
     from cellucid.cli import main
 
-    with mock.patch("cellucid.server.serve", side_effect=KeyboardInterrupt):
+    with mock.patch("cellucid.anndata_server.serve_anndata", side_effect=KeyboardInterrupt):
         status = main(["serve", str(_prepared_export(tmp_path / "export")), "--quiet"])
 
     assert status == 130
@@ -481,7 +417,7 @@ def test_every_defect_signature_keeps_its_traceback(
 ) -> None:
     from cellucid.cli import main
 
-    with mock.patch("cellucid.server.serve", side_effect=error):
+    with mock.patch("cellucid.anndata_server.serve_anndata", side_effect=error):
         status = main(["serve", str(_prepared_export(tmp_path / "export")), "--quiet"])
 
     assert status == 1
@@ -504,8 +440,11 @@ def test_the_tutorial_quotes_the_line_the_cli_actually_prints(
 
     tutorial = SERVER_TUTORIAL.read_text(encoding="utf-8")
 
+    import anndata as ad
+    import numpy as np
+
     h5ad = tmp_path / "lung_atlas.h5ad"
-    h5ad.write_bytes(b"")
+    ad.AnnData(X=np.zeros((2, 1), dtype=np.float32)).write_h5ad(h5ad)
     assert main(["serve", str(h5ad), "--no-browser"]) == 1
     missing_identity = _error_lines(capsys.readouterr().err)[0]
     assert missing_identity in tutorial
@@ -530,10 +469,10 @@ def test_the_tutorial_quotes_the_line_the_cli_actually_prints(
 @pytest.mark.parametrize(
     "error",
     [
-        ValueError("Prepared-data path does not contain one complete current dataset."),
-        TypeError("dataset_identity.json must contain a JSON object."),
+        ValueError("knn_key names obsp['connectivities'], which this store does not have."),
+        TypeError("embedding_keys must map '1d', '2d', or '3d' to an obsm key."),
         KeyError("obs field 'cell_type' not found. Available fields: ['leiden']"),
-        OSError("Prepared artifact changed while it was opened."),
+        OSError("cli-export.h5ad changed while it was opened."),
     ],
 )
 def test_every_reported_condition_stays_a_single_actionable_line(
@@ -543,7 +482,7 @@ def test_every_reported_condition_stays_a_single_actionable_line(
 ) -> None:
     from cellucid.cli import main
 
-    with mock.patch("cellucid.server.serve", side_effect=error):
+    with mock.patch("cellucid.anndata_server.serve_anndata", side_effect=error):
         status = main(["serve", str(_prepared_export(tmp_path / "export")), "--quiet"])
 
     assert status == 1

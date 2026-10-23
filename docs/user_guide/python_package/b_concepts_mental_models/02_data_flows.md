@@ -8,12 +8,14 @@
 
 ## Fast path: pick a workflow (you can change later)
 
-Cellucid supports multiple “paths” from data → interactive viewer. The main decision is:
+Every path from data to the viewer reads **AnnData** with the web app's own
+reader. The main decision is whether to prepare the file first:
 
-- Do you want **maximum convenience** right now? Use **direct AnnData** (`show_anndata(...)`).
-- Do you want **maximum performance + shareability**? Use **export-first** (`prepare(...)` then `show(...)` / `serve(...)`).
+- **Maximum convenience** right now: open the AnnData you have (`show_anndata(...)`).
+- **Maximum performance + shareability**: write a Cellucid-ready AnnData once
+  (`prepare(...)`), then open that file anywhere.
 
-### Workflow A — Direct AnnData (no export)
+### Workflow A — Open the AnnData you have
 
 ```python
 from cellucid import show_anndata
@@ -26,36 +28,39 @@ viewer = show_anndata(
 
 Good for:
 - exploration in notebooks,
-- avoiding an “export step” while iterating.
+- avoiding a preparation step while iterating.
 
 Tradeoffs:
-- slower than a pre-export for very large datasets,
-- more moving parts at runtime (server must compute/stream on demand).
+- the first gene of a row-major (CSR) matrix waits for a gene index the
+  browser builds once,
+- the file carries no name, citation or launch defaults of its own.
 
-### Workflow B — Export-first (recommended for large, reproducible, shareable viewing)
+### Workflow B — Prepare first (recommended for large, shareable viewing)
 
 ```python
-from cellucid import prepare, show
+from cellucid import prepare, show_anndata
 
-prepare(
-    ...,
+path = prepare(
+    "example.h5ad",
+    format="h5ad",
     embeddings={"X_umap": adata.obsm["X_umap"]},
-    out_dir="./my_export",
-    dataset_name="Example",
     dataset_id="example",
-    obs_categorical_dtype="uint16",
+    dataset_name="Example",
+    obs=adata.obs,
+    var=adata.var,
+    gene_expression=adata.X,
 )
-viewer = show("./my_export")
+viewer = show_anndata(path)
 ```
 
 Good for:
-- fast loads,
-- consistent results across machines,
-- publishing/sharing an export folder as an artifact.
+- fast loads (a gene-major matrix: every gene is one small read),
+- a file that names itself and opens with your chosen defaults,
+- publishing/sharing a standard AnnData as an artifact.
 
 Tradeoffs:
-- you spend time once to export,
-- you need to manage versions/IDs (covered in {doc}`04_dataset_identity_and_reproducibility`).
+- you spend time once to write the file,
+- you manage ids across versions (covered in {doc}`04_dataset_identity_and_reproducibility`).
 
 ---
 
@@ -70,7 +75,7 @@ When you use `cellucid-python`, you almost always have three actors:
 The key idea: the viewer is a web app, so it loads data by making HTTP requests to a server.
 
 ```text
-               (static files) or (dynamic endpoints)
+               (the AnnData store's bytes)
 Python ──starts──────────────────────────▶ Local Cellucid HTTP server
   │                                             │
   │ postMessage                                 │ fetch()
@@ -86,36 +91,30 @@ Notebook iframe / browser tab  ◀────────────  Cellucid
 
 ## Data flow by mode (what changes)
 
-### Mode 1: Notebook + `show(...)` (pre-exported folder)
+### Mode 1: Notebook + `show_anndata(...)`
 
-**What you have:** an export folder on disk.
-
-**What happens:**
-1) Python starts a `CellucidServer` that serves the export folder over HTTP.
-2) Before binding, Python establishes the exact source web generation; the
-   browser then loads it from the same server.
-3) The web app fetches `embeddings/<index>_<dim>d.bin(.gz)` / `obs_manifest.json` / expression binaries, etc.
-4) Interactions can be sent back to Python: hover/click via `/_cellucid/events`, selections via `/_cellucid/selection`.
-
-**Why this is fast:** the export folder is already in a viewer-optimized format (binary, quantized, compressible).
-
-### Mode 2: Notebook + `show_anndata(...)` (direct AnnData)
-
-**What you have:** an AnnData object or an AnnData-backed file (`.h5ad`, `.zarr`).
+**What you have:** an AnnData object or an AnnData store on disk (`.h5ad`, a
+Zarr store folder, or a zipped Zarr store).
 
 **What happens:**
-1) Python starts an `AnnDataServer` with an `AnnDataAdapter`.
-2) The web app asks the server for the same *logical* resources as in export mode (points, obs fields, gene expression),
-   but the server produces them on demand from AnnData.
+1) Python starts an `AnnDataServer`. It reads only the store's metadata, checks
+   the launch choices you named against it, and serves the store's bytes as
+   they are on disk (an in-memory object is first written once to a temporary
+   `.h5ad`).
+2) The web app's own HDF5/Zarr reader reads the store in place with HTTP range
+   requests: only the bytes a view needs are transferred. The server computes
+   nothing per request.
 3) Hooks/events work the same way (`/_cellucid/events`; selections via `/_cellucid/selection`).
 
-**Why this is convenient:** you don’t have to export first.
+**Why this is convenient:** nothing is converted; any AnnData opens.
 
-**Why it can be slower:** dynamic conversion + network transfer happen at view time, and gene queries require server work.
+**What it costs:** the browser does the reading, so the first gene of a
+row-major (CSR) matrix waits for a gene index the browser builds once; later
+genes are fast. A file written by `prepare()` is gene-major and needs no index.
 
-### Mode 3: CLI / standalone server (`cellucid serve ...`)
+### Mode 2: CLI / standalone server (`cellucid serve ...`)
 
-**What you have:** an export folder or AnnData path.
+**What you have:** an AnnData path (`.h5ad`, Zarr folder, or `.zip`).
 
 **What happens:**
 1) You run a long-lived server process in a terminal.
@@ -126,13 +125,13 @@ This mode is ideal for:
 - demos for teammates on the same network,
 - separating “viewer runtime” from “analysis notebook”.
 
-### Mode 4: Web app file picker (no Python server)
+### Mode 3: Web app file picker (no Python server)
 
-This is primarily a **web app** workflow: you open the Cellucid web app and load an export folder using the browser’s file picker.
+This is primarily a **web app** workflow: you open the Cellucid web app and load an `.h5ad`, a `.zarr.zip` or a `.zarr` folder with its **Files** buttons.
 
 Key mental model:
 - files are read locally by the browser,
-- nothing is “uploaded” unless you explicitly host/share the folder yourself.
+- nothing is “uploaded” unless you explicitly host/share the file yourself.
 
 Start here: {doc}`../../web_app/b_data_loading/index`
 
@@ -186,30 +185,6 @@ This is covered in depth in: {doc}`05_sessions_to_anndata_bridge`.
 
 ---
 
-## Multi-dataset folders: one server, many datasets
-
-If you point a server at a directory containing multiple dataset subfolders, the server can expose a list:
-
-- `GET /_cellucid/datasets` → dataset list + relative paths
-- Each dataset folder should contain a `dataset_identity.json` (written by `prepare(...)`)
-- `server.viewer_url` opens this served catalog without choosing an arbitrary
-  entry. Exactly one declared dataset may auto-open; multiple datasets require
-  an exact dataset-id selection.
-
-The root is intentionally strict. Once any immediate subdirectory looks like
-an exported-dataset candidate, every immediate subdirectory must be a complete
-current export. A stray directory rejects the root rather than disappearing
-from the catalog.
-
-This matters for:
-- demos (“choose a dataset”),
-- hosting multiple exports behind one URL,
-- stable dataset IDs across collaborators.
-
-See: {doc}`04_dataset_identity_and_reproducibility`.
-
----
-
 ## Edge cases (common confusion points)
 
 ### “Is my data being uploaded to cellucid.com?”
@@ -226,7 +201,7 @@ viewer generation from the same origin as the dataset.
 
 ### “Why do events contain indices instead of cell IDs?”
 
-Indices are fast, compact, and universal across export/AnnData modes. The downside is that they are fragile if you reorder/subset cells after the fact.
+Indices are fast, compact, and the same in every mode. The downside is that they are fragile if you reorder/subset cells after the fact.
 Treat index order as part of dataset identity (see {doc}`04_dataset_identity_and_reproducibility`).
 
 ---

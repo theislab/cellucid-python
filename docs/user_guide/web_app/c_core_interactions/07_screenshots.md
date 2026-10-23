@@ -38,7 +38,7 @@ Pancreas sample at twice the device pixel ratio.
 starting with the **Depth perception** box shown here — belongs to the points
 renderer and is hidden in smoke mode; **Image quality** is the exception and
 stays in both modes. Choosing smoke also shows a `Beta` pill beside the
-`Render mode:` label, which is why no pill is visible here. Scenario
+`Render mode` label, which is why no pill is visible here. Scenario
 `core-render-mode-select`.
 ```
 
@@ -48,7 +48,7 @@ stays in both modes. Choosing smoke also shows a `Beta` pill beside the
 
 **Volumetric smoke cloud**, coloured by `clusters`. The cloud carries each
 cluster's legend colour, the `Beta` pill is showing, and every smoke control is
-at its initial value except `Animation speed:`, held at 0 (`Still`) so the
+at its initial value except `Animation speed`, held at 0 (`Still`) so the
 frame stops changing and the capture is reproducible. Scenario
 `core-window-smoke-cloud`.
 ```
@@ -135,7 +135,7 @@ window.
 
 ## Camera paths
 
-The **Camera Path** accordion starts collapsed. Opening it does not start camera
+The **Camera path** accordion starts collapsed. Opening it does not start camera
 motion.
 
 ```{figure} ../../../_static/screenshots/web_app/camera-path-unconfigured.png

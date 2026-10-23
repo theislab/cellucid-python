@@ -39,7 +39,7 @@ Cellucid supports the current stable releases of:
 
 All supported browsers must provide WebGL2 and the native
 `DecompressionStream('gzip')` API. Browser-native file pickers differ visually,
-but the local H5AD file, Zarr ZIP, and prepared-export workflows use the same
+but the local H5AD file, Zarr folder and Zarr ZIP workflows use the same
 validation contract on every supported platform.
 
 ### Hardware (what matters)
@@ -62,7 +62,7 @@ Rule of thumb:
 **Multisampling is optional, not required.** Antialiasing is drawn by the app
 rather than requested from the browser, so a device that cannot multisample still
 runs Cellucid — it just draws harder point edges. When that is the case, the line
-under `Antialiasing (smooth point edges)` reads (exact):
+under `Antialiasing` reads (exact):
 
 - `This browser is not providing antialiasing for this view.`
 
@@ -72,7 +72,7 @@ that device.
 ### Input devices (what is expected)
 
 - Mouse or trackpad recommended.
-- Keyboard shortcuts are available (see the in-app “Keyboard Shortcuts” accordion).
+- Keyboard shortcuts are available (see the in-app “Keyboard shortcuts” accordion).
 - Touch devices work for navigation and selection (one finger orbits — pans in
   planar mode — two fingers pinch to zoom and drag to pan), but are much more
   likely to run out of GPU memory.
@@ -136,7 +136,7 @@ If you are in this situation, you’ll usually need help from IT:
 
 - allow hardware acceleration,
 - allow required origins,
-- or use a supported workflow (e.g., a local server hosting the export folder).
+- or use a supported workflow (e.g., a local `cellucid serve` handing the file to the browser).
 
 ---
 
@@ -197,12 +197,12 @@ This section is intentionally long. Use the symptom that matches what you see.
 - Open the browser devtools console and look for WebGL errors.
 - Check the app’s “filter count”/visibility indicators (if present).
 - Switch back to **Points** render mode.
-- Click **Reset Camera**.
+- Click **Reset camera**.
 
 **Fix**
 
 1) Refresh the page once (sometimes the GPU recovers).
-2) Use **Reset Camera** and clear filters.
+2) Use **Reset camera** and clear filters.
 3) If it persists, confirm hardware acceleration and WebGL2 are enabled, then
    update the browser, operating system, and GPU driver when applicable.
 
@@ -260,8 +260,8 @@ Cellucid shows an overlay and requires a reload when the GPU context is lost.
 
 - Reduce the number of views (clear snapshots) — note that a two- or three-view
   row costs more than the 2×2 four-view grid.
-- Lower `Point size (log):` and avoid very large point sizes.
-- Turn off `Antialiasing (smooth point edges)` under **Image quality** — it
+- Lower `Point size` and avoid very large point sizes.
+- Turn off `Antialiasing` under **Performance** — it
   applies to the next frame, and was measured at roughly a fifth of the frame
   time at point size 0.75 on one Apple M1 Pro, at the cost of visibly harder
   point edges. Look at the box before you reach for it: until you click it, the
@@ -270,7 +270,7 @@ Cellucid shows an overlay and requires a reload when the GPU context is lost.
   so on a large dataset it is already clear and there is nothing left to turn off.
 - If using smoke: reduce render resolution and ray quality, then grid density; or set animation speed to 0 (`Still`) so a still view is not redrawn.
 
-Lowering `Shader quality:` is a reasonable-sounding move that does **not** help:
+Lowering `Shader quality` is a reasonable-sounding move that does **not** help:
 the three qualities measured the same at every point size tested. It changes how
 points look, not how fast they draw. See
 {doc}`../n_benchmarking_performance/02_performance_considerations_what_gets_slow_and_why`.

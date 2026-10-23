@@ -1,8 +1,10 @@
 # Data Loading in the Web App (All Paths)
 
-These pages cover every current route into Cellucid: public samples, prepared
-folders, browser-selected H5AD or Zarr ZIP files, local or remote Python
-servers, Jupyter, and public GitHub catalogs.
+These pages cover every current route into Cellucid: public samples,
+browser-selected `.h5ad` files, Zarr store folders and Zarr ZIPs, links, local
+or remote Python servers, Jupyter, and published dataset catalogs. Every route
+opens the same thing: an AnnData file, read in the browser as each view needs
+it.
 
 They are written for **mixed audiences**:
 - **Wet lab / non-technical**: click-by-click, “what success looks like”, and safe defaults.
@@ -15,17 +17,14 @@ If you are not sure which method to use, start with {doc}`01_loading_options_ove
 
 :::{note}
 Vector fields (velocity/drift overlays): if your dataset includes per-cell
-vectors, Cellucid can draw them as an animated overlay after loading. Two
-things decide whether the overlay appears, and only the first is about naming:
+vectors, Cellucid can draw them as an animated overlay after loading. Nothing
+has to be switched on: however the file is opened — a browser picker, a drop,
+a link, a catalog, `cellucid serve`, `serve_anndata()` or `show_anndata()` —
+the browser discovers `<field>_<basis>` keys in `obsm` (`velocity_umap` for
+`X_umap`, scVelo's naming convention) and reads a field's
+vectors only when the overlay shows it.
 
-- **A prepared export** carries whatever `prepare(vector_fields=...)` wrote, and
-  the **three browser pickers** discover `<field>_umap_<dim>d` keys in `obsm` by
-  themselves. Nothing to switch on.
-- **Every Python path** — `cellucid serve`, `serve_anndata()`, `show_anndata()` —
-  leaves the vectors unread unless you ask, exactly like the neighbor graph.
-  Pass `--vector-fields` or `serve_vector_fields=True`.
-
-See {doc}`../i_vector_field_velocity/index` and {doc}`07_folder_file_format_expectations_high_level_link_to_spec`.
+See {doc}`../i_vector_field_velocity/index` and {doc}`07_file_format_expectations`.
 :::
 
 ---
@@ -36,25 +35,26 @@ Use this as a decision tree. You can always switch later.
 
 | You have… | Best first choice | Why | Next page |
 |---|---|---|---|
-| A pre-exported folder from `prepare()` | Browser Prepared picker | Fastest, most reliable, no server | {doc}`03_browser_file_picker_tutorial` |
+| A Zarr store folder (`.zarr`), for example from `prepare()` | Browser Zarr folder picker, or drop the folder | Read key by key from disk, nothing zipped or uploaded | {doc}`03_browser_file_picker_tutorial` |
 | A portable `.zarr.zip` or `.zip` | Browser Zarr ZIP picker | One validated file selection in every supported browser | {doc}`03_browser_file_picker_tutorial` |
 | A `.h5ad` of any size, and no Python | Browser H5AD picker | One file selection, nothing installed, nothing uploaded; read from disk as each view needs it | {doc}`03_browser_file_picker_tutorial` |
-| A `.h5ad` you will open again and again, or share | Server mode or Jupyter | Python serves genes on request and keeps the file read-only-backed | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
-| A `.zarr` directory | Server mode or Jupyter | Direct Python loading is supported and eager | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
+| A `.h5ad` on a remote machine, or one you drive from a notebook | Server mode or Jupyter | Python hands the file to the browser, which reads it in place as each view needs it | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
+| A Zarr store folder on a remote machine | Server mode or Jupyter | Served key by key as it is on disk, nothing zipped or copied | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
 | An in-memory `AnnData` in a notebook | Jupyter | Fastest way to iterate while analyzing | {doc}`05_jupyter_tutorial` |
-| A dataset collection you want to share publicly | GitHub-hosted exports | Exact shareable URLs, no running server | {doc}`11_custom_dataset_repository` |
-| A static host, CDN, or intranet server you control | Self-hosted exports root | `?exportsBaseUrl=https://host/exports/` fills the app's own `Sample datasets:` dropdown from your catalog | {doc}`11_custom_dataset_repository` |
+| One dataset you want to share publicly, of any size | A Zarr store folder on GitHub | Free hosting, no file over GitHub's 100 MB limit, no Git LFS quota; one link opens it | {doc}`15_host_on_github` |
+| A dataset collection you want to share publicly | A dataset catalog on GitHub | Exact shareable URLs, no running server | {doc}`11_custom_dataset_repository` |
+| A static host, CDN, or intranet server you control | A dataset catalog on that host | `?data=https://host/datasets/` opens your catalog from one shareable link | {doc}`02_local_demo_tutorial` |
 
 ---
 
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Cellucid Session panel with a dataset loaded: a summary table of dataset, description, source, URL, cells, genes, obs fields and connectivity; a Sample datasets dropdown; H5AD, Zarr ZIP and Prepared buttons under Local data; Remote server and GitHub data text fields each with a Connect button; and Save State and Load State buttons.
+:alt: The Cellucid Session panel with a dataset loaded: a Dataset summary table of name, description, source, URL, cells, genes, obs fields and connectivity; then the Open data group with a Sample dataset dropdown, the local file buttons under Files, and Server and Open from link text fields each with a Connect button; then the Session file group with Save and Load buttons.
 :width: 524px
 
-Every loading path lives in its own labelled group of the Session panel, and
-Save State and Load State stay beside the dataset controls. The summary table at
+Every loading path has its own label under **Open data** in the Session panel,
+and **Save** and **Load** sit under **Session file**, below it. The summary table at
 the top always describes the dataset currently loaded, whichever path loaded it.
 ```
 
@@ -73,17 +73,17 @@ elsewhere, or move focus outside to close it. See
 Every dataset control is live while a dataset loads, including the dataset
 Cellucid opens when it starts. Whatever you choose last is what you get:
 
-- Choosing another sample, **None**, an H5AD or Zarr ZIP file, or a prepared
+- Choosing another sample, **None**, an H5AD or Zarr ZIP file, or a Zarr
   folder, or running the benchmark, stops the load in progress at once (its
   downloads are cancelled) and loads your new choice instead. The dataset
   picker shows what is loading; a file shows as *Opening <name>…* while it is
   read.
 - Connecting to a server or GitHub repository that holds exactly one dataset
   opens that dataset, unless you chose another dataset, or applied a session
-  with **Load State**, after clicking **Connect**. Then what you did later
+  with **Load** under **Session file**, after clicking **Connect**. Then what you did later
   stays, the connection is kept, and its dataset is listed in the dataset
   picker.
-- **Load State** chosen while a dataset loads waits for it, says so in a
+- **Load** chosen while a dataset loads waits for it, says so in a
   notification, and then applies the session to the dataset that loaded. A
   session saved from a different dataset is refused with an explanation, as
   always.
@@ -101,16 +101,17 @@ startup fails and you had not chosen anything else, startup stops on the
 (drop-to-open)=
 ### Dropping a file or folder onto the viewer
 
-Instead of a button, you can drag one `.h5ad` file, one `.zarr.zip` archive,
-or one prepared export folder from your file manager and drop it anywhere on
-the viewer. While you drag, an outline and a *Drop to open* card cover the
-viewer. A drop is read exactly as the matching **H5AD**, **Zarr ZIP** or
-**Prepared** button would read it, and it replaces any load in progress like
+Instead of a button, you can drag one `.h5ad` file, one `.zarr` store folder,
+or one `.zarr.zip` archive from your file manager and drop it anywhere on the
+viewer. While you drag, an outline and a *Drop to open* card cover the viewer.
+A drop is read exactly as the matching **H5AD**, **Zarr folder** or
+**Zarr ZIP** button would read it, and it replaces any load in progress like
 any other choice.
 
 Anything else is refused with a notification that says what can be dropped:
-several items at once (drop the export's folder, not the files inside it), a
-`.zarr` directory (zip it first, or use a server), or any other file. A file
+several items at once (drop the `.zarr` folder itself, not the files inside
+it), any other file, or a folder that holds no Zarr metadata (`.zgroup`,
+`.zarray` or `zarr.json`). A file
 dropped onto the page never makes the browser leave Cellucid, including while
 it is still starting; until the data controls are ready, the pointer shows the
 drop as not allowed. The buttons remain the way to open data from the keyboard
@@ -127,14 +128,14 @@ or with a screen reader.
 :link: 01_loading_options_overview
 :link-type: doc
 
-Understand all 14 loading options and choose the best approach for your workflow: in-memory, h5ad, zarr, or pre-exported.
+Every route into Cellucid — the browser itself (a sample, a link, a file) or a Cellucid server — and how to choose between them.
 :::
 
-:::{grid-item-card} {octicon}`file-directory;1.5em;sd-mr-1` Local Demo
+:::{grid-item-card} {octicon}`file-directory;1.5em;sd-mr-1` Publish a Dataset Catalog
 :link: 02_local_demo_tutorial
 :link-type: doc
 
-Export once, then share via public GitHub-hosted exports (no server), or run a local demo viewer.
+Publish a folder of AnnData files with a `datasets.json` catalog on GitHub Pages or any static host, and share it with one link — no server.
 :::
 
 :::{grid-item-card} {octicon}`repo;1.5em;sd-mr-1` Custom Dataset Repository
@@ -143,6 +144,14 @@ Export once, then share via public GitHub-hosted exports (no server), or run a l
 
 Follow a complete three-dataset reference repository, validate its exact
 catalog contract, and publish stable dataset-specific links.
+:::
+
+:::{grid-item-card} {octicon}`mark-github;1.5em;sd-mr-1` Host a Dataset on GitHub
+:link: 15_host_on_github
+:link-type: doc
+
+Publish a dataset as a Zarr folder on GitHub (Pages or raw), with the measured
+speed of each host, GitHub's limits, and Git LFS's bandwidth trade-off.
 :::
 
 :::{grid-item-card} {octicon}`pulse;1.5em;sd-mr-1` Standard Pancreas Sample
@@ -174,15 +183,15 @@ from its recipe, and what is recorded for the four that cannot.
 :link: 03_browser_file_picker_tutorial
 :link-type: doc
 
-Load a prepared directory, one H5AD file, or one portable Zarr ZIP through the
-three visible local-data controls.
+Load one H5AD file, one Zarr store folder, or one portable Zarr ZIP through
+the three visible local-data controls, or by dropping it on the viewer.
 :::
 
 :::{grid-item-card} {octicon}`server;1.5em;sd-mr-1` Server Mode
 :link: 04_server_tutorial
 :link-type: doc
 
-Run a local HTTP server for larger datasets with efficient lazy loading of gene expression.
+Run a local HTTP server that hands an `.h5ad` or a Zarr store to the viewer, on your machine or over an SSH tunnel.
 :::
 
 :::{grid-item-card} {octicon}`code;1.5em;sd-mr-1` Jupyter Integration
@@ -212,22 +221,22 @@ What makes a dataset “the same dataset” in Cellucid, and why it matters for 
 :link: 13_data_mapping
 :link-type: doc
 
-Choose which `obsm` array or prepared embedding each dimension and each view
+Choose which `obsm` array each dimension and each view
 shows, and what happens when a file has no UMAP.
 :::
 
 :::{grid-item-card} {octicon}`file;1.5em;sd-mr-1` Format Expectations
-:link: 07_folder_file_format_expectations_high_level_link_to_spec
+:link: 07_file_format_expectations
 :link-type: doc
 
-What files/keys are required for exports, GitHub manifests, `.h5ad`, and `.zarr`.
+What Cellucid reads from `.h5ad`, `.zarr` and `.zarr.zip`, what `uns['cellucid']` may say, and the `datasets.json` catalog contract.
 :::
 
 :::{grid-item-card} {octicon}`bug;1.5em;sd-mr-1` Troubleshooting
 :link: 08_troubleshooting_data_loading
 :link-type: doc
 
-Symptom → diagnosis → fix for file picker, server mode, GitHub exports, and common data issues.
+Symptom → diagnosis → fix for file picker, server mode, links and catalogs, and common data issues.
 :::
 
 :::{grid-item-card} {octicon}`image;1.5em;sd-mr-1` Verified captures
@@ -256,8 +265,8 @@ If your dataset includes vector fields (e.g. RNA velocity), enable the overlay a
 | Public sample | Learning with known-good data | No |
 | Browser file picker | Local viewing without Python | No |
 | GitHub catalog | Public, dataset-specific share links | No |
-| Self-hosted exports root | A catalog on your own static host or CDN | No — any HTTP server will do |
-| Server mode | Large data and on-demand browser gene requests | Yes — `cellucid serve` |
+| Self-hosted catalog | A catalog on your own static host or CDN | No — any HTTP server will do |
+| Server mode | Data on a remote machine, or a Zarr store folder | Yes — `cellucid serve` |
 | Jupyter | Interactive analysis workflows | No — the viewer manages a localhost server |
 
 :::{note}
@@ -271,7 +280,20 @@ default; use the documented SSH-tunnel workflow for a remote machine.
 ```{toctree}
 :maxdepth: 1
 :hidden:
-:glob:
 
-[0-9]*
+01_loading_options_overview
+03_browser_file_picker_tutorial
+04_server_tutorial
+05_jupyter_tutorial
+14_open_from_link
+13_data_mapping
+10_standard_pancreas_dataset
+12_sample_dataset_provenance
+15_host_on_github
+11_custom_dataset_repository
+02_local_demo_tutorial
+06_dataset_identity_why_it_matters
+07_file_format_expectations
+08_troubleshooting_data_loading
+09_screenshots
 ```

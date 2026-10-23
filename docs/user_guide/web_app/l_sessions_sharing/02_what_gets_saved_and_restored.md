@@ -22,17 +22,22 @@ Saved/restored (typical):
 - view layout (live + kept views)
 - active fields (obs/var) per view
 - filter state per view (category visibility, continuous ranges, outliers)
+- centroid points and labels, per view
 - highlight pages/groups and their exact memberships
-- some UI control values (generic controls by DOM id)
+- sidebar control values (generic controls by DOM id), including the
+  background, renderer settings and the app theme (light/dark)
 - floating panel layout (geometry/open/closed)
-- analysis windows (settings + geometry) and the exact saved cache inventory
+- the analysis panel in the sidebar (which analysis is open, each analysis's
+  settings and result) and floating analysis windows (settings, result,
+  geometry)
+- Figure Export settings
 - Camera Path settings and keyframes, including an explicitly empty path
 
 Not saved/restored (typical):
 - the dataset itself (points, obs, gene expression)
 - dataset selection / connection controls (file picker, remote URL, GitHub path)
 - Community Annotation state (votes, repo auth)
-- Figure Export UI state (intentionally excluded)
+- Antialiasing (a property of the machine drawing the view)
 - Benchmarking state
 - ephemeral UI like toasts, in-progress selections, hover state
 
@@ -93,8 +98,12 @@ Restored early so you see the correct view quickly:
 - **Filter state**
   - per-view filters (see below)
 - **Generic sidebar UI controls**
-  - many checkboxes/selects/sliders are captured “by id”
+  - many checkboxes/selects/sliders are captured “by id”, including the
+    background, point and lighting settings, and the app theme (light/dark),
+    which a restore applies exactly as a choice made by hand
   - accordion open/closed state for many sections
+- **Centroids**
+  - whether each view shows centroid points and centroid labels
 
 Eager describes ordering, not an intermediate success state. Treat the view as
 restored only after the terminal **Session fully restored** notification.
@@ -113,8 +122,8 @@ panel showing something the viewer never accepted.
 :::
 
 :::{note}
-**`Antialiasing (smooth point edges)` is the one exception.** It is recorded in
-a session, but loading one **never changes it**, for two reasons.
+**`Antialiasing` is the one exception.** It is not
+recorded in a session, and loading one **never changes it**, for two reasons.
 
 It describes the machine you are sitting at rather than the analysis you are
 doing, and your choice is stored in this browser rather than in the file.
@@ -151,14 +160,14 @@ because you can see both the control and its effect:
 :alt: The renderer settings block with Shader quality set to Light, Level-of-Detail checked, Force LOD level set to 4, and Frustum culling checked.
 :width: 480px
 
-Four sidebar controls set to non-default values before **Save State**.
+Four sidebar controls set to non-default values before **Save** (under **Session file**).
 ```
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-08-renderer-controls-restored.png
 :alt: The renderer settings block after a restore, showing the same four values as the saved state.
 :width: 480px
 
-The same four after **Load State** into a freshly started app that began at the
+The same four after **Load** into a freshly started app that began at the
 defaults. Walked through step by step in {doc}`03_save_restore_ux`.
 ```
 
@@ -170,7 +179,9 @@ Common things that restore:
 - categorical category visibility toggles (legend checkboxes)
 - continuous filter ranges (Min/Max sliders)
 - continuous color ranges and log-scale toggles (when present)
-- outlier filter enable/threshold on categorical fields that carry latent outlier quantiles
+- outlier filter enable/threshold on categorical fields, restored by getting
+  their quantiles (stored in the file, or computed with progress and Cancel);
+  a notification names each threshold that could not be restored
 - “filter enabled/disabled” state for fields
 
 Because filtering is view-scoped, restore replays the correct filter state into:
@@ -238,20 +249,32 @@ Every categorical user-defined field still requires exactly one codes chunk.
 Priority is part of the current contract: a code column is eager exactly when a
 target live or snapshot active field needs it, and lazy otherwise.
 
-### 7) Analysis windows + caches — windows eager, caches lazy
+### 7) Analysis — eager
 
-Sessions can persist:
-- **open floating analysis windows** (which analysis modes were open, their settings, and geometry) — eager; the windows reopen only after the highlight pages and analysis caches they refer to have been restored, so a window comparing saved pages opens on those pages even in a fresh tab
-- **some analysis caches/artifacts** to speed up later analysis — lazy
+Sessions persist:
+- **the analysis panel in the sidebar**: which analysis is open, and every
+  analysis's settings and result
+- **open floating analysis windows**: which analysis each shows, its settings,
+  its result, and its geometry
 
-The eager `analysis/cache-inventory` chunk lists the exact ordered cache
-artifacts that follow. It is present even when the list is empty, so restoring
-an empty saved cache clears an older destination cache instead of leaving stale
-entries behind.
+Results that are expensive to compute — differential expression, marker
+genes, gene signatures, correlation — are stored with the session (genes and
+categories by name, numeric columns as their raw values), so they come back
+without being run again. A restored result naming a gene or category the open
+dataset lacks is refused. Both reopen only after the highlight pages they refer
+to have been restored, so an analysis comparing saved pages opens on those
+pages even in a fresh tab.
 
-Important nuance:
-- analysis **results** are generally not treated as “authoritative” artifacts inside sessions.
-- you should expect to recompute results after restore (but caches can make it faster).
+The per-cell gene values analyses read are not stored: they are re-read from
+the dataset when needed.
+
+### 8) Figure Export — eager
+
+Every Figure Export setting is saved: plot size and preset, the frame,
+background, font and text sizes, title and axis labels, axes, legend and its
+position, orientation, depth sorting, reference grid, selection emphasis,
+colorblind preview, download format, DPI, SVG strategy, and **Export all
+views**. After **Load**, the panel holds the settings the figure was exported with.
 
 ---
 
@@ -268,10 +291,9 @@ This is the “don’t expect it to come back” list.
   - GitHub repo path field
   - dataset dropdown selection (as a UI action)
 
-### Modules intentionally excluded from sessions
+### Modules and settings intentionally excluded from sessions
 
-- **Figure Export module UI state**
-  - by design: sessions should not “silently change export settings”
+- **Antialiasing** — a property of the device (see the note above)
 - **Benchmarking module state**
 - **Community Annotation state**
   - votes, suggestions, moderation
@@ -301,7 +323,8 @@ On restore, Cellucid compares a **dataset fingerprint** saved in the session wit
 
 If they differ, Cellucid rejects the complete restore before success. Any
 registered mutation is rolled back; no layout, filters, fields, highlights, or
-cache subset is committed.
+analysis subset is committed. A dataset that lacks a field or gene the session
+uses is refused the same way, with every missing key named.
 
 This is a safety feature (it prevents applying filters/highlights to the wrong dataset).
 
@@ -317,8 +340,8 @@ See {doc}`07_versioning_compatibility_and_dataset_identity` for:
 After you load a session, verify in this order:
 
 1) **Did you load the correct dataset?**
-   - A mismatch is a terminal rejection. Load the exact source route and
-     dataset id, then use the unchanged bundle again.
+   - A mismatch is a terminal rejection. Open the dataset the message names,
+     then use the unchanged bundle again.
 2) **Did the terminal success appear?**
    - Require **Session fully restored**.
    - A progress card is not success; eager and lazy scheduling are still
@@ -326,14 +349,14 @@ After you load a session, verify in this order:
 3) **State looks right**
    - camera/framing
    - active field
-   - filters (Active filters panel)
+   - filters (Filters panel)
    - snapshot layout
 4) **Spot-check exact replacement**
    - an empty saved Camera Path is empty after restore
-   - cache-backed analysis reflects the saved inventory, not a prior session
+   - a saved analysis result is shown without running it again
 5) **Spot-check derived consequences**
    - highlight counts
-   - analysis window presence and settings
+   - analysis panel and window presence, settings and results
 
 If any part is wrong, jump to {doc}`10_troubleshooting_sessions`.
 
@@ -341,5 +364,5 @@ If any part is wrong, jump to {doc}`10_troubleshooting_sessions`.
 
 ## Next steps
 
-- {doc}`03_save_restore_ux` (how to use Save State / Load State safely)
+- {doc}`03_save_restore_ux` (how to use **Save** / **Load** safely)
 - {doc}`12_reference` (chunk inventory and implementation notes)

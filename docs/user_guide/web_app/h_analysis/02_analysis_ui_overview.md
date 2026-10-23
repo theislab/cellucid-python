@@ -82,7 +82,9 @@ These are potentially expensive and require an explicit action:
 - **Differential Expression** → `Run Differential Expression`
 - **Marker Genes** → `Discover Markers`
 
-They also show progress feedback (phases / spinner / notifications).
+Under the button they say what a run will read before you press it, and while
+it runs they say what it is doing, with **Cancel** (see
+[Running, cancelling and running again](#running-cancelling-and-running-again)).
 
 The difference is visible in the form itself: an auto-run mode ends at its last
 control, and an explicit-run mode ends at a button.
@@ -113,9 +115,63 @@ is pressed, and changing a control afterwards cancels the run in flight.
 
 ---
 
+## Running, cancelling and running again
+
+Every analysis that reads genes or computes for more than a moment runs as one
+**job** you can stop: Differential Expression, Marker Genes (and the heatmap
+genes it reads afterwards), Correlation, Gene Signature, Quick Insights and
+Detailed (a gene's values, a box, violin, histogram or density plot).
+
+**Before it runs.** An explicit-run mode says what a run will read under its
+button, from what is chosen now: Differential Expression
+`Tests 3,753 genes in 1,234 vs 5,678 cells.`, Marker Genes
+`Reads 3,753 genes in 3,696 cells, testing each category of celltype against
+the rest.`
+
+**While it runs.** A box under the form (in Quick Insights and Detailed, where
+the result appears) shows, once the job has run for a quarter of a second:
+
+- the mode's name and, when it is known, what the run covers
+  (`3,753 genes in Alpha (1,234 cells) vs Beta (5,678 cells)`);
+- what it is doing: the step (`Testing genes`, `Reading genes`,
+  `Discovering markers`, `Building expression matrix`, `Clustering`,
+  `Reading <variable>`, `Drawing the plot`), how many genes are done of how
+  many, how much it has read and how fast, and how long is left;
+- a progress bar, and **Cancel**.
+
+A job that takes longer than 0.7 s also shows one progress notification with
+the same line and its own cancel button (×). It is the run's only
+notification: the gene reads it makes are not announced again by the general
+read notifications -- neither is a gene a view started reading before the run
+needed it too, which the run takes as its own read from then on -- and it
+closes with the outcome (`Differential expression: 412 significant genes`).
+
+**Cancel.** Cancelling stops the job where it is: its gene reads stop in the
+file reader (a remote file stops downloading), and its computations stop in
+the analysis workers (a worker still busy a quarter of a second after the
+cancel is replaced by a fresh one, so nothing keeps running for a cancelled
+job). Nothing of a cancelled run is kept: no partial result is shown, cached
+or exported. A read that something else also waits for, the gene the
+embedding is coloured by, or the same gene another analysis window reads,
+goes on for it.
+
+The same happens, without asking, when you close the analysis window, switch
+to another dataset, start the same analysis again, or change a control of a
+running explicit-run mode.
+
+**After a cancel** the box reads `<mode> cancelled` and
+`Cancelled after 12 s. 1,240 of 3,753 genes were done. Nothing was kept.`,
+with **Run again**. A cancel is never reported as an error. **Run again** runs
+the form as it stands.
+
+**When a run fails** the box reads `<mode> failed` with the reason, again with
+**Run again**, and the notification says the same once.
+
+---
+
 ## Page selection UI (“Compare pages”)
 
-Most modes include a page selector labeled **Compare pages:**.
+Most modes include a page selector labeled **Compare pages**.
 
 What you can do there:
 - click tabs to select which pages are included,
@@ -152,6 +208,13 @@ Detailed uses a two-step variable selector:
 
 If gene expression is not available in the dataset, the selector will show an explicit “No gene expression data available” message.
 
+The gene list is the same windowed list as the sidebar's gene search (see
+{doc}`../d_fields_coloring_legends/02_field_selector_ux`): it lists **None**
+and every matching gene, opens with the chosen gene highlighted, and only
+builds the rows near what is shown. `↓` / `↑` move the highlight and wrap at
+either end, **Home** and **End** jump to the first and the last entry,
+`Enter` chooses the highlighted entry and `Esc` closes the list.
+
 A gene that stays under the pointer, or highlighted with the arrow keys, in the
 gene list for 150 ms starts loading in the background, so choosing it usually
 needs no wait. Moving on cancels that load, and choosing the gene uses it.
@@ -159,12 +222,12 @@ needs no wait. Moving on cancels that load, and choosing the gene uses it.
 ### Correlation mode
 
 Correlation uses two selectors:
-- **X Axis Variable:** (continuous obs or gene)
-- **Y Axis Variable:** (continuous obs or gene)
+- **X axis variable**: (continuous obs or gene)
+- **Y axis variable**: (continuous obs or gene)
 
 It also includes:
-- **Color by:** (optional categorical obs; otherwise points are colored by page)
-- **Correlation method:** Pearson (linear) or Spearman (rank)
+- **Color by** (optional categorical obs; otherwise points are colored by page)
+- **Correlation method**: Pearson (linear) or Spearman (rank)
 
 ---
 
@@ -210,7 +273,7 @@ separated by drag handles you can move:
 | Region | Holds |
 | --- | --- |
 | **Plot** (top left) | the same plot, with room to be legible |
-| **Options** (right) | the **Export:** row — PNG · SVG · CSV — and **PLOT OPTIONS** |
+| **Options** (right) | the **Export:** row — PNG · SVG · CSV — and **Plot options** |
 | **Summary statistics** (bottom left) | the numeric table for this mode |
 | **Statistical analysis** (bottom right) | tests, interpretation, ranked tables |
 
@@ -268,9 +331,14 @@ Important behavior:
 ## Sessions (what restores)
 
 If you save/restore a session:
-- floating analysis windows can be reopened with their geometry and settings,
-- heavy analysis caches (notably bulk gene caches) may be restored lazily to speed up gene-heavy modes,
-- results may still recompute depending on what the mode needs and what changed.
+- the docked panel reopens the mode that was open, with every mode's settings,
+- floating analysis windows reopen with their geometry and settings,
+- the shown results of Differential expression, Marker genes, Gene signature and
+  Correlation are saved and restored as they were, without recomputing; Quick and
+  Detailed recompute from their settings,
+- a saved result that names a gene, field or category the open dataset lacks is
+  refused rather than shown against different data,
+- gene-expression caches are not saved; genes are read again when needed.
 
 See {doc}`../l_sessions_sharing/index` for session semantics.
 

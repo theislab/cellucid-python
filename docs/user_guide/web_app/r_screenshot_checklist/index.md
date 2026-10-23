@@ -3,6 +3,30 @@
 Working material, not published. ``docs/conf.py`` excludes this directory from
 the Sphinx build.
 
+:::{important}
+**Cellucid 0.9.5 reads AnnData only.** The prepared export format, its folders
+and packs, the **Prepared** button, `?exportsBaseUrl=`, `state-snapshots.json`
+and the `cellucid-datasets/exports-v3/` tree are gone. Wherever a record below
+names them, read instead:
+
+| Record says | Now |
+| --- | --- |
+| **Prepared** button, `#user-data-browse-btn` | **Zarr folder** button, `#user-data-zarr-folder-btn` (a directory input for one `.zarr` store; a folder can also be dropped on the viewer) |
+| `?exportsBaseUrl=…` | `?sampleCatalog=…` (meta element `cellucid-sample-catalog`) |
+| `cellucid-datasets/exports-v3/` | the AnnData sample catalog, `https://theislab.github.io/cellucid-datasets/anndata/` |
+| `datasets.json` with `version`, `state_manifest`, `state_sha256`, `state_bytes` | `datasets.json` schema 2: `{schema, default, datasets: [{id, path, session: {path, bytes, sha256}}]}` |
+| `dataset_identity.json`, `obs_manifest.json`, `vectors/*.bin.gz` on disk | the AnnData file itself: `uns['cellucid']`, `obs`, `obsm` |
+| `tests/browser/fixtures/exports/current-ui-prepared/`, `broken-exports/`, `demo-custom-exports/` | `catalog/current-ui.h5ad`, `current-ui-smoke.h5ad`, `current-ui-smoke.zarr.zip`, `demo-catalog/`, `broken-catalogs/` |
+| `theislab/cellucid-demo-custom-datasets/exports`, `…/main/exports/datasets.json`, `cellucid serve ./exports` | `theislab/cellucid-demo-custom-datasets/catalog` (three Zarr folders and `datasets.json`), `…/HEAD/catalog/datasets.json`; a catalog folder is checked locally with any static server that sends CORS headers (`?data=http://127.0.0.1:8000/`) |
+
+Every published image that shows the **Prepared** button (the Session panel
+captures in `_static/screenshots/data_loading/` among them) needs recapturing.
+The capture tooling in `docs/_tooling/screenshots/` loads the AnnData sample
+catalog (`serve-catalog.mjs`, `?sampleCatalog=`, `cellucid-datasets/anndata/`);
+it shoots once that folder exists in the datasets checkout, and every image
+taken from `exports-v3` is then rechecked with `node capture.mjs check --all`.
+:::
+
 **Start with `{doc}`00_capture_tooling_and_conventions``.** It has the tool, the
 size rule, the contract the Python suite enforces, and every trap found while
 building it. Nothing here is useful until you have read that.
@@ -18,6 +42,7 @@ building it. Nothing here is useful until you have read that.
 | `{doc}`04_pages_velocity_annotation_export`` | I velocity · J community annotation · K figure export | 23 | **assignment** |
 | `{doc}`05_pages_sessions_performance`` | L sessions/sharing · N benchmarking/performance | 23 | **assignment** |
 | `{doc}`06_pages_developer`` | P developer docs | 20 | **assignment** |
+| `{doc}`07_open_from_link_captures`` | B data loading: Open from link, Transfers, the Session panel | 7 | **assignment** (scenarios ready, not emitted) |
 
 Each per-page record in an **assignment** file carries: the page path, what it
 explains, what figure it had *when the audit was written*, a verdict, and — for

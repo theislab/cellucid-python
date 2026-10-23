@@ -22,9 +22,9 @@ Provenance is the answer to:
 For a Cellucid figure, that usually means recording:
 
 **Data identity**
-- dataset name and dataset id (or an exported folder version tag)
+- dataset name and dataset id
 - how the dataset was loaded (local folder, server, URL, notebook)
-- *ideally* a version/commit hash for the dataset export, if you maintain one
+- *ideally* a version/commit hash for the dataset file, if you maintain one
 
 **View identity**
 - which view was exported (live view vs a snapshot view, or multiview grid)
@@ -46,12 +46,12 @@ For a Cellucid figure, that usually means recording:
 - frame export crop rectangle (if used)
 
 :::{tip}
-If you saved a session bundle right before exporting, you already captured most of the view/scientific state. The remaining missing piece is export settings (which are not stored in sessions).
+If you saved a session bundle right before exporting, you captured the view/scientific state and the export settings together.
 :::
 
 ---
 
-## What metadata is embedded into exports (must be explicit)
+## What metadata is embedded into exports
 
 Cellucid exports embed metadata by default (there is no “metadata off” toggle in the current UI).
 
@@ -104,14 +104,14 @@ Views: Live (Field: cell_type; Filters: none) • Source: https://example.org/pa
 A grid names each panel separately:
 
 ```text
-Views: A. Live (Field: cell_type; Filters: total_counts: 500.00 – 12000.00) | B. Endoderm (Field: leiden; Filters: none) • Source: pancreas-exports
+Views: A. Live (Field: cell_type; Filters: total_counts: 500.00 – 12000.00) | B. Endoderm (Field: leiden; Filters: none) • Source: pancreas
 ```
 
 Read it as: `Views:` then one `Panel. Label (Field: …; Filters: …)` clause per
 panel joined by ` | `, then the source. `none` means exactly that — no color
 field, or no active filter. A panel's filters are the ones in force in that
 view, including a gene range filter, whether or not the view is the focused
-one; a filter you disabled in Active filters hides nothing and is not listed. The SVG `dc:description` is built by the same code,
+one; a filter you disabled in Filters hides nothing and is not listed. The SVG `dc:description` is built by the same code,
 so it is identical text for the same export.
 
 ### What `Comment` looks like (structured JSON)
@@ -122,7 +122,7 @@ so it is identical text for the same export.
   "exporter": { "name": "Cellucid", "website": "https://cellucid.com" },
   "exportedAt": "2026-05-14T09:12:44.108Z",
   "dataset": {
-    "name": "Pancreas", "id": "pancreas", "sourceType": "github-repo",
+    "name": "Pancreas", "id": "pancreas", "sourceType": "link",
     "baseUrl": "https://example.org/pancreas", "userPath": null,
     "source": { "name": null, "url": null, "citation": null }
   },
@@ -200,7 +200,7 @@ single-file renderer produces.
 :::{important}
 The embedded metadata is useful, but it does not replace version control. For long-term reproducibility, also record:
 - the Cellucid app version/commit (if you have it), and
-- the dataset export version you used.
+- the dataset version you used.
 :::
 
 ---
@@ -235,22 +235,22 @@ However:
 - figure export UI settings are **not** stored in sessions,
 - so you still need to record export settings (or recover them from embedded metadata in the exported file).
 
-### What if the dataset export changes?
+### What if the dataset changes?
 
-If the dataset export changes between exports (common in iterative pipelines):
+If the dataset changes between exports (common in iterative pipelines):
 - field keys can change,
 - category ordering can change,
 - legends can change,
 - filters can target different distributions,
 - and a “re-export” may not match.
 
-For manuscript figures, treat the dataset export as immutable once you start final export production.
+For manuscript figures, treat the dataset file as immutable once you start final export production.
 
 ### How to package for collaboration
 
 To make a figure reproducible for a collaborator, share:
 
-1) the dataset export folder (or a stable URL), plus
+1) the dataset file (or a stable URL), plus
 2) the session bundle, plus
 3) the exported artifact(s) (SVG/PNG), plus
 4) (optional but recommended) a short README describing export settings and any post-processing.
@@ -275,8 +275,8 @@ leaves your machine, know that it can contain:
   loaded from a GitHub repository, that URL contains the account, repository and
   branch names — including for a private repository you happened to have access
   to.
-- **A name from your own disk.** If you opened a local prepared export, the file
-  or folder name you chose is embedded, and it is the *first* thing used for the
+- **A name from your own disk.** If you opened a local file or Zarr folder, the
+  file or folder name you chose is embedded, and it is the *first* thing used for the
   human-readable source line.
 - **What you coloured by — including gene symbols.** The colour field key of
   every exported panel. For a gene, that is the gene symbol.
@@ -316,8 +316,8 @@ you do not want the dataset's name printed on the figure.
 Every dynamic value was traced to the code that produces it:
 
 - `Creation Time` is UTC, so it does not reveal your timezone.
-- `Source File` carries a **name**, never a path. Opening a prepared directory
-  contributes the root folder's name; opening an `.h5ad` or `.zarr` contributes
+- `Source File` carries a **name**, never a path. Opening a `.zarr` folder
+  contributes the folder's name; opening an `.h5ad` or `.zarr.zip` contributes
   the file's name; a GitHub dataset contributes its public raw URL; a Jupyter
   session contributes `jupyter://<viewer-id>/`, not a filesystem location.
 - There is no access token in any of these. The GitHub data source has no token

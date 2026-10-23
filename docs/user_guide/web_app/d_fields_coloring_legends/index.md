@@ -23,9 +23,9 @@ Cellucid treats “coloring” and “filtering” as coupled:
 
 | You want to… | Do this in the UI | Why |
 |---|---|---|
-| Color by clusters / sample / batch | **Coloring & Filtering → Categorical obs** | Best for discrete labels; legend lets you hide categories and edit labels/colors |
-| Color by a score (QC, pseudotime, marker score) | **Coloring & Filtering → Continuous obs** | Gives a continuous colorbar; you can filter by min/max and rescale the palette |
-| Color by a gene | **Coloring & Filtering → Gene Expression** | Search genes, load on demand, and use the same continuous legend controls |
+| Color by clusters / sample / batch | **Coloring & filtering → Categorical obs** | Best for discrete labels; legend lets you hide categories and edit labels/colors |
+| Color by a score (QC, pseudotime, marker score) | **Coloring & filtering → Continuous obs** | Gives a continuous colorbar; you can filter by min/max and rescale the palette |
+| Color by a gene | **Coloring & filtering → Gene Expression** | Search genes, load on demand, and use the same continuous legend controls |
 
 ---
 

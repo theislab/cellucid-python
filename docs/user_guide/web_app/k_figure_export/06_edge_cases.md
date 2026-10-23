@@ -40,7 +40,7 @@ If positions/colors contain NaN/Inf:
 - exact export validation terminates before rendering.
 
 If you see odd axes or missing regions:
-- verify your exported dataset does not contain NaN/Inf in embeddings,
+- verify your dataset file does not contain NaN/Inf in embeddings,
 - try exporting a smaller subset or a different view to isolate the issue.
 
 ### Missing/renamed/deleted fields

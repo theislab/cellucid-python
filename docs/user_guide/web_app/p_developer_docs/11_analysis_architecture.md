@@ -103,10 +103,16 @@ Code:
 ### 2) `DataLayer` (unified access to state + datasets)
 
 The analysis module needs a safe, consistent way to:
-- extract per-cell values for obs/var fields
+- extract per-cell values for obs/var fields: a continuous page holds the
+  field's own numbers, a categorical page its cells' category codes at the
+  field's width with `categories` and `missingCode` (counts keyed by label are
+  published with the codes)
+- read whole gene columns for computations (`readGeneColumn(s)`): a gene's
+  sparse entries from the source, or a loaded field's values, never installed
+  in field state
 - handle missing values
 - respect filtering/visibility/highlights
-- cache expensive derived arrays (e.g. bulk gene extraction)
+- cache page data by page version
 
 This is handled by:
 - `cellucid/assets/js/app/analysis/data/data-layer.js`
@@ -139,6 +145,11 @@ changes a number. The operations are:
 - order statistics (`COMPUTE_ORDER_STATISTICS`): the median and quartiles of
   Quick Insights and the median of signature scores, for 500,000 finite values
   or more.
+- hierarchical clustering (`COMPUTE_PAIRWISE_DISTANCES` in row blocks across
+  the pool, then `COMPUTE_AGGLOMERATION` in one worker,
+  `compute/hierarchical-clustering.js`), always in the workers;
+- per-cell CSV files (`COMPUTE_CSV_EXPORT`, `compute/csv-export.js`): each
+  worker writes a range of rows as a Blob, joined after the header.
 
 Below those sizes the main thread computes the result directly, because posting
 the values to a worker would cost more than the work. A payload posted without
@@ -150,7 +161,7 @@ page also reports its finite values, which the main thread adopts instead of
 scanning the page again, and categorical counts are taken once, as the data
 layer builds a page's values (`analysis/shared/category-counts.js`). Loops that
 must stay on the main thread (gathering a page, aligning two variables for a
-scatter plot, signature scoring) yield to the interface between 12 ms slices.
+scatter plot, signature scoring from sparse gene columns) yield to the interface between 12 ms slices.
 Marker-gene discovery dispatches its own `MARKERS_*` messages to the same
 worker pool. There is no GPU analysis backend.
 
@@ -178,14 +189,19 @@ Every gene and observation-field load goes through one download scheduler
   gene chosen during a 5,000-gene run does not share the connection with a
   dozen of the run's downloads. The browser is told the same through the
   fetch `priority` hint. A load joined by a more urgent caller (a prefetched
-  gene the user then chooses) is raised.
+  gene the user then chooses) is raised. Waiting `bulk` and `low` loads start
+  best first (a heap), no more of them at once than the six requests a
+  browser keeps open to one HTTP/1.1 host: each needs at least one request,
+  and more would only queue behind the reader's own slots, where priority no
+  longer applies. A caller's signal carries one `abort` listener however many
+  loads wait on it.
 - **Downloads kept per dataset load.** The var field loader of a dataset load
   keeps the downloaded (still compressed) payloads in a byte-bounded cache
   (`data/payload-transfer-cache.js`, 64 MiB), so a gene evicted from memory is
   decoded again without a request, and a second run over the same genes makes
   no requests. Concurrent requests for one payload share one download. The
-  cache holds exactly the export generation whose manifests describe it and is
-  dropped with the load.
+  cache holds exactly the loaded dataset's payloads and is dropped with the
+  load.
 - **Downloads ahead.** `StreamingGeneLoader` (DE, markers, heatmaps) downloads
   the payloads of the genes queued after its decode window into that cache
   (`DataLayer.prefetchGenePayload`). The number in flight starts at 8,
@@ -278,16 +294,17 @@ Differential expression and marker discovery repeat the same steps once per
 gene, so anything in that loop is multiplied by the gene count. The loop keeps
 these properties, and each one is pinned by a test:
 
-- **Decoding happens in the decode worker.** A quantized gene payload is read on
-  the main thread as transferred (still gzip when the URL ends in `.gz`) and
-  handed to the quantization worker, which inflates it under the exact declared
-  length and dequantizes it. Both the worker and the main-thread backend decode
-  through one table-driven kernel, `decodeQuantizedToFloat32` in
-  `cellucid/assets/js/data/quantization-contract.js`, which is bit identical to
-  evaluating `minValue + code * scale` per cell.
-- **Each decode goes to the least-loaded worker** of the quantization pool (a
-  busy worker counts one, plus its queue), not round-robin, so a decode never
-  waits behind a busy worker while another is idle.
+- **Reading and decoding happen off the main thread.** A gene's values are
+  read by the AnnData reader worker (`data/anndata-reader-worker.js`), whose
+  decode workers decompress the chunks; the page receives float32 values,
+  transferred, and never decompresses a gene itself (see
+  {ref}`reading-anndata-directly`).
+- **A chunk goes to a decode worker with room** (`formats/io/decode-pool.js`):
+  queued chunks are sent as workers free up, a gene index being built in the
+  background waits behind every other read, small chunks waiting together
+  travel as one message, and a small chunk alone is decoded in the reader
+  thread. The workers start when a file opens; there are as many as the cores
+  (less the page and the reader) and their memory budget allow.
 - **Per-run work is done once per run.** `StreamingGeneLoader` validates both
   group specifications when a run starts, not once per gene.
 - **Rank tests tabulate values without a `Map`.** Wilcoxon (DE and markers),

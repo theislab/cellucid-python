@@ -38,19 +38,19 @@ What it is *not*:
 ### X and Y variables
 
 In the UI you select:
-- **X Axis Variable:** (continuous obs or gene expression)
-- **Y Axis Variable:** (continuous obs or gene expression)
+- **X axis variable**: (continuous obs or gene expression)
+- **Y axis variable**: (continuous obs or gene expression)
 
 Cellucid prevents X and Y from being identical (it won’t run if they are the same variable).
 
 ### Pages
 
-You select pages under **Compare pages:**.
+You select pages under **Compare pages**.
 Correlation is computed **separately for each selected page**.
 
 ### Optional: Color by
 
-If you choose a categorical obs field under **Color by:**
+If you choose a categorical obs field under **Color by**
 - points are colored by category (useful to reveal substructure),
 otherwise
 - points are colored by page (using the page colors you set).
@@ -229,9 +229,9 @@ computed per page, never per colour.
 :alt: The expanded Correlation modal headed "CORRELATION: S_SCORE VS G2M_SCORE" with a coloured scatter and per-page statistic boxes, a PLOT OPTIONS column, a SUMMARY STATISTICS table with columns Page, R, R², P and N, and a STATISTICAL ANALYSIS table with columns Page, Direction, Strength and R.
 :width: 1440px
 
-Expanded Correlation. **SUMMARY STATISTICS** gives one row per page: `r`, `r²`,
+Expanded Correlation. **Summary statistics** gives one row per page: `r`, `r²`,
 the p-value in exponential notation, and `n` — the number of **paired finite**
-values that actually entered the calculation. **STATISTICAL ANALYSIS** restates
+values that actually entered the calculation. **Statistical analysis** restates
 the same `r` as a direction and a strength band, with the band boundaries printed
 underneath.
 ```

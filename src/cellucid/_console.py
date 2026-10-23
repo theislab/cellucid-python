@@ -29,7 +29,7 @@ def console_print(
 
     Python's Windows console streams can use single-byte encodings such as
     CP1252. User-controlled names and paths, as well as decorative output
-    glyphs, must not turn a successful export into ``UnicodeEncodeError``.
+    glyphs, must not turn a successful command into ``UnicodeEncodeError``.
     Backslash escaping is lossless, ASCII-readable, and deterministic without
     mutating the process-wide stream configuration.
     """

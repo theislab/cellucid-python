@@ -5,8 +5,8 @@ picture index: if you are not sure whether what you are looking at is the
 expected screen, find it here first.
 
 The captures use a small pinned fixture dataset (120 cells, 6 genes) for the
-save/restore round trip, and the published **Pancreas** built-in sample for the
-official starting state. Your dataset will differ; the controls and messages
+save/restore round trip, and the published **Pancreas** built-in sample for its
+catalog default session. Your dataset will differ; the controls and messages
 will not.
 
 ---
@@ -14,10 +14,10 @@ will not.
 ## Where the controls are
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-01-session-controls.png
-:alt: The Session accordion in full, with a dataset summary table at the top, the sample picker, local, remote and GitHub loading controls, and the Session state block with Save State and Load State at the bottom.
+:alt: The Session accordion in full: the Dataset summary table at the top, the Open data group with the sample picker and the Files, Server and Open from link controls, the Session file group with Save and Load, and the Data mapping group at the bottom.
 :width: 524px
 
-The **Session** accordion. Save State and Load State sit at the bottom, below
+The **Session** accordion. **Save** and **Load** sit under **Session file**, below
 every control that brings a dataset in — the order is the workflow, because a
 session is restored onto a dataset that is already open.
 ```
@@ -27,10 +27,10 @@ session is restored onto a dataset that is already open.
 ## Saving
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-02-save-state-action.png
-:alt: The Session state block with a mouse pointer over the Save State button.
+:alt: The Session file group with a mouse pointer over the Save button.
 :width: 488px
 
-**Save State** downloads a file. There is no upload and no server round trip.
+**Save** downloads a file. There is no upload and no server round trip.
 ```
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-03-save-confirmation.png
@@ -84,20 +84,20 @@ The state that was saved.
 :alt: The renderer settings block after restoring, matching the saved state exactly.
 :width: 480px
 
-The same four values after **Load State** into a freshly started app. See
+The same four values after **Load** into a freshly started app. See
 {doc}`03_save_restore_ux` for why this particular check is worth doing once.
 ```
 
 ---
 
-## Official sample starting state
+## Catalog default session (official sample)
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/official-01-sample-state-applied.png
 :alt: The Pancreas built-in sample shortly after being chosen, showing a 3-D orbit view coloured by cell type on a light grid background.
 :width: 1440px
 
-Choosing a built-in sample applies its reviewed starting state automatically,
-after the scientific dataset has been published and the state bytes verified.
+Choosing a built-in sample applies the default session its catalog names,
+after the scientific dataset has been published and the session's bytes verified.
 Nothing was loaded by hand. See {doc}`04_official_sample_states`.
 ```
 
@@ -116,10 +116,10 @@ Wrong dataset. The message names both sizes so you can tell which one you meant.
 ```
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/refusal-02-not-a-session-file.png
-:alt: A notification titled "Loading failed" reading "Session file: Invalid session file (bad MAGIC header).", with a dismiss button at its right, after a file that is not a session bundle was chosen in Load State.
+:alt: A notification titled "Loading failed" reading "Session file: This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2).", with a dismiss button at its right, after a file that is not a session bundle was chosen with Load.
 :width: 760px
 
-Wrong file. `Invalid session file (bad MAGIC header).` means the file does not
+Wrong file. `This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2).` means the file does not
 begin with the session container's signature, so it is not a session bundle at
 all — regardless of what it is named.
 ```

@@ -4,15 +4,15 @@
 **Time:** 15–30 minutes  
 **What you’ll learn:**
 - What “dataset identity” means in Cellucid (and why it matters)
-- How `dataset_identity.json` is generated and used
+- Where a dataset's id and name come from (`uns['cellucid']`, or the server's arguments)
 - How session bundles decide whether state is safe to restore/apply
-- A practical versioning strategy for “paper-ready” exports
+- A practical versioning strategy for “paper-ready” datasets
 
 ---
 
 ## Mental model (one sentence)
 
-If you want sessions, share links, and collaborative annotation to work reliably, treat your dataset export as an **immutable, versioned artifact** with a **stable dataset ID**.
+If you want sessions, share links, and collaborative annotation to work reliably, treat your dataset file as an **immutable, versioned artifact** with a **stable dataset ID**.
 
 ---
 
@@ -27,34 +27,30 @@ Cellucid needs a dataset identity for:
   reject the bundle.
 - **Session → AnnData application** (Python): mutate only the exact matching
   AnnData or raise before mutation.
-- **Multi-dataset servers**: how the viewer lists and labels datasets behind one server URL.
+- **Dataset catalogs**: how the viewer lists and labels datasets published together.
 - **Collaboration**: if you send someone a session bundle, you need a stable reference to the dataset it belongs to.
 
 ---
 
-## The concrete identity file: `dataset_identity.json`
+## Where the identity lives: `uns['cellucid']`
 
-When you export with `prepare(...)`, Cellucid writes a `dataset_identity.json` into the export folder.
+A Cellucid-ready AnnData carries its identity in the file itself:
 
-What it contains (high level):
-- `id`: dataset ID (string)
-- `name`: human-readable dataset name
-- `description`: optional description
-- `stats`: lightweight counts (cells/genes/fields) and connectivity summary
-- `embeddings`: available dimensions + default dimension
-- `export_settings`: compression/quantization knobs used for the export
-- optional `source` metadata (name/url/citation)
+- `uns['cellucid']['id']`: the dataset ID (stable, machine-friendly)
+- `uns['cellucid']['name']`: the human-readable name (also `uns['title']`)
+- optional `description`, `citation` and `source`, and the launch `defaults`
 
 ```{note}
-`dataset_identity.json` is a **metadata contract**, not a cryptographic hash of all content.
-If you need tamper-proof guarantees, add your own checksums/version control around the export folder.
+The id is a **metadata contract**, not a cryptographic hash of the content.
+If you need tamper-proof guarantees, add your own checksums or version control
+around the file.
 ```
 
 ---
 
 ## How the dataset ID is chosen (important)
 
-### Export mode (`prepare(...)`)
+### Writing it into the file (`prepare(...)`)
 
 `prepare(...)` requires both `dataset_name` (human-friendly) and `dataset_id`
 (stable, machine-friendly). It does not derive either value or rewrite an
@@ -64,42 +60,50 @@ Example:
 
 ```python
 prepare(
-    ...,
+    "pbmc_10k_v1.h5ad",
+    format="h5ad",
     embeddings={"X_umap": adata.obsm["X_umap"]},
-    out_dir="./exports/pbmc_v1",
-    dataset_name="PBMC 10k (Seurat v3 tutorial)",
     dataset_id="pbmc_10k_v1",
-    created_at="2026-07-26T12:34:56Z",
-    dataset_description="PBMC demo export used for tutorial figures",
+    dataset_name="PBMC 10k (Seurat v3 tutorial)",
+    dataset_description="PBMC demo dataset used for tutorial figures",
     source_name="Seurat PBMC tutorial",
     source_url="https://satijalab.org/seurat/articles/pbmc3k_tutorial.html",
-    obs_categorical_dtype="uint16",
 )
 ```
 
-Omit `created_at` for an ordinary export: Cellucid writes the current UTC time.
-Use an explicit, provenance-fixed value only when a canonical builder must
-reproduce the complete export directory byte-for-byte. Its exact accepted form
-is `YYYY-MM-DDTHH:MM:SSZ`.
+### Naming it when you open it (`show_anndata(...)`, `cellucid serve`)
 
-### AnnData direct mode (`show_anndata(...)`)
-
-Direct AnnData mode also requires an explicit stable name and ID:
+A file that declares `uns['cellucid']['id']` and `['name']` is opened under
+them. Any other AnnData needs a stable name and ID, passed explicitly:
 
 ```python
 from cellucid import show_anndata
 viewer = show_anndata("data.h5ad", dataset_name="My study (raw)", dataset_id="my_study_raw_v1")
 ```
 
+An explicit `dataset_name` / `dataset_id` overrides what the file declares.
+Data that declares neither (and is given neither) is refused before the server
+starts:
+
+```text
+dataset_name and dataset_id are required: this AnnData declares no Cellucid identity of its own (uns['cellucid']['id'] and ['name']). Name the dataset, for example dataset_name="My study", dataset_id="my-study-v1" (--dataset-name/--dataset-id on the command line).
+```
+
+Sessions and community annotations are keyed by this dataset ID.
+
 ---
 
 ## How sessions decide “same dataset or not”
 
 A `.cellucid-session` bundle contains a lightweight **dataset fingerprint** in
-its manifest (not the full dataset). In the current session format it has exactly six required fields: four scalars — `sourceType`, `datasetId`,
-`cellCount`, `varCount` — plus `cellOrder`, recording *which ordering* of the
+its manifest (not the full dataset). In the current session format (format 2) it has exactly six required fields: three scalars — `datasetId`,
+`cellCount`, `varCount` — the dataset's display `name` (or null; used in
+messages only, never compared), `cellOrder`, recording *which ordering* of the
 cells the session was saved against, and `dataMapping`, recording *which arrays*
-it was showing.
+it was showing. Beside the fingerprint, the manifest's `requires` lists every
+obs column and gene the session uses. It does not record how the dataset was opened, so a session
+applies to the same dataset whether it was opened from a sample, a link, a
+server, a notebook or a local folder.
 
 In Python, `apply_cellucid_session_to_anndata(...)` uses this fingerprint as a safety guard:
 - compares `datasetId` to the required `expected_dataset_id`,
@@ -107,6 +111,8 @@ In Python, `apply_cellucid_session_to_anndata(...)` uses this fingerprint as a s
 - checks that every key `dataMapping` names exists on `adata` (its `obsm`
   embeddings and their columns, `obsp` graph, layer or `raw`, latent space, and
   gene-name column),
+- requires every obs column and gene the manifest's `requires` lists, naming
+  all that are missing,
 - compares `varCount` to the gene count of the axis that mapping reads:
   `adata.raw.n_vars` for `expression: "raw"`, `0` for a mapping without
   expression, `adata.n_vars` otherwise.
@@ -118,19 +124,17 @@ strict and atomic, and a bundle without `cellOrder` or `dataMapping` is refused.
 
 `cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
 16-character lowercase hexadecimal `digest` of the coordinates of that
-embedding. `embedding` is `{"key", "columns"}`: an exported embedding id with
-`columns: null`, or an AnnData `obsm` key with the 0-based columns that were
-read, one per dimension. It closes a hole the four scalars cannot: sessions store
-selections as row numbers, and a dataset re-exported at the same id from
-re-sorted input matches all four scalars while every row number now denotes a
-different cell.
+embedding. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
+columns that were read, one per dimension. It closes a hole the three scalars
+cannot: sessions store selections as row numbers, and a dataset rewritten at
+the same id from re-sorted input matches all three scalars while every row
+number now denotes a different cell.
 
-`dataMapping` records which stored arrays the session was showing. Its `kind`
-is `"export"` — exactly `kind`, `embeddings` (`enabled`, the embeddings that are turned on, and
-`defaults`, the `1d`/`2d`/`3d` default of each dimension),
-`geneNames` (`"index"` or `"column:<name>"`), and `vectorFields` — or
-`"anndata"`, which adds `knn`, `expression` (`"X"`, `"raw"`, `"layer:<name>"`,
-or null), and `latent`.
+`dataMapping` records which stored arrays the session was showing: `kind`
+(`"anndata"`), `embeddings` (`enabled`, the embeddings that are turned on, and
+`defaults`, the `1d`/`2d`/`3d` default of each dimension), `knn`, `geneNames`
+(`"index"` or `"column:<name>"`), `expression` (`"X"`, `"raw"`,
+`"layer:<name>"`, or null), `latent`, and `vectorFields`.
 
 Both readers require both records. Python validates `cellOrder`'s shape and
 never its digest: the digest is taken over normalized coordinates the viewer
@@ -151,17 +155,17 @@ Use stable IDs + versioning to make identity meaningful.
 
 ## A versioning strategy that works (practical and boring — on purpose)
 
-### Rule 1: treat export folders as immutable
+### Rule 1: treat published files as immutable
 
-Once you share an export folder (or publish it), do not modify it in place.
-If you need to change anything, create a new folder and bump the version.
+Once you share or publish a dataset file, do not modify it in place.
+If you need to change anything, write a new file and bump the version.
 
 Good:
-- `exports/pbmc_10k_v1/`
-- `exports/pbmc_10k_v2/`
+- `pbmc_10k_v1.h5ad`
+- `pbmc_10k_v2.h5ad`
 
 Risky:
-- overwriting `exports/pbmc_10k/` while reusing the same dataset ID.
+- overwriting `pbmc_10k.h5ad` while reusing the same dataset ID.
 
 ### Rule 2: version the dataset ID (not just the folder)
 
@@ -174,7 +178,7 @@ Make `dataset_id` reflect the version:
 
 If you want paper-grade reproducibility, include:
 - which pipeline produced the AnnData,
-- which commit/tag produced the export,
+- which commit/tag produced the file,
 - which parameters (neighbors/umap) were used,
 - any filtering decisions (QC thresholds).
 
@@ -186,8 +190,8 @@ Many Cellucid interactions use **row index** as identity.
 
 If you reorder cells, previously saved sessions/highlights can map to different biological cells even if the shape is unchanged.
 
-The web app now catches that for a re-exported dataset, because `cellOrder`
-digests the exported coordinates. **Python does not**, and cannot: applying a
+The web app catches that for a rewritten dataset, because `cellOrder` digests
+the coordinates it drew. **Python does not**, and cannot: applying a
 session to an `AnnData` you reordered in memory is checked only against
 `n_obs`, `n_vars`, and `datasetId`, all of which a permutation leaves intact.
 Keeping row order stable remains your responsibility on this side.
@@ -203,7 +207,7 @@ If you must reorder/subset:
 ### Sessions (shareable state)
 
 If you send a collaborator:
-- a `.cellucid-session` file **without** the matching dataset export folder (or matching hosted dataset),
+- a `.cellucid-session` file **without** the matching dataset file (or matching hosted dataset),
 they may not be able to restore the state meaningfully.
 
 ### Community annotation (`cellucid-annotation`)
@@ -217,12 +221,14 @@ If you plan to use `cellucid-annotation`, decide your dataset ID/versioning earl
 
 ## Edge cases (common identity mistakes)
 
-### “I exported twice to the same folder with `force=True`”
+### “I rewrote the same file with `force=True`”
 
-This can produce a folder whose metadata says one thing while some files are from another export run.
-If you must overwrite, do it only while iterating privately — and treat the result as not shareable until you export cleanly into a fresh folder.
+`prepare(..., force=True)` replaces the whole file at once, so it is never a
+mix of two runs. But anyone holding a session or annotation for the old content
+now restores it onto the new one: change `dataset_id` whenever the cells
+change.
 
-### “Two exports have the same `dataset_id`”
+### “Two datasets have the same `dataset_id`”
 
 This is a recipe for confusion:
 - sessions may “match” when they shouldn’t,
@@ -230,10 +236,13 @@ This is a recipe for confusion:
 
 Fix: choose unique IDs (include a version suffix).
 
-### “My AnnDataViewer identity includes local file paths”
+### “Does my AnnDataViewer publish local file paths?”
 
-Direct AnnData identity may include source info (like the path).
-Be mindful when sharing debug reports or screenshots (privacy/security covered in {doc}`06_privacy_security_and_offline_vs_online`).
+No. The server publishes the dataset ID and name, and serves the store under a
+route named by the dataset ID (`_cellucid/anndata/<dataset_id>.h5ad`); the local
+file name is never part of it. The terminal output still prints the resolved
+path, so be mindful when sharing logs or screenshots (privacy/security covered
+in {doc}`06_privacy_security_and_offline_vs_online`).
 
 ---
 
@@ -244,8 +253,8 @@ Be mindful when sharing debug reports or screenshots (privacy/security covered i
 Likely causes:
 - different number of cells/genes,
 - different dataset ID,
-- you are loading a different export folder than you think,
-- the dataset was re-exported at the same ID from re-sorted input, so the
+- you are loading a different file than you think,
+- the dataset was rewritten at the same ID from re-sorted input, so the
   counts match but the cell order does not,
 - the session names an embedding, graph, layer, or gene-name column the dataset
   does not have,
@@ -253,11 +262,11 @@ Likely causes:
   `embedding`, or no `dataMapping`), so it is refused outright.
 
 How to confirm:
-- inspect `dataset_identity.json` in the export folder you loaded,
-- compare counts (`n_cells`, `n_genes`) to the session’s fingerprint (web app warning or Python logs).
+- inspect `uns['cellucid']` and the shape of the file you loaded,
+- compare counts (`n_obs`, `n_vars`) to the session’s fingerprint (web app warning or Python logs).
 
 Fix:
-- load the correct dataset export folder,
+- load the correct dataset file,
 - or create a fresh session from the dataset generation you intend to use.
 
 The current web and Python readers do not accept a layout-only partial

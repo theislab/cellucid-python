@@ -1,152 +1,83 @@
-# Gene Expression Matrix
+# Gene expression (`X`)
 
-**Audience:** computational users  
-**Time:** 15–30 minutes  
-**Goal:** export gene expression correctly without accidentally producing terabytes of files.
+**Audience:** everyone who wants gene search and gene colouring
+**Time:** 10 minutes
+**Goal:** pass expression in the right orientation and know how it is stored.
 
-Gene expression export is optional, but it is what enables:
-- gene search
-- “color by gene” overlays
+## What to pass
 
-In `cellucid_prepare()`:
-- `gene_expression` is the values matrix
-- `var` provides the gene IDs / metadata
+`gene_expression` is an optional **cells x genes** matrix:
 
-## Required shape and orientation (critical)
+- a sparse `Matrix` matrix (`dgCMatrix` and any other sparse numeric class), or
+- a dense numeric matrix, a dense `Matrix`, or a numeric `data.frame`.
 
-`gene_expression` must be shaped:
-
-> `(n_cells, n_genes)` = **cells × genes**
-
-That means:
-- each **row** is one cell
-- each **column** is one gene
-
-```{warning}
-Many R containers store expression as genes × cells. You almost always need to transpose.
-
-- Seurat: `GetAssayData(...)` is typically genes × cells → use `Matrix::t(...)`
-- SingleCellExperiment: `assay(...)` is genes × cells → use `Matrix::t(...)`
-```
-
-If you provide `gene_expression`, export enforces:
-- `nrow(gene_expression) == n_cells`
-- `ncol(gene_expression) == nrow(var)`
-
-## Supported types
-
-Supported inputs:
-- base R `matrix`
-- `Matrix` sparse matrices (recommended)
-
-Special case:
-- `dgCMatrix` is handled efficiently (direct column access without densifying the whole matrix).
-
-## How data is written (what files are produced)
-
-Gene expression values are written as **one file per gene** under:
-
-- `<out_dir>/var/`
-
-Each file is named by the gene's **payload index** — its position in the
-manifest's `fields` array — not by its ID. For the first exported gene you will
-get one of:
-
-- float32: `var/0.values.f32`
-- 8-bit quantized: `var/0.values.u8`
-- 16-bit quantized: `var/0.values.u16`
-
-The manifest:
-- `<out_dir>/var_manifest.json`
-
-is what maps each index back to its gene ID, and (if quantized) stores the
-min/max needed to dequantize. Because the ID never reaches a path, a gene called
-`HLA-DRB1/2` needs no renaming.
-
-## Quantization (`var_quantization`)
-
-Quantization is the main disk-size lever for gene expression.
-
-Set:
-- `var_quantization = 8` (smallest; fastest I/O; lower precision)
-- `var_quantization = 16` (more precision; still much smaller than float32)
-- `var_quantization = NULL` (float32; largest)
+It must have one row per cell, in the cell order of the embeddings. Seurat and
+SingleCellExperiment keep expression as genes x cells, so transpose first:
 
 ```r
-cellucid_prepare(..., var_quantization = 8)
+expr <- Matrix::t(Seurat::GetAssayData(seu, layer = "data"))
 ```
 
-Every gene value must be finite. Quantized finite values map to `0..254`
-(8-bit) or `0..65534` (16-bit); `NA`, `NaN`, and infinities reject the
-complete candidate rather than being mapped to a marker.
+A wrong row count is refused with a reminder:
 
-## The “sparse matrix” misconception
+```text
+gene_expression has 2000 rows, but the embeddings have 5000 cells. gene_expression is cells x genes; transpose a genes x cells matrix with t().
+```
 
-Even if your input matrix is sparse, the exported per-gene file is a **dense vector of length `n_cells`**.
+A square matrix in the wrong orientation cannot be detected from its shape;
+check `nrow(expr)` against your cell count yourself.
 
-That means the total exported size scales like:
+Which values to pass is your choice: the viewer shows what you store.
+Normalized, log-transformed values (Seurat's `data` layer, a
+SingleCellExperiment's `logcounts`) are the usual choice for colouring.
 
-> `O(n_cells * n_genes)`
+## How it is stored
 
-Approximate per-gene sizes (before gzip compression):
+Values must be finite and within the float32 range, and are stored as
+float32 -- unless they are integer counts float32 cannot hold exactly: when
+every value is a whole number and one exceeds 2^24 (16,777,216) in magnitude,
+the whole `X` is stored as float64, so every count reads back as it was given.
+The rule looks at the stored values (a sparse matrix's non-zeros, a dense
+matrix's every value) of the genes that are stored, after `gene_identifiers`
+has chosen them; Python's `cellucid.prepare()` applies the same rule. A pattern matrix (`ngCMatrix`, no values) is refused.
 
-| dtype | bytes per cell | per gene @ 100k cells |
-|---|---:|---:|
-| `uint8` | 1 | ~0.10 MB |
-| `uint16` | 2 | ~0.20 MB |
-| `float32` | 4 | ~0.40 MB |
+**Sparse input** is stored as `X`, an AnnData `csc_matrix`: column-compressed
+with one column per gene, so each gene's values are one contiguous range.
 
-Multiply by the number of exported genes:
-- 20k genes × 0.10 MB ≈ **2 GB** (100k cells, 8-bit)
-- 20k genes × 0.40 MB ≈ **8 GB** (100k cells, float32)
+- `X/data`: float32 values (float64 for counts above 2^24, as above)
+- `X/indices`: int32 cell indices
+- `X/indptr`: int32 offsets, one per gene plus one
 
-For 1M cells, multiply those numbers by 10.
+(indices and offsets become int64 only if a matrix ever held 2^31 or more
+stored values.) `data` and `indices` are chunked at 65,536 values, so reading
+one gene fetches little more than that gene. A stored zero is no value and
+is dropped (as `Matrix::drop0()` drops it); the matrix stays sparse.
 
-### Practical mitigation strategies
+**Dense input** is stored as a dense float32 (or float64, as above) `X` array in tall, gene-major
+chunks: each chunk holds up to 262,144 rows of one or a few genes.
 
-1) Export fewer genes (recommended)
-   - pass `gene_identifiers = ...`
-   - export HVGs, marker genes, or a curated panel
-2) Use 8-bit quantization (`var_quantization = 8`)
-3) Use gzip compression (`compression = 6`)
+See {doc}`09_cellucid_ready_anndata_specification` for every detail.
 
-See the full performance guide: {doc}`10_performance_tuning_prepare_export`
+## Gene names and subsets
 
-## Choosing which expression values to export
+Gene names come from `rownames(var)` or `colnames(gene_expression)`;
+`gene_identifiers` stores a subset; `var_gene_id_column` picks the names the
+viewer shows. See {doc}`05_var_gene_metadata`.
 
-From Seurat/SCE you often have choices like:
-- raw counts
-- log-normalized values
-- scaled values
+## Size
 
-Cellucid can visualize any numeric values, but interpretation differs.
+Expression is usually the largest part of a store. Each chunk is
+zlib-compressed; on simulated data, 10 million stored values took about 33 MB
+({doc}`10_performance_and_storage`). To make a store smaller, store fewer genes
+(`gene_identifiers`, for example highly variable genes) -- the cell count is
+what it is.
 
-Recommendation:
-- export log-normalized expression for visualization
-- keep raw counts for analysis pipelines (not necessarily for the viewer)
+## Without expression
 
-## Edge cases
+`gene_expression` is optional. Without it the store has no `X` and an empty
+`var`; the viewer shows embeddings and `obs` fields but no genes.
 
-### Negative values
+## Next
 
-Negative expression values export fine. Quantization uses min/max scaling so negatives are representable.
-
-### Extremely large outliers
-
-A single extreme value can stretch min/max and reduce effective contrast for most cells.
-If you see “gene coloring is washed out”, consider:
-- clipping values before export, or
-- exporting a transformed expression (e.g., log1p)
-
-### Invalid values (`NA`, `Inf`)
-
-Both float32 and quantized gene export reject `NA`, `NaN`, and infinities
-before publication. Correct the scientific input explicitly.
-
-## Troubleshooting pointers
-
-- “var has X rows but gene_expression has Y genes” → orientation mismatch.
-- “Export is huge / takes forever” → you exported too many genes; use `gene_identifiers` + quantization.
-- “Gene IDs are rejected” → provide non-empty, distinct IDs in `rownames(var)`
-  or the selected `var_gene_id_column`.
-- Full troubleshooting: {doc}`11_troubleshooting_prepare_export`
+- {doc}`07_connectivities_knn_graph`
+- The same topic for Python, `cellucid.prepare()`: {doc}`../../python_package/c_data_preparation_api/06_gene_expression_matrix`

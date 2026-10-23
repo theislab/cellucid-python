@@ -34,7 +34,7 @@ Before you click anything else, write down:
    - local-demo / local-user / remote server / GitHub / Jupyter
 
 4) **Dataset identity**
-   - dataset id (from the UI dataset info block or from `dataset_identity.json`)
+   - dataset id (from the UI dataset info block, or `uns['cellucid']['id']` in the file)
 
 Why this matters:
 - the same bug can be caused by CORS in one environment and by caching in another.
@@ -119,8 +119,9 @@ Fix:
 
 Likely causes (ordered):
 1) CORS/mixed-content blocked a fetch.
-2) Wrong path/manifest missing and the UI is waiting on a fetch that never completes.
-3) Very large file in browser file picker mode (no lazy loading).
+2) Wrong path, and the UI is waiting on a fetch that never completes.
+3) A large read on a slow host, or a file not written gene-major read over a
+   slow link (the `[cellucid:read]` console lines show what is still reading).
 
 How to confirm:
 - Read `document.documentElement.dataset.startupPhase`. Startup publishes the
@@ -139,7 +140,7 @@ How to confirm:
 - Console: enable `CELLUCID_DEBUG` and look for the last “loading…” log.
 
 Fix:
-- For large h5ad/zarr, use remote server mode (cellucid-python).
+- For a large cell-major (CSR) h5ad, the first gene waits for the gene index (watch the `[cellucid:read]` console lines); this is the same opened in the browser or served by cellucid-python.
 - For GitHub datasets, verify raw URLs are reachable.
 - For CORS, run the local app and connect from the same origin when possible.
 
@@ -178,17 +179,17 @@ Deep dive:
 ### Symptom: “Field selector is empty”
 
 Likely causes (ordered):
-1) `obs_manifest.json` missing/unreadable.
-2) `obs_manifest.json` contains no usable fields.
+1) The file's `obs` has no columns (or none Cellucid can show).
+2) The **Data mapping** turned the columns off (`uns['cellucid']['defaults']['obsKeys']`, or a session).
 3) You are in a snapshot view with a different view context.
 
 How to confirm:
-- Network tab: did `obs_manifest.json` return 200?
+- Read the file with anndata (`adata.obs.columns`).
 - Console: check `window._cellucidState.pointCount` and whether a field loader exists.
 
 Fix:
-- Fix exports to include `obs_manifest.json` (or use `prepare()`).
-- Ensure the correct dataset base URL is in use.
+- Add the columns to `obs` and save the file again (or write it with `prepare(obs=...)`).
+- Ensure the correct dataset is open.
 
 ### Symptom: “Colors look wrong / legend doesn’t match”
 
@@ -293,7 +294,7 @@ frames slower, the most likely cause is that you put work on the draw path
 without a gate.
 
 How to confirm:
-1) Open the **Performance Benchmark** panel once, so the harness module is
+1) Open the **Benchmark** panel once, so the harness module is
    published on `window._cellucidBenchmarkHarness`.
 2) Build a harness against the live viewer and canvas. It shadows the GL context
    and counts, per frame: buffer allocations and bytes, sub-updates and bytes,

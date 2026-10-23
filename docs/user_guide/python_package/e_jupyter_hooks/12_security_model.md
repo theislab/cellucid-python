@@ -19,7 +19,8 @@ Within that model, it’s reasonable to allow:
 
 ### The data server
 
-The Cellucid server exposes dataset endpoints (exported or AnnData-backed) plus:
+The Cellucid server exposes the dataset (the bytes of one AnnData store under
+`/_cellucid/anndata/<dataset_id>…`) plus:
 - `/_cellucid/health`
 - `/_cellucid/info`
 - `/_cellucid/datasets`
@@ -27,6 +28,7 @@ The Cellucid server exposes dataset endpoints (exported or AnnData-backed) plus:
   the same answer for every viewer and every dataset, so it exposes nothing
   about your data)
 - `/_cellucid/events` (POST)
+- `/_cellucid/selection` (POST)
 - `/_cellucid/session_bundle` (POST)
 
 In notebook mode, the server is started with `host="127.0.0.1"` by default, so it should only be reachable from the same machine.

@@ -62,10 +62,10 @@ You have two typical options:
 Use this when you explore in the standalone browser viewer (notebook or not).
 
 ```{figure} ../../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
+:alt: The Cellucid Session panel: the Dataset summary, the Open data group with Sample dataset, Files, Server and Open from link, the Session file group with its Save and Load buttons, and the Data mapping group.
 :width: 524px
 
-The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
+The Session panel gathers every loading path under **Open data** and keeps the **Save** and **Load** buttons under **Session file**, directly below it.
 ```
 
 #### B) From a notebook viewer without downloading (advanced)
@@ -82,11 +82,17 @@ bundle = viewer.get_session_bundle(timeout=60)
 ```python
 bundle = CellucidSessionBundle("my-session.cellucid-session")
 
-print(bundle.dataset_fingerprint)
+print(bundle.dataset_fingerprint)   # dataset id, name, counts, cell order, data mapping
+print(bundle.dataset_source)        # where it was opened from, or None
+print(bundle.required_fields)       # {"obs": [...], "var": [...]} the session uses
 print(bundle.list_chunk_ids()[:10])
 
 # Read decoded payloads (JSON chunks become Python objects)
 meta = bundle.decode_chunk("highlights/meta")
+
+# Analysis windows are typed JSON: result columns come back as numpy arrays
+from cellucid.session_codecs import decode_typed_json
+windows = decode_typed_json(bundle.decode_chunk("analysis/windows"))
 ```
 
 ### 3) Apply to AnnData (what gets created)
@@ -98,7 +104,8 @@ Applying a bundle can add:
 - Optional bookkeeping in `adata.uns["cellucid"]` (manifest, fingerprint, and chunk snapshots)
 
 Application requires the exact `expected_dataset_id`. Identity, shape, bounds,
-and target-column conflicts are rejected before mutation. You may include or
+every field the session uses (`requires`: obs columns and genes, all missing
+ones named at once), and target-column conflicts are rejected before mutation. You may include or
 exclude deleted user-defined fields explicitly.
 
 ---
@@ -120,13 +127,37 @@ The bundle reader and AnnData applicator include guards:
 
 ### Format overview (for developers)
 
-The `.cellucid-session` framing is:
-1. MAGIC bytes: `CELLUCID_SESSION\n`
+The `.cellucid-session` framing (session format 2) is:
+1. MAGIC bytes: `CELLUCID_SESSION/2\n` — the format version is part of the signature
 2. `manifestByteLength` (u32 little-endian)
 3. UTF-8 manifest JSON bytes
 4. repeated chunks: `[chunkByteLength (u32 LE), chunkBytes...]`
 
-Each chunk has metadata in the manifest (`kind`, `codec`, expected sizes, ids).
+The manifest holds exactly `createdAt`, `datasetFingerprint` (`datasetId`,
+`name`, `cellCount`, `varCount`, `cellOrder`, `dataMapping`), `source` (where
+the dataset was opened from: a sample, a link, a server, or the name of a local
+file or folder; `null` for a notebook), `requires` (the obs columns and genes
+the session uses) and `chunks`. Each chunk has metadata in the manifest (`kind`,
+`codec`, expected sizes, ids).
+
+A file that does not start with `CELLUCID_SESSION/2\n` is refused with the web
+app's sentence: *This file is not a Cellucid session file of format 2 (it does not start with CELLUCID_SESSION/2).*
+
+### Compact payloads
+
+| Chunk | Encoding (before the chunk's gzip) |
+|---|---|
+| `highlights/cells/<groupId>` | byte 0 picks the smallest of: 0 sorted-delta varints, 1 bitset, 2 runs, 3 a bitmask over the cells of the group's category, 4 the whole category (no per-cell bytes) |
+| `user-defined/codes/<fieldId>` | byte 0 picks: 0 raw codes, 1 runs, 2 codes packed 1, 2 or 4 bits each |
+| `analysis/windows`, `analysis/docked` | typed JSON: settings and results as JSON whose numeric result columns are stored as raw typed arrays |
+
+A category-relative membership (3 or 4) is decoded against
+`adata.obs[fieldKey] == categoryName`; the session records that category's cell
+count and a digest of its cells, and an AnnData whose category holds other
+cells is refused (*The category this selection was saved relative to no longer
+holds the same cells.*) rather than silently selecting different cells. The
+codecs are in `cellucid.session_codecs` (`decode_cell_set`,
+`decode_user_defined_codes`, `decode_typed_json`, `digest_cell_set`).
 
 ### Closed contributor/chunk inventory
 
@@ -138,11 +169,12 @@ current inventory is:
 | `core-state` | `core/state` |
 | `field-overlays` | `core/field-overlays` |
 | `dockable-layout` | `ui/dockable-layout` |
+| `figure-export` | `ui/figure-export` |
 | `highlights-meta` | `highlights/meta` |
 | `highlights-cells` | `highlights/cells/<groupId>` |
 | `user-defined-codes` | `user-defined/codes/<fieldId>` |
 | `analysis-windows` | `analysis/windows` |
-| `analysis-artifacts` | `analysis/artifacts/bulk-gene/<encoded-cache>/<encoded-gene>/<encoded-page>` |
+| `analysis-docked` | `analysis/docked` |
 | `cinematic-camera` | `cinematic/camera` |
 
 An unknown chunk, unknown contributor, or mismatched contributor/chunk pair
@@ -150,10 +182,6 @@ raises before payload decoding and before target mutation. AnnData application
 materializes only highlight and user-defined field chunks; the other current
 chunks remain in the session bundle, while their manifest entries are retained
 in `adata.uns` when `store_uns=True`.
-
-Each analysis-artifact identity segment uses the canonical JavaScript
-`encodeURIComponent` encoding. Noncanonical escapes, unescaped reserved
-characters, empty segments, or invalid UTF-8 are rejected.
 
 ---
 
@@ -181,7 +209,7 @@ characters, empty segments, or invalid UTF-8 are rejected.
 
 A bundle is only meaningfully applicable if it matches the dataset it was created from.
 Common mismatch causes:
-- you filtered/reordered cells before exporting,
+- you filtered/reordered cells before capturing the session,
 - you regenerated the AnnData with different preprocessing,
 - you are applying a session to a subset.
 
@@ -189,8 +217,9 @@ Any mismatch raises before the target is mutated.
 
 ### Cell ordering assumptions
 
-Highlights and codes are stored as **indices** into the dataset.
-If your AnnData row order differs, labels will be assigned to the wrong cells.
+Highlights and codes are stored as **cell positions** in the dataset (or, for a
+whole category, as that category). If your AnnData row order differs, labels
+will be assigned to the wrong cells.
 
 ### Conflicting column names
 
@@ -227,9 +256,19 @@ Fix:
 - Apply to the original AnnData used to create the session.
 - Pass the exact dataset ID used to create the viewer.
 
-### Symptom: “Not a .cellucid-session file (invalid MAGIC header)”
+### Symptom: “This file is not a Cellucid session file of format 2 …”
 Fix:
-- Confirm the file is actually a `.cellucid-session` bundle and not (for example) a `.json` export or a renamed file.
+- Confirm the file is actually a `.cellucid-session` file saved by this release and not (for example) a `.json` file or a renamed file.
+
+### Symptom: “This session uses the obs column … which this AnnData does not have”
+The session's `requires` names fields the AnnData lacks: every missing obs
+column and gene is listed. Apply the session to the AnnData it was saved on (or
+with the same data mapping and gene names).
+
+### Symptom: “The category this selection was saved relative to no longer holds the same cells”
+A whole-category highlight is stored as that category. The AnnData's
+`obs[fieldKey]` assigns that category to different cells than when the session
+was saved; apply the session to the AnnData it was saved on.
 
 ### Symptom: “Chunk decompressed too large”
 Fix:

@@ -1,18 +1,14 @@
 """
 Cellucid - 1D, 2D, and 3D single-cell WebGL visualization toolkit.
 
-Utilities for exporting AnnData/array data for the Cellucid web viewer,
-serving data locally or remotely, and integrating with Jupyter notebooks.
+Writes Cellucid-ready AnnData files, serves AnnData files and objects to the
+Cellucid web viewer (which reads them itself), and embeds the viewer in
+Jupyter notebooks.
 
 Main exports:
-    - prepare: Export data to cellucid format
-    - Embedding: One embedding to export, with the columns it is read from
-    - serve: Serve a dataset directory via HTTP
-    - CellucidServer: Server class for more control
-    - CellucidViewer: Jupyter notebook integration
-    - show_anndata: Directly visualize AnnData (no export needed)
-    - serve_anndata: Serve AnnData via HTTP (no export needed)
-    - AnnDataAdapter: Adapter for reading AnnData in cellucid format
+    - prepare: Write a Cellucid-ready AnnData (.h5ad, .zarr or .zarr.zip)
+    - serve_anndata / AnnDataServer: Serve an AnnData file, store or object
+    - show_anndata / AnnDataViewer: Show an AnnData file, store or object in a notebook
 """
 
 from importlib import metadata as _metadata
@@ -29,12 +25,10 @@ if TYPE_CHECKING:
     # without it the module ``__getattr__`` erases the public API: every export
     # resolves to ``Any``, so ``prepare(nonexistent_argument=123)`` checks clean
     # even though the package ships ``py.typed``.
-    from .anndata_adapter import AnnDataAdapter
     from .anndata_server import AnnDataServer, serve_anndata
     from .anndata_session import apply_cellucid_session_to_anndata
-    from .jupyter import AnnDataViewer, CellucidViewer, show, show_anndata
-    from .prepare_data import Embedding, prepare
-    from .server import CellucidServer, serve
+    from .jupyter import AnnDataViewer, show_anndata
+    from .prepare_data import prepare
     from .session_bundle import CellucidSessionBundle
     from .vector_fields import add_transition_drift_to_obsm, compute_transition_drift
     from .web_cache import clear_web_cache, get_web_cache_dir
@@ -43,37 +37,13 @@ if TYPE_CHECKING:
 # All imports are lazy to ensure fast CLI startup.
 # Heavy dependencies (numpy, scipy, pandas) are only loaded when needed.
 def __getattr__(name: str) -> Any:
-    # Core export functionality (imports numpy, pandas, scipy)
+    # Writing a Cellucid-ready AnnData (imports numpy, pandas, scipy)
     if name == "prepare":
         from .prepare_data import prepare
 
         return prepare
-    if name == "Embedding":
-        from .prepare_data import Embedding
 
-        return Embedding
-
-    # Server for pre-exported data (lightweight, no heavy deps)
-    if name == "serve":
-        from .server import serve
-
-        return serve
-    if name == "CellucidServer":
-        from .server import CellucidServer
-
-        return CellucidServer
-
-    # Jupyter integration
-    if name == "CellucidViewer":
-        from .jupyter import CellucidViewer
-
-        return CellucidViewer
-    if name == "show":
-        from .jupyter import show
-
-        return show
-
-    # AnnData direct visualization
+    # AnnData in a notebook
     if name == "show_anndata":
         from .jupyter import show_anndata
 
@@ -83,7 +53,7 @@ def __getattr__(name: str) -> Any:
 
         return AnnDataViewer
 
-    # AnnData server and adapter
+    # AnnData server
     if name == "serve_anndata":
         from .anndata_server import serve_anndata
 
@@ -92,10 +62,6 @@ def __getattr__(name: str) -> Any:
         from .anndata_server import AnnDataServer
 
         return AnnDataServer
-    if name == "AnnDataAdapter":
-        from .anndata_adapter import AnnDataAdapter
-
-        return AnnDataAdapter
 
     # Session bundles + AnnData mutation
     if name == "CellucidSessionBundle":
@@ -129,21 +95,13 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
-    # Core export functionality
+    # Writing a Cellucid-ready AnnData
     "prepare",
-    "Embedding",
-    # Serve pre-exported data
-    "serve",
-    "CellucidServer",
-    # Jupyter integration (pre-exported data)
-    "CellucidViewer",
-    "show",
-    # Direct AnnData visualization (no export needed)
+    # Viewing AnnData
     "show_anndata",
     "AnnDataViewer",
     "serve_anndata",
     "AnnDataServer",
-    "AnnDataAdapter",
     # Sessions
     "CellucidSessionBundle",
     "apply_cellucid_session_to_anndata",

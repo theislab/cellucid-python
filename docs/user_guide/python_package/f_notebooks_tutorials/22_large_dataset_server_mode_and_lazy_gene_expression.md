@@ -6,9 +6,8 @@ It explains:
 - what “server mode” means in Cellucid (and why it exists)
 - how “lazy gene expression” avoids shipping a giant matrix to the browser
 - which workflow to pick for large datasets
-- what direct-AnnData startup does, as five numbered steps you can read
-- why the neighbor graph is never read unless you ask for it, and what that
-  saves at scale
+- what direct-AnnData startup does, as four numbered steps you can read
+- what the browser reads, and when, and what that costs at scale
 - how to make notebook embeds work on HTTPS/remote kernels (JupyterHub/HPC)
 - what to do when you hit performance limits (browser/GPU/memory)
 
@@ -26,9 +25,9 @@ It explains:
 **Prerequisites**
 - `pip install cellucid`
 - A dataset:
-  - `.h5ad` (recommended for read-only-backed access), or
-  - `.zarr` (loaded eagerly), or
-  - a pre-exported folder from {doc}`21_prepare_exports_with_quantization_and_compression`
+  - `.h5ad`, or
+  - a Zarr store (a folder, or zipped as `.zip`), or
+  - a Cellucid-ready AnnData written as in {doc}`21_prepare_a_cellucid_ready_anndata`
 
 ---
 
@@ -38,54 +37,62 @@ It explains:
 
 Cellucid’s viewer runs in the browser, but your dataset may be:
 - too large to load into browser memory
-- too large to ship as a single file
-- stored in formats that benefit from on-demand access
+- too large to ship as a single download
+- on a remote machine the browser cannot open files from
 
 So Cellucid uses an HTTP server that serves:
 - the viewer UI assets
-- metadata manifests (obs/var/connectivity)
-- per-gene and per-field binary vectors **on demand**
+- the data: the bytes of one AnnData store (`.h5ad` or Zarr) exactly as they
+  are on disk
+
+The server computes nothing. The web app's own HDF5/Zarr
+reader reads the store in place with HTTP range requests, so only the bytes a
+view needs cross the wire.
 
 ### “Lazy gene expression”
 
 The browser does not download the entire expression matrix upfront.
 
-Instead, when you search/select a gene, the viewer requests something like:
-- `var/<gene_id>.values.*.bin` (exported mode)
-- or a dynamic endpoint that returns that gene’s vector (AnnData server mode)
+Instead, when you search/select a gene, the viewer reads only that gene's
+entries in the store's expression matrix, by range request.
 
 This means:
 - time-to-first-view can be fast even for huge `n_genes`
 - gene coloring is “pay as you go” (first time you request a gene, you pay I/O)
 
-### “Opt-in connectivity”
+For a row-major (CSR) matrix — the layout Scanpy writes — a gene's entries are
+spread across every row, so the browser builds a gene index once, on the first
+gene, and every later gene reads only its own entries. A column-major (CSC)
+matrix — the layout `prepare()` writes — needs no index: one gene is one
+contiguous range.
 
-The neighbor graph in `adata.obsp['connectivities']` is not read unless you ask
-for it. Everything else — points, obs fields, gene expression, centroids, vector
-fields — is unaffected by that choice.
+### “Read when drawn”
+
+The neighbor graph in `adata.obsp`, and any vector field in `obsm`, is read
+only when a view draws it. Nothing about them costs startup time.
 
 ---
 
 ## Choose your workflow (decision guide)
 
-### Option A (recommended for sharing/repeated viewing): export once, then `show()` / `cellucid serve`
+### Option A (recommended for sharing/repeated viewing): `prepare()` once, then open the file
 
 Use this if:
 - you plan to view the dataset many times
-- you want a stable artifact to share (export folder)
+- you want a stable artifact to share (one standard AnnData file)
 
 Workflow:
-- `prepare(...)` → export folder
-- `show("./exports/<id>")` (notebook) or `cellucid serve ./exports/<id>` (browser)
+- `prepare("my_dataset.h5ad", format="h5ad", ...)` → a Cellucid-ready AnnData
+- `show_anndata("my_dataset.h5ad")` (notebook) or `cellucid serve my_dataset.h5ad` (browser); the file names itself
 
 See:
-- {doc}`21_prepare_exports_with_quantization_and_compression`
+- {doc}`21_prepare_a_cellucid_ready_anndata`
 
-### Option B (recommended for large `.h5ad` without exporting yet): direct read-only-backed AnnData viewing
+### Option B (a large `.h5ad` or Zarr store as it is): open it directly
 
 Use this if:
 - you want convenience and are iterating quickly
-- you have a large `.h5ad` and don’t want to export yet
+- you have a large `.h5ad` or Zarr store and don’t want to convert it
 
 ```python
 from cellucid import show_anndata
@@ -99,6 +106,9 @@ viewer = show_anndata(
 viewer
 ```
 
+`dataset_name` and `dataset_id` may be omitted when the file declares them in
+`uns['cellucid']['name']` and `uns['cellucid']['id']`.
+
 ### Option C (browser-only, no notebook): `cellucid serve /path/to/data`
 
 Use this if:
@@ -106,10 +116,6 @@ Use this if:
 - you want a simple “serve and open browser” workflow
 
 ```bash
-# Exported directory:
-cellucid serve /path/to/export
-
-# Direct AnnData:
 cellucid serve /path/to/data.h5ad \
   --dataset-name "My study" \
   --dataset-id my-study-v1
@@ -119,18 +125,32 @@ cellucid serve /path/to/data.h5ad \
 
 ## Reading the startup report
 
-Startup prints five numbered steps. Step 2, `Loading AnnData`, is where a large
-object spends nearly all of its time, and it names each phase of the build as it
-starts, so a long pause is labelled rather than silent. A prepared export runs
-three steps instead.
+Startup prints four numbered steps: `[1/4] Detecting format`,
+`[2/4] Reading metadata` (cell and gene counts and the names of the stored
+elements — no array is read), `[3/4] Checking launch choices` (each option you
+named must exist in the store), and `[4/4] Starting server`.
 
 The full transcript is in
 {doc}`../../web_app/b_data_loading/04_server_tutorial`.
 
-## The graph and the overlay are opt-in
+## What it costs at scale
 
-This is the setting that matters most at scale. The graph is **not** read unless
-you ask for it:
+Measured on one Mac over localhost, for a 562k-cell × 8,192-gene `.h5ad` (CSR
+matrix, gzip-compressed):
+
+| What | Time |
+| --- | --- |
+| Server startup | 0.16 s |
+| obs fields | about 90 ms |
+| 2D and 3D UMAP | about 40 ms each |
+| Gene index, built once in the background from the moment the dataset opens | about 2 s |
+| A gene, once the index is built | a few ms |
+| A gene asked for before the index is built | 1.3 s |
+| 100 genes at once | about 20 ms |
+| 1,000 cell rows | 0.55 s |
+| Neighbor graph, when drawn | 0.65 s |
+
+Choosing a graph at launch costs nothing at startup either:
 
 ```python
 viewer = cellucid.show_anndata(
@@ -141,26 +161,22 @@ viewer = cellucid.show_anndata(
 )
 ```
 
-Left off, `adata.obsp['connectivities']` is never touched and the dataset
-publishes no connectivity. Asked for, the whole graph is read and validated
-before the server binds, because the manifest the viewer fetches first declares
-the edge count.
+`knn_key` names the `obsp` matrix the viewer draws; it must exist in the store,
+and it is read only when a view draws the graph.
 
-Why it dominates: the cost tracks *stored neighbors*, not cells. A 50-neighbor
-graph over millions of cells is hundreds of millions of them, and validating one
-needs several times its own memory. Ask for it when you will draw it.
+Details: {doc}`../d_viewing_apis/14_performance_scaling_and_lazy_loading`.
 
-Details and the arithmetic: {doc}`../d_viewing_apis/14_performance_scaling_and_lazy_loading`.
+## Paths and in-memory objects
 
-## Large `.h5ad` specifics (backed mode)
+When you pass a path, it is served as it is on disk — never copied — and the
+browser reads it in place: an `.h5ad`, a Zarr store folder (v2 or v3), or a
+zipped Zarr store (`.zip`).
 
-When you pass a `.h5ad` path, Cellucid always opens it read-only-backed:
-- it does **not** load the entire matrix into RAM
-- it reads data as needed (I/O-bound but memory-friendly)
-
-To use an in-memory dataset, load an `AnnData` object yourself and pass that
-object to `show_anndata` with the required identity. A `.zarr` path is loaded
-eagerly by `anndata.read_zarr`.
+An in-memory `AnnData` object is written once to a temporary `.h5ad`, with
+sparse matrices (`X`, layers, `raw.X`) column-major (CSC) and uncompressed, and
+that file is removed when the server stops or Python exits. On the same
+562k-cell object, writing it took 0.8 s (925 MB on disk); after that the first
+gene took 8 ms and 100 genes 68 ms, because a CSC matrix needs no gene index.
 
 ```python
 import anndata
@@ -174,11 +190,16 @@ viewer = show_anndata(
 )
 ```
 
+A store holding an array the browser cannot decode (an HDF5 filter such as
+Blosc, Zstandard, szip or scaleoffset; a Zarr codec such as bz2, lzma or zfpy)
+is read once with anndata and its codec plugins and served from a decodable
+temporary `.h5ad`; the terminal names those arrays.
+
 ### Which `obsm` array gets drawn
 
 A key that names its dimension decides it. Failing that, a plain `X_umap` of 1,
 2, or 3 columns is read at the dimension its column count states, so a Scanpy
-object serves as written and a backed file needs no rewrite. Full rules:
+object is drawn as written. Full rules:
 {doc}`../d_viewing_apis/08_anndata_mode_show_anndata_and_serve_anndata`.
 
 ## Remote notebooks (HTTPS / JupyterHub / HPC)
@@ -210,7 +231,7 @@ slash, query, fragment, or credentials.
 
 On the remote machine:
 ```bash
-cellucid serve exports/my_dataset --host 127.0.0.1 --port 8765 --no-browser
+cellucid serve my_dataset.h5ad --dataset-name "My study" --dataset-id my-study-v1 --host 127.0.0.1 --port 8765 --no-browser
 ```
 
 On your laptop:
@@ -220,7 +241,7 @@ ssh -L 8765:127.0.0.1:8765 user@remote-host
 
 In your browser:
 - open the printed Viewer URL:
-  `http://127.0.0.1:8765/?source=remote`
+  `http://127.0.0.1:8765/?anndata=true`
 
 ```{warning}
 Be careful with `--host 0.0.0.0`. It exposes the server to your network. Use it only if you understand the security implications.
@@ -247,40 +268,34 @@ If the viewer becomes unstable, consider:
 - using the web app performance guidance:
   - {doc}`../../web_app/n_benchmarking_performance/index`
 
-### 2) Prefer exports for speed and stability
+### 2) Prefer a Cellucid-ready AnnData for speed and stability
 
-Exports allow you to:
-- quantize and compress values
-- cache “what the browser needs” in a stable folder
+`prepare()` writes:
+- the expression matrix gene-major, so every gene is one small read
+- arrays chunked for range reads, with codecs browsers decode natively
+- one stable file that names itself
 
 See:
-- {doc}`21_prepare_exports_with_quantization_and_compression`
+- {doc}`21_prepare_a_cellucid_ready_anndata`
 
 ### 3) Expect “first gene request” latency
 
 Lazy gene expression means:
-- the first time you request a gene, it may take noticeable time (disk/network)
-- subsequent requests may be faster (server/browser caching)
+- the first time you request a gene, it may take noticeable time (disk/network);
+  for a row-major (CSR) matrix the browser builds a gene index once: in the
+  background as soon as the dataset opens when the link to the server is as
+  fast as a disk (the same machine or network), else with the first gene
+- subsequent genes read only their own entries
 
 If gene requests are consistently slow:
 - your storage is slow (network filesystem)
-- your `.h5ad` is not chunked/optimized for the access pattern
-- use a read-only-backed `.h5ad` on fast local storage
+- the server runs far from the data, or the tunnel has high latency
+- write the file with `prepare()` (column-major), so each gene is one contiguous range
 
-### 4) Only ask for the neighbor graph when you will draw it
+### 4) Serve only the obs columns you need
 
-`knn_key="connectivities"` / `--knn connectivities` is the most expensive switch on the
-direct path, and it is paid in full at startup on every session. Leave it off
-for exploration, and turn it on for the session that actually inspects edges. If
-you need the graph repeatedly, `prepare(connectivities=...)` validates it once
-into an export instead of once per launch.
-
-### 5) Serve only the obs columns you need
-
-`obs_keys=` (or `--obs-key`, repeated) fixes both the served set and its order.
-Every column is classified during step 2, so naming a short list shortens the
-longest step and drops columns Cellucid cannot serve, such as a `datetime64`
-collection date.
+`obs_keys=` (or `--obs-key`, repeated) fixes both the shown set and its order.
+Each name must exist in `obs`; the check runs before the server starts.
 
 ---
 
@@ -289,54 +304,40 @@ collection date.
 ### Symptom: “Viewer loads but gene search is extremely slow”
 
 Likely causes:
-- backed `.h5ad` on slow storage
-- large `.h5ad` with access pattern that forces many small reads
+- the `.h5ad` sits on slow storage
+- a row-major (CSR) matrix: the first gene waits for the gene index
 - remote notebook proxy adding latency
 
 Fix:
 - move data to fast local SSD (if possible)
-- consider exporting (quantize+compress) for repeated viewing
-- move the `.h5ad` to fast local storage
+- write it once with `prepare()` (gene-major) for repeated viewing
 
-### Symptom: “Startup sits for minutes before printing a URL”
+### Symptom: “Startup sits for a long time before printing a URL”
 
 Likely causes:
-- you are inside `[2/5] Loading AnnData` on a very large object
-- you asked for the neighbor graph, and the edge list is being built
+- the viewer generation is being fetched on a cold cache (`[4/4] Starting server`)
+- an in-memory object, or a store with arrays the browser cannot decode, is
+  being written to a temporary `.h5ad`
 
 How to confirm:
-- read the last line printed. `Obs columns: classifying …` is column
-  classification; `Embeddings: resolving obsm keys` is embedding resolution;
-  `Connectivity: reading obsp['connectivities']` is the edge list, and for
-  50,000,000 or more stored neighbors the `cellucid.connectivity` logger has
-  already warned with both counts.
+- read the last line printed; each of the four steps names its phase.
 
 Fix:
-- drop `knn_key="connectivities"` / `--knn connectivities` if this session will not
-  draw edges
-- narrow `obs_keys=` to the columns you actually color by
-- export once with `prepare()` for repeated viewing
+- wait once for the viewer generation; the cache is reused afterwards
+- serve the file from disk instead of an in-memory object
 
 ### Symptom: “The edge overlay is missing, but my object has a KNN graph”
 
-Likely cause:
-- the neighbor graph is opt-in, and this run did not ask for it.
+Likely causes:
+- the viewer opened with a different (or no) neighbor graph.
 
 How to confirm:
-- read the `Connectivity:` line of `[3/5] Analyzing dataset`. It has three
-  states:
-
-  ```text
-        Connectivity: yes (125,481,922 edges)
-        Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)
-        Connectivity: no
-  ```
-
-  The middle line means you own a graph and did not ask for it. `no` means the
-  object really has none.
+- open **Session › Data mapping › Neighbour graph** and check which `obsp`
+  matrix is chosen.
 
 Fix:
-- restart with `knn_key="connectivities"`, or `--knn connectivities` from the terminal.
+- choose the graph there, or restart with `knn_key="connectivities"`
+  (`--knn connectivities` from the terminal).
 
 ### Symptom: “Cellucid found nothing to plot”
 
@@ -345,7 +346,8 @@ Likely causes:
   cell, or non-finite in the columns that would be drawn
 
 How to confirm:
-- read the message. It lists every `obsm` entry and why it was not used.
+- read the message in the viewer. It lists every `obsm` entry and why it was
+  not used.
 
 Fix:
 - repair or compute an embedding, or name a usable one with
@@ -378,5 +380,5 @@ Fix:
 ## Next steps
 
 - {doc}`23_programmatic_highlighting_and_selection_callbacks` (hooks + robust callback patterns)
-- {doc}`04_real_world_dataset_recipes_gallery` (runnable real Pancreas export)
+- {doc}`04_real_world_dataset_recipes_gallery` (runnable real Pancreas preparation)
 - Web app performance guidance: {doc}`../../web_app/n_benchmarking_performance/index`
