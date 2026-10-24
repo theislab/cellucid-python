@@ -88,8 +88,10 @@ For administrators: Cellucid is a single-page application; for OneDrive it
 has no server, stores nothing and receives no data (see [What Cellucid sees and
 keeps](#what-cellucid-sees-and-keeps)). To approve it for the organisation, open
 the Microsoft Entra admin center, **Enterprise applications → Cellucid →
-Permissions → Grant admin consent**. Sharing across organisations (a guest
-opening another organisation's file) is not tested yet.
+Permissions → Grant admin consent**. Not tested yet with real accounts:
+sharing across organisations (a guest opening another organisation's file),
+and whether Microsoft opens a share link with `Files.Read` alone (its
+reference for share links names `Files.ReadWrite` as the least permission).
 
 ## Share private data with a collaborator
 
@@ -126,7 +128,8 @@ nothing else about it.
   id (`gdrive:<id>`, `onedrive:<drive>/<item>`), never a token or a download
   address.
 
-The privacy policy is at [www.cellucid.com/privacy.html](https://www.cellucid.com/privacy.html).
+The privacy policy is at [www.cellucid.com/privacy.html](https://www.cellucid.com/privacy.html),
+linked as **Privacy** at the foot of the sidebar.
 
 ## Why folders are refused
 
@@ -162,13 +165,23 @@ Cellucid's permission from your account as well:
 
 Cellucid does not sign you out of Google or Microsoft themselves.
 
-## Signing in from a local server
+## Where Drive and OneDrive work
 
-On `cellucid serve`, Microsoft sign-in works on any port. Google matches the
-page's address exactly, so Google sign-in works on www.cellucid.com and on
-`cellucid serve`'s default port only (`http://127.0.0.1:8765` or
-`http://localhost:8765`); on another port, Cellucid says so. Public Drive
-files open on any port.
+Google and Microsoft answer only the addresses Cellucid is registered with.
+Google matches an address exactly, port included, for public files (Cellucid's
+API key) and for sign-ins alike. Microsoft ignores the port of a `localhost`
+address, and accepts plain `http://` only for this computer.
+
+| Cellucid opened at | Google Drive | OneDrive |
+|---|---|---|
+| www.cellucid.com | Yes | Yes |
+| `cellucid serve` on its default port (`http://127.0.0.1:8765`, `http://localhost:8765`) | Yes | Yes |
+| `cellucid serve --port <another port>` | No: Cellucid says to start it without `--port` | Yes |
+| A notebook viewer (`show_anndata`), on a free port the system picks | No: Cellucid says to create the viewer with `AnnDataViewer(data, port=8765)`, which opens public files (private files are not tested yet) | Only when the notebook page is on the same host as the viewer (Jupyter at `127.0.0.1`, not tested yet). From `localhost`, VS Code or any other site the browser keeps Microsoft's window from reaching the embedded viewer, and Cellucid says to open Cellucid in its own tab |
+| Another computer's address (`cellucid serve --host 0.0.0.0`, `http://192.168.…`) | No | No: Cellucid says it needs `https://` or this computer's own address |
+| JupyterHub, Colab, a remote server, any other site | No | No |
+
+Where a row says no, open the file on www.cellucid.com.
 
 ## Related pages
 

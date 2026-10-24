@@ -153,9 +153,14 @@ contract test (`tests/source-sign-in-contract.test.mjs`):
   Services (a popup, no refresh token); Microsoft uses the authorization code
   flow with PKCE for a single-page application, redeemed in the page (the
   popup returns to `assets/auth/callback.html`, which posts the code over a
-  `BroadcastChannel`). The public client IDs, API key and project number are
-  in `assets/js/data/sources/provider-config.js`; empty values mean "not
-  configured on this site yet".
+  `BroadcastChannel` and closes once the page answers that it has it; a popup
+  closed before then ends the attempt). The public client IDs, API key, project
+  number and the origins registered with Google (`registeredOrigins`) are in
+  `assets/js/data/sources/provider-config.js`; empty values mean "not
+  configured on this site yet". Where Google or Microsoft cannot answer the
+  page (another origin, a plain `http://` page of another computer, a viewer
+  embedded in another site, `data/sources/auth/page-context.js`), Cellucid
+  says so before any request or popup.
 - A file read behind a sign-in names only `{provider, ref}` in its resource
   (`data/sources/access.js`). The AnnData reader worker asks the page for the
   URL and headers to read from (`{event: 'source-access'}`), holds them in

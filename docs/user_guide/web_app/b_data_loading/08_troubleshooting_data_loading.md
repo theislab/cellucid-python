@@ -379,12 +379,27 @@ The sign-in step sits under the **Link or server** bar and in a notification
 
 - **"The browser blocked … sign-in window."** Allow pop-ups for the site
   (the address bar's pop-up icon), then click the button again.
-- **The window closed before it finished.** Click the button again; a new
-  window opens.
-- **"Google sign-in works on a local cellucid serve only on its default port,
-  8765."** Google accepts sign-ins only from the addresses Cellucid
-  registered. Start `cellucid serve` without `--port`, or open the file on
-  www.cellucid.com. Microsoft sign-in works on any local port.
+- **"… sign-in window was closed before it finished."** Click the button
+  again; a new window opens. If you did sign in and Cellucid runs inside
+  another page (a notebook), open Cellucid in its own tab.
+- **"Google Drive works on a local cellucid serve only on its default port,
+  8765."** Google answers only the addresses Cellucid registered, port
+  included, for public and private files. Start `cellucid serve` without
+  `--port`, or open the file on www.cellucid.com.
+- **"Google Drive works in a notebook viewer only on port 8765."** A notebook
+  viewer runs on a free port the system picks. Create it with
+  `AnnDataViewer(data, port=8765)` (when no `cellucid serve` holds that port),
+  or open the file on www.cellucid.com.
+- **"Google Drive works on www.cellucid.com, not on …"** The page is on
+  another computer's address or another site. Open the file on
+  www.cellucid.com.
+- **"Microsoft sign-in needs https:// or this computer's own address."** The
+  page is plain `http://` on another computer's address, which Microsoft and
+  the browser refuse for a sign-in. Open www.cellucid.com.
+- **"Microsoft sign-in cannot reach Cellucid inside another site's page."**
+  The browser keeps a page embedded in another site (a notebook at
+  `localhost` showing a viewer at `127.0.0.1`) apart from Microsoft's sign-in
+  window. Open Cellucid in its own tab, such as www.cellucid.com.
 - **"Signing in to Google / Microsoft is not configured on this site yet."**
   The site you use has no Google or Microsoft registration (a copy of the app
   hosted elsewhere). Use www.cellucid.com.

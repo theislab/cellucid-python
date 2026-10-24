@@ -82,7 +82,10 @@ Three things that are commonly assumed to cost per frame, and do not:
   GPU at all and nothing is redrawn. Holding a view steady does not accumulate
   cost — with or without a highlighted selection, except in `Full` shader
   quality, whose highlight ring pulses and so keeps drawing while anything is
-  highlighted.
+  highlighted. A frame drawn only for the pulse waits until the page has been
+  free for as long as the previous frame took, so on a slow renderer (software
+  WebGL, a weak GPU under millions of points) the pulse slows down instead of
+  taking the main thread from analyses and input.
 - **Shader quality.** `Full`, `Light` and `Ultra-light` measured the same on the
   machine below in 3D views, at every point size tested — see the next section.
   A **2D view** draws without depth testing and shades every overlapping point;

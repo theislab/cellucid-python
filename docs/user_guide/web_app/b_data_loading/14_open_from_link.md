@@ -311,7 +311,8 @@ computer unless you export a file.
 | The DOI … names a record on …, which is not a Figshare item | A DOI of another repository | Paste a Zenodo or Figshare DOI, or a link to the file |
 | This link is a Google Drive folder / a OneDrive folder … | Cellucid opens single files from Drive and OneDrive | Share the `.h5ad` or `.zarr.zip` file itself ({doc}`16_private_drive_onedrive`) |
 | This file is private on Google Drive, or the link is wrong … not configured on this site yet | A private Drive file on a site where Google sign-in is not set up | Open it on www.cellucid.com |
-| Google sign-in works on a local cellucid serve only on its default port, 8765 … | Google accepts sign-ins only from registered addresses | Start `cellucid serve` without `--port`, or use www.cellucid.com |
+| Google Drive works on a local cellucid serve only on its default port, 8765 … / in a notebook viewer only on port 8765 … / on www.cellucid.com, not on … | Google answers only registered addresses, port included, for public and private files | Start `cellucid serve` without `--port`, create the notebook viewer with `AnnDataViewer(data, port=8765)`, or use www.cellucid.com |
+| Microsoft sign-in needs https:// … / cannot reach Cellucid inside another site's page … | A plain `http://` page on another computer, or a viewer embedded in another site | Open Cellucid in its own tab, such as www.cellucid.com |
 | Your Google account cannot open this file / Your Microsoft account cannot open this file … | The file is not shared with the account you signed in with | Ask its owner to share it with that account |
 | Your organisation must approve Cellucid … | A work or school account opening a colleague's file, in an organisation that lets only administrators grant `Files.Read.All` | Ask your administrator ({doc}`16_private_drive_onedrive`) |
 | Google has limited downloads of this file for now … | Google's per-file download quota | Try later, or ask the owner to share a copy |

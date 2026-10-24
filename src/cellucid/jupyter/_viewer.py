@@ -282,7 +282,9 @@ class AnnDataViewer:
             data: AnnData object, or path to an .h5ad file, a zipped Zarr
                 store or a Zarr store folder. A leading ``~`` in a path is
                 expanded to the user's home directory.
-            port: Port for the data server (auto-selected if None).
+            port: Port for the data server (auto-selected if None). Google
+                Drive files open in the viewer only on 8765, the one local
+                port Cellucid registers with Google.
             height: Height of the embedded viewer in pixels.
             auto_open: Automatically display when created.
             latent_key: ``obsm`` array (a latent space such as scVI or PCA)

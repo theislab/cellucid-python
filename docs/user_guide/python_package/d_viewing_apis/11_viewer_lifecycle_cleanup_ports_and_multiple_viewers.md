@@ -73,10 +73,13 @@ handle any failure before interpreter teardown.
 **Rule:** use the CLI/server banner for blocking server mode and
 `viewer.viewer_url` for notebook viewer objects; never assume port `8765`.
 
-### Choosing a fixed port (useful for SSH tunnels)
+### Choosing a fixed port (SSH tunnels, Google Drive)
 
 The convenience function `show_anndata(...)` does not expose `port` directly.
-If you need a fixed port, instantiate the viewer class:
+If you need a fixed port, instantiate the viewer class. Port `8765` is also
+the one local port on which Google Drive files open in a notebook viewer:
+Google answers only the addresses Cellucid registered, port included
+({doc}`../../web_app/b_data_loading/16_private_drive_onedrive`).
 
 ```python
 from cellucid import AnnDataViewer
