@@ -129,12 +129,32 @@ Then the startup selection loads as the first ordinary dataset change (see
 - load the obs inventory → attach obs field loader
 - optionally load the var inventory → attach var field loader
 - load the positions of the embedding the dataset opens on (the default of
-  its opening dimension, `dimensionManager.getDefaultLayoutKey()`); every other
-  enabled embedding is read when a view first shows it
+  its opening dimension, `dimensionManager.getDefaultLayoutKey()`), read
+  beside the obs field lists rather than after them; every other enabled
+  embedding, including the other dimensions `uns['cellucid']['defaults']`
+  names, is read (and its values checked) when a view first shows it. Before
+  its first render, Suo now reads 5.5 MB in 27 requests (its metadata and its
+  3D embedding). It used to read all three embeddings, 10.9 MB in 139
+  requests, one after another. Over HTTP/2 at 80 ms and 2 MB/s its first
+  render went from 6.9 to 3.8 s in WebKit; the 0.9.4 app took 4.3 s with the
+  prepared export
 - optionally describe the neighbour graph (edges load when shown)
 - note the latent space the file stores outlier quantiles for
   (`uns['cellucid']['outlierQuantiles']`); no latent space and no quantile is
   read at open
+
+Opening the startup dataset runs as the `dataset` startup step
+(`app/startup-phase.js`). Every request it makes bounds itself (see
+{ref}`web-host-requests`), so the step's 60 s deadline measures silence, not
+duration: it is restarted whenever the transfer log (`data/transfer-log.js`) counts a request or
+hears bytes of one still under way (`arriving`), and it fires only when
+nothing at all has arrived for 60 s. Its error names the reads still open
+(the read activity log) and the request being asked again, with its URL:
+`Startup stalled while opening the dataset (its metadata, field lists and the
+embedding its first view draws): nothing arrived from the host of dataset
+"suo" for 60 s, while reading obsm['X_umap_3d'] columns 0, 1, 2 (last
+failure: https://…/obsm/X_umap_3d/3.0: no answer for 35.6 s. Asked 5 times so
+far.)`.
 
 (dataset-change-transactions)=
 ## Dataset changes: the newest choice wins
@@ -160,7 +180,7 @@ the synthetic benchmark. The rules:
   the server answers. Every user action that decides the dataset advances
   `actionSequence`: each transaction begun, and each session file applied
   (`recordAction()`, which begins no transaction and aborts nothing). The
-  Connect click reads `actionSequence`; a one-dataset activation then calls
+  address bar's **Open** reads `actionSequence`; a one-dataset activation then calls
   `beginIfNoActionSince(sequence)`, which supersedes loads that were running at
   the click but never a choice made or a session applied after it. A
   connection that lost that race is kept as a catalog.
@@ -213,6 +233,11 @@ Behavior:
   (`DATA_CONFIG.SAMPLE_CATALOG_URL`) and lists its datasets. Listing reads each
   file's metadata and `uns` only (`describe` in the reader worker), never its
   data; a dataset's file is opened when it is chosen.
+- Listing waits for any dataset of the catalog being opened, and lists that
+  dataset from its opening (`_listedFromOpen`): at startup the default
+  sample's store is read once, and the other files' metadata is read only
+  after the dataset on screen has what its first view needs, so the listing
+  never competes with it.
 - `DATA_CONFIG.SAMPLE_CATALOG_URL` resolves in this order:
   1) exactly one `?sampleCatalog=...` query field
   2) the one `<meta name="cellucid-sample-catalog" content="...">` in
@@ -303,14 +328,18 @@ Common failure modes:
 
 Code:
 - `cellucid/assets/js/data/local-user-source.js`
+- `cellucid/assets/js/app/ui/modules/open-data-menu.js` (the **Open…** menu)
 - `cellucid/assets/js/app/ui/modules/dataset-drop.js` (drag and drop)
 
 Behavior:
 - Lets the user pick, or drop on the viewer:
-  - one `.h5ad` file with **H5AD**
-  - one AnnData Zarr store folder with **Zarr folder** (a directory input;
-    every file below it, each with its `webkitRelativePath`)
-  - one `.zarr.zip` or `.zip` archive with **Zarr ZIP**
+  - one `.h5ad` file, or one `.zarr.zip` or `.zip` archive, with
+    **Open… › File…** (one file input, `#user-data-file-input`, accepting
+    `.h5ad` and `.zip`; `localFileKind()` reads it by its extension, and
+    anything else is refused naming the file)
+  - one AnnData Zarr store folder with **Open… › Zarr folder…** (a directory
+    input, `#user-data-folder-input`; every file below it, each with its
+    `webkitRelativePath`)
 - Each is opened as a candidate by the AnnData reader worker and adopted only
   when it opened completely; it is served through `h5ad://` / `zarr://` URLs.
   Its dataset id is `uns['cellucid']['id']`, else `h5ad_<file name>` or
@@ -411,7 +440,7 @@ layer depends only on the ones below it.
 
 | Layer | Code | What it does |
 |---|---|---|
-| Bytes | `formats/io/` | Byte sources (a local `File`, HTTP range requests, memory) and **one byte reader per file**: reads asked for in the same task are planned together, neighbours closer than the merge gap become one request, requests are split at the request size so large reads run in parallel (`concurrency` at once: six per HTTP/1.1 host, the browser's limit), requests waiting for a slot take their neighbours with them when round trips cost more than bytes, metadata is cached in aligned blocks, and a read's `AbortSignal` cancels it. The merge gap and request size follow **the link as measured** (`link.js`, see below). `inflate.js` decompresses with the browser's native `DecompressionStream`, to an exact or bounded size. `decode-pool.js` decodes chunks on decode workers (`decode-worker.js`, nested in the reader worker, started when a file opens: as many as the cores allow, less one for the reader thread and one for the page, and as many as the `decodeWorkers` memory share holds), small chunks that wait together going to a worker in one message, a background pass's chunks behind every other read's, so a background pass over a matrix leaves the reader thread free; where no worker can be made, chunks are decoded in the reader thread. The same workers take the reader thread's work on decoded values (`runOnDecodeWorker`: a function of a module that depends on nothing else, its arguments transferred, with a context each worker is sent once), as a cell subset's runs of genes. `activity.js` counts what each operation fetched and decoded, and which shared loads it reads for (`keys`: a job joining one adopts the read, `read-activity-log.js`). |
+| Bytes | `formats/io/` | Byte sources (a local `File`, HTTP range requests, memory) and **one byte reader per file**: reads asked for in the same task are planned together, neighbours closer than the merge gap become one request, requests are split at the request size so large reads run in parallel (`concurrency` at once: six per HTTP/1.1 host, the browser's limit), requests waiting for a slot take their neighbours with them when round trips cost more than bytes, metadata is cached in aligned blocks, and a read's `AbortSignal` cancels it. The merge gap and request size follow **the link as measured** (`link.js`, see below). `inflate.js` decompresses with the browser's native `DecompressionStream`, to an exact or bounded size, feeding it the input in 32 KiB slices so the size bound holds while it decodes (WebKit's decompressor inflates whatever is written to it at once: a chunk written whole expanded a 60 MB bomb past its 1 KiB declared size). `decode-pool.js` decodes chunks on decode workers (`decode-worker.js`, nested in the reader worker, started when a file opens: as many as the cores allow, less one for the reader thread and one for the page, and as many as the `decodeWorkers` memory share holds), small chunks that wait together going to a worker in one message, a background pass's chunks behind every other read's, so a background pass over a matrix leaves the reader thread free; where no worker can be made, chunks are decoded in the reader thread. The same workers take the reader thread's work on decoded values (`runOnDecodeWorker`: a function of a module that depends on nothing else, its arguments transferred, with a context each worker is sent once), as a cell subset's runs of genes. `activity.js` counts what each operation fetched and decoded, and which shared loads it reads for (`keys`: a job joining one adopts the read, `read-activity-log.js`). |
 | Formats | `formats/hdf5/`, `formats/zarr/`, `formats/zip/` | Cellucid's own HDF5 reader (every superblock, object header, group, attribute and chunk-index version; deflate, shuffle, Fletcher-32 and LZF), Zarr reader (v2 and v3 with sharding; gzip, zlib, Blosc, LZ4 and Zstandard; a picked folder, a ZIP, or a folder on a web host via consolidated metadata) and ZIP reader. Each opens a file as the **array store** of `formats/store.js`: the whole node tree (names, shapes, element types, attributes) is read at open, with a tree level's reads in flight together, so navigation is synchronous; array values are read on demand, fetching only the chunks a selection touches, in parallel, each decoded once (a per-file decoded-chunk cache serves neighbouring reads). |
 | AnnData | `data/anndata/` | **One** AnnData reader for both formats: the element rules of the current layout (`elements.js`, `dataframe.js`, `sparse.js`), files from anndata 0.6/0.7 and SeuratDisk presented in the current layout (`older-layouts.js`), slabbed reads with read-ahead and exact conversions (`values.js`), gene columns and cell rows per layout (`matrix-access.js`), and opening plus error explanations (`open.js`). |
 | Worker | `data/anndata-reader-worker.js`, `data/anndata-reader-client.js` | The reader's methods over `postMessage`, results transferred; live `activity` and `transfer` events. |
@@ -768,8 +797,11 @@ one line when it ends:
 (except opening, which the startup view shows) as a progress notification
 with the same figures, closed with what it read and how long it took.
 
-A remote file's running totals also feed the **Transfers** list
-(`data/transfer-log.js`, `[cellucid:transfer]` lines).
+A remote file's running totals also feed the transfer log
+(`data/transfer-log.js`, `[cellucid:transfer]` lines), which the **Dataset**
+box (`app/ui/modules/dataset-card.js`) shows as one line, "5.5 MB read in 43
+requests", beside where the dataset is stored (`data/anndata-storage.js`:
+format, container, host or this computer, size).
 
 **Verification.** `tests/hdf5-reader-conformance.test.mjs` reads every object of
 an HDF5 corpus (`scripts/generate-hdf5-conformance-corpus.py`) and every `.h5ad`
@@ -792,6 +824,73 @@ simulated link) and `scripts/benchmark-real-links.mjs` (the whole app on real
 hosts, against an earlier revision).
 
 ---
+
+(web-host-requests)=
+## Requests to a web host: retries, stalls and failures
+
+Every request to a web host (a byte range of an `.h5ad` or `.zarr.zip`, a
+Zarr store's objects, the size probe, catalog files and provider APIs) goes
+through `fetchOnce` and `withRetries` in `formats/io/byte-source.js`
+(`fetchWhenNotBusy` in `data/data-source.js` for catalog files and provider
+APIs). None is left waiting for ever:
+
+- **Transient failures are asked again**, with growing waits
+  (`RETRY_DELAYS_MS`: 250 ms to 8 s, six repeats), or as long as a
+  `Retry-After` asks (seconds or an HTTP date; a cross-origin page sees it
+  only where the host exposes it): HTTP 408, 429 and 5xx (but 501 and 505),
+  and a connection that fails or drops. GitHub Pages answers a burst of
+  requests with an occasional 503 that carries no CORS headers, which every
+  browser reports to the page as a failed connection, so a failed connection
+  is transient too.
+- **A stalled request is aborted and asked again at once.** The link's
+  `ResponseClock` (`formats/io/link.js`) applies TCP's retransmission
+  timeout (RFC 6298) to the time requests wait for their answers: the timeout
+  is the smoothed wait plus four times its variation, never under one second
+  and one second before the first answer, doubled by every stall and computed
+  afresh by the next answer. A request is stalled when neither it nor any
+  other request of the link has received anything (an answer, or bytes of a
+  body) for a whole timeout: while the link delivers bytes, a request queued
+  behind them (in a browser's HTTP/1.1 queue, or behind an HTTP/2 host's
+  other streams) is waiting, not stalled. A range of known length is also
+  given the time its bytes take at the measured bandwidth, since a host that
+  buffers a range (a proxy, a CDN fetching the object from its origin)
+  answers only once it holds all of it. Bodies are read as streams, so a
+  body that stops arriving is caught as well as an answer that never comes.
+- **A failure that will stay is reported at once** (`worthAskingAgain`).
+  The signs that a host will answer later keep the whole schedule: a
+  `Retry-After`, a connection dropped in the middle of a body, a stall. An
+  error status without `Retry-After` that repeats exactly (the same status
+  and `Content-Length`: Zenodo answers a missing record with the same 500
+  every time) is reported after its second answer, and a request that got no
+  answer at all (no connection, or a host that does not let this site read
+  it) after it was asked once more; the momentary 503 GitHub Pages sends
+  without CORS headers is answered on that second request.
+- **A failure that outlasts its repeats names the request**:
+  `https://…/suo.zarr/obsm/X_umap_3d/3.0: the host could not answer (HTTP
+  503). Asked 7 times.` A failure that is not transient (404 on a file, a
+  short or changed answer, a range ignored) is reported at once.
+- Each repeat is reported to the transfer log while it happens (`retrying`,
+  naming the URL; the console's `[cellucid:transfer]` warning; the Dataset
+  box's one "Retrying a read" notification, closed when bytes arrive again),
+  and bytes of a
+  request still under way are reported as they arrive (`arriving`, at most
+  every 250 ms), so a read of one large request shows progress before it
+  completes. The bytes also count into the read's activity as they arrive
+  (the `[cellucid:read]` progress, its rate and time left), and an attempt
+  that fails has its bytes taken back, so what is fetched never passes what
+  was planned before it has arrived.
+- Cancellation is unchanged: the caller's signal aborts the request in
+  flight and any wait to ask again at once, and nothing is asked after it. A
+  range read's planned bytes are counted once, however often its request was
+  made.
+
+Measured in WebKit, Chromium and Firefox against Suo served with injected
+faults (the app's own requests: a 503 without CORS headers, a 429 with
+`Retry-After: 1`, a request never answered, a body that stops after its first
+bytes, a dropped connection): each recovers and the dataset opens; a request
+that is never answered on any attempt ends the startup step with the error
+above. `tests/http-request-resilience-contract.test.mjs` holds the same cases
+against a fake `fetch`.
 
 ## Loader layer (what is read)
 
@@ -846,6 +945,28 @@ AnnData bytes are read with range requests. A Cellucid server answers them
 with `Cache-Control: no-cache` and a strong `ETag`, and a range asked with
 `If-Range` naming an older version is answered with the whole current file,
 so bytes of a changed file are never mixed with old ones.
+
+Every request into a Zarr store on a web host bypasses the HTTP cache
+(`cache: 'no-store'`, `formats/zarr/stores/http.js`), as every range read of a
+file does. WebKit (Safari, and Playwright's WebKit) never finished reading the
+bodies of chunks it served from its HTTP cache to the AnnData reader worker:
+Suo opened from the sample catalog loaded once, then every reload, with the
+store unchanged, waited for those bodies until the startup step's deadline
+(measured 2026-10-23 with a persistent WebKit profile and the store served
+with GitHub Pages' `Cache-Control: max-age=600`: the default cache mode and
+`no-cache` revalidation both hung on every reload; `no-store` opened it three
+reloads in a row). A small store (the browser fixtures) does not trigger it,
+so the suite asserts the cache mode (`http-request-resilience-contract`)
+rather than reproducing the hang. Bypassing the cache also means a browser
+never pairs a store's metadata with chunks it cached from an earlier version
+of the store. A reload reads the store again (Suo's first view: 5.5 MB).
+
+A query string cannot version a store instead: GitHub Pages' CDN ignores it
+(a never-seen `?v=` on a store file is answered `x-cache: HIT`), and it would
+break presigned bucket URLs, whose signature covers the query. For up to ten
+minutes after a store is rebuilt, the CDN may still answer some of its
+objects from before the rebuild; a chunk that does not fit the new metadata
+is refused with a decode or size error naming its URL, never waited on.
 
 Debug tip:
 - DevTools → Network → “Disable cache” while you debug.
@@ -941,8 +1062,13 @@ When something “doesn’t load”, do the following in order:
 ### Symptom: “Dataset loads forever”
 
 Likely causes (ordered):
-1) A request for the file is hanging or blocked (CORS/mixed content).
-2) A large read on a slow or throttled host (the `[cellucid:read]` lines show
+1) The host stopped answering: requests that stall or fail are asked again
+   ({ref}`web-host-requests`), each repeat a `[cellucid:transfer]` warning
+   naming its URL; the startup error names it once nothing has arrived for
+   60 s.
+2) A request is blocked (CORS/mixed content): it fails as a failed
+   connection, is asked again, then reported naming its URL.
+3) A large read on a slow or throttled host (the `[cellucid:read]` lines show
    its progress).
 
 How to confirm:

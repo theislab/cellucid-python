@@ -1,8 +1,84 @@
-/* Custom styles for Cellucid documentation - PyData Theme */
+/* Cellucid documentation: the PyData theme set in the site's design.
 
-/* Slightly adjust card styling */
-.sd-card {
-    border-radius: 0.5rem;
+   The web app's design principles (cellucid/assets/css/README.md, "Site
+   Design Principles") hold here too, through the theme's own CSS variables
+   rather than a fork: the app's type (Inter, self-hosted), its ink and cyan
+   link colours in light and dark, square surfaces with quiet edges, and the
+   wordmark inverted in the dark theme as the app inverts it. The values are
+   the app's tokens (cellucid/assets/css/tokens/_colors.css, themes/). */
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("fonts/inter-latin.woff2") format("woff2");
+}
+
+html {
+    --pst-font-family-base: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --pst-font-family-heading: var(--pst-font-family-base);
+    --pst-font-weight-heading: 600;
+}
+
+/* Light: gray-900 ink on white, gray-600 secondary text, the app's
+   cyan-700 links (5.9:1 on white, WCAG AA). */
+html[data-theme="light"] {
+    --pst-color-primary: #111827;
+    --pst-color-primary-bg: #f3f4f6;
+    --pst-color-secondary: #0369a1;
+    --pst-color-secondary-bg: #e0f7ff;
+    --pst-color-accent: #0369a1;
+    --pst-color-link: #0369a1;
+    --pst-color-link-hover: #075985;
+    --pst-color-text-base: #111827;
+    --pst-color-text-muted: #4b5563;
+    --pst-color-heading-color: #111827;
+    --pst-color-background: #ffffff;
+    --pst-color-on-background: #ffffff;
+    --pst-color-surface: #f9fafb;
+    --pst-color-on-surface: #111827;
+    --pst-color-border: #d1d5db;
+    --pst-color-shadow: rgba(17, 24, 39, 0.08);
+}
+
+/* Dark: gray-50 ink on gray-900, gray-200 secondary text, cyan-300 links. */
+html[data-theme="dark"] {
+    --pst-color-primary: #f9fafb;
+    --pst-color-primary-bg: #1f2937;
+    --pst-color-secondary: #44cbf9;
+    --pst-color-secondary-bg: #1f2937;
+    --pst-color-accent: #44cbf9;
+    --pst-color-link: #44cbf9;
+    --pst-color-link-hover: #7ddcfc;
+    --pst-color-text-base: #f9fafb;
+    --pst-color-text-muted: #e5e7eb;
+    --pst-color-heading-color: #f9fafb;
+    --pst-color-background: #111827;
+    --pst-color-on-background: #1f2937;
+    --pst-color-surface: #1f2937;
+    --pst-color-on-surface: #f9fafb;
+    --pst-color-border: #4b5563;
+    --pst-color-shadow: rgba(0, 0, 0, 0.4);
+}
+
+/* The wordmark is grey-scale ink drawn for a light surface; the dark theme
+   inverts it, as the app does. */
+html[data-theme="dark"] .navbar-brand img {
+    filter: invert(1) hue-rotate(180deg);
+}
+
+/* Square surfaces, as in the app. */
+.sd-card,
+.admonition,
+div.admonition,
+.topic,
+div.highlight,
+div.highlight pre,
+.cell_output,
+.search-button-field,
+.bd-search {
+    border-radius: 0;
 }
 
 /* Improve code block readability */
@@ -17,7 +93,6 @@ div.highlight pre {
 
 /* Notebook cell output styling */
 .cell_output {
-    border-radius: 4px;
     margin-top: 8px;
 }
 

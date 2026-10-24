@@ -22,9 +22,9 @@ If you want a decision tree instead of a table, go to {doc}`03_choose_your_workf
 
 | Route | How you point Cellucid at the data | Formats | Best for |
 |---|---|---|---|
-| **Sample dataset** | the dataset menu, Cellucid's own catalog | Cellucid-ready AnnData | learning the UI with known-good data |
-| **Open from link** | a link or id in **Open from link**, or `?data=…` ({doc}`../../web_app/b_data_loading/14_open_from_link`) | `.h5ad`, `.zarr.zip`, a Zarr store folder, a dataset catalog folder | opening data where it is already published; sharing it as one link |
-| **Files** | the **H5AD**, **Zarr ZIP** and **Zarr folder** buttons, or a dropped file or folder | `.h5ad`, `.zarr.zip`, `.zarr` folder | viewing a file on your computer without Python |
+| **Sample dataset** | the **Sample dataset** list, Cellucid's own catalog | Cellucid-ready AnnData | learning the UI with known-good data |
+| **Link** | a link or id in the **Link or server** bar, or `?data=…` ({doc}`../../web_app/b_data_loading/14_open_from_link`) | `.h5ad`, `.zarr.zip`, a Zarr store folder, a dataset catalog folder | opening data where it is already published; sharing it as one link |
+| **File or folder** | **Open…**, then **File…** (`.h5ad`, `.zarr.zip`) or **Zarr folder…**, or a file or folder dropped on the page | `.h5ad`, `.zarr.zip`, `.zarr` folder | viewing a file on your computer without Python |
 
 ## A Cellucid server serves it
 
@@ -37,8 +37,8 @@ If you want a decision tree instead of a table, go to {doc}`03_choose_your_workf
 A Cellucid-ready AnnData declares its own name and id, so the identity
 arguments are needed only for other AnnData.
 
-The web app reaches a server through its **Server** field, or the server opens
-it: `cellucid serve` opens your browser and a notebook embeds the viewer. The
+The web app reaches a server through its **Link or server** bar (type
+`localhost:8765`, or just the port), or the server opens it: `cellucid serve` opens your browser and a notebook embeds the viewer. The
 viewer reads the store itself, in place, with range requests, exactly as it
 reads a linked file; the server serves the store's bytes (an in-memory object
 is first written once to a temporary `.h5ad`).
@@ -48,7 +48,7 @@ is first written once to a temporary `.h5ad`).
 - **Local machine, terminal:** `cellucid serve …`
 - **Notebook-based analysis:** `show_anndata`
 - **Sharing with collaborators:** write a Cellucid-ready AnnData once
-  (`prepare`), then publish the file anywhere **Open from link** reads, or
+  (`prepare`), then publish the file anywhere a link can be read from, or
   serve it
 
 ## How the CLI maps to the Python API

@@ -78,7 +78,7 @@ The high-level startup flow is:
    (`initUI`), which wires the sidebar modules to state/viewer.
 7) Only once their listeners exist are the deferred controls (data sources,
    renderer toggles, benchmark) enabled, and the live-region line under the
-   dataset picker switches from *“Starting Cellucid…”* to *“Data sources are
+   **Open data** heading (`#data-source-status`) switches from *“Starting Cellucid…”* to *“Data sources are
    ready…”*. The render loop starts.
 8) The startup selection loads as the first ordinary dataset change
    (`ui.loadStartupDataset` → `reloadActiveDatasetInPlace`), under the same

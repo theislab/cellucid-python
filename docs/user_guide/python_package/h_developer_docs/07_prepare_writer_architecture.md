@@ -91,9 +91,11 @@ leaves nothing on disk.
 attributes, so it controls each array's chunks and codec:
 
 - numeric arrays: `create_dataset` (HDF5: gzip level 6 after the shuffle
-  filter) or `create_array` (Zarr: numcodecs' `Shuffle` filter for a value of
-  more than one byte, then v2 `Zlib(6)` / v3 `GzipCodec(6)`, the shuffle as
-  the `numcodecs.shuffle` codec), chunked by `SLICED_CHUNK_ELEMENTS` (2^16,
+  filter) or `create_array` (Zarr v2: numcodecs' `Shuffle` filter for a
+  value of more than one byte, the expression values excepted, then
+  `Zlib(6)`; Zarr v3: `BloscCodec` (zlib 6, byte shuffle) where v2 shuffles,
+  `GzipCodec(6)` otherwise, since `numcodecs.shuffle` is outside the v3
+  specification), chunked by `SLICED_CHUNK_ELEMENTS` (2^16,
   `X/data` and `X/indices`) or `WHOLE_CHUNK_ELEMENTS` (2^18, everything read
   whole); 2-D `obsm` arrays in row blocks across all columns; dense `X` in
   tall gene strips;
@@ -159,8 +161,11 @@ measurements, and keep cellucid-r's writer in step.
 
 - `tests/test_prepare_anndata_contract.py`: round trips on `.h5ad`, Zarr v2,
   Zarr v3 and `.zarr.zip` (values, dtypes, encodings, chunks, codecs,
-  consolidated metadata, `uns['cellucid']`), serving a prepared file without
-  identity arguments, and every refusal leaving nothing on disk.
+  consolidated metadata, `uns['cellucid']`), Zarr v3 metadata naming only
+  codecs of the v3 specification (read from the written `zarr.json`, whatever
+  zarr-python warns about), each Blosc chunk the frame c-blosc writes,
+  serving a prepared file without identity arguments, and every refusal
+  leaving nothing on disk.
 - `tests/test_docs_current_api_contract.py`: the documented signature and the
   specification's key tables against the code.
 

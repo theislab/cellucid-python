@@ -104,8 +104,8 @@ URL, or an error message — and an event that does not fit is dropped whole.
 - **`feature_used`** — the first use, per page load, of a feature you started
   yourself, from a fixed list (for example `render_mode` / `smoke`,
   `figure_export`, `highlight_tool` / `lasso`, `data_mapping` / `embedding`,
-  `embedding_columns`, `default`, `knn`, `gene_names`, `expression`, `latent` or
-  `vector_fields`, and `dimension` / `2` when a view is switched to a 2D
+  `embedding_columns`, `default`, `knn`, `gene_names`, `expression`, `log1p`,
+  `highly_variable`, `latent` or `vector_fields`, and `dimension` / `2` when a view is switched to a 2D
   embedding). The feature's name is a fixed
   identifier the developers assigned; nothing is read from what a control says,
   so category names, page names you typed and the `obsm` or `obsp` keys or
@@ -156,7 +156,7 @@ If you only read one thing, read this.
 | **Sample datasets** (`source=local-demo`) | The hosted sample catalog | Yes (the parts of the sample files a view needs are downloaded) | Load descriptors and the public sample's id | Low (public samples), but still trackable traffic |
 | **Local `.h5ad`, `.zarr` folder or `.zarr.zip`** (file picker or drop) | Your local disk | No (files read locally) | Coarse shape only — no name or id | Low–medium: only count ranges and dimensions are reported; the file name can still leak via screenshots and figure metadata |
 | **Remote server** (`remote=...`) | A server you connect to (often `127.0.0.1`) | Yes (files or chunks downloaded from that server) | Coarse shape only — never the server address | Depends: can be "local-only" or a true data transfer |
-| **Data links** (`data=...`: GitHub, CELLxGENE, GEO, Zenodo, any web address) | The host the link names | Yes (the parts a view needs are downloaded) | Coarse shape only — never the link | High if data is private; the host's access logs exist |
+| **Data links** (`data=...`: GitHub, CELLxGENE, GEO, Zenodo, Figshare, Google Drive, OneDrive, any web address) | The host the link names | Yes (the parts a view needs are downloaded) | Coarse shape only — never the link | High if data is private; the host's access logs exist. A private Google Drive or OneDrive file is read with your own sign-in, straight from Google or Microsoft ({doc}`../b_data_loading/16_private_drive_onedrive`) |
 | **Jupyter embedded viewer** | A local Python server + iframe bridge | Yes (browser ↔ local server) | No — the notebook viewer is never on a production hostname | Usually low if truly local, but can be risky if ports are exposed |
 | **Community annotation** (GitHub sync) | GitHub API + repo contents, through Cellucid's auth proxy | Yes | That the feature was used | You are explicitly publishing annotations/votes to GitHub; treat as public unless repo is private and access-controlled |
 
@@ -226,6 +226,7 @@ So `localStorage` can reveal:
 
 `sessionStorage` is used for **short-lived secrets** and per-tab state, most importantly:
 - GitHub OAuth tokens for Community Annotation
+- Google and Microsoft sign-ins for Google Drive and OneDrive files
 
 This is intentional:
 - closing the tab signs you out (token is gone),
@@ -321,6 +322,13 @@ If you self-host the app, the “app host” changes, but the model is the same.
   deployment from exfiltrating it.
 - **ORCID lookup**: typing into the ORCID field in the annotation identity form
   queries ORCID’s public search endpoint.
+- **Google Drive and OneDrive**: opening a Drive file loads Google's sign-in
+  and file-picker scripts (from `accounts.google.com` and `apis.google.com`),
+  only then; a private Drive file or any OneDrive file asks you to sign in to
+  Google or Microsoft in their own window. The page then reads the file
+  straight from Google or Microsoft with your sign-in. No Cellucid server is
+  involved, and the sign-in stays in the tab's `sessionStorage`
+  ({doc}`../b_data_loading/16_private_drive_onedrive`).
 
 ### 4) What is not there
 

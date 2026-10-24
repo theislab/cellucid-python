@@ -12,7 +12,10 @@ product divided by the row sums of ``T`` first when rows are normalized.
 The expected drift is computed here with exact rational arithmetic
 (:class:`fractions.Fraction`), independently of numpy, scipy, R and every BLAS,
 from inputs drawn with :class:`random.Random`, whose ``random()`` stream is the
-same on every Python version. Running this script again writes the same bytes;
+same on every Python version. Every float sum is :func:`math.fsum`, correctly
+rounded on every Python version: the built-in ``sum`` of floats is not (Python
+3.12 made it compensated, so 3.11 rounds some sums differently). Running this
+script again, on any supported Python, writes the same bytes;
 cellucid-python's ``tests/test_transition_drift_conformance.py`` checks that.
 
 Two kinds of case:
@@ -46,6 +49,7 @@ Two kinds of case:
 from __future__ import annotations
 
 import json
+import math
 import random
 import struct
 import sys
@@ -233,7 +237,7 @@ def _general_case(
         if not normalize_rows:
             # Already row-stochastic, as CellRank's transition matrix is: the
             # rows sum to 1 up to their own rounding.
-            total = sum(values)
+            total = math.fsum(values)
             values = [value / total for value in values]
         rows.append([(j, value) for j, value in zip(columns, values, strict=True) if value != 0 or not sparse])
     embedding = [

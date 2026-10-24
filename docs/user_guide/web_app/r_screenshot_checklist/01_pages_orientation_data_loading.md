@@ -107,16 +107,22 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
   "Analysis", `#cinematic-camera-section` "Camera Path", `#figure-export-section`
   "Figure Export", `#shortcuts-section` "Keyboard Shortcuts", `#benchmark-section`
   "Performance Benchmark".
-- Session panel internals: `#dataset-info` (the NAME/DESCRIPTION/SOURCE/URL/
-  CELLS/GENES/OBS FIELDS/CONNECTIVITY block under "Dataset"); under "Open data"
-  `#dataset-select` ("Sample dataset"),
-  `#user-data-block` ("Files" with `#user-data-h5ad-btn` "H5AD",
-  `#user-data-zarr-archive-btn` "Zarr ZIP", `#user-data-zarr-folder-btn` "Zarr folder"),
-  `#remote-server-block` ("Server": `#remote-server-url`, `#remote-connect-btn`
-  "Connect"), `#data-link-block` ("Open from link": `#data-link-url` placeholder
-  `Link, DOI, GSE…, hf:user/repo, owner/repo/path`, `#data-link-connect-btn`
-  "Connect"); `#session-state-controls` ("Session file": `#save-state-btn`
-  "Save", `#load-state-btn` "Load").
+- Session panel internals (redesigned 2026-10-23; the records further down
+  name the earlier ids, translated in {doc}`index`): `#dataset-facts`
+  ("Dataset", with **Share**) holding the Dataset box `#dataset-info`
+  (`data-state` empty/loading/ready: `#dataset-name`, `#dataset-summary` with
+  `#dataset-cells` · `#dataset-genes`, `#dataset-origin`, `#dataset-description`,
+  `#dataset-read`, the collapsed **Details** `#dataset-details`); under
+  "Open data" (`#open-data-controls`) `#dataset-select` ("Sample dataset", or
+  "Dataset from <host>" while a catalog is connected), `#user-data-block`
+  ("File or folder": `#user-data-open-btn` "Open…", its menu
+  `#user-data-open-menu` with `#user-data-file-item` "File…" and
+  `#user-data-folder-item` "Zarr folder…"), `#data-address-block` ("Link or
+  server": `#data-address` placeholder `Link or localhost:8765`,
+  `#data-address-open-btn` "Open", and the connection lines
+  `#remote-disconnect-container` / `#data-link-disconnect-container`);
+  `#session-state-controls` ("Session file": `#save-state-btn` "Save",
+  `#load-state-btn` "Load"); `#data-mapping-controls` ("Data mapping").
 - Other: `#welcome-modal` / `#welcome-demo-btn` ("Choose a dataset"), `#sidebar`,
   `#legend`, `#split-keep-view-btn` ("Keep view"),
   `.highlight-mode-btn[data-mode="lasso"]` ("Lasso"), `#navigation-controls`
@@ -372,7 +378,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
   1. `_static/diagrams/workflow-decision-tree.svg` — replace the ASCII tree at
      lines 42–51 with a real flowchart, and place it at line 15 so both the
      wet-lab and computational tabs can point at one artefact. Entry question
-     "What do you have?" branching to: **a `.zarr` store folder** → **Zarr folder**; **`.h5ad` / `.zarr`** → server mode or Jupyter; **AnnData in a
+     "What do you have?" branching to: **a `.zarr` store folder** → **Open… › Zarr folder…**; **`.h5ad` / `.zarr`** → server mode or Jupyter; **AnnData in a
      notebook** → `show_anndata()`; **nothing yet** → ask a colleague to
      `prepare()`. Then a second tier on sharing: **one-to-one / reproducible** →
      `.cellucid-session`; **public, no server** → a Zarr folder on GitHub;
@@ -472,12 +478,13 @@ terminal and Jupyter captures:
   1. **REPLACE line 196.** The step is "validate *your PBMC export* by opening it
      with the **Zarr folder** picker"; the image shows the bundled Suo sample in a
      3D orbit view with no picker interaction and no legend. It proves nothing
-     about the step. Replacement: click `#user-data-zarr-folder-btn` **Zarr folder**,
-     select `cellucid/tests/browser/fixtures/forms-catalog/forms-zarr.zarr/`, and
-     capture the settled result — crop to `#session-section` so the
-     `#dataset-info` rows (DATASET, CELLS, GENES, OBS FIELDS) read out the
-     just-validated export, with the success notification toast in frame if it
-     is still visible. Cursor on `#user-data-zarr-folder-btn`.
+     about the step. Replacement: click `#user-data-open-btn` **Open…**, then
+     `#user-data-folder-item` **Zarr folder…**, select
+     `cellucid/tests/browser/fixtures/forms-catalog/forms-zarr.zarr/`, and
+     capture the settled result — crop to `#session-section` so the Dataset box
+     (`#dataset-name`, cells · genes, `Zarr v2 folder · this computer`) reads
+     out the just-validated export, with the success notification toast in
+     frame if it is still visible. Cursor on `#user-data-open-btn`.
      `_static/screenshots/data_loading/validate-zarr-folder.png`.
   2. **SEQUENCE for Step 4 — Publish to GitHub** (line 203), which is where a
      wet-lab reader is most likely to fail and where there is currently no
@@ -488,17 +495,18 @@ terminal and Jupyter captures:
        two `.zarr` store folders beside it. Terminal is better — it shows the exact
        command. `_static/screenshots/data_loading/catalog-tree-terminal.png`,
        cropped to the terminal, command `tree -L 1 catalog/` visible with output.
-     - **The GitHub connect form filled in**, cropped to `#data-link-block`
-       with `#data-link-url` containing
+     - **The GitHub connect form filled in**, cropped to `#data-address-block`
+       with `#data-address` containing
        `theislab/cellucid-demo-custom-datasets/catalog` and cursor on
-       `#data-link-connect-btn` ("Connect"). This is the exact field described at
+       `#data-address-open-btn` ("Open"). This is the exact field described at
        line 234 ("What repo path to enter in Cellucid") and it has no picture.
        `_static/screenshots/data_loading/github-connect-form.png`, ~246px.
      - **The validated dataset list after connecting**, cropped to
-       `#dataset-select` expanded showing the three synthetic entries — proof of
+       `#dataset-select` (labelled "Dataset from <host>") expanded showing the
+       three synthetic entries — proof of
        the "show the validated dataset list" claim at line 244.
        `_static/screenshots/data_loading/github-connected-dataset-list.png`.
-     - **The failure state**, cropped to `#data-link-block` after connecting to
+     - **The failure state**, cropped to the notification after opening
        a path with no `datasets.json`, showing the exact error surfaced by the
        app. The troubleshooting block at line 295 quotes the message
        `datasets.json not found` — a reader matching their screen to the docs
@@ -525,22 +533,25 @@ terminal and Jupyter captures:
   none of them being used. It is the wet-lab reader's most likely first
   self-service path and it needs a per-option sequence:
   1. **Zarr folder.** Two frames.
-     (a) Cursor on `#user-data-zarr-folder-btn`, cropped to `#user-data-block`,
-     with the button in hover state.
+     (a) **Open…** (`#user-data-open-btn`) clicked, its menu open, cursor on
+     `#user-data-folder-item` **Zarr folder…**, cropped to `#user-data-block`
+     and `#user-data-open-menu` (scenario `loading-open-menu` does the same
+     with the cursor on **File…**).
      (b) The OS directory chooser open on
      `cellucid/tests/browser/fixtures/forms-catalog/forms-zarr.zarr/`, cropped to the dialog:
      showing a *directory* chooser rather than a *file* chooser is the whole
      point and cannot be conveyed in prose.
      `_static/screenshots/data_loading/picker-zarr-folder-button.png`,
      `_static/screenshots/data_loading/picker-zarr-folder-dialog.png`.
-  2. **H5AD (Option #4, line 88).** Cursor on `#user-data-h5ad-btn`; then the
-     loaded result cropped to `#session-section` showing SOURCE `H5AD file`.
+  2. **H5AD (Option #4, line 88).** **Open… › File…** (`#user-data-file-item`);
+     then the loaded result cropped to `#session-section`, the Dataset box
+     reading `h5ad file · this computer`.
      `_static/screenshots/data_loading/picker-h5ad-loaded.png`. Note the existing
      `data_loading/h5ad-current-loaded.png` already shows this state but is
      stranded on the gallery page {doc}`/user_guide/web_app/b_data_loading/09_screenshots` — **move it here** rather
      than capturing a duplicate (see that page's entry).
   3. **Zarr ZIP (Option #5, line 138).** Same treatment with
-     `#user-data-zarr-archive-btn` and
+     **Open… › File…** and
      `cellucid/tests/browser/fixtures/current-ui-smoke.zarr.zip`; the existing
      `data_loading/zarr-zip-loaded.png` should move here.
   4. **The CSR reorganisation progress notice.** A large cell-major `.h5ad`
@@ -678,10 +689,10 @@ terminal and Jupyter captures:
      resulting refusal message. Cursor on `#load-state-btn`.
      `_static/screenshots/data_loading/session-dataset-mismatch.png`.
      This is the one capture that turns an abstract page into a diagnostic one.
-  2. **Where the id is actually visible in the UI.** Crop to `#dataset-info`
-     with the DATASET row legible, ~246px, so a reader can answer "what is my
-     dataset id right now" without opening JSON.
-     `_static/screenshots/data_loading/dataset-info-identity-row.png`.
+  2. ~~**Where the id is actually visible in the UI.**~~ **Dropped:** the
+     Dataset box (`#dataset-info`) shows the dataset's name, never its id, so
+     there is no on-screen id to crop. The page states where the id comes
+     from instead.
 - **notes** — The page is otherwise correctly text-heavy; identity is a concept,
   not a screen. Do not over-illustrate it. The `dataset_id` character rules at
   lines 53–58 (1–180 ASCII, letter/digit first, no trailing `.`, no reserved
@@ -726,8 +737,8 @@ terminal and Jupyter captures:
   the docs quote but never show.** A reader matching their screen against the
   docs needs the rendered form. All crops to the notification/error region only,
   ~600px display width, 2x, no cursor:
-  1. `datasets.json not found` (line 215) — reproduce by connecting
-     `#data-link-url` to a repo path with no catalog.
+  1. `datasets.json not found` (line 215) — reproduce by opening a repo path
+     with no catalog in `#data-address`.
      `_static/screenshots/data_loading/error-datasets-json-not-found.png`.
      (Shared with ``02_local_demo_tutorial`` item 2d — capture once, use twice.)
   2. "Cellucid found nothing to plot" — reproduce with an H5AD whose `obsm`
@@ -822,7 +833,7 @@ terminal and Jupyter captures:
      while **Coloring & Filtering** reports the exact **Showing all 3,696
      points**. That contrast between rounded and exact is a real source of reader
      confusion and is perfectly suited to one capture. Crop a vertical strip
-     containing `#dataset-info` (CELLS 4K, GENES 4K) **and** the
+     containing the Dataset box's rounded `#dataset-summary` (cells · genes) **and** the
      `#coloring-filtering-section` count line (Showing all 3,696 points) in the
      same frame. `_static/screenshots/data_loading/pancreas-counts-rounded-vs-exact.png`.
      No cursor.
@@ -850,13 +861,13 @@ terminal and Jupyter captures:
   repository first", line 26) that is five clicks long and has no visual
   anchor. Capture that flow end to end; it doubles as the GitHub-loader
   documentation the whole section lacks. All at 1440x900, 2x:
-  1. **The empty GitHub form.** Crop to `#data-link-block` showing the
-     placeholder `Link, DOI, GSE…, hf:user/repo, owner/repo/path` and the **Load** button
-     (`#data-link-connect-btn`). `_static/screenshots/data_loading/github-form-empty.png`,
+  1. **The empty address bar.** Crop to `#data-address-block` showing the
+     placeholder `Link or localhost:8765` and the **Open** button
+     (`#data-address-open-btn`). `_static/screenshots/data_loading/github-form-empty.png`,
      ~246px.
-  2. **The form filled with the exact reference value.**
-     `#data-link-url` containing `theislab/cellucid-demo-custom-datasets/catalog`
-     (the exact string at line 36), cursor on `#data-link-connect-btn`.
+  2. **The bar filled with the exact reference value.**
+     `#data-address` containing `theislab/cellucid-demo-custom-datasets/catalog`
+     (the exact string at line 36), cursor on `#data-address-open-btn`.
      `_static/screenshots/data_loading/github-form-reference-repo.png`.
      (Same capture as ``02_local_demo_tutorial`` item 2b — take it once.)
   3. **The connected catalog.** `#dataset-select` expanded with all three

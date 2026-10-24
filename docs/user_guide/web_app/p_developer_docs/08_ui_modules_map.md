@@ -106,8 +106,11 @@ The `ui/` layer also has directories this page does not otherwise cover:
 
 | Module | File | Owns |
 |---|---|---|
-| Dataset controls | `ui/modules/dataset-controls.js` | dataset dropdown + dataset info block |
-| Dataset connections | `ui/modules/dataset-connections.js` | local-user picker, remote server connect, Open from link |
+| Dataset controls | `ui/modules/dataset-controls.js` | dataset dropdown (the samples, or a connected catalog's datasets as "Dataset from <host>"; `__dataset_unlisted__` while a file, single-dataset link or server dataset is open) |
+| Dataset box | `ui/modules/dataset-card.js` | the **Dataset** box (`#dataset-info`, `data-state` empty/loading/ready): name, cells · genes, format · host, description, bytes read in place, **Details**; the retry notification |
+| Open… menu | `ui/modules/open-data-menu.js` | the **Open…** button's two-item menu (**File…**, **Zarr folder…**) and its keyboard handling |
+| Address routing | `ui/modules/address-routing.js` | what the **Link or server** bar opens: a `cellucid serve` server, linked data, or (asked over `/_cellucid/health`) either |
+| Dataset connections | `ui/modules/dataset-connections.js` | local file and folder pickers, the **Link or server** bar (server and link connectors), the **Server** / **Link** connection lines with **Disconnect** |
 | Session controls | `ui/modules/session-controls.js` | save/load `.cellucid-session` buttons |
 | Data mapping controls | `ui/modules/data-mapping-controls.js` | Session › Data mapping: the Embeddings checklist (on/off, defaults, column selections), Apply/Revert, Read from file |
 
@@ -120,6 +123,7 @@ The `ui/` layer also has directories this page does not otherwise cover:
 | Deleted fields panel | `ui/modules/field-selector-deleted-fields.js` | restore/purge UI |
 | Filter controls | `ui/modules/filter-controls.js` | filter stack UI + count |
 | Legend renderer | `ui/modules/legend-renderer.js` | legend DOM + outlier UI container |
+| Outlier filter control | `ui/modules/outlier-filter-control.js` | the legend's **Outlier filter**: **Choose latent space** without a latent space, else the slider with at most one line, progress and **Cancel** |
 | Highlight controls | `ui/modules/highlight-controls.js` | highlight pages + groups + selection mode tools |
 
 ### View/render/camera modules

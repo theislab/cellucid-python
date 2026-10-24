@@ -60,7 +60,7 @@ That’s it. If you get stuck, go to {doc}`15_troubleshooting_viewing`.
 It declares its own name and id, so open it as it is:
 - Terminal: `cellucid serve /path/to/pbmc_cellucid.h5ad`
 - Notebook: `show_anndata("pbmc_cellucid.h5ad")`
-- Browser, no Python: the web app's **Files** buttons
+- Browser, no Python: the web app's **Open…** button
   ({doc}`../../web_app/b_data_loading/03_browser_file_picker_tutorial`).
 
 #### I have a `.h5ad`
@@ -104,7 +104,7 @@ Step-by-step: {doc}`12_remote_servers_ssh_tunneling_and_cloud`.
 ### Step 4 — Do you need to share with collaborators?
 
 - Public sharing (no server): write a Cellucid-ready AnnData once (`prepare`),
-  publish it, and share an **Open from link** link:
+  publish it, and share its `?data=` link:
   {doc}`../../web_app/b_data_loading/11_custom_dataset_repository`
 - Private sharing: send the file, or serve it on an internal machine with an
   SSH tunnel.

@@ -201,6 +201,18 @@ the viewer's own choice. The names are the web app's
 A server may pass the same keys for one session (`cellucid serve --embedding-2d`,
 `serve_anndata(embedding_keys=...)`); they override the file's own.
 
+There is no `defaults` key for how an expression matrix is transformed or which
+genes are highly variable. Those are Scanpy's own records, which the viewer
+reads from any AnnData: `uns['log1p']` (written by `sc.pp.log1p`; its `base`,
+none for e) makes `X`, every layer and a non-integer `raw.X` open as `log1p`,
+and a true/false `var['highly_variable']` (written by
+`sc.pp.highly_variable_genes`) is the highly variable genes. A second record
+of the same facts here could disagree with them. `prepare()` and
+`cellucid_prepare()` write neither: `prepare()` keeps the `var` columns it is
+given (a `highly_variable` column among them) but writes no `uns['log1p']`,
+so a prepared file opens with its values as stored, which the Data mapping
+panel can change.
+
 (outlier-quantiles-spec)=
 ### `outlierQuantiles`
 
@@ -290,7 +302,7 @@ empty array has chunks of 1.
 |---|---|
 | `.h5ad` | HDF5 deflate (gzip) level 6 on every chunked array, after HDF5's shuffle filter on every array of values wider than one byte except the expression values; scalars uncompressed, as HDF5 requires (Python writer). |
 | Zarr format 2 | `{"id": "zlib", "level": 6}` on every array, `uns` scalars and empty arrays included, after the filter `{"id": "shuffle", "elementsize": <bytes>}` on every array of values wider than one byte except the expression values; fill value 0, `false` or `""` |
-| Zarr format 3 | `{"name": "gzip", "configuration": {"level": 6}}` on every array, after `{"name": "numcodecs.shuffle", "configuration": {"elementsize": <bytes>}}` where Zarr format 2 shuffles; unsharded |
+| Zarr format 3 | `{"name": "blosc", "configuration": {"typesize": <bytes>, "cname": "zlib", "clevel": 6, "shuffle": "shuffle", "blocksize": 0}}` on every array Zarr format 2 shuffles, `{"name": "gzip", "configuration": {"level": 6}}` on every other array; only codecs of the Zarr v3 specification (and `vlen-utf8` for strings); unsharded |
 
 **Shuffle.** A byte shuffle stores the first byte of every value, then every
 second byte, and so on, so the similar high bytes of neighbouring values
@@ -302,9 +314,21 @@ of three atlases grew 14–45% as raw counts, after `normalize_total` + `log1p`,
 and as proportions alike. Strings and one-byte values (`|b1`, `|i1`) are not
 shuffled either.
 
-Browsers inflate deflate, zlib and gzip natively (`DecompressionStream`); the
-web app also decodes Blosc, LZ4 and Zstandard in JavaScript, so a file written
-with those is read too.
+Zarr format 2 shuffles with numcodecs' `shuffle` filter (a format 2 filter is
+any numcodecs codec). Zarr format 3 has no shuffle codec of its own:
+`numcodecs.shuffle` is outside its specification, so another Zarr
+implementation need not read it. A format 3 array is shuffled by the
+specification's `blosc` codec instead: Blosc byte-shuffles each block of a
+chunk (the whole chunk, or blocks of 1 MiB in a larger one) and stores each
+byte plane as a zlib stream at level 6. On the He atlas (71,650 cells) the
+format 3 store is 29.00 MB so, against 29.11 MB with `numcodecs.shuffle` and
+gzip and 37.62 MB with gzip unshuffled.
+
+Browsers inflate deflate, zlib and gzip natively (`DecompressionStream`), the
+zlib streams of a Blosc frame included (the web app reads the frame and
+un-shuffles in JavaScript); the web app also decodes Blosc's other
+compressors, LZ4 and Zstandard in JavaScript, so a file written with those is
+read too.
 
 ### Consolidated metadata
 

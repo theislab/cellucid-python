@@ -11,7 +11,7 @@ names them, read instead:
 
 | Record says | Now |
 | --- | --- |
-| **Prepared** button, `#user-data-browse-btn` | **Zarr folder** button, `#user-data-zarr-folder-btn` (a directory input for one `.zarr` store; a folder can also be dropped on the viewer) |
+| **Prepared** button, `#user-data-browse-btn` | **Open… › Zarr folder…**, `#user-data-open-btn` then `#user-data-folder-item` (`#user-data-folder-input`, a directory input for one `.zarr` store; a folder can also be dropped on the page) |
 | `?exportsBaseUrl=…` | `?sampleCatalog=…` (meta element `cellucid-sample-catalog`) |
 | `cellucid-datasets/exports-v3/` | the AnnData sample catalog, `https://theislab.github.io/cellucid-datasets/anndata/` |
 | `datasets.json` with `version`, `state_manifest`, `state_sha256`, `state_bytes` | `datasets.json` schema 2: `{schema, default, datasets: [{id, path, session: {path, bytes, sha256}}]}` |
@@ -25,6 +25,23 @@ The capture tooling in `docs/_tooling/screenshots/` loads the AnnData sample
 catalog (`serve-catalog.mjs`, `?sampleCatalog=`, `cellucid-datasets/anndata/`);
 it shoots once that folder exists in the datasets checkout, and every image
 taken from `exports-v3` is then rechecked with `node capture.mjs check --all`.
+:::
+
+:::{important}
+**The Session panel was redesigned on 2026-10-23.** Wherever a record below
+names its earlier controls, read instead:
+
+| Record says | Now |
+| --- | --- |
+| `#dataset-info` as a two-column table (Name, Description, Source, URL, Citation, Cells, Genes, Obs fields, Connectivity; `#dataset-url`, `#dataset-source`, …) | the **Dataset** box, `#dataset-info` with `data-state` `empty` / `loading` / `ready`: `#dataset-name` ("No dataset open" with none), `#dataset-summary` (`#dataset-cells` · `#dataset-genes`), `#dataset-origin` (format · host), `#dataset-description` with **More**, `#dataset-read` ("5.5 MB read in 43 requests"), and a collapsed **Details** (`#dataset-details`, `#dataset-details-list`: Source, Citation, File, Format, Size, Read, Cells, Genes, Obs fields, Embeddings, Layers, Raw, Neighbour graph, Latent space, Vector fields). It never shows the dataset id. |
+| **Files** with **H5AD** `#user-data-h5ad-btn`, **Zarr ZIP** `#user-data-zarr-archive-btn`, **Zarr folder** `#user-data-zarr-folder-btn` | **File or folder**: one **Open…** button, `#user-data-open-btn`, whose menu `#user-data-open-menu` has **File…** `#user-data-file-item` (`#user-data-file-input`, `.h5ad` and `.zip`) and **Zarr folder…** `#user-data-folder-item` (`#user-data-folder-input`) |
+| **Server** `#remote-server-url` + **Connect** `#remote-connect-btn`, **Reconnect**; **Open from link** `#data-link-url` + **Connect** `#data-link-connect-btn` | **Link or server**: one bar `#data-address` (placeholder `Link or localhost:8765`) and **Open** `#data-address-open-btn`; while connected one line, `#remote-disconnect-container` (**Server**, `#remote-connection-target`) or `#data-link-disconnect-container` (**Link**, `#data-link-connection-target`), with a compact **Disconnect**. No Reconnect. |
+| the **Transfers** list (`#transfers-block`, `#transfers-list`) | gone: the read line of the Dataset box, notifications for progress and retries, `[cellucid:transfer]` in the console |
+| linked datasets listed in **Sample dataset** as **Linked data** | the dropdown lists one source: the samples, or a connected catalog's datasets labelled "Dataset from <host>"; it shows "—" (`__dataset_unlisted__`) while a file, single-dataset link or server dataset is open |
+| **Data mapping** opening by itself for a file without a UMAP | it never opens on its own: the best-guess notification's **Show** opens it |
+| the outlier slider greyed out with a line and **Choose latent space** | without a latent space only the label, its (i) and **Choose latent space**; with one, the slider and at most one line |
+
+The new captures are listed in {doc}`07_open_from_link_captures`.
 :::
 
 **Start with `{doc}`00_capture_tooling_and_conventions``.** It has the tool, the
@@ -42,7 +59,7 @@ building it. Nothing here is useful until you have read that.
 | `{doc}`04_pages_velocity_annotation_export`` | I velocity · J community annotation · K figure export | 23 | **assignment** |
 | `{doc}`05_pages_sessions_performance`` | L sessions/sharing · N benchmarking/performance | 23 | **assignment** |
 | `{doc}`06_pages_developer`` | P developer docs | 20 | **assignment** |
-| `{doc}`07_open_from_link_captures`` | B data loading: Open from link, Transfers, the Session panel | 7 | **assignment** (scenarios ready, not emitted) |
+| `{doc}`07_open_from_link_captures`` | B data loading and E filtering: the Session panel (Dataset box, Open…, Link or server bar, Data mapping) and the outlier filter | 9 | **assignment** (scenarios ready, not emitted) |
 
 Each per-page record in an **assignment** file carries: the page path, what it
 explains, what figure it had *when the audit was written*, a verdict, and — for

@@ -34,14 +34,15 @@ If your dataset lives on another machine, use **Server Mode** ({doc}`04_server_t
 ## Fast Path (Wet Lab Friendly)
 
 1) Open [Cellucid](https://www.cellucid.com/).
-2) Expand **Session** in the left sidebar and find **Files** under **Open data**.
-3) Choose the button matching exactly what you have. The three sit together, in
-   this order:
-   - **H5AD** — one `.h5ad`, of any size
-   - **Zarr ZIP** — one `.zarr.zip` or `.zip` archive
-   - **Zarr folder** — one `.zarr` store folder (choose the folder itself)
-   Or drag the file or folder from your file manager and drop it onto the
-   viewer; see {ref}`drop-to-open`.
+2) Expand **Session** in the left sidebar and find **File or folder** under
+   **Open data**.
+3) Click **Open…** and choose what you have:
+   - **File…** — one `.h5ad` (of any size), or one `.zarr.zip` / `.zip` archive
+   - **Zarr folder…** — one `.zarr` store folder (choose the folder itself)
+   A browser's file dialog picks files *or* a folder, never both, which is why
+   **Open…** asks first. What you pick decides how it is read. Or drag the file
+   or folder from your file manager and drop it anywhere on the page; see
+   {ref}`drop-to-open`.
 4) Wait for the dataset to load.
 5) Confirm success:
    - you see points rendered in the canvas
@@ -50,29 +51,28 @@ If your dataset lives on another machine, use **Server Mode** ({doc}`04_server_t
 If you don’t see points after loading, jump to the troubleshooting section at the end.
 
 ```{figure} ../../../_static/screenshots/data_loading/choose-local-data-control.png
-:alt: Close-up of the Files controls: an H5AD button and a Zarr ZIP button side by side, a full-width button beneath them, and a mouse pointer resting on it.
+:alt: Close-up of File or folder: the full-width Open… button with its menu open, showing File… (.h5ad or .zarr.zip) and Zarr folder… (.zarr store).
 :width: 496px
 
-The buttons under **Files**. Each one opens a different kind of picker, so
-choosing the wrong button is the most common reason a selection is refused:
-**Zarr folder** asks for a *folder*, the other two ask for a single *file*.
+**Open…** under **File or folder**, with its menu open. **Zarr folder…** asks
+for a *folder*; **File…** asks for a single *file*.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The full Session panel: the Dataset summary table, then the Open data group with a Sample dataset dropdown, the Files buttons, a Server field with a Connect button and an Open from link field with a Connect button, then the Session file group with Save and Load buttons.
+:alt: The full Session panel: the Dataset box, then Open data with the Sample dataset list, the Open… button and the Link or server bar with its Open button, then Session file with Save and Load, and the collapsed Data mapping group.
 :width: 524px
 
-Where the **Files** buttons sit in the whole Session panel. Every loading path
-has its own label under **Open data**, and **Save** / **Load** sit under
-**Session file**, just below.
+Where **Open…** sits in the whole Session panel. Every loading path has its own
+label under **Open data**, and **Save** / **Load** sit under **Session file**,
+just below.
 ```
 
 :::{important}
 **If you cancel the file chooser, Cellucid says nothing at all.** No error, no
 notification, no spinner — the app simply carries on with whatever was already
-loaded. So “I clicked **Zarr folder** and nothing happened” almost always means
-the dialog was dismissed rather than confirmed. Click the button again and complete
-the selection.
+loaded. So “I chose **Zarr folder…** and nothing happened” almost always means
+the dialog was dismissed rather than confirmed. Open it again and complete the
+selection.
 :::
 
 ## Load a Zarr Store Folder
@@ -83,8 +83,8 @@ the selection.
   `adata.write_zarr("data.zarr")`.
 
 ### What you click
-Click **Zarr folder** and choose the `.zarr` folder itself (not a file inside
-it, and not its parent folder). Your browser may ask you to confirm that the
+Click **Open…**, then **Zarr folder…**, and choose the `.zarr` folder itself
+(not a file inside it, and not its parent folder). Your browser may ask you to confirm that the
 site may read the folder's files ("upload" in its wording: nothing leaves your
 computer). Dropping the folder onto the viewer does the same.
 
@@ -95,12 +95,19 @@ computer). Dropping the folder onto the viewer does the same.
 - A gene reads its own chunks when you colour by it.
 
 ### Hidden metadata files
-A Zarr store keeps its metadata in files whose names start with a dot
-(`.zgroup`, `.zarray`, `.zattrs`, `.zmetadata`; a Zarr v3 store uses
-`zarr.json`). The folder pickers of Chrome, Edge, Firefox and Safari include
-them in the selection, and so does a folder dropped on the viewer. If a
-picker leaves them out, Cellucid says the store's metadata is missing and
-suggests opening the store as a `.zarr.zip` archive instead.
+A Zarr v2 store keeps its metadata in files whose names start with a dot
+(`.zgroup`, `.zarray`, `.zattrs`, `.zmetadata`); a Zarr v3 store uses
+`zarr.json`, which is not hidden. The folder dialogs of Chrome, Edge and
+Firefox include hidden files in the selection. **Safari's leaves them out**, so
+a Zarr v2 folder chosen with **Zarr folder…** in Safari arrives without its
+metadata, and Cellucid says so: "This browser left out the folder's hidden
+files … Drag the folder onto the page, or open its .zarr.zip." In Safari:
+
+- **drag the `.zarr` folder** from Finder and drop it anywhere on the page, or
+- open the store as a **`.zarr.zip`** archive (**Open… › File…**), or
+- write it as Zarr v3 (`prepare(..., format="zarr", zarr_format=3)`), whose
+  metadata file is not hidden, or serve it with `cellucid serve`, which every
+  browser reads.
 
 **Vector fields (optional)**
 - `obsm` arrays named `<field>_<basis>` (scVelo's convention: `velocity_umap`,
@@ -215,7 +222,7 @@ Optional (if you want the vector field / velocity overlay):
 - Archive entries, decoded chunks, and the active embedding still consume
   browser memory and are bounded by the documented reader limits.
 
-A store folder needs no zipping: open it with **Zarr folder**, or serve it
+A store folder needs no zipping: open it with **Open… › Zarr folder…**, or serve it
 with `cellucid serve`, which hands it to the browser key by key.
 
 The archive may contain the Zarr store at its root or inside exactly one root
@@ -274,8 +281,8 @@ embedding (for example `sc.tl.umap(adata)`), and open the file again.
   `.zgroup`, `.zattrs`, or `.zarray` entries.
 
 ### “The file picker won’t let me select a folder”
-- The **Zarr folder** control accepts folders only; H5AD and Zarr ZIP accept
-  one file.
+- **Open… › Zarr folder…** accepts folders only; **Open… › File…** accepts one
+  file.
 - In an embedded or managed browser, directory access may be disabled by the
   embedding policy. Open the standalone Cellucid page or choose the explicit
   Python server workflow.
@@ -295,10 +302,11 @@ embedding (for example `sc.tl.umap(adata)`), and open the file again.
 
 ## Browser and file-selection boundaries
 
-- **Zarr folder** uses the folder-input capability available in supported
-  current desktop browsers.
-- **H5AD** and **Zarr ZIP** use ordinary single-file inputs and have the same
-  validation contract in Chrome, Edge, Firefox, and Safari.
+- **Zarr folder…** uses the folder-input capability available in supported
+  current desktop browsers; Safari's leaves out hidden files (see
+  [Hidden metadata files](#hidden-metadata-files)).
+- **File…** is an ordinary single-file input, with the same validation
+  contract in Chrome, Edge, Firefox, and Safari.
 - **Permission prompts**: if you deny folder access, Cellucid cannot read files.
 - **Large `.h5ad`**: read from disk as each view needs it; a cell-major matrix is reorganised by gene in the background, with a progress notice.
 - **Zarr ZIP root**: the archive must contain either root metadata at archive
@@ -310,19 +318,19 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 
 ---
 
-### Symptom: “I clicked Zarr folder, but nothing happens”
+### Symptom: “I chose Zarr folder…, but nothing happens”
 
 **Likely causes (ordered)**
 1) **You dismissed the file chooser.** A cancelled selection is deliberately
    silent — Cellucid shows no error and keeps the dataset you already had.
 2) You denied folder access or a managed-browser policy blocked it.
 3) The UI is open in an embedded context that disallows folder access.
-4) You clicked H5AD or Zarr ZIP instead of **Zarr folder**.
+4) You chose **File…** instead of **Zarr folder…**.
 
 **How to confirm**
-- Click **Zarr folder** again and complete the selection. If a dataset then
-  loads, cause 1 was it.
-- Open Cellucid as a standalone page and click **Zarr folder**.
+- Choose **Open… › Zarr folder…** again and complete the selection. If a
+  dataset then loads, cause 1 was it.
+- Open Cellucid as a standalone page and choose **Zarr folder…**.
 
 **Fix**
 - Allow directory access and use the standalone page.
@@ -403,7 +411,7 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
   v2 root marker `.zgroup` (stores from anndata before 0.8 have no root
   `.zattrs` and open as they are).
 - Package the complete store while preserving its dotfiles, then select the
-  resulting `.zarr.zip` or `.zip` file with **Zarr ZIP**.
+  resulting `.zarr.zip` or `.zip` file with **Open… › File…**.
 
 ---
 

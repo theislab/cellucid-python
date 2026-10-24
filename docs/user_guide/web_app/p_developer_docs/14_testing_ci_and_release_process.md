@@ -20,8 +20,8 @@ The goal here is to make validation repeatable.
 - `npm run test:browser` runs the Playwright browser suite.
 - UI and state changes also require the manual smoke checks below.
 
-In CI, `npm test` runs on Ubuntu, macOS, and Windows across Node 20, 22, 24,
-and 26. Every push and pull request runs the browser suite in Chromium,
+In CI, `npm test` runs on Ubuntu, macOS, and Windows across Node 22, 24, and
+26 (Node.js 22.15 or newer is required). Every push and pull request runs the browser suite in Chromium,
 Firefox, and WebKit on Ubuntu, plus WebKit on macOS; every engine on every
 operating system runs nightly and on manual dispatch. A failed browser job
 uploads its Playwright screenshots and error context as a workflow artifact.

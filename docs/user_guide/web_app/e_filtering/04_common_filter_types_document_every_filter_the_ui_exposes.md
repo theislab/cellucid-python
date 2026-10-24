@@ -219,14 +219,16 @@ Practical workflows:
 When the active field is a categorical obs field of the file, the **Legend**
 box shows, below **Show centroids**:
 
-- an `Outlier filter` slider with a percent readout,
-- a line under it, when there is something to say: that a latent space must
-  be chosen first (with a **Choose latent space** button), that the field's
-  categories are too small to measure, what the first use reads, or the
-  progress of that read (with **Cancel**).
+- the `Outlier filter` label with its (i), and then one of:
+  - a single **Choose latent space** button, with no slider, until a latent
+    space is chosen;
+  - a line saying the field's categories are too small to measure;
+  - the slider with a percent readout and at most one short line: what the
+    first use reads (for example "First use reads X_scVI (12 MB)."), or the
+    progress of that read with **Cancel**.
 
 ```{figure} ../../../_static/screenshots/filtering/outlier-slider-95.png
-:alt: A control labelled Outlier filter (latent space) whose slider handle sits a short distance in from the right end with the number 95 percent printed beside it and the mouse pointer on the handle.
+:alt: A control labelled Outlier filter, with its small i button, whose slider handle sits a short distance in from the right end with the number 95 percent printed beside it and the mouse pointer on the handle.
 :width: 436px
 
 The slider runs `0`–`100` in whole steps and starts at `100`.

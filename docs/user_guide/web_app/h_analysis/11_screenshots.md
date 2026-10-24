@@ -70,14 +70,15 @@ to run a two-group comparison without selecting anything else.
 
 ## Step 2 — Choose a mode
 
-Open the **Analysis** section. It lists six modes, all collapsed. Opening one
-closes the others, so exactly one mode is active at a time.
+Open the **Analysis** section. It lists its modes in three groups (Genes, Cells,
+Explore), all collapsed. Opening one closes the others, so exactly one mode is
+active at a time.
 
 ```{figure} ../../../_static/screenshots/analysis/analysis-panel-modes.png
 :alt: Six stacked rows reading Quick (Automatic insights), Detailed (Full control over options), Correlation (Explore variable relationships), Differential Expression (Find DE genes between groups), Gene Signature (Compute signature scores) and Marker Genes (Discover markers across groups). Each row carries a small copy-window icon and a chevron.
 :width: 808px
 
-The six modes. Each row carries a **copy** button, which undocks that mode into a
+The modes. Each row carries a **copy** button, which undocks that mode into a
 floating window, and a chevron, which opens it in place.
 ```
 
@@ -85,63 +86,52 @@ floating window, and a chevron, which opens it in place.
 | --- | --- | --- | --- |
 | **Quick** | automatically | one page with cells | "What is in this group?" |
 | **Detailed** | automatically | one variable, one or more pages | "How does this variable differ between my groups?" |
-| **Correlation** | automatically | two continuous or gene variables | "Do these two move together?" |
-| **Differential Expression** | on **Run** | two different, non-empty pages, gene data | "Which genes separate group A from group B?" |
-| **Gene Signature** | automatically | a list of gene names | "How strongly does this program score per cell?" |
-| **Marker Genes** | on **Discover Markers** | a categorical field, gene data | "What marks every group at once?" |
+| **Correlation** | on **Run** | two continuous or gene variables | "Do these two move together?" |
+| **Differential Expression** | on **Run** | two groups of cells (pages or categories), gene data | "Which genes separate group A from group B?" |
+| **Gene Signature** | on **Run** | one or more gene sets | "How strongly does this program score per cell?" |
+| **Marker Genes** | on **Run** | a categorical field, gene data | "What marks every group at once?" |
+| **Dot plot**, **Composition** | on **Run** | genes and a field / samples and conditions | see {doc}`13_analysis_mode_dot_plot`, {doc}`12_analysis_mode_composition` |
 
-Four modes recompute as you type or change a control. Two do not, because they
-are expensive: **Differential Expression** waits for `Run Differential
-Expression`, and **Marker Genes** waits for `Discover Markers`.
+Quick and Detailed recompute as you change a control. Every other mode is a form
+that ends in **Run**: essentials first, everything else under a collapsed **More
+options** (see {doc}`02_analysis_ui_overview`).
 
 We will follow **Differential Expression**, because it is the mode with the most
-moving parts. The other five are the same shape.
+moving parts. The others are the same shape.
 
 ---
 
 ## Step 3 — Configure it
 
-Open **Differential Expression**. The form asks for three things.
+Open **Differential Expression**. The essentials ask for three things:
+**Compare** (Pages, here), **Group A** and **Group B**.
 
 ```{figure} ../../../_static/screenshots/analysis/de-page-selection.png
 :alt: The Differential Expression form with a heading "Select pages to compare:", a Page A select set to "Page 1", the word "vs", a Page B select set to "Rest of Page 1", a Statistical method select reading Wilcoxon with the description "Rank-based test, robust to outliers and non-normal distributions.", a collapsed Performance Settings row, and a Run Differential Expression button.
 :width: 488px
 
-**Page A vs Page B.** The two must be different and both non-empty. The base
-page and its `Rest of` complement are the simplest valid pair.
+**Group A vs Group B.** Two different pages that share no cell. The base page
+and its `Rest of` complement are the simplest valid pair. Until the pair is
+valid, Run is disabled and the line above it says why.
 ```
 
 **Which page goes in A?** The sign convention follows A: a gene with positive
-log₂ fold change is higher in **Page A**. Put the group you are characterising in
-A and the background in B, and "upregulated" then means what you expect.
+log₂ fold change is higher in **Group A**. Put the group you are characterising
+in A and the background in B, and "upregulated" then means what you expect;
+**Swap A and B** exchanges them.
 
-**Which statistical method?** Two, and only two:
-
-- **Wilcoxon** (default) — a Mann-Whitney rank-sum test. It asks whether one
-  group's values tend to rank above the other's. It does not assume a bell curve
-  and is not thrown off by a few extreme cells. Use this unless you have a
-  reason not to.
-- **t-test** — Welch's t-test on the means. Faster, but it assumes the values
-  are roughly normally distributed, which single-cell expression usually is not.
-
-**Performance Settings** is collapsed by default and can stay that way. It exists
-for very large datasets, where the limit is how fast gene vectors can be fetched
-and held in memory rather than the arithmetic.
-
-```{figure} ../../../_static/screenshots/analysis/de-performance-settings.png
-:alt: The Performance Settings disclosure expanded, showing four selects: Batch size set to "500 genes (recommended)", Memory budget set to 512 MB, Network parallelism set to 12 parallel, and Compute parallelism set to Auto.
-:width: 488px
-
-The four performance controls, expanded. Every one of them has a working default;
-they change how fast the run goes, never what it computes.
-```
+**More options** can stay collapsed. It holds the cells to compare within, the
+test (Wilcoxon rank-sum by default; two t-tests), the p-value convention, the
+multiple-testing correction, the fold change, the filters and the labels — every
+default is in the table on {doc}`06_analysis_mode_differential_expression_de`.
+There are no performance settings: the run sizes itself.
 
 ---
 
 ## Step 4 — Let it run
 
-Press **Run Differential Expression**. The button reads `Running…`, and a box
-under it says what the run covers, what it is doing, and offers **Cancel**.
+Press **Run**. The button reads `Running…`, and a box under it says what the
+run covers, what it is doing, and offers **Cancel**.
 
 ```{figure} ../../../_static/screenshots/analysis/de-running.png
 :alt: The Differential Expression panel mid-run. The button reads "Running…" and is disabled; under it the cost line "Tests 2,000 genes in 1,000 vs 3,000 cells.", then a box titled "Differential expression" with "2,000 genes in Beta cells (1,000 cells) vs Rest of Beta cells (3,000 cells)", "Testing genes: 0 of 2,000 genes", a progress bar, and a Cancel button.
@@ -154,9 +144,9 @@ across all of them at once and is usually over in an instant.
 
 **Cancel** stops the run, its reads and its computations, and keeps nothing; the
 box then reads `Differential expression cancelled` with **Run again**.
-Changing anything in the form while a run is in flight cancels it too. That is
-deliberate — a result that no longer matches the form on screen would be worse
-than no result.
+Changing the form while a run is in flight does not stop it: the result arrives
+dimmed, marked **Stale · Run**, so a result that no longer matches the form is
+never mistaken for one that does.
 
 ---
 
@@ -177,9 +167,10 @@ an unkeyed volcano.
 ```
 
 :::{important}
-The sidebar shows the plot only. Summary statistics, the ranked gene table, the
-threshold controls and every export live **exclusively** in the expanded view.
-If you are looking for a number and cannot find it, you have not expanded yet.
+The sidebar shows the plot and one line naming what was compared. Summary
+statistics, the gene table and every export live **exclusively** in the expanded
+view. If you are looking for a number and cannot find it, you have not expanded
+yet.
 :::
 
 The **⤢ Expand** button is the only way in. The preview itself is not clickable,
@@ -203,12 +194,12 @@ them are drag handles.
 Read it in this order.
 
 **The volcano.** Horizontal position is log₂ fold change: right means higher in
-Page A, left means higher in Page B. Vertical position is `−log₁₀` of the
-p-value, so higher up means more statistically confident. Genes that clear both
-thresholds are coloured — red on the right, blue on the left — and everything
-else is grey. The dashed lines are the two thresholds themselves.
+Group A, left means higher in Group B. Vertical position is `−log₁₀` of the
+adjusted p-value, so higher up means more statistically confident. Genes that
+pass the filters are coloured — red on the right, blue on the left — and
+everything else is grey. The dashed lines are the filters themselves.
 
-**Summary statistics.** Five rows, and they are worth reading carefully.
+**Summary statistics.** Worth reading carefully.
 
 ```{figure} ../../../_static/screenshots/analysis/de-fdr-denominator.png
 :alt: A five-row table. Genes tested (FDR denominator) 3,753. Not tested (< 10 cells with a value) 0. Significant (FDR ≤ 0.05, |log₂FC| ≥ 1) 1,097. Upregulated 396. Downregulated 701.
@@ -219,41 +210,36 @@ size of the gene panel. Both numbers are shown so the false-discovery rate can b
 reconstructed from this table alone.
 ```
 
-- **Genes tested (FDR denominator)** — genes that produced a p-value. This is the
-  number the correction divided by.
-- **Not tested (< 10 cells with a value)** — genes skipped before testing,
-  because one of the two groups had fewer than 10 cells with a measured value for
-  that gene. They have no p-value and no adjusted p-value, and they are not part
-  of the correction. It reads `0` here because this dataset stores a value for
-  every cell; on a sparser dataset it will not.
-- **Significant** — tested genes passing **both** the current p-value threshold
-  and the current fold-change threshold. The row label restates the two cutoffs
-  in force, so it changes when you change them.
-- **Upregulated / Downregulated** — significant genes split by the sign of the
-  fold change, relative to Page A.
+- **Genes tested** — genes that produced a p-value. This is the number the
+  correction divided by.
+- **Not tested (fewer than 2 cells with a value)** — genes one of the two groups
+  had fewer than 2 measured cells for. They have no p-value and are not part of
+  the correction.
+- **Significant** — tested genes passing **both** **Max adjusted p** and **Min
+  |log2FC|**. The row label restates the two values in force.
+- **Up in A / Down in A** — significant genes split by the sign of the fold
+  change.
+- **Multiple testing**, **Fold change** — what the run used.
 
-**The ranked table.** `Top Differentially Expressed Genes` lists significant genes
-sorted by **absolute** fold change, largest first, so the strongest movers in
-either direction come first. The `Top 5 / 10 / 20 / 100 / All` select changes how
-many rows are drawn. The p-value column is headed `Adj. P-value` while the
-FDR checkbox is ticked and `P-value` when it is not, and values below 0.001 are
-printed as `<0.001` rather than as a long exponent.
+**The gene table.** Every significant gene with its score, log₂ fold change,
+adjusted p and the share of each group’s cells expressing it, highest score first:
+the genes up in A lead, those up in B close the table.
 
-In this run, the three largest movers are `Iapp` (−11.8), `Gcg` (−11.0) and
-`Ghrl` (−10.7) — all strongly *lower* in Page A. That is the expected answer: Page
-A is a progenitor population that has not yet switched on the hormone genes that
-define the mature endocrine cells filling Page B.
+In this run, the largest movers include `Iapp`, `Gcg` and `Ghrl`, all strongly
+*lower* in Group A. That is the expected answer: Page 1 is a progenitor
+population that has not yet switched on the hormone genes that define the mature
+endocrine cells filling the rest.
 
 ---
 
 ## Step 7 — Change one setting and watch the answer move
 
-Nothing in the expanded view is recomputed when you move a threshold. The test
-statistics were fixed the moment the run finished; the thresholds only decide
-which genes get called significant, get coloured, and get listed. Moving them is
-instant and lossless.
+Nothing is recomputed when you change a filter. The test statistics were fixed
+the moment the run finished; the filters only decide which genes get called
+significant, get coloured, and get listed. Changing them is instant and lossless,
+in the form or at the top of the expanded view’s options.
 
-Drag **log2 FC threshold** and compare.
+Change **Min |log2FC|** and compare.
 
 ::::{grid} 1 1 2 2
 :gutter: 3
@@ -284,17 +270,14 @@ about your thresholds as much as about your data.** If a volcano looks empty,
 check the cutoffs before concluding there is nothing there — that is the single
 most reported analysis surprise.
 
-The other controls in the column behave the same way:
+The other controls behave the same way:
 
-- **P-value threshold** — one of `0.001`, `0.01`, `0.05`, `0.1`.
-- **Use FDR-adjusted p-values** — on by default. Untick it to threshold on raw
-  p-values instead. Do not untick it to get more hits; with thousands of genes
-  tested, raw p-values will hand you hundreds of false positives.
-- **Maximum gene labels** — how many gene names the plot is allowed to draw. The
-  plot prints how many it actually managed to fit — `7 of 15 gene labels shown`
-  in the capture above — because labels that would collide are dropped.
-- **Point size**, **Show threshold lines**, **Show legend**, **Color scheme** —
-  appearance only.
+- **Max adjusted p** — any value from 0 to 1 (0.05).
+- **Min % expressing in either group** — hides genes expressed in few cells of
+  both groups.
+- **Labelled genes** — how many gene names the plot is allowed to draw; labels
+  that would collide are dropped, and the plot says how many fit.
+- **Point size**, **Show threshold lines**, **Color scheme** — appearance only.
 
 ---
 
@@ -314,13 +297,14 @@ no PDF export.
 - **PNG** — a raster image of the plot as drawn.
 - **SVG** — the same plot as vector art, for figure assembly.
 - **CSV** — the numbers. For Differential Expression the file is
-  `differential_expression.csv` and its columns are, in order:
-  `gene, meanA, meanB, log2FoldChange, pValue, adjustedPValue`.
+  `differential_expression.csv`, with scanpy’s column names: `names, scores,
+  logfoldchanges, pvals, pvals_adj, pct_nz_group, pct_nz_reference, auroc,
+  mean_a, mean_b, n_a, n_b`.
 
 :::{warning}
-The CSV holds **every gene that was tested**, not just the ones passing your
-current thresholds, and it does **not** record which pages A and B were, which
-method you chose, or what the thresholds were. Write that down alongside the file
+The CSV holds **every gene**, not just the ones passing your current filters,
+and it does **not** record which groups A and B were, which test you chose, or
+what the filters were. Write that down alongside the file
 or you will not be able to reconstruct the run later. See
 {doc}`09_exporting_analysis_results` for every mode's schema.
 :::
@@ -340,9 +324,9 @@ Steps 2 and 5–8 are identical everywhere. Only the middle changes.
 | --- | --- | --- | --- |
 | {doc}`Quick <03_analysis_mode_quick_insights>` | nothing | composition bars and a statistics table | — (Quick has no expanded view) |
 | {doc}`Detailed <04_analysis_mode_detailed_analysis>` | one variable, plot type, pages | the plot | summary table + statistical tests + export |
-| {doc}`Correlation <05_analysis_mode_correlation_analysis>` | X, Y, colour-by, method, pages | the scatter | per-page `r`, `r²`, `p`, `n` + strength reading + export |
-| {doc}`Gene Signature <07_analysis_mode_gene_signature>` | gene list, scoring, normalisation, plot | the distribution | per-page summary + between-page tests + gene chips + export |
-| {doc}`Marker Genes <08_analysis_mode_genes_panel>` | grouping field, mode, clustering | a heatmap, in all three modes | the ranked per-group table, a wider heatmap with dendrograms + export |
+| {doc}`Correlation <05_analysis_mode_correlation_analysis>` | X, Y, pages; method and colour-by under More options | the scatter | per-page `r`, `r²`, `p`, `n` + strength reading + export |
+| {doc}`Gene Signature <07_analysis_mode_gene_signature>` | gene sets, pages; method and display under More options | the distribution | per-page summary + between-page tests + gene chips + export |
+| {doc}`Marker Genes <08_analysis_mode_genes_panel>` | Group by, compare against; groups, test, filters, ranking under More options | a ranked list, heatmap or clustered heatmap | the sortable per-group table, heatmap options + CSV, all genes CSV, GMT |
 
 ---
 

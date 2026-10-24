@@ -44,7 +44,10 @@ Figure export is split into three layers so it stays fast and maintainable:
    bounds, the shader-accurate WebGL2 point pass (on OffscreenCanvas), the
    vector point markup (returned as one Blob), and PNG encoding with
    `OffscreenCanvas.convertToBlob` plus the `iTXt` metadata. The page only
-   composes, so exporting a large dataset does not freeze the tab.
+   composes, so exporting a large dataset does not freeze the tab. In a
+   browser whose workers have no WebGL2 (WebKitGTK and WPE,
+   [WebKit bug 209809](https://bugs.webkit.org/show_bug.cgi?id=209809)) the
+   same handler draws the point pass on the page.
    - `cellucid/assets/js/app/ui/modules/figure-export/utils/figure-export-worker.js`
    - `cellucid/assets/js/app/ui/modules/figure-export/utils/figure-export-worker-client.js`
 

@@ -92,12 +92,12 @@ This is best for:
 
 ### Option B: Use the browser file picker (local-user)
 
-Use the buttons under **Open data → Files** to select:
-- a `.h5ad` file (**H5AD**), or
-- a `.zarr` store folder (**Zarr folder**), or
-- a `.zarr.zip` archive holding one Zarr store (**Zarr ZIP**)
+Use **Open…** under **Open data → File or folder** to select:
+- a `.h5ad` file (**File…**), or
+- a `.zarr.zip` archive holding one Zarr store (**File…**), or
+- a `.zarr` store folder (**Zarr folder…**)
 
-or drop one of them on the viewer.
+or drop one of them anywhere on the page.
 
 This is best for:
 - “real user” workflows with no Python server running
@@ -113,8 +113,9 @@ cellucid serve /path/to/dataset.h5ad --dataset-name "My dataset" --dataset-id my
 cellucid serve /path/to/dataset.zarr --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
-Then in the Cellucid UI, use the **Server** field under **Open data** and point it at:
-- `http://127.0.0.1:<port>`
+Then in the Cellucid UI, type the server's address into the **Link or server**
+bar under **Open data** and click **Open**:
+- `127.0.0.1:<port>`, `http://127.0.0.1:<port>`, or just `<port>`
 
 This is best for:
 - debugging the served-AnnData path (`data/remote-source.js`,
@@ -161,14 +162,16 @@ This helps you reproduce edge cases quickly without waiting for large loads.
 
 ### Symptom: “Blank page / canvas is black”
 
-First, check whether you got a **“Cellucid could not start”** card. If you did,
-the bootstrap failed deliberately and the line beneath the heading is the reason
-— read it before anything else. A truly blank page means the module graph never
-ran at all, which is a serving problem, not an application one.
+First, check whether you got a full-screen startup failure card. If you did,
+the bootstrap failed deliberately: the heading names the kind of problem and
+**Details** holds the exact reason — read it before anything else. A truly
+blank page means the module graph never ran at all, which is a serving problem,
+not an application one.
 
 Likely causes (ordered):
-1) WebGL2 not available (browser/GPU issue) — you will get the card, reading
-   “WebGL2 is required but not supported in this browser.”
+1) WebGL2 not available (browser/GPU issue) — you will get the card headed
+   “This browser cannot run Cellucid”, with “WebGL2 is required but not
+   supported in this browser.” under Details.
 2) A JS exception during startup prevented viewer initialization.
 3) The app cannot fetch required files due to server/CORS/missing paths.
 
@@ -180,7 +183,8 @@ How to confirm:
 
 That is the intended initial state. Controls whose listeners are wired after an
 `await` in the bootstrap are authored `disabled` and enabled only once they are
-live; the line under the dataset picker says which phase you are in. If they
+live; the line under the **Open data** heading (`#data-source-status`) says
+which phase you are in. If they
 never enable, the bootstrap threw — look for the startup card or the console.
 
 Locally this window is short enough to miss; throttle the network in DevTools if

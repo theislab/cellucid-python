@@ -1,13 +1,13 @@
 // Open every "Open in Cellucid" link the documentation publishes and say
 // whether each one still opens a dataset.
 //
-// The data-loading pages link real datasets on CELLxGENE, Zenodo, Hugging
-// Face, GEO, Dropbox and GitHub so a reader can click and look. Those hosts
+// The data-loading pages link real datasets on CELLxGENE, Zenodo, Figshare,
+// Hugging Face, GEO, Dropbox and GitHub so a reader can click and look. Those hosts
 // change without telling anyone, so a link is only as good as its last check.
 // This reads every `https://www.cellucid.com/?data=…` link in `docs/`, opens
 // each one, in turn, in a real browser against the application at `--app`
 // (default: the published site), and prints what it saw: the dataset's name
-// and cell count, how long it took and what the Transfers list says was read,
+// and cell count, how long it took and what the Dataset box says was read,
 // or the message that refused it. It exits non-zero when any link fails.
 //
 //   node check.mjs                                     # against www.cellucid.com
@@ -71,13 +71,12 @@ async function open(browser, app, link) {
       const errors = [...document.querySelectorAll('.notification-error')]
         .map(note => note.textContent.replace(/\s+/g, ' ').trim());
       if (errors.length > 0) return `refused: ${errors.join(' | ')}`;
-      const name = document.getElementById('dataset-name')?.textContent.trim() ?? '';
       const ready = document.documentElement.dataset.startupPhase === 'ready';
-      return ready && name !== '' && name !== '–' && name !== '—' ? 'ok' : false;
+      return ready && document.getElementById('dataset-info')?.dataset.state === 'ready' ? 'ok' : false;
     }, null, { timeout: OPEN_TIMEOUT_MS, polling: 250 }).then(handle => handle.jsonValue());
-    const read = await page.evaluate(() => document
-      .querySelector('#transfers-list .transfer-row')
-      ?.innerText.match(/[\d.]+ [KMG]?B read(?: of a [\d.]+ [KMG]?B file)?, in \d+ requests?/)?.[0] ?? '');
+    // The Dataset box's read line: "5.5 MB read in 43 requests", "Reading… " while bytes arrive.
+    const read = await page.evaluate(() => (document.getElementById('dataset-read')?.textContent ?? '')
+      .replace(/^Reading…\s*/, '').trim());
     return {
       ok: outcome === 'ok',
       detail: outcome === 'ok'

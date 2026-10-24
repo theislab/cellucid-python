@@ -13,7 +13,7 @@ browser.
 ```{warning}
 Publishing a store on a public host is publishing your data. Treat it like
 making the dataset public. For data that must stay private, keep it on your own
-machine and open the `.zarr.zip` with the **Zarr ZIP** button instead.
+machine and open the `.zarr.zip` with **Open… › File…** instead.
 ```
 
 ## Folder or single file?
@@ -33,7 +33,7 @@ Both hold the same files, byte for byte.
    at most 262,144 values, a few MiB before compression), which suits GitHub's
    file size limit; a `.zarr.zip` larger than 100 MB needs Git LFS, which the web app
    also reads.
-3. In the web app, paste into **Open from link**
+3. In the web app, paste into the **Link or server** bar
    `owner/repo/data/my_dataset.zarr` (the folder) or
    `owner/repo/data/my_dataset.zarr.zip` (the file). Without `@branch` this
    reads the repository's default branch; `owner/repo@branch/data/...` reads

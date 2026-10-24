@@ -146,15 +146,18 @@ and its `zarr.json` (Zarr format 3):
  "chunk_key_encoding": {"name": "default", "configuration": {"separator": "/"}},
  "fill_value": 0,
  "codecs": [{"name": "bytes", "configuration": {"endian": "little"}},
-            {"name": "numcodecs.shuffle", "configuration": {"elementsize": 4}},
-            {"name": "gzip", "configuration": {"level": 6}}],
+            {"name": "blosc", "configuration": {"typesize": 4, "cname": "zlib", "clevel": 6,
+                                                "shuffle": "shuffle", "blocksize": 0}}],
  "attributes": {}, "zarr_format": 3, "node_type": "array", "storage_transformers": []}
 ```
 
 - **Shuffle:** every chunk of an array of values wider than one byte is
   byte-shuffled first -- the first byte of every value, then every second
-  byte, and so on -- numcodecs' `Shuffle` filter (format 3: the
-  `numcodecs.shuffle` codec), as HDF5's shuffle filter does in an `.h5ad`.
+  byte, and so on -- numcodecs' `Shuffle` filter in format 2, as HDF5's
+  shuffle filter does in an `.h5ad`. Format 3 has no shuffle codec of its own
+  (`numcodecs.shuffle` is outside its specification), so there the array is
+  compressed with the specification's `blosc` codec: byte shuffle and zlib
+  level 6 in a Blosc frame, the frame c-blosc writes.
   The similar high bytes of neighbouring values then compress together: the
   gene indices of a sparse `X` shrink by about a third, embeddings and graph
   weights by 7-9%. The expression values themselves -- `X/data`, or a dense
@@ -164,9 +167,10 @@ and its `zarr.json` (Zarr format 3):
   one-byte values (`|b1`, `|i1`) are not shuffled either; the `.zarray` of
   such an array declares `"filters": null`.
 - **Compressor:** every chunk is then DEFLATE level 6, made by base R's
-  `memCompress(type = "gzip")`: a zlib stream (RFC 1950) in format 2, exactly
-  what numcodecs' `Zlib` codec reads and writes; the same deflate data in gzip
-  framing (RFC 1952) in format 3. Browsers inflate both natively.
+  `memCompress(type = "gzip")`: a zlib stream (RFC 1950) in format 2, what
+  numcodecs' `Zlib` codec reads and writes; in format 3 the same deflate data
+  in gzip framing (RFC 1952), or, for a shuffled array, one zlib stream per
+  byte plane of each Blosc block. Browsers inflate all of them natively.
 - **Strings:** dtype `|O`, `filters: [{"id": "vlen-utf8"}]`, `fill_value: ""`
   (format 3: `data_type` `"string"` and the `vlen-utf8` codec).
 - **Fill values:** `0` for numbers, `false` for `|b1`, `""` for strings. Every

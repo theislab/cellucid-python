@@ -299,7 +299,7 @@ element five times and stack them into a single labelled composite:
 | `That gesture ended outside the view…` | Lasso, `Alt+drag`, release the mouse over the sidebar | pancreas |
 | `That cell has no value on that panel's field…` | Annotation based on a field with a missing-code sentinel, `Alt+click` a sentinel cell | he |
 | `That gesture did not change the selection.` | Lasso the identical polygon twice with `Alt` | pancreas |
-| `Color by a field first…` | Annotation based with colour-by set to None | pancreas |
+| `Color by a field first…` (Selection (i) open) | Annotation based with colour-by set to None | pancreas |
 
 Crop each to `#highlight-mode-description` (plus the `Step N:` line above it where
 present, since the doc says the readout distinguishes the two cases). Assemble into one
@@ -560,20 +560,14 @@ pages: `Beta` (annotation-selected on `cell_type = Beta`) and `Alpha`.
    (the latter holds `Rest of Beta`). The page's prose already claims those exact
    group labels; this is the shot that proves it. Cursor on the open `Page B:` select.
    `analysis/de-page-selection.png`, `:width: 246px`.
-2. *Method + performance* — same panel scrolled to `Statistical method:` (Wilcoxon /
-   t-test, each with its description line) and `Performance Settings` **expanded**
-   (batch size, memory budget, network parallelism, compute parallelism). The page
-   devotes a whole section to these four controls and never shows them. Cursor on the
-   Performance Settings disclosure.
-   `analysis/de-performance-settings.png`, `:width: 246px`.
-3. *Running* — captured mid-run: the run button reading `Running…` and, under it, the
+2. *Running* — captured mid-run: the run button reading `Running…` and, under it, the
    running box (`Differential expression`, what the run covers, `Testing genes: x of y
    genes`, a progress bar and **Cancel**; step names are literal, from
    `stats/multi-variable-analysis.js`). Crop `#analysis-panel-differential`. Cursor on
    **Cancel**. `analysis/de-running.png`, `:width: 246px`. Then click **Cancel** and
    capture the calm cancelled state (`Differential expression cancelled`, `Cancelled
    after …`, **Run again**): `analysis/de-cancelled.png`, `:width: 246px`.
-4. *The volcano, expanded* — `.analysis-modal-content` after `⤢ Expand`:
+3. *The volcano, expanded* — `.analysis-modal-content` after `⤢ Expand`:
    `.analysis-modal-plot` with the volcano (up/down/not-significant colouring and
    labelled top-N genes), the `PLOT OPTIONS` column with the p-value threshold, the
    |log2FC| slider and the **Use FDR-corrected p-values** checkbox, the `Export:`
@@ -585,7 +579,7 @@ pages: `Beta` (annotation-selected on `cell_type = Beta`) and `Alpha`.
    outside of. A pointer drawn on the slider would either be outside the crop or point
    at a control the caption does not say was touched.
    `analysis/de-volcano-expanded.png`.
-5. *The FDR denominator* — a tight crop of just the `.de-modal-stats` table, at a
+4. *The FDR denominator* — a tight crop of just the `.de-modal-stats` table, at a
    readable width, showing the five rows the page documents in prose:
    `Genes tested (FDR denominator)`, `Not tested (< 10 cells with a value)`,
    `Significant (…)`, `Upregulated`, `Downregulated`. Choose a page pair small enough
@@ -688,8 +682,7 @@ dataset where the "not tested" half is non-zero, so the page's central rule is
 demonstrated rather than asserted:
 `analysis/marker-genes-tested-line.png`.
 
-**notes** — `Use cached results`, `CLUSTERING`, `PERFORMANCE SETTINGS`,
-`DISCOVER MARKERS` all verified as real controls. The two "no markers" messages quoted
+**notes** — The two "no markers" messages quoted
 at lines 165–170 are exact.
 
 **standing defects, reported not fixed here** — Two things the recapture made visible
@@ -1061,7 +1054,6 @@ prepared by Lifecycle A: **`Beta cells`** and **`Alpha cells`**.
 | 5 | step 4 | Click `⤢ Expand` | Modal: plot + `PLOT OPTIONS` + `SUMMARY STATISTICS` + `STATISTICAL ANALYSIS` (chi-squared / Cramér's V card) + `Export:` row | `.analysis-modal-content` | `⤢ Expand` (pre-click frame) | `detailed-expanded.png` |
 | 6 | — | Open **Correlation**; `X = S_score`, `Y = G2M_score`, `Color by = cell_type`, Pearson | Structured scatter with a real `r`, `n`, trend line — not a null result | `#analysis-panel-correlation` | `Correlation method:` select | `correlation-results.png` |
 | 7 | — | Open **Differential Expression**; open the `Page B:` select | Two `<optgroup>`s visible: **Pages** and **Wildcards** (`Rest of Beta cells`) | `#analysis-panel-differential` (top) | the open `Page B:` select | `de-page-selection.png` |
-| 8 | step 7 | Set `Statistical method: Wilcoxon`; expand `Performance Settings` | Batch size / memory budget / network parallelism / compute parallelism all visible | `#analysis-panel-differential` (mid) | the Performance Settings disclosure | `de-performance-settings.png` |
 | 9 | configured | Click `Run Differential Expression`; capture mid-run | Button reads `Running…`; the running box reads `Testing genes` with genes done of how many, and **Cancel** | `#analysis-panel-differential` | **Cancel** | `de-running.png` |
 | 10 | step 9 | Click **Cancel** | The box reads `Differential expression cancelled`, `Cancelled after …`, with **Run again**; no result | `#analysis-panel-differential` | **Run again** | `de-cancelled.png` |
 | 11 | run complete | — | Sidebar result: the volcano preview and the `⤢ Expand` button, and nothing else — `Top Differentially Expressed Genes` is drawn only in the modal (`de-analysis-ui.js:28`) | `.analysis-preview-container` ∪ `.analysis-expand-btn` | the `⤢ Expand` button | `de-sidebar-result.png` |

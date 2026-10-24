@@ -82,6 +82,15 @@ How the file's own values combine with the route that opens it:
 - **Launch defaults**: the file's, with every choice a server names on its
   command line taking precedence.
 
+Beside `uns['cellucid']` and `uns['title']`, the one other part of `uns`
+Cellucid reads is the colours Scanpy keeps for a categorical obs column,
+`uns['<column>_colors']`: the column opens in them
+({doc}`../d_fields_coloring_legends/03_color_by_behavior`). They are read with
+the column's categories when the column is first shown: opening a file reads
+no category list, only how many categories each column has, so a column of
+one category per cell (barcodes stored as a categorical) costs nothing until
+it is shown.
+
 ---
 
 (dataset-catalog-contract)=
@@ -158,7 +167,7 @@ publishing workflow is {doc}`02_local_demo_tutorial`.
 
 The browser reads one H5AD file, one ZIP containing a complete Zarr store
 (Zarr v2 or v3, sharded or not), a Zarr store folder from your disk (the
-**Zarr folder** button, or a dropped folder), or a Zarr store folder on a web
+**Open… › Zarr folder…**, or a dropped folder), or a Zarr store folder on a web
 host (through its consolidated metadata). Server mode and Jupyter accept H5AD paths, Zarr
 store folders (v2 or v3), zipped Zarr stores, or an in-memory AnnData object.
 The server serves a path as it is on disk, and the browser reads it with the

@@ -167,7 +167,7 @@ See: {doc}`05_sessions_to_anndata_bridge`.
 ## Screenshot: where the Save button lives in the web app
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Cellucid Session panel: the Dataset summary, the Open data group with Sample dataset, Files, Server and Open from link, the Session file group with its Save and Load buttons, and the Data mapping group.
+:alt: The Cellucid Session panel with a dataset open: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset list, the Open… button and the Link or server bar; Session file with Save and Load; and the collapsed Data mapping group.
 :width: 524px
 
 The Session panel gathers every loading path under **Open data** and keeps the **Save** and **Load** buttons under **Session file**, directly below it.

@@ -184,6 +184,24 @@ Rules of the road:
 - use utilities + semantic tokens
 - avoid raw hex outside token files
 
+Every screen of the site follows the same design principles (the full list is
+"Site Design Principles" in that README), whether it is a panel, a dialog, a
+standalone page (`404.html`, `privacy.html`, `assets/auth/callback.html`) or a
+screen shown when the app cannot run:
+- tokens only, in light and dark, in the theme the visitor chose in the app;
+- the brand card's composition (`components/_welcome.css`): wordmark, one calm
+  heading, one short sentence, clear actions, quiet links;
+- tidy and never verbose: say what happened and what to do; technical detail
+  goes under **Details**, to the console and to the notification log;
+  explanations go behind (i) tips and in the documentation;
+- never a dead end, and terminal only when the app itself cannot run;
+- phone widths, a visible keyboard focus, contrast in both themes, and
+  `prefers-reduced-motion`.
+
+Standalone pages load `assets/css/page.css`, a subset of `main.css` (tokens,
+themes, base, the brand card and `layouts/_page.css`);
+`tests/site-pages-design-contract.test.mjs` holds them to it.
+
 If you add new tokens:
 - update `types/design-tokens.d.ts`
 - run validation scripts (see {doc}`14_testing_ci_and_release_process`)

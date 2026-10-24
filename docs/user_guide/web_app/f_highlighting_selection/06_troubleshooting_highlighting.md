@@ -9,8 +9,10 @@ Format: **Symptom → likely causes → how to confirm → fix → prevention**.
 These checks solve most “it’s broken” reports in under a minute:
 
 1) **Read the line under the Tool buttons.** A gesture the app
-   consumed but could not turn into a step explains itself there, in words.
-   See **What the app tells you** below before assuming a tool is broken.
+   consumed but could not turn into a step explains itself there, in words;
+   the tool's own gesture, or what it needs first, is the first line of the
+   Selection (i). See **What the app tells you** below before assuming a tool
+   is broken.
 2) **Filters:** are you filtering out the cells you expect to see?
    - See {doc}`../e_filtering/index`
 3) **Active page:** are you on the highlight page you think you are on?
@@ -65,7 +67,7 @@ Two rules hold for every message in the table below:
 | “That cell has no value on that panel's field, so there is nothing to select.” | Annotation based: the clicked cell is missing a value on the field of the panel you pressed, so the rule resolves to no cells. | Click a cell that has a value, or color that panel by a field that covers it. |
 | “That panel is not colored by a field, so there is nothing to select.” | Annotation based: the panel you pressed is colored by no field, whatever the focused view is colored by. The gesture is read on the panel you press. | Color that panel by a field, or select in a panel that has one. |
 | “That gesture did not change the selection.” | The gesture resolved to exactly the set you already had. | Nothing is wrong. Draw elsewhere, or change the modifier key. |
-| “Color by a field first (Coloring & filtering), then Alt+click a cell.” | Annotation based is selected but no panel on screen is colored by a field, so no press can select anything. | Choose a categorical or continuous field first. |
+| “Color by a field first (Coloring & filtering), then Alt+click a cell.” (first line of the Selection (i)) | Annotation based is selected but no panel on screen is colored by a field, so no press can select anything. | Choose a categorical or continuous field first. |
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/read-missed-click-notice.png
 :alt: A proximity Alt+click on empty space: the pointer is pressed above the embedding where no cell is drawn, and the ringed line in the Highlighting panel adds "That click did not land on a cell, so there is nothing to select. Zoom in or raise Point size to make cells easier to hit: only the cells the viewer is currently drawing can be clicked." under the Proximity drag help text.
@@ -360,9 +362,10 @@ on the selection.
 - Temporarily disable filters and repeat the selection.
 - Try a known categorical field with obvious labels (e.g., `cell_type`) to validate semantics.
 - If **nothing at all** is selected, read the line under the **Tool**
-  buttons. Three states are reported there and they mean different things:
-  - *“Color by a field first…”* replaces the usual `Alt+click` invitation
-    whenever no panel on screen is colored by a field. No press can select
+  buttons and the first line of the Selection (i). Three states are reported
+  and they mean different things:
+  - *“Color by a field first…”* (in the (i)) replaces the usual `Alt+click`
+    line whenever no panel on screen is colored by a field. No press can select
     anything in that state, so there is nothing to debug beyond choosing a
     field.
   - *“That panel is not colored by a field…”* means the panel you pressed has

@@ -66,7 +66,28 @@ Any static host works (GitHub Pages, Netlify, S3+CloudFront, Cloudflare Pages, n
      you are relying on. Document it for your reviewers:
      {doc}`../o_accessibility_privacy_security/02_privacy_model`.
 
-5) **Catch-all route rewrites**
+5) **Know how long a deploy takes to reach visitors (GitHub Pages)**
+   - GitHub Pages answers every file with `Cache-Control: max-age=600`, and
+     the headers cannot be changed. For up to ten minutes after a push, a
+     visitor's browser may reuse files it cached from the previous build, and
+     a page can then run cached modules of the old build beside freshly
+     fetched ones of the new.
+   - Versioning URLs with a query (`main.js?v=<build id>`) cannot close that
+     window on this host: GitHub Pages' CDN ignores the query string (a never
+     seen `?v=` on an existing file is answered `x-cache: HIT`, measured
+     2026-10-23), so a stale page asking for old versions still receives
+     current bytes. An import map in `index.html` could version the page's
+     own module graph, but not the graphs of module workers (a worker gets no
+     import map: the AnnData reader, decode, spatial-tree, point-raster,
+     figure-export and benchmark workers) nor stylesheets' `@import`s and
+     fonts. Closing it needs content-addressed file names (a bundler) or a
+     service worker; neither is used, so the window stays, and reloading the
+     page once it has passed loads one build.
+   - Dataset stores are not affected in the browser: every request into a
+     Zarr store bypasses the HTTP cache (see
+     {doc}`09_data_loading_pipeline_and_caching`, "HTTP cache").
+
+6) **Catch-all route rewrites**
    - Cellucid is a single page, but it is not using a framework router that needs wildcard rewrites.
    - Do not serve `index.html` for missing data files; that turns a missing-file
      response into a misleading JSON parse error.
@@ -143,7 +164,9 @@ How to confirm:
 
 Fix:
 - Adjust static host configuration to serve `.js` as JavaScript.
-- Bust caches (new filenames, or cache-control headers) for JS.
+- Within ten minutes of a deploy to GitHub Pages, reload once the window has
+  passed (checklist item 5). On a host whose headers you control, serve the
+  app's files with `Cache-Control: no-cache`.
 
 ### Symptom: “Dataset loads on my machine but not for others”
 

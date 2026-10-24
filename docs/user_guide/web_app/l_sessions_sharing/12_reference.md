@@ -62,6 +62,8 @@ and `chunks`:
       "knn": "connectivities",
       "geneNames": "index",
       "expression": "X",
+      "log1p": {},
+      "highlyVariable": null,
       "latent": null,
       "vectorFields": []
     }
@@ -110,7 +112,12 @@ and `chunks`:
   without repeats; and `defaults`: the `1d`/`2d`/`3d` default, each an enabled
   reference or null, at least one named), `knn` (an `obsp` key or null),
   `geneNames` (`"index"` or `"column:<name>"`), `expression` (`"X"`, `"raw"`,
-  `"layer:<name>"`, or null), `latent` (an `obsm` key or null), and
+  `"layer:<name>"`, or null), `log1p` (for each expression matrix whose
+  values are `log1p`, keyed `"X"`, `"raw"` or `"layer:<name>"` in code-point
+  order, `{"base": null}` for e or `{"base": <number>}`; a matrix not listed
+  is as stored), `highlyVariable` (the true/false var column marking the
+  highly variable genes of the expression matrix's axis, or null), `latent`
+  (an `obsm` key or null), and
   `vectorFields`: the vector bindings in use, each `{"key", "embedding"}` —
   the vector's `obsm` key and the enabled embedding reference it is drawn
   over. Bindings are sorted by embedding key, columns, then key. The Python package reads the

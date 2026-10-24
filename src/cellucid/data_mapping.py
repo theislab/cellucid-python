@@ -47,8 +47,19 @@ EmbeddingKeySpec = str | tuple[str, Sequence[int]]
 ANNDATA_KIND = "anndata"
 
 _ANNDATA_MAPPING_KEYS = frozenset(
-    {"kind", "embeddings", "knn", "geneNames", "expression", "latent", "vectorFields"}
+    {
+        "kind",
+        "embeddings",
+        "knn",
+        "geneNames",
+        "expression",
+        "log1p",
+        "highlyVariable",
+        "latent",
+        "vectorFields",
+    }
 )
+_LOG1P_ENTRY_KEYS = frozenset({"base"})
 _EMBEDDING_REF_KEYS = frozenset({"key", "columns"})
 _EMBEDDINGS_GROUP_KEYS = frozenset({"enabled", "defaults"})
 _VECTOR_BINDING_KEYS = frozenset({"key", "embedding"})
@@ -502,6 +513,47 @@ def _validate_gene_names(value: object, *, label: str) -> str:
     )
 
 
+def _is_expression_matrix(value: object) -> bool:
+    return isinstance(value, str) and (
+        value in ("X", "raw")
+        or (value.startswith(_LAYER_PREFIX) and len(value) > len(_LAYER_PREFIX))
+    )
+
+
+def _validate_log1p(value: object, *, label: str) -> dict[str, dict[str, Any]]:
+    """Validate the ``log1p`` group (the web app's ``validateLog1p``).
+
+    For each expression matrix holding ``log1p`` values (``X``, ``raw``,
+    ``layer:<name>``), its ``{"base": ...}``: None for the natural logarithm,
+    else a positive number other than 1. A matrix not listed holds its values
+    as stored. The result lists the matrices in code-point order.
+    """
+    if not isinstance(value, dict):
+        raise DataMappingError("log1p", f"{label} must be an object of expression matrices.")
+    result: dict[str, dict[str, Any]] = {}
+    for matrix in sorted(value):
+        if not _is_expression_matrix(matrix):
+            raise DataMappingError(
+                "log1p",
+                f'{label} keys must be expression matrices: "X", "raw" or "layer:<name>".',
+            )
+        entry = _require_exact_keys(value[matrix], _LOG1P_ENTRY_KEYS, label=f"{label}.{matrix}")
+        base = entry["base"]
+        if base is not None and not (
+            isinstance(base, int | float)
+            and not isinstance(base, bool)
+            and math.isfinite(base)
+            and base > 0
+            and base != 1
+        ):
+            raise DataMappingError(
+                "log1p_base",
+                f"{label}.{matrix}.base must be null (base e) or a positive number other than 1.",
+            )
+        result[matrix] = {"base": base}
+    return result
+
+
 def _validate_expression(value: object, *, label: str) -> str | None:
     if value is None:
         return None
@@ -597,6 +649,13 @@ def validate_data_mapping(value: object, *, label: str = "dataMapping") -> dict[
     ``vectorFields`` must already be in canonical order -- by the bound
     embedding's ``key``, then its ``columns``, then the vector's ``obsm`` key --
     and must not repeat a binding.
+
+    ``log1p`` names, per expression matrix holding ``log1p`` values, its base
+    (None for e); ``highlyVariable`` the boolean ``var`` column of the mapped
+    expression matrix's genes that marks the highly variable ones, or None.
+    The canonical key order is ``kind``, ``embeddings``, ``knn``,
+    ``geneNames``, ``expression``, ``log1p``, ``highlyVariable``, ``latent``,
+    ``vectorFields``.
     """
     if not isinstance(value, dict):
         raise DataMappingError("not_object", f"{label} must be an object.")
@@ -646,6 +705,10 @@ def validate_data_mapping(value: object, *, label: str = "dataMapping") -> dict[
         "knn": _optional_mapping_string(mapping["knn"], label=f"{label}.knn"),
         "geneNames": _validate_gene_names(mapping["geneNames"], label=f"{label}.geneNames"),
         "expression": _validate_expression(mapping["expression"], label=f"{label}.expression"),
+        "log1p": _validate_log1p(mapping["log1p"], label=f"{label}.log1p"),
+        "highlyVariable": _optional_mapping_string(
+            mapping["highlyVariable"], label=f"{label}.highlyVariable"
+        ),
         "latent": _optional_mapping_string(mapping["latent"], label=f"{label}.latent"),
         "vectorFields": bindings,
     }
@@ -1043,6 +1106,29 @@ def require_mapping_matches_anndata(adata: Any, mapping: Mapping[str, Any]) -> N
         if var is not None and gene_column not in var.columns:
             problems.append(
                 f"geneNames uses var column {gene_column!r}, which this dataset does not have"
+            )
+    for matrix in mapping["log1p"]:
+        if matrix == "X" and adata.X is None:
+            problems.append("log1p names X, which this dataset does not have")
+        elif matrix == "raw" and getattr(adata, "raw", None) is None:
+            problems.append("log1p names raw, which this dataset does not have")
+        elif expression_layer(matrix) is not None and expression_layer(matrix) not in adata.layers:
+            problems.append(
+                f"log1p names layers[{expression_layer(matrix)!r}], which this dataset does not have"
+            )
+    highly_variable = mapping["highlyVariable"]
+    if highly_variable is not None:
+        try:
+            var = mapped_var_axis(adata, mapping)
+        except ValueError:
+            var = None
+        if var is not None and highly_variable not in var.columns:
+            problems.append(
+                f"highlyVariable uses var column {highly_variable!r}, which this dataset does not have"
+            )
+        elif var is not None and str(var[highly_variable].dtype) not in ("bool", "boolean"):
+            problems.append(
+                f"highlyVariable uses var column {highly_variable!r}, which is not a true/false column"
             )
     if problems:
         raise ValueError(

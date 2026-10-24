@@ -27,7 +27,8 @@ If you are new, start here. If you already know what you want, jump to the page 
 **What you’ll learn**
 - What Cellucid reads (AnnData, in three containers) and what a dataset catalog is
 - What “lazy reading” is and why it matters for large datasets
-- How to choose between **Files**, **Open from link**, **Server Mode** and **Jupyter**
+- How to choose between a file or folder (**Open…**), a link or a server (the
+  **Link or server** bar), and **Jupyter**
 - The top failure modes, and how to diagnose them quickly
 
 ## What Cellucid Reads
@@ -104,8 +105,9 @@ Pick the first row that matches you.
 
 | Your situation | Recommended workflow | Why |
 |---|---|---|
-| “I just want to look at my data, no Python.” | **Files** (H5AD, Zarr folder or Zarr ZIP) | Nothing installed or uploaded; any file size |
-| “The data is already on CELLxGENE, GEO, Zenodo, Hugging Face, Dropbox or any web host.” | **Open from link** | Read in place where it is published ({doc}`14_open_from_link`) |
+| “I just want to look at my data, no Python.” | **Open…** under **File or folder** (an `.h5ad`, a `.zarr` folder or a `.zarr.zip`) | Nothing installed or uploaded; any file size |
+| “The data is already on CELLxGENE, GEO, Zenodo, Figshare, Hugging Face, Dropbox, a public Google Drive file or any web host.” | The **Link or server** address bar | Read in place where it is published ({doc}`14_open_from_link`) |
+| “My collaborator shared a file with me on Google Drive or OneDrive.” | The **Link or server** address bar, then one sign-in | Read in place from Google or Microsoft with your own sign-in ({doc}`16_private_drive_onedrive`) |
 | “I want to share datasets publicly without running a server.” | A dataset catalog on GitHub or a static host | One shareable link; no running server ({doc}`02_local_demo_tutorial`) |
 | “The data is on a remote machine.” | Server Mode over an SSH tunnel | The server hands the file to the browser, which reads only what each view needs |
 | “I’m already working in a notebook.” | Jupyter (`show_anndata`) | Tight analysis loop; programmatic control |
@@ -123,14 +125,15 @@ starts for you). Either way, the same browser AnnData reader reads it.
 | Route | How you point Cellucid at the data | What it opens |
 |---|---|---|
 | **Sample dataset** | Pick from the **Sample dataset** list: Cellucid's own catalog on www.cellucid.com | The catalog's AnnData files |
-| **Open from link** | Paste a link or id into **Open from link**, or put it in `?data=...` ({doc}`14_open_from_link`) | An `.h5ad`, a Zarr ZIP, a Zarr store folder, or a dataset catalog folder |
-| **Files** | The **H5AD**, **Zarr ZIP** and **Zarr folder** buttons under **Files**, or a file or folder dropped on the viewer | An `.h5ad`, a `.zarr.zip`, or a `.zarr` folder |
+| **Link** | Paste a link or id into the **Link or server** bar and click **Open**, or put it in `?data=...` ({doc}`14_open_from_link`) | An `.h5ad`, a Zarr ZIP, a Zarr store folder, or a dataset catalog folder |
+| **File or folder** | **Open…** under **File or folder**, then **File…** (an `.h5ad` or `.zarr.zip`) or **Zarr folder…**; or a file or folder dropped anywhere on the page | An `.h5ad`, a `.zarr.zip`, or a `.zarr` folder |
 
 ### A Cellucid server hands it over
 
 The server runs where the data is; the web app connects to it, either because
 the server opened it (`cellucid serve` opens your browser, a notebook embeds
-it) or through the **Server** field under **Open data**. The server computes
+it) or through the **Link or server** bar under **Open data** (type its
+address, for example `localhost:8765`, or just the port). The server computes
 nothing: it serves the file's bytes as they are on disk, and the browser reads
 them with range requests, exactly as it reads a linked file (an in-memory
 AnnData is first written once to a temporary `.h5ad`).
@@ -188,7 +191,7 @@ cellucid.prepare(
 )
 ```
 
-Open `pbmc.zarr` with the **Zarr folder** button, serve it, or publish it in a
+Open `pbmc.zarr` with **Open…** › **Zarr folder…**, serve it, or publish it in a
 catalog. See {doc}`../../python_package/c_data_preparation_api/index` for every
 argument.
 
@@ -214,14 +217,45 @@ viewer = show_anndata("data.h5ad", dataset_name="My study", dataset_id="my-study
 For the complete verified loading gallery, see {doc}`09_screenshots`.
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Cellucid Session panel with a dataset loaded, showing the Dataset summary table; the Open data group with the Sample dataset dropdown, the file buttons under Files, the Server and Open from link fields with their Connect buttons, and the Transfers list; and the Session file group with its Save and Load buttons.
+:alt: The Cellucid Session panel with a dataset open: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset list, the Open… button and the Link or server bar; Session file with Save and Load; and the collapsed Data mapping group.
 :width: 524px
 
 The browser routes in the table above are the controls in this panel; a
-server started in a terminal or from Python is reached through the
-**Server** field, and a notebook needs no control at all because it supplies the
+server started in a terminal or from Python is reached through the **Link or
+server** bar, and a notebook needs no control at all because it supplies the
 address.
 ```
+
+## The Dataset box
+
+The **Dataset** box at the top of the **Session** panel describes the dataset
+that is open, and only that one; opening another rewrites all of it.
+
+- **The name**, then one line with its cells and genes.
+- **Where it is read from:** the format (`h5ad file`, `Zarr v2 folder`,
+  `Zarr v3 ZIP`, …) and the host (`theislab.github.io`, `localhost:8765`), or
+  `this computer` for a file you opened.
+- **The description** the dataset states (`uns['cellucid']['description']`),
+  two lines with **More**.
+- **How much has been read**, for data read in place from a host:
+  "5.5 MB read in 43 requests", or "Reading…" while bytes arrive. Nothing is
+  saved to disk; what was read is released when the dataset closes.
+- **Details**, collapsed: the source and citation as links, the file and its
+  size, how it is read, cells, genes, obs fields, the embeddings shown (of how
+  many `obsm` arrays), layers, raw, the neighbour graph, the latent space and
+  the vector fields. A change in **Data mapping** updates them.
+
+While a dataset opens, the box shows a spinner and what is opening. With no
+dataset open it says so. Progress of long reads and anything that went wrong
+are notifications, not text in the panel.
+
+Every opening (a link, a file, a sample, a catalog dataset, a server or a
+notebook) is shown from its first moment: over the empty viewer while no
+dataset is shown, or as a notification with **Cancel** while another dataset
+stays on screen. It names what is opened, the step under way, how much has
+arrived, how fast and how long is left when that is known; a request made
+again shows as *Retrying…* with why. **Cancel** stops the opening where it is
+and keeps the dataset on screen. How it ended goes to the notification center.
 
 ## Edge Cases (Read This If Something Feels “Weird”)
 
@@ -245,9 +279,9 @@ address.
 - **Millions of cells + dense gene matrix**: even with lazy reading, gene queries can be slow or memory-heavy.
 
 ### Environment edge cases
-- **Zarr folder picker**: it requires the browser's folder-input capability,
-  which every supported browser has. H5AD and Zarr ZIP use ordinary
-  single-file inputs.
+- **Zarr folder picker**: **Open… › Zarr folder…** uses the browser's
+  folder-input capability, which every supported browser has. **Open… ›
+  File…** is an ordinary single-file input for an `.h5ad` or a `.zarr.zip`.
 - **Corporate environments**: content blockers can break `raw.githubusercontent.com` (GitHub-hosted catalogs).
 
 ## Troubleshooting (Quick Index)
@@ -260,7 +294,8 @@ address.
 
 **How to confirm**
 - Open Developer Tools → Console → look for network errors / memory warnings
-- Open the **Transfers** list under **Open data**: it shows what is being read
+- Look at the **Dataset** box: for linked data it shows how much has been
+  read ("Reading…" while bytes arrive), and a retried request is a notification
 - Try a built-in sample: if samples load, your environment is probably fine
 
 **Fix**
@@ -280,7 +315,7 @@ address.
 
 ---
 
-### Symptom: “Open from link says the folder holds no datasets.json”
+### Symptom: “A link says the folder holds no datasets.json”
 **Likely causes**
 - The link points at the wrong folder, or at a page instead of the folder
 - The folder holds AnnData files but no `datasets.json`

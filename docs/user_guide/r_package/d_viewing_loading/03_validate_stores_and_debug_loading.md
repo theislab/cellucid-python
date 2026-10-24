@@ -72,8 +72,8 @@ embedding (as float32), `adata.X` with the expression matrix.
 
 ## 3. Open it in the web app
 
-Open the `.zarr.zip` with **Zarr ZIP**, or the hosted store with **Open from
-link** ({doc}`01_open_stores_in_cellucid_web_app`). The browser console (open
+Open the `.zarr.zip` with **Open… › File…**, or the hosted store with the
+**Link or server** bar ({doc}`01_open_stores_in_cellucid_web_app`). The browser console (open
 the developer tools) logs what the reader opened, for example
 `[AnnDataReader] Opened check.zarr: 100 cells, 0 genes`.
 
@@ -81,7 +81,7 @@ the developer tools) logs what the reader opened, for example
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| The **Zarr ZIP** button refuses the file | The file is not a ZIP, or it is a `.zarr` folder you zipped yourself without its hidden files | Write it with `format = "zarr.zip"` |
+| **Open… › File…** refuses the file | The file is not a ZIP, or it is a `.zarr` folder you zipped yourself without its hidden files | Write it with `format = "zarr.zip"` |
 | A link reports nothing published at that address | Wrong path, branch, or a folder address without the trailing `/` store | Open the address in a browser tab; for a folder, check that `<address>/.zmetadata` downloads |
 | A link reports CORS or ignored range requests | The host does not let other sites read its files | Use GitHub, Hugging Face or Zenodo, or fix the host's headers ({doc}`02_host_stores_for_sharing`) |
 | The app refuses `uns['cellucid']` | A value in it was edited by hand into something the viewer does not accept | Write the store again with `cellucid_prepare()` |

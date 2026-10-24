@@ -38,6 +38,8 @@ def _mapping_fingerprint_keys() -> dict:
             "knn": None,
             "geneNames": "index",
             "expression": "X",
+            "log1p": {},
+            "highlyVariable": None,
             "latent": None,
             "vectorFields": [],
         },
@@ -171,6 +173,8 @@ def test_web_app_format2_file_reads_exactly():
     assert bundle.required_fields == {"obs": ["ctype"], "var": []}
     windows = decode_typed_json(bundle.decode_chunk("analysis/windows"))
     assert windows["windows"][0]["result"]["log2fc"].tolist() == [1.5]
+    assert windows["sizes"] == {"window": {"differential": {"width": 300, "height": 200}}, "expandedView": {}}
+    assert windows["windows"][0]["settings"]["options"]["matrix"] == "mapped"
     docked = decode_typed_json(bundle.decode_chunk("analysis/docked"))
     assert docked["openMode"] == "differential"
     assert docked["modes"]["differential"]["result"]["pValue"].dtype == np.float64

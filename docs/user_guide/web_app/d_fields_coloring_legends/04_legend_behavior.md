@@ -236,9 +236,11 @@ button, is in
 
 When the active field is a categorical field of the file, you’ll see, below
 **Show centroids**:
-- the **Outlier filter** slider, greyed out with a **Choose latent space**
-  button until a latent space is chosen, and a line under it saying what its
-  first use reads (or its progress, with **Cancel**)
+- the **Outlier filter**: until a latent space is chosen, only its label,
+  its (i) and one **Choose latent space** button; then the slider, with at
+  most one short line under it saying what its first use reads (for example
+  "First use reads X_scVI (12 MB).") or, while that read runs, a progress bar
+  and **Cancel**
 
 See {doc}`03_color_by_behavior` for semantics and edge cases.
 

@@ -227,7 +227,7 @@ whereas `0` is a real measurement and will be coloured as one.
 ### How to confirm
 
 - If the **Gene Expression** row is not visible at all, the dataset likely has no var fields.
-- Check dataset info (if available) for gene count.
+- Check the gene count in the **Dataset** box at the top of **Session**.
 - Open **Session › Data mapping › Genes** and check which
   matrix is chosen.
 

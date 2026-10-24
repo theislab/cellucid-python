@@ -18,39 +18,43 @@ than an empty application.
 ## Loading and session controls
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Session panel with the Pancreas sample loaded: a Dataset summary table, then the Open data group with a Sample dataset dropdown, the file buttons under Files, and Server and Open from link fields each with a Connect button, then the Session file group with Save and Load buttons.
+:alt: The Session panel with the Pancreas sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; then the Open data group with the Sample dataset dropdown, the Open… button under File or folder and the Link or server bar with its Open button; then the Session file group with Save and Load buttons and the collapsed Data mapping group.
 :width: 524px
 
 The Session panel in its settled state, with the standard Pancreas sample
-loaded. Every loading path has its own label under **Open data**, and **Save**
-and **Load** sit under **Session file**, below them. Both connection buttons read
-**Connect** once the app is ready.
+loaded. The **Dataset** box at the top describes the open dataset. Every
+loading path has its own label under **Open data**, and **Save** and **Load**
+sit under **Session file**, below them. **Open…** and the bar's **Open** are
+enabled once the app is ready.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/choose-local-data-control.png
-:alt: Close-up of the Files controls: the H5AD and Zarr ZIP buttons side by side, a full-width button below them, and a mouse pointer on it.
+:alt: Close-up of File or folder: the full-width Open… button with its menu open, showing File… (.h5ad or .zarr.zip) and Zarr folder… (.zarr store), and a mouse pointer on File….
 :width: 496px
 
-The buttons under **Files**. **Zarr folder** (the full-width button) opens a
-folder chooser; **H5AD** and **Zarr ZIP** open single-file choosers.
+**Open…** under **File or folder**, with its menu open. **File…** opens a
+single-file chooser for an `.h5ad` or a `.zarr.zip`; **Zarr folder…** opens a
+folder chooser. A browser's file dialog picks files or a folder, never both,
+which is why the button asks first.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/connect-remote-server.png
-:alt: Close-up of the Server control with a loopback URL typed into the field and a mouse pointer on the Connect button.
+:alt: Close-up of the Link or server bar holding the loopback address of a cellucid serve server, with one line under it reading Server, the address and a compact Disconnect button.
 :width: 496px
 
-The **Server** control, holding the address a running `cellucid serve`
-printed as its **Local URL** — the bare origin, `http://127.0.0.1:8765`. This
-field is not where the **Viewer URL** goes: it refuses a trailing slash, a
-`?…` query, and a fragment. The Viewer URL belongs in the browser address bar.
-See {doc}`04_server_tutorial`.
+The **Link or server** bar connected to a running `cellucid serve`: the bar
+holds its address (`127.0.0.1:8765`, the port alone, or the **Local URL**
+`http://127.0.0.1:8765` all reach it), and the line under it reads **Server**
+with **Disconnect**. The **Viewer URL** does not go here: its `?…` query makes
+the bar open it as a link to data. The Viewer URL belongs in the browser
+address bar. See {doc}`04_server_tutorial`.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/connect-github-catalog.png
-:alt: Close-up of the Open from link control with an owner/repo path typed into the field and a mouse pointer on the Connect button.
+:alt: Close-up of the Link or server bar with an owner/repo path typed into it and a mouse pointer on the Open button.
 :width: 496px
 
-The **Open from link** control, holding a GitHub catalog folder path.
+The **Link or server** bar, holding a GitHub catalog folder path.
 ```
 
 ## Direct H5AD load

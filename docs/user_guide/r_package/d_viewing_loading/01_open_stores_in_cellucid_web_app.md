@@ -33,7 +33,8 @@ cellucid_prepare(
 Then:
 
 1. Open <https://www.cellucid.com>.
-2. In the **Session** panel, under **Files**, click **Zarr ZIP**.
+2. In the **Session** panel, under **File or folder**, click **Open…**, then
+   **File…**.
 3. Select `my_dataset.zarr.zip`.
 
 The dataset opens under the name you passed as `dataset_name`, with the launch
@@ -41,8 +42,9 @@ defaults you set (for example `embedding_defaults` or `obs_keys`) applied.
 
 ## From a web address: a `.zarr` folder or a `.zarr.zip`
 
-Once a store is on a web host, paste its address into **Open from link** in the
-**Session** panel (or put it in the page's `?data=` parameter):
+Once a store is on a web host, paste its address into the **Link or server**
+bar in the **Session** panel and click **Open** (or put it in the page's
+`?data=` parameter):
 
 - a `.zarr` folder: `https://example.org/data/my_dataset.zarr/` — the store's
   consolidated metadata (`.zmetadata`, which `cellucid_prepare()` always writes)

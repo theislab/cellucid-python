@@ -110,7 +110,7 @@ view: that PCA is the dataset's latent space, which Cellucid does not list as a
 view on its own.
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/official-01-sample-state-applied.png
-:alt: The full application window shortly after choosing the Pancreas built-in sample, showing the dataset coloured by cell type in a 3-D orbit view on a light grid background, with the Session accordion open and the dataset summary filled in.
+:alt: The full application window shortly after choosing the Pancreas built-in sample, showing the dataset coloured by cell type in a 3-D orbit view on a light grid background, with the Session accordion open and its Dataset box filled in.
 :width: 1440px
 
 The Pancreas sample moments after it was chosen. Nothing was clicked beyond
@@ -132,10 +132,11 @@ the state is applied, but moving-camera playback remains off.
 ## Which datasets get a default session
 
 Only a dataset opened from a catalog — the sample catalog the dataset picker
-reads, or a catalog opened with **Open from link** — whose catalog entry names
+reads, or a catalog opened from a link in the **Link or server** bar — whose catalog entry names
 a `session` gets one. Nothing else is probed:
 
-- a file chosen or dropped from your computer (H5AD, Zarr folder, Zarr ZIP);
+- a file or folder chosen with **Open…** or dropped from your computer
+  (`.h5ad`, `.zarr.zip`, Zarr folder);
 - a single file or Zarr store opened from a link;
 - a dataset served by `cellucid serve`, `serve_anndata()` or Jupyter; and
 - any catalog entry without `session`.

@@ -1039,11 +1039,13 @@ def test_data_loading_matrix_uses_the_exact_local_picker_labels() -> None:
         DOCS_ROOT / "user_guide" / "web_app" / "b_data_loading" / "index.md"
     ).read_text(encoding="utf-8")
 
-    assert "| Browser Zarr folder picker, or drop the folder |" in page
-    assert "| Browser Zarr ZIP picker |" in page
-    assert "| Browser H5AD picker |" in page
+    assert "| A Zarr store folder (`.zarr`), for example from `prepare()` | **Open… › Zarr folder…**, or drop the folder |" in page
+    assert "| A portable `.zarr.zip` or `.zip` | **Open… › File…** |" in page
+    assert "| A `.h5ad` of any size, and no Python | **Open… › File…** |" in page
     assert "Prepared" not in page
     assert "Browser folder picker" not in page
+    for removed in ("**H5AD**", "**Zarr ZIP**", "**Files**", "Open from link", "**Connect**"):
+        assert removed not in page, removed
 
 
 def test_remote_and_github_url_docs_require_exact_multi_dataset_selection() -> None:

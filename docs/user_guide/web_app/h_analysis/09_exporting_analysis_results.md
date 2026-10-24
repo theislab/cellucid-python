@@ -136,65 +136,67 @@ The exported CSV statistics (`r`, `p_value`, `n`) are computed on the full paire
 
 ### Differential Expression (DE)
 
-- **Plot export:** `PNG` / `SVG` of the volcano plot with current thresholds/options.
-- **CSV export:** one row per gene with DE statistics.
+- **Plot export:** `PNG` / `SVG` of the volcano plot with the current filters and labels.
+- **CSV export:** one row per gene — every gene tested or not, whatever the filters.
   - Filename: `differential_expression.csv`
-  - Columns:
-    - `gene`
-    - `meanA`, `meanB`
-    - `log2FoldChange`
-    - `pValue`
-    - `adjustedPValue` (BH/FDR)
+  - Columns (scanpy’s `rank_genes_groups_df` names where one exists):
+    - `names` (the gene)
+    - `scores` (Wilcoxon z, or Welch’s t)
+    - `logfoldchanges` (as **Fold change from** chose)
+    - `pvals`, `pvals_adj` (Benjamini–Hochberg or Bonferroni)
+    - `pct_nz_group`, `pct_nz_reference` (share of Group A’s / Group B’s cells not zero, 0–1)
+    - `auroc` (Wilcoxon)
+    - `mean_a`, `mean_b`, `n_a`, `n_b` (each group’s mean, and its cells with a measured value)
+  - A gene that was not tested has empty statistics.
 
 :::{important}
-The DE CSV does not include the compared page names.
-Record Page A vs Page B yourself (file rename, notes, or session).
+The DE CSV does not include the group names or the test options.
+Record them yourself (file rename, notes, or session).
 :::
 
 ### Gene Signature
 
 - **Plot export:** `PNG` / `SVG` of the signature score plot.
-- **CSV export:** signature scores as a long table.
+- **CSV export:** one row per scored cell and gene set.
   - Filename: `gene_signature_scores.csv`
   - Columns:
     - `page`
-    - `score`
+    - `set` (the gene set’s name)
+    - `cell_index` (the dataset row, 0-based)
+    - `score` (as computed: **Rescale** changes the plot, not the file)
 
-:::{warning}
-This CSV does **not** include cell indices.
-If you need to map scores back to specific cells, export a session and recompute in Python where you can attach indices/obs.
-:::
+`cell_index` joins the scores back to `adata.obs` (row `cell_index`).
 
 ### Marker Genes (Genes Panel)
 
-All three Marker Genes modes draw the same heatmap, so the export cannot be
-chosen by what is on screen. It is chosen by the **mode recorded in the result**:
+From the expanded view:
 
-- **Heatmap-style exports** (Clustered / Custom Genes)
-  - Filename: `marker_genes_heatmap.csv`
-  - Shape: wide matrix
-  - Columns:
-    - `gene` (first column)
-    - one column per group (column headers are group names)
-  - Values: per-group mean expression for each gene, using the **current heatmap transform** (e.g., z-score/log1p/none).
+- **CSV** — the markers shown, one row per group and marker.
+  - Filename: `marker_genes.csv`
+  - Columns: `group`, `rank`, `names`, `scores`, `logfoldchanges`, `pvals`,
+    `pvals_adj`, `pct_nz_group`, `pct_nz_reference`, `auroc`, `small_group`
+- **All genes CSV** — every gene of every group, whatever the filters, in dataset
+  gene order.
+  - Filename: `marker_genes_all.csv`
+  - Columns: `group`, `names`, `scores`, `logfoldchanges`, `pvals`, `pvals_adj`,
+    `pct_nz_group`, `pct_nz_reference`, `auroc`, `small_group`, `tested`
+  - `tested` is `false` for a skipped group and for the reference group; their
+    statistics are empty. A gene not tested in a tested group has empty
+    statistics too.
+- **GMT** — the markers shown, one gene set per group.
+  - Filename: `marker_genes.gmt`
+  - One line per group: the group name, `Cellucid marker genes`, then its genes,
+    tab-separated (MSigDB’s format; Gene signature and Dot plot import it).
 
-- **Ranked markers exports** (Ranked Genes)
-  - Filename: `marker_genes_ranked.csv`
-  - Columns, in this order:
-    - `group`, `gene`, `rank`
-    - `log2FoldChange`, `pValue`, `adjustedPValue`
-    - `meanInGroup`, `meanOutGroup`
-    - `percentInGroup`, `percentOutGroup`
-  - `group` is the **category name** — the grouping field's value for that
-    group, written exactly as the heatmap CSV writes its column headers and as
-    the group dropdown above the ranked table labels its entries. A numeric or
-    boolean category is written as its plain string form. Both exports encode
-    the group through the same rule, so a `marker_genes_ranked.csv` and a
-    `marker_genes_heatmap.csv` taken from one run can be joined on it.
+The column names are scanpy’s `rank_genes_groups_df`; `pct_nz_group` and
+`pct_nz_reference` are fractions (0–1). `group` is the category name exactly as
+the heatmap and the group picker show it. `small_group` is `true` for a group
+with fewer cells than **Min cells per group** (a pool of small groups counts as
+one group).
 
 :::{note}
-Both files quote any field that contains a comma, a quote or a newline, and
-double an embedded quote, so a comma inside a category name is carried into one
+Every CSV quotes any field that contains a comma, a quote or a newline, and
+doubles an embedded quote, so a comma inside a category name is carried into one
 cell rather than splitting the row. Read them with a real CSV parser
 (`pandas.read_csv`, `readr::read_csv`) rather than by splitting on commas.
 :::
@@ -208,8 +210,8 @@ If you need to reproduce an export later, record:
 - active view/snapshot (if relevant to your workflow)
 - selected pages (names + sizes)
 - selected variables (obs key / gene id + how genes are resolved)
-- method settings (Pearson vs Spearman; Wilcoxon vs t-test; signature normalization; performance settings)
-- thresholds and plot options (DE volcano thresholds; log axes; labeling settings)
+- method settings (Pearson vs Spearman; the DE / marker test, p-value convention, correction and fold change; the signature method)
+- filters and plot options (DE and marker filters; ranking; log axes; labels)
 
 Recommended workflow:
 1) Save a session: {doc}`../l_sessions_sharing/index`
@@ -265,11 +267,7 @@ PDF export anywhere in the analysis panel.
 
 The expanded Marker Genes result combines the heatmap, the method summary, the
 ranked table, and the PNG, SVG and CSV export actions. Exports exist **only**
-here — the sidebar preview has none. **Mode** in the summary table is the value
-the CSV button dispatches on: `clustered` here, so `CSV` downloads
-`marker_genes_heatmap.csv`. The summary table's last row, **Duration**, is left
-out of this picture: it is how long the run took on the machine that made the
-screenshot.
+here — the sidebar preview has none.
 ```
 
 ---

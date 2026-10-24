@@ -66,22 +66,24 @@ http://127.0.0.1:8765/?anndata=true
 3) Keep the terminal running while you use the viewer.
 4) Stop the server with **Ctrl+C**.
 
-If the server stops while a viewer connected through the **Server** field is
-open, the viewer says so at once ("Server connection was lost.").
+If the server stops while a viewer connected to it is open, the viewer says
+so at once ("Server connection was lost.").
 Should another dataset you chose still be loading, that choice is left to
-land; the server's datasets leave the list once it settles, and the notice
-then reads "… Reconnect to continue."
+land; the **Server** line under the **Link or server** bar goes once it
+settles, and the notice then reads "… Open its address again to continue."
 
 ### What success looks like in the browser
 
 ```{figure} ../../../_static/screenshots/server/open-served-dataset.png
-:alt: Cellucid with a dataset loaded from a local Python server; the Session panel names the dataset, reports 4K cells and 33K edges, the Server field holds the loopback URL, and Reconnect and Disconnect buttons have replaced Connect.
+:alt: Cellucid with a dataset loaded from a local Python server; the Session panel's Dataset box names the dataset, its cells and genes and the server's address as its host, and the Link or server bar holds the loopback address with one line under it reading Server, the address and Disconnect.
 :width: 1440px
 
 The same server, opened at its printed Viewer URL. Two things tell you the
-connection is live rather than a leftover sample: the **Server** field
-holds the server's address, and a **Disconnect** button has appeared beneath it.
-The dataset summary above comes from the server, not from the sample catalog.
+connection is live rather than a leftover sample: the **Link or server** bar
+holds the server's address, and a line under it reads **Server**, the address
+and **Disconnect**. The **Dataset** box above describes the server's dataset,
+with the server as its host (`h5ad file · 127.0.0.1:8765`), not the sample
+catalog.
 ```
 
 :::{important}
@@ -89,14 +91,17 @@ The dataset summary above comes from the server, not from the sample catalog.
 
 - **Viewer URL** (`http://127.0.0.1:8765/?anndata=true`) goes in the
   **browser address bar**. Opening it is the
-  whole workflow; the field below fills itself in.
-- **Server** — the text field under **Open data** in the Session panel — takes the bare
-  origin the banner prints as **Local URL**: `http://127.0.0.1:8765`. No
-  trailing slash, no `?…` query, no credentials, no `#fragment`. The field's
-  own placeholder, `http://localhost:8765`, is the exact shape. Pasting the
-  Viewer URL there is refused, because of the query string.
+  whole workflow; the **Link or server** bar fills itself in.
+- **Link or server** — the address bar under **Open data** in the Session
+  panel — takes the server's address: the port alone (`8765`),
+  `localhost:8765` or `127.0.0.1:8765` (its placeholder reads
+  `Link or localhost:8765`), or the bare origin the banner prints as
+  **Local URL**, `http://127.0.0.1:8765`. The Viewer URL carries a `?…` query,
+  and the bar opens an address with a query as a link to data, not as a
+  server, so paste the Local URL instead. See
+  [The address bar](14_open_from_link.md#the-address-bar) for every rule.
 
-You only need the field when you are pointing an already-open Cellucid tab at a
+You only need the bar when you are pointing an already-open Cellucid tab at a
 server, for example after a tunnel comes up. Otherwise open the Viewer URL and
 skip it.
 :::
@@ -897,9 +902,10 @@ copy the traceback into the report.
 
 **Likely causes**
 1) You typed the wrong URL (port mismatch).
-2) You pasted the **Viewer URL** into the **Server** field. That field
-   takes the bare origin (`http://127.0.0.1:8765`) and refuses a trailing
-   slash, a query string, or a fragment.
+2) You pasted the **Viewer URL** into the **Link or server** bar. Its
+   `?anndata=true` query makes the bar open it as a link to data, not as a
+   server; type `127.0.0.1:8765`, the port alone, or the **Local URL**
+   (`http://127.0.0.1:8765`).
 3) The server is bound to `127.0.0.1` but you are trying to access it from another machine.
 4) The Cellucid page is on HTTPS and the server address is `http://`, which
    Cellucid refuses outright.

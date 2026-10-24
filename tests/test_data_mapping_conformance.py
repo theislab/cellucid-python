@@ -32,7 +32,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "data_mapping_conformance.json"
 
 #: The same digest is pinned in cellucid-r (tests/testthat/test-data-mapping-
 #: conformance.R) and in the web app. Update all three together.
-FIXTURE_SHA256 = "9e7e7b443fcdcb4f8891165951459d1cae2c4e198041ddb2ffc3a82577ecb4f6"
+FIXTURE_SHA256 = "a84646cb66451a4ef86d965c9d65ef1dab41276592274fc9fa5f343344640241"
 
 
 def _fixture() -> dict[str, Any]:
@@ -46,7 +46,7 @@ def _cases(section: str) -> list[dict[str, Any]]:
 def test_the_fixture_is_the_pinned_shared_copy() -> None:
     assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == FIXTURE_SHA256
     fixture = _fixture()
-    assert fixture["version"] == 3
+    assert fixture["version"] == 4
     assert list(fixture) == [
         "_about",
         "version",

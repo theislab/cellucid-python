@@ -62,7 +62,8 @@ file.size(path)
 ## Step 3 — Open it
 
 1. Go to <https://www.cellucid.com>.
-2. In the **Session** panel, under **Files**, click **Zarr ZIP**.
+2. In the **Session** panel, under **File or folder**, click **Open…**, then
+   **File…**.
 3. Choose the file printed in Step 2.
 
 Colour the cells by `cluster`, `condition` or `quality` from the field list.

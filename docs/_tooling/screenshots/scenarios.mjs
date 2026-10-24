@@ -169,9 +169,9 @@ export const SCENARIOS = Object.freeze([
     topic: '_proof',
     name: 'panel-session-dataset-picker',
     describes:
-      'The Session panel showing the loaded Pancreatic endocrinogenesis ' +
-      'dataset summary above the sample picker, with the pointer on the ' +
-      'sample dropdown.',
+      'The Session panel showing the Dataset box for the loaded Pancreatic ' +
+      'endocrinogenesis sample above the Sample dataset dropdown, with the ' +
+      'pointer on the dropdown.',
     dataset: 'pancreas',
     steps: [
       PANCREAS_READY,
@@ -379,8 +379,8 @@ export const SCENARIOS = Object.freeze([
   // hand the application a file from disk rather than driving its controls.
   ...buildDataLoadingRefusalScenarios(),
 
-  // Open from link and the Transfers list on b_data_loading, and the panel
-  // they live in. Separate builder for the same reason as the blocks above;
+  // The Session panel on b_data_loading: the Dataset box, Open… and the Link
+  // or server bar. Separate builder for the same reason as the blocks above;
   // every link points at a loopback host of this run, never the internet, so
   // a capture is reproducible offline.
   ...buildDataLinkScenarios(),
@@ -677,9 +677,9 @@ function buildFilteringScenarios() {
       topic: 'filtering',
       name: 'outlier-slider-95',
       describes:
-        'The control labelled Outlier filter (latent space) inside Display '
-        + 'options, its slider moved left of the end stop and its readout showing '
-        + '95 percent, with the pointer on the slider.',
+        'The Outlier filter in the legend, with its small i button, its slider '
+        + 'moved left of the end stop and its readout showing 95 percent, with '
+        + 'the pointer on the slider.',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -1807,10 +1807,10 @@ function buildAnnotationAndSessionScenarios() {
       topic: 'sessions_sharing',
       name: 'save-restore-01-session-controls',
       describes:
-        'The Session accordion showing the loaded Dataset summary, the Open data '
-        + 'group with the Sample dataset picker, the Files buttons and the Server '
-        + 'and Open from link fields, the Session file group with Save and Load '
-        + 'below them, and the Data mapping group.',
+        'The Session accordion showing the Dataset box for the loaded sample, '
+        + 'the Open data group with the Sample dataset dropdown, the Open… '
+        + 'button and the Link or server bar, the Session file group with Save '
+        + 'and Load below them, and the collapsed Data mapping group.',
       dataset: 'pancreas',
       steps: [
         READY,
@@ -2724,12 +2724,13 @@ function buildDataLoadingRefusalScenarios() {
   const AT_LOCAL_CONTROLS = [
     PANCREAS_READY,
     { openSection: '#session-section' },
-    { scrollIntoView: '#user-data-h5ad-btn' },
+    { scrollIntoView: '#user-data-open-btn' },
     NOTIFICATIONS_DRAINED,
   ];
 
   /**
-   * Offer one file to the `.h5ad` picker and wait for the failure text.
+   * Offer one file to the picker behind **Open… › File…** (it takes an
+   * `.h5ad` or a `.zarr.zip`) and wait for the notification text.
    *
    * @param {(directory: string) => Promise<string>} write - writes the fixture
    * @param {string} text - the substring the notification must carry
@@ -2741,7 +2742,7 @@ function buildDataLoadingRefusalScenarios() {
       const { join } = await import('node:path');
       const directory = await mkdtemp(join(tmpdir(), 'cellucid-docs-'));
       const fixture = await write(directory);
-      await page.locator('#user-data-h5ad-input').setInputFiles(fixture);
+      await page.locator('#user-data-file-input').setInputFiles(fixture);
       await page.waitForFunction(
         needle => (
           document.querySelector('#notification-center')?.textContent
@@ -2802,18 +2803,7 @@ function buildDataLoadingRefusalScenarios() {
       dataset: 'pancreas',
       steps: [
         ...AT_LOCAL_CONTROLS,
-        offerH5ad(
-          async () => {
-            const { fileURLToPath } = await import('node:url');
-            const { dirname, join } = await import('node:path');
-            return join(
-              dirname(fileURLToPath(import.meta.url)),
-              'fixtures',
-              'pca-only.h5ad'
-            );
-          },
-          'This file has no default UMAP'
-        ),
+        offerH5ad(pcaOnlyFixture, 'This file has no default UMAP'),
       ],
       shot: {
         mode: 'element',
@@ -2822,7 +2812,136 @@ function buildDataLoadingRefusalScenarios() {
       },
       settle: REFUSAL_SETTLE,
     },
+
+    // ------------------------------------------------- Open… with its menu open
+    // A browser's file dialog picks files or one folder, never both, so the
+    // one button asks first. The menu is a sibling list under the button, so
+    // the crop spans both.
+    {
+      id: 'loading-open-menu',
+      topic: 'data_loading',
+      name: 'choose-local-data-control',
+      describes:
+        'Close-up of File or folder: the full-width Open… button with its menu '
+        + 'open, showing File… (.h5ad or .zarr.zip) and Zarr folder… (.zarr '
+        + 'store), with the pointer on File….',
+      dataset: 'pancreas',
+      steps: [
+        ...AT_LOCAL_CONTROLS,
+        { scrollIntoView: '#user-data-block' },
+        { click: '#user-data-open-btn' },
+        { waitFor: '#user-data-folder-item' },
+      ],
+      shot: {
+        mode: 'region',
+        selectors: ['#user-data-block', '#user-data-open-menu'],
+        padding: 8,
+      },
+      cursor: { on: '#user-data-file-item', state: 'hover' },
+      settle: REFUSAL_SETTLE,
+    },
+
+    // ---------------------------- the best guess's Show, opening the checklist
+    // Data mapping never opens on its own; Show on the best-guess
+    // notification is what opens its Embeddings checklist.
+    {
+      id: 'loading-best-guess-show',
+      topic: 'data_loading',
+      name: 'best-guess-show-checklist',
+      describes:
+        'The Data mapping group after Show on the best-guess notification: the '
+        + 'Embeddings checklist open with its one row, X_pca, turned on, above '
+        + 'the Revert and Apply buttons.',
+      dataset: 'pancreas',
+      steps: [
+        ...AT_LOCAL_CONTROLS,
+        offerH5ad(pcaOnlyFixture, 'This file has no default UMAP'),
+        { click: '#notification-center .notification-action' },
+        { waitFor: '#data-mapping-embeddings' },
+        { scrollIntoView: '#data-mapping-controls' },
+      ],
+      shot: { mode: 'element', selector: '#data-mapping-controls', padding: 8 },
+      settle: REFUSAL_SETTLE,
+    },
+
+    // ------------------------------- the Embeddings list and "Other arrays"
+    // Arrays that are off and wider than three columns are listed last,
+    // collapsed. Garcia's 24-column `scvi` (its latent space) is one; the
+    // capture fails at the waitForText below if the sample's own session
+    // turns it on, rather than photographing an empty disclosure.
+    {
+      id: 'loading-data-mapping-other-arrays',
+      topic: 'data_loading',
+      name: 'data-mapping-other-arrays',
+      describes:
+        'The Data mapping group of the Garcia sample with its Embeddings '
+        + 'checklist open as one flat list of rows, and at its end the Other '
+        + 'arrays disclosure open, listing scvi, which is off, with its width, '
+        + '24 columns.',
+      dataset: 'garcia',
+      steps: [
+        { run: async page => {
+          await page.waitForFunction(() => (
+            document.querySelector('#filter-count')?.textContent
+              ?.includes('Showing all 219,731 cells') === true
+          ), undefined, { timeout: 180_000 });
+          await page.waitForFunction(
+            () => document.documentElement.dataset.startupPhase === 'ready',
+            undefined,
+            { timeout: 180_000 }
+          );
+        } },
+        NOTIFICATIONS_DRAINED,
+        { openSection: '#session-section' },
+        { run: page => page.locator('#data-mapping-disclosure .disclosure-header').first().click() },
+        { waitFor: '#data-mapping-embeddings' },
+        { run: page => page.locator('#data-mapping-more .disclosure-header').first().click() },
+        { waitForText: '#data-mapping-more', text: '24 columns' },
+        { scrollIntoView: '#data-mapping-more' },
+      ],
+      shot: { mode: 'element', selector: '#data-mapping-disclosure', padding: 8 },
+      settle: REFUSAL_SETTLE,
+    },
+
+    // --------------------------- the outlier filter without a latent space
+    // `pca-only.h5ad` holds one two-column array, so nothing in it looks
+    // like a latent space: the filter is its label, its (i) and one button.
+    {
+      id: 'filtering-outlier-no-latent',
+      topic: 'filtering',
+      name: 'outlier-no-latent',
+      describes:
+        'The Outlier filter in the legend for a file without a latent space: '
+        + 'the label, its (i) and one Choose latent space button, with no '
+        + 'slider, and the pointer on the button.',
+      dataset: 'pancreas',
+      steps: [
+        ...AT_LOCAL_CONTROLS,
+        offerH5ad(pcaOnlyFixture, 'This file has no default UMAP'),
+        { openSection: '#coloring-filtering-section' },
+        { waitForStable: '#categorical-field' },
+        { select: '#categorical-field', label: 'cell_type' },
+        { waitFor: '#outlier-filter-action' },
+        { waitForText: '#outlier-filter-action', text: 'Choose latent space' },
+        { scrollIntoView: '#outlier-filter-container' },
+      ],
+      shot: { mode: 'element', selector: '#outlier-filter-container', padding: 8 },
+      cursor: { on: '#outlier-filter-action', state: 'hover' },
+      settle: REFUSAL_SETTLE,
+    },
   ];
+}
+
+/**
+ * The committed `.h5ad` whose `obsm` holds only a two-column `X_pca`
+ * (`fixtures/generate-refusal-fixtures.py`).
+ *
+ * @returns {Promise<string>}
+ */
+async function pcaOnlyFixture() {
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  return join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'pca-only.h5ad');
 }
 
 // ---------------------------------------------------------------------------
@@ -2844,13 +2963,24 @@ function buildDataLinkScenarios() {
       { timeout: 120_000 }
     ),
   };
-  const AT_LINK_CONTROL = [
+  const AT_ADDRESS_BAR = [
     { openSection: '#session-section' },
-    { scrollIntoView: '#data-link-block' },
+    { scrollIntoView: '#data-address-block' },
   ];
   // The catalog host's address, read back from the page the tool opened.
   const catalogBaseOf = page =>
     new URL(page.url()).searchParams.get('sampleCatalog');
+  /** An `.h5ad` read in place from the permissive-CORS mirror. */
+  const linkedFile = urls => ({
+    data: `${urls.sampleOrigin}/tests/browser/fixtures/current-ui-smoke.h5ad`,
+  });
+  const LINKED_FILE_OPEN = [
+    startupReady,
+    { waitForText: '#dataset-name', text: 'current-ui-smoke' },
+    { run: page => page.waitForFunction(
+      () => document.getElementById('dataset-info')?.dataset.state === 'ready'
+    ) },
+  ];
 
   return [
     {
@@ -2859,63 +2989,122 @@ function buildDataLinkScenarios() {
       name: 'data-loading-session-panel',
       describes:
         'The Session panel with the Pancreatic endocrinogenesis sample loaded: '
-        + 'the Dataset summary table, the Sample dataset dropdown, the H5AD, '
-        + 'Zarr ZIP and Zarr folder buttons under Files, the Server field, the Open from '
-        + 'link field with its Connect button, and Save and Load under Session file.',
+        + 'the Dataset box with its name, cells and genes, format and host, '
+        + 'description and a collapsed Details; Open data with the Sample '
+        + 'dataset dropdown, the Open… button and the Link or server bar; Save '
+        + 'and Load under Session file; and the collapsed Data mapping group.',
       dataset: 'pancreas',
       steps: [PANCREAS_READY, NOTIFICATIONS_DRAINED, { openSection: '#session-section' }],
       shot: { mode: 'element', selector: '#session-section', padding: 6 },
+    },
+    {
+      id: 'loading-session-panel-dark',
+      topic: 'data_loading',
+      name: 'data-loading-session-panel-dark',
+      describes:
+        'The same Session panel in the dark theme: the Dataset box, Open data '
+        + 'with the Sample dataset dropdown, Open… and the Link or server bar, '
+        + 'Session file with Save and Load, and the collapsed Data mapping group.',
+      dataset: 'pancreas',
+      theme: 'dark',
+      steps: [
+        PANCREAS_READY,
+        { select: '#theme-select', value: 'dark' },
+        { run: page => page.waitForFunction(() => document.documentElement.dataset.theme === 'dark') },
+        NOTIFICATIONS_DRAINED,
+        { openSection: '#session-section' },
+      ],
+      shot: { mode: 'element', selector: '#session-section', padding: 6 },
+    },
+    {
+      id: 'loading-dataset-box-details',
+      topic: 'data_loading',
+      name: 'dataset-box-details',
+      describes:
+        'The Dataset box after an .h5ad file was opened from a web address: its '
+        + 'name, the cells and genes line, "h5ad file" and the host, how much '
+        + 'has been read in how many requests, and Details open, listing '
+        + 'File, Format, Size, Read, Cells, Genes, Obs fields, Embeddings and '
+        + 'the rest.',
+      query: linkedFile,
+      steps: [
+        ...LINKED_FILE_OPEN,
+        NOTIFICATIONS_DRAINED,
+        { openSection: '#session-section' },
+        { waitFor: '#dataset-read' },
+        { click: '#dataset-details .disclosure-header' },
+        { waitFor: '#dataset-details-list' },
+        { scrollIntoView: '#dataset-facts' },
+      ],
+      shot: { mode: 'element', selector: '#dataset-facts', padding: 6 },
+      settle: SETTLE,
     },
     {
       id: 'loading-link-control-typed',
       topic: 'data_loading',
       name: 'open-from-link-control',
       describes:
-        'The Open from link control with "zenodo:23288289" typed into its field, '
-        + 'the pointer on its Connect button.',
+        'The Link or server bar with "zenodo:23288289" typed into it, the '
+        + 'pointer on its Open button.',
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
-        ...AT_LINK_CONTROL,
-        { fill: '#data-link-url', value: 'zenodo:23288289' },
+        ...AT_ADDRESS_BAR,
+        { fill: '#data-address', value: 'zenodo:23288289' },
       ],
-      shot: { mode: 'element', selector: '#data-link-block', padding: 8 },
-      cursor: { on: '#data-link-connect-btn', state: 'hover' },
+      shot: { mode: 'element', selector: '#data-address-block', padding: 8 },
+      cursor: { on: '#data-address-open-btn', state: 'hover' },
     },
     {
+      // A catalog of several datasets lists them in the dataset dropdown,
+      // whose label then names the catalog's host, so the crop is the whole
+      // Open data group: the dropdown above, the Link line below.
       id: 'loading-link-catalog-connected',
       topic: 'data_loading',
       name: 'connect-data-link',
       describes:
-        'The Open from link control connected to a dataset catalog folder, '
-        + 'with its Disconnect button and, under it, the Transfers list naming '
-        + 'the folder it reads, what is read and that nothing is saved to disk.',
+        'The Open data group connected to a dataset catalog folder: the '
+        + 'dropdown labelled "Dataset from" the catalog\'s host and holding its '
+        + 'datasets, Open…, and the Link or server bar holding the address, '
+        + 'with one line under it reading Link, the address and a compact '
+        + 'Disconnect button.',
       dataset: 'pancreas',
       query: urls => ({ data: `${urls.catalogOrigin}/` }),
-      steps: [PANCREAS_READY, NOTIFICATIONS_DRAINED, ...AT_LINK_CONTROL],
-      shot: { mode: 'element', selector: '#data-link-block', padding: 8 },
+      steps: [
+        PANCREAS_READY,
+        NOTIFICATIONS_DRAINED,
+        ...AT_ADDRESS_BAR,
+        { waitFor: '#data-link-disconnect-container' },
+        { waitForText: 'label[for="dataset-select"]', text: 'Dataset from' },
+      ],
+      shot: { mode: 'element', selector: '#open-data-controls', padding: 8 },
       settle: SETTLE,
     },
     {
-      id: 'loading-link-file-transfers',
+      // `cellucid serve` on the Pancreas sample's own store, on a free
+      // loopback port, opened by typing its address. The server is the
+      // product's own; it is stopped when the capture process exits.
+      id: 'loading-address-server-connected',
       topic: 'data_loading',
-      name: 'transfers-file-in-place',
+      name: 'connect-remote-server',
       describes:
-        'The Transfers list after an .h5ad file was opened from a web address: '
-        + 'one entry reading the file in place, with the bytes read of the '
-        + "file's size, the number of requests, why it is read and where it goes.",
-      query: urls => ({
-        data: `${urls.sampleOrigin}/tests/browser/fixtures/current-ui-smoke.h5ad`,
-      }),
+        'The Link or server bar holding the address of a cellucid serve '
+        + 'server on this computer, with one line under it reading Server, the '
+        + 'server\'s address and a compact Disconnect button.',
+      dataset: 'pancreas',
       steps: [
-        startupReady,
-        { waitForText: '#dataset-name', text: 'current-ui-smoke' },
+        PANCREAS_READY,
         NOTIFICATIONS_DRAINED,
-        ...AT_LINK_CONTROL,
-        { waitFor: '#transfers-list .transfer-row' },
+        ...AT_ADDRESS_BAR,
+        { run: async page => {
+          const address = await serveSampleStore('pancreas.zarr');
+          await page.fill('#data-address', address);
+          await page.click('#data-address-open-btn');
+          await page.waitForSelector('#remote-disconnect-container', { state: 'visible', timeout: 120_000 });
+        } },
+        NOTIFICATIONS_DRAINED,
       ],
-      // Close: the Disconnect button sits right above the list.
-      shot: { mode: 'element', selector: '#transfers-block', padding: 2 },
+      shot: { mode: 'element', selector: '#data-address-block', padding: 8 },
       settle: SETTLE,
     },
     {
@@ -2928,10 +3117,10 @@ function buildDataLinkScenarios() {
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
-        ...AT_LINK_CONTROL,
+        ...AT_ADDRESS_BAR,
         NOTIFICATIONS_DRAINED,
-        { fill: '#data-link-url', value: 'not a link' },
-        { click: '#data-link-connect-btn' },
+        { fill: '#data-address', value: 'not a link' },
+        { click: '#data-address-open-btn' },
         { waitForText: '#notification-center', text: 'does not recognise' },
       ],
       shot: { mode: 'element', selector: '#notification-center', padding: 10 },
@@ -2948,16 +3137,73 @@ function buildDataLinkScenarios() {
       dataset: 'pancreas',
       steps: [
         PANCREAS_READY,
-        ...AT_LINK_CONTROL,
+        ...AT_ADDRESS_BAR,
         NOTIFICATIONS_DRAINED,
-        { run: page => page.fill('#data-link-url', `${catalogBaseOf(page)}missing/`) },
-        { click: '#data-link-connect-btn' },
+        { run: page => page.fill('#data-address', `${catalogBaseOf(page)}missing/`) },
+        { click: '#data-address-open-btn' },
         { waitForText: '#notification-center', text: 'datasets.json' },
       ],
       shot: { mode: 'element', selector: '#notification-center', padding: 10 },
       settle: SETTLE,
     },
   ];
+}
+
+/**
+ * Serve one store of the sample catalog with `cellucid serve` on a free
+ * loopback port and return the address to type into the bar
+ * (`127.0.0.1:<port>`) once its health endpoint answers. The executable is
+ * `$CELLUCID_CLI`, else `cellucid` on the PATH; the catalog is
+ * `$CELLUCID_DATASETS_REPO/anndata`, as in `capture.mjs`. The server is
+ * stopped when this process exits.
+ *
+ * @param {string} storeName - a store in the catalog folder
+ * @returns {Promise<string>}
+ */
+async function serveSampleStore(storeName) {
+  const { spawn } = await import('node:child_process');
+  const { createServer } = await import('node:net');
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join, resolve } = await import('node:path');
+  const here = dirname(fileURLToPath(import.meta.url));
+  const datasets = process.env.CELLUCID_DATASETS_REPO
+    ?? resolve(here, '..', '..', '..', '..', 'cellucid-datasets');
+  const port = await new Promise((done, fail) => {
+    const probe = createServer();
+    probe.once('error', fail);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port: free } = probe.address();
+      probe.close(() => done(free));
+    });
+  });
+  const child = spawn(process.env.CELLUCID_CLI ?? 'cellucid', [
+    'serve', join(datasets, 'anndata', storeName),
+    '--host', '127.0.0.1', '--port', String(port),
+    '--no-browser', '--no-web-ui', '--quiet',
+  ], { stdio: 'ignore' });
+  let spawnError = null;
+  child.once('error', error => { spawnError = error; });
+  process.once('exit', () => child.kill());
+  const deadline = Date.now() + 60_000;
+  for (;;) {
+    if (spawnError !== null) {
+      throw new Error(`cellucid serve could not start: ${spawnError.message}`);
+    }
+    if (child.exitCode !== null) {
+      throw new Error(`cellucid serve exited with status ${child.exitCode}`);
+    }
+    try {
+      const health = await fetch(`http://127.0.0.1:${port}/_cellucid/health`);
+      if (health.ok) return `127.0.0.1:${port}`;
+    } catch {
+      // Not listening yet.
+    }
+    if (Date.now() > deadline) {
+      child.kill();
+      throw new Error(`cellucid serve did not answer on port ${port} within 60 s`);
+    }
+    await new Promise(next => setTimeout(next, 250));
+  }
 }
 
 // ---------------------------------------------------------------------------

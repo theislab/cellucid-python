@@ -11,7 +11,7 @@
 ## Different identity, even with similar files
 
 A session saved on a file opened from GitHub restores on the same file opened
-with the **Zarr folder**, **Zarr ZIP** or **H5AD** button, from a web address,
+with **Open…** (or a drop) from your computer, from a web address,
 or from a server: the route is not part of a dataset's identity, as long as the
 file states its own id in `uns['cellucid']['id']`. A file without one gets an
 id from how it was opened (its file name, its link), and then the route does

@@ -76,7 +76,7 @@ for a continuous obs field and for a gene.
 ### 3) Legend — Outlier filter
 
 ```{figure} ../../../_static/screenshots/filtering/outlier-slider-95.png
-:alt: A control labelled Outlier filter (latent space) whose slider handle sits a short distance in from the right end, with 95 percent printed beside it and the mouse pointer on the handle.
+:alt: A control labelled Outlier filter whose slider handle sits a short distance in from the right end, with 95 percent printed beside it and the mouse pointer on the handle.
 :width: 436px
 
 Lowering the percentage creates an **outlier** filter that hides the cells

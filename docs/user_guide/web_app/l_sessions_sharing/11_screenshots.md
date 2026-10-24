@@ -14,7 +14,7 @@ will not.
 ## Where the controls are
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-01-session-controls.png
-:alt: The Session accordion in full: the Dataset summary table at the top, the Open data group with the sample picker and the Files, Server and Open from link controls, the Session file group with Save and Load, and the Data mapping group at the bottom.
+:alt: The Session accordion in full: the Dataset box at the top, the Open data group with the Sample dataset dropdown, the Open… button and the Link or server bar, the Session file group with Save and Load, and the collapsed Data mapping group at the bottom.
 :width: 524px
 
 The **Session** accordion. **Save** and **Load** sit under **Session file**, below

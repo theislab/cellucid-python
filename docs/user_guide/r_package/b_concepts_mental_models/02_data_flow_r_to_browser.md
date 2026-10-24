@@ -24,7 +24,7 @@ Start here: {doc}`../d_viewing_loading/01_open_stores_in_cellucid_web_app`
 
 Put the `.zarr` folder on GitHub, or the `.zarr.zip` file on any host that
 serves files over HTTPS (a lab server, a bucket, Zenodo, Figshare, Hugging
-Face), and paste its address into **Open from link**. The viewer reads it in place with range
+Face), and paste its address into the **Link or server** bar. The viewer reads it in place with range
 requests, so only what a view needs is downloaded.
 
 Start here: {doc}`../d_viewing_loading/02_host_stores_for_sharing` and

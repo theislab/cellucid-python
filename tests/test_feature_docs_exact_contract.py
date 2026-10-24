@@ -327,7 +327,7 @@ def test_official_sample_state_docs_publish_integrity_verified_static_loading() 
         "moving-camera playback remains off",
         "All three are required",
         "Nothing else is probed",
-        "a file chosen or dropped from your computer",
+        "a file or folder chosen with **Open…** or dropped from your computer",
         "a dataset served by `cellucid serve`, `serve_anndata()` or Jupyter",
         "a `session` key there is ignored",
         "does not infer session paths",

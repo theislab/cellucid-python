@@ -12,7 +12,7 @@
 Before deep-diving, answer:
 
 1) Are you loading:
-   - a browser-selected **`.h5ad`**, **Zarr ZIP** or **Zarr folder**,
+   - a browser-selected **`.h5ad`**, `.zarr.zip` or Zarr folder (**Open…**),
    - a Python-served **`.h5ad` / Zarr store** path (the exact printed
      **Viewer URL**, `/?anndata=true`),
    - a **remote server** (`?remote=...`, only when the viewer origin can fetch that scheme),
@@ -91,16 +91,20 @@ There is one message that does **not** carry a cause clause, and its punctuation
 is the tell — a full stop where the others have a colon:
 
 > *`<subject>` `<what happened>`. Try again; if it keeps failing, check the
-> address and your connection. Details: `<raw error text>`*
+> address and your connection.*
 
 That is what Cellucid says when it could not classify the failure at all, and
 naming a cause anyway would be a guess. It is rare, because the ordinary
 outcomes above are all classified — a connection you cancel yourself, and one
 that runs past its timeout, both read as *nothing readable came back*. What is
 left is a transfer the browser abandoned from underneath the request, or a
-defect inside Cellucid. That is why the trailing `Details:` exists at all, and
-why it appears in this case only: it is the raw error text, and it is the only
-evidence anyone has. Quote it if you report the problem.
+defect inside Cellucid.
+
+Every failure notification keeps the raw error text folded under its
+**Details** (and in the browser console), never in the sentence. A dataset you
+chose from the list that does not open is said once, as *Could not open
+"`<name>`".*, while the explanation and **Try again** stay next to the
+selector. Quote the **Details** if you report the problem.
 
 Local file failures use neither shape. They quote the specific defect instead —
 for example `The selected file is not a valid HDF5/H5AD file…` or
@@ -119,8 +123,9 @@ for example `The selected file is not a valid HDF5/H5AD file…` or
 2) You denied the file or directory permission prompt.
 3) The app is embedded in a context that blocks file access.
 4) A managed-browser policy disabled local file access.
-5) The selected object does not match the control: a `.zarr` folder for
-   **Zarr folder**, `.h5ad` for **H5AD**, or one `.zarr.zip`/`.zip` for **Zarr ZIP**.
+5) The selected object does not match the menu item: a `.zarr` folder for
+   **Open… › Zarr folder…**, and one `.h5ad` or `.zarr.zip`/`.zip` for
+   **Open… › File…**.
 
 **How to confirm**
 - Click the same button again and confirm the dialog. Silence after a *confirmed*
@@ -148,11 +153,23 @@ cell-major (CSR) matrix while it is reorganised by gene in the background; a
 progress notice shows how far that is.
 :::
 
+No request waits for ever: a request the host answers as busy or failing
+(HTTP 429, 503, ...), whose connection fails, or that stops receiving bytes is
+asked again a few times, each repeat logged in the console as a
+`[cellucid:transfer]` warning naming its URL, and then reported. When a
+dataset opens at startup and nothing at all arrives for 60 s, Cellucid stops
+waiting and starts without it: the panel over the empty viewer says the data
+could not be opened, and its **Details** read `Startup stalled while opening
+the dataset ...`, naming the reads that were open and the last request that
+failed.
+
 **Likely causes (ordered)**
 1) A very large cell-major (CSR) `.h5ad` opened directly in the browser while
    its matrix is still being reorganised by gene (watch the progress notice).
-2) Remote server URL is wrong or unreachable.
-3) GitHub raw fetch blocked (corporate firewall/content blocker).
+2) The data host is down, or a content blocker blocks some of its requests
+   (the console's `[cellucid:transfer]` warnings name them).
+3) Remote server URL is wrong or unreachable.
+4) GitHub raw fetch blocked (corporate firewall/content blocker).
 
 **How to confirm**
 - Try loading a demo dataset.
@@ -317,7 +334,7 @@ For overlay behavior and deeper diagnostics, see:
 
 ---
 
-### Symptom: “Open from link says the folder holds no `datasets.json`”
+### Symptom: “A link says the folder holds no `datasets.json`”
 
 **Likely causes (ordered)**
 1) Wrong repository path (pointing at another folder than the catalog folder).
@@ -355,6 +372,33 @@ Compare your repository with the known-good reference repository in
 
 ---
 
+### Symptom: “Google or Microsoft sign-in does not open, or does not finish”
+
+The sign-in step sits under the **Link or server** bar and in a notification
+({doc}`16_private_drive_onedrive`).
+
+- **"The browser blocked … sign-in window."** Allow pop-ups for the site
+  (the address bar's pop-up icon), then click the button again.
+- **The window closed before it finished.** Click the button again; a new
+  window opens.
+- **"Google sign-in works on a local cellucid serve only on its default port,
+  8765."** Google accepts sign-ins only from the addresses Cellucid
+  registered. Start `cellucid serve` without `--port`, or open the file on
+  www.cellucid.com. Microsoft sign-in works on any local port.
+- **"Signing in to Google / Microsoft is not configured on this site yet."**
+  The site you use has no Google or Microsoft registration (a copy of the app
+  hosted elsewhere). Use www.cellucid.com.
+- **Microsoft says "Need admin approval" (`AADSTS90094`, `AADSTS65001`), or
+  Cellucid says "Your organisation must approve Cellucid".** A work or school
+  account reading a colleague's file needs `Files.Read.All`, which your
+  organisation lets only an administrator approve. Send your administrator the
+  request Microsoft offers, or the instructions in
+  [Work and school accounts](16_private_drive_onedrive.md#work-and-school-accounts-administrator-approval).
+- **"Google sign-in expired" or "Microsoft sign-in expired".** Click **Sign in
+  again**; the reads that waited go on.
+
+---
+
 ### Symptom: “Remote server connect fails / CORS blocked / mixed content”
 
 ```{figure} ../../../_static/screenshots/data_loading/fail-remote-server-unreachable.png
@@ -369,10 +413,10 @@ indistinguishable from the browser's side.
 **Likely causes**
 - Wrong URL (host/port mismatch) — this and a dead server produce the same
   message.
-- You pasted the **Viewer URL** into the **Server** field. That field
-  wants the bare origin the banner prints as **Local URL**
-  (`http://127.0.0.1:8765`) and refuses a trailing slash, a `?…` query, or a
-  fragment.
+- You pasted the **Viewer URL** into the **Link or server** bar. Its `?…`
+  query makes the bar open it as a link to data, not as a server; type the
+  **Local URL** the banner prints (`http://127.0.0.1:8765`), `127.0.0.1:8765`
+  or just the port.
 - Server is bound to `127.0.0.1` on a remote machine, but you’re trying to access it directly.
 - The Cellucid page is HTTPS and the address is `http://`, which Cellucid
   refuses before the browser does:

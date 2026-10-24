@@ -32,7 +32,7 @@ Your dataset is **not uploaded** anywhere automatically.
 
 ### Web app file picker mode (no Python server)
 
-If you open the Cellucid web app and use its **Files** buttons to open an `.h5ad`, a `.zarr.zip` or a `.zarr` folder:
+If you open the Cellucid web app and use its **Open…** button (or drop a file or folder on the page) to open an `.h5ad`, a `.zarr.zip` or a `.zarr` folder:
 - the browser reads the file locally,
 - nothing is uploaded unless you explicitly host/share the file yourself.
 

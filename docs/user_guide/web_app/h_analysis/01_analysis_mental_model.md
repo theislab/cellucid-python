@@ -70,7 +70,16 @@ It’s common to confuse these:
 
 In practice:
 - If you filtered cells out, they may still be in your page (because the page stores indices, not visibility).
-- If you want analysis to exclude cells, you must define pages accordingly (e.g., create the page while a filter is active, or maintain a dedicated “filtered group” page).
+- If you want analysis to exclude cells, define pages accordingly (e.g., create the page while a filter is active), or, in Marker genes and Differential expression, set **Cells** / **Within** to **Visible cells** — the one choice that follows the filters.
+
+### Groups that are not pages
+
+Two modes take their groups from a categorical field instead of pages:
+- **Marker genes** compares every category of a **Group by** field against the
+  rest or a reference category;
+- **Differential expression** can compare categories (**Compare → Categories**),
+  and can keep both groups inside some cells (**Within**: visible cells, a page,
+  or categories of another field).
 
 :::{tip}
 Debug rule: if analysis outputs surprise you, first inspect your pages:
@@ -112,16 +121,18 @@ Important caveats:
 Cellucid analysis uses caching at multiple levels:
 
 - **Field loading cache**: obs/gene fields are loaded on demand and kept in memory for responsiveness.
-- **Bulk gene cache**: gene-heavy modes can preload and reuse gene vectors to avoid repeated I/O.
-- **Marker genes cache** (Marker Genes mode): optional caching of marker results so reruns are faster.
+- **Gene read-ahead**: a gene-heavy run reads genes ahead of its workers, as far as it measures it needs, within the analysis memory budget (see {doc}`06_analysis_mode_differential_expression_de`, How Cellucid sizes a run).
+- **Marker genes cache**: the same marker run is answered from memory and marked **Cached**, with **Recompute** beside it.
+- **Gene moments**: each gene's mean and spread over all cells, read once per dataset for Gene signature's Mean z-score and Module score.
 - **Page data cache**: the per-cell values of each page and variable, kept in their own numeric type and bounded at 100 entries and 256 MiB, least recently used first out.
 - **Density curves**: a density plot's curve is reused across cosmetic option changes and CSV export, and recomputed only when the data or the bandwidth changes.
 
-What triggers recomputation depends on the mode, but common triggers include:
-- changing selected pages or variables,
-- changing page membership (adding/removing highlighted cells),
-- changing plot options that change the numbers (thresholds, transforms, plot type, density bandwidth),
-- opening a copied (floating) analysis window (it recomputes; results are not copied).
+Quick and Detailed recompute when their inputs change. Every other mode computes
+only when you press **Run**; after that, a change that would change the numbers —
+options, selected pages, page membership — marks the result **Stale · Run**, and
+a change that only changes what is shown (filters, ranking, the plot) redraws it
+at once. A copied (floating) analysis window starts with the settings, not the
+result.
 
 Changing the gene names or the expression matrix under **Session › Data
 mapping** replaces the gene list every gene result was computed from, so every
@@ -147,7 +158,9 @@ All analysis operates on the values of the expression matrix in use:
   mapping › Genes** (`X`, a layer such as `log1p`, or `raw.X`).
 
 This matters for interpretation:
-- fold changes are computed on the stored scale (see DE page for exact formula),
+- fold changes follow **Fold change from**: by default, `log1p` is undone when the
+  data mapping says the matrix holds `log1p` values, as scanpy does; otherwise
+  they are on the stored scale (see {doc}`06_analysis_mode_differential_expression_de`),
 - and correlation can differ dramatically between raw vs normalized values.
 
 ---
@@ -179,9 +192,9 @@ Interpret plots and effect sizes alongside p-values. For confirmatory inference,
 ## Common pitfalls (read this once; it saves hours)
 
 - **Pages overlap**: the same cell can exist in multiple pages. Comparisons are then not independent.
-- **Pages are tiny**: many statistics are unstable below ~50–100 cells; DE below the app’s minimum size may be skipped.
+- **Groups are tiny**: many statistics are unstable below ~50–100 cells. Differential expression tests a small group and flags it **low n**; Marker genes skips, pools or flags it, as **Small groups** says.
 - **Gene expression missing**: if the dataset was loaded without gene expression, gene-based modes will be unavailable/empty.
-- **Gene names mismatch**: “TP53” vs “Tp53”; a gene signature list must match the one name each gene is published under, exactly.
+- **Gene names mismatch**: a name is matched exactly, or else to the one gene that matches it ignoring case (“Tp53” → “TP53”); a name the dataset does not have is left out and reported as **not found**, never guessed.
 - **Interpreting p-values as biology**: DE and correlation tests are exploratory; batch/technical confounding can dominate.
 
 ---

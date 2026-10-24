@@ -24,7 +24,7 @@ In the left sidebar:
    - **Load** (opens a file picker and restores a `.cellucid-session` file)
 
 ```{figure} ../../../_static/screenshots/sessions_sharing/save-restore-01-session-controls.png
-:alt: The Session accordion showing the Dataset summary table, the Open data group with the Sample dataset picker, the Files buttons and the Server and Open from link fields, the Session file group containing Save and Load buttons, and the Data mapping group.
+:alt: The Session accordion showing the Dataset box for the loaded sample, the Open data group with the Sample dataset dropdown, the Open… button and the Link or server bar, the Session file group containing Save and Load buttons, and the collapsed Data mapping group.
 :width: 524px
 
 The **Session** accordion. Everything that brings a dataset in sits under
@@ -72,7 +72,7 @@ save time, so repeated saves never overwrite each other.
    **Session fully restored.**
 
 A session records where its dataset was opened from: a sample dataset, a data
-link (**Open from link** or `?data=`), or a Cellucid server. When another
+link (the **Link or server** bar or `?data=`), or a Cellucid server. When another
 dataset — or none — is open, **Load** opens that one first ("Opening the
 session's dataset from …") and then applies the session. A session saved on a
 dataset opened from your own computer or in a notebook records no source:
@@ -284,7 +284,7 @@ Workflow:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Cellucid Session panel: the Dataset summary, the Open data group with Sample dataset, Files, Server and Open from link, the Session file group with its Save and Load buttons, and the Data mapping group.
+:alt: The Cellucid Session panel with a dataset open: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset list, the Open… button and the Link or server bar; Session file with Save and Load; and the collapsed Data mapping group.
 :width: 524px
 
 The Session panel gathers every loading path under **Open data** and keeps the **Save** and **Load** buttons under **Session file**, directly below it.

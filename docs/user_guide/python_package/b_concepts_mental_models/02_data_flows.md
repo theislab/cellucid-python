@@ -127,7 +127,7 @@ This mode is ideal for:
 
 ### Mode 3: Web app file picker (no Python server)
 
-This is primarily a **web app** workflow: you open the Cellucid web app and load an `.h5ad`, a `.zarr.zip` or a `.zarr` folder with its **Files** buttons.
+This is primarily a **web app** workflow: you open the Cellucid web app and load an `.h5ad`, a `.zarr.zip` or a `.zarr` folder with its **Open…** button (or by dropping it on the page).
 
 Key mental model:
 - files are read locally by the browser,

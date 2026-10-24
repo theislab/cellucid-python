@@ -92,13 +92,15 @@ intersphinx_mapping = {
 html_theme = "pydata_sphinx_theme"
 html_title = "Cellucid"
 html_logo = "_static/cellucid-logo.svg"
-html_favicon = "_static/cellucid-logo.svg"
+# The app's favicon (cellucid/assets/img/favicon.svg): the mark, not the wordmark.
+html_favicon = "_static/favicon.svg"
 
 html_theme_options = {
     # Note: analytics config removed due to pydata-sphinx-theme bug causing duplicate scripts
     # Using custom template in _templates/layout.html instead
+    # The wordmark already says "Cellucid"; no text beside it.
     "logo": {
-        "text": "Cellucid",
+        "alt_text": "Cellucid",
     },
     "header_links_before_dropdown": 5,
     "navbar_align": "left",

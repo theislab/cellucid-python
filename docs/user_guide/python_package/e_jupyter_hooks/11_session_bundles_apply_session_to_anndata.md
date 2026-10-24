@@ -118,10 +118,14 @@ In practice, if you subset/shuffle your AnnData after the session was created, y
 `dataMapping` records which stored arrays the session was showing: `kind`
 (`"anndata"`), `embeddings` (the enabled embeddings and the `1d`/`2d`/`3d`
 defaults), `knn`, `geneNames` (`"index"` or `"column:<name>"`), `expression`
-(`"X"`, `"raw"`, `"layer:<name>"`, or null), `latent`, and `vectorFields`.
-Python requires each named `obsm` embedding to exist and be wide enough for its
-columns, and the named `obsp` graph, latent space, layer or `raw`, and
-gene-name column to exist.
+(`"X"`, `"raw"`, `"layer:<name>"`, or null), `log1p` (the expression matrices
+holding `log1p` values, each with its `base`, null for e), `highlyVariable`
+(the true/false var column marking the highly variable genes, or null),
+`latent`, and `vectorFields`. Python requires each named `obsm` embedding to
+exist and be wide enough for its columns, the named `obsp` graph, latent
+space, layer or `raw`, gene-name column and every matrix `log1p` names to
+exist, and the highly variable column to be a true/false column of the
+mapped gene axis.
 
 ### `cellOrder`: shape-checked here, enforced in the viewer
 

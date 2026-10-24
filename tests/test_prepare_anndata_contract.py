@@ -402,21 +402,174 @@ def test_every_zarr_v2_array_carries_the_store_codec(tmp_path: Path) -> None:
     assert metadata["uns/cellucid/schema/.zarray"]["dtype"] == "<i8"
 
 
+#: The codecs the Zarr v3 specification defines, and ``vlen-utf8``, the
+#: codec registered for its variable-length strings
+#: (github.com/zarr-developers/zarr-extensions). ``numcodecs.*`` codecs are
+#: outside both: another Zarr implementation need not read them.
+ZARR_V3_SPECIFICATION_CODECS = frozenset(
+    {"bytes", "transpose", "gzip", "blosc", "crc32c", "sharding_indexed", "vlen-utf8"}
+)
+
+
+def _blosc(itemsize: int) -> dict[str, Any]:
+    configuration = {"typesize": itemsize, "cname": "zlib", "clevel": _store.DEFLATE_LEVEL}
+    return {"name": "blosc", "configuration": {**configuration, "shuffle": "shuffle", "blocksize": 0}}
+
+
 def test_zarr_v3_codec_and_consolidated_metadata(tmp_path: Path) -> None:
     path = _write(tmp_path, "data.zarr", "zarr", 3, **_embedding_defaults_and_metadata())
     root = json.loads((path / "zarr.json").read_text())
     nodes = root["consolidated_metadata"]["metadata"]
-    codecs = nodes["X/data"]["codecs"]
-    assert {"name": "gzip", "configuration": {"level": _store.DEFLATE_LEVEL}} in codecs
-    assert not any(codec["name"] == "numcodecs.shuffle" for codec in codecs)
-    assert {"name": "numcodecs.shuffle", "configuration": {"elementsize": 4}} in nodes["X/indices"]["codecs"]
-    assert not any(codec["name"] == "numcodecs.shuffle" for codec in nodes["obs/_index"]["codecs"])
-    assert not any(codec["name"] == "sharding_indexed" for codec in codecs)
-    assert nodes["X/data"]["data_type"] == "float32"
     gzip = {"name": "gzip", "configuration": {"level": _store.DEFLATE_LEVEL}}
+    # The expression values, strings and one-byte values: gzip alone.
+    assert nodes["X/data"]["data_type"] == "float32"
+    assert nodes["X/data"]["codecs"][1:] == [gzip]
+    assert nodes["obs/_index"]["codecs"][1:] == [gzip]
+    # Every other multi-byte array: Blosc's byte shuffle and zlib.
+    assert nodes["X/indices"]["codecs"][1:] == [_blosc(4)]
+    assert nodes["uns/cellucid/schema"]["codecs"][1:] == [_blosc(8)]
     for key, node in nodes.items():
         if node["node_type"] == "array":
-            assert gzip in node["codecs"], key
+            assert node["codecs"][1:] in ([gzip], [_blosc(np.dtype(_V3_DTYPES[node["data_type"]]).itemsize)]), key
+
+
+#: The NumPy dtype of each Zarr v3 data type the writers use.
+_V3_DTYPES = {
+    "bool": "|b1",
+    "int8": "|i1",
+    "int16": "<i2",
+    "int32": "<i4",
+    "int64": "<i8",
+    "float32": "<f4",
+    "float64": "<f8",
+    "string": "|O",
+}
+
+
+@pytest.mark.parametrize("output_format", ["zarr", "zarr.zip"])
+def test_zarr_v3_uses_only_codecs_of_the_specification(tmp_path: Path, output_format: str) -> None:
+    """Checked on the written metadata, whatever the installed zarr-python
+    warns about: a codec outside the specification is an interoperability
+    defect even where no warning is raised (zarr-python 3.2 and later raise
+    none for ``numcodecs.*``)."""
+    name = "data.zarr" if output_format == "zarr" else "data.zarr.zip"
+    full = _write(tmp_path, name, output_format, 3, **_embedding_defaults_and_metadata())
+    bare = prepare(
+        tmp_path / ("bare." + name.split(".", 1)[1]),
+        format=output_format,
+        zarr_format=3,
+        embeddings={"X_umap": np.zeros((3, 2))},
+        dataset_id="bare",
+        dataset_name="Bare",
+    )
+    for path in (full, bare):
+        if output_format == "zarr":
+            documents = [json.loads(entry.read_text()) for entry in path.rglob("zarr.json")]
+        else:
+            with zipfile.ZipFile(path) as archive:
+                documents = [
+                    json.loads(archive.read(entry)) for entry in archive.namelist() if entry.endswith("zarr.json")
+                ]
+        root = next(document for document in documents if "consolidated_metadata" in document)
+        documents += list(root["consolidated_metadata"]["metadata"].values())
+        arrays = [document for document in documents if document["node_type"] == "array"]
+        assert arrays
+        for array in arrays:
+            names = {codec["name"] for codec in array["codecs"]}
+            assert names <= ZARR_V3_SPECIFICATION_CODECS, names
+
+
+def _assert_blosc_frame(frame: bytes, raw: bytes, typesize: int) -> None:
+    """``frame`` is the Blosc 1 frame of ``raw`` that c-blosc writes for the
+    writers' ``blosc`` codec (cname zlib, clevel 6, byte shuffle, automatic
+    block size) compressing in one thread, and that cellucid-r's
+    ``.blosc_frame()`` writes: every header field, block, stream and the
+    choice between a zlib stream and a stored one. The zlib streams are
+    checked by what they inflate to, not byte for byte, since deflate's output
+    differs between zlib builds (a CPython links its own or the system's;
+    numcodecs bundles one)."""
+    import struct
+    import zlib
+
+    def splits(block: int) -> bool:
+        return typesize <= 16 and block // typesize >= 128
+
+    nbytes = len(raw)
+    block = nbytes
+    if nbytes >= 32 * 1024:
+        block = 32 * 1024 * 2 * 8  # c-blosc's L1, doubled for zlib, x8 at clevel 6
+    if splits(block):
+        block = min(max(min(block, 1 << 18) * typesize, 1 << 16), 1 << 20)
+    block = min(block, nbytes)
+    if block > typesize:
+        block = block // typesize * typesize
+    split = splits(block)
+    flags = 0x01 | (0 if split else 0x10) | (3 << 5)  # byte shuffle, zlib
+    version, codec_version, stored_flags, stored_typesize, stored_nbytes, stored_block, total = struct.unpack(
+        "<BBBBIII", frame[:16]
+    )
+    assert (version, codec_version, stored_typesize, stored_nbytes, stored_block, total) == (
+        2, 1, typesize, nbytes, block, len(frame)
+    )
+    if nbytes < 128 or stored_flags == flags | 0x02:
+        # Copied whole: too small to compress, or nothing gained.
+        assert stored_flags == flags | 0x02 and frame[16:] == raw
+        return
+    assert stored_flags == flags
+    n_blocks = -(-nbytes // block)
+    starts = struct.unpack(f"<{n_blocks}I", frame[16 : 16 + 4 * n_blocks])
+    at = 16 + 4 * n_blocks
+    for index in range(n_blocks):
+        assert starts[index] == at
+        values = raw[index * block : (index + 1) * block]
+        shuffled = np.frombuffer(values, np.uint8).reshape(-1, typesize).T.tobytes()
+        streams = typesize if split and len(values) == block else 1
+        each = len(values) // streams
+        for stream in range(streams):
+            (length,) = struct.unpack("<i", frame[at : at + 4])
+            data = frame[at + 4 : at + 4 + length]
+            at += 4 + length
+            plane = shuffled[stream * each : (stream + 1) * each]
+            assert data == plane if length == each else zlib.decompress(data) == plane
+            assert 0 < length <= each
+    assert at == len(frame)
+
+
+@pytest.mark.parametrize("dtype", ["<i2", "<i4", "<f4", "<i8", "<f8"])
+@pytest.mark.parametrize("values", ["ramp", "noise", "sparse"])
+@pytest.mark.parametrize("length", [5, 31, 100, 4_000, 20_000, 300_000])
+def test_a_blosc_chunk_is_the_documented_frame(tmp_path: Path, dtype: str, values: str, length: int) -> None:
+    """Every case of the frame: a whole copy (under 128 bytes, or nothing
+    gained), one stream (under 128 values), one plane per byte, planes stored
+    as they are, and a float64 chunk of 2^18 values, two blocks of 1 MiB."""
+    rng = np.random.default_rng(length)
+    if values == "ramp":
+        array = (np.arange(length) % 1009).astype(dtype)
+    elif values == "noise":
+        array = rng.integers(-(2**14), 2**14, length).astype(dtype) if dtype[1] == "i" else rng.standard_normal(length).astype(dtype)
+    else:
+        array = np.where(rng.random(length) < 0.05, rng.integers(1, 100, length), 0).astype(dtype)
+    chunk = min(length, _store.WHOLE_CHUNK_ELEMENTS)
+    stored = zarr.create_array(
+        str(tmp_path / "a.zarr"),
+        shape=array.shape,
+        chunks=(chunk,),
+        dtype=dtype,
+        filters=None,
+        compressors=_store._blosc_codec(array.dtype.itemsize),
+        zarr_format=3,
+    )
+    stored[...] = array
+    padded = np.zeros(-(-length // chunk) * chunk, dtype=dtype)
+    padded[:length] = array
+    for index in range(len(padded) // chunk):
+        raw = padded[index * chunk : (index + 1) * chunk]
+        path = tmp_path / "a.zarr" / "c" / str(index)
+        if not raw.any():
+            # zarr writes no chunk that holds only the fill value.
+            assert not path.exists()
+            continue
+        _assert_blosc_frame(path.read_bytes(), raw.tobytes(), array.dtype.itemsize)
 
 
 def test_a_zipped_store_is_the_store_folder_at_the_archive_root_entries_stored(
@@ -469,15 +622,29 @@ def test_a_zipped_store_depends_on_its_entries_alone(tmp_path: Path, zarr_format
 
 def test_a_zarr_v3_chunk_carries_no_time(tmp_path: Path) -> None:
     """gzip's header has a time field; numcodecs stamps the time of writing
-    in it, which would make every run's chunks differ. Every chunk, strings
-    included, holds a zero time."""
+    in it, which would make every run's chunks differ. Every gzip chunk,
+    strings included, holds a zero time; every other chunk is the Blosc
+    frame of its values (which carries no time)."""
     path = _write(tmp_path, "data.zarr", "zarr", 3)
+    root = zarr.open_group(path, mode="r")
     chunks = [entry for entry in path.rglob("*") if entry.is_file() and "/c/" in entry.as_posix()]
     assert chunks
+    framed = 0
     for chunk in chunks:
-        header = chunk.read_bytes()[:8]
-        assert header[:2] == b"\x1f\x8b", chunk
-        assert header[4:8] == bytes(4), chunk
+        data = chunk.read_bytes()
+        key = chunk.relative_to(path).as_posix().split("/c/")[0]
+        if json.loads((path / key / "zarr.json").read_text())["codecs"][-1]["name"] == "blosc":
+            array = root[key]
+            index = int(chunk.name)
+            raw = np.zeros(array.chunks, dtype=array.dtype)
+            values = np.asarray(array[index * array.chunks[0] : (index + 1) * array.chunks[0]])
+            raw[: len(values)] = values
+            _assert_blosc_frame(data, raw.tobytes(), array.dtype.itemsize)
+            framed += 1
+            continue
+        assert data[:2] == b"\x1f\x8b", chunk
+        assert data[4:8] == bytes(4), chunk
+    assert framed
 
 
 @pytest.mark.parametrize(("name", "output_format", "zarr_format"), OUTPUTS)

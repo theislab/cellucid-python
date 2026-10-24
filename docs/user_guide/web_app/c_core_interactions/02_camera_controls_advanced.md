@@ -42,7 +42,10 @@ an enabled ready path starts without another Play action. **Loop playback**
 controls whether it repeats or stops at the final keyframe. With zero or one
 saved position, the top playback bar is not available and Autoplay waits until
 the path becomes ready. Loading another dataset clears the current path so
-positions from one dataset cannot move the camera over another.
+positions from one dataset cannot move the camera over another. The camera
+itself starts over too: a dataset opens at the default framing of the
+dimension it opens in, never at the pose the dataset before it was left in
+(its session or published preset, when it has one, then moves it).
 
 :::{note}
 The playback bar auto-hides when idle. Move the pointer over the viewport or

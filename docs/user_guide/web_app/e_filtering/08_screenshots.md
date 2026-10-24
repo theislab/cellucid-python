@@ -50,7 +50,7 @@ Scenario `filtering-button-disabled-live-on`.
 ```
 
 ```{figure} ../../../_static/screenshots/filtering/outlier-slider-95.png
-:alt: A control labelled Outlier filter (latent space) with its slider handle a short distance in from the right end and the number 95 percent printed beside it, the mouse pointer resting on the handle.
+:alt: A control labelled Outlier filter with its slider handle a short distance in from the right end and the number 95 percent printed beside it, the mouse pointer resting on the handle.
 :width: 436px
 
 **Latent-space outliers.** Scenario `filtering-outlier-slider-95`.

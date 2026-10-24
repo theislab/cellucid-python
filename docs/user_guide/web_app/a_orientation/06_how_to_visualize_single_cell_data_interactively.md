@@ -23,8 +23,8 @@ Every route ends in the same viewer, with millions of cells drawn on the GPU in
 
 1. Open [www.cellucid.com](https://www.cellucid.com) and choose **Choose a
    dataset** on the welcome card.
-2. In the **Session** panel, under **Open data**, press **H5AD** and pick your
-   file.
+2. In the **Session** panel, under **Open data**, press **Open…**, choose
+   **File…** and pick your file.
 
 The file needs at least one embedding in `obsm`. The `X_umap` that
 `sc.tl.umap()` writes is read as it is; see
@@ -61,8 +61,8 @@ The viewer opens in the output cell and can be driven from Python
 
 `cellucid_prepare()` writes your object's embeddings, metadata and (optionally)
 gene expression into a Cellucid-ready AnnData Zarr store (`.zarr`). In the
-viewer, press **Zarr folder** under **Open data** and choose that folder, or
-drop it on the viewer. The recipes extract everything from a
+viewer, press **Open…** under **Open data**, choose **Zarr folder…** and pick
+that folder, or drop it on the page. The recipes extract everything from a
 Seurat or SingleCellExperiment object:
 
 - {doc}`../../r_package/e_integrations_recipes/01_seurat_recipe`

@@ -145,8 +145,8 @@ where it was. See [Multi-view behavior](#multi-view-behavior).
 Whether a press can select at all is the pressed panel's question too: an
 `Alt+click` in a panel colored by a field works even while the focused view is
 colored by none, and a press in a panel colored by no field selects nothing and
-says so. The panel asks you to color by a field first only when no panel on
-screen has one.
+says so. The Selection (i) asks you to color by a field first only when no
+panel on screen has one.
 
 While `Alt` is held (or Select mode is on), the cursor shows what a press in the
 panel under it would do: a cell cursor over a categorical panel, a vertical
@@ -193,9 +193,9 @@ it is still true, because nothing has been confirmed.
 ### Common pitfalls
 - “It selected fewer than expected”: filters are hiding some category members.
 - “It selected way too many”: your continuous range is too wide; reduce drag distance or intersect with a lasso.
-- “Nothing happens, and the panel says *Color by a field first*”: no panel on
-  screen is colored by a field — choose one under **Coloring & filtering**.
-  That sentence replaces the `Alt+click` invitation exactly while no press
+- “Nothing happens, and the Selection (i) says *Color by a field first*”: no
+  panel on screen is colored by a field — choose one under **Coloring &
+  filtering**. That sentence replaces the `Alt+click` line exactly while no press
   could select anything, so the panel and the viewer never disagree. More
   symptoms: {doc}`06_troubleshooting_highlighting`.
 

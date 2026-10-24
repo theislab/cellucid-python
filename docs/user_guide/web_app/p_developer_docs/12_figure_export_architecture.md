@@ -93,6 +93,29 @@ worker once per session, and closing the session releases it. An export that is
 cancelled rejects its pending requests at once; the worker's late answers are
 discarded.
 
+### Where the point pass is drawn
+
+The point passes (`spriteZoomLimit`, `rasterizePoints`) need a WebGL2 context
+on an OffscreenCanvas, and not every browser offers one in a worker:
+
+- WebKitGTK and WPE (GNOME Web/Epiphany, and Playwright's Linux WebKit) have no
+  WebGL in workers: [WebKit bug 209809](https://bugs.webkit.org/show_bug.cgi?id=209809).
+- Safari 16.4–16.6, and 17.0–17.1 on macOS Ventura, returned no WebGL context
+  to an OffscreenCanvas in a worker while the same context worked on the page:
+  [WebKit bug 253431](https://bugs.webkit.org/show_bug.cgi?id=253431),
+  [WebKit bug 183720](https://bugs.webkit.org/show_bug.cgi?id=183720).
+
+So before the first point pass the client asks the worker once whether it can
+create such a context (`webgl2`, answered by `webgl2RasterAvailable()`), and
+keeps the answer for the page's lifetime. Where the worker can, every pass is
+drawn there. Where it cannot, the client runs the same handler
+(`createFigureExportWorkerHandler`) on the page for the point passes only; the
+bounds, the vector markup and every encode stay in the worker. There is one
+rasterizer and no setting: the placement follows the measured capability.
+`setFigureExportWorkerWebgl2(false)` states the answer for tests, and
+`CELLUCID_FIGURE_EXPORT_POINT_PASS=page` runs a browser suite with every
+point pass on the page.
+
 The PNG exporter also embeds metadata via UTF-8 PNG `iTXt` chunks:
 - `Software`, `Website`, `Creation Time`, `Dataset`, `Dataset ID`, `Color Field`,
   `Source File`, `Description` and a compact JSON `Comment` blob.

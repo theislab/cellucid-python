@@ -209,7 +209,8 @@ are needed.
 **Option C: open the file in the hosted web app**
 
 If you prefer not to run a local server, open the web app and load the file
-with the **Files** buttons, or host it and use **Open from link**. For
+with **Open…**, or host it and paste its address into the **Link or server**
+bar. For
 click-by-click instructions, see {doc}`../../web_app/b_data_loading/index`.
 
 ### What you get on disk

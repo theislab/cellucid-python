@@ -34,28 +34,30 @@ content from your network.
 
 1. Open [Cellucid](https://www.cellucid.com/).
 2. Expand **Session** in the left sidebar.
-3. In **Open from link**, paste the repository's catalog path,
-   `theislab/cellucid-demo-custom-datasets/catalog`.
-4. Click **Connect**.
-5. Wait for the connection message, then choose one of the three entries under
-   **Sample dataset** (they are listed as **Linked data**).
+3. In the **Link or server** bar under **Open data**, paste the repository's
+   catalog path, `theislab/cellucid-demo-custom-datasets/catalog`.
+4. Click **Open** (or press Enter).
+5. Wait for the connection message, then choose one of the three entries in
+   the dataset dropdown above the bar, whose label now reads
+   "Dataset from <host>".
 
 ```{figure} ../../../_static/screenshots/data_loading/connect-github-catalog.png
-:alt: Close-up of the Open from link control with a theislab/cellucid-demo-custom-datasets path typed into the text field and a mouse pointer resting on the Connect button beside it.
+:alt: Close-up of the Link or server bar with a theislab/cellucid-demo-custom-datasets path typed into it and a mouse pointer resting on the Open button beside it.
 :width: 496px
 
-The **Open from link** control with the reference path entered. Type the
-catalog folder (or one file in it) and press **Connect**.
+The **Link or server** bar with the reference path entered. Type the catalog
+folder (or one file in it) and press **Open**.
 ```
 
 The shorthand reads the repository's default branch (`main`, `master` or any
 other), as GitHub resolves `HEAD`, without a request to find it; Cellucid never
 probes branch names.
 
-On success the connection lists the catalog's datasets under **Sample
-dataset** and opens its default one. A **Disconnect** button appears beneath
-the field, and **Connect** becomes **Reconnect** — that pair is how you tell a
-live connection from a path you merely typed.
+On success the dataset dropdown lists the catalog's datasets in place of the
+samples, labelled "Dataset from <host>", and the catalog's default one opens.
+One line appears under the bar reading **Link**, the address and
+**Disconnect** — that line is how you tell a live connection from a path you
+merely typed. **Disconnect** brings the samples back.
 
 ### Three tiny datasets, three useful checks
 
@@ -190,8 +192,9 @@ Test the exact files, not just the script that was meant to create them.
 
 ### 1. Test one file in the browser
 
-Open Cellucid, expand **Session**, click **Zarr folder** (or **H5AD**, **Zarr
-ZIP**) under **Files**, and choose `catalog/study-a.zarr`. Confirm:
+Open Cellucid, expand **Session**, click **Open…** under **File or folder**,
+then **Zarr folder…** (or **File…** for an `.h5ad` or `.zarr.zip`), and choose
+`catalog/study-a.zarr`. Confirm:
 
 - the reported cell and gene counts;
 - every intended dimension and its default navigation mode;

@@ -32,7 +32,15 @@ For a categorical obs field, each cell has a category code:
 - If the code is valid, the cell is colored with that category’s RGB color.
 - If the code is missing/invalid, the cell uses a neutral gray “None” color.
 
-Category colors come from a fixed categorical palette by default, and can be overridden per category.
+Category colors come from the file when it stores them, else from a fixed
+categorical palette, and can be overridden per category. A file colours a field
+the way Scanpy keeps a plot's colours: `uns['<field>_colors']`, one hex colour
+(`#rrggbb`) per category, in category order, as `sc.pl.umap(adata,
+color="leiden")` leaves it. Cellucid reads it as Scanpy does: a list shorter
+than the categories is not used, and a longer one gives its first colours. A
+list holding anything but hex colours is not used, nor is it for a text column
+whose categories are found when it is loaded. Once categories are merged, the
+merged field is coloured by Cellucid's palette.
 
 A missing code is not a quiet variant of a category — it is outside the
 category system entirely, and that has two visible consequences:
@@ -281,8 +289,8 @@ Important details:
 - Outlier filtering applies only while the categorical field it was set on is the active field.
 - It needs a latent space, which Cellucid never picks for you: the file's
   (`prepare(latent_key=...)`), the launch's (`--latent-key`), or yours under
-  **Data mapping › Latent space**. Without one the slider is greyed out with a
-  **Choose latent space** button
+  **Data mapping › Latent space**. Without one there is no slider: the filter
+  is its label, its (i) and one **Choose latent space** button
   ([Turning it on](../e_filtering/02_outlier_filtering_per_active_field.md#turning-it-on-choose-a-latent-space)).
 - The quantiles are got on the slider's first move below `100%` for a field
   (picking the field reads nothing): read from the file when it stores them

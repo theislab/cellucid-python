@@ -129,10 +129,44 @@ Session storage is used for **short-lived secrets and per-tab identity**.
 
 | Key | Purpose | Notes |
 |---|---|---|
-| `cellucid:github-app-auth:session` | GitHub access token **and** the signed-in user payload, in one record | Explicitly not persisted across tab close; the code refuses to write it to `localStorage` |
+| `cellucid:github-app-auth:session` | GitHub access token **and** the signed-in user payload, in one record | Community annotations |
+| `cellucid:google-auth:session` | Google access token (`drive.file`), its expiry and granted scope | Google Drive files; about an hour, renewed with one click |
+| `cellucid:microsoft-auth:session` | Microsoft access token, refresh token, their expiries and granted scopes | OneDrive files; renewed without a click for 24 hours |
 | `cellucid:community-annotations:tab-id:v1` | Unique tab id for scope locks | Used by scope-lock lease mechanism |
 
-`sessionStorage` holds exactly one secret, and closing the tab destroys it.
+`sessionStorage` holds the app's three sign-ins, and closing the tab destroys
+them.
+
+#### The sign-in token model
+
+Every sign-in goes through one module,
+`cellucid/assets/js/data/sources/auth/token-store.js`: GitHub
+(`app/community-annotations/github-auth.js`), Google (`data/sources/auth/google.js`)
+and Microsoft (`data/sources/auth/microsoft.js`). The rules, each held by a
+contract test (`tests/source-sign-in-contract.test.mjs`):
+
+- A token lives in the tab's `sessionStorage` and in memory: it survives a
+  reload of the tab and is gone when the tab closes. Nothing writes one to
+  `localStorage`, IndexedDB, cookies, a URL, a session file, figure
+  provenance, the console, analytics or an error message.
+- No client secret exists. Google uses the token model of Google Identity
+  Services (a popup, no refresh token); Microsoft uses the authorization code
+  flow with PKCE for a single-page application, redeemed in the page (the
+  popup returns to `assets/auth/callback.html`, which posts the code over a
+  `BroadcastChannel`). The public client IDs, API key and project number are
+  in `assets/js/data/sources/provider-config.js`; empty values mean "not
+  configured on this site yet".
+- A file read behind a sign-in names only `{provider, ref}` in its resource
+  (`data/sources/access.js`). The AnnData reader worker asks the page for the
+  URL and headers to read from (`{event: 'source-access'}`), holds them in
+  memory, and shares one renewal across all its parallel reads
+  (`httpByteSource`'s `access` in `formats/io/byte-source.js`). Sessions and
+  `?data=` links record the provider and file ids (`gdrive:<id>`,
+  `onedrive:<drive>/<item>`), never a token or a download address.
+- A step the person must take (sign in, sign in again, grant more access)
+  waits in `data/sources/auth/sign-in.js` and is shown under the address bar
+  and as a notification (`app/source-sign-in-view.js`); its button runs the
+  sign-in inside the click, because a popup opens only from one.
 
 ---
 

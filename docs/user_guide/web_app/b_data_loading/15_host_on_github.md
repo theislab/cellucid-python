@@ -109,7 +109,8 @@ git push
 
 ### 4. Open it in Cellucid
 
-Paste either address into **Session › Open from link** and press **Connect**:
+Paste either address into **Session › Open data › Link or server** and press
+**Open**:
 
 | Address | Served by | Example |
 |---|---|---|

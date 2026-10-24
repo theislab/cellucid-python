@@ -124,8 +124,8 @@ Use the fastest safe resets:
 ### Likely causes (ordered)
 
 1) The slider is still at `100%` (no outlier filtering).
-2) No latent space is chosen: the slider is greyed out and the line under it
-   says *“Choose the latent space in Data mapping”*.
+2) No latent space is chosen: there is no slider, only a **Choose latent
+   space** button (its tooltip names the file's candidate arrays).
 3) The quantiles are still being read or computed (a progress bar under the
    slider), or you cancelled that read, which put the slider back at `100%`.
 4) The outlier filter is disabled in Filters (shows `(disabled)`).
@@ -135,12 +135,13 @@ Use the fastest safe resets:
 
 ### How to confirm
 
-1) Confirm the outlier slider is visible and enabled — it appears for every
-   categorical field of the file (never for a continuous field, a gene, or a
-   field you created), and the line under it says why it cannot filter yet.
+1) Confirm the outlier slider is visible — the **Outlier filter** appears for
+   every categorical field of the file (never for a continuous field, a gene,
+   or a field you created); when it shows a button or a line instead of the
+   slider, that says why it cannot filter yet.
 
 ```{figure} ../../../_static/screenshots/filtering/window-outlier-100-off.png
-:alt: The whole application window coloured by clusters with the Outlier filter (latent space) slider parked at its right end reading 100 percent, loose points scattered around the coloured groups, and the sidebar reading Showing all 3,696 points above No filters active.
+:alt: The whole application window coloured by clusters with the Outlier filter slider parked at its right end reading 100 percent, loose points scattered around the coloured groups, and the sidebar reading Showing all 3,696 points above No filters active.
 :width: 1440px
 
 The commonest cause: the slider is present and correct, but still at `100%`,

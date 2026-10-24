@@ -73,11 +73,11 @@ replaced only with `force=True`.
   `cellucid.show_anndata("pbmc_cellucid.h5ad")`. The file names itself
   (`uns['cellucid']`), so no `dataset_name`/`dataset_id` is passed.
 - On the command line: `cellucid serve pbmc_cellucid.h5ad`.
-- In the browser: the web app's **Files** button, or **Open from link** for a
-  hosted file ({doc}`../../web_app/b_data_loading/index`).
+- In the browser: the web app's **Open…** button, or the **Link or server**
+  bar for a hosted file ({doc}`../../web_app/b_data_loading/index`).
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Cellucid Session panel: the Dataset summary, the Open data group with Sample dataset, Files, Server and Open from link, the Session file group with its Save and Load buttons, and the Data mapping group.
+:alt: The Cellucid Session panel with a dataset open: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset list, the Open… button and the Link or server bar; Session file with Save and Load; and the collapsed Data mapping group.
 :width: 524px
 
 The Session panel gathers every loading path under **Open data** and keeps the **Save** and **Load** buttons under **Session file**, directly below it.

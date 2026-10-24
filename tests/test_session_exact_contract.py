@@ -38,6 +38,8 @@ def _mapping_fingerprint_keys() -> dict:
             "knn": None,
             "geneNames": "index",
             "expression": "X",
+            "log1p": {},
+            "highlyVariable": None,
             "latent": None,
             "vectorFields": [],
         },

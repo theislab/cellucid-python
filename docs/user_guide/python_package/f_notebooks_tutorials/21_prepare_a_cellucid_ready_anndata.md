@@ -139,7 +139,8 @@ viewer = show_anndata(path, height=650)
 ```
 
 From a terminal: `cellucid serve pbmc_10k_v1.h5ad`. Or open the file with the
-web app's **Files** buttons, or host it and use **Open from link**.
+web app's **Open…** button, or host it and paste its address into the
+**Link or server** bar.
 
 ## Interface reference
 

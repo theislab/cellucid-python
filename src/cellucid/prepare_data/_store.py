@@ -22,11 +22,16 @@ and every chunk is one request and one decode:
 Every chunk is compressed with DEFLATE (:data:`DEFLATE_LEVEL`), which browsers
 inflate natively (``DecompressionStream``): HDF5's gzip filter in an
 ``.h5ad``, zlib (Zarr v2) or gzip (Zarr v3) in a Zarr store, unsharded. Before
-it, every array of values wider than one byte is byte-shuffled (HDF5's shuffle
-filter; numcodecs' ``Shuffle``, ``numcodecs.shuffle`` in Zarr v3), which puts
-the similar high bytes of neighbouring values together -- except the
-expression values themselves (a sparse ``X``'s ``data``, a dense ``X``), which
-repeat whole and compress best as they are.
+it, every array of values wider than one byte is byte-shuffled, which puts the
+similar high bytes of neighbouring values together -- except the expression
+values themselves (a sparse ``X``'s ``data``, a dense ``X``), which repeat
+whole and compress best as they are. The shuffle is HDF5's shuffle filter in
+an ``.h5ad`` and numcodecs' ``Shuffle`` filter in Zarr v2 (a v2 filter is any
+numcodecs codec). Zarr v3 has no shuffle codec of its own -- numcodecs'
+(``numcodecs.shuffle``) is outside the v3 specification -- so a shuffled v3
+array is compressed with the specification's ``blosc`` codec instead: byte
+shuffle and zlib at the same level (:func:`_blosc_codec`); every other v3
+array is gzip.
 
 Measured on the 561,947-cell, 8,192-gene Suo atlas with the web app's own
 reader (``scripts/benchmark-anndata.mjs`` in the web repository; the numbers
@@ -165,6 +170,29 @@ def _reproducible_gzip(level: int) -> Any:
     return _GzipCodec(level=level)
 
 
+def _blosc_codec(itemsize: int) -> Any:
+    """Zarr format 3's ``blosc`` codec for a shuffled array of ``itemsize``-byte values.
+
+    Blosc byte-shuffles each block of a chunk and deflates each byte plane of
+    it as a zlib stream (``cname`` zlib, ``clevel`` :data:`DEFLATE_LEVEL`),
+    which browsers inflate natively. The block size is Blosc's own choice
+    (``blocksize`` 0): the whole chunk, or blocks of 1 MiB in a larger one
+    (a float64 chunk of 2^18 values is two). On the He atlas
+    (71,650 cells) a Zarr v3 store written so came to 29.00 MB, against
+    29.11 MB with ``numcodecs.shuffle`` and gzip, and 37.62 MB with gzip and
+    no shuffle (the gene indices of ``X`` alone 64% larger).
+
+    zarr-python compresses with numcodecs' Blosc, which it sets to compress in
+    the calling thread (``numcodecs.blosc.use_threads = False``), so a chunk
+    of several blocks holds them in order and every run writes the same bytes.
+    cellucid-r's ``cellucid_prepare()`` writes the same frames: the same
+    header, blocks and streams, each stream deflated by the zlib R links.
+    """
+    from zarr.codecs import BloscCodec
+
+    return BloscCodec(typesize=itemsize, cname="zlib", clevel=DEFLATE_LEVEL, shuffle="shuffle", blocksize=0)
+
+
 def _vector_chunks(length: int, target: int) -> tuple[int]:
     return (max(1, min(length, target)),)
 
@@ -218,8 +246,8 @@ class _Writer:
         A multi-byte value is byte-shuffled before it is deflated (unless
         ``shuffle`` is false: the expression values, see the module
         docstring), as HDF5's shuffle filter does in an ``.h5ad``: numcodecs'
-        ``Shuffle`` filter in Zarr format 2, the same codec
-        (``numcodecs.shuffle``) in format 3.
+        ``Shuffle`` filter before zlib in Zarr format 2, the ``blosc`` codec
+        (byte shuffle and zlib) in format 3.
         """
         if itemsize <= 1 or not shuffle:
             return {"filters": None, "compressors": self.codec}
@@ -227,9 +255,7 @@ class _Writer:
             from numcodecs import Shuffle
 
             return {"filters": [Shuffle(elementsize=itemsize)], "compressors": self.codec}
-        from zarr.codecs import Shuffle as Shuffle3
-
-        return {"filters": None, "compressors": [Shuffle3(elementsize=itemsize), self.codec]}
+        return {"filters": None, "compressors": _blosc_codec(itemsize)}
 
     def _fill(self, dataset: Any, values: Callable[[], Any], *, opening: bool) -> None:
         """Write a declared array's values: now in a Zarr store, at the end in an ``.h5ad``."""

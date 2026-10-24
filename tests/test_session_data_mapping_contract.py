@@ -127,6 +127,8 @@ def _anndata_mapping(**changes: Any) -> dict[str, Any]:
         "knn": "connectivities",
         "geneNames": "index",
         "expression": "X",
+        "log1p": {},
+        "highlyVariable": None,
         "latent": "X_pca",
         "vectorFields": [
             {"key": "velocity_umap_2d", "embedding": {"key": "X_umap", "columns": [0, 1]}}

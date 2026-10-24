@@ -912,8 +912,8 @@ class AnnDataViewer:
 
         Each keyword replaces one top-level field of the mapping the viewer
         last reported (:attr:`data_mapping`): ``embeddings``, ``vectorFields``,
-        ``geneNames``, ``knn``, ``expression`` and ``latent``. ``kind`` cannot
-        change. The merged mapping is validated
+        ``geneNames``, ``knn``, ``expression``, ``log1p``, ``highlyVariable``
+        and ``latent``. ``kind`` cannot change. The merged mapping is validated
         before anything is sent, so an unknown field or an invalid value raises
         here and the viewer is untouched.
 

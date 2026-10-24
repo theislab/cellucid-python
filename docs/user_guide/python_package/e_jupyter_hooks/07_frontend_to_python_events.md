@@ -292,6 +292,8 @@ Posted record:
     "knn": null,
     "geneNames": "index",
     "expression": "X",
+    "log1p": {},
+    "highlyVariable": null,
     "latent": null,
     "vectorFields": []
   }

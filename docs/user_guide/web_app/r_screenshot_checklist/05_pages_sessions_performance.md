@@ -276,7 +276,8 @@ are browser chrome — Playwright cannot capture them, and both would expose
 5. Every row of `#active-filters`, verbatim.
 6. `#highlight-count` text, the tab in `#highlight-pages-tabs`, and the
    `Endocrine lobe` row and its count in `#highlighted-groups-list`.
-7. The `Dataset`, `Source`, `Cells`, `Genes` rows of `#dataset-info`.
+7. The Dataset box `#dataset-info`: `#dataset-name`, `#dataset-summary`
+   (cells · genes), and the Source row of its **Details**.
 8. `#web-build-version` in the footer.
 
 **What is allowed to differ, and must be called out in the caption so a reader
@@ -351,8 +352,9 @@ longer a reason to refuse it. Details under
      on-screen representation; a screenshot cannot show it. Mermaid block,
      rendered by the docs build — no capture needed.
   3. **ADD** a fingerprint capture for the "Dataset identity" subsection: crop
-     `#dataset-info` (the eight-row block: Dataset, Description, Source, URL,
-     Cells, Genes, Obs fields, Connectivity) on pancreas, which reads
+     `#dataset-facts` (the Dataset box: name, cells · genes, format · host,
+     description, and **Details** opened: Source, Citation, Cells, Genes, Obs
+     fields, Neighbour graph and the rest) on pancreas, whose Details read
      `3,696` cells / `3,753` genes. Cursor on the `Cells` row.
      `session-identity-dataset-info.png` · `:width: 246px`. This makes the
      abstract "five-part fingerprint" concrete: four of the five parts are
@@ -483,16 +485,16 @@ longer a reason to refuse it. Details under
 - **verdict** — **ADD**
 - **Does the URL bar need to be visible, and is that safe?** **No, and it is not
   needed.** Cellucid's "share a link" means *a link to the dataset* — a public
-  URL or a GitHub `owner/repo/path` typed into `#data-link-url` or the remote
-  server field — **not** a shareable app URL that encodes state. There is no
+  URL or a GitHub `owner/repo/path` typed into the **Link or server** bar
+  (`#data-address`) — **not** a shareable app URL that encodes state. There is no
   session-in-URL feature, and **Save** is a plain file download. Photographing the browser's URL bar would therefore illustrate
   nothing on this page while risking a `localhost:PORT` or file path. Show the
   **in-app input fields** instead, which is where the link actually lives.
 - **needs** — Three images, each answering one of the page's three artifact
   types:
-  1. **Link:** crop the GitHub row — `#data-link-url` pre-filled with a public
-     path (use `theislab/cellucid-datasets/anndata`) plus `#data-link-connect-btn`.
-     Cursor on `#data-link-connect-btn`.
+  1. **Link:** crop `#data-address-block` — `#data-address` pre-filled with a
+     public path (use `theislab/cellucid-datasets/anndata`) plus
+     `#data-address-open-btn`. Cursor on `#data-address-open-btn`.
      `share-link-github-input.png` · `:width: 246px`.
   2. **Bundle:** reuse `session-lifecycle-09-artifact-terminal.png` — the `ls`
      of the `.cellucid-session` file.
@@ -580,18 +582,20 @@ longer a reason to refuse it. Details under
   against. Adding one would be actively counterproductive.
 - **Leak review of every image proposed in this audit** (this is the deliverable
   for this page):
-  - **`#dataset-url`** (inside `#dataset-info`) renders `metadata.source.url`
-    verbatim (the `datasetUrlEl` assignment in `dataset-controls.js`). For a
-    remote or GitHub load this is
-    a live URL and may carry a host, port, private org, or query string. Every
-    capture that includes `#dataset-info` — `session-identity-dataset-info.png`,
-    `session-lifecycle-01-picker.png` — **must** be taken on a `local-demo`
-    sample, where the row renders a public catalog value, and the row must be
-    checked frame by frame before publishing.
-  - **`#data-link-url`** in `share-link-github-input.png` must contain only the
+  - **The Dataset box** (`#dataset-info`, `ui/modules/dataset-card.js`) shows
+    the host it reads from in `#dataset-origin`, and, with **Details** open,
+    links `metadata.source.url` (Source) and, for data read in place, the
+    file's address without its query string (File). For a remote or GitHub
+    load these are live addresses and may carry a host, port or private org.
+    Every capture that includes `#dataset-info` —
+    `session-identity-dataset-info.png`, `session-lifecycle-01-picker.png` —
+    **must** be taken on a `local-demo` sample, where they render public
+    catalog values, and checked frame by frame before publishing.
+  - **`#data-address`** in `share-link-github-input.png` must contain only the
     public `theislab/cellucid-datasets` path. Never a private org.
-  - **The remote-server URL field** must be empty or public in any frame that
-    includes it.
+  - **The Link or server bar and its connection line**
+    (`#remote-connection-target`, `#data-link-connection-target`) must be
+    empty or public in any frame that includes them.
   - **Terminal captures** (`session-lifecycle-09`, `share-portable-pair-terminal`)
     must run with a reduced prompt (`PS1='$ '`) from inside the directory, so no
     `/Users/<username>/` string is rendered. Do not use `pwd`, do not show the

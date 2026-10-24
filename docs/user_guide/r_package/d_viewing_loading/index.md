@@ -8,11 +8,11 @@ store, either a `.zarr` folder (`format = "zarr"`) or one `.zarr.zip` file (`for
 web app opens it like any other AnnData store, so there is no separate format to
 load.
 
-- **On your own computer:** write a `.zarr.zip` and open it with the **Zarr ZIP**
-  button.
+- **On your own computer:** write a `.zarr.zip` and open it with **Open… ›
+  File…**.
 - **Shared with others:** put the `.zarr` folder or the `.zarr.zip` file on a web
-  host (GitHub, Hugging Face, Zenodo, a bucket) and open it with **Open from
-  link**.
+  host (GitHub, Hugging Face, Zenodo, a bucket) and open it with the **Link or
+  server** bar.
 
 ```{note}
 The web app's own loading documentation is in {doc}`../../web_app/index`; every

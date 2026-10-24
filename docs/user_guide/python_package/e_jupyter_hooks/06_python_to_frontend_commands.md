@@ -199,7 +199,8 @@ this one is answered: the viewer replies with a `data_mapping` event of origin
 
 `viewer.set_data_mapping(**fields)` replaces the named top-level fields of the
 mapping the viewer last reported (`embeddings`, `vectorFields`, `geneNames`,
-`knn`, `expression`, `latent`; never `kind`, which is always `"anndata"`),
+`knn`, `expression`, `log1p`, `highlyVariable`, `latent`; never `kind`, which
+is always `"anndata"`),
 validates the result, sends it, and returns the mapping the viewer reports
 back. It raises `RuntimeError` before sending when the viewer has not reported
 a mapping yet, `TypeError` for an unknown field, `ValueError` for an invalid

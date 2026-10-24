@@ -43,7 +43,7 @@ Everything on this page happens inside one sidebar accordion,
 **Coloring & filtering**. Open it once and keep it open.
 
 ```{figure} ../../../_static/screenshots/filtering/panel-clusters-unfiltered.png
-:alt: The Coloring and Filtering panel with a Categorical obs select holding clusters, empty Continuous obs and Gene Expression controls, a dashed Display options box containing an Outlier filter (latent space) slider at 100 percent, Show centroids and Show labels checkboxes, Show All and Hide All buttons and eight category rows with colour swatches and cell counts, and below the box a heading reading ACTIVE FILTERS (SELECTED VIEW ONLY), the line Showing all 3,696 points, and a bordered area reading No filters active.
+:alt: The Coloring and Filtering panel with a Categorical obs select holding clusters, empty Continuous obs and Gene Expression controls, a dashed Legend box containing an Outlier filter slider at 100 percent, Show centroids and Show labels checkboxes, Show All and Hide All buttons and eight category rows with colour swatches and cell counts, and below the box a heading reading ACTIVE FILTERS (SELECTED VIEW ONLY), the line Showing all 3,696 points, and a bordered area reading No filters active.
 :width: 516px
 
 The panel in its resting state on the Pancreas sample. The three selectors at

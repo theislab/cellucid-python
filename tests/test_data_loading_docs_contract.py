@@ -116,10 +116,23 @@ def test_loading_guides_do_not_reintroduce_stale_branch_or_server_routes() -> No
     assert "/_cellucid/health" in combined
     assert "/_cellucid/datasets" in combined
     assert "**Session**" in combined
-    assert "**Files**" in combined
-    assert "**Zarr folder**" in combined
-    assert "**H5AD**" in combined
-    assert "**Zarr ZIP**" in combined
+    assert "**Open…**" in combined
+    assert "**File…**" in combined
+    assert "**Zarr folder…**" in combined
+    assert "**Link or server**" in combined
+    # The Session panel's earlier controls are gone: the Files buttons, the
+    # Server and Open from link fields with Connect, and the Transfers list.
+    for removed in (
+        "**Files**",
+        "**H5AD**",
+        "**Zarr ZIP**",
+        "**Zarr folder**",
+        "Open from link**",
+        "**Server** field",
+        "Reconnect",
+        "**Transfers**",
+    ):
+        assert removed not in combined, removed
     assert "?sampleCatalog=" in combined
 
 
@@ -235,9 +248,9 @@ def test_real_pancreas_server_and_jupyter_evidence_is_wired_into_the_guides() ->
 
     overview = _read(DATA_LOADING / "01_loading_options_overview.md")
     picker = _read(DATA_LOADING / "03_browser_file_picker_tutorial.md")
-    assert "The **H5AD**, **Zarr ZIP** and **Zarr folder** buttons under **Files**" in overview
+    assert "**Open…** under **File or folder**, then **File…**" in overview
     assert "Browser **Folder** picker" not in overview
-    assert "I clicked **Zarr folder**" in picker
+    assert "I chose Zarr folder…, but nothing happens" in picker
 
 
 def test_python_and_r_sharing_navigation_points_to_the_reference_repository() -> None:

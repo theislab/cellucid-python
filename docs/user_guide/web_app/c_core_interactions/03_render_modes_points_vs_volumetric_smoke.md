@@ -102,7 +102,7 @@ Its relevant controls are:
   every other: a change reaches the next frame. Unlike the two checkboxes above
   it, it is not hidden in smoke mode, because it governs the whole scene target,
   which both renderers share. Until you click
-  the checkbox yourself it follows the dataset, and the status line beneath it
+  the checkbox yourself it follows the dataset, and the first line of its (i)
   says so — `Chosen automatically: 3,696 cells in 3D.` on the Pancreas sample, or
   `Chosen automatically from the size of the dataset.` before a dataset is
   open. Clicking it ends automatic selection.

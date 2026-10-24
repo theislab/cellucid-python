@@ -25,9 +25,29 @@ Most “analysis is broken” reports reduce to one of these.
 4) **Is gene expression actually available?**  
    - If DE/signature/marker genes look empty, confirm gene search returns genes and expression loads.
 5) **Is this a mode that ignores pages?**  
-   - Marker Genes (Genes Panel) groups by a categorical obs field across the dataset, not by highlight pages.
+   - Marker Genes (Genes Panel) groups by a categorical obs field, not by highlight pages.
+6) **Is Run disabled, or the result marked Stale?**  
+   - The line above Run says why it cannot run; **Stale · Run** means the form changed since the result was computed.
 
 If any of these fail, fix them first; most downstream symptoms disappear.
+
+---
+
+## Symptom: “Run is disabled” or a chip on the result
+
+Every mode with **Run** says what it needs in a muted line above the button, and
+labels a result with chips for what the run decided. None of them is an error.
+
+| You see | Meaning | What to do |
+| --- | --- | --- |
+| A line above Run (`Choose two pages`, `Add genes to a set`, …) | The form cannot run yet | Do what it says; each mode’s page lists every reason |
+| **Stale · Run** | The options, pages or page contents changed after this result | Press it to run again, or change the form back |
+| **n skipped** (Marker genes) | Groups under **Min cells per group** were not tested and stayed in the rest | Hover for their names; choose **Pool into one group** or **Test anyway, flagged** under Small groups |
+| **n pooled** (Marker genes) | Small groups were tested together as one | — |
+| **low n** | A group was tested with fewer cells than the minimum | Read its p-values with care |
+| **n not found** (Gene signature) | Gene names the dataset does not have were left out | Hover for them; fix the names or **Remove not found** |
+| **n constant** (Gene signature, Mean z-score) | Genes the same in every cell were left out | — |
+| **Cached** (Marker genes) | The same run was answered from memory | **Recompute** runs it again |
 
 ---
 
@@ -97,44 +117,36 @@ Safe fixes first:
 
 ### Likely causes (ordered)
 
-1) **Huge groups (page sizes)**
-   - Runtime scales with the number of cells in Page A and Page B.
+1) **Reading the expression matrix**
+   - Almost all of a run is reading genes; over a slow or distant link that is the limit.
 2) **Large gene count**
-   - DE typically tests all genes; 20k–40k genes is common.
-3) **Gene expression loading overhead**
-   - If expression is loaded lazily/over the network, the data transfer dominates.
+   - DE tests every gene by default; 20k–40k genes is common.
+3) **Huge groups**
+   - Testing grows with each gene’s non-zero values in the two groups.
 4) **Browser memory pressure**
-   - Large expression batches + large plots can trigger GC churn or WebGL memory pressure.
-5) **Too aggressive performance settings**
-   - High parallelism + high network concurrency can saturate memory and thrash.
+   - Other tabs or large plots leave the run less memory; it then reads less far ahead.
+
+There are no performance settings to tune: a run measures the link, the genes and
+the workers and sizes itself (see
+{doc}`06_analysis_mode_differential_expression_de`, How Cellucid sizes a run).
 
 ### How to confirm
 
-- Check Page A / Page B sizes in the DE UI.
-- Read the running box under the button: whether it stays on `Testing genes` (how many genes are done, how much is read and how fast) or on `Applying multiple testing correction`. A run you do not want to wait for can be stopped with **Cancel**, and run again later.
-- If you see browser slowdown across the whole app, suspect memory pressure.
+- Read the running box under Run: whether it is reading (how much is read and how fast) or `Applying multiple testing correction`. A run you do not want to wait for can be stopped with **Cancel**, and run again later.
+- If the whole app slows down, suspect memory pressure.
 
 ### Fix
 
-Do the least invasive thing that answers your question:
-
-1) Reduce the scope
-   - Compare smaller pages (e.g., subset to one sample/batch first).
-   - If you need global DE, consider exporting and running DE offline in Python/R.
-2) Use performance settings deliberately
-   - Open the DE “Performance Settings” section.
-   - If you see stalls/crashes, try:
-     - lower network concurrency,
-     - lower memory budget (to avoid spikes),
-     - lower compute parallelism.
-3) Avoid “repeat reruns” during setup
-   - Choose pages and method first, then run once.
-4) Refresh if the browser is in a degraded memory state
-   - Close extra modals/windows, then reload the page and run again.
+1) Test fewer genes
+   - **More options → Filters → Only genes in**: highly variable genes, or a gene list.
+2) Test fewer cells
+   - **Within** a cell type or a page, or smaller pages.
+3) Refresh if the browser is in a degraded memory state
+   - Close extra windows and tabs, then reload and run again.
 
 ### Prevention
 
-- For exploratory DE, start with smaller pages (hundreds–thousands of cells) to validate your hypothesis.
+- For exploratory DE, start with targeted groups (hundreds–thousands of cells).
 - Export CSV artifacts and move heavy analysis to Python/R for large studies.
 
 ---
@@ -168,13 +180,11 @@ of these, and neither is a bug:
 
 ### Likely causes (ordered)
 
-1) **Thresholds hide most genes**
-   - Volcano plots are often drawn with filters:
-     - p/FDR threshold
-     - |log2FC| threshold
-     - “label top N” choices
-2) **Adjusted p-values vs raw p-values confusion**
-   - If you switch to FDR (adjusted) and your dataset has weak signal, many genes will become non-significant.
+1) **Filters hide most genes**
+   - The volcano colours and lists the genes passing **Max adjusted p**,
+     **Min |log2FC|** and **Min % expressing**; **Labelled genes** names the top ones.
+2) **Weak signal after correction**
+   - The volcano always uses adjusted p-values; with weak signal few genes pass.
 3) **Non-finite values**
    - Genes with NaN/Inf p-values or fold-changes may not be plotted or may collapse.
 4) **Constant / all-zero genes**
@@ -184,10 +194,10 @@ of these, and neither is a bug:
 
 ### How to confirm
 
-1) Confirm Page A and Page B
-   - Re-check the page selector at the top of DE.
-2) Open the expanded view and adjust thresholds
-   - Temporarily relax thresholds (e.g., higher p/FDR threshold; lower |log2FC| threshold).
+1) Confirm Group A and Group B
+   - Re-check them at the top of the form; **Swap A and B** flips the direction.
+2) Relax the filters
+   - Temporarily raise **Max adjusted p** and lower **Min |log2FC|** (they redraw without testing again).
    - If points “appear”, it was a thresholding/view issue.
 3) Check the gene table
    - If the gene table has rows but the plot looks sparse, it’s a plotting/threshold issue.
@@ -195,8 +205,8 @@ of these, and neither is a bug:
 
 ### Fix
 
-- Relax thresholds to inspect overall behavior, then tighten for reporting.
-- Decide explicitly: use raw p-values for exploratory ranking; use FDR for “call significant” claims.
+- Relax the filters to inspect overall behavior, then tighten them for reporting.
+- Use the adjusted p-values for “call significant” claims; the CSV also has the raw ones for ranking.
 - If you see NaN-heavy behavior:
   - try the other method (Wilcoxon vs t-test),
   - ensure gene expression is present and not all-zero for the compared pages.
@@ -292,33 +302,29 @@ things. It does not produce `NaN` from the UI.
 
 ---
 
-## Symptom: “Marker Genes fails with ‘Group \"X\" has only N cells. Minimum required: 10.’”
+## Symptom: “Marker Genes skipped a group”
 
 ### Likely causes (ordered)
 
-1) **Your Group by field has tiny categories**
-   - Common when grouping by overly granular labels, or after heavy filtering in preprocessing.
-2) **You have many rare categories**
-   - Even one category below the minimum can block the whole run in the current implementation.
+1) **The group is smaller than Min cells per group** (10 by default)
+   - Under the default **Small groups → Skip and list**, it is not tested, stays in the rest, and the result shows **n skipped**.
+2) **Cells narrows the groups**
+   - With **Cells** set to visible cells or a page, groups are counted inside those cells only.
 
 ### How to confirm
 
-- In the Marker Genes UI, inspect the chosen Group by field:
-  - do you see many groups with very small counts?
-- If you have access to the data table in Python, compute per-category counts.
+- Hover the **n skipped** chip: it names each group and its cell count.
+- Open **Groups to test**: every group shows its cell count, and small ones are flagged.
 
 ### Fix
 
-1) Choose a different Group by field
-   - Prefer stable, reasonably sized groups (e.g., `cell_type` over a very granular label).
-2) Collapse/merge rare categories upstream
-   - Merge rare labels into `Other` during preprocessing.
-3) If you only need a subset of groups
-   - consider writing a subset of the dataset that excludes those rare categories.
+1) **More options → Groups and cells → Small groups**: **Pool into one group**, or **Test anyway, flagged** (any group with at least 2 cells).
+2) Lower **Min cells per group** (at least 2).
+3) Choose a coarser **Group by** field.
 
 ### Prevention
 
-- When creating categorical fields intended for marker discovery, keep a minimum group size in mind (e.g., ≥ 50 cells per category for stable marker behavior).
+- Fields meant for marker discovery work best with ≥ 50 cells per category; read **low n** results with care.
 
 ---
 
@@ -326,34 +332,29 @@ things. It does not produce `NaN` from the UI.
 
 ### Likely causes (ordered)
 
-1) **Gene list formatting**
-   - In the current UI, genes are parsed by commas (`,`). Newline-only lists can be interpreted as one “gene”.
-2) **Genes not found in your dataset**
-   - The names you pasted may be a different vocabulary from the one the dataset
-     names its genes with, or differ only in casing. Each gene has one name and no alias.
-3) **Gene expression missing**
+1) **Genes not found in your dataset**
+   - The names you pasted may be a different vocabulary from the dataset’s (symbols vs Ensembl ids, human vs mouse names). The result says **n not found**; Run is disabled when no gene of any set is found.
+2) **Gene expression missing**
    - Signature scoring requires expression.
-4) **Normalization misunderstanding**
-   - Z-score/min-max normalization changes the scale and can invert “intuitive” expectations.
+3) **Rescaling misunderstood**
+   - z-score and 0–1 rescale every drawn score together and can change “intuitive” expectations; the CSV keeps the scores as computed.
+4) **Method mismatch**
+   - Mean scores track expression level; Module score and UCell are relative (see {doc}`07_analysis_mode_gene_signature`).
 
 ### How to confirm
 
-- Try a 1–2 gene signature with a known marker gene you can visualize in the field selector.
-- Confirm gene expression exists by searching for that gene in other places (field selector).
-- Re-enter the gene list as comma-separated: `CD3D, CD3E, LST1`
+- Hover **n not found** for the names left out.
+- Try a 1–2 gene set with a known marker gene you can find in the field selector.
 
 ### Fix
 
-1) Fix gene list formatting (comma-separated)
-2) Use the names the dataset actually publishes
-   - Read a few of them out of the field selector and match that vocabulary.
-3) Turn off normalization temporarily to sanity-check raw behavior
-4) Reduce to a minimal signature to debug
-   - then expand the list once you see non-empty results
+1) Use the names the dataset publishes (read a few in the field selector), then **Remove not found**.
+2) Set **Rescale** to None to sanity-check raw behavior.
+3) Reduce to a minimal set to debug, then expand it.
 
 ### Prevention
 
-- Keep a “known-good” gene list snippet for each dataset, written in that dataset’s own names, and reuse it.
+- Keep a “known-good” gene list for each dataset, in that dataset’s own names, and import it.
 
 ---
 
@@ -362,8 +363,8 @@ things. It does not produce `NaN` from the UI.
 ### Likely causes (ordered)
 
 1) **You changed visibility, but analysis uses page membership**
-2) **You are looking at a cached analysis result**
-   - Some modes cache results until you re-run.
+2) **The result is from before the change**
+   - Modes with **Run** keep their result until you run again; a change to pages or page contents marks it **Stale · Run**.
 
 ### How to confirm
 
@@ -372,7 +373,7 @@ things. It does not produce `NaN` from the UI.
 
 ### Fix
 
-- If you want analysis to respect filtering, build pages after filtering (or rebuild them).
+- If you want analysis to respect filtering, build pages after filtering (or rebuild them), or set **Cells** / **Within** to **Visible cells** in Marker genes and Differential expression.
 - Re-run the analysis after changing the group definition.
 
 ### Prevention

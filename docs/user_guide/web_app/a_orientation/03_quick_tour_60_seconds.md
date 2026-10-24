@@ -78,19 +78,20 @@ counts for every built-in sample are listed in
    datasets**. **Pancreatic endocrinogenesis (scVelo)** is the standard
    1D/2D/3D velocity example; see
    {doc}`../b_data_loading/10_standard_pancreas_dataset`.
-3) Wait for the dataset info panel to populate (Cells/Genes/Obs fields).
+3) Wait for the **Dataset** box at the top of **Session** to name the dataset
+   and its cells and genes.
    Every sample opens each dimension on its default embedding; Pancreas also
    carries a 2D PCA embedding beside its 2D UMAP.
 
 **What success looks like**
 
 - The canvas shows points on the default light studio floor.
-- The dataset info panel shows non‑zero counts.
+- The **Dataset** box shows non‑zero cell and gene counts.
 
 :::{note}
-You can also load your own data from **Files** (H5AD, Zarr ZIP, or Zarr folder)
-or from a running server through the **Server** field, but those workflows
-are documented in
+You can also open your own data with **Open…** (an `.h5ad`, a `.zarr.zip` or
+a Zarr folder), or a link or a running server through the **Link or server**
+bar, but those workflows are documented in
 {doc}`../b_data_loading/index`.
 :::
 

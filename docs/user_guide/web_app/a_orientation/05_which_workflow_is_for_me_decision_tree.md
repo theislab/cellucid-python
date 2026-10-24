@@ -9,12 +9,12 @@
 ## The short answer (most common choices)
 
 - If you are a **wet-lab scientist** and someone sent you a `.h5ad`, a `.zarr`
-  folder or a `.zarr.zip` → open it with the **H5AD**, **Zarr folder** or
-  **Zarr ZIP** button in the web app, or drop it on the viewer; nothing is
-  installed and nothing is uploaded
+  folder or a `.zarr.zip` → open it with **Open…** in the web app (**File…**
+  for an `.h5ad` or `.zarr.zip`, **Zarr folder…** for a folder), or drop it
+  on the page; nothing is installed and nothing is uploaded
   ({doc}`../b_data_loading/03_browser_file_picker_tutorial`).
-- If someone sent you a **link** → paste it into **Open from link**
-  ({doc}`../b_data_loading/14_open_from_link`).
+- If someone sent you a **link** → paste it into the **Link or server** bar
+  and click **Open** ({doc}`../b_data_loading/14_open_from_link`).
 - If you are a **computational user with AnnData** → use `cellucid-python`
   (`show_anndata(...)` in a notebook, `cellucid serve` in a terminal, and
   `prepare(...)` to write a Cellucid-ready AnnData that opens fastest).
@@ -31,11 +31,11 @@
 :::{tab-item} Wet‑Lab / New to Coding
 
 1) What did your colleague send you?
-   - A `.h5ad` file → use **Files → H5AD**. You do not need Python for this.
-   - A folder ending in `.zarr` → use **Files → Zarr folder**, or drop the
-     folder on the viewer.
-   - A `.zarr.zip` → use **Files → Zarr ZIP**.
-   - A link → paste it into **Open from link**.
+   - A `.h5ad` file → use **Open… → File…**. You do not need Python for this.
+   - A folder ending in `.zarr` → use **Open… → Zarr folder…**, or drop the
+     folder on the page.
+   - A `.zarr.zip` → use **Open… → File…**.
+   - A link → paste it into the **Link or server** bar and click **Open**.
    - Nothing yet → ask a computational colleague for an AnnData file. One
      written by `cellucid.prepare()` in Python or `cellucid_prepare()` in R
      opens fastest; both write the same thing, so it does not matter which
@@ -59,10 +59,10 @@ Start here:
 
 ```
 Is the AnnData file (.h5ad, .zarr, .zarr.zip) on this computer?
-  ├─ Yes → open it in the web app (H5AD / Zarr folder / Zarr ZIP, or drop it)
+  ├─ Yes → open it in the web app (Open… → File… / Zarr folder…, or drop it)
   └─ No →
        Is it on the web (GEO, Zenodo, Hugging Face, GitHub, a URL)?
-         ├─ Yes → paste the link into Open from link
+         ├─ Yes → paste the link into the Link or server bar
          └─ No → is it in Python (AnnData in memory or on a remote disk)?
                   ├─ in a notebook → show_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")
                   └─ on a remote machine → cellucid serve <file> + SSH tunnel
@@ -92,8 +92,8 @@ Then decide on sharing:
 | You want to… | Recommended workflow | Why | Common gotcha |
 |---|---|---|---|
 | Try Cellucid quickly | Demo dataset | Zero setup | Not your data |
-| Explore your own data locally | Web app: Files → H5AD, Zarr folder, or Zarr ZIP | No server needed | Files not written gene-major read more bytes per gene |
-| Share a dataset with collaborators | Host the AnnData file (HTTP) and share an **Open from link** URL | Everyone opens the same dataset URL | CORS / hosting config |
+| Explore your own data locally | Web app: Open… → File… (`.h5ad`, `.zarr.zip`) or Zarr folder… | No server needed | Files not written gene-major read more bytes per gene |
+| Share a dataset with collaborators | Host the AnnData file (HTTP) and share its `?data=` link ({doc}`../b_data_loading/14_open_from_link`) | Everyone opens the same dataset URL | CORS / hosting config |
 | Work in notebooks | `cellucid-python` (embedded viewer + hooks) | Tight Python ↔ UI loop | Notebook iframe restrictions (fullscreen/pointer lock) |
 | Prepare a dataset without Python | `cellucid-r` (`cellucid_prepare()`) | Same Cellucid-ready AnnData, read by the same viewer | Arguments are named differently from `prepare()` |
 | Compare multiple hypotheses | Multiview snapshots (“Keep view”) | Side-by-side views | Smoke mode is disabled when snapshots exist |
@@ -143,16 +143,17 @@ Choose workflows based on your constraints:
 
 **How to confirm**
 
-- If you have a `.h5ad` file → use the browser **H5AD** control, or
+- If you have a `.h5ad` file → use **Open… → File…** in the browser, or
   `cellucid serve` / `show_anndata()` when you work in Python
   ({doc}`../b_data_loading/03_browser_file_picker_tutorial`,
   {doc}`../b_data_loading/04_server_tutorial`).
-- If you have a `.zarr` directory → use the browser **Zarr folder** control,
-  drop the folder on the viewer, or point `cellucid serve` / `show_anndata()`
+- If you have a `.zarr` directory → use **Open… → Zarr folder…** in the
+  browser, drop the folder on the page, or point `cellucid serve` / `show_anndata()`
   at it ({doc}`../b_data_loading/03_browser_file_picker_tutorial`,
   {doc}`../b_data_loading/04_server_tutorial`).
 - If you have a folder holding `datasets.json` → it is a dataset catalog;
-  publish it on a static host and open its address with **Open from link**
+  publish it on a static host and open its address in the **Link or server**
+  bar
   ({doc}`../b_data_loading/02_local_demo_tutorial`).
 
 ### Symptom: “My colleague sent me a folder but the app can’t load it”

@@ -52,7 +52,7 @@ store <- cellucid_prepare(
 ```
 
 Open `seurat_dataset.zarr` on a web host, or write `seurat_dataset.zarr.zip` with
-`format = "zarr.zip"` and open it with **Zarr ZIP** ({doc}`../d_viewing_loading/01_open_stores_in_cellucid_web_app`).
+`format = "zarr.zip"` and open it with **Open… › File…** ({doc}`../d_viewing_loading/01_open_stores_in_cellucid_web_app`).
 
 ## What each input becomes
 

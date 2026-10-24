@@ -167,7 +167,8 @@ PNG export produces a high-DPI raster image that is easy to paste into slides, m
 - Chromium, Firefox, and Safari/WebKit use the same native single-file and ZIP
   batch contracts.
 - PNG and Hybrid require WebGL2 with OffscreenCanvas (the points are drawn in a
-  worker) plus the published camera matrices. If either is
+  worker, or on the page where a browser's workers have no WebGL2, as in
+  WebKitGTK and WPE) plus the published camera matrices. If either is
   absent, **Export blocked** names the missing requirement and no file is
   created.
 - Every format additionally requires the **Points** render mode; a volumetric

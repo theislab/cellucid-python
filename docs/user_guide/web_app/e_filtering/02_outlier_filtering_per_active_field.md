@@ -47,14 +47,14 @@ This filter is **not**:
 Use this when your clusters/regions look “fuzzy” and you want to hide fringe points.
 
 1) Pick a categorical field (clusters/cell types) in **Coloring & Filtering → Categorical obs**.
-2) Look in the **Legend** box for **Outlier filter**. The line under it says
+2) Look in the **Legend** box for **Outlier filter**. What it shows says
    what it can do for this field:
-   - nothing under the slider: it works at once;
-   - *“Choose the latent space in Data mapping”*: press **Choose latent
-     space** and pick one (see [Turning it on](#turning-it-on-choose-a-latent-space));
-   - *“The first use reads the latent space … once”*: the file stores no
-     outlier distances for this space; moving the slider computes them (see
-     [Stored or computed](#stored-or-computed)).
+   - the slider alone: it works at once;
+   - one **Choose latent space** button and no slider: press it and pick one
+     (see [Turning it on](#turning-it-on-choose-a-latent-space));
+   - the slider and a line such as *“First use reads X_scVI (54 MB).”*: the
+     file stores no outlier distances for this space; moving the slider
+     computes them (see [Stored or computed](#stored-or-computed)).
 3) Drag the slider from `100%` down to `95%`.
 
 ```{figure} ../../../_static/screenshots/filtering/outlier-slider-95.png
@@ -111,11 +111,14 @@ latent spaces. It is chosen in one of three ways:
 - you choose it under **Session › Data mapping › Latent space** (“Outliers in”;
   see [Latent space](../b_data_loading/13_data_mapping.md#latent-space)).
 
-Without one, the outlier control is shown **disabled** for every categorical
-field, with what the filter measures, the file's arrays that look like a
-latent space (more than three columns, e.g. `X_scVI or X_pca`) and a
-**Choose latent space** button that opens that setting. The suggestions are
-only suggestions.
+Without one, the outlier control of every categorical field is only its
+label, its (i) (what the filter measures) and one **Choose latent space**
+button that opens that setting; there is no slider and no paragraph. The
+button's tooltip names the file's arrays that look like a latent space (more
+than three columns, e.g. `X_scVI or X_pca`, likeliest names first; an array
+named for positions, such as `spatial` or a 4-column `coordinates`, is not
+suggested). The suggestions are only suggestions: every dense array is in the
+menu.
 
 ---
 
@@ -135,14 +138,15 @@ way:
   that latent space **outliers stored**.
 - **Computed.** Any other file (an AnnData you wrote yourself, a CELLxGENE
   download), or another latent space than the stored one: before anything is
-  read, the line under the slider says what the first use costs — *“The first
-  use reads the latent space X_scVI (54 MB) once to compute the outlier
-  distances; every other field then filters at once.”* Moving the slider below
+  read, one short line under the slider says what the first use costs —
+  *“First use reads X_scVI (54 MB).”* (its tooltip adds that every other
+  field then filters at once). Moving the slider below
   `100%` starts it: the latent space is read once, in the background, every
   field asked for at the same time is computed in the same pass, and the
   latent space is kept in memory (within Cellucid's memory budget), so every
   other field filters without reading it again. A latent space larger than
-  that budget is read again for each field, and the line says so.
+  that budget is read again for each field, and the line says so (*“Each
+  field’s first use reads X_scVI (…).”*).
 
 While the distances are read or computed, a bar under the slider and a
 progress notification show how much of how much is read, how fast and how
@@ -239,12 +243,13 @@ chosen again.
 - The active field is continuous, a gene, or a field you created: outlier
   quantiles are per category of a field the file holds.
 
-### “The slider is greyed out”
+### “There is no slider, only a button or a line”
 
-Read the line under it:
-- *“Choose the latent space in Data mapping”* — press **Choose latent space**;
-- *“No category … has 10 cells”* — the field's categories are too small to
-  measure; lower `centroid_min_points`.
+- **Choose latent space** — no latent space is chosen; press it;
+- *“No category has 10 cells.”* — the field's categories are too small to
+  measure; lower `centroid_min_points`;
+- *“This latent space cannot be used.”* with **Choose latent space** — the
+  latent space holds a value it cannot be measured in; choose another.
 
 ### “Moving the slider started a download”
 

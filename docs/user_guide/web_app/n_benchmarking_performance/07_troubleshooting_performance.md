@@ -254,8 +254,9 @@ before the first dataset has loaded, so a benchmark run can already replace
 that load.
 
 ### How to confirm
-- Look under the dataset picker. While the app is still starting it reads
-  *“Starting Cellucid — the data controls below open as soon as it is ready.”*
+- Look under the **Open data** heading, above the dataset picker. While the
+  app is still starting it reads *“Starting Cellucid. The controls below open
+  as soon as it is ready.”*
 - If it has changed, the controls are live.
 
 ### Fix

@@ -46,7 +46,7 @@ Before you do this:
 
 If you need **private** sharing:
 - Use **Server Mode** ({doc}`04_server_tutorial`) on a private machine + VPN/SSH tunnel.
-- Or send the file and let each collaborator open it with **Files**.
+- Or send the file and let each collaborator open it with **Open…**.
 
 ## The Catalog Folder Layout
 
@@ -137,13 +137,18 @@ first:
 
 The dataset list shows each dataset's name and cell count, read from its
 file: names, descriptions and citations are never written in the catalog.
+While the dataset Cellucid opens first is still loading, the list already
+offers every entry under the name its path gives it (`suo` for `suo.zarr/`),
+the one being opened marked *· opening…*; the names and counts follow once
+the files have been read.
 The full contract, including the optional default session, is in
 {doc}`07_file_format_expectations`.
 
 ## Step 3 — Validate Locally (Before You Upload)
 
-- **One file:** open it with the **Zarr folder**, **H5AD** or **Zarr ZIP**
-  button under **Files**. If it opens there, it will open from a link.
+- **One file:** open it with **Open…** under **File or folder** (**File…**
+  for an `.h5ad` or `.zarr.zip`, **Zarr folder…** for a store folder). If it
+  opens there, it will open from a link.
 - **The whole catalog:** serve the folder with any static server that sends
   CORS headers, then open `?data=http://127.0.0.1:8000/` in Cellucid:
 
@@ -184,24 +189,27 @@ catalog folder at its root or in a folder such as `catalog/`.
 
 ### 4.3 What to enter in Cellucid
 
-Expand **Session**, type the path into the **Open from link** field, and press
-**Connect**:
+Expand **Session**, type the path into the **Link or server** bar under
+**Open data**, and press **Open** (or Enter):
 
 - `owner/repo` (if `datasets.json` is at the repository root)
 - `owner/repo/catalog` (if your catalog is in a folder)
 - `owner/repo@my-branch/catalog` (on another branch)
 
 ```{figure} ../../../_static/screenshots/data_loading/connect-github-catalog.png
-:alt: Close-up of the Open from link control with an owner/repo path typed into the text field and a mouse pointer resting on the Connect button beside it.
+:alt: Close-up of the Link or server bar with an owner/repo path typed into it and a mouse pointer resting on the Open button beside it.
 :width: 496px
 
-The **Open from link** field takes the catalog folder (or one file in it).
-Press **Connect** beside it.
+The **Link or server** bar takes the catalog folder (or one file in it).
+Press **Open** beside it.
 ```
 
 Cellucid then reads `datasets.json`, describes every listed file from its
-metadata (name, cell and gene counts), shows the dataset list, and opens the
-catalog's default dataset; each other dataset is opened when you choose it.
+metadata (name, cell and gene counts), lists them in the dataset dropdown
+(labelled "Dataset from <host>" while the catalog is connected), and opens the
+catalog's default dataset; each other dataset is opened when you choose it. A
+line under the bar reads **Link** with the address and **Disconnect**, which
+brings the samples back.
 
 **Shareable URL**
 
@@ -246,7 +254,7 @@ including range requests (`Range` request header; `Content-Range` and
 
 ## Troubleshooting (Large, Practical)
 
-### Symptom: “Open from link says the folder holds no `datasets.json`”
+### Symptom: “A link says the folder holds no `datasets.json`”
 
 **Likely causes (ordered)**
 1) The path points at the wrong folder.

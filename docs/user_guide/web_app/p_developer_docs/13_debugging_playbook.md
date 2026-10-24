@@ -34,7 +34,7 @@ Before you click anything else, write down:
    - local-demo / local-user / remote server / GitHub / Jupyter
 
 4) **Dataset identity**
-   - dataset id (from the UI dataset info block, or `uns['cellucid']['id']` in the file)
+   - dataset id (`uns['cellucid']['id']` in the file, or the id its route gives it; the **Dataset** box shows the name, not the id)
 
 Why this matters:
 - the same bug can be caused by CORS in one environment and by caching in another.
@@ -125,15 +125,19 @@ Likely causes (ordered):
 
 How to confirm:
 - Read `document.documentElement.dataset.startupPhase`. Startup publishes the
-  step it is in — `sign-in`, `health`, `catalog`, `ui`, `identity`,
+  step it is in — `sign-in`, `health`, `catalog`, `ui`, `dataset`,
   `positions`, `session`, then `ready` — so a page that never finishes says
   where it stopped. The interface (`ui`) is built before the startup dataset
   loads; a dataset chosen in the data controls while it loads replaces it, and
   startup then publishes `ready` without it.
-- The request/response steps (`sign-in`, `health`, `catalog`, `identity`, and
-  `session`, which reads a sample's published default session) each have a
-  60-second deadline. A server that never answers ends startup on the
-  startup-failure page, naming the step and the URL it was waiting on.
+- The request/response steps (`sign-in`, `health`, `catalog` and `session`,
+  which reads a sample's published default session) each have a 60-second
+  deadline. A server that never answers ends startup on the startup-failure
+  page, naming the step and the URL it was waiting on. `dataset` (opening the
+  startup dataset: its metadata, field lists and the embedding its first view
+  draws) stalls only when nothing at all has arrived for 60 s; every request
+  it makes is retried or fails on its own, naming its URL, and the error names
+  the reads that were open.
   `positions` and `ui` have no deadline, because their time grows with the
   dataset; a slow but progressing load is not a stall.
 - Network tab: which request is pending/blocked?

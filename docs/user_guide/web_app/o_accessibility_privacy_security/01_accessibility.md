@@ -82,8 +82,11 @@ Related: {doc}`../d_fields_coloring_legends/03_color_by_behavior` (exact behavio
 
 ### Categorical fields (clusters, sample, batch)
 
-Cellucid assigns categorical colours in three stages, and only the first stage
-is colour-vision-deficiency safe. This is the most useful thing to know on this
+A field whose file stores Scanpy's colours for it (`uns['<field>_colors']`)
+opens in those colours, whatever they are; see
+{doc}`../d_fields_coloring_legends/03_color_by_behavior`. Otherwise Cellucid
+assigns categorical colours in three stages, and only the first stage is
+colour-vision-deficiency safe. This is the most useful thing to know on this
 page, so it is worth being precise:
 
 1) **The first 24 categories** come from a hand-tuned palette built from

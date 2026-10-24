@@ -430,11 +430,11 @@ count and the active view's dimension: **in 3D, on below 5,000,000 cells; in a
 1D or 2D view, on below 200,000 cells; off at or above**. It is re-decided every
 time a dataset is published, because datasets are switched in place — so opening
 an atlas after a small dataset clears the box on its own — and whenever the
-active view switches between 2D and 3D. While the choice is automatic the line
-under the control says so, naming the count and the dimension
+active view switches between 2D and 3D. While the choice is automatic the first
+line of the control's (i) says so, naming the count and the dimension
 (`Chosen automatically: 18,142,044 cells in 3D.`). Clicking the checkbox ends automatic
 selection permanently, in both directions: from then on the box holds your answer
-on every dataset, and the status line goes quiet. This is why the 10,000,000-point
+on every dataset, and that line is gone. This is why the 10,000,000-point
 workload measured below is *not* the default configuration — at that size the
 automatic answer is already off.
 

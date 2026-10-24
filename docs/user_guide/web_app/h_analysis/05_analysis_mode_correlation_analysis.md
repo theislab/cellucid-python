@@ -35,25 +35,42 @@ What it is *not*:
 
 ## Inputs (what you choose)
 
-### X and Y variables
+| Where | Options |
+| --- | --- |
+| Essentials | **X axis**, **Y axis**, then **Pages** |
+| More options → Test | **Method** (Pearson / Spearman) |
+| More options → Display | **Colour by** |
 
-In the UI you select:
-- **X axis variable**: (continuous obs or gene expression)
-- **Y axis variable**: (continuous obs or gene expression)
+Press **Run** to compute. The line above Run says what is missing (`Choose the X
+and Y variables`, `X and Y are the same variable`, `Select at least one page`).
+After a run, changing any of these marks the result **Stale · Run** until you run
+again (see {doc}`02_analysis_ui_overview`).
 
-Cellucid prevents X and Y from being identical (it won’t run if they are the same variable).
+### X and Y
+
+Each is a continuous obs field or a gene, chosen with the same two-step picker
+Detailed uses (type, then the field or gene).
 
 ### Pages
 
-You select pages under **Compare pages**.
 Correlation is computed **separately for each selected page**.
 
-### Optional: Color by
+### Colour by
 
-If you choose a categorical obs field under **Color by**
-- points are colored by category (useful to reveal substructure),
-otherwise
-- points are colored by page (using the page colors you set).
+**Page** (default) colours points by page, with the page colours you set; a
+categorical obs field colours them by category, which can reveal substructure.
+The coefficient is always computed per page, never per colour.
+
+### Defaults
+
+<!-- options:correlation -->
+| Label | Default |
+|---|---|
+| X axis | None |
+| Y axis | None |
+| Method | Pearson |
+| Colour by | Page |
+<!-- /options:correlation -->
 
 ---
 
@@ -128,15 +145,15 @@ The reported statistics (`r`, `p-value`, `n`) are computed on the **full paired 
 
 1) Create/select a page you want to analyze
 2) Open **Analysis → Correlation**
-3) Choose X and Y variables
+3) Choose **X axis** and **Y axis**
    - Start with continuous obs fields (QC) to confirm the workflow.
-4) Select one or more pages under **Compare pages**
-5) Optional: set **Color by** to a categorical obs field
-6) Choose Pearson vs Spearman
+4) Select one or more pages
+5) Optional: **More options** → Method (Pearson or Spearman), Colour by
+6) Press **Run**
 7) Interpret
    - inspect scatter shape,
    - confirm `n` is large enough to trust,
-   - consider whether the relationship is driven by a hidden grouping (Color by helps).
+   - consider whether the relationship is driven by a hidden grouping (Colour by helps).
 
 ---
 
@@ -150,7 +167,7 @@ Many single-cell expression matrices are sparse:
 
 Practical tips:
 - try Spearman if you suspect non-linearity,
-- stratify by cell type (Color by or separate pages).
+- stratify by cell type (Colour by or separate pages).
 
 ### Confounding and mixture effects
 
@@ -221,7 +238,7 @@ Fix:
 :width: 488px
 
 Correlation on the two cell-cycle scores, both pages selected and points coloured
-by `cell_type`. **Color by** changes only the colouring; the coefficient is always
+by `cell_type`. **Colour by** changes only the colouring; the coefficient is always
 computed per page, never per colour.
 ```
 

@@ -124,10 +124,10 @@ two datasets that are not the same size. But nothing announces the point-size
 change, so it reads as the app behaving differently for no reason.
 
 ### How to confirm
-1) Read the line under the antialiasing checkbox. While the choice is still
-   automatic it names the count and dimension, as in
+1) Open the antialiasing (i). While the choice is still automatic its first
+   line names the count and dimension, as in
    `Chosen automatically: 18,142,044 cells in 3D.`
-   Once you have clicked the checkbox yourself the line goes quiet and the box
+   Once you have clicked the checkbox yourself that line is gone and the box
    holds your answer on every dataset from then on.
 2) Compare `Point size` against what you remember. The opening size is
    applied on every dataset publication — but *before* a saved session or a

@@ -99,7 +99,7 @@ Core test categories:
 
 1) The Cellucid-ready AnnData writer (`tests/test_prepare_anndata_contract.py`):
    - every output (`.h5ad`, Zarr v2/v3, `.zarr.zip`) reads back exactly with anndata
-   - chunks, codecs, consolidated metadata, and `uns['cellucid']` match the specification
+   - chunks, codecs, consolidated metadata, and `uns['cellucid']` match the specification; Zarr v3 metadata names only codecs of the v3 specification
    - every refusal happens before anything is written
 2) Server routes:
    - health/info endpoints

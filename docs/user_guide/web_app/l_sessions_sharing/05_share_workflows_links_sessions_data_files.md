@@ -122,8 +122,8 @@ This is common for private datasets.
 ### Recipient steps
 
 1) Unzip to a local folder.
-2) Open the dataset in Cellucid with **H5AD**, **Zarr ZIP** or **Zarr folder**
-   (or drop it on the viewer).
+2) Open the dataset in Cellucid with **Open…** (**File…** for an `.h5ad` or
+   `.zarr.zip`, **Zarr folder…** for a folder), or drop it on the page.
 3) Load the session file with **Load**.
 
 ---

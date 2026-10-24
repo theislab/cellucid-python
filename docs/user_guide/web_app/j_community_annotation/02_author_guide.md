@@ -181,7 +181,7 @@ Community annotation is scoped by dataset id. If the id changes, existing annota
 
 - For a file that states its id in `uns['cellucid']['id']`, Cellucid uses that
   id, whatever opened it: the sample menu, a data link, a server, a notebook,
-  or the local **H5AD**, **Zarr folder** or **Zarr ZIP** button. The same file
+  or **Open…** for a local file or folder. The same file
   keeps the same annotations everywhere.
 - A file without one gets an id from how it was opened: a data link gives a
   stable one, such as `cellxgene:<dataset id>` or `geo:<GSE>:<file>`
@@ -378,7 +378,7 @@ For large groups, a dedicated branch reduces accidental changes to `main` and ma
   - Dataset ids must be unique.
 
 - `supportedDatasets[].datasetId`
-  - Must match the dataset id of the dataset currently open in Cellucid (shown in its dataset info).
+  - Must match the dataset id of the dataset currently open in Cellucid: the id its file states in `uns['cellucid']['id']`, or the one its route gives it ({doc}`../b_data_loading/06_dataset_identity_why_it_matters`). When the repo does not list it, Cellucid names the id it looked for.
   - If the currently loaded dataset id is missing:
     - **annotators are blocked** (cannot Pull / view annotations)
     - **authors can still connect** (with a confirmation) and Publish an updated config to unblock everyone

@@ -8,7 +8,7 @@ This page documents {func}`~cellucid.prepare`, which writes a **Cellucid-ready
 AnnData**: one standard AnnData (`.h5ad`, `.zarr` folder, or `.zarr.zip`)
 laid out for the web app's range reads and naming itself in `uns['cellucid']`.
 The result can be:
-- opened in the web app (**Files**, or **Open from link** once hosted),
+- opened in the web app (**Open…**, or the **Link or server** bar once hosted),
 - served with `cellucid serve <file>`,
 - embedded in notebooks with {func}`~cellucid.show_anndata`,
 - read by any AnnData tool (`anndata.read_h5ad`, `anndata.read_zarr`).

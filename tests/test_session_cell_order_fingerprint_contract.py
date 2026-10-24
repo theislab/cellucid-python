@@ -35,6 +35,8 @@ _KEYED_MAPPING: dict[str, Any] = {
     "knn": None,
     "geneNames": "index",
     "expression": "X",
+    "log1p": {},
+    "highlyVariable": None,
     "latent": None,
     "vectorFields": [],
 }
@@ -48,6 +50,8 @@ _ANNDATA_MAPPING: dict[str, Any] = {
     "knn": None,
     "geneNames": "column:gene_symbols",
     "expression": "X",
+    "log1p": {},
+    "highlyVariable": None,
     "latent": None,
     "vectorFields": [],
 }

@@ -138,13 +138,13 @@ Disabling the category filter stops it from hiding cells, but the legend may sti
 
 ---
 
-## 5) Outlier slider hidden, greyed out, or reading data
+## 5) Outlier slider hidden, replaced by a button, or reading data
 
 ### What you see
 
 - After merging/deleting categories (creating a derived field), the outlier
   slider is gone; or
-- the slider is greyed out, with a line under it; or
+- there is no slider, only a **Choose latent space** button or a line; or
 - moving it below `100%` shows a progress bar instead of filtering at once.
 
 ### Why it happens
@@ -152,9 +152,9 @@ Disabling the category filter stops it from hiding cells, but the legend may sti
 - A field you create by merging or deleting categories has **no** outlier
   quantiles: they exist only for the file's own categorical `obs` columns, so
   the control is hidden for it.
-- The filter measures in a latent space, and none is chosen: the line says
-  *“Choose the latent space in Data mapping”* and offers **Choose latent
-  space** ([Turning it on](02_outlier_filtering_per_active_field.md#turning-it-on-choose-a-latent-space)).
+- The filter measures in a latent space, and none is chosen: the control is
+  one **Choose latent space** button
+  ([Turning it on](02_outlier_filtering_per_active_field.md#turning-it-on-choose-a-latent-space)).
 - No category of the field has `centroid_min_points` cells (10 by default):
   there is nothing to measure, and the line says so.
 - The file stores no outlier quantiles for this latent space, so the first

@@ -41,9 +41,9 @@ served by Python. A session saved on one route restores on the others.
 
 | Route | Dataset id |
 |---|---|
-| **Files** (`.h5ad`) | `h5ad_<file name without .h5ad>` |
-| **Files** (`.zarr.zip`, `.zarr` folder) | `zarr_<store name without .zarr / .zip>` |
-| **Open from link**, one file or store | the link's own stable id (from the address or the record) |
+| **Open…** or a drop (`.h5ad`) | `h5ad_<file name without .h5ad>` |
+| **Open…** or a drop (`.zarr.zip`, `.zarr` folder) | `zarr_<store name without .zarr / .zip>` |
+| A link in the **Link or server** bar, one file or store | the link's own stable id (from the address or the record) |
 | A dataset catalog (`datasets.json`) | the catalog entry's `id` |
 
 A file without an id therefore has a different id on each route; write one into

@@ -164,14 +164,14 @@ be refused by the app. That is not an inconsistency to report. See
 ### Shared GitHub publication
 
 Give collaborators the exact `owner/repository`, branch or immutable revision,
-and dataset id. Everyone should open it with **Open from link**, then choose
-**Load**.
+and dataset id. Everyone should open it with the **Link or server** bar, then
+choose **Load**.
 
 ### Shared dataset file
 
 Distribute one unchanged file (`.h5ad`, `.zarr.zip` or `.zarr` folder) and the
 session together, with a stable id in `uns['cellucid']['id']`. Everyone opens
-it with the matching **Files** button or by dropping it; how it was opened does
+it with **Open…** or by dropping it; how it was opened does
 not matter. Re-zipping without changing the store is fine; writing it again
 from changed data, or changing its id, is a new publication.
 

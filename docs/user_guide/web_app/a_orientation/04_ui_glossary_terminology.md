@@ -184,23 +184,37 @@ Every word here appears on a button, a label, or a page in
 {doc}`../b_data_loading/index`. Read the short definition; the linked page owns
 the detail.
 
-**What the Session panel calls things** (the first four sit under **`Open data`**)
+**What the Session panel calls things** (**`Dataset`** comes first; the next
+three sit under **`Open data`**)
 
+- **`Dataset`**: the box at the top of the panel that describes the dataset
+  that is open, and only that one: its name, its cells and genes, its format
+  and host (`h5ad file · this computer`), its description, how much has been
+  read for data read in place from a host, and a collapsed **`Details`** list.
+  With nothing open it says "No dataset open"
+  ({doc}`../b_data_loading/01_loading_options_overview`).
 - **`Sample dataset`**: the dropdown listing the catalog Cellucid was
   configured to read. On www.cellucid.com that is the five built-in samples
   ({doc}`../b_data_loading/12_sample_dataset_provenance`); on a copy you host
-  yourself it is whatever catalog you pointed it at.
-- **`Files`**: the group of three buttons that read a file or folder off
-  your own computer — **`H5AD`** (one file), **`Zarr ZIP`** (one archive), and
-  **`Zarr folder`** (one `.zarr` store folder). Dropping one of these on the
-  viewer does the same. Nothing is uploaded.
-- **`Server`**: a text field for the base address of a running
-  `cellucid serve`, for example `http://localhost:8765` — the origin, with no
-  trailing slash and no `?…` query.
-- **`Open from link`**: a text field for a link or id of data that already
-  lives somewhere public: a CELLxGENE dataset, a GEO series (`GSE…`), the
-  `owner/repo/path` shorthand of a public GitHub folder, or a web address of
-  an `.h5ad`, a Zarr store folder, a Zarr ZIP or a dataset catalog folder.
+  yourself it is whatever catalog you pointed it at. While a linked catalog
+  that holds several datasets is connected, it lists that catalog's datasets
+  instead and its label reads "Dataset from <host>". A dataset opened from a
+  file, a single-dataset link or a server is not listed there; while one is
+  open the dropdown shows "—".
+- **`File or folder`**: the **`Open…`** button, which reads a file or folder
+  off your own computer. Its menu has **`File…`** (an `.h5ad` or a
+  `.zarr.zip`) and **`Zarr folder…`** (a `.zarr` store folder): a browser's
+  file dialog picks files or a folder, never both. Dropping a file or folder
+  anywhere on the page does the same. Nothing is uploaded.
+- **`Link or server`**: one address bar with an **`Open`** button (Enter works
+  too). A port (`8765`), `localhost:8765` or `host:port` connects to a running
+  `cellucid serve`; a link or id of data that already lives somewhere public
+  (a CELLxGENE dataset, a GEO series `GSE…`, the `owner/repo/path` shorthand
+  of a public GitHub folder, or a web address of an `.h5ad`, a Zarr store
+  folder, a Zarr ZIP or a dataset catalog folder) opens it in place. While
+  something is connected, one line under the bar reads **`Server`** or
+  **`Link`**, the address and **`Disconnect`**
+  ({doc}`../b_data_loading/14_open_from_link`).
 - **`Session file`**: the **`Save`** and **`Load`** buttons, which download
   and restore a `.cellucid-session` bundle.
 
@@ -227,8 +241,9 @@ the detail.
   graph lives).
 - **H5AD**: one AnnData saved as a single HDF5 file (`.h5ad`).
 - **Zarr store**: one AnnData saved as a directory of chunked arrays (Zarr v2
-  or v3). The browser reads the folder itself (**Zarr folder**, or a drop) or
-  zipped as one **Zarr ZIP**, a link can name a store folder on a web host, and
+  or v3). The browser reads the folder itself (**Open… › Zarr folder…**, or a
+  drop) or zipped as one `.zarr.zip` (**Open… › File…**), a link can name a
+  store folder on a web host, and
   the Python server and Jupyter serve the directory itself.
 - **Range request**: how the viewer reads an `.h5ad` or Zarr store, opened in
   the browser or served by `cellucid serve` and `show_anndata()` — only the

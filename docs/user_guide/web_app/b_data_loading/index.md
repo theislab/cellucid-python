@@ -35,9 +35,9 @@ Use this as a decision tree. You can always switch later.
 
 | You have… | Best first choice | Why | Next page |
 |---|---|---|---|
-| A Zarr store folder (`.zarr`), for example from `prepare()` | Browser Zarr folder picker, or drop the folder | Read key by key from disk, nothing zipped or uploaded | {doc}`03_browser_file_picker_tutorial` |
-| A portable `.zarr.zip` or `.zip` | Browser Zarr ZIP picker | One validated file selection in every supported browser | {doc}`03_browser_file_picker_tutorial` |
-| A `.h5ad` of any size, and no Python | Browser H5AD picker | One file selection, nothing installed, nothing uploaded; read from disk as each view needs it | {doc}`03_browser_file_picker_tutorial` |
+| A Zarr store folder (`.zarr`), for example from `prepare()` | **Open… › Zarr folder…**, or drop the folder | Read key by key from disk, nothing zipped or uploaded | {doc}`03_browser_file_picker_tutorial` |
+| A portable `.zarr.zip` or `.zip` | **Open… › File…** | One validated file selection in every supported browser | {doc}`03_browser_file_picker_tutorial` |
+| A `.h5ad` of any size, and no Python | **Open… › File…** | One file selection, nothing installed, nothing uploaded; read from disk as each view needs it | {doc}`03_browser_file_picker_tutorial` |
 | A `.h5ad` on a remote machine, or one you drive from a notebook | Server mode or Jupyter | Python hands the file to the browser, which reads it in place as each view needs it | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
 | A Zarr store folder on a remote machine | Server mode or Jupyter | Served key by key as it is on disk, nothing zipped or copied | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
 | An in-memory `AnnData` in a notebook | Jupyter | Fastest way to iterate while analyzing | {doc}`05_jupyter_tutorial` |
@@ -50,12 +50,13 @@ Use this as a decision tree. You can always switch later.
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Cellucid Session panel with a dataset loaded: a Dataset summary table of name, description, source, URL, cells, genes, obs fields and connectivity; then the Open data group with a Sample dataset dropdown, the local file buttons under Files, and Server and Open from link text fields each with a Connect button; then the Session file group with Save and Load buttons.
+:alt: The Cellucid Session panel with a dataset open: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset list, the Open… button and the Link or server bar; Session file with Save and Load; and the collapsed Data mapping group.
 :width: 524px
 
 Every loading path has its own label under **Open data** in the Session panel,
-and **Save** and **Load** sit under **Session file**, below it. The summary table at
-the top always describes the dataset currently loaded, whichever path loaded it.
+and **Save** and **Load** sit under **Session file**, below it. The **Dataset**
+box at the top always describes the dataset currently open, whichever path
+opened it ([The Dataset box](01_loading_options_overview.md#the-dataset-box)).
 ```
 
 :::{note}
@@ -73,16 +74,16 @@ elsewhere, or move focus outside to close it. See
 Every dataset control is live while a dataset loads, including the dataset
 Cellucid opens when it starts. Whatever you choose last is what you get:
 
-- Choosing another sample, **None**, an H5AD or Zarr ZIP file, or a Zarr
-  folder, or running the benchmark, stops the load in progress at once (its
-  downloads are cancelled) and loads your new choice instead. The dataset
-  picker shows what is loading; a file shows as *Opening <name>…* while it is
-  read.
+- Choosing another sample, **None**, a file or folder with **Open…**, an
+  address in the **Link or server** bar, or running the benchmark, stops the
+  load in progress at once (its downloads are cancelled) and loads your new
+  choice instead. The **Dataset** box shows a spinner and what is opening, for
+  example *Opening data.h5ad…*.
 - Connecting to a server or GitHub repository that holds exactly one dataset
   opens that dataset, unless you chose another dataset, or applied a session
-  with **Load** under **Session file**, after clicking **Connect**. Then what you did later
-  stays, the connection is kept, and its dataset is listed in the dataset
-  picker.
+  with **Load** under **Session file**, after clicking **Open**. Then what you
+  did later stays and the connection is kept: its line under the bar still
+  names it, with **Disconnect**.
 - **Load** chosen while a dataset loads waits for it, says so in a
   notification, and then applies the session to the dataset that loaded. A
   session saved from a different dataset is refused with an explanation, as
@@ -95,8 +96,9 @@ Cellucid opens when it starts. Whatever you choose last is what you get:
 
 A load you replaced never appears afterwards and reports nothing; only the
 outcome of your latest choice is reported. If the dataset Cellucid opens at
-startup fails and you had not chosen anything else, startup stops on the
-“Cellucid could not start” card.
+startup fails and you had not chosen anything else, Cellucid starts without
+it: a panel over the empty viewer says the data could not be opened, with the
+exact reason under **Details**, **Try again** and **Open without this link**.
 
 (drop-to-open)=
 ### Dropping a file or folder onto the viewer
@@ -104,9 +106,8 @@ startup fails and you had not chosen anything else, startup stops on the
 Instead of a button, you can drag one `.h5ad` file, one `.zarr` store folder,
 or one `.zarr.zip` archive from your file manager and drop it anywhere on the
 viewer. While you drag, an outline and a *Drop to open* card cover the viewer.
-A drop is read exactly as the matching **H5AD**, **Zarr folder** or
-**Zarr ZIP** button would read it, and it replaces any load in progress like
-any other choice.
+A drop is read exactly as **Open… › File…** or **Open… › Zarr folder…** would
+read it, and it replaces any load in progress like any other choice.
 
 Anything else is refused with a notification that says what can be dropped:
 several items at once (drop the `.zarr` folder itself, not the files inside
@@ -144,6 +145,14 @@ Publish a folder of AnnData files with a `datasets.json` catalog on GitHub Pages
 
 Follow a complete three-dataset reference repository, validate its exact
 catalog contract, and publish stable dataset-specific links.
+:::
+
+:::{grid-item-card} {octicon}`lock;1.5em;sd-mr-1` Google Drive, OneDrive and Private Sharing
+:link: 16_private_drive_onedrive
+:link-type: doc
+
+Open a file from Google Drive or OneDrive in place, and share unpublished data
+with a collaborator: one sign-in, nothing stored on a server.
 :::
 
 :::{grid-item-card} {octicon}`mark-github;1.5em;sd-mr-1` Host a Dataset on GitHub
@@ -286,6 +295,7 @@ default; use the documented SSH-tunnel workflow for a remote machine.
 04_server_tutorial
 05_jupyter_tutorial
 14_open_from_link
+16_private_drive_onedrive
 13_data_mapping
 10_standard_pancreas_dataset
 12_sample_dataset_provenance

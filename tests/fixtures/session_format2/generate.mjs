@@ -13,11 +13,14 @@ const web = path.resolve(here, '../../../../cellucid/assets/js/app/session');
 const load = async relative => import(path.join(web, relative));
 const { writeBundle } = await load('bundle/writer.js');
 const { gzipCompress } = await load('codecs/gzip.js');
-const { encodeTypedJson } = await load('codecs/typed-json.js');
 const { digestCellSet } = await load('codecs/cell-set.js');
 const highlightsCells = await load('contributors/highlights-cells.js');
 const highlightsMeta = await load('contributors/highlights-meta.js');
 const userDefinedCodes = await load('contributors/user-defined-codes.js');
+const analysisWindows = await load('contributors/analysis-windows.js');
+const analysisDocked = await load('contributors/analysis-docked.js');
+const { DE_OPTIONS } = await import(path.resolve(web, '../analysis/options/de-options.js'));
+const { validateDataMapping } = await import(path.resolve(web, '../../data/data-mapping.js'));
 
 const N = 1024;
 // obs "ctype": A for cells 0-99, B for 100-899, C for 900-1023.
@@ -62,8 +65,29 @@ const overlays = {
     sourcePages: [], overlapStrategy: 'first', overlapLabel: null, intersectionLabels: null, uncoveredLabel: null, createdAt: 1,
   }],
 };
-const windows = { windows: [{ modeId: 'differential', rect: { left: 1, top: 2, width: 300, height: 200 }, settings: { selectedPages: ['page_1'], config: {} }, headerTitle: 'DE', result: { genes: ['gene_0'], log2fc: new Float32Array([1.5]) } }] };
-const docked = { openMode: 'differential', modes: { differential: { settings: { selectedPages: ['page_1'], config: {} }, result: { genes: ['gene_0'], pValue: new Float64Array([0.001]) } } } };
+// The analysis chunks go through the app's own contributors, with records in
+// the shape a form-based analysis exports (`{options, selectedPages, view}`)
+// and the window manager's remembered sizes.
+const deSettings = {
+  options: DE_OPTIONS.withDefaults({ pageA: 'page_1', pageB: 'page_2' }),
+  selectedPages: ['page_1', 'page_2'],
+  view: { disclosures: {} },
+};
+const windowsManager = {
+  exportSessionWindows: () => [{
+    modeId: 'differential', open: true, rect: { left: 1, top: 2, width: 300, height: 200 }, z: 1,
+    settings: structuredClone(deSettings), result: { genes: ['gene_0'], log2fc: new Float32Array([1.5]) }, headerTitle: 'DE',
+  }],
+  exportViewSizes: () => ({ window: { differential: { width: 300, height: 200 } }, expandedView: {} }),
+};
+const dockedModule = {
+  exportSessionState: () => ({
+    openMode: 'differential',
+    modes: { differential: { settings: structuredClone(deSettings), result: { genes: ['gene_0'], pValue: new Float64Array([0.001]) } } },
+  }),
+};
+const [windowsChunk] = analysisWindows.capture({ analysisWindowManager: windowsManager });
+const [dockedChunk] = analysisDocked.capture({ comparisonModule: dockedModule });
 const json = value => new TextEncoder().encode(JSON.stringify(value));
 const chunks = [
   { id: 'core/field-overlays', contributorId: 'field-overlays', priority: 'eager', kind: 'json', codec: 'gzip', label: 'Field overlays', datasetDependent: true, bytes: json(overlays) },
@@ -72,8 +96,8 @@ const chunks = [
   { id: 'core/state', contributorId: 'core-state', priority: 'eager', kind: 'json', codec: 'gzip', label: 'Core state', datasetDependent: true, bytes: json({ notMaterializedByPython: true }) },
   { id: 'ui/dockable-layout', contributorId: 'dockable-layout', priority: 'eager', kind: 'json', codec: 'gzip', label: 'Floating panels', datasetDependent: false, bytes: json({ panels: [] }) },
   { id: 'ui/figure-export', contributorId: 'figure-export', priority: 'eager', kind: 'json', codec: 'gzip', label: 'Figure export', datasetDependent: false, bytes: json({ version: 1 }) },
-  { id: 'analysis/windows', contributorId: 'analysis-windows', priority: 'eager', kind: 'binary', codec: 'gzip', label: 'Analysis windows', datasetDependent: true, bytes: encodeTypedJson(windows) },
-  { id: 'analysis/docked', contributorId: 'analysis-docked', priority: 'eager', kind: 'binary', codec: 'gzip', label: 'Docked analysis', datasetDependent: true, bytes: encodeTypedJson(docked) },
+  { ...windowsChunk, bytes: windowsChunk.payload },
+  { ...dockedChunk, bytes: dockedChunk.payload },
   ...highlightsMeta.capture(ctx).map(c => ({ ...c, bytes: json(c.payload) })),
   ...highlightsCells.capture(ctx).map(c => ({ ...c, bytes: c.payload })),
 ];
@@ -92,11 +116,12 @@ const manifest = {
   datasetFingerprint: {
     datasetId: 'format2', name: 'Format 2 fixture', cellCount: N, varCount: 1,
     cellOrder: { embedding: { key: 'X_umap', columns: [0, 1] }, dimension: 2, digest: '0123456789abcdef' },
-    dataMapping: {
+    // Checked by the app's own validator, so the record is in its current shape.
+    dataMapping: validateDataMapping({
       kind: 'anndata',
       embeddings: { enabled: [{ key: 'X_umap', columns: [0, 1] }], defaults: { '1d': null, '2d': { key: 'X_umap', columns: [0, 1] }, '3d': null } },
-      knn: null, geneNames: 'index', expression: 'X', latent: null, vectorFields: [],
-    },
+      knn: null, geneNames: 'index', expression: 'X', log1p: {}, highlyVariable: null, latent: null, vectorFields: [],
+    }),
   },
   source: { kind: 'file', name: 'format2.h5ad', dataset: 'format2' },
   requires: { obs: ['ctype'], var: [] },

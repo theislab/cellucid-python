@@ -141,9 +141,9 @@ choice you never made.
 
 So a session you open — including the starting view every built-in sample
 publishes — keeps your choice, or the dataset's choice when you have not made
-one, rather than the setting whoever saved the file was using. The status line
-under the control tells you which you are on: it reads `Chosen automatically:
-<n> cells in <d>D.` while the dataset is deciding, and nothing at all once you have
+one, rather than the setting whoever saved the file was using. The first line
+of the control's (i) tells you which you are on: it reads `Chosen automatically:
+<n> cells in <d>D.` while the dataset is deciding, and is gone once you have
 clicked the box. (It reads `This browser is not providing antialiasing for this
 view.` when the device cannot multisample.)
 

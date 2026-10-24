@@ -21,7 +21,7 @@ If you can load a demo dataset but not yours, it’s usually **data loading / da
    - **Visible cells**: do you have `0 visible` due to filters? → {doc}`../e_filtering/07_troubleshooting_filtering`
    - **Active view**: are you editing the intended panel (live vs snapshot)? → {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`
    - **Still starting**: if controls look greyed out, read the line under the
-     dataset picker — see {ref}`starting-up`.
+     **Open data** heading — see {ref}`starting-up`.
 3) Reload in a clean state (private window; extensions off)  
 4) If only one dataset fails, try a known-good demo dataset  
 5) Open DevTools → Console and copy the **first** error (for bug reports)
@@ -38,22 +38,34 @@ identifies the cause on its own.
 
 ### The app refused to start at all
 
-A full-screen card headed **“Cellucid could not start”** means the application
-never reached a usable state. The line beneath it is the reason and the footer
-asks you to correct the launch configuration or server response and reload.
-Below that, **Open Cellucid without this link’s settings** (shown when the
-address carried launch settings such as `?dataset=` or `?remote=`) reopens the
-app as it starts by default, and **Troubleshooting data loading** opens
-{doc}`../b_data_loading/08_troubleshooting_data_loading`.
+**Data the link names did not open.** When the dataset, file, catalog or
+server the address names (`?data=`, `?remote=`, `?dataset=`, a sample
+catalog's default) cannot be read, Cellucid still starts, without it. The
+panel over the empty viewer says **The data could not be opened** in one
+sentence; **Details** holds the exact message (the address, the host, the
+status), which the notification log and the browser console keep too.
+**Try again** reloads the same address; **Open without this link** closes the
+panel and removes those settings from the address, leaving Cellucid open to
+choose other data. See {doc}`../b_data_loading/08_troubleshooting_data_loading`.
 
-| The reason says | What it means | Go to |
+**The app itself could not start.** A full-screen card means Cellucid cannot
+run at all. Its heading says why, **Details** holds the exact message, and it
+offers **Try again**, **Open Cellucid without this link** when the address
+carried launch settings, and the guide for that problem.
+
+| The heading says | What it means | Go to |
 |---|---|---|
-| `WebGL2 is required but not supported in this browser.` | The browser gave the page no WebGL2 context: old browser, disabled hardware acceleration, a managed-device policy, or a remote-desktop session | {doc}`../a_orientation/02_system_requirements` |
-| Anything about a dataset catalog, a dataset, or a server response | The launch parameters pointed at something that could not be read | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
-| A blank page instead of a card, or “module script failed to load” | The app’s own files were not served correctly (wrong MIME type, opened via `file://`) | {doc}`../p_developer_docs/02_local_development_setup` |
+| **This browser cannot run Cellucid** | The browser gave the page no WebGL2 context (Details: `WebGL2 is required but not supported in this browser.`): old browser, disabled hardware acceleration, a managed-device policy, or a remote-desktop session | {doc}`../a_orientation/02_system_requirements` |
+| **Cellucid could not load** | One of the app’s own files failed to download, so nothing could run | reload; see *The line turns red* below |
+| **The data could not be opened** | The Cellucid server the page itself is served from (`cellucid serve`, Jupyter) could not be read | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
+| **A server did not answer** | A server startup was waiting on (the page's own server, the sample catalog, a published default view) sent nothing for 60 s | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
+| **Cellucid could not start** | Anything else, such as an invalid launch setting (an empty `?remote=`) | Details, then {doc}`../p_developer_docs/02_local_development_setup` or report it |
 
-If JavaScript is disabled you get a plain sentence instead: *“Cellucid requires
-JavaScript and WebGL2 to run.”*
+A blank page instead of a card, or “module script failed to load” in the
+console, means the app’s own files were not served correctly (wrong MIME type,
+opened via `file://`): see {doc}`../p_developer_docs/02_local_development_setup`.
+
+If JavaScript is disabled the card reads **Cellucid needs JavaScript**.
 
 ---
 
@@ -125,7 +137,7 @@ the browser itself, and each is reported by name rather than as a crash:
 | “That panel is not colored by a field, so there is nothing to select.” | The panel you pressed has no colour-by field; an annotation gesture reads the pressed panel's field, not the focused view's | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
 | “That gesture ended outside the view, so nothing was selected.” | The drag was released off the panel | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
 | “That gesture did not change the selection.” | The gesture worked; it just selected what was already selected | — |
-| “Color by a field first (Coloring & filtering), then Alt+click a cell.” | No panel on screen is colored by a field; choose a categorical or continuous obs field first | {doc}`../d_fields_coloring_legends/02_field_selector_ux` |
+| “Color by a field first (Coloring & filtering), then Alt+click a cell.” (Selection (i)) | No panel on screen is colored by a field; choose a categorical or continuous obs field first | {doc}`../d_fields_coloring_legends/02_field_selector_ux` |
 
 :::{warning}
 If you find advice anywhere telling you to **raise Point size so clicks land**,
@@ -213,9 +225,10 @@ dataset publishes no gene expression fields…”*.
 
 The data-source, renderer and benchmark controls now ship **disabled** and are
 enabled only once the code that responds to them is wired up. While the app is
-starting, a line under the dataset picker reads:
+starting, a line under the **Open data** heading, above the dataset picker,
+reads:
 
-> Starting Cellucid — the data controls below open as soon as it is ready.
+> Starting Cellucid. The controls below open as soon as it is ready.
 
 When it changes to *“Data sources are ready…”* the controls are live. Screen
 readers announce this, and each control is described by that line.
@@ -228,9 +241,10 @@ So:
   {ref}`changing-dataset-while-loading`).
 - **A click that did nothing at all** — this should no longer be reproducible.
   If it happens, it is a bug worth reporting.
-- **Never becomes ready** — that is a startup failure. Look for the “Cellucid
-  could not start” card, or check the console.
-- **The line turns red and reads “Cellucid could not load its code…”** — one of
+- **Never becomes ready** — that is a startup failure. Look for the full-screen
+  startup failure card, or check the console.
+- **The line turns red and reads “Cellucid could not load its code…”**, under a
+  card headed **Cellucid could not load** — one of
   the app's own files failed to download (a dropped connection, a proxy or
   firewall, a browser extension that blocks requests to this site, or a site
   update that landed while the page was loading), so nothing could start. Check
@@ -317,9 +331,9 @@ Use this section when Cellucid doesn’t start, your environment blocks required
 | IndexedDB | Community Annotation **Pull** fails with a message; the annotation view on screen is kept |
 | Clipboard write | “Copy” actions report that you must select the text manually |
 
-Cellucid does **not** use the File System Access API, `SharedArrayBuffer`, or
-`OffscreenCanvas`, so a browser or policy that blocks those is not the cause of
-your problem.
+Cellucid does **not** use the File System Access API or `SharedArrayBuffer`, so
+a browser or policy that blocks those is not the cause of your problem. Figure
+export (PNG and Hybrid SVG) draws its points on an `OffscreenCanvas`.
 
 **If you’re running locally (developer / power user)**
 
