@@ -98,7 +98,7 @@ Citation = "https://github.com/theislab/cellucid-python/blob/main/CITATION.cff"
 where = ["src"]
 
 [tool.setuptools.package-data]
-cellucid = ["py.typed"]
+cellucid = ["py.typed", "input_formats.json"]
 
 [tool.ruff]
 line-length = 100

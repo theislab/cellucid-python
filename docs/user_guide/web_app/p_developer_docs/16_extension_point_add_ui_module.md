@@ -186,8 +186,8 @@ Rules of the road:
 
 Every screen of the site follows the same design principles (the full list is
 "Site Design Principles" in that README), whether it is a panel, a dialog, a
-standalone page (`404.html`, `privacy.html`, `assets/auth/callback.html`) or a
-screen shown when the app cannot run:
+standalone page (`404.html`, `privacy.html`, `terms.html`, `accessibility.html`,
+`assets/auth/callback.html`) or a screen shown when the app cannot run:
 - tokens only, in light and dark, in the theme the visitor chose in the app;
 - the brand card's composition (`components/_welcome.css`): wordmark, one calm
   heading, one short sentence, clear actions, quiet links;

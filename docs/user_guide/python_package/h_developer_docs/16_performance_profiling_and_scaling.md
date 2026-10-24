@@ -51,8 +51,8 @@ Developer work should aim to improve one without catastrophically harming the ot
 The Python server computes nothing per request: it answers
 range requests with the store's bytes from disk, on a threaded HTTP/1.1 server
 with keep-alive connections. The reading — and so the performance — is the web
-app's HDF5/Zarr reader (`cellucid/assets/js/data/h5ad.js`, `zarr.js`,
-`base-anndata-adapter.js`).
+app's HDF5/Zarr reader (`cellucid/assets/js/data/anndata-file-source.js`,
+`data/anndata/`, `base-anndata-adapter.js`).
 
 What decides the cost:
 - matrix layout: a column-major (CSC) matrix reads one gene as one contiguous

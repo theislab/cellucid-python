@@ -164,12 +164,13 @@ def _create_common_server_parser() -> argparse.ArgumentParser:
 
 def _detect_data_format(path: Path) -> str:
     """
-    Detect the format of the data at the given path.
+    Detect the format of the data at the given path, by the input format
+    registry the web app reads too (``classify_anndata_path``).
 
     Returns:
-        'h5ad' - HDF5-based AnnData file
-        'zarr' - Zarr-based AnnData store (a folder, or zipped)
-        'unknown' - Unable to detect format
+        The input format id: 'h5ad' (an HDF5-based AnnData file) or 'zarr' (a
+        Zarr-based AnnData store, a folder or zipped); 'unknown' when the path
+        is none of them
     """
     from ._anndata_files import classify_anndata_path
 

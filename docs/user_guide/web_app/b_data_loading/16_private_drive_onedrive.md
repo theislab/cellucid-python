@@ -128,8 +128,9 @@ nothing else about it.
   id (`gdrive:<id>`, `onedrive:<drive>/<item>`), never a token or a download
   address.
 
-The privacy policy is at [www.cellucid.com/privacy.html](https://www.cellucid.com/privacy.html),
-linked as **Privacy** at the foot of the sidebar.
+The privacy policy is at [www.cellucid.com/privacy.html](https://www.cellucid.com/privacy.html)
+and the terms of use at [www.cellucid.com/terms.html](https://www.cellucid.com/terms.html),
+linked as **Privacy** and **Terms** at the foot of the sidebar.
 
 ## Why folders are refused
 

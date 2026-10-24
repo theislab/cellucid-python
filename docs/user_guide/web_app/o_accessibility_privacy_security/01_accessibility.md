@@ -322,12 +322,22 @@ are safe to rely on:
 - The app respects the operating system's **reduce motion** setting: animated
   transitions are clamped globally, and cinematic camera playback jumps to its
   final camera instead of animating through it.
+- Text contrast meets WCAG AA (4.5:1) in both themes: every text colour token
+  is measured against every text surface (`theme-contrast-contract`), and
+  every line of sidebar copy, the open colormap menu included, is measured as
+  rendered against the surface it sits on, in light and in dark.
+- Opening a dataset announces its progress: the opening step is a polite
+  status region, and notifications are announced the same way.
 
 What is **not** verified, and should not be assumed:
 
-- there is no automated WCAG audit in the test suite,
-- there is no colour-contrast assertion anywhere,
-- and no live region announces data-loading or rendering progress.
+- there is no automated WCAG audit in the test suite, and no formal audit has
+  been made, so Cellucid does not claim WCAG conformance;
+- rendering progress (a long draw or a smoke build) is not announced.
+
+The site's short accessibility statement, with how to report a barrier, is
+[www.cellucid.com/accessibility.html](https://www.cellucid.com/accessibility.html),
+linked as **Accessibility** at the foot of the sidebar.
 
 ---
 

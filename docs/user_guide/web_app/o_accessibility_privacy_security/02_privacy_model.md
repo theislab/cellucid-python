@@ -140,6 +140,10 @@ Pick any one of these; each is sufficient:
   is loaded as an optional part. Prefer one of the first two all the same,
   because they remove the code path rather than the request.
 
+Google Analytics keeps two first-party cookies of its own on the production
+hostnames, `_ga` and `_ga_K4774ZWGEQ`, to tell a returning browser from a new
+one. Cellucid itself sets no cookie, and no other origin gets either.
+
 Naming datasets neutrally (`cohort_a` rather than the study name) is a sensible
 habit regardless, since the same string also lands in figure metadata and
 session bundles.
@@ -470,6 +474,16 @@ Community Annotation requires a GitHub OAuth flow.
 Even though tokens are session-only, best practice is:
 - use it on trusted deployments (official `cellucid.com` or your audited self-host)
 - avoid signing in inside embedded/untrusted iframes
+
+### 4) Report a security problem privately
+
+Report a vulnerability to the contact in the
+[security policy](https://github.com/theislab/cellucid/security/policy), not
+in a public issue. The site publishes the same contact for automated tools at
+[www.cellucid.com/.well-known/security.txt](https://www.cellucid.com/.well-known/security.txt)
+(RFC 9116). The plain-language summaries for visitors are the site's
+[privacy policy](https://www.cellucid.com/privacy.html) and
+[terms of use](https://www.cellucid.com/terms.html).
 
 ---
 

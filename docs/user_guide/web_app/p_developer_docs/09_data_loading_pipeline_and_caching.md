@@ -34,12 +34,15 @@ The frontend separates data loading into two layers:
    - Output: a canonical `{ sourceType, datasetId, baseUrl, metadata }`.
 
 2) **File loading**
-   - Given `baseUrl` (`h5ad://<dataset id>/` or `zarr://<dataset id>/`), load
-     the dataset's identity, field inventories, embeddings and graph.
+   - Given `baseUrl` (`anndata://<dataset id>/`), load the dataset's
+     identity, field inventories, embeddings and graph.
    - Output: typed arrays + field loaders attached to `DataState`.
 
-Every dataset is one AnnData file, so every base URL is an `h5ad://` or
-`zarr://` URL. `anndata-provider.js` resolves a route under it to the AnnData
+Every dataset is read by the one AnnData reader through one data source
+(`anndata-file-source.js`, `AnnDataFileSource`), whatever file it arrived as,
+so every base URL is an `anndata://` URL; the format is a fact of the open
+dataset (`source.format`, `describeStorage()`), not of its address.
+`anndata-provider.js` resolves a route under it to the AnnData
 adapter of the dataset that owns it (`base-anndata-adapter.js`), which answers
 it from the file's `uns['cellucid']`, `obs`, `var`, `obsm` and `obsp`. Each
 route is named for the AnnData element it reads:
@@ -289,7 +292,7 @@ Behavior:
   reader; each listed file opened when chosen, its default session applied).
   A file or Zarr folder is opened by the AnnData
   reader worker in place, with parallel HTTP range requests, and served
-  through `h5ad://` / `zarr://` like a local file (see
+  through `anndata://` like a local file (see
   [Reading AnnData directly](#reading-anndata-directly)). How it is read
   follows the link the reader measures while opening: over a link as fast as
   a disk (the same machine or network) a cell-major (CSR) matrix is indexed
@@ -335,16 +338,20 @@ Behavior:
 - Lets the user pick, or drop on the viewer:
   - one `.h5ad` file, or one `.zarr.zip` or `.zip` archive, with
     **Open… › File…** (one file input, `#user-data-file-input`, accepting
-    `.h5ad` and `.zip`; `localFileKind()` reads it by its extension, and
+    the single-file endings of the format registry, `.h5ad` and `.zip`, set
+    from `filePickerAccept()`; `localFileLayout()` takes it by its name, and
     anything else is refused naming the file)
   - one AnnData Zarr store folder with **Open… › Zarr folder…** (a directory
     input, `#user-data-folder-input`; every file below it, each with its
     `webkitRelativePath`)
 - Each is opened as a candidate by the AnnData reader worker and adopted only
-  when it opened completely; it is served through `h5ad://` / `zarr://` URLs.
-  Its dataset id is `uns['cellucid']['id']`, else `h5ad_<file name>` or
-  `zarr_<store name>`; its name is `uns['cellucid']['name']` (or
-  `uns['title']`), else the file name.
+  when it opened completely; it is served through `anndata://` URLs. What it
+  is is decided by the reader from its content (a file's first bytes), so a
+  misnamed file opens as what it is. Its dataset id is
+  `uns['cellucid']['id']`, else `<format>_<name>` (`h5ad_<file name>`,
+  `zarr_<store name>`: `defaultDatasetIdOf`); its name is
+  `uns['cellucid']['name']` (or `uns['title']`), else the file name without
+  its format's ending.
 
 Common failure modes:
 - denied or policy-blocked local-file permissions
@@ -438,11 +445,39 @@ is read in place by Cellucid's own readers, in the AnnData reader worker
 only what a view asks for is read. The code is layered like a package; each
 layer depends only on the ones below it.
 
+**What a file is** is decided in one place, the input format registry
+(`data/input-formats.js`): each format's id (`h5ad`, `zarr`; the id a server
+states as `anndata.file.kind` and its health `format`, and the prefix of the
+id of a dataset that states none), the name endings of each layout it arrives
+in (`file`: an `.h5ad`; `zip`: a `.zarr.zip`; `folder`: a `.zarr` store), the
+container signatures (HDF5's at byte 0, 512, 1024 or 2048; ZIP's) and the
+marker files of a store folder. Every entry point asks it: the File… picker's
+`accept` list, a drop, the address bar's routing, the link providers, the
+dataset catalog, the served-store validator, and the reader worker. A name
+decides whether an entry point takes a file; once its bytes are at hand,
+its content decides what it is. `tests/fixtures/input-formats.json` is the
+registry's document byte for byte, and cellucid-python (`cellucid serve`) and
+cellucid-r read the same rules from their copies.
+
+**Opening** has one entry, `openDatasetStore({source, expect}, options)` in
+`data/anndata/open.js`. The source is one file `{file}` (a `File` or a remote
+file), a picked folder `{files, rootName}`, or a store folder on a web host
+`{url, name}`; `expect` is what a server or a catalog says it is
+(`{format, layout}`). It opens the container (`formats/hdf5`,
+`formats/zarr`), then `presentStore()` asks the layout views of the formats
+that container can hold (`data/anndata/views/index.js`) whether they
+recognise the root: a view presents its format as an AnnData store root
+without copying it (`views/view-nodes.js`, the nodes `older-layouts.js` is
+made of), and a root no view recognises is AnnData as stored. A format that is
+one stream is turned into an AnnData Zarr store by its transcoder
+(`data/anndata/transcode/index.js`) and opened with the Zarr reader. No view or
+transcoder is registered yet: every format read today is AnnData as stored.
+
 | Layer | Code | What it does |
 |---|---|---|
 | Bytes | `formats/io/` | Byte sources (a local `File`, HTTP range requests, memory) and **one byte reader per file**: reads asked for in the same task are planned together, neighbours closer than the merge gap become one request, requests are split at the request size so large reads run in parallel (`concurrency` at once: six per HTTP/1.1 host, the browser's limit), requests waiting for a slot take their neighbours with them when round trips cost more than bytes, metadata is cached in aligned blocks, and a read's `AbortSignal` cancels it. The merge gap and request size follow **the link as measured** (`link.js`, see below). `inflate.js` decompresses with the browser's native `DecompressionStream`, to an exact or bounded size, feeding it the input in 32 KiB slices so the size bound holds while it decodes (WebKit's decompressor inflates whatever is written to it at once: a chunk written whole expanded a 60 MB bomb past its 1 KiB declared size). `decode-pool.js` decodes chunks on decode workers (`decode-worker.js`, nested in the reader worker, started when a file opens: as many as the cores allow, less one for the reader thread and one for the page, and as many as the `decodeWorkers` memory share holds), small chunks that wait together going to a worker in one message, a background pass's chunks behind every other read's, so a background pass over a matrix leaves the reader thread free; where no worker can be made, chunks are decoded in the reader thread. The same workers take the reader thread's work on decoded values (`runOnDecodeWorker`: a function of a module that depends on nothing else, its arguments transferred, with a context each worker is sent once), as a cell subset's runs of genes. `activity.js` counts what each operation fetched and decoded, and which shared loads it reads for (`keys`: a job joining one adopts the read, `read-activity-log.js`). |
 | Formats | `formats/hdf5/`, `formats/zarr/`, `formats/zip/` | Cellucid's own HDF5 reader (every superblock, object header, group, attribute and chunk-index version; deflate, shuffle, Fletcher-32 and LZF), Zarr reader (v2 and v3 with sharding; gzip, zlib, Blosc, LZ4 and Zstandard; a picked folder, a ZIP, or a folder on a web host via consolidated metadata) and ZIP reader. Each opens a file as the **array store** of `formats/store.js`: the whole node tree (names, shapes, element types, attributes) is read at open, with a tree level's reads in flight together, so navigation is synchronous; array values are read on demand, fetching only the chunks a selection touches, in parallel, each decoded once (a per-file decoded-chunk cache serves neighbouring reads). |
-| AnnData | `data/anndata/` | **One** AnnData reader for both formats: the element rules of the current layout (`elements.js`, `dataframe.js`, `sparse.js`), files from anndata 0.6/0.7 and SeuratDisk presented in the current layout (`older-layouts.js`), slabbed reads with read-ahead and exact conversions (`values.js`), gene columns and cell rows per layout (`matrix-access.js`), and opening plus error explanations (`open.js`). |
+| AnnData | `data/anndata/` | **One** AnnData reader for both formats: the element rules of the current layout (`elements.js`, `dataframe.js`, `sparse.js`), files from anndata 0.6/0.7 and SeuratDisk presented in the current layout (`older-layouts.js`), slabbed reads with read-ahead and exact conversions (`values.js`), gene columns and cell rows per layout (`matrix-access.js`), and opening plus error explanations (`open.js`, `views/`, `transcode/`). |
 | Worker | `data/anndata-reader-worker.js`, `data/anndata-reader-client.js` | The reader's methods over `postMessage`, results transferred; live `activity` and `transfer` events. |
 
 **Genes and cells by layout.** Only what one gene (or cell) needs is read:
@@ -895,8 +930,8 @@ against a fake `fetch`.
 ## Loader layer (what is read)
 
 Most of the “what do we read?” logic lives in:
-- `cellucid/assets/js/data/data-loaders.js` (it accepts only `h5ad://` and
-  `zarr://` URLs)
+- `cellucid/assets/js/data/data-loaders.js` (it accepts only `anndata://`
+  URLs)
 - `cellucid/assets/js/data/base-anndata-adapter.js` (what each path means in
   the file)
 

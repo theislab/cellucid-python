@@ -15,7 +15,10 @@ what it is, and serves its bytes:
   metadata; when it does not, the server builds it in memory from the store's
   own metadata files and answers it in place of the missing document.
 
-This module classifies a path, reads the little a server reports and checks
+This module classifies a path by the input format registry the web app
+reads too (``input_formats.json``: the same names, signatures and folder
+markers, byte for byte the web app's ``tests/fixtures/input-formats.json``),
+reads the little a server reports and checks
 before it binds (the cell and gene counts and the names of the stored
 elements -- metadata only, never an array), finds arrays stored with a codec
 the browser's reader does not decode, builds missing consolidated metadata,
@@ -34,14 +37,80 @@ import zipfile
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import cache
+from importlib import resources
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     import anndata
 
-AnnDataKind = Literal["h5ad", "zarr"]
 AnnDataLayout = Literal["file", "zip", "folder"]
+
+#: The version of ``input_formats.json`` this module reads.
+INPUT_FORMATS_SCHEMA = 1
+
+
+@cache
+def input_formats() -> dict[str, Any]:
+    """The input format registry: the formats Cellucid reads, by id.
+
+    The packaged ``input_formats.json`` is byte for byte the web app's
+    ``tests/fixtures/input-formats.json`` (and cellucid-r's copy): the name
+    endings of each format and layout, the container signatures and the
+    folder markers. ``cellucid serve`` names a store with the same format id
+    (``kind``) the browser's reader uses.
+    """
+    document: dict[str, Any] = json.loads(
+        resources.files("cellucid").joinpath("input_formats.json").read_text("utf-8")
+    )
+    if document.get("schema") != INPUT_FORMATS_SCHEMA:
+        raise RuntimeError(
+            f"input_formats.json has schema {document.get('schema')!r}; "
+            f"this package reads schema {INPUT_FORMATS_SCHEMA}."
+        )
+    return document
+
+
+def _format_of_name(name: str, layouts: tuple[str, ...]) -> tuple[dict[str, Any], str] | None:
+    """The format and layout whose longest name ending ``name`` ends with."""
+    lower = name.lower()
+    best: tuple[dict[str, Any], str, str] | None = None
+    for entry in input_formats()["formats"]:
+        for layout in layouts:
+            for ending in entry["names"].get(layout, []):
+                if lower.endswith(ending) and (best is None or len(ending) > len(best[2])):
+                    best = (entry, layout, ending)
+    return None if best is None else (best[0], best[1])
+
+
+def _layout_of_head(head: bytes) -> tuple[str, str] | None:
+    """The layout and container a file's first bytes carry the signature of."""
+    for signature in input_formats()["signatures"]:
+        magic = bytes.fromhex(signature["hex"])
+        for offset in signature["offsets"]:
+            if head[offset : offset + len(magic)] == magic:
+                return signature["layout"], signature["container"]
+    return None
+
+
+def _format_of_container(container: str, layout: str) -> dict[str, Any]:
+    """The format a container holds when it arrives in ``layout``."""
+    entry: dict[str, Any]
+    for entry in input_formats()["formats"]:
+        if entry["container"] == container and layout in entry["names"]:
+            return entry
+    raise ValueError(f"No input format is a {container} container in a {layout} layout.")
+
+
+def _file_endings() -> str:
+    endings = [
+        names[0]
+        for entry in input_formats()["formats"]
+        for layout, names in entry["names"].items()
+        if layout != "folder"
+    ]
+    return " or ".join(endings)
 
 _ZARR_V2_ROOT_KEYS = (".zgroup", ".zattrs", ".zmetadata")
 _ZARR_V2_METADATA_FILES = frozenset({".zgroup", ".zattrs", ".zarray"})
@@ -57,7 +126,8 @@ class AnnDataStore:
     path
         The resolved file or folder.
     kind
-        ``"h5ad"`` or ``"zarr"``.
+        The input format id (``input_formats.json``): ``"h5ad"`` or
+        ``"zarr"``.
     layout
         ``"file"`` (an ``.h5ad``), ``"zip"`` (a zipped Zarr store) or
         ``"folder"`` (a Zarr store folder).
@@ -69,10 +139,18 @@ class AnnDataStore:
     """
 
     path: Path
-    kind: AnnDataKind
+    kind: str
     layout: AnnDataLayout
     zip_root: str = ""
     zarr_format: int | None = None
+
+
+def _container_of(store: AnnDataStore) -> str:
+    """The container (``hdf5`` or ``zarr``) a store's format is read with."""
+    for entry in input_formats()["formats"]:
+        if entry["id"] == store.kind:
+            return str(entry["container"])
+    raise ValueError(f"Unknown input format {store.kind!r}.")
 
 
 def _zip_store_root(path: Path) -> str | None:
@@ -99,6 +177,12 @@ def _zip_store_root(path: Path) -> str | None:
 def classify_anndata_path(path: str | Path) -> AnnDataStore:
     """Classify one ``.h5ad`` file, zipped Zarr store, or Zarr store folder.
 
+    The rules are the input format registry's (``input_formats.json``), as
+    the web app applies them: a file is taken when its name ends as a format
+    names it, and is then what its first bytes say (an HDF5 file named
+    ``.zip`` is an ``.h5ad``), its name deciding only when they carry no
+    signature; a folder is a Zarr store by its root metadata.
+
     Raises
     ------
     FileNotFoundError
@@ -110,9 +194,22 @@ def classify_anndata_path(path: str | Path) -> AnnDataStore:
     if not resolved.exists():
         raise FileNotFoundError(f"Path not found: {resolved}")
     if resolved.is_file():
-        if resolved.suffix == ".h5ad":
-            return AnnDataStore(resolved, "h5ad", "file")
-        if resolved.suffix == ".zip":
+        named = _format_of_name(resolved.name, ("file", "zip"))
+        if named is None:
+            raise ValueError(
+                f"An AnnData file must be an {_file_endings()} file: {resolved}"
+            )
+        width = max(
+            max(signature["offsets"]) + len(signature["hex"]) // 2
+            for signature in input_formats()["signatures"]
+        )
+        with resolved.open("rb") as file:
+            sniffed = _layout_of_head(file.read(width))
+        entry, layout = named
+        if sniffed is not None:
+            layout = sniffed[0]
+            entry = _format_of_container(sniffed[1], layout)
+        if layout == "zip":
             root = _zip_store_root(resolved)
             if root is None:
                 raise ValueError(
@@ -120,19 +217,18 @@ def classify_anndata_path(path: str | Path) -> AnnDataStore:
                     "zarr.json). A zipped AnnData store is the store folder "
                     "written by adata.write_zarr, zipped."
                 )
-            return AnnDataStore(resolved, "zarr", "zip", zip_root=root)
-        raise ValueError(
-            f"An AnnData file must be an .h5ad file or a zipped Zarr store (.zip): {resolved}"
-        )
+            return AnnDataStore(resolved, entry["id"], "zip", zip_root=root)
+        return AnnDataStore(resolved, entry["id"], "file")
     if not resolved.is_dir():
         raise ValueError(
             f"AnnData path must be an .h5ad file, a zipped Zarr store or a Zarr store "
             f"folder: {resolved}"
         )
+    folder_format = _format_of_container("zarr", "folder")["id"]
     if (resolved / _ZARR_V3_METADATA_FILE).is_file():
-        return AnnDataStore(resolved, "zarr", "folder", zarr_format=3)
+        return AnnDataStore(resolved, folder_format, "folder", zarr_format=3)
     if (resolved / ".zgroup").is_file():
-        return AnnDataStore(resolved, "zarr", "folder", zarr_format=2)
+        return AnnDataStore(resolved, folder_format, "folder", zarr_format=2)
     raise ValueError(
         f"{resolved} is not a Zarr store: it has no zarr.json (Zarr v3) or .zgroup "
         "(Zarr v2) at its root."
@@ -258,7 +354,7 @@ def _contents_of_root(root: Any) -> AnnDataContents:
 def _open_root(store: AnnDataStore) -> Iterator[Any]:
     """The store's root group, open for reading metadata."""
     try:
-        if store.kind == "h5ad":
+        if _container_of(store) == "hdf5":
             import h5py
 
             with h5py.File(store.path, "r") as file:
@@ -498,7 +594,7 @@ def browser_undecodable(store: AnnDataStore) -> list[str]:
     Read from metadata only (HDF5 filter pipelines, Zarr compressors, filters
     and codecs). An empty list means the browser reads the whole store.
     """
-    if store.kind == "h5ad":
+    if _container_of(store) == "hdf5":
         return _hdf5_undecodable(store.path)
     found = []
     for key, document in _zarr_metadata_documents(store):
@@ -512,7 +608,7 @@ def read_into_memory(store: AnnDataStore) -> anndata.AnnData:
     """Read a whole store into memory with anndata (and its codec plugins)."""
     import anndata as ad
 
-    if store.kind == "h5ad":
+    if _container_of(store) == "hdf5":
         return ad.read_h5ad(store.path)
     if store.layout == "zip":
         import zarr

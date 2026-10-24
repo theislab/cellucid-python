@@ -77,11 +77,19 @@ Implementation lives in:
 
 Detection rules:
 
-`_detect_data_format` asks `_anndata_files.classify_anndata_path`:
+`_detect_data_format` asks `_anndata_files.classify_anndata_path`, which
+applies the input format registry the web app reads too (the packaged
+`input_formats.json`, byte for byte the web app's
+`tests/fixtures/input-formats.json`; `tests/test_input_formats.py` pins its
+digest). The detected format is the registry's id, which the server states
+as the store's `kind` and its health `format`:
 
-1) A regular file is `h5ad` when it has the exact `.h5ad` suffix, and `zarr`
-   when it is a `.zip` archive holding a Zarr store (a `.zgroup`, `.zmetadata`
-   or `zarr.json`).
+1) A regular file is taken when its name ends as a format names it (`.h5ad`,
+   `.zip`). It is then what its first bytes say: the HDF5 signature (at byte
+   0, 512, 1024 or 2048) makes it `h5ad`, the ZIP signature a zipped `zarr`
+   store, whatever its name; the name decides only when the bytes carry no
+   signature. A `.zip` must hold a Zarr store (a `.zgroup`, `.zmetadata` or
+   `zarr.json`).
 2) A directory is `zarr` when its root is a Zarr v3 (`zarr.json`) or v2
    (`.zgroup`) group. A `.zarr` directory name alone does not establish the
    format, and a valid store does not need it.
