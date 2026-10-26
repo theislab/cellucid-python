@@ -1,425 +1,347 @@
-# Local & Remote Demo (Share Without Running a Server)
+# Share Without Running a Server (Publish a Dataset Catalog)
 
-This tutorial shows how to **export a dataset once** and then view/share it **without** running a long-lived Python server.
+This tutorial shows how to publish AnnData files so anyone can open them in
+Cellucid from one link, **without** running a server.
 
-You’ll learn two closely-related workflows:
+You’ll learn two closely related workflows:
 
-1) **Remote demo (recommended): public GitHub repo**
-   - You push an `exports/` folder to a **public** GitHub repo.
-   - Anyone can open Cellucid and load your dataset from that repo.
+1) **Public catalog (recommended): a GitHub repository or any static host**
+   - You publish a folder holding your AnnData files and a small `datasets.json`.
+   - Anyone opens Cellucid with `?data=<that folder>` and picks a dataset.
 
-2) **Local demo (optional): run the web app locally**
-   - You put your exported dataset inside a local copy of the Cellucid web app.
-   - You run a simple static file server (or just a local host).
-   - This is useful for offline demos or if you want to host Cellucid yourself.
+2) **Your own sample list (optional): run or deploy the web app yourself**
+   - You point the web app's **Sample dataset** list at your catalog.
+   - Useful for offline demos, an intranet, or your own deployment.
 
-If you just want to load your own local files right now, use {doc}`03_browser_file_picker_tutorial`.
-For a complete, inspectable public repository with three tiny datasets, use
-{doc}`11_custom_dataset_repository`.
+To publish a single file, you need no catalog at all: a link to the `.h5ad`,
+`.zarr.zip` or Zarr store folder opens it ({doc}`14_open_from_link`). If you
+just want to open your own local files right now, use
+{doc}`03_browser_file_picker_tutorial`. For a complete, inspectable public
+repository with five tiny datasets, use {doc}`11_custom_dataset_repository`.
 
 ## At A Glance
 
 **Audience**
-- Wet lab / beginner: follow the step-by-step checklist; you do not need to understand file formats.
-- Computational users: pay attention to dataset IDs, compression/quantization, and GitHub limits.
-- Developers: this explains the exact directory structure (`datasets.json` + `dataset_identity.json`) used by the frontend.
+- Wet lab / beginner: follow the checklist; you do not need to understand file formats.
+- Computational users: pay attention to dataset ids, file layout and host limits.
+- Developers: this is the exact `datasets.json` contract the web app reads.
 
 **Time**
-- Minimum viable share (one dataset, public repo): ~15–30 minutes (mostly uploading)
-- Adding multiple datasets + polish: ~30–60 minutes
+- One dataset in a public repository: ~15–30 minutes (mostly uploading)
 
 **Prerequisites**
-- Python environment with `cellucid` installed
-- A dataset in one of these forms:
-  - AnnData object (`adata`)
-  - a `.h5ad` file
-  - a `.zarr` directory
-- (For remote demo) a GitHub account + willingness to publish a **public** repo
+- Python with `cellucid` installed (or R with `cellucid`), to write
+  Cellucid-ready AnnData files; any AnnData file works, too
+- For a public catalog: a GitHub account or a static host that allows
+  cross-origin reads (CORS)
 
 ## Important: Privacy and Sharing
 
-When you publish exports to a public GitHub repo, you are effectively publishing your dataset.
+Publishing files on a public host publishes your dataset.
 
 Before you do this:
-- Verify there is **no private metadata** in `obs` (e.g. patient IDs, sample identifiers, internal notes).
-- Consider removing/renaming columns that should not be public.
-- Consider publishing only a reduced dataset or a subset of fields.
+- Verify there is **no private metadata** in `obs` (e.g. patient ids, internal notes).
+- Remove or rename columns that should not be public; `prepare(obs_keys=...)`
+  writes only the columns you name.
 
 If you need **private** sharing:
 - Use **Server Mode** ({doc}`04_server_tutorial`) on a private machine + VPN/SSH tunnel.
-- Or use the **Browser File Picker** on each collaborator’s machine.
+- Or send the file and let each collaborator open it with **Open…**.
 
-## The Required Folder Layout (Do This Exactly)
+## The Catalog Folder Layout
 
-Cellucid’s GitHub loader expects a top-level `datasets.json` **manifest** plus one folder per dataset.
-
-Recommended layout:
+A **dataset catalog** is a folder holding `datasets.json` and the AnnData files
+it lists:
 
 ```text
-exports/                     # "exports root" (this is what you point Cellucid at)
-├── datasets.json            # required
-├── pbmc_demo/               # dataset folder (name can differ from dataset_id)
-│   ├── dataset_identity.json
-│   ├── embeddings/          # one coordinate file per embedding
-│   ├── obs_manifest.json
-│   ├── var_manifest.json
-│   ├── obs/
-│   ├── var/
-│   ├── vectors/             # optional (vector fields like velocity/drift)
-│   └── connectivity/        # optional
-└── another_dataset/
-    └── ...
+catalog/                         # the folder you link to
+├── datasets.json                # required
+├── pbmc_demo.zarr/              # a Zarr store folder (recommended on static hosts)
+├── lung_atlas.h5ad              # an .h5ad file
+├── organoid.zarr.zip            # a zipped Zarr store
+└── pbmc_demo.cellucid-session   # optional: a dataset's default view
 ```
 
 **Key rules**
-- `datasets.json` is at the **exports root**, not inside the dataset folder.
-- Each dataset folder must contain a `dataset_identity.json`.
-- All paths in `datasets.json` are **relative** to the exports root.
+- `datasets.json` sits in the folder you link to.
+- Every path in it is **relative** to that folder, and stays below it.
+- Files can sit in subfolders (`data/pbmc_demo.zarr/`).
 
-## Step 1 — Export Your Dataset (Create the Dataset Folder)
+## Step 1 — Write Cellucid-ready AnnData Files
 
-You can export from:
-- an in-memory `AnnData` (`adata`)
-- a `.h5ad` file
-- a `.zarr` directory
-
-The central idea:
-- You create one dataset folder, e.g. `./exports/pbmc_demo/`.
-- That folder is what Cellucid will actually fetch.
+Any AnnData file opens, but a file written by `cellucid.prepare()` (Python) or
+`cellucid_prepare()` (R) reads fastest over a network and carries its own name,
+description, citation and launch defaults in `uns['cellucid']`.
 
 ```python
-from __future__ import annotations
+import cellucid
 
-from pathlib import Path
-
-from cellucid import prepare
-
-export_dir = Path("./exports/pbmc_demo")
-
-prepare(
-    latent_space=adata.obsm["X_pca"],
+cellucid.prepare(
+    "catalog/pbmc_demo.zarr",
+    format="zarr",
+    embeddings={"X_umap": adata.obsm["X_umap"], "X_pca": adata.obsm["X_pca"]},
     obs=adata.obs,
     var=adata.var,
     gene_expression=adata.X,
     connectivities=adata.obsp["connectivities"],
-    embeddings={
-        "X_umap_1d": adata.obsm["X_umap_1d"],
-        "X_umap_2d": adata.obsm["X_umap_2d"],
-        "X_umap_3d": adata.obsm["X_umap_3d"],
-    },
-    vector_fields={
-        "velocity": {
-            "X_umap_1d": adata.obsm["velocity_umap_1d"],
-            "X_umap_2d": adata.obsm["velocity_umap_2d"],
-            "X_umap_3d": adata.obsm["velocity_umap_3d"],
-        },
-    },
-    out_dir=export_dir,
     dataset_id="pbmc_demo",
     dataset_name="PBMC demo",
-    dataset_description="PBMC scRNA-seq with aligned velocity",
-    obs_categorical_dtype="uint16",
-    compression=6,
-    var_quantization=8,
-    obs_continuous_quantization=8,
+    dataset_description="PBMC scRNA-seq",
+    latent_key="X_pca",
 )
 ```
 
-This complete call assumes `adata` contains every named matrix. The executable
-{doc}`../../python_package/f_notebooks_tutorials/prepare_pancreas` notebook
-deliberately exports only the checked-in source file's real 2-D UMAP and
-connectivity; it does not invent 1-D/3-D coordinates or velocity. For the full
-standard Pancreas artifact with deterministic 1-D, 2-D, and 3-D embeddings and
-aligned velocity, use {doc}`10_standard_pancreas_dataset` and the reproducible
-{doc}`../../python_package/f_notebooks_tutorials/33_vector_fields_and_velocity_overlay_end_to_end`
-workflow. For a dataset without a particular optional product, omit that
-product deliberately—for example, omit both `X_umap_3d` and
-`velocity_umap_3d` rather than inventing a third coordinate or passing `None`.
+The arguments you should understand, even as a beginner:
 
-### Export knobs you should understand (even as a beginner)
+- `dataset_id`: a **stable** identifier; sessions and community annotations
+  are keyed by it. 1–180 ASCII letters, digits, `.`, `_` or `-`, starting
+  with a letter or digit and not ending with `.`. Avoid changing it after you
+  publish ({doc}`06_dataset_identity_why_it_matters`).
+- `dataset_name` / `dataset_description`: what the dataset list and the
+  **Dataset** box show.
+- `format` (required; the path ends in its suffix): `"zarr"` is a folder of
+  many small files, for GitHub (no file over 100 MB, no LFS); `"h5ad"` is one
+  file, for single-file hosts (Zenodo, Figshare, Hugging Face, S3, a lab
+  server), local files, `cellucid serve` and Jupyter; `"zarr.zip"` is the
+  Zarr store in one file, wherever an `.h5ad` goes
+  ({ref}`which-format`).
+- `vector_fields` (optional): per-cell vectors drawn by the velocity overlay
+  ({doc}`../i_vector_field_velocity/index`).
 
-- `dataset_id`:
-  - A **stable** identifier that will appear in URLs and manifests.
-  - Use 1–180 ASCII characters: start with a letter or digit, then use only
-    letters, digits, `.`, `_`, or `-`; do not end with `.` or use a reserved
-    Windows device name.
-  - Avoid changing it after you publish.
-  - See {doc}`06_dataset_identity_why_it_matters` for what breaks when it changes.
+Every argument: {doc}`../../python_package/c_data_preparation_api/index`.
 
-- `dataset_name` / `dataset_description`:
-  - Human-friendly labels shown in the UI. `dataset_name` must be non-empty
-    and unpadded, without control characters; Unicode is supported.
+## Step 2 — Write `datasets.json`
 
-- `compression` (gzip level):
-  - Higher = smaller files, slower export.
-  - A good starting point is `compression=6`.
+`datasets.json` names the datasets, where each file is, and which one opens
+first:
 
-- `var_quantization` and `obs_continuous_quantization`:
-  - Controls how values are compressed/quantized.
-  - Smaller bit-depth makes exports much smaller but loses precision.
-  - For visualization, `8` is often a good default.
-
-- `vector_fields` (optional):
-  - Per-cell displacement vectors visualized by the vector field / velocity overlay.
-  - Must be provided per-dimension (`*_umap_2d`, `*_umap_3d`) and match the same cell order as the embedding.
-  - If you export them, you’ll see a vector-field dropdown in the UI after loading.
-  - See {doc}`../i_vector_field_velocity/index` for naming and UI controls.
-
-If you want the full, parameter-by-parameter specification, see the Python package guide section:
-- {doc}`../../python_package/c_data_preparation_api/index`
-
-## Step 2 — Generate `datasets.json` (Create the Exports Manifest)
-
-Once you have one (or many) dataset folders under `./exports/`, generate `datasets.json`.
-
-This file is required for the GitHub loader.
-
-```python
-from __future__ import annotations
-
-from cellucid.prepare_data import generate_datasets_manifest
-
-# This scans ./exports/*/dataset_identity.json
-# and writes ./exports/datasets.json
-generate_datasets_manifest("./exports", default_dataset="pbmc_demo")
+```json
+{
+  "schema": 2,
+  "default": "pbmc_demo",
+  "datasets": [
+    { "id": "pbmc_demo", "path": "pbmc_demo.zarr/" },
+    { "id": "lung_atlas", "path": "lung_atlas.h5ad" }
+  ]
+}
 ```
+
+- `schema` is the integer `2`.
+- `default` is the id of the dataset the catalog opens on.
+- Each `id` is the dataset's stable id. When a file states its own id in
+  `uns['cellucid']['id']` (every file `prepare()` writes does), the catalog
+  must list it under that same id, or the file is refused when it is opened.
+- Each `path` ends in `/` for a Zarr store folder, `.h5ad` for an HDF5 file,
+  or `.zarr.zip` for a zipped store; a file in any other format Cellucid reads
+  (`.h5mu`, `.loom`, `.h5`, `.rds`, …) ends in its own ending. Write each part in its canonical URL
+  encoding (`cell%20atlas.h5ad`), without `.`, `..`, a query or a fragment.
+
+The dataset list shows each dataset's name and cell count, read from its
+file: names, descriptions and citations are never written in the catalog.
+While the dataset Cellucid opens first is still loading, the list already
+offers every entry under the name its path gives it (`suo` for `suo.zarr/`),
+the one being opened marked *· opening…*; the names and counts follow once
+the files have been read.
+The full contract, including the optional default session, is in
+{doc}`07_file_format_expectations`.
 
 ## Step 3 — Validate Locally (Before You Upload)
 
-Before publishing, verify that your export loads:
+- **One file:** open it with **Open…** under **File or folder** (**File…**
+  for an `.h5ad`, a `.zarr.zip` or another file, **Folder…** for a store folder). If it
+  opens there, it will open from a link.
+- **The whole catalog:** serve the folder with any static server that sends
+  CORS headers, then open `?data=http://127.0.0.1:8000/` in Cellucid:
 
-- **Fastest validation:** open Cellucid and use the **Prepared** file picker (Option #3).
-- **Most realistic validation:** run the CLI server (Option #6) and open the
-  exact printed prepared-data Viewer URL
-  (`http://127.0.0.1:<port>/?source=remote`).
+  ```bash
+  cd catalog
+  python -m http.server 8000   # add CORS headers if Cellucid runs on another origin
+  ```
 
-This avoids debugging “GitHub problems” that are actually export problems.
+This avoids debugging “hosting problems” that are actually file problems.
 
 ```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
-:alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
+:alt: The whole Cellucid window with the Pancreas sample coloured by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colours.
 :width: 1440px
 
 A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
 ```
 
-## Step 4 — Publish to a Public GitHub Repo (Remote Demo)
+## Step 4 — Publish to a Public GitHub Repository
 
 ### 4.1 Create a repository
 
-You can use either:
-- a repo that contains only data (recommended), e.g. `my-lab/cellucid-exports`
-- a general repo that contains code + an `exports/` folder
+A data-only repository is simplest, e.g. `my-lab/cellucid-data`, with the
+catalog folder at its root or in a folder such as `catalog/`.
 
-### 4.2 Commit the exports root
+### 4.2 GitHub constraints (do not skip)
 
-The repo must include:
-- `exports/datasets.json`
-- at least one dataset folder under `exports/`
+- **Public repository only**: Cellucid reads files through
+  `raw.githubusercontent.com`.
+- **Branches**: shorthand without a branch reads the repository's default
+  branch (whatever it is called); Cellucid never probes branch names. Name
+  another branch explicitly:
+  `owner/repo@my-branch/catalog`, or
+  `https://github.com/owner/repo/tree/my-branch/catalog`.
+- **File size**: GitHub refuses files over 100 MiB. A Zarr store folder is
+  many small chunk files, so it fits where a large `.h5ad` does not; see
+  {doc}`15_host_on_github` for the steps, the limits and the Git LFS
+  trade-off.
 
-### 4.3 GitHub constraints (do not skip)
+### 4.3 What to enter in Cellucid
 
-- **Public repo only**: Cellucid’s GitHub loader fetches data via `raw.githubusercontent.com`.
-- **Branches**:
-  - Shorthand without a branch always means `main`; Cellucid does not probe
-    other branch names.
-  - If your exports live on a different branch, name it explicitly:
-    - `owner/repo@my-branch/exports`
-    - or `https://github.com/owner/repo/tree/my-branch/exports`
-- **File size limits**:
-  - GitHub blocks ordinary Git files larger than 100 MiB.
-  - Git LFS raw repository content is a pointer, not a transparent replacement
-    for the prepared bytes Cellucid requests.
+Expand **Session**, type the path into the **Link or server** bar under
+**Open data**, and press **Open** (or Enter):
 
-If your export is too large for GitHub:
-- Use **Server Mode** instead ({doc}`04_server_tutorial`).
-
-### 4.4 What repo path to enter in Cellucid
-
-Expand **Session**, type the path into the **GitHub data:** field, and press
-**Connect**. Enter one of these:
-
-- `owner/repo` (if `datasets.json` is at repo root)
-- `owner/repo/exports` (if your exports root is in a folder)
-- `owner/repo@my-branch/exports` (if your exports root is on a custom branch)
+- `owner/repo` (if `datasets.json` is at the repository root)
+- `owner/repo/catalog` (if your catalog is in a folder)
+- `owner/repo@my-branch/catalog` (on another branch)
 
 ```{figure} ../../../_static/screenshots/data_loading/connect-github-catalog.png
-:alt: Close-up of the GitHub data control with an owner/repo/exports path typed into the text field and a mouse pointer resting on the Connect button beside it.
+:alt: The Link or server bar with the GitHub path "theislab/cellucid-demo-custom-datasets/catalog" typed into it and the pointer on its Open button.
 :width: 496px
 
-The **GitHub data:** field takes the exports root, not a full URL and not a
-single dataset directory. Press **Connect** beside it.
+The **Link or server** bar takes the catalog folder (or one file in it).
+Press **Open** beside it.
 ```
 
-Cellucid will then:
-- fetch and validate `datasets.json`
-- fetch and validate every listed `dataset_identity.json`
-- show the validated dataset list
-- fetch the selected dataset's remaining files on demand
+Cellucid then reads `datasets.json`, describes every listed file from its
+metadata (name, cell and gene counts), lists them in the dataset dropdown
+(labelled "Dataset from <host>" while the catalog is connected), and opens the
+catalog's default dataset; each other dataset is opened when you choose it. A
+line under the bar reads **Link** with the address and **Disconnect**, which
+brings the samples back.
 
 **Shareable URL**
 
-Once it works, share the exact dataset. The `dataset=` field is required when
-the catalog contains multiple datasets:
-
 ```text
-https://www.cellucid.com/?github=owner/repo/exports&dataset=pbmc_demo
+https://www.cellucid.com/?data=gh:owner/repo/catalog&dataset=pbmc_demo
 ```
 
-(Replace `owner/repo/exports` with your chosen path.)
+## Optional: Your Own Sample Dataset List
 
-## Optional: “Local Demo” (Run the Web App Locally With Demo Exports)
+The **Sample dataset** list reads the catalog named by the page's
+`<meta name="cellucid-sample-catalog" content="...">` element in
+`cellucid/index.html` (www.cellucid.com names
+`https://theislab.github.io/cellucid-datasets/anndata/`). One `sampleCatalog`
+query field replaces it for a single launch:
 
-The web app’s `local-demo` source loads from an **exports base URL** (it does not have to be inside the web app repo).
+```text
+http://localhost:8000/?sampleCatalog=http://localhost:9000/catalog/
+```
 
-In production, Cellucid’s sample datasets are intended to live in a separate repository/site (e.g. `cellucid-datasets`) and the web app is configured via:
-- `<meta name="cellucid-exports-base-url" content="...">` in `cellucid/index.html`, or
-- `?exportsBaseUrl=...` as a runtime override.
-
-High-level local-dev workflow:
-- Run the web app locally.
-- Point `exportsBaseUrl` at any static host that serves `exports/datasets.json` + dataset folders.
+The value is an absolute `http(s)` folder address ending in `/`. This is a
+development and deployment hook; to share a catalog with others, use a data
+link, `?data=https://host/catalog/` ({doc}`14_open_from_link`).
 
 ```{note}
-If your exports host is a different origin, it must authorize the Cellucid
-origin with CORS headers so the browser can fetch the JSON and binary files.
-There is no alternate browser-side transport for a host that rejects the
-cross-origin requests.
+A catalog on another origin must allow the Cellucid origin with CORS headers,
+including range requests (`Range` request header; `Content-Range` and
+`Content-Length` exposed), so the browser can read the files in place.
 ```
 
 ## Edge Cases
 
-- **Changed dataset IDs after publishing**: links break; collaborators load the wrong dataset.
-- **Missing `datasets.json`**: GitHub loader cannot discover datasets.
-- **Wrong repo path**: the loader fetches `datasets.json` from the wrong folder (404).
-- **Wrong branch**: your exports root is on a different branch than you think (pin the branch in the repo path).
-- **Large files**: GitHub may reject pushes, or raw fetch may be blocked by a corporate proxy.
-- **Vector fields “missing” after publish**:
-  - You didn’t export them (no `vectors/` directory and no `vector_fields` block in `dataset_identity.json`).
-  - Or you exported only 2D vectors but you are viewing the dataset in 3D (dimension mismatch).
+- **Changed dataset ids after publishing**: links break; saved sessions and
+  community annotations no longer match.
+- **A file whose `uns['cellucid']['id']` differs from its catalog id**: the
+  file is refused when chosen; list it under the id it states.
+- **Wrong repository path or branch**: Cellucid reports that the folder holds
+  no `datasets.json`, naming the address it read.
+- **A Zarr store without consolidated metadata** on a static host: write it
+  with `prepare()` or call `zarr.consolidate_metadata()` before publishing.
+- **GitHub Pages and hidden files**: Jekyll skips dot-files such as `.zmetadata`
+  and `.zgroup`; publish a `.nojekyll` file at the site root.
 
 ## Troubleshooting (Large, Practical)
 
-Use this section like a lookup table.
-
----
-
-### Symptom: “Connected to GitHub, but it says `datasets.json not found`”
+### Symptom: “A link says the folder holds no `datasets.json`”
 
 **Likely causes (ordered)**
-1) Your repo path points at the wrong folder.
-2) You uploaded only a single dataset folder and forgot `datasets.json`.
-3) Your exports root is in a different branch than you think.
+1) The path points at the wrong folder.
+2) The catalog is on another branch than you think.
+3) You published the files but no `datasets.json`.
 
 **How to confirm**
-- Read the second notification. Cellucid prints the exact address it asked for,
-  in the form:
+- Read the notification. It names the folder Cellucid read:
 
   ```text
-  Resource not found: https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>/datasets.json
+  https://raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>/ holds no datasets.json, so it is not a dataset catalog. …
   ```
 
-- Open that URL in a browser tab. If it 404s there too, the path or branch is
-  wrong; if it loads there but not in Cellucid, suspect the network.
+- Open that folder's `datasets.json` in a browser tab. If it 404s there too,
+  the path or branch is wrong; if it loads there but not in Cellucid, suspect
+  the network or CORS.
 
 ```{figure} ../../../_static/screenshots/data_loading/fail-github-catalog-not-found.png
-:alt: Two stacked Cellucid notifications, the upper naming the raw.githubusercontent.com URL that returned not found and the lower explaining that the GitHub repository could not be reached and suggesting a check for a typo.
-:width: 776px
+:alt: A Cellucid notification saying the linked data could not be opened because the GitHub folder holds no datasets.json, after a repository path rather than its catalog folder was opened.
+:width: 760px
 
-What a wrong repository path looks like. The upper notification hands you the
-URL to test by hand.
+What a wrong repository path looks like: one notification, *The linked data
+could not be opened: … holds no datasets.json, so it is not a dataset
+catalog. …*, which names the folder to test by hand.
 ```
 
-**Fix**
-- Regenerate `datasets.json` with an explicit catalog default:
+---
 
-  ```python
-  generate_datasets_manifest(
-      "./exports",
-      default_dataset="pbmc_demo",
-  )
-  ```
+### Symptom: “Invalid datasets.json: the catalog must contain exactly: datasets, default, schema (missing: schema)”
 
-- Ensure the file is at the exports root you are pointing Cellucid at.
-
-**Prevention**
-- Keep a single exports root folder named `exports/` in your repo.
-- Always validate the raw URL before sending the link to collaborators.
+The catalog has no `"schema"` key. A catalog holds exactly `"schema": 2`,
+`"default"` and `"datasets"`, and lists the files it serves (AnnData written
+with `prepare()` reads fastest).
 
 ---
 
-### Symptom: “Datasets list shows up, but loading a dataset fails (404 for a file)”
+### Symptom: “The dataset list shows up, but choosing a dataset fails”
 
 **Likely causes**
-- `datasets.json` lists a dataset `path` that does not exist.
-- You renamed the dataset folder after generating the manifest.
-
-**How to confirm**
-- Compare `datasets.json["datasets"][i]["path"]` to the actual repo folder names.
+- A `path` names a file or folder that does not exist (404).
+- The file states another id than its catalog entry.
+- The file is not in a format Cellucid reads, or a Zarr store lacks its metadata.
 
 **Fix**
-- Re-run `generate_datasets_manifest` after renaming folders.
+- Compare each `path` with the published names; the notification names the
+  dataset and the reason.
 
 ---
 
-### Symptom: “It loads, but gene search is extremely slow”
+### Symptom: “It loads, but gene search is slow”
 
 **Likely causes**
-- Export not compressed/quantized (files too large)
-- Using `.h5ad` browser mode (not an export)
-- Huge dataset where each gene vector is large even after compression
+- The expression matrix is stored cell-major (CSR): the first gene waits for
+  its index to be built.
 
 **Fix**
-- Re-export with `compression=6` and `var_quantization=8`.
-- Prefer server mode for very large datasets.
+- Write the file with `prepare()`, which stores the matrix gene-major (CSC).
 
 ---
 
 ### Symptom: “The vector field overlay toggle is disabled / no fields appear”
 
 **Likely causes**
-1) You didn’t export any vector fields (common).
-2) The field is bound to other embeddings than the one the view shows (for
-   example only to the 2D UMAP while the view shows the 3D one).
-3) The `vectors/` files were not published with the rest of the export.
-
-**How to confirm**
-- Open `exports/<dataset>/dataset_identity.json` and check for a `vector_fields` block;
-  each field's `files` names the embedding ids it is bound to.
-- Confirm the repo contains a `vectors/` folder with exactly the files that block
-  lists, named by field and embedding position:
-
-  ```text
-  vectors/0_1.bin.gz
-  vectors/0_2.bin.gz
-  ```
+1) The file has no `obsm['<field>_<basis>']` array beside its embedding `obsm['X_<basis>']` (`velocity_umap` beside `X_umap`), with the same number of columns.
+2) The field is bound to another embedding than the one the view shows.
 
 **Fix**
-- Re-export with `prepare(..., vector_fields={"velocity": {"X_umap": v2, "X_umap_3d": v3}})`,
-  binding the field to every embedding it should be drawn on.
-- Make sure you commit/publish the `vectors/` directory.
+- Write the vectors with `prepare(..., vector_fields=...)`, or name them
+  `<field>_<basis>` in `obsm` after their embedding `X_<basis>`.
 - Show an embedding the field is bound to; the overlay info line names them.
 
-For UI behavior and overlay-specific debugging, see:
-- {doc}`../i_vector_field_velocity/index`
-- {doc}`../i_vector_field_velocity/07_troubleshooting_velocity_overlay`
+See {doc}`../i_vector_field_velocity/07_troubleshooting_velocity_overlay`.
 
 ---
 
 ### Symptom: “GitHub blocks my push / files are too big”
 
-**Likely causes**
-- Individual files > 100 MB
-- Total repo size becomes too large
-
 **Fix**
-- Reduce export size (quantization, fewer genes/fields).
-- Switch to server mode.
-- Host exports elsewhere and load via a server.
+- Write the dataset as a `.zarr` folder: each chunk is a small file.
+- Or host the files elsewhere (Zenodo, Hugging Face, an object store) and link
+  to them, or use server mode.
 
 ## Next Steps
 
-- Want to load from your computer (no publishing)? → {doc}`03_browser_file_picker_tutorial`
+- Want to open a file from your computer (no publishing)? → {doc}`03_browser_file_picker_tutorial`
 - Want a complete repository to copy and adapt? → {doc}`11_custom_dataset_repository`
-- Want the most reliable workflow for big datasets? → {doc}`04_server_tutorial`
-- Export format expectations: {doc}`07_folder_file_format_expectations_high_level_link_to_spec`
-- If GitHub loading fails: {doc}`08_troubleshooting_data_loading`
+- Data on another machine? → {doc}`04_server_tutorial`
+- File and catalog expectations: {doc}`07_file_format_expectations`
+- If loading fails: {doc}`08_troubleshooting_data_loading`

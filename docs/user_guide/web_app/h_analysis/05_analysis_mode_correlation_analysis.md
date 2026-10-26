@@ -35,25 +35,42 @@ What it is *not*:
 
 ## Inputs (what you choose)
 
-### X and Y variables
+| Where | Options |
+| --- | --- |
+| Essentials | **X axis**, **Y axis**, then **Pages** |
+| More options → Test | **Method** (Pearson / Spearman) |
+| More options → Display | **Colour by** |
 
-In the UI you select:
-- **X Axis Variable:** (continuous obs or gene expression)
-- **Y Axis Variable:** (continuous obs or gene expression)
+Press **Run** to compute. The line above Run says what is missing (`Choose the X
+and Y variables`, `X and Y are the same variable`, `Select at least one page`).
+After a run, changing any of these marks the result **Stale · Run** until you run
+again (see {doc}`02_analysis_ui_overview`).
 
-Cellucid prevents X and Y from being identical (it won’t run if they are the same variable).
+### X and Y
+
+Each is a continuous obs field or a gene, chosen with the same two-step picker
+Detailed uses (type, then the field or gene).
 
 ### Pages
 
-You select pages under **Compare pages:**.
 Correlation is computed **separately for each selected page**.
 
-### Optional: Color by
+### Colour by
 
-If you choose a categorical obs field under **Color by:**
-- points are colored by category (useful to reveal substructure),
-otherwise
-- points are colored by page (using the page colors you set).
+**Page** (default) colours points by page, with the page colours you set; a
+categorical obs field colours them by category, which can reveal substructure.
+The coefficient is always computed per page, never per colour.
+
+### Defaults
+
+<!-- options:correlation -->
+| Label | Default |
+|---|---|
+| X axis | None |
+| Y axis | None |
+| Method | Pearson |
+| Colour by | Page |
+<!-- /options:correlation -->
 
 ---
 
@@ -128,15 +145,15 @@ The reported statistics (`r`, `p-value`, `n`) are computed on the **full paired 
 
 1) Create/select a page you want to analyze
 2) Open **Analysis → Correlation**
-3) Choose X and Y variables
+3) Choose **X axis** and **Y axis**
    - Start with continuous obs fields (QC) to confirm the workflow.
-4) Select one or more pages under **Compare pages**
-5) Optional: set **Color by** to a categorical obs field
-6) Choose Pearson vs Spearman
+4) Select one or more pages
+5) Optional: **More options** → Method (Pearson or Spearman), Colour by
+6) Press **Run**
 7) Interpret
    - inspect scatter shape,
    - confirm `n` is large enough to trust,
-   - consider whether the relationship is driven by a hidden grouping (Color by helps).
+   - consider whether the relationship is driven by a hidden grouping (Colour by helps).
 
 ---
 
@@ -150,7 +167,7 @@ Many single-cell expression matrices are sparse:
 
 Practical tips:
 - try Spearman if you suspect non-linearity,
-- stratify by cell type (Color by or separate pages).
+- stratify by cell type (Colour by or separate pages).
 
 ### Confounding and mixture effects
 
@@ -217,21 +234,21 @@ Fix:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/analysis/correlation-results.png
-:alt: The Correlation panel with X Axis Variable set to Continuous obs then S_score, Y Axis Variable set to G2M_score, both pages selected, Color by set to cell_type, a Correlation method select reading Pearson (linear) under a pointer, and a coloured scatter plot with trend lines beneath.
-:width: 488px
+:alt: The Correlation form with Page 1 and Rest of Page 1 selected, X axis S_score and Y axis G2M_score (Continuous obs), More options open on Display with Colour by cell_type, and the Run button.
+:width: 468px
 
 Correlation on the two cell-cycle scores, both pages selected and points coloured
-by `cell_type`. **Color by** changes only the colouring; the coefficient is always
+by `cell_type`. **Colour by** changes only the colouring; the coefficient is always
 computed per page, never per colour.
 ```
 
 ```{figure} ../../../_static/screenshots/analysis/correlation-expanded.png
-:alt: The expanded Correlation modal headed "CORRELATION: S_SCORE VS G2M_SCORE" with a coloured scatter and per-page statistic boxes, a PLOT OPTIONS column, a SUMMARY STATISTICS table with columns Page, R, R², P and N, and a STATISTICAL ANALYSIS table with columns Page, Direction, Strength and R.
+:alt: The expanded Correlation view of S_score against G2M_score: the scatter with its per-page trend lines, the options beside it, and the summary and statistics tables with r, r², p and n per page.
 :width: 1440px
 
-Expanded Correlation. **SUMMARY STATISTICS** gives one row per page: `r`, `r²`,
+Expanded Correlation. **Summary statistics** gives one row per page: `r`, `r²`,
 the p-value in exponential notation, and `n` — the number of **paired finite**
-values that actually entered the calculation. **STATISTICAL ANALYSIS** restates
+values that actually entered the calculation. **Statistical analysis** restates
 the same `r` as a direction and a strength band, with the band boundaries printed
 underneath.
 ```

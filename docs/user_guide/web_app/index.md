@@ -31,7 +31,7 @@ What Cellucid is, system requirements, a 60-second tour, and how to choose a wor
 :link: b_data_loading/index
 :link-type: doc
 
-All supported loading paths (exports, file picker, server mode, Jupyter), plus dataset identity, format expectations, and troubleshooting (includes vector fields where relevant).
+All supported loading paths (file picker, links to GitHub, GEO, Zenodo and other hosts, server mode, Python and R viewers), the formats Cellucid reads (AnnData, MuData, Loom, 10x, MatrixMarket, R objects), dataset identity, data mapping, and troubleshooting.
 :::
 
 ::::

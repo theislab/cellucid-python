@@ -5,23 +5,23 @@ Cellucid's public sample catalog includes the pancreas dataset used by the
 It is a complete known-good example for dimensional navigation, categorical and
 continuous metadata, gene coloring, connectivity, and RNA-velocity rendering.
 The catalog id is exactly `pancreas`; Suo remains the catalog default.
-Its published identity contains exactly 3,696 cells and 3,753 genes.
+It holds exactly 3,696 cells and 3,753 genes.
 
 ## Load it
 
 1. Open an ordinary Cellucid startup and dismiss the welcome overlay.
 2. Open **Session**.
-3. Under **Sample datasets**, select
+3. Under **Sample dataset**, select
    **Pancreatic endocrinogenesis (scVelo)**.
-4. Wait until the loaded-dataset name changes to
-   **Pancreatic endocrinogenesis (scVelo)**. The compact Session statistics
-   round both counts to **4K**; **Coloring & Filtering** reports the exact
-   **Showing all 3,696 points**, while the published identity and provenance
-   pin the exact inventory of **3,753 genes**.
+4. Wait until the name in the **Dataset** box changes to
+   **Pancreatic endocrinogenesis (scVelo)**. Its summary line rounds the
+   counts to **3.7K cells · 3.8K genes**; **Coloring & filtering** reports the
+   exact **Showing all 3,696 cells**, and the box's **Details** list
+   **3,753** genes.
 
 The sample opens in its declared default 3D embedding with **Orbit**
-navigation, restored from the reviewed starting view it publishes beside its
-scientific files (see {doc}`../l_sessions_sharing/04_official_sample_states`).
+navigation, restored from the default session the sample catalog names for it
+(see {doc}`../l_sessions_sharing/04_official_sample_states`).
 Orbit is what a 3D embedding gets anyway, so the starting view is not treated as
 a mode you chose. Selecting 1D or 2D afterwards therefore moves
 **Navigation → Mode** to **Planar** for you. Pick a mode yourself and it stays
@@ -39,38 +39,40 @@ The public dataset exposes:
 - source-owned continuous observations `S_score` and `G2M_score`;
 - 3,753 ordered, source-marked, nonconstant genes for on-demand coloring;
 - 33,476 exact weighted connectivity edges;
-- four declared embeddings; and
-- one vector field, `velocity`, bound to the three UMAP embeddings.
+- three UMAP embeddings and the 50-component PCA, which is the dataset's
+  latent space (`latentKey`); and
+- one vector field, `velocity` (the `obsm` arrays `velocity_umap_1d`,
+  `velocity_umap` and `velocity_umap_3d`, scVelo's names for it on
+  `X_umap_1d`, `X_umap` and `X_umap_3d`), bound to the three UMAPs.
 
-The embeddings, exactly as `dataset_identity.json` declares them under
-`embeddings`:
+The embeddings the file holds in `obsm` (the store is
+`anndata/pancreas.zarr` in `cellucid-datasets`):
 
-| Embedding id | Label | Dimension | Origin | Velocity |
+| `obsm` key | Columns | Origin | Shown when it opens | Velocity |
 | --- | --- | --- | --- | --- |
-| `X_umap_1d` | UMAP | 1D | derived | yes |
-| `X_pca` | PCA | 2D | source, first two components | no |
-| `X_umap` | UMAP | 2D | source | yes |
-| `X_umap_3d` | UMAP | 3D | derived | yes |
+| `X_umap_1d` | 1 | derived | yes (1D default) | `velocity_umap_1d` |
+| `X_umap` | 2 | source | yes (2D default) | `velocity_umap` |
+| `X_umap_3d` | 3 | derived | yes (3D default) | `velocity_umap_3d` |
+| `X_pca` | 50 | source | yes, components 1 and 2 as a 2D view, enabled by the starting view (it is the latent space, which the viewer does not show on its own; enable other components under **Data mapping → Embeddings**) | none |
 
-The declared defaults are `X_umap_1d` for 1D, `X_umap` for 2D, and `X_umap_3d`
-for 3D, and the default dimension is 3D. The `velocity` field, labelled
-`velocity`, is the declared default field and carries one vector payload for
-each of the three UMAPs. Nothing is bound to `X_pca`: the build projects
-velocity onto the three UMAPs only.
+The launch defaults in `uns['cellucid']['defaults']` are `X_umap_1d` for 1D,
+`X_umap` for 2D, and `X_umap_3d` for 3D, and the starting view opens on the 3D
+UMAP. The `velocity` field carries one vector array for each of the three
+UMAPs. Nothing is bound to `X_pca`: the build projects velocity onto the three
+UMAPs only.
 
 To inspect velocity, open **Visualization**, keep **Render mode** set to
-`Points`, find **Vector Field Overlay**, and enable **Show overlay**. The field
+`Points`, find **Vector field**, and enable **Show overlay**. The field
 selector reports `velocity`. The overlay is a qualitative view of the
 projected stochastic velocity; it does not replace scVelo's numerical
 diagnostics or uncertainty checks.
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/pancreas-velocity-3d.png
-:alt: Cellucid showing the Pancreatic endocrinogenesis (scVelo) sample in its 3D Orbit view, colored by clusters, with the velocity overlay enabled and vector controls visible.
+:alt: The Pancreas sample in its 3D view coloured by clusters with the velocity overlay running, and the Vector field controls open in the sidebar.
 :width: 1440px
 
-The standard Pancreas sample in Build 2026-07-27.1: `clusters` supplies eight
-categories, **Show overlay** is enabled, the `velocity` field is selected, and
-the dimension-owned controls report **3D** with **Orbit** navigation.
+The standard Pancreas sample in its 3D (**Orbit**) view: `clusters` supplies
+eight categories, **Show overlay** is on and the `velocity` field is drawn.
 ```
 
 ## What is source-owned and what is derived
@@ -109,21 +111,22 @@ in `cellucid-datasets`, the build contract of
 - deterministic embedding and velocity parameters;
 - semantic digests for coordinates, vectors, metadata, genes, expression, and
   connectivity; and
-- the total byte size and the SHA-256 generation digest covering all 3,775
-  exported files.
+- the `uns['cellucid']` the store carries, the published expression matrix,
+  and the file count, total byte size, and SHA-256 store digest covering
+  every file of `anndata/pancreas.zarr`.
 
-Those last two are recorded in `sources/pancreas.json` rather than repeated
-here, because they change whenever the dataset is regenerated. Read them from
+The store measurements are recorded in `sources/pancreas.json` rather than
+repeated here, because they change whenever the dataset is regenerated. Read them from
 that file if you are verifying a build.
 
 The environment — the exact Python and scientific-package set in
-`requirements-build.lock` — and the exact Cellucid 0.9.3 producer-source digest, over
-the modules the export path executes, are pinned once for all five samples in
+`requirements-build.lock` — and the exact Cellucid 0.9.5 producer-source digest, over
+the modules the build executes, are pinned once for all five samples in
 `sources/build-environment.json`.
 
 Every one of the five built-in samples has a build contract of this kind. The
-build refuses to start in a different environment and refuses to publish an
-export that does not match the recorded generation digest, so Pancreas can be
+build refuses to start in a different environment and refuses to publish a
+store that does not match the recorded store digest, so Pancreas can be
 rebuilt and checked from the recipe in `cellucid-datasets`. That pin covers the
 producer and the output, not the upstream file itself, which the build
 downloads from the URL above unless it is handed a local copy. Pancreas is the
@@ -139,14 +142,14 @@ to the tools used in your analysis.
 
 ## Troubleshooting
 
-- If the sample is not listed, the configured exports host is not serving the
+- If the sample is not listed, the configured sample catalog is not serving the
   current `datasets.json`; include the footer **Build** value in a bug report.
 - If the overlay controls are absent, confirm that the loaded dataset name is
   **Pancreatic endocrinogenesis (scVelo)** and that `Points` is the active
   render mode.
 - If **Show overlay** disables after a dimension change, wait for that
-  dimension's embedding and `velocity` payload to finish loading before
-  retrying. The **PCA** embedding has no `velocity` payload.
+  dimension's embedding and vectors to finish loading before retrying. The
+  PCA view has no vectors.
 - If points or flow look biologically surprising, compare the exact dimension
   with the scVelo analysis and inspect velocity confidence before interpreting
   directionality.

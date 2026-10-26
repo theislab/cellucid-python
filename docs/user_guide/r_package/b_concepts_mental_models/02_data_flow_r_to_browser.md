@@ -1,84 +1,71 @@
-# Data Flow: R → Export → Browser
+# Data Flow: R → Store → Browser
 
 **Audience:** everyone  
-**Time:** 10 minutes  
-**Goal:** choose the right way to load your exported data into Cellucid.
+**Time:** 5 minutes  
+**Goal:** choose the right way to get your store into Cellucid.
 
-The Cellucid viewing workflow starts with **files on disk**.
+R writes the store, or serves it. The **browser** reads it, chunk by chunk,
+wherever it lives.
 
-R produces the files. The **browser** reads them.
+## Straight from R, with no file
 
-## Three ways to view an export folder
+`cellucid_view(seu)` reads the object into the store `cellucid_prepare()`
+would write, keeps it in memory, and serves it from a small web server in the
+R session (`httpuv`) to the viewer in the RStudio or Positron Viewer pane or a
+browser; `cellucid_serve()` does the same for a browser on another machine
+(an SSH tunnel to a cluster). The viewer reads it with range requests exactly
+as it reads a file, and talks back to R over a WebSocket: commands from R,
+selections and other events to R. Nothing is written to disk, and nothing
+leaves the machine: the server listens on `127.0.0.1` unless you choose
+another `host`.
 
-### Option 1 — Load locally via the browser file picker (simplest)
+Start here: {doc}`../d_viewing_loading/04_view_in_rstudio_positron`
 
-This is the “no server” workflow:
+## Three ways to open a written store
 
-1) Export a folder with `cellucid_prepare(out_dir = "...")`.
+### Option 1 — Open it from your computer (simplest)
+
+1) Write a store with `cellucid_prepare(out_path = "my_dataset.zarr", format = "zarr", ...)`.
 2) Open the Cellucid web app.
-3) Use the dataset loader to select the export folder on disk.
+3) Open the `.zarr` folder (or the `.zarr.zip` file) from the data panel.
 
-Pros:
-- No server to run
-- Works well for small/medium datasets
+Nothing leaves your machine, and no server runs. A browser folder picker may
+leave out the hidden metadata files (`.zgroup`, `.zmetadata`, …) on some
+systems; a `.zarr.zip` (`format = "zarr.zip"`) avoids that.
 
-Cons / limitations:
-- Browser file access UX varies by OS
-- Some browsers impose performance limits on very large directory trees
+Start here: {doc}`../d_viewing_loading/01_open_stores_in_cellucid_web_app`
 
-Start here: {doc}`../d_viewing_loading/01_open_exports_in_cellucid_web_app`
+### Option 2 — Open it from a link (for sharing)
 
-### Option 2 — Serve the folder locally (good for large datasets / stability)
+Put the `.zarr` folder on GitHub, or the `.zarr.zip` file on any host that
+serves files over HTTPS (a lab server, a bucket, Zenodo, Figshare, Hugging
+Face), and paste its address into the **Link or server** bar. The viewer reads it in place with range
+requests, so only what a view needs is downloaded.
 
-You run a local static file server so the web app loads over `http://localhost:...`.
+Start here: {doc}`../d_viewing_loading/02_host_stores_for_sharing` and
+{doc}`../../web_app/b_data_loading/14_open_from_link`
 
-Pros:
-- More predictable browser behavior
-- Easier to share links to your own machine (same LAN)
-- Often faster for large datasets because the browser can stream requests cleanly
+### Option 3 — Continue in Python
 
-Cons:
-- You must run a server process
-- You need to think about LAN exposure (security)
+A store written by R is a standard AnnData store: `anndata.read_zarr()` opens
+it, and the Cellucid Python package's AnnData workflows (a local server,
+Jupyter embedding) take the resulting object like any other:
+{doc}`../../python_package/index`.
 
-Start here: {doc}`../d_viewing_loading/02_host_exports_for_sharing`
+## Where `cellucid-annotation` fits
 
-### Option 3 — Host the folder remotely (for sharing and collaboration)
-
-If you can host static files (object storage, CDN, GitHub Pages, etc.), you can share exports with collaborators without sending huge archives.
-
-Pros:
-- Best for collaboration
-- Enables stable share links
-
-Cons:
-- Requires hosting and CORS setup
-- Be careful with privacy (you are publishing data)
-
-Start here: {doc}`../d_viewing_loading/02_host_exports_for_sharing`
-
-## Where do `cellucid-python` and `cellucid-annotation` fit?
-
-Even if you export from R, you might still use the other repos:
-
-- **`cellucid-python`** (optional):
-  - provides server mode + Jupyter embedding + hooks
-  - can serve an export folder from Python if you prefer that toolchain
-- **`cellucid-annotation`** (optional):
-  - provides workflows for community annotation and voting
-  - expects datasets to have stable identity (see {doc}`03_dataset_identity_and_reproducibility`)
+Community annotation (`cellucid-annotation`) keys a dataset's annotations on
+its `dataset_id`, so keep that id stable (see
+{doc}`03_dataset_identity_and_reproducibility`).
 
 ## Privacy and security (do not skip)
 
-If your dataset contains sensitive information:
-
-- **Local file picker** is safest (data stays on your machine).
-- **Local server** can expose data to your network if you bind to non-localhost.
-- **Remote hosting** is publishing; treat it like making data public unless access controls exist.
-
-See also the web app security model: {doc}`../../web_app/o_accessibility_privacy_security/index`.
+- **Opening from your computer**, and **viewing from R** on the default
+  loopback address, keep the data on your machine.
+- **Hosting at a public address** is publishing; treat it like making the
+  dataset public unless the host enforces access control.
 
 ## Next steps
 
-- Export a folder: {doc}`../c_data_preparation_api/index`
-- Open it in the browser: {doc}`../d_viewing_loading/01_open_exports_in_cellucid_web_app`
+- Write a store: {doc}`../c_data_preparation_api/index`
+- Open it: {doc}`../d_viewing_loading/01_open_stores_in_cellucid_web_app`

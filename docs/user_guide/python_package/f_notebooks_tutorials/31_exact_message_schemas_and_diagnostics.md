@@ -5,20 +5,19 @@ inventing message types or accepting undeclared fields.
 
 ## Prerequisites
 
-- A displayed viewer from `show(...)` or `show_anndata(...)`
+- A displayed viewer from `show_anndata(...)`
 - A viewer that has reached `ready`
 - Familiarity with Python dictionaries
 
 ## The two authenticated directions
 
-Python commands enter the iframe through `postMessage`. The embedding layer
-adds the exact `viewerId` and `viewerToken`; user code supplies only the
-command-specific record.
-
-Viewer events return through `POST /_cellucid/events`, and selections through
-`POST /_cellucid/selection` as binary cell indices. The server authenticates
-the routing pair, removes the token, and gives the closed event record to the
-Python viewer.
+Both directions travel on the viewer channel, one WebSocket the viewer opens
+to the server and authenticates once with its exact `viewerId` and
+`viewerToken`. Python's commands are the command-specific record only (a
+highlight or a visibility change travels as one binary frame of cell indices);
+the viewer's events come back as JSON text frames, and selections as binary
+cell indices. The server checks each closed event record and gives it to the
+Python viewer that owns the channel.
 
 Neither direction accepts arbitrary message types.
 
@@ -46,16 +45,11 @@ The `event` discriminator is one of:
 - `debug_snapshot`
 - `session_bundle`
 - `command_error`
+- `data_mapping`
 
 The remaining fields are the exact payload for that discriminator. See
 {doc}`../e_jupyter_hooks/07_frontend_to_python_events` for every field and
 value constraint.
-
-```{note}
-`command_error` arrives only from the web build that emits `command_error`.
-Older builds — including the one currently published — apply or refuse a
-command silently, so this tutorial will not observe one.
-```
 
 ## Exercise the request/response diagnostics
 
@@ -95,7 +89,7 @@ print(snapshot["serverUrl"])
 ```python
 report = viewer.debug_connection(timeout=5)
 print(report["server_health"])
-print(report["dataset_identity_probes"])
+print(report["anndata_store_probes"])  # the AnnData store the viewer reads
 print(report["frontend_roundtrip"])
 print(report["frontend_debug_snapshot"])
 print(report["recent_events"])
@@ -118,8 +112,7 @@ viewer.reset_view()
 
 The low-level `send_message(...)` entry point is still closed. It accepts the
 current command records used by those helpers and the internal diagnostics; an
-unknown type or an undeclared field raises before notebook output is
-published.
+unknown type or an undeclared field raises before anything is sent.
 
 ## Failure checks
 
@@ -143,13 +136,14 @@ viewer.send_message(
 )
 ```
 
-This raises before the command reaches the iframe.
+This raises `TypeError` before the command reaches the viewer.
 
 ### Undeclared event field
 
 An authenticated event with an extra property fails before `@viewer.on_message`
 or an event-specific hook runs. The failed event is not written to
-`viewer.state` and does not wake `wait_for_event(...)`.
+`viewer.state` and does not wake `wait_for_event(...)`, and the server closes
+that viewer's channel (WebSocket close code 1008, policy violation).
 
 ## Adding a new protocol variant
 

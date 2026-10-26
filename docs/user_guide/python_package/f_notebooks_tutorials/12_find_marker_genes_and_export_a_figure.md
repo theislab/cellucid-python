@@ -113,7 +113,7 @@ top_markers_by_cluster
 
 When you search a gene in the Cellucid UI, the viewer uses the **gene IDs** it was given.
 
-In AnnData mode (`show_anndata`), those gene IDs are typically:
+With `show_anndata`, those gene IDs are typically:
 - `adata.var_names` (default)
 - OR a column you choose via `gene_id_column=...`
 
@@ -144,11 +144,10 @@ viewer
 ```
 
 ```{important}
-Gene names must be distinct across `var`, and the ones that reach a manifest
-must read as the value they store. Names are never filenames, so `HLA-DRB1/2`
-is fine. Direct AnnData viewing serves every gene in `var`, so it holds all of
-them to the display rule; `prepare()` holds only the genes `gene_identifiers`
-actually exports. Both reject duplicate names anywhere in `var`.
+Repeated gene names are made unique the way anndata's
+`var_names_make_unique()` does it — the second `MATR3` is shown as `MATR3-1` —
+and the change is reported, both when the viewer reads `var` and when
+`prepare()` writes it. Names are never filenames, so `HLA-DRB1/2` is fine.
 ```
 
 ---
@@ -175,7 +174,7 @@ This tutorial does not assume a specific UI layout for the field selector (it ev
 
 Exporting figures is a web-app feature. In the viewer:
 
-1) Open the **Figure Export** panel
+1) Open the **Figure export** panel
 2) Choose output format:
    - **SVG** for vector editing (Illustrator/Inkscape) and publication
    - **PNG** for quick slides/docs
@@ -276,5 +275,5 @@ Fix:
 ## Next steps
 
 - {doc}`13_compare_two_groups_and_interpret_results` (turn “markers” into a comparison story)
-- {doc}`21_prepare_exports_with_quantization_and_compression` (export for speed + sharing)
+- {doc}`21_prepare_a_cellucid_ready_anndata` (a Cellucid-ready AnnData for speed + sharing)
 - Web-app deep dive: {doc}`../../web_app/k_figure_export/index`

@@ -1,6 +1,7 @@
 # Makefile for Cellucid documentation
 
-SPHINXOPTS    ?=
+# -W --keep-going is the gate CI applies (.github/workflows/docs-check.yml).
+SPHINXOPTS    ?= -W --keep-going
 SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     = .
 BUILDDIR      = _build
@@ -26,7 +27,6 @@ html:
 
 clean:
 	rm -rf $(BUILDDIR)
-	rm -rf user_guide/python_package/api/_autosummary
 	@echo "Cleaned build artifacts."
 
 serve: html

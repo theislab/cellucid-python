@@ -4,7 +4,7 @@
 users looking for a specific marker
 **Time:** 5–10 minutes
 **What you’ll learn:**
-- What the **Gene Expression** search is searching in a built-in sample
+- What the **Gene expression** search is searching in a built-in sample
 - Why a gene that is genuinely in the underlying study can be absent from a sample
 - How many genes each sample publishes, and where to check that yourself
 - What to do when you need a gene a sample does not carry
@@ -13,16 +13,16 @@ users looking for a specific marker
 
 ## The short version
 
-The gene list in **Coloring & Filtering → Gene Expression** is exactly the list
+The gene list in **Coloring & filtering → Gene expression** is exactly the list
 of gene names the loaded dataset published, and nothing else. Cellucid adds no
 aliases and looks nothing up.
 
 The four human samples — **Suo**, **Garcia**, **He**, and **Kanemaru** — publish
-a subset of the genes their prepared source file contains, because that file
+a subset of the genes their upstream source file contains, because that file
 identifies genes by Ensembl accession and only the accessions that could be
 translated to a gene symbol are published. So a real gene, measured in the real
 study, can produce **No gene matches** here. That is a property of how these
-four demonstration samples were prepared, not a limit of Cellucid and not a
+four demonstration samples were built, not a limit of Cellucid and not a
 defect in the studies.
 
 ---
@@ -33,15 +33,15 @@ Type a name the loaded dataset does not publish and the dropdown replaces the
 result list with three lines:
 
 - **No gene matches**, followed by your query in quotes;
-- *This dataset publishes N gene names, chosen when it was prepared and possibly
+- *This dataset publishes N gene names, chosen when its file was written and possibly
   a subset of the source data. Check for typos too.*, where *N* is the loaded
   dataset’s own published gene count; and
 - a **Why a gene may be missing** link, which opens
   {doc}`05_troubleshooting_fields_legends`.
 
 ```{figure} ../../../_static/screenshots/web_app/gene-search-no-match.png
-:alt: A field row labelled GENE EXPRESSION with CD19 typed into its search box, and an open dropdown below reading No gene matches, then a sentence stating how many gene names this dataset publishes and that it was chosen when the dataset was prepared and is possibly a subset of the source data with a reminder to check for typos, then a link reading Why a gene may be missing.
-:width: 480px
+:alt: The Gene expression list after typing a symbol this sample does not publish: No gene matches "CD19", a sentence giving the 3,753 gene names the dataset publishes, and a link Why a gene may be missing.
+:width: 496px
 
 The empty state on the Pancreas sample, searching for a human B-cell marker in
 a mouse dataset. The number in the middle line is **this** dataset's own
@@ -52,15 +52,15 @@ absent gene.
 For contrast, a query that does match simply lists the matches:
 
 ```{figure} ../../../_static/screenshots/web_app/gene-search-dropdown-open.png
-:alt: The same field row with the two letters Rp typed into the search box and a dropdown below listing gene names that contain those letters, one per row.
-:width: 480px
+:alt: The Gene expression search box holding the letters Rp with its list open below, naming the genes that contain them.
+:width: 496px
 
 Matching is a case-insensitive substring test over the published names only.
 There is no alias table and no second identifier to try instead.
 ```
 
-The viewer states that count and stops there on purpose: an export records the
-names it published and nothing about what preparation left behind, so the app
+The viewer states that count and stops there on purpose: a dataset file records
+the names it holds and nothing about what preparation left behind, so the app
 cannot know whether your query was dropped, misspelled, or never measured.
 
 Before concluding a gene is absent, note how the search behaves: it is a
@@ -75,9 +75,9 @@ Matching in the Analysis panel is stricter — see
 
 ## The four human samples: two reductions, not one
 
-### Reduction 1 — the prepared source file already holds 8,192 genes
+### Reduction 1 — the upstream source file already holds 8,192 genes
 
-Suo, Garcia, He, and Kanemaru were exported from integrated files produced
+Suo, Garcia, He, and Kanemaru were built from integrated files produced
 upstream of this project, and each of those files holds exactly **8,192**
 features rather than a whole transcriptome. The selection to 8,192 was made by
 that integration pipeline, before any Cellucid step ran, and no record of the
@@ -110,17 +110,18 @@ entirely, or it may be present but mapped to another accession — the table hol
 no name. Both count as unnamed, and unnamed genes are left out rather than
 published under an accession.
 
-Every published gene still keeps its upstream identifier. Each of these four
-samples publishes two gene-name sets in its `var_manifest.json`: the default
-set, from the `gene_name` column, holds the symbols above, and a second set,
-from the `ensembl_gene_id` column, holds each translated gene's Ensembl
-accession. A gene that passed through as a symbol has no separate accession, so
-its entry in the second set falls back to the default name. The second set never
-adds a gene: a gene whose accession has no symbol is not published at all.
+Every published gene still keeps its upstream identifier. In each of these four
+samples' files the symbols above are the `var` index, which names the genes by
+default, and the column `var['ensembl_gene_id']` holds each translated gene's
+Ensembl accession; switch the gene names to that column under **Session › Data
+mapping › Genes and expression**. A gene that passed through as a symbol has no
+separate accession, so its `ensembl_gene_id` repeats the default name. The
+second column never adds a gene: a gene whose accession has no symbol is not
+published at all.
 
 ### What each sample publishes
 
-| Sample | Catalog id | Genes in the prepared file | Published | Left out |
+| Sample | Catalog id | Genes in the upstream file | Published | Left out |
 | --- | --- | --- | --- | --- |
 | Developing human immune system (Suo) | `suo` | 8,192 | 5,103 | 3,089 |
 | Developing human gonad (Garcia) | `garcia` | 8,192 | 5,754 | 2,438 |
@@ -133,10 +134,9 @@ are in the table but map to another accession: 1,022, 784, 949, and 699
 respectively.
 
 :::{note}
-Every published count above is the `stats.n_genes` value in that sample’s own
-`exports-v3/<id>/dataset_identity.json`, which is also the number of entries in its
-`var_manifest.json` and the number of payload files in its `var/` directory. The
-full breakdown is recorded as `gene_naming.census` in each sample’s
+Every published count above is the number of rows of `var` in that sample's
+own AnnData file in the sample catalog ({doc}`../b_data_loading/12_sample_dataset_provenance`),
+which is also the gene count the dataset panel shows. The full breakdown is recorded as `gene_naming.census` in each sample’s
 `sources/<id>.json` in
 [`cellucid-datasets`](https://github.com/theislab/cellucid-datasets), and the
 build refuses to publish a rebuild whose census differs. Read those rather than
@@ -183,20 +183,23 @@ dataset.
 ## What to do if you need a gene that is not there
 
 **First, confirm it is really absent.** Search a short, distinctive substring
-rather than the full name, and if the dropdown ends in `...and N more`, narrow
-the query until the whole match list is visible.
+rather than the full name, and if the match list keeps growing as you scroll,
+narrow the query until it is short enough to read through.
 
 **If it is absent, no in-app setting brings it back.** The gene panel is fixed by
-the export; the viewer has nothing to re-enable, and reloading the sample
+the sample's file; the viewer has nothing to re-enable, and reloading the sample
 produces the same list.
 
 **Work from a dataset that carries the gene.** The built-in samples are fixed
-demonstration exports, so a full gene axis has to come from data you prepare
+demonstration datasets, so a full gene axis has to come from data you prepare
 yourself:
 
-- Load your own `.h5ad` or `AnnData` through {doc}`../b_data_loading/04_server_tutorial`
-  or {doc}`../b_data_loading/05_jupyter_tutorial`, which needs no export step.
-- Or prepare an export of your own with
+- Open your own data in the browser (`.h5ad`, AnnData Zarr, `.h5mu`, `.loom`,
+  10x `.h5`, a Seurat or SingleCellExperiment `.rds`, and the other formats in
+  {doc}`../b_data_loading/07_file_format_expectations`), or through
+  {doc}`../b_data_loading/04_server_tutorial` or
+  {doc}`../b_data_loading/05_jupyter_tutorial`; any of them opens as it is.
+- Or write a Cellucid-ready AnnData of your own with
   {doc}`../../python_package/c_data_preparation_api/index`, choosing
   `var_gene_id_column` so genes are named the way your readers will type them.
   {doc}`../../python_package/c_data_preparation_api/05_var_gene_metadata` and

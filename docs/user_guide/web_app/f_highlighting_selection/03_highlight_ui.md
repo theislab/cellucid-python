@@ -21,11 +21,11 @@ This page is the “UI map” for highlighting:
   - {doc}`02_selection_tools_document_each_tool`
 
 **What you’ll learn**
-- What “Highlight mode”, “Highlight pages”, and “Highlighted groups” each control
+- What the **Selection** tools, the highlight pages, and the highlighted groups each control
 - How to create/rename/recolor/delete pages
 - How to enable/disable/remove groups (and what “Clear” clears)
 - How to interpret the highlighted cell count (“visible” vs “total”)
-- How to turn your pages into a real categorical obs column with `Create Categorical`
+- How to turn your pages into a real categorical obs column with `Create categorical`
 
 ---
 
@@ -34,11 +34,11 @@ This page is the “UI map” for highlighting:
 In the left sidebar, open the accordion section labeled **Highlighting**.
 
 Inside this section you will see four sub-areas, top to bottom:
-1) **Highlight mode** (the four selection tools, then the **Select mode** switch
-   below a divider — an input setting, not a fifth tool)
-2) **Highlight pages** (tabs)
-3) **Highlighted groups** (the list + count + Clear)
-4) `Create Categorical` (a collapsed accordion that turns pages into an obs column)
+1) **Selection** — the **Tool** buttons (the four selection tools), then the
+   **Select mode** switch below them — an input setting, not a fifth tool
+2) **Highlights** — the highlight page tabs
+3) the highlighted groups of the active page (the list + count + **Clear**)
+4) `Create categorical` (a collapsed accordion that turns pages into an obs column)
 
 On the plot itself, the **selection bar** repeats Select mode's switch and
 combine choice, the active tool's step controls, and the page's count and
@@ -46,10 +46,10 @@ combine choice, the active tool's step controls, and the page's count and
 
 ---
 
-## 1) Highlight mode (choose how you build a selection)
+## 1) Selection tools (choose how you build a selection)
 
-The **Highlight mode** buttons control *which selection tool is active*:
-- **Annotation based**
+The **Tool** buttons control *which selection tool is active*:
+- **Annotation**
 - **KNN drag**
 - **Proximity drag**
 - **Lasso**
@@ -75,7 +75,7 @@ For the annotation-based tool on categorical fields, `Alt` acts like “replace�
 ### Select mode (touch screens, or no `Alt` key)
 
 A touch screen has no `Alt` key, so the **Select mode** switch below the four
-Highlight mode tools stands in for holding it. It is drawn as a switch, not as
+**Tool** buttons stands in for holding it. It is drawn as a switch, not as
 another tool button, because it changes how every tool is triggered rather than
 choosing one:
 
@@ -194,8 +194,8 @@ On drop, the UI offers:
 This creates a new page whose name reflects the operation (e.g. `Page A ∩ Page B`).
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/compare-highlight-pages.png
-:alt: The Highlighting panel with two page tabs ringed — Page 1 with a blue swatch carrying 842, and the active Page 2 with a red swatch carrying 223, each with a combine (⋈) and a delete (×) control — the group list showing one "Proximity (223 cells) (223)" group, and the pointer on the button that adds another page.
-:width: 516px
+:alt: The Highlighting panel with two page tabs ringed, their names shortened — Page 1 with a blue swatch carrying 826, and the active Page 2 with a red swatch carrying 267, each with a combine (⋈) and a delete (×) control — the list reading 267 cells highlighted with one Proximity (267 cells) (267) group, and the pointer on the button that adds another page.
+:width: 534px
 
 Two pages. Each tab carries a colour swatch, the page name, and that page's
 total membership. Only the active tab's groups are listed below and only they
@@ -267,11 +267,10 @@ Common reasons “visible < total”:
 
 ---
 
-## 4) Create Categorical (turn pages into a real obs column)
+## 4) Create categorical (turn pages into a real obs column)
 
 At the bottom of the **Highlighting** section there is a collapsed accordion
-headed `Create Categorical`, described as *Build a new categorical obs column
-from highlight pages*. It turns the pages you have built into an ordinary
+headed `Create categorical`. It turns the pages you have built into an ordinary
 categorical observation field — one you can then colour by, filter on, and use
 as the field for annotation-based selection.
 
@@ -279,11 +278,11 @@ It is always present. It is greyed out only until a dataset is loaded.
 
 ### The short version
 
-1) Expand `Create Categorical`.
+1) Expand `Create categorical`.
 2) Drag page tabs into the `Drop pages here` box (or pick one in
-   `Add a highlight page:` and press **Add**). Each page becomes one category,
+   `Add page` and press **Add**). Each page becomes one category,
    named after the page.
-3) Type a name in `Column name:`.
+3) Type a name in `Column name`.
 4) Press **Create**.
 
 A notification confirms it: `Created "<your name>" (<N> categories)`, and the
@@ -298,13 +297,13 @@ The builder only shows these when they actually apply, so a set of
 non-overlapping pages that covers every cell will show neither.
 
 - **Cells in more than one page.** A section appears headed
-  `Assign overlapping cells to:` with four choices: **First page** (the default),
+  `Overlapping cells` with four choices: **First page** (the default),
   **Last page**, **New label** — one shared category, `Overlap` unless you rename
   it — and **Each intersection**, which makes a separate category per overlap
   combination and asks you to name each one. Only enabled groups count towards a
   page's membership here, exactly as for page combine.
 - **Cells in no page at all.** A section reports `<n> cells not in any page` and
-  offers `Label for uncovered cells:`, `Unassigned` by default. Clear that box if
+  offers `Label for uncovered cells`, `Unassigned` by default. Clear that box if
   you would rather those cells carry no label.
 
 :::{note}

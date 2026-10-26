@@ -19,7 +19,9 @@ Recommended:
 - a fresh virtual environment (`venv`, `conda`, `uv`, etc.)
 
 Optional (only if you work on notebook embedding):
-- JupyterLab / VSCode notebooks / classic notebook
+- JupyterLab or classic notebook (VS Code notebooks and Colab have not been
+  tested by the project; see
+  {doc}`../e_jupyter_hooks/03_supported_environments_matrix`)
 
 ---
 
@@ -30,7 +32,7 @@ Cellucid is split across repositories:
 - **Python package** (this page): `cellucid-python/`
 - **Web app** (UI/rendering): `cellucid/` (see {doc}`../../web_app/p_developer_docs/index`)
 
-If you are changing the export format or hooks protocol, you will likely touch both repos.
+If you are changing the Cellucid-ready AnnData contract or the hooks protocol, you will likely touch both repos.
 
 ---
 
@@ -59,8 +61,10 @@ python -m pip install -e ".[dev,docs]"
 
 What this does:
 - installs runtime dependencies,
-- installs developer tooling (`pytest`, `ruff`, `mypy`, `pre-commit`),
-- installs documentation tooling (Sphinx + MyST).
+- installs developer tooling (`pytest`, `pytest-cov`, `ruff`, `mypy`, `pre-commit`),
+- installs documentation tooling (Sphinx + MyST),
+- installs `mudata` through the `dev` extra, which brings the `mudata` extra
+  with it: the MuData tests need it (CI installs `.[dev]`).
 
 ---
 
@@ -81,10 +85,14 @@ cellucid serve --help
 
 If the CLI is slow or crashes, jump to: {doc}`05_cli_architecture_and_commands`.
 
-### 3.3 Run tests
+### 3.3 Run tests and checks
+
+These are the commands CI runs (`.github/workflows/test.yml`):
 
 ```bash
-pytest
+python -m pytest
+python -m ruff check src tests
+python -m mypy src/cellucid
 ```
 
 If tests are missing for what you changed, see: {doc}`13_testing_and_ci`.
@@ -97,6 +105,13 @@ From the `cellucid-python/` folder:
 
 ```bash
 make -C docs html
+```
+
+CI builds with warnings as errors, which `make -C docs html` does not; run the
+exact CI command before you push:
+
+```bash
+sphinx-build -W --keep-going -b html docs docs/_build/html
 ```
 
 Then open:
@@ -118,19 +133,20 @@ Doc-writing conventions live here:
 
 You can test with either:
 
-### Option A: exported folder (fastest + most representative)
+### Option A: a Cellucid-ready AnnData (fastest + most representative)
 
-1) Export your dataset:
+1) Prepare your dataset:
 
 ```python
 from cellucid import prepare
-# ... call prepare(...) to write an export folder ...
+# ... call prepare("my_dataset.h5ad", format="h5ad", ...) to write a Cellucid-ready AnnData ...
 ```
 
 2) Serve it:
 
 ```bash
-cellucid serve ./my_export
+# A file written by cellucid.prepare() names itself: no identity flags.
+cellucid serve ./my_dataset.h5ad
 ```
 
 ### Option B: AnnData server (convenient during iteration)

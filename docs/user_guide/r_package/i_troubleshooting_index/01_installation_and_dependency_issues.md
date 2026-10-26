@@ -55,24 +55,59 @@ options(repos = c(CRAN = "https://cloud.r-project.org"))
 install.packages("jsonlite")
 ```
 
-## Symptom: “Matrix package is required …”
+## Symptom: “The Matrix package is required to store connectivities.”
 
-You’ll see this if you try to export:
-- sparse gene expression matrices, or
-- connectivities,
-without Matrix installed.
+You passed `connectivities` as a base R matrix without `Matrix` installed.
+(`Matrix` is also what you need to hold a sparse `gene_expression` in the first
+place.)
 
 **Fix**
 ```r
 install.packages("Matrix")
 ```
 
-## Symptom: “Seurat / SingleCellExperiment not installed”
+## Symptom: SeuratObject does not install on R older than 4.4
 
-These are optional and only required for the recipe/tutorial pages.
+SeuratObject 5 needs Matrix 1.6-4 or later, and CRAN's current Matrix release
+needs R 4.4, so the installer reports a dependency it cannot install.
 
-If you only want the minimal workflow, you can export from matrices/data.frames:
+**Fix**
+```r
+remotes::install_version("Matrix", version = "1.6-5")
+install.packages("SeuratObject")
+```
+
+## Symptom: installing from GitHub fails with a compiler error
+
+**Likely cause**
+- The package compiles a few small C files (checksums, the outlier quantiles,
+  one-pass matrix checks, the decoders of a saved session) and links zlib, and
+  no C toolchain, or no zlib header (`zlib.h: No such file or directory`), is
+  installed.
+
+**Fix**
+- Windows: install Rtools. macOS: `xcode-select --install`. Linux: a C
+  compiler plus the R and zlib development headers (for example `r-base-dev`,
+  which brings `zlib1g-dev`, on Debian and Ubuntu; `zlib-devel` on Fedora).
+- Or install a platform binary from CRAN once the index lists the package; see
+  {doc}`../installation`.
+
+## Symptom: “data is a Seurat object from the SeuratObject package, which is not installed”
+
+`cellucid_prepare(data = )` and `cellucid_view()` read an object with its own
+package, loaded only when such an object arrives. Install the one the message
+names: `install.packages("SeuratObject")`, or
+`BiocManager::install("SingleCellExperiment")` (and `"SummarizedExperiment"`).
+An object saved by Seurat v5 needs SeuratObject 5.
+
+Without any of them, start from matrices and data frames:
 - {doc}`../e_integrations_recipes/03_raw_matrices_and_data_frames_recipe`
+
+## Symptom: “The viewer needs the httpuv package”
+
+`httpuv`, `later` and `curl` are imports, installed with the package; this
+message means the library holding them is not the one R loads. Reinstall them
+with `install.packages(c("httpuv", "later", "curl"))`.
 
 ## Symptom: “I updated but R still loads an old version”
 

@@ -66,23 +66,55 @@ Loaded field values live in `_fieldDataCache` (obs fields) and
 bounded in **bytes**, not entries (`field/residency.js`): once inactive fields
 hold more than their budget, the least recently used are released. The budget
 is `residencyBudgetBytes('inactiveFields')` (`data/memory-budget.js`): a
-sixteenth of the device memory the browser reports, at least 128 MiB, and
-512 MiB where the browser reports none. The active field, any field with filter state, and fields still
+sixteenth of the estimated device memory (see {ref}`memory-budgets`). The active field, any field with filter state, and fields still
 loading are always kept, and release runs only when the active field changes, so
 a session restore or an analysis that loads several fields cannot lose one.
 (An entry-count bound did not bound memory: browsing genes kept every one at
 4 bytes per cell.)
 
+(memory-budgets)=
+### Memory budgets
+
+Every cache that decides what stays resident takes its budget from
+`data/memory-budget.js`. A budget is a residency policy: it decides what is
+released, spilled to disk or read again, never what can be opened or shown.
+
+- **The device** is estimated from what the browser reports:
+  `navigator.deviceMemory` (Chromium; earlier releases report at most 8 GiB,
+  Chromium 151 reports 16 on a 16 GiB Mac) and the JavaScript heap limit
+  (`performance.memory.jsHeapSizeLimit`), which V8 sets at about a quarter of
+  physical memory (3.76 GB on that Mac). The heap limit raises an 8 GiB report
+  that may be a cap and stands in when deviceMemory is absent. A browser that
+  reports neither (Firefox, Safari) is taken to be 8 GiB.
+- **The allowance** is half the device: every budget together. The other half
+  is the system, the browser, other tabs and what the views show.
+- **The shares** of the allowance sum to exactly one, so no two caches count
+  the same bytes: the gene-column index 3/8 (it spills to disk beyond it),
+  positions of layouts no view shows 1/8, inactive fields 1/8, an analysis
+  run's default budget 1/8, the AnnData adapter's cache 1/16, a latent space
+  held for outlier quantiles 1/16, decoded chunk blocks 1/16, decode workers
+  1/32 (about 40 MB each while they decode; with the cores they size the
+  pool) and selection undo history 1/32.
+- **A refused allocation** of fewer bytes than the allowance halves the
+  allowance of the thread that saw it for every budget read afterwards.
+
+| Device | Allowance | Gene index | Positions, inactive fields, analysis (each) | Decode workers |
+|---|---|---|---|---|
+| 4 GiB | 2 GiB | 768 MiB | 256 MiB | 1 |
+| 8 GiB (or unreported) | 4 GiB | 1.5 GiB | 512 MiB | 3 |
+| 16 GiB | 8 GiB | 3 GiB | 1 GiB | 6 |
+
 ### Multi-view contexts (live + snapshots)
 
 Cellucid supports:
 - one **live** view (`viewId = "live"`)
-- at most **three** snapshot views (“Keep view”)
+- any number of snapshot views (“Keep view”)
 
-The cap is enforced viewer-side: requesting a fourth snapshot raises a
-`RangeError`. Four total views is therefore the maximum, and it is what the
-grid-layout arithmetic in the renderer assumes. Do not write UI or state code
-that treats the snapshot count as unbounded.
+There is no count cap: GPU memory decides what stays resident. When an
+allocation is refused, the colour stores and alpha textures of kept views that
+are not presented are released first and rebuilt when they are shown again
+(`tests/browser/kept-views-memory.spec.mjs`). The grid layout fits any number
+of panes. `createSnapshotView` refuses only in smoke render mode.
 
 `DataState` maintains a `viewContexts` map (`viewId → context`) so each view can have:
 - independent active field selections (obs/var)
@@ -139,8 +171,9 @@ Selections in progress (the annotation, lasso, KNN and proximity candidates)
 are `CellSet`s (`app/utils/cell-set.js`): one bit a cell, with word-wise union,
 intersection and difference. Never hold a set of cells in a JavaScript `Set`
 or `Map`: V8 refuses more than 16,777,216 entries, so a selection of a large
-cluster in a 30M-cell dataset would fail. Uniqueness checks on cell lists use
-`hasDuplicateCellIndex` for the same reason. `tests/cell-set-contract.test.mjs`
+cluster in a 30M-cell dataset would fail. Cell lists are checked with
+`requireCellList` (the same module), which refuses duplicates without a `Set`,
+for the same reason. `tests/cell-set-contract.test.mjs`
 enforces this in the selection modules.
 
 ### Representations + vector fields
@@ -162,8 +195,8 @@ dimension. Cellucid tracks them via:
 
 Coordinates of an enabled layout are read the first time a view shows it and
 kept while a view shows it; afterwards they stay in a cache whose budget is a
-quarter of the device memory the browser reports
-(`residencyBudgetBytes('positions')`, at least 512 MiB), released least
+sixteenth of the estimated device memory
+(`residencyBudgetBytes('positions')`, see {ref}`memory-budgets`), released least
 recently shown first, and entirely under memory pressure. The budget never
 refuses what the views show: the layouts shown plus the one being shown are
 always admitted, even above it.
@@ -217,7 +250,7 @@ Events are the main way UI modules stay decoupled from state internals.
 | `highlight:changed` | none | Highlight groups changed (membership/colors/enabled) |
 | `page:changed` | none | Highlight page set changed (add/remove/rename/switch) |
 | `view:representation-changed` | `{ viewId, layoutKey, dimension, previousLayoutKey }` | The representation a view shows changed (any view, active or not), or focus moved to a view showing another one |
-| `mapping:changed` | `{ mapping, cause }` | The data mapping was applied (Session › Data mapping, or a session restore) |
+| `mapping:changed` | `{ mapping, cause, origin }` | The data mapping was applied; `origin` is `user` (Session › Data mapping), `session` (a session restore) or `notebook` (a host program's command) |
 | `representations:changed` | `{ enabled }` | The enabled representations changed (fires with `mapping:changed`) |
 | `vectorFields:changed` | list of available fields | Vector-field availability changed (dataset load / manager attached) |
 
@@ -375,7 +408,7 @@ Mitigation patterns:
 Cellucid supports “no dataset selected” and “empty data” states.
 Make sure new code handles:
 - `pointCount === 0`
-- missing manifests (e.g. no `var_manifest.json`)
+- a dataset without genes (an empty `var`)
 
 ### Async representation changes
 
@@ -414,7 +447,7 @@ Fix:
 
 Likely causes:
 - the representation is not enabled (`dimensionManager.isEnabled(layoutKey)`)
-- async load failed (network / manifest mismatch / values refused)
+- async load failed (network / field list mismatch / values refused)
 - the change targeted another view than the one on screen
 
 Fix:

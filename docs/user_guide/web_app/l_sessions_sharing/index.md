@@ -13,12 +13,12 @@ This section is intentionally written for **mixed audiences**:
 A session bundle (`.cellucid-session`) **does not contain your dataset**.
 
 For a session you saved yourself, you must:
-1) load the exact matching source route, dataset id, cell count, and variable count, then
-2) choose **Load State** and open the `.cellucid-session` file.
+1) load the dataset it was saved on (the same dataset id, cell count, and variable count), then
+2) choose **Load** under **Session file** and open the `.cellucid-session` file.
 
-Official built-in starting states use a separate, catalog-advertised path:
-Cellucid applies the matching static state automatically after it publishes
-and verifies the official dataset generation.
+A dataset opened from a catalog (the built-in samples included) can come with
+a default session the catalog names: Cellucid applies it automatically after
+the dataset is published and the session's bytes are verified.
 :::
 
 :::{tip}
@@ -33,10 +33,10 @@ If you’re here because “I loaded a session but it looks different”, start 
 
 | You want to… | Do this | Why it’s the right choice | Start here |
 |---|---|---|---|
-| Reopen your work later | **Save State** → keep the `.cellucid-session` file | Captures UI state; reproducible “what I was looking at” | {doc}`03_save_restore_ux` |
-| Start an official sample in its reviewed view | Choose the built-in sample; its advertised static state applies automatically | Scientific data publishes first, then the state is integrity-verified | {doc}`04_official_sample_states` |
-| Send someone an exact view | Send **dataset export folder** + `.cellucid-session` | Sessions don’t include data; folder + session is the portable pair | {doc}`05_share_workflows_links_bundles_exports` |
-| Collaborate on labels with many people | Use **Community Annotation** (GitHub-backed) | Sessions are single-user artifacts; annotation is multi-user | {doc}`../j_community_annotation/index` |
+| Reopen your work later | **Save** → keep the `.cellucid-session` file | Captures UI state; reproducible “what I was looking at” | {doc}`03_save_restore_ux` |
+| Start a sample in its reviewed view | Choose the dataset from its catalog; the default session the catalog names applies automatically | Scientific data publishes first, then the session is integrity-verified | {doc}`04_official_sample_states` |
+| Send someone an exact view | Send the **dataset file** + `.cellucid-session` | Sessions don’t include data; file + session is the portable pair | {doc}`05_share_workflows_links_sessions_data_files` |
+| Collaborate on labels with many people | Use **Community annotation** (GitHub-backed) | Sessions are single-user artifacts; annotation is multi-user | {doc}`../j_community_annotation/index` |
 
 ---
 
@@ -44,20 +44,25 @@ If you’re here because “I loaded a session but it looks different”, start 
 
 1) {doc}`01_session_mental_model` (what a session is and how to reason about it)
 2) {doc}`02_what_gets_saved_and_restored` (explicit inclusion/exclusion list)
-3) {doc}`03_save_restore_ux` (manual Save State / Load State)
-4) {doc}`04_official_sample_states` (automatic, integrity-verified static states for official samples)
-5) {doc}`05_share_workflows_links_bundles_exports` (how to share with humans)
+3) {doc}`03_save_restore_ux` (manual **Save** / **Load**)
+4) {doc}`04_official_sample_states` (automatic, integrity-verified default sessions named by a catalog)
+5) {doc}`05_share_workflows_links_sessions_data_files` (how to share with humans)
 6) {doc}`10_troubleshooting_sessions` (the big “why did this fail?” map)
+
+From Python: read a session from a notebook viewer
+({doc}`../../python_package/e_jupyter_hooks/10_session_bundles_get_session_bundle`)
+and apply it back to an AnnData
+({doc}`../../python_package/e_jupyter_hooks/11_session_bundles_apply_session_to_anndata`).
 
 ---
 
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
-:width: 524px
+:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Data mapping group.
+:width: 532px
 
-The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
+The Session panel gathers every loading path under **Open data** and keeps the **Save** and **Load** buttons under **Session file**, directly below it.
 ```
 
 ```{toctree}

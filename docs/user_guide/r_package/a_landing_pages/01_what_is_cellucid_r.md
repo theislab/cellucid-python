@@ -1,83 +1,119 @@
 # What is cellucid-r?
 
 **Audience:** wet lab scientists, computational biologists, engineers  
-**Time:** 5–10 minutes  
+**Time:** 5 minutes  
 **Goal:** understand what the R package does, and what workflow it supports
 
-`cellucid-r` (package name: `cellucid`) is a **minimal R package** whose job is to export your single-cell data to the **on-disk format** consumed by the **Cellucid web app**.
+`cellucid-r` (package name: `cellucid`) does two things from R:
+
+- it **opens** a Seurat, SingleCellExperiment or SummarizedExperiment object
+  (or a file) in the **Cellucid viewer**, in the RStudio or Positron Viewer
+  pane or a browser, served from memory with no file written and no Python;
+- it **writes** the object, or matrices and data frames, as a
+  **Cellucid-ready AnnData** store that the **Cellucid web app** opens
+  directly (several assays: a **Cellucid-ready MuData**).
 
 If you remember one sentence:
 
-> `cellucid-r` turns *R objects* into an *export folder* that you open in your browser (Cellucid).
+> `cellucid_view(seu)` shows your object in Cellucid; `cellucid_prepare()`
+> writes it as a standard *AnnData Zarr store* that anyone opens in a browser —
+> or in Python with `anndata`.
 
 ```{note}
-Cellucid itself is a **web app** (the viewer UI). `cellucid-python` and `cellucid-r` are **helper packages** that prepare data and (in Python) provide notebook/server integrations. `cellucid-annotation` is for community annotation workflows.
+Cellucid itself is a **web app** (the viewer UI). `cellucid-python` and
+`cellucid-r` are peer packages that prepare data and serve it to the viewer
+from Python and R. `cellucid-annotation` is for community annotation
+workflows.
 ```
 
-## What `cellucid-r` does (today)
+## What `cellucid-r` does
 
 ### Fast path (wet lab / non-technical)
-- You (or a collaborator) run one R function: `cellucid::cellucid_prepare(...)`.
-- It writes an **export folder** to disk (a directory full of `.json` + binary files).
-- You open the Cellucid web app and load that folder.
-- You interactively explore: embeddings, metadata coloring, gene expression overlays, etc.
+- Look at an object: `viewer <- cellucid_view(seu)`.
+- Share it: one R call, `cellucid::cellucid_prepare("pbmc.zarr", "zarr", data = seu, ...)`,
+  writes one **`.zarr` folder** (or, with `format = "zarr.zip"`, one **`.zarr.zip` file**).
+- Anyone opens that folder or file in the Cellucid web app and explores it:
+  embeddings, metadata colouring, gene expression, and more.
 
 ### Practical path (computational users)
-`cellucid_prepare()` writes:
-- **Embeddings**: one `embeddings/<index>_<dim>d.bin` per embedding, any number per dimension (float32, row-major; optionally gzipped)
-- **Cell metadata (“obs”)**: `obs_manifest.json` + `obs/` binary files
-- **Gene expression (“var”)** (optional): `var_manifest.json` + `var/` binary files (one file per gene)
-- **Connectivity graph** (optional): `connectivity_manifest.json` + `connectivity/edges.*.bin`
-- **Dataset identity**: `dataset_identity.json` (what the viewer uses to understand “what’s in this folder”)
-- **Vector fields** (optional): `vectors/*.bin` + metadata in `dataset_identity.json`
+`cellucid_prepare()` writes a standard AnnData store (AnnData Zarr, format 2,
+or 3 with `zarr_format = 3`). With `data =` every component comes from the
+object; any argument you pass replaces that component:
 
-It is intentionally dependency-light:
-- Hard dependency: `jsonlite`
-- Optional (recommended) dependency: `Matrix` for sparse matrices and connectivity export
-- A small compiled primitive owns the persistent per-target export lock shared
-  with the Python package; source installs therefore need the platform R build
-  toolchain.
+| What you pass | Where it lands |
+|---|---|
+| `data` (Seurat, SingleCellExperiment, SummarizedExperiment) | every element below; several assays as modalities (`mod/<name>`) |
+| `embeddings` (named list of matrices) | `obsm[<key>]`, float32, every column |
+| `obs` (data frame) | `obs`, every column, with anndata's column encodings |
+| `var` (data frame) | `var`, every column |
+| `gene_expression` (cells × genes) | `X`, gene-major float32 (float64 for integer counts above 2^24; `csc_matrix` from a sparse matrix, stored zeros dropped) |
+| `connectivities` (cells × cells) | `obsp['connectivities']`, float32 `csr_matrix` |
+| `vector_fields` | `obsm['<field>_<basis>']` for each embedding `X_<basis>` (`velocity_umap`) |
+| dataset name, id, citation, source, launch defaults | `uns['cellucid']` and `uns['title']` |
+
+Its dependencies are light:
+- Hard dependencies: `jsonlite`, and for the viewer `httpuv`, `later` and `curl`
+- Optional: `Matrix` (sparse expression matrices and neighbour graphs;
+  recommended), `SeuratObject`, `SingleCellExperiment` /
+  `SummarizedExperiment` (each only to read its own objects)
+- A few small C routines (checksums, the outlier quantiles, one-pass matrix
+  checks, the decoders of a saved session), so a source install needs the
+  platform's R build toolchain.
 
 ### Deep path (expert / maintainer)
-`cellucid_prepare()` also:
-- **Normalizes embeddings** to a stable coordinate scale (so different datasets render consistently).
-- Computes **categorical centroids** (in embedding space) and **outlier quantiles** (in latent space) to support UI features that need category summaries.
-- Supports **quantization** (8-bit or 16-bit) for continuous values to reduce disk size and speed up loading.
+- Expression is stored **gene-major** and in chunks sized for range reads, so
+  the viewer fetches one gene with one small read.
+- Every chunk is byte-shuffled where that helps and **deflate**-compressed,
+  which browsers decompress natively.
+- Consolidated metadata (`.zmetadata`) lets a store on a web host open with one request.
+- Embeddings are stored at their **own coordinates**; the viewer scales them to
+  its view.
+- With `latent_key`, each categorical `obs` column's **outlier quantiles** in
+  that latent space are computed in C and stored in
+  `uns['cellucid']['outlierQuantiles']`, the same bytes Python's
+  `cellucid.prepare()` stores, so the viewer's outlier filter works as soon as
+  the file opens.
+- `cellucid_view()` serves exactly the store `cellucid_prepare(format = "zarr")`
+  would write, held in memory and encoded chunk by chunk as the viewer asks.
 
-## What `cellucid-r` does NOT do (yet)
+## What `cellucid-r` does not do
 
-Be explicit about current boundaries:
-
-- It does **not** embed Cellucid inside RStudio / Shiny (no widget yet).
-- It does **not** run a dedicated R server for lazy gene loading (Python has this).
-- It does **not** depend on Seurat or SingleCellExperiment; you must **extract matrices/data.frames** yourself (we provide recipes).
-
-If you want a “viewer object” you can control from a notebook, see {doc}`../../python_package/index`.
+- It writes **no HDF5**: no `.h5ad` and no `.h5mu` (Python's
+  `cellucid.prepare()` writes both), so it depends on no HDF5 library.
+  `cellucid_view()` still opens an `.h5ad` or `.h5mu` by path; the browser
+  reads the file itself.
+- It has no Shiny or htmlwidgets integration; the viewer is a page served by a
+  small local web server (`httpuv`), shown in the IDE's Viewer pane or a
+  browser.
+- It writes one expression matrix per modality: `counts` beside `data`, other
+  layers and `scale.data` are not written.
 
 ## The core mental model
 
-Cellucid uses a simple, robust mapping:
-
 1) **Row order defines cell identity.**  
-   Cell `i` in your embeddings must be the same cell `i` in your `obs`, `latent_space`, gene expression matrix, connectivity matrix, and vector fields.
-2) **The export folder is the dataset.**  
-   The browser doesn’t “load an R object” — it loads files.
+   Row `i` of every embedding, of `obs`, of `gene_expression`, of the graph,
+   and of every vector field is the same cell. Where several inputs carry row
+   names, they must agree.
+2) **The store is the dataset.**  
+   The browser reads a Cellucid-ready AnnData, from a file, a web host, or the
+   store `cellucid_view()` holds in memory for an R object.
 3) **The web app is the UI.**  
-   R is for preparation. The browser is for interaction.
+   R prepares, serves and talks to the viewer; the browser is where you
+   interact.
 
-## Common misconceptions (quick clarifications)
+## Common misconceptions
 
-- “Can I export from Seurat/SCE directly?”  
-  Not as a single call (by design), but you can export by extracting the data. Start with {doc}`../e_integrations_recipes/index`.
-
+- “Can I write from Seurat/SCE directly?”  
+  Yes: `cellucid_prepare(out_path, format, data = seu)`. See {doc}`../e_integrations_recipes/index`.
 - “Do I need gene expression to use Cellucid?”  
-  No. You can export embeddings + metadata only. Gene expression enables gene overlays/search.
-
-- “Why is `latent_space` required?”  
-  `cellucid-r` uses `latent_space` to compute per-cell **outlier quantiles** for categorical fields. This supports UI features that want a robust “how typical is this cell for its category?” measure.
+  No. Embeddings alone are enough; expression enables gene colouring and search.
+- “Is this a Cellucid-only format?”  
+  No. It is plain AnnData: `anndata.read_zarr("my_dataset.zarr")` reads it in
+  Python (`mudata.read_zarr()` for several assays).
 
 ## Next steps
 
-- If you want a copy/paste minimal example: {doc}`04_quick_start_3_levels`
-- If you want Seurat or SingleCellExperiment recipes: {doc}`../e_integrations_recipes/index`
-- If you want the detailed API + file format documentation: {doc}`../c_data_preparation_api/index`
+- Copy/paste minimal example: {doc}`04_quick_start_3_levels`
+- Seurat or SingleCellExperiment recipes: {doc}`../e_integrations_recipes/index`
+- The viewer from R: {doc}`../d_viewing_loading/04_view_in_rstudio_positron`
+- Detailed API and store layout: {doc}`../c_data_preparation_api/index`

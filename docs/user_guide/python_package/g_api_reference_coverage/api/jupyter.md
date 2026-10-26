@@ -5,9 +5,8 @@
 ```
 
 This page documents the notebook-facing APIs:
-- **Fastest notebook preview:** {func}`~cellucid.show_anndata` (serve AnnData directly)
-- **Reproducible notebook view:** {func}`~cellucid.show` (view an exported dataset directory)
-- **Interactive control:** viewer objects ({class}`~cellucid.AnnDataViewer`, {class}`~cellucid.CellucidViewer`) support hooks + Python→frontend commands
+- **Notebook view:** {func}`~cellucid.show_anndata` (an AnnData or MuData object, or any file or folder Cellucid reads: `.h5ad`, a Zarr store, `.h5mu`, `.loom`, a 10x `.h5` or `outs/` folder, a MatrixMarket folder, an `.rds`/`.rda`, or a file written by {func}`~cellucid.prepare`)
+- **Interactive control:** the viewer object ({class}`~cellucid.AnnDataViewer`) supports hooks + Python→frontend commands
 
 ---
 
@@ -21,7 +20,7 @@ This page documents the notebook-facing APIs:
 **Prerequisites**
 - `pip install cellucid`
 - If you use AnnData: install `anndata` (and typically `numpy`, `scipy`, `pandas`).
-- A notebook environment: classic Jupyter, JupyterLab, VSCode notebooks, or Google Colab.
+- A notebook environment: classic Jupyter or JupyterLab. VS Code's notebook webview and Google Colab's proxy have not been tested by the project ({doc}`../../e_jupyter_hooks/03_supported_environments_matrix`).
 
 ---
 
@@ -44,12 +43,12 @@ What you should see:
 - Progress while the complete configured web generation is fetched, verified,
   and published for this startup (unless output is quiet).
 
-### B) “I already exported a dataset folder”
+### B) “I have a file written by `prepare()`”
 
 ```python
-from cellucid import show
+from cellucid import show_anndata
 
-viewer = show("./my_export")
+viewer = show_anndata("my_study.h5ad")  # it names itself (uns['cellucid'])
 ```
 
 ---
@@ -60,19 +59,19 @@ viewer = show("./my_export")
 
 Cellucid always runs in a browser context (the viewer UI), but you choose **where it appears**:
 - **Notebook embedding**: viewer appears inline (this page).
-- **Browser tab**: use {func}`~cellucid.serve` / {func}`~cellucid.serve_anndata` / `cellucid serve …` (see {doc}`server`).
+- **Browser tab**: use {func}`~cellucid.serve_anndata` / `cellucid serve …` (see {doc}`server`).
 
-### 2) Choosing `show_anndata` vs `show`
+### 2) Opening what you have, or a prepared file
 
-Use {func}`~cellucid.show_anndata` when:
+Open the object or file you have when:
 - you’re iterating quickly in analysis notebooks,
-- you don’t want to write an export folder yet,
-- you can accept slower loads and less shareable artifacts.
+- you want the viewer to read the `.h5ad` or Zarr store you already have, in
+  place.
 
-Use {func}`~cellucid.show` when:
-- you want reproducibility (the export folder is a concrete artifact),
-- you want speed (pre-quantized, pre-packed binaries),
-- you want to share the dataset directory or host it.
+Open a file written by {func}`~cellucid.prepare` when:
+- you want reproducibility (the file is a concrete, self-naming artifact),
+- you want speed (a gene-major matrix: every gene is one small read),
+- you want to share the dataset or host it.
 
 ### 3) A minimal “hooks” example (viewer → Python)
 
@@ -130,13 +129,16 @@ See {doc}`sessions` for what a session bundle contains and how to apply it back 
 
 ## Deep path (how notebook embedding works)
 
-### What starts when you call `show(...)` / `show_anndata(...)`
+### What starts when you call `show_anndata(...)`
 
-1. A **local HTTP server** starts (on `127.0.0.1:<port>`).
-   - Exported data: {class}`~cellucid.CellucidServer`
-   - AnnData mode: {class}`~cellucid.AnnDataServer`
+1. A **local HTTP server** ({class}`~cellucid.AnnDataServer`) starts on
+   `127.0.0.1:8765`, or, when another viewer or program holds 8765, on the next
+   free port, with a printed note (Google sign-in works only on 8765).
+   `AnnDataViewer(port=...)` uses the port given or fails.
 2. The exact verified viewer generation is served from that same origin.
-3. The viewer UI posts interaction events back to the local server at `/_cellucid/events` (selections at `/_cellucid/selection`).
+3. The viewer UI opens its channel, one WebSocket to that server
+   (`/_cellucid/ws`), authenticated with its viewer token; commands go to the
+   viewer and interaction events come back on it.
 4. The Python viewer routes those events to your hook callbacks (e.g., `@viewer.on_selection`).
 
 ### Environment caveat: when the browser cannot reach the kernel’s localhost
@@ -158,33 +160,32 @@ If that happens, pass the exact browser-reachable HTTP(S) base URL as
 .. autofunction:: show_anndata
 ```
 
-#### `show`
-
-```{eval-rst}
-.. autofunction:: show
-```
-
 ### Classes (see dedicated page)
 
-- {class}`~cellucid.AnnDataViewer` and {class}`~cellucid.CellucidViewer` are documented on {doc}`viewers`.
+- {class}`~cellucid.AnnDataViewer` is documented on {doc}`viewers`.
 
 ---
 
 ## Edge cases (do not skip)
 
 ### Data size and performance
-- Very large `adata.X` can be slow in AnnData mode; consider exporting with {func}`~cellucid.prepare`.
-- A `.h5ad` path is always opened read-only-backed; a `.zarr` path is loaded
-  eagerly.
+- A path is never loaded into the kernel's memory: the viewer reads an
+  `.h5ad`, a Zarr store, an `.h5mu`, a `.loom` or a 10x file in place with HTTP
+  range requests (only what a view needs), and an R object or a MatrixMarket
+  folder once from the start.
+- An in-memory AnnData is written once to a temporary `.h5ad` (sparse matrices
+  column-major, uncompressed), and a MuData to a temporary Cellucid-ready
+  `.h5mu`, when the viewer starts; the file is removed when the viewer stops or
+  Python exits. For a large object, passing the path it was read from skips
+  that write.
 
 ### “My embedding is not 2D/3D”
 - Cellucid supports 1D/2D/3D embeddings; if the embedding is missing or has an unexpected shape, you’ll see missing plot / errors.
 
 ### Duplicate gene identifiers
-- Direct AnnData viewing rejects duplicate gene names during adapter
-  construction; provide a distinct name through `var.index` or `gene_id_column`
-  (see {doc}`export` and {doc}`adapters`). Names are not filenames, so only
-  exact duplicates collide.
+- The viewer makes repeated gene names unique (`MATR3`, `MATR3-1`), so every
+  gene stays reachable; name genes by another `var` column with
+  `gene_id_column` when the index holds identifiers you do not search by.
 
 ---
 
@@ -200,7 +201,7 @@ How to confirm:
 - Print `viewer.viewer_url` and try opening it in a new browser tab.
 
 Fix:
-- Use a notebook environment (Jupyter, JupyterLab, VSCode notebooks, Colab).
+- Use a notebook environment (classic Jupyter or JupyterLab; VS Code and Colab are untested).
 - If iframes are blocked, open `viewer.viewer_url` manually.
 
 ---
@@ -219,7 +220,10 @@ Fix:
 ### Symptom: “Port already in use”
 
 Fix:
-- Choose a different port (pass `port=...` to the viewer class, or stop the process using the port).
+- {func}`~cellucid.show_anndata` and `AnnDataViewer()` without `port=` never
+  fail on a taken port: they take the next free one. This error means a port
+  you passed to `AnnDataViewer(port=...)` is taken: pass another, or stop the
+  process using it.
 
 ---
 
@@ -280,11 +284,11 @@ Likely causes:
 
 How to confirm:
 - Wait for readiness: `viewer.wait_for_ready()`.
-- In AnnData mode, print `adata.obs.columns` and confirm the field exists.
+- Print `adata.obs.columns` and confirm the field exists.
 
 Fix:
 - Use the exact field name.
-- Prefer exporting with {func}`~cellucid.prepare` for stable field naming across sessions.
+- Prefer a file written by {func}`~cellucid.prepare` for stable field naming across sessions.
 
 ---
 
@@ -322,7 +326,12 @@ Fix:
 ### Symptom: “My hook callback crashes silently”
 
 What’s happening:
-- Hook callbacks are wrapped; exceptions are logged rather than crashing the notebook cell.
+- Hooks run on the viewer channel's thread, not in your cell. An exception a
+  hook raises is logged with its traceback (logger `cellucid.viewer_channel`,
+  "A viewer event hook failed"), never raised in the notebook. The event is
+  still recorded in `viewer.state` and handed to `wait_for_event` (it is
+  recorded before any hook runs), and the other hooks still run for it. The
+  channel stays open.
 
 How to confirm:
 - Enable debug logging:
@@ -347,7 +356,7 @@ Fix:
   ```
 - The report includes:
   - server health/info probes,
-  - `dataset_identity_probes`, keyed by every exact declared dataset id/path,
+  - `anndata_store_probes`, keyed by every exact listed dataset id,
   - detected notebook context (Jupyter/Colab/VSCode),
   - viewer UI cache status,
   - recent events and readiness state.
@@ -357,5 +366,5 @@ Fix:
 ## See also
 
 - {doc}`server` for browser-tab workflows and SSH tunneling
-- {doc}`export` for reproducible exports (`prepare(...)`)
+- {doc}`prepare` for Cellucid-ready AnnData files (`prepare(...)`)
 - {doc}`sessions` for `.cellucid-session` bundles (capture + apply)

@@ -19,15 +19,15 @@ If you’re stuck, do this first:
 1) Confirm **Visualization → Render mode:** is `Points`.  
 2) Confirm the selected view shows an embedding that actually has vector fields: under **Compare views → View N shows**, the embedding the vectors were computed on.  
 3) Enable `Show overlay`, then temporarily set:
-   - `Particle density:` 5K
-   - `Trail length:` 3.0s
-   - `Opacity:` 60%
-   - `Bloom strength:` 0.00 (Advanced Visual Settings → HDR & Bloom)
+   - `Particle density` 5K
+   - `Trail length` 3.0s
+   - `Opacity` 60%
+   - `Bloom strength` 0.00 (Advanced visual settings → HDR and bloom)
 4) If it’s still broken, look at which symptom below matches what you see.
 
 ---
 
-## Symptom: “I can’t find the Vector Field Overlay controls”
+## Symptom: “I can’t find the vector field overlay controls”
 
 ### Likely causes (ordered)
 
@@ -38,8 +38,8 @@ If you’re stuck, do this first:
 ### How to confirm
 
 - In the left sidebar, open **Visualization** and look for:
-  - `Render mode:` and then
-  - a block titled `Vector Field Overlay:`
+  - `Render mode` and then
+  - a block titled `Vector field`
 
 ### Fix
 
@@ -73,7 +73,7 @@ If you’re stuck, do this first:
 
 ### Prevention
 
-- Export both `*_umap_2d` and `*_umap_3d` vector fields when you expect users to show both dimensions.
+- Store one vector array per embedding users will show, named `<field>_<basis>` after it: `velocity_umap` for `X_umap` and `velocity_umap_3d` for `X_umap_3d`.
 
 ---
 
@@ -94,14 +94,14 @@ If you’re stuck, do this first:
 ### Fix
 
 1) Confirm the view shows an embedding a field is bound to.
-2) Try a different field in `Vector field:` (if available).
-3) If you are loading via server/public hosting, confirm the vector files exist and are reachable.
-4) If you are loading an AnnData, confirm `adata.obsm` contains the expected key and shape (see “How do I add vector fields?”).
+2) Try a different field in `Vector field` (if available).
+3) Confirm the AnnData file's `obsm` contains the expected key and shape (see “How do I add vector fields?”).
+4) For a hosted file, confirm `adata.obsm` contains the expected key and shape (see “How do I add vector fields?”).
 
 ### Prevention
 
 - Keep vector field naming and shapes consistent (bound to one embedding, row-aligned).
-- Prefer pre-exported folders created by `cellucid.prepare(...)` for reproducibility.
+- Write the dataset with `cellucid.prepare(..., vector_fields=...)`, which checks every array and stores it under the key the default binding reads.
 
 ---
 
@@ -111,19 +111,13 @@ If you’re stuck, do this first:
 
 1) There are no vector fields for the embedding the view shows (the dropdown lists only the fields bound to it).  
 2) Your dataset metadata says vector fields exist, but the actual arrays/files are missing.  
-3) For an AnnData file: the arrays are present, but their keys do not follow the `<field>_umap_<dim>d` default rule, so nothing is bound until you bind them under **Session › Data mapping › Vector fields**.
+3) For an AnnData file: the arrays are present, but their keys do not follow the `<field>_<basis>` rule (no `obsm['X_<basis>']` matches the key), or the array does not have as many columns as its embedding, so nothing is bound until you bind them under **Session › Data mapping › Vector fields**. A `velocity_umap_2d` beside a bare `X_umap` (no `X_umap_2d`) is such a key: rename it `velocity_umap`, scVelo's own name, or bind it by hand.
 
 ### How to confirm
 
 - Switch the view's embedding and see if entries appear; the info line names the embeddings that have a field.
 - If you’re loading an AnnData, inspect `adata.obsm.keys()` in Python and look for:
-  - `velocity_umap_2d`, `velocity_umap_3d`, `T_fwd_umap_2d`, etc.
-- If you’re loading an export folder, check for:
-  - `dataset_identity.json` containing a `vector_fields` block
-  - a `vectors/` directory with the files that block lists under
-    `vector_fields.fields.<field>.files`, one per bound embedding and named by
-    index, such as `vectors/0_2.bin.gz` (or `.bin` when the export is
-    uncompressed)
+  - `velocity_umap`, `velocity_umap_3d`, `T_fwd_umap`, `velocity_branches`, etc.: a `<field>_<basis>` key beside its `X_<basis>` embedding, with the same number of columns.
 
 ### Fix
 
@@ -133,9 +127,10 @@ If you’re stuck, do this first:
 
 ### Prevention
 
-- Use required dimension-suffixed keys: `<field>_umap_<dim>d` (e.g.,
-  `velocity_umap_2d`).
-- Validate shapes before export: `(n_cells, dim)` with matching row order.
+- Name each vector array `<field>_<basis>` after the embedding `X_<basis>` it
+  is drawn over (e.g. `velocity_umap` for `X_umap`).
+- Validate shapes before export: as many columns as the embedding, one row per
+  cell, in the same row order.
 
 ---
 
@@ -143,7 +138,7 @@ If you’re stuck, do this first:
 
 ### Likely causes (ordered)
 
-1) `Opacity:` is 0% or very low, or `Particle size:` is too small.  
+1) `Opacity` is 0% or very low, or `Particle size` is too small.  
 2) All cells are filtered out / invisible, so there is nothing to spawn particles from.  
 3) Vectors are all-zero. Every particle is then discarded before it is drawn, so
    nothing appears at any setting — see {doc}`06_edge_cases`.  
@@ -152,16 +147,16 @@ If you’re stuck, do this first:
 
 ### How to confirm
 
-- Set `Opacity:` to 60% and `Particle size:` to ~2.0.
+- Set `Opacity` to 60% and `Particle size` to ~2.0.
 - Temporarily relax filters so you have visible points.
-- Reduce `Particle density:` to 5K (to reduce GPU load).
+- Reduce `Particle density` to 5K (to reduce GPU load).
 - If possible in Python: check vector magnitudes (e.g., `np.linalg.norm(vectors, axis=1)`).
 
 ### Fix
 
-1) Adjust `Opacity:` and `Particle size:`.
+1) Adjust `Opacity` and `Particle size`.
 2) Ensure you have visible cells (undo filters that hide everything).
-3) Increase `Flow speed:` slightly (2×–4×) to see motion.
+3) Increase `Flow speed` slightly (2×–4×) to see motion.
 4) If steps 1–3 change nothing at all, stop tuning: an all-zero field cannot be
    revealed by any control. Recompute the vectors or verify you are exporting
    the intended array.
@@ -177,33 +172,33 @@ If you’re stuck, do this first:
 ### Likely causes (ordered)
 
 - Too faint:
-  1) low `Opacity:` or tiny `Particle size:`
-  2) low `Intensity:` / low `Exposure:` (advanced)
+  1) low `Opacity` or tiny `Particle size`
+  2) low `Intensity` / low `Exposure` (advanced)
   3) dark background + low contrast
 - Too bright:
-  1) high `Particle density:` + long `Trail length:`
-  2) high `Trail persistence:` (advanced)
-  3) `Bloom strength:` too high (advanced)
+  1) high `Particle density` + long `Trail length`
+  2) high `Trail persistence` (advanced)
+  3) `Bloom strength` too high (advanced)
 
 ### How to confirm
 
 - Switch to conservative “debug” settings:
-  - `Particle density:` 5K
-  - `Trail length:` 3.0s
-  - `Opacity:` 60%
-  - `Bloom strength:` 0.00
+  - `Particle density` 5K
+  - `Trail length` 3.0s
+  - `Opacity` 60%
+  - `Bloom strength` 0.00
 
 ### Fix
 
 - If too faint:
-  1) raise `Opacity:` and `Particle size:`
-  2) then raise `Intensity:` slightly (advanced)
-  3) only then consider `Exposure:` changes
+  1) raise `Opacity` and `Particle size`
+  2) then raise `Intensity` slightly (advanced)
+  3) only then consider `Exposure` changes
 - If too bright:
-  1) reduce `Particle density:`
-  2) reduce `Trail length:`
-  3) reduce `Bloom strength:` (or set to 0.00)
-  4) reduce `Opacity:`
+  1) reduce `Particle density`
+  2) reduce `Trail length`
+  3) reduce `Bloom strength` (or set to 0.00)
+  4) reduce `Opacity`
 
 ### Prevention
 
@@ -215,7 +210,7 @@ If you’re stuck, do this first:
 
 ### Likely causes (ordered)
 
-1) Particle count is too high for your GPU (`Particle density:`).  
+1) Particle count is too high for your GPU (`Particle density`).  
 2) Trails and bloom are dominating (large window + high DPI + bloom).  
 3) You have many snapshot views open (each view has its own trail buffers).  
 4) LOD is disabled, or it is enabled and the camera is close enough that `Auto`
@@ -230,15 +225,15 @@ If you’re stuck, do this first:
 
 ### Fix
 
-1) Set `Particle density:` to 5K–10K.
-2) Set `Trail length:` to 2–5s.
-3) Set `Bloom strength:` to 0.00 (Advanced → HDR & Bloom). This is not only a
+1) Set `Particle density` to 5K–10K.
+2) Set `Trail length` to 2–5s.
+3) Set `Bloom strength` to 0.00 (Advanced → HDR and bloom). This is not only a
    visual change: it also frees the bloom render targets and skips two
    full-screen passes.
 4) Reduce number of visible views.
-5) Enable renderer LOD (**Visualization → Renderer settings → Level-of-Detail
+5) Enable renderer LOD (**Visualization → Performance → Level of detail
    (LOD)**), keep `Sync with LOD` enabled, and pull the camera back — `Auto`
-   coarsens at any dataset size. Lower `Force LOD level:` by a few steps when you
+   coarsens at any dataset size. Lower `Force LOD level` by a few steps when you
    need to go past `Auto`'s floor of `min(2,000,000, cells ÷ 8)` points.
 
 ### Prevention
@@ -271,7 +266,7 @@ If you’re stuck, do this first:
 
 - Uncheck `Sync with LOD` if you need the flow at every zoom level, and accept
   the frame cost, or
-- raise `Force LOD level:` so the renderer stays nearer full detail.
+- raise `Force LOD level` so the renderer stays nearer full detail.
 
 ### Prevention
 
@@ -321,8 +316,10 @@ returns without touching the overlay. See {doc}`06_edge_cases`.
 1) The spawn-table build threw. This is the terminal failure state of that
    build, and it is the *only* thing this message means. The overlay also
    disables itself.  
-2) The build allocates two GPU textures (one visibility, one spawn table) at the
-   end; under memory pressure that allocation is where it fails.  
+2) The first build of a view (and one after its cell count or level of
+   detail changed) allocates two GPU textures (one visibility, one spawn
+   table); under memory pressure that allocation is where it fails. Later
+   builds rewrite the same textures.  
 
 ### How to confirm
 
@@ -330,11 +327,11 @@ returns without touching the overlay. See {doc}`06_edge_cases`.
   That one carries the actual error text.
 - Open the browser console; the thrown error is logged there too.
 - Check whether the same view had just been enlarged, duplicated into more
-  snapshots, or pushed to a high `Particle density:`.
+  snapshots, or pushed to a high `Particle density`.
 
 ### Fix
 
-1) Reduce GPU load: lower `Particle density:`, set `Bloom strength:` to `0.00`,
+1) Reduce GPU load: lower `Particle density`, set `Bloom strength` to `0.00`,
    close extra snapshot views, shrink the window.
 2) Toggle `Show overlay` off and on to retry the build.
 3) If the console reports WebGL context loss, reload the page.
@@ -351,12 +348,12 @@ returns without touching the overlay. See {doc}`06_edge_cases`.
 ### Likely causes (ordered)
 
 1) You only exported/provided the vector field for one dimension.  
-2) The 3D vector field exists but has the wrong shape (e.g., `(n_cells, 2)` stored under a 3D key).  
+2) The 3D vector field exists but is not bound: its key does not name the 3D embedding (`velocity_umap_3d` for `X_umap_3d`), or it does not have as many columns as that embedding (e.g. `(n_cells, 2)` beside a 3-column `X_umap_3d`).  
 
 ### How to confirm
 
 - Show the other dimension's embedding in the view and see whether the dropdown changes.
-- Check your export folder or AnnData `obsm` keys for `*_2d` and `*_3d` variants.
+- Check the AnnData `obsm` keys for a `<field>_<basis>` array beside each embedding, for example `velocity_umap` beside `X_umap` and `velocity_umap_3d` beside `X_umap_3d`.
 
 ### Fix
 
@@ -379,7 +376,7 @@ returns without touching the overlay. See {doc}`06_edge_cases`.
 
 ### How to confirm
 
-- Set `Turbulence:` low (0–0.2) and disable bloom (Bloom strength = 0).
+- Set `Turbulence` low (0–0.2) and disable bloom (Bloom strength = 0).
 - Switch to a different field (if you have one) and compare.
 - In Python, verify:
   - same cell order
@@ -409,23 +406,24 @@ with the exact shape and dtype requirements — is
 The two routes bind a field to an embedding differently, and the binding
 decides whether the field is drawn at all:
 
-- **Export (`prepare(..., vector_fields=...)`).** Each field names the
-  embedding ids it is drawn over, for example
-  `{"velocity": {"X_umap": v2, "X_umap_3d": v3}}`. The field id is any name.
-  Each array must have as many columns as the embedding it is bound to has
-  dimensions, or the export is refused naming both numbers. Bind the field to
-  every embedding you expect people to show it on.
-- **Direct AnnData (the browser H5AD/Zarr path, or `serve_anndata` with
-  `serve_vector_fields=True`).** The default binding reads the key: an `obsm`
-  key of the form `<something>_umap_<dim>d` — `velocity_umap_2d`,
-  `T_fwd_umap_3d` — is bound to the embedding of its dimension when that
-  embedding is the UMAP (`X_umap_<dim>d` or the plain `X_umap`). Any other
-  binding is chosen under **Session › Data mapping › Vector fields**.
+- **`prepare(..., vector_fields=...)`.** Each field names the embedding it
+  is drawn over, for example `{"velocity": {"X_umap": v2, "X_umap_3d": v3}}`,
+  and each array is stored under scVelo's name for it, `obsm['<field>_<basis>']`
+  for the embedding `X_<basis>` (`velocity_umap`, `velocity_umap_3d`), which the
+  viewer shows as the one field `velocity`. Any embedding named `X_<basis>`
+  works (`{"velocity": {"X_branches": v}}` stores `velocity_branches`); each
+  array has exactly as many columns as its embedding.
+- **Any AnnData file (opened in the browser, or served by `cellucid serve`,
+  `serve_anndata` or `show_anndata`, which the browser reads the same
+  way).** The default binding reads the key, following scVelo's convention: an
+  `obsm` key `<field>_<basis>` — `velocity_umap`, `velocity_umap_3d`,
+  `T_fwd_umap`, `velocity_branches` — is bound to every enabled view of
+  `obsm['X_<basis>']` when both arrays have the same number of columns. Any
+  other binding is chosen under **Session › Data mapping › Vector fields**.
 
 Either way a field is drawn only in a view showing an embedding it is bound to.
-A finished export folder carries the evidence: `dataset_identity.json` gains a
-`vector_fields` block, and a `vectors/` directory appears holding one `.bin`
-(or `.bin.gz`) per field and bound embedding.
+The file carries the evidence: `adata.obsm.keys()` lists one
+`<field>_<basis>` array per field and embedding.
 
 ---
 
@@ -436,14 +434,13 @@ not on a paraphrase — each one has exactly one cause.
 
 | Message | Raised by | The one condition |
 |---|---|---|
-| `Vector field "<id>" has no data bound to layout "<layout>".` | DataState | A load was asked for in a view showing an embedding this field is not bound to. |
-| `Vector field "<id>" is not bound to embedding "<embedding id>"` | AnnData adapter | The same, for a file read in the browser. |
-| `Vector field '<obsmKey>' has N columns, but its Dd suffix requires exactly D` | AnnData adapter, at dataset load | A 2D array is stored under a 3D key, or the reverse — so the dataset does not open. Note the **single** quotes around the `obsm` key. |
-| `Vector field '<obsmKey>' contains a non-finite component at flat index I` | AnnData adapter | A `NaN` or `Inf` in an `obsm` vector array; `I` is the flat index (cell × dimension + component). |
-| `Vector field '<obsmKey>' component at flat index I is outside the finite Float32 range after normalization` | AnnData adapter | The values are finite but leave `float32` range once scaled with their embedding. |
-| `VectorFieldManager.loadField: vectors length X does not equal expected length Y.` | Vector field manager | The payload length is not `n_cells × components`: usually a stale or mismatched `vectors/*.bin` in an export folder. |
-| `VectorFieldManager.loadField: field "<id>" contains a non-finite value at cell N, component C.` | Vector field manager | A `NaN` or `Inf` in the field. The message names the exact cell and component; see {doc}`06_edge_cases`. |
-| `VectorFieldManager.loadField: scaling field "<id>" overflowed at cell N, component C.` | Vector field manager | The values are finite but so large that scaling them leaves `float32` range. |
+| `Vector field "<id>" has no data bound to <embedding label>.` | View manager | A load was asked for in a view showing an embedding this field is not bound to. |
+| `Vector field obsm['<obsmKey>'] cannot be drawn: <reason>.` | Data mapping | A binding (default or chosen by hand) the file cannot satisfy, for example `obsm['velocity_umap'] has 3 columns; it needs 2, or 2 like obsm['X_umap']`. |
+| `Vector field '<obsmKey>' cannot be drawn: NaN at cell N.` | AnnData reader (worker) | A `NaN` (or `Infinity`, `-Infinity`, or a value not representable as float32) in an `obsm` vector array; `N` is the cell's row. |
+| `Vector field '<obsmKey>' component at flat index I is outside the finite Float32 range after normalization` | AnnData reader (worker) | The values are finite but leave `float32` range once scaled with their embedding. |
+| `VectorFieldManager.loadField: vectors length X does not equal expected length Y.` | Vector field manager | The array read is not `n_cells × components`: the `obsm` array does not have one row per cell. |
+| `Vector field obsm['<obsmKey>'] is bound to obsm['<embeddingKey>'], which cannot be plotted.` | Vector field manager | The embedding the binding names is not one the dataset can show, so there is no view to draw the field in. |
+| `Two vector arrays are the vector field "<id>" of <embedding label>; bind only one.` | Vector field manager | Two bindings give one field two arrays over the same embedding; keep one. |
 
 Whichever one fires, the visible consequence is the same: `Show overlay` turns
 itself back off and the info line reads `Failed to load vector field.`
@@ -454,9 +451,9 @@ itself back off and the info line reads `Failed to load vector field.`
 
 When reporting an overlay bug, include:
 
-- Dataset loading path: file picker / server / Jupyter / GitHub-hosted exports
+- Dataset loading path: file picker / server / Jupyter / link (GitHub, web address)
 - Browser + OS + GPU (e.g., Chrome 121, macOS 14.2, Apple M2)
 - Dataset size: `n_cells`, and which embedding each view showed (its row in **Compare views**, e.g. `t-SNE · 2D`)
-- Selected `Vector field:` label and a screenshot of the overlay settings panel
+- Selected `Vector field` label and a screenshot of the overlay settings panel
 - Any toast/notification error text (copy/paste)
 - Browser console logs around the failure (copy/paste)

@@ -16,16 +16,16 @@ If you are only *using* the package, you can skip this section — start at
 :link: 01_codebase_architecture
 :link-type: doc
 
-What each file under `R/` is responsible for, and the order
-`cellucid_prepare()` runs the export in.
+What each file under `R/` and `src/` is responsible for, and the order
+`cellucid_prepare()` checks its inputs and writes the store.
 :::
 
 :::{grid-item-card} {octicon}`beaker;1.5em;sd-mr-1` Testing and CI
 :link: 02_testing_and_ci
 :link-type: doc
 
-Running `testthat` and `R CMD check` locally, what the suite covers, and which
-OS/R combinations CI runs.
+Running `testthat` and `R CMD check --as-cran` locally, the anndata round
+trip, and which OS/R combinations CI runs.
 :::
 
 :::{grid-item-card} {octicon}`tag;1.5em;sd-mr-1` Release Process
@@ -39,9 +39,10 @@ requires, and the publishing targets.
 ::::
 
 ```{note}
-The export format itself is a contract with four other repositories. Before
-changing anything a file layout depends on, read
-{doc}`../c_data_preparation_api/09_output_format_specification_exports_directory`.
+The store `cellucid_prepare()` writes is a contract with the web app and the
+Python package: a standard AnnData store plus `uns['cellucid']`. Before
+changing anything in it, read
+{doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification`.
 ```
 
 ```{toctree}

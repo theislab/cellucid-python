@@ -1,6 +1,6 @@
 # Analysis architecture
 
-This page documents the Cellucid **Page Analysis** subsystem: how analysis UIs are registered, how data is queried, which compute backends exist, and how the module avoids memory/performance degradation during long sessions.
+This page documents the Cellucid **Analysis** subsystem: how analysis UIs are registered, how data is queried, which compute backends exist, and how the module avoids memory/performance degradation during long sessions.
 
 It is written for contributors adding:
 - a new analysis mode,
@@ -25,7 +25,7 @@ It is written for contributors adding:
 
 ## Where analysis is initialized (not a normal UI module)
 
-Unlike most sidebar modules, Page Analysis is created directly in:
+Unlike most sidebar modules, Analysis is created directly in:
 - `cellucid/assets/js/app/main.js`
 
 It looks for a DOM container:
@@ -39,7 +39,7 @@ For debugging convenience, the instance is stored as:
 - `window._comparisonModule`
 
 :::{note}
-Page Analysis has its own UI architecture under `cellucid/assets/js/app/analysis/ui/`.
+Analysis has its own UI architecture under `cellucid/assets/js/app/analysis/ui/`.
 It is not orchestrated by `cellucid/assets/js/app/ui/core/ui-coordinator.js`.
 :::
 
@@ -103,10 +103,16 @@ Code:
 ### 2) `DataLayer` (unified access to state + datasets)
 
 The analysis module needs a safe, consistent way to:
-- extract per-cell values for obs/var fields
+- extract per-cell values for obs/var fields: a continuous page holds the
+  field's own numbers, a categorical page its cells' category codes at the
+  field's width with `categories` and `missingCode` (counts keyed by label are
+  published with the codes)
+- read whole gene columns for computations (`readGeneColumn(s)`): a gene's
+  sparse entries from the source, or a loaded field's values, never installed
+  in field state
 - handle missing values
 - respect filtering/visibility/highlights
-- cache expensive derived arrays (e.g. bulk gene extraction)
+- cache page data by page version
 
 This is handled by:
 - `cellucid/assets/js/app/analysis/data/data-layer.js`
@@ -139,6 +145,11 @@ changes a number. The operations are:
 - order statistics (`COMPUTE_ORDER_STATISTICS`): the median and quartiles of
   Quick Insights and the median of signature scores, for 500,000 finite values
   or more.
+- hierarchical clustering (`COMPUTE_PAIRWISE_DISTANCES` in row blocks across
+  the pool, then `COMPUTE_AGGLOMERATION` in one worker,
+  `compute/hierarchical-clustering.js`), always in the workers;
+- per-cell CSV files (`COMPUTE_CSV_EXPORT`, `compute/csv-export.js`): each
+  worker writes a range of rows as a Blob, joined after the header.
 
 Below those sizes the main thread computes the result directly, because posting
 the values to a worker would cost more than the work. A payload posted without
@@ -150,7 +161,7 @@ page also reports its finite values, which the main thread adopts instead of
 scanning the page again, and categorical counts are taken once, as the data
 layer builds a page's values (`analysis/shared/category-counts.js`). Loops that
 must stay on the main thread (gathering a page, aligning two variables for a
-scatter plot, signature scoring) yield to the interface between 12 ms slices.
+scatter plot, signature scoring from sparse gene columns) yield to the interface between 12 ms slices.
 Marker-gene discovery dispatches its own `MARKERS_*` messages to the same
 worker pool. There is no GPU analysis backend.
 
@@ -171,44 +182,60 @@ Every gene and observation-field load goes through one download scheduler
 (`cellucid/assets/js/data/fetch-scheduler.js`), entered from
 `app/state/managers/field/loading.js`:
 
-- **Priorities.** A gene the user chose (`high`), an observation field or a
-  gene a view or a short analysis needs (`normal`), one of a long run's genes
-  (`bulk`) and a prefetch on intent (`low`). `high` and `normal` loads start at
-  once; while any is in flight, no new `bulk` or `low` download starts, so a
-  gene chosen during a 5,000-gene run does not share the connection with a
-  dozen of the run's downloads. The browser is told the same through the
-  fetch `priority` hint. A load joined by a more urgent caller (a prefetched
-  gene the user then chooses) is raised.
-- **Downloads kept per dataset load.** The var field loader of a dataset load
-  keeps the downloaded (still compressed) payloads in a byte-bounded cache
-  (`data/payload-transfer-cache.js`, 64 MiB), so a gene evicted from memory is
-  decoded again without a request, and a second run over the same genes makes
-  no requests. Concurrent requests for one payload share one download. The
-  cache holds exactly the export generation whose manifests describe it and is
-  dropped with the load.
-- **Downloads ahead.** `StreamingGeneLoader` (DE, markers, heatmaps) downloads
-  the payloads of the genes queued after its decode window into that cache
-  (`DataLayer.prefetchGenePayload`). The number in flight starts at 8,
-  doubles after each round that ran more than 10% faster than the last and
-  shrinks by a quarter after one that ran more than 10% slower, so it settles
-  where the round trips are covered and the link is full; it is at most 256
-  and never holds more than half the payload cache in downloaded-but-undecoded
-  genes. A gene already in memory is skipped; a local source (a file opened in
-  the browser, a served AnnData) has nothing to download ahead.
-- **Cancellation.** A finished or aborted run cancels its downloads still
+- **Priorities.** A gene the user chose or the field a view is coloured by
+  (`high`), work the user started and is watching, such as a gene signature
+  or a correlation (`normal`), one of a long run's genes (`bulk`) and a
+  prefetch on intent (`low`). `high` and `normal` reads start at once; while
+  any is in flight, no new `bulk` or `low` read starts, so a gene chosen
+  during a 5,000-gene run does not share the connection with a dozen of the
+  run's reads. A read joined by a more urgent caller (a prefetched gene the
+  user then chooses) is raised. Waiting reads start in priority order (`bulk`
+  before `low`, each kind first come, first served), no more of them at once
+  than requests the dataset's source answers at once, as its reader reports
+  it (`setSourceRequestConcurrency`): six to an HTTP/1.1 host until a reader
+  says otherwise, the host's streams over HTTP/2 or HTTP/3, and no bound for a
+  source whose reads cost no request (a local file).
+- **Reads ahead, straight to the workers.** A run that streams genes
+  (markers, DE, the gene-moments pass, the dot plot, UCell:
+  `analysis/shared/gene-stream-runner.js`) hands them to the workers in tasks
+  of several genes, and reads the tasks queued after the ones being computed,
+  as their genes' sparse entries (never installed in field state). The reads
+  go over the run's gene route (`analysis/data/gene-route.js`,
+  `data/gene-delivery.js`): one read serves a task on each worker, the reader
+  posting each task's genes to the worker it runs on, and the page hears only
+  their bytes, so no gene value crosses the main thread. How many genes a
+  task takes, how far ahead, and how many tasks the workers hold, is decided
+  by the run's tuner (`analysis/shared/run-tuner.js`) from the worker count,
+  the run's genes, the analysis memory budget (`data/memory-budget.js`), each
+  read's time and bytes and the link the reader measured: sixteen tasks per
+  worker over the run (held so the tasks in flight fit half the budget as
+  dense columns); the read-ahead covers the tasks consumed while one task's
+  genes are fetched, doubles while workers sit idle waiting for reads,
+  halves when throughput falls or memory pressure is reported, and buffered
+  genes hold at most 30% of the budget. The tuner never decides network
+  parallelism; the scheduler above does. A worker the pool replaces during a
+  run (a cancelled task outlived its grace) gets a new port; the genes on
+  their way to the old one are read again.
+- **Cancellation.** A finished or aborted run cancels its reads still
   waiting in the scheduler (they never start) and those under way; a shared
-  download is cancelled only when every caller has left. Each dataset load has
+  read is cancelled only when every caller has left. Each dataset load has
   its own scheduler: replacing the dataset closes the previous one, which
-  aborts and rejects every download it still held, so a stalled read of the
-  old dataset never holds back the new dataset's downloads.
-- **Progress.** A gene the user waits for reports its download in its loading
-  notification, one step per whole percent.
+  aborts and rejects every read it still held, so a stalled read of the
+  old dataset never holds back the new dataset's reads.
+- **Progress.** Every read is reported to the read activity log
+  (`data/read-activity-log.js`): a gene the user waits for shows in its
+  loading notification, and a long read is written to the console as
+  `[cellucid:read]`.
 
 ### 4) Plot infrastructure (Plotly + custom helpers)
 
 Plots are managed via:
 - a plot registry / factory (`analysis/plots/plot-factory.js`)
-- a Plotly loader (`analysis/plots/plotly-loader.js`) to keep initial load light
+- a Plotly loader (`analysis/plots/plotly-loader.js`) to keep initial load light:
+  Plotly is not part of startup; opening an analysis (`_setAnalysisMode`)
+  starts loading it at the page's next idle moment (`prefetchPlotly`), so the
+  library's evaluation, one long main-thread task, happens while the analysis
+  is being set up rather than inside the run that draws the first plot
 - plot types registered as modules under `analysis/plots/types/`
 
 Theme integration:
@@ -269,8 +296,7 @@ On dataset reload (especially “in-place” reloads for local-user), analysis m
 - purge old plots and detach event handlers
 - reset page selection safely if page ids changed
 
-There are dev-only helpers to sanity check this:
-- see `window._comparisonModule` and local-user switch self-test wiring in `ui/modules/dataset-controls.js`.
+To inspect it in the console, use `window._comparisonModule`.
 
 ### 4) The per-gene streaming path
 
@@ -278,18 +304,24 @@ Differential expression and marker discovery repeat the same steps once per
 gene, so anything in that loop is multiplied by the gene count. The loop keeps
 these properties, and each one is pinned by a test:
 
-- **Decoding happens in the decode worker.** A quantized gene payload is read on
-  the main thread as transferred (still gzip when the URL ends in `.gz`) and
-  handed to the quantization worker, which inflates it under the exact declared
-  length and dequantizes it. Both the worker and the main-thread backend decode
-  through one table-driven kernel, `decodeQuantizedToFloat32` in
-  `cellucid/assets/js/data/quantization-contract.js`, which is bit identical to
-  evaluating `minValue + code * scale` per cell.
-- **Each decode goes to the least-loaded worker** of the quantization pool (a
-  busy worker counts one, plus its queue), not round-robin, so a decode never
-  waits behind a busy worker while another is idle.
-- **Per-run work is done once per run.** `StreamingGeneLoader` validates both
-  group specifications when a run starts, not once per gene.
+- **Reading, decoding and the genes' values stay off the main thread.** A
+  gene's values are read by the AnnData reader worker
+  (`data/anndata-reader-worker.js`), whose decode workers decompress the
+  chunks, and delivered from there to the analysis worker that computes them
+  over the run's gene route: the page sends which genes each task takes,
+  hears their bytes and takes in each task's statistics, packed (one message
+  a task), and never holds a gene a run computes (see
+  {ref}`reading-anndata-directly`).
+- **A chunk goes to a decode worker with room** (`formats/io/decode-pool.js`):
+  queued chunks are sent as workers free up, a gene index being built in the
+  background waits behind every other read, small chunks waiting together
+  travel as one message, and a small chunk alone is decoded in the reader
+  thread. The workers start when a file opens; there are as many as the cores
+  (less the page and the reader) and their memory budget allow.
+- **Per-run work is done once per run.** A run's groups reach each worker
+  once (a context the pool replays to a replaced worker), and a gene's task
+  carries only its delivery; the per-gene work on the main thread is placing
+  each task's packed results.
 - **Rank tests tabulate values without a `Map`.** Wilcoxon (DE and markers),
   Spearman ranks and order statistics number distinct values through
   `DistinctValueIndex` in `compute/math-utils.js` up to 4,096 distinct

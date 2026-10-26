@@ -8,7 +8,7 @@ If you’re actively stuck, use {doc}`06_troubleshooting_highlighting` (it’s o
 
 - [Zero visible cells](#highlighting-with-zero-visible-cells)
 - [Changing the active field](#highlighting-after-field-changes-active-field-changed)
-- [No active field at all](#annotation-based-with-no-field-at-all)
+- [No active field at all](#annotation-with-no-field-at-all)
 - [Cells in multiple groups](#cells-in-multiple-highlight-groups)
 - [Switching pages mid-selection](#switching-highlight-pages-while-a-selection-is-active)
 - [Huge highlight groups (1M+)](#huge-highlight-groups-performance-memory-and-session-size)
@@ -49,23 +49,23 @@ If you’re actively stuck, use {doc}`06_troubleshooting_highlighting` (it’s o
 - Highlight pages and highlight groups (membership) do not change when you switch fields.
 
 **Common gotcha**
-- You are in **Annotation based** mode, and you switch to a field that is not selectable (or has missing values). `Alt+click` may appear to “stop working” because the tool has no meaningful selection rule for that field.
+- You are in **Annotation** mode, and you switch to a field that is not selectable (or has missing values). `Alt+click` may appear to “stop working” because the tool has no meaningful selection rule for that field.
 
 **Best practice**
 - If you are mid-selection, confirm/cancel before switching the active field to avoid mixing steps driven by different semantics.
 
-## Annotation based with no field at all
+## Annotation with no field at all
 
 Set both **Categorical obs** and **Continuous obs** to `None` in every panel
 on screen and the tool has nothing to work from. It says so rather than failing
 silently:
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/read-no-active-field-notice.png
-:alt: The Highlighting panel in Annotation based mode with no coloured field, with the ringed line "Annotation selection needs an active field. Choose a Categorical obs or Continuous obs field under Coloring & Filtering, then Alt+click a cell (or tap it in Select mode)." in place of the usual help text.
-:width: 516px
+:alt: The Highlighting panel with the Annotation tool chosen and no field coloured, and the Selection (i) tip open, its first line ringed: "Color by a field first (Coloring & filtering), then Alt+click a cell."
+:width: 762px
 
-With no coloured field the usual `Alt+click` invitation is replaced by an
-instruction. In this state no press can select anything, so there is nothing to
+With no coloured field the **Selection** (i) leads with an instruction
+instead of the usual `Alt+click` invitation. In this state no press can select anything, so there is nothing to
 debug beyond choosing a field.
 ```
 
@@ -92,7 +92,7 @@ graph-based and do not read the coloured field at all.
 
 **How to reason about it**
 - If you care about mutually exclusive labels, use pages (separate workspaces),
-  then turn them into a real categorical column with `Create Categorical`, which
+  then turn them into a real categorical column with `Create categorical`, which
   makes you decide explicitly what happens to a cell that is in two of them —
   see {doc}`03_highlight_ui`.
 
@@ -153,7 +153,7 @@ Highlight groups store explicit arrays of indices, and highlight recomputation s
 
 **What to try**
 - Zoom in: highlights are easiest to see when points are not subpixel-sized.
-- Raise **Point size (log)** under **Visualization** to make the drawn points —
+- Raise **Point size** under **Visualization** to make the drawn points —
   and therefore their halos — larger.
 - Switch to a simpler color-by (e.g., a single color) just to visually validate highlights.
 - Change background mode to increase contrast.
@@ -211,11 +211,11 @@ This approximates a 3D volume by combining multiple 2D “cuts”.
 
 **Why**
 - KNN selection requires a connectivity graph.
-- The graph may not be present in the dataset export, or it may not be loaded yet.
+- The graph may not be present in the dataset, or it may not be loaded yet.
 
 **What to do**
 - Enable/show edges (if the UI has a “Show edges” toggle).
-- Re-export your dataset including connectivities.
+- Write your dataset again including connectivities (`obsp['connectivities']`).
 - Use lasso/proximity/annotation-based selection if connectivity is not available.
 
 ---

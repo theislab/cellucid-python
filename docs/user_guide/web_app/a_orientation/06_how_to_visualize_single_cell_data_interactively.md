@@ -12,9 +12,9 @@ which one to pick
 
 | You have | Route | Install |
 | --- | --- | --- |
-| An `.h5ad` file, of any size | [Open it in the browser](#route-1-open-a-file-in-the-browser) | Nothing |
+| An `.h5ad` file of any size, an AnnData or MuData Zarr store, an `.h5mu`, a Loom or 10x file or folder, or a Seurat / SingleCellExperiment `.rds` | [Open it in the browser](#route-1-open-a-file-in-the-browser) | Nothing |
 | An AnnData in Python (Scanpy), or an `.h5ad` you open often | [Serve it from Python](#route-2-serve-it-from-python) | `pip install cellucid` |
-| A Seurat or SingleCellExperiment object in R | [Export it from R](#route-3-export-it-from-r) | the `cellucid` R package |
+| A Seurat or SingleCellExperiment object in an R session | [View or write it from R](#route-3-view-or-write-it-from-r) | the `cellucid` R package |
 
 Every route ends in the same viewer, with millions of cells drawn on the GPU in
 1D, 2D or 3D. Your data stays on your machine: nothing is uploaded.
@@ -23,13 +23,16 @@ Every route ends in the same viewer, with millions of cells drawn on the GPU in
 
 1. Open [www.cellucid.com](https://www.cellucid.com) and choose **Choose a
    dataset** on the welcome card.
-2. In the **Session** panel, under **Open data**, press **H5AD** and pick your
-   file.
+2. In the **Session** panel, under **Open data**, press **Open…**, choose
+   **File…** and pick your file (or **Folder…** for a Zarr store, a Cell
+   Ranger `outs/` folder or a MatrixMarket folder), or drop it on the page.
 
-The file needs at least one embedding in `obsm`. The `X_umap` that
-`sc.tl.umap()` writes is read as it is; see
-{doc}`../b_data_loading/03_browser_file_picker_tutorial` for the exact rule and
-how a large file is read.
+The data needs at least one embedding (in AnnData, an array in `obsm`; in a
+Seurat object, a reduction). The `X_umap` that `sc.tl.umap()` writes is read
+as it is; see {doc}`../b_data_loading/03_browser_file_picker_tutorial` for the
+exact rule and how a large file is read, and
+{doc}`../b_data_loading/17_open_r_objects` and
+{doc}`../b_data_loading/18_open_loom_and_10x` for the other formats.
 
 ## Route 2: serve it from Python
 
@@ -40,8 +43,10 @@ pip install cellucid
 cellucid serve my_dataset.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
-Open the viewer URL it prints. The file is opened in backed mode and read on
-demand, and Python answers each gene the browser asks for.
+Open the viewer URL it prints. The server hands the file to the browser as it
+is on disk, and the browser reads only what each view needs, with range
+requests. `--dataset-name` and `--dataset-id` can be left out when the file
+declares its own (`uns['cellucid']['name']` and `['id']`).
 
 Inside a Jupyter notebook, show an AnnData you already have in memory:
 
@@ -55,11 +60,16 @@ The viewer opens in the output cell and can be driven from Python
 (`viewer.set_color_by("leiden")`). See
 {doc}`../../python_package/a_landing_pages/04_quick_start_3_levels`.
 
-## Route 3: export it from R
+## Route 3: view or write it from R
+
+`cellucid_view(obj)` shows a Seurat or SingleCellExperiment object in RStudio
+or Positron, served from memory
+({doc}`../../r_package/d_viewing_loading/04_view_in_rstudio_positron`).
 
 `cellucid_prepare()` writes your object's embeddings, metadata and (optionally)
-gene expression into an export folder. In the viewer, press **Prepared** under
-**Open data** and choose that folder. The recipes extract everything from a
+gene expression into a Cellucid-ready AnnData Zarr store (`.zarr`). In the
+viewer, press **Open…** under **Open data**, choose **Folder…** and pick
+that folder, or drop it on the page. The recipes extract everything from a
 Seurat or SingleCellExperiment object:
 
 - {doc}`../../r_package/e_integrations_recipes/01_seurat_recipe`
@@ -81,7 +91,7 @@ Seurat or SingleCellExperiment object:
 
 ## Share it
 
-A dataset exported to a public GitHub repository opens from a link, a README
+A dataset written to a public GitHub repository opens from a link, a README
 badge or an embedded frame on a web page; see
 {doc}`../l_sessions_sharing/13_share_links_badges_and_embeds`. To send your exact
 view — camera, colours, filters and selections — save a session file.

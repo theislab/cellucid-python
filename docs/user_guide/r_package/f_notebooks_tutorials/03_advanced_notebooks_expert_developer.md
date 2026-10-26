@@ -1,260 +1,124 @@
-# Advanced Notebooks (Expert / Developer)
+# Advanced Tutorial (Expert / Developer)
 
-**Audience:** expert computational users, developers/maintainers  
-**Time:** 60–120 minutes  
-**What you’ll learn**
-- How to reason about the export format at the file level
-- How to validate binaries (points, edges, values) and spot corruption/misalignment
-- How vector fields are named and scaled
-- How exact connectivity validation and index dtype selection work
+**Audience:** computational biologists and developers
+**Time:** 30 minutes
+**Goal:** store vector fields and a neighbour graph, then read the store back
+byte for byte to see exactly what `cellucid_prepare()` wrote.
 
-This tutorial assumes you’ve already successfully exported at least one dataset.
-
----
-
-## Part 1 — Export with “everything on” (small synthetic example)
-
-We use a tiny synthetic dataset so you can inspect files safely.
+## Step 1 — A trajectory with velocities and a graph
 
 ```r
 library(cellucid)
-library(Matrix)
+set.seed(3)
 
-n_cells <- 4
+n <- 1000
+t <- sort(runif(n, 0, 2 * pi))
+umap <- cbind(cos(t), sin(t)) * 5 + matrix(rnorm(2 * n, sd = 0.2), ncol = 2)
+umap3 <- cbind(umap, t)
+velocity_2d <- cbind(-sin(t), cos(t))          # along the circle
+velocity_3d <- cbind(velocity_2d, 1)
 
-X_umap_2d <- matrix(c(0, 0,
-                      1, 0,
-                      0, 1,
-                      1, 1),
-                    ncol = 2, byrow = TRUE)
+# A symmetric 10-nearest-neighbour graph with a zero diagonal.
+d <- as.matrix(dist(umap))
+diag(d) <- Inf
+nearest <- t(apply(d, 1, order))[, 1:10]
+knn <- Matrix::sparseMatrix(i = rep(seq_len(n), 10), j = as.vector(nearest),
+                            x = 1, dims = c(n, n))
+knn <- (knn + Matrix::t(knn)) / 2
 
-latent_space <- matrix(rnorm(n_cells * 5), ncol = 5)
+obs <- data.frame(pseudotime = t, phase = cut(t, 4, labels = c("G1", "S", "G2", "M")))
+```
 
-obs <- data.frame(
-  cluster = factor(c("A", "A", "B", "B")),
-  score = c(0.1, 0.2, 0.3, 0.4)
-)
+## Step 2 — Write the store
 
-gene_expression <- matrix(rexp(n_cells * 3), nrow = n_cells, ncol = 3)
-var <- data.frame(symbol = c("G1", "G2", "G3"), stringsAsFactors = FALSE)
-rownames(var) <- var$symbol
-
-conn <- Matrix(0, nrow = n_cells, ncol = n_cells, sparse = TRUE)
-conn[1, 2] <- 1
-conn[2, 1] <- 1
-conn[1, 3] <- 1
-conn[3, 1] <- 1
-conn[4, 3] <- 1
-conn[3, 4] <- 1
-
-vector_fields <- list(
-  velocity = list(X_umap = matrix(c(0.2, 0,
-                              0.2, 0,
-                              0.2, 0,
-                              0.2, 0),
-                            ncol = 2, byrow = TRUE))
-)
-
-out_dir <- file.path(tempdir(), "cellucid_advanced_debug")
-dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-
-cellucid_prepare(
-  latent_space = latent_space,
+```r
+store <- cellucid_prepare(
+  out_path = file.path(tempdir(), "advanced.zarr"),
+  format = "zarr",
+  embeddings = list(X_umap = umap, X_umap_3d = umap3),
+  dataset_id = "advanced-tutorial",
+  dataset_name = "Advanced tutorial",
   obs = obs,
-  var = var,
-  gene_expression = gene_expression,
-  connectivities = conn,
-  vector_fields = vector_fields,
-  embeddings = list(X_umap = X_umap_2d),
-  obs_categorical_dtype = "uint8",
-  dataset_name = "Cellucid Advanced Debug",
-  dataset_id = "cellucid_advanced_debug",
-  out_dir = out_dir,
-  force = TRUE,
-  compression = NULL,
-  var_quantization = NULL,
-  obs_continuous_quantization = NULL,
-  centroid_min_points = 1
+  connectivities = knn,
+  vector_fields = list(velocity = list(X_umap = velocity_2d, X_umap_3d = velocity_3d)),
+  vector_field_default = "velocity",
+  embedding_defaults = c("2d" = "X_umap", "3d" = "X_umap_3d"),
+  force = TRUE
 )
-
-list.files(out_dir, recursive = TRUE)
+sort(list.files(file.path(store, "obsm")))
 ```
 
----
+The field `velocity` is stored under scVelo's names for it,
+`obsm['velocity_umap']` and `obsm['velocity_umap_3d']`. The viewer lists it as
+`velocity` and draws it whenever a view shows `X_umap` or `X_umap_3d`. A vector
+field can be bound to any embedding named `X_<basis>`, with as many columns as
+it; see {doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement`.
 
-## Part 2 — Validate embeddings (`embeddings/0_2d.bin`)
+## Step 3 — Read an array back by hand
 
-Each embedding file is float32 row-major. `dataset_identity.json` names the
-file of every embedding:
-
-```r
-identity <- jsonlite::read_json(file.path(out_dir, "dataset_identity.json"))
-path <- file.path(out_dir, identity$embeddings$items$X_umap$file)  # "embeddings/0_2d.bin"
-con <- file(path, open = "rb")
-on.exit(close(con), add = TRUE)
-
-vals <- readBin(con, what = "numeric", size = 4, endian = "little", n = n_cells * 2)
-coords <- matrix(vals, ncol = 2, byrow = TRUE)
-coords
-```
-
-Sanity expectations:
-- values should be finite
-- coordinates should be centered around ~0
-- range should be roughly within [-1, 1] (after normalization)
-
-Normalization details: {doc}`../c_data_preparation_api/03_embeddings_and_coordinates`
-
----
-
-## Part 3 — Validate obs encoding (codes + outliers)
-
-Inspect `obs_manifest.json`:
+Every array of a Zarr v2 store (the default) has a `.zarray` file describing
+it, and one file per chunk, compressed with zlib, which base R decompresses. An
+array of values wider than one byte is byte-shuffled first (its `.zarray`
+lists the `shuffle` filter): the first byte of every value, then the second,
+and so on; undo it before reading the values.
 
 ```r
-obs_manifest <- jsonlite::read_json(file.path(out_dir, "obs_manifest.json"), simplifyVector = TRUE)
-str(obs_manifest, max.level = 3)
-```
-
-Look for:
-- `_continuousFields` and `_categoricalFields`; every entry begins with its
-  payload index, then its key
-- file patterns under `_obsSchemas`, which are templates over `{index}`
-
-Read categorical codes. The filename is the field's payload index — take it from
-the manifest entry rather than guessing from the key:
-
-```r
-field <- obs_manifest$`_categoricalFields`[[1]]
-codes_path <- file.path(out_dir, "obs", sprintf("%d.codes.u8", field[[1]]))
-con <- file(codes_path, open = "rb")
-on.exit(close(con), add = TRUE)
-codes <- readBin(con, what = "integer", size = 1, n = n_cells, endian = "little")
-codes
-```
-
-Remember:
-- codes are 0-based
-- missing is 255 (uint8), 65535 (uint16) or 4294967295 (uint32)
-
----
-
-## Part 4 — Validate gene values
-
-Read one gene file:
-
-```r
-g1_path <- file.path(out_dir, "var", "G1.values.f32")
-con <- file(g1_path, open = "rb")
-on.exit(close(con), add = TRUE)
-g1 <- readBin(con, what = "numeric", size = 4, n = n_cells, endian = "little")
-g1
-```
-
-If you exported with quantization, the file dtype changes and you must read as bytes/uint16 instead.
-
-Gene export details: {doc}`../c_data_preparation_api/06_gene_expression_matrix`
-
----
-
-## Part 5 — Validate connectivity edge pairs
-
-Connectivity export writes three aligned arrays:
-- `edges.src.bin`
-- `edges.dst.bin`
-- `edges.weights.f64.bin`
-
-The dtype is `uint16` through 65,536 cells and `uint32` through
-4,294,967,296 cells. Larger axes are outside the current graph contract.
-
-For small `n_cells` it will be uint16:
-
-```r
-src_path <- file.path(out_dir, "connectivity", "edges.src.bin")
-dst_path <- file.path(out_dir, "connectivity", "edges.dst.bin")
-weights_path <- file.path(out_dir, "connectivity", "edges.weights.f64.bin")
-
-read_u16 <- function(path) {
-  con <- file(path, open = "rb")
-  on.exit(close(con), add = TRUE)
-  readBin(con, what = "integer", size = 2, endian = "little", n = 1000)
+read_f4_chunk <- function(store, key, chunk) {
+  meta <- jsonlite::read_json(file.path(store, key, ".zarray"))
+  path <- file.path(store, key, chunk)
+  bytes <- memDecompress(readBin(path, "raw", file.size(path)), type = "gzip")
+  if (length(meta$filters) > 0 && identical(meta$filters[[1]]$id, "shuffle")) {
+    bytes <- as.vector(t(matrix(bytes, ncol = 4)))   # undo the byte shuffle
+  }
+  values <- readBin(bytes, "double", n = prod(unlist(meta$chunks)), size = 4, endian = "little")
+  matrix(values, ncol = meta$chunks[[2]], byrow = TRUE)   # C order: row-major
 }
 
-src <- read_u16(src_path)
-dst <- read_u16(dst_path)
+meta <- jsonlite::read_json(file.path(store, "obsm", "X_umap", ".zarray"))
+str(meta[c("shape", "chunks", "dtype", "compressor", "filters")])
 
-read_f64 <- function(path) {
-  con <- file(path, open = "rb")
-  on.exit(close(con), add = TRUE)
-  readBin(con, what = "numeric", size = 8, endian = "little", n = 1000)
-}
-
-weights <- read_f64(weights_path)
-cbind(src[1:3], dst[1:3], weights[1:3])
+stored <- read_f4_chunk(store, "obsm/X_umap", "0.0")
+float32 <- function(x) readBin(writeBin(as.double(x), raw(), size = 4), "double", n = length(x), size = 4)
+identical(stored[seq_len(n), ], matrix(float32(umap), ncol = 2))
 ```
 
-Remember:
-- indices are 0-based
-- only unique undirected edges are kept (`src < dst`)
-- weights are exact little-endian Float64 values aligned by array index
-- the input must already be finite, non-negative, exactly symmetric in
-  topology and weight, and zero on the diagonal; invalid input is rejected
-  rather than transformed
+The embedding is stored as float32, at its own coordinates; the viewer scales it
+to the view (`normalize_embeddings = FALSE` turns that off).
 
----
-
-## Part 6 — Vector fields: naming + scaling
-
-Vector binaries live in `vectors/`, named by the field's payload index. The
-`vector_fields` section of `dataset_identity.json` records the exact path for
-each field and dimension.
+## Step 4 — The graph
 
 ```r
-vec_path <- file.path(out_dir, "vectors", "0_2d.bin")
-con <- file(vec_path, open = "rb")
-on.exit(close(con), add = TRUE)
-vec_vals <- readBin(con, what = "numeric", size = 4, endian = "little", n = n_cells * 2)
-vec <- matrix(vec_vals, ncol = 2, byrow = TRUE)
-vec
+graph_meta <- jsonlite::read_json(file.path(store, "obsp", "connectivities", ".zattrs"))
+graph_meta$`encoding-type`
+length(list.files(file.path(store, "obsp", "connectivities", "data")))
 ```
 
-Vectors are automatically scaled by the embedding normalization factor. This often surprises people when they compare exported values to original velocity units.
+`obsp['connectivities']` is a float32 `csr_matrix`. For a symmetric matrix, the
+column-compressed arrays of a `dgCMatrix` are also its row-compressed arrays, so
+`cellucid_prepare()` writes them as they are.
 
-Details: {doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement`
+## Step 5 — The same store as one file, and read in Python
 
----
+```r
+archive <- cellucid_prepare(
+  out_path = file.path(tempdir(), "advanced.zarr.zip"),
+  format = "zarr.zip",
+  embeddings = list(X_umap = umap, X_umap_3d = umap3),
+  dataset_id = "advanced-tutorial",
+  dataset_name = "Advanced tutorial",
+  obs = obs,
+  connectivities = knn,
+  vector_fields = list(velocity = list(X_umap = velocity_2d, X_umap_3d = velocity_3d)),
+  force = TRUE
+)
+head(utils::unzip(archive, list = TRUE)$Name)
+```
 
-## Part 7 — “Export format bugs” that are actually user bugs
+```python
+import anndata, zarr
+adata = anndata.read_zarr(zarr.storage.ZipStore("advanced.zarr.zip", mode="r"))
+adata.obsm["velocity_umap"].shape, adata.obsp["connectivities"].format
+```
 
-### 1) Row order mismatches
-
-Symptoms:
-- clusters don’t match the point cloud
-- gene expression appears on the “wrong” cells
-
-Root cause:
-- embeddings/obs/expression were not aligned to the same cell order
-
-Prevention:
-- choose a canonical `cells` vector and reorder everything explicitly
-
-### 2) Duplicate identifiers
-
-Symptoms:
-- missing genes
-- a lookup by gene ID or obs key resolving the wrong row
-
-Root cause:
-- two rows of `var`, or two entries of `obs_keys`, carry the same identifier
-
-Prevention:
-- check `anyDuplicated(ids) == 0` before export. Visible character content is
-  not a problem — identifiers never become filenames, so nothing needs escaping
-  — but invisible ones are, so check `identical(ids, trimws(ids))` too.
-
----
-
-## Next steps
-
-- Full format spec: {doc}`../c_data_preparation_api/09_output_format_specification_exports_directory`
-- Export troubleshooting: {doc}`../c_data_preparation_api/11_troubleshooting_prepare_export`
+The full layout of the store is in
+{doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification`.

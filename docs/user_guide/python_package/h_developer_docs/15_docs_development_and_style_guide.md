@@ -20,6 +20,7 @@ Key files/folders:
 - `cellucid-python/docs/user_guide/`: main documentation “book”
   - `web_app/`: user guide for the web app (even though code is in `cellucid/`)
   - `python_package/`: user guide for the Python package + CLI
+  - `r_package/`: user guide for the R package (code in `cellucid-r/`)
 
 Developer docs you are reading now:
 - `cellucid-python/docs/user_guide/python_package/h_developer_docs/`
@@ -41,6 +42,13 @@ Clean rebuild:
 
 ```bash
 make -C docs clean html
+```
+
+CI (`docs-check.yml`) and the release gate build with warnings as errors,
+which the `make` target does not; run the same command before you push:
+
+```bash
+sphinx-build -W --keep-going -b html docs docs/_build/html
 ```
 
 ---
@@ -96,8 +104,8 @@ Example:
 
 ````md
 ```{figure} ../../../_static/screenshots/figure_export/style.png
-:alt: Figure Export Style controls for background, typography, and text sizes.
-:width: 224px
+:alt: The Style group open: background, font family and the text sizes for the base text, legend, ticks, axis labels, title and centroid labels.
+:width: 532px
 
 Style controls expose background, typography, and text sizing.
 ```
@@ -165,7 +173,7 @@ Rules:
   ```
 
 - **Keep bare backticks for things that really are literals**: filenames and
-  paths (`dataset_identity.json`), JSON keys and API parameters
+  paths (`cellucid-web-assets.json`), JSON keys and API parameters
   (`vector_fields`), CSS classes, code identifiers, and literal values
   (`local-user`). Converting one of those to `{doc}` is a regression that no
   test will catch — `vector_fields` happens to collide with a generated API page
@@ -186,7 +194,7 @@ Common causes:
 - broken `{doc}` targets.
 
 Fix:
-1) run `make -C docs clean html`
+1) run `sphinx-build -W --keep-going -b html docs docs/_build/html`
 2) search the error message for the filename + line
 
 ### Symptom: “My notebook renders strangely”

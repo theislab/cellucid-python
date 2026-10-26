@@ -8,15 +8,16 @@
 //   node capture.mjs shoot <scenario-id> ...  --emit
 //   node capture.mjs check  <scenario-id> ...
 //
-//   --out DIR   write the PNGs under DIR (required unless --emit)
-//   --emit      write into docs/_static/screenshots/<topic>/<name>.png
+//   --out DIR   write the images under DIR (required unless --emit)
+//   --emit      write into docs/_static/screenshots/<topic>/<name>.<png|webp>
 //   --check     recapture and compare against the recorded digest; write
 //               nothing and exit non-zero on any difference
 //
 // Ports: the application is served by the web repository's own browser-test
 // server, so this honours the same two variables it does —
 // CELLUCID_BROWSER_TEST_PORT and CELLUCID_BROWSER_TEST_SAMPLE_PORT — and adds
-// CELLUCID_DOCS_EXPORTS_PORT (default: main port + 2) for the dataset host.
+// CELLUCID_DOCS_CATALOG_PORT (default: main port + 2) for the sample catalog
+// host (`cellucid-datasets/anndata/`, read through `?sampleCatalog=`).
 // Set them when another run already owns the default 4173/4174.
 //
 // ---------------------------------------------------------------------------
@@ -91,7 +92,7 @@
 
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -101,7 +102,7 @@ import { promisify } from 'node:util';
 
 import { clearOverlay, OVERLAY_ROOT_ID, paintOverlay } from './overlay.mjs';
 import { SCENARIOS } from './scenarios.mjs';
-import { startExportsServer } from './serve-exports.mjs';
+import { startCatalogServer } from './serve-catalog.mjs';
 
 const run = promisify(execFile);
 
@@ -119,8 +120,56 @@ const DATASETS_REPO =
   process.env.CELLUCID_DATASETS_REPO ??
   path.join(WORKSPACE, 'cellucid-datasets');
 
-/** Every capture uses this CSS viewport; it is the app's documentation size. */
+/**
+ * The sample catalog folder the scenarios load: `datasets.json` (schema 2) and
+ * the AnnData stores it lists, as published at
+ * https://theislab.github.io/cellucid-datasets/anndata/. Refused by name when
+ * the datasets checkout does not hold it, rather than letting every scenario
+ * time out on an empty dataset list.
+ *
+ * @returns {Promise<string>}
+ */
+async function requireSampleCatalog() {
+  const root = path.join(DATASETS_REPO, 'anndata');
+  let catalog;
+  try {
+    catalog = JSON.parse(await readFile(path.join(root, 'datasets.json'), 'utf8'));
+  } catch (error) {
+    throw new Error(
+      `No sample catalog at ${root}/datasets.json (${error.code ?? error.message}). ` +
+        'The scenarios load the AnnData sample datasets of cellucid-datasets; ' +
+        'set CELLUCID_DATASETS_REPO to a checkout that holds anndata/.'
+    );
+  }
+  if (catalog?.schema !== 2 || !Array.isArray(catalog.datasets)) {
+    throw new Error(
+      `${root}/datasets.json is not a schema 2 dataset catalog.`
+    );
+  }
+  return root;
+}
+
+/** The CSS viewport of every capture that names no other; the app's documentation size. */
 const VIEWPORT = Object.freeze({ width: 1440, height: 1000 });
+
+/**
+ * The browser context a scenario runs in. `viewport: { width, height,
+ * touch }` is for a page about another screen — the phone layout, which the
+ * app switches to at 720 CSS px and below. `touch` makes the context a
+ * touch device (`isMobile`, `hasTouch`), so the app sees the coarse pointer
+ * a phone has, not a narrow desktop window.
+ *
+ * @param {Object} scenario
+ * @returns {{width: number, height: number, touch: boolean}}
+ */
+function viewportOf(scenario) {
+  const { width = VIEWPORT.width, height = VIEWPORT.height, touch = false } =
+    scenario.viewport ?? {};
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 200 || height < 200) {
+    throw new Error(`${scenario.id}: viewport must be whole CSS pixels, at least 200x200.`);
+  }
+  return { width, height, touch: touch === true };
+}
 
 /** Supersampling factor. Two is enough; three triples the settle cost. */
 const DEVICE_SCALE_FACTOR = 2;
@@ -144,22 +193,22 @@ async function resolvePorts() {
     pathToFileURL(path.join(WEB_REPO, 'scripts', 'browser-test-ports.mjs'))
   );
   const { host, port, samplePort, origin } = module.resolveBrowserTestPorts();
-  const exportsPort = Number(
-    process.env.CELLUCID_DOCS_EXPORTS_PORT ?? String(port + 2)
+  const catalogPort = Number(
+    process.env.CELLUCID_DOCS_CATALOG_PORT ?? String(port + 2)
   );
   if (
-    !Number.isInteger(exportsPort) ||
-    exportsPort < 1024 ||
-    exportsPort > 65535 ||
-    exportsPort === port ||
-    exportsPort === samplePort
+    !Number.isInteger(catalogPort) ||
+    catalogPort < 1024 ||
+    catalogPort > 65535 ||
+    catalogPort === port ||
+    catalogPort === samplePort
   ) {
     throw new RangeError(
-      'CELLUCID_DOCS_EXPORTS_PORT must be a free port between 1024 and 65535 ' +
-        `that differs from ${port} and ${samplePort}; received ${exportsPort}.`
+      'CELLUCID_DOCS_CATALOG_PORT must be a free port between 1024 and 65535 ' +
+        `that differs from ${port} and ${samplePort}; received ${catalogPort}.`
     );
   }
-  return { host, port, samplePort, exportsPort, origin };
+  return { host, port, samplePort, catalogPort, origin };
 }
 
 /**
@@ -328,15 +377,16 @@ async function readRects(page, selectors) {
 }
 
 /**
- * Downscale a PNG with the browser's own high-quality resampler.
+ * Downscale the settled PNG with the browser's own high-quality resampler and
+ * encode it as the scenario's format (`image/png` or `image/webp`).
  *
  * Both directions travel as base64 because Playwright's evaluate boundary does
  * not carry typed arrays.
  *
- * @param {{data: string, width: number}} request
- * @returns {Promise<string>}
+ * @param {{data: string, width: number, type: string, quality?: number}} request
+ * @returns {Promise<{data: string, width: number, height: number}>}
  */
-async function resizePngInPage(request) {
+async function encodeInPage(request) {
   const binary = atob(request.data);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) {
@@ -350,13 +400,20 @@ async function resizePngInPage(request) {
   context.imageSmoothingQuality = 'high';
   context.drawImage(source, 0, 0, request.width, height);
   source.close();
-  const blob = await canvas.convertToBlob({ type: 'image/png' });
+  const blob = await canvas.convertToBlob(
+    request.quality === undefined
+      ? { type: request.type }
+      : { type: request.type, quality: request.quality }
+  );
+  if (blob.type !== request.type) {
+    throw new Error(`This browser cannot encode ${request.type} (got ${blob.type}).`);
+  }
   const buffer = new Uint8Array(await blob.arrayBuffer());
   let out = '';
   for (let index = 0; index < buffer.length; index += 1) {
     out += String.fromCharCode(buffer[index]);
   }
-  return btoa(out);
+  return { data: btoa(out), width: request.width, height };
 }
 
 // ---------------------------------------------------------------------------
@@ -414,8 +471,8 @@ async function applyStep(page, step) {
   if ('hover' in step) return page.hover(step.hover);
   if ('press' in step) return page.keyboard.press(step.press);
   if ('waitForStable' in step) {
-    // The application rebuilds the field selectors when the observation
-    // manifest arrives, which is *after* the point count settles. A selection
+    // The application rebuilds the field selectors when the obs field list
+    // arrives, which is *after* the point count settles. A selection
     // made in that window is silently discarded — `selectOption` reports
     // success and the control comes back holding a different value. Waiting
     // for the element's markup to stop changing is the honest fix; retrying the
@@ -443,6 +500,14 @@ async function applyStep(page, step) {
     // Assert the effect, not the call. A screenshot captioned "coloured by
     // clusters" that shows "Field: None" is the precise documentation defect
     // this tool exists to prevent, so a discarded selection must fail loudly.
+    // Some controls are rebuilt while the choice is applied (the Shows picker
+    // re-renders its options once the view holds the new embedding), so the
+    // value is given a few seconds to come back before it counts as discarded.
+    await page.waitForFunction(
+      ([selector, expected]) => document.querySelector(selector)?.value === expected,
+      [step.select, chosen[0]],
+      { timeout: 5_000 }
+    ).catch(() => {});
     const settledValue = await page.inputValue(step.select);
     if (chosen.length !== 1 || settledValue !== chosen[0]) {
       throw new Error(
@@ -491,7 +556,7 @@ async function applyStep(page, step) {
   throw new Error(`Unrecognised step: ${JSON.stringify(step)}`);
 }
 
-function clipFromRects(rects, padding, selectors) {
+function clipFromRects(rects, padding, selectors, viewport) {
   const left = Math.min(...rects.map(rect => rect.x)) - padding;
   const top = Math.min(...rects.map(rect => rect.y)) - padding;
   const right = Math.max(...rects.map(rect => rect.x + rect.width)) + padding;
@@ -503,8 +568,8 @@ function clipFromRects(rects, padding, selectors) {
   const clip = {
     x,
     y,
-    width: Math.min(VIEWPORT.width - x, Math.round(right) - x),
-    height: Math.min(VIEWPORT.height - y, Math.round(bottom) - y),
+    width: Math.min(viewport.width - x, Math.round(right) - x),
+    height: Math.min(viewport.height - y, Math.round(bottom) - y),
   };
   if (clip.width <= 0 || clip.height <= 0) {
     throw new Error(
@@ -519,8 +584,9 @@ function cropSelectors(shot) {
 }
 
 async function resolveClip(page, shot) {
+  const viewport = page.viewportSize();
   if (shot.mode === 'window') {
-    return { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height };
+    return { x: 0, y: 0, width: viewport.width, height: viewport.height };
   }
   const selectors = cropSelectors(shot);
   for (const selector of selectors) {
@@ -529,7 +595,8 @@ async function resolveClip(page, shot) {
   return clipFromRects(
     await readRects(page, selectors),
     shot.padding ?? 0,
-    selectors
+    selectors,
+    viewport
   );
 }
 
@@ -566,7 +633,8 @@ async function assertCropStillFramed(page, shot, clip) {
     after = clipFromRects(
       await readRects(page, selectors),
       shot.padding ?? 0,
-      selectors
+      selectors,
+      page.viewportSize()
     );
   } catch (error) {
     throw new Error(
@@ -614,7 +682,9 @@ async function paint(page, scenario, clip) {
     cursor = { x: point.x, y: point.y, state };
   }
 
-  if (cursor === null && rings.length === 0) return () => Promise.resolve();
+  if (cursor === null && rings.length === 0) {
+    return { undo: () => Promise.resolve(), clip: clip };
+  }
 
   await page.evaluate(paintOverlay, {
     rootId: OVERLAY_ROOT_ID,
@@ -622,10 +692,44 @@ async function paint(page, scenario, clip) {
     rings,
   });
 
-  return async () => {
-    if (scenario.cursor?.state === 'press') await page.mouse.up();
-    await page.evaluate(clearOverlay, OVERLAY_ROOT_ID);
+  return {
+    undo: async () => {
+      if (scenario.cursor?.state === 'press') await page.mouse.up();
+      await page.evaluate(clearOverlay, OVERLAY_ROOT_ID);
+    },
+    clip: clipWithPointer(clip, cursor, page.viewportSize()),
   };
+}
+
+/**
+ * The crop, grown to hold the whole pointer drawn on it.
+ *
+ * The pointer is drawn with its tip on a control, and the arrow extends
+ * 22x32 CSS px down and to the right of the tip (a press adds a 30 px ring
+ * centred on it). A control at the edge of its crop — a button at the bottom
+ * of a panel — used to leave half an arrow in the picture. The crop is still
+ * named by its selectors; only the pointer can widen it, and never past the
+ * viewport.
+ *
+ * @param {{x: number, y: number, width: number, height: number}} clip
+ * @param {{x: number, y: number, state: string}|null} cursor
+ * @param {{width: number, height: number}} viewport
+ */
+function clipWithPointer(clip, cursor, viewport) {
+  if (cursor === null) return clip;
+  const margin = 4;
+  const ring = cursor.state === 'press' ? 15 : 0;
+  const left = Math.max(0, Math.min(clip.x, Math.floor(cursor.x - ring - margin)));
+  const top = Math.max(0, Math.min(clip.y, Math.floor(cursor.y - ring - margin)));
+  const right = Math.min(
+    viewport.width,
+    Math.max(clip.x + clip.width, Math.ceil(cursor.x + Math.max(22, ring) + margin))
+  );
+  const bottom = Math.min(
+    viewport.height,
+    Math.max(clip.y + clip.height, Math.ceil(cursor.y + Math.max(32, ring) + margin))
+  );
+  return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
 async function settledScreenshot(page, clip, settle) {
@@ -679,13 +783,44 @@ async function emitWidthFor(scenario, clip) {
   return Math.min(native, MAX_EMIT_WIDTH);
 }
 
+/**
+ * The file format a scenario emits. PNG is lossless and is what every
+ * `{figure}` in the guides uses. WebP is for images a page places itself with
+ * `<img>`/`srcset` (the documentation home page), where a full-window
+ * capture of a dense point cloud would otherwise weigh megabytes; its
+ * `quality` is part of the scenario, so the bytes stay reproducible.
+ *
+ * @param {Object} scenario
+ * @returns {{type: string, extension: string, quality?: number}}
+ */
+function formatOf(scenario) {
+  const format = scenario.format ?? 'png';
+  if (format === 'png') {
+    if (scenario.quality !== undefined) {
+      throw new Error(`${scenario.id}: quality applies to webp only; PNG is lossless.`);
+    }
+    return { type: 'image/png', extension: 'png' };
+  }
+  if (format === 'webp') {
+    const quality = scenario.quality;
+    if (typeof quality !== 'number' || !(quality > 0 && quality <= 1)) {
+      throw new Error(`${scenario.id}: a webp scenario names its quality in (0, 1].`);
+    }
+    return { type: 'image/webp', extension: 'webp', quality };
+  }
+  throw new Error(`${scenario.id}: unknown format "${format}"; expected png or webp.`);
+}
+
 async function captureScenario(browser, scenario, urls) {
   // A fresh context per scenario, not a fresh page. The application persists
   // theme, sidebar geometry and onboarding state, so a shared context makes the
   // result depend on what ran before it — which is the exact property this tool
   // exists to eliminate.
+  const viewport = viewportOf(scenario);
   const context = await browser.newContext({
-    viewport: VIEWPORT,
+    viewport: { width: viewport.width, height: viewport.height },
+    isMobile: viewport.touch,
+    hasTouch: viewport.touch,
     deviceScaleFactor: DEVICE_SCALE_FACTOR,
     colorScheme: scenario.theme === 'dark' ? 'dark' : 'light',
     reducedMotion: 'reduce',
@@ -698,6 +833,13 @@ async function captureScenario(browser, scenario, urls) {
   const page = await context.newPage();
   const consoleErrors = [];
   page.on('pageerror', error => consoleErrors.push(String(error.message)));
+  // Errors the application logs (a failed request, a refused reading) are
+  // printed with the scenario's result so a stray notification in a frame
+  // comes with its cause; they are not part of the provenance record.
+  const loggedErrors = [];
+  page.on('console', message => {
+    if (message.type() === 'error') loggedErrors.push(message.text().slice(0, 400));
+  });
 
   try {
     // Anything that has to exist before the first byte of application code
@@ -707,15 +849,54 @@ async function captureScenario(browser, scenario, urls) {
     // community annotation scenarios use this to stand up a synthetic GitHub
     // Worker origin, so the whole feature is reachable without an account and
     // without touching a real repository.
+    // `servedAs` shows the application under another origin, for features
+    // that exist only on origins a provider registered (Google and Microsoft
+    // sign-in answer `http://127.0.0.1:8765`, not this run's port). Every
+    // request to that origin is answered by this run's own server through a
+    // context route, so no second server binds the port — which may belong to
+    // a real `cellucid serve` — and nothing leaves the machine.
+    // A page answered by a route has no network address, so Chromium's local
+    // network access check refuses its requests to this run's other loopback
+    // hosts (the sample catalog): those are answered through the route too.
+    const appOrigin = scenario.servedAs ?? urls.appOrigin;
+    if (scenario.servedAs !== undefined) {
+      const served = new URL(scenario.servedAs).origin;
+      await context.route(
+        url => url.hostname === '127.0.0.1' || url.hostname === 'localhost',
+        async route => {
+          const requested = new URL(route.request().url());
+          const response = await route.fetch(requested.origin === served
+            ? { url: new URL(requested.pathname + requested.search, urls.appOrigin).toString() }
+            : {});
+          await route.fulfill({ response });
+        }
+      );
+    }
+
     if (typeof scenario.setup === 'function') {
       await scenario.setup({ context, page, urls });
     }
 
-    const url = new URL('/index.html', urls.appOrigin);
-    url.searchParams.set('exportsBaseUrl', `${urls.exportsOrigin}/`);
-    if (scenario.dataset != null) url.searchParams.set('dataset', scenario.dataset);
-    for (const [key, value] of Object.entries(scenario.query ?? {})) {
-      url.searchParams.set(key, value);
+    // `entry` opens an address a product printed — the Viewer URL of
+    // `cellucid serve`, of `cellucid_view()` in R — instead of the run's own
+    // application with its sample catalog: that address is what a reader
+    // opens, and the server behind it serves its own copy of the app.
+    let url;
+    if (typeof scenario.entry === 'function') {
+      url = new URL(await scenario.entry(urls));
+    } else {
+      url = new URL('/index.html', appOrigin);
+      url.searchParams.set('sampleCatalog', `${urls.catalogOrigin}/`);
+      if (scenario.dataset != null) url.searchParams.set('dataset', scenario.dataset);
+      // A query may depend on the run's origins (a `?data=` link to a loopback
+      // host, or to a host the scenario starts), so it can be a function of
+      // `urls`, and an async one.
+      const query = typeof scenario.query === 'function'
+        ? await scenario.query(urls)
+        : scenario.query ?? {};
+      for (const [key, value] of Object.entries(query)) {
+        url.searchParams.set(key, value);
+      }
     }
     await page.goto(url.toString(), { waitUntil: 'domcontentloaded' });
 
@@ -724,11 +905,28 @@ async function captureScenario(browser, scenario, urls) {
     // does. It must be *waited for* before Escape is sent: the overlay paints
     // before its key handler is wired, and an early Escape is swallowed, which
     // leaves the overlay covering every later capture.
-    const welcome = page.locator('#welcome-modal');
-    await welcome.waitFor({ state: 'visible' });
-    if (scenario.keepWelcome !== true) {
-      await page.keyboard.press('Escape');
-      await welcome.waitFor({ state: 'hidden' });
+    // A startup that names its data exactly (a `?data=` link, a server)
+    // keeps onboarding hidden, so the overlay is waited for only until
+    // startup is either showing it or done without it. A scenario whose
+    // subject is a startup that has not finished — the opening progress over
+    // the empty viewer — says `awaitStartup: false` and waits for its own
+    // subject instead.
+    if (scenario.awaitStartup !== false) {
+      const welcome = page.locator('#welcome-modal');
+      await page.waitForFunction(
+        () => document.getElementById('welcome-modal')?.classList.contains('hidden') === false
+          || document.documentElement.dataset.startupPhase === 'ready',
+        undefined,
+        { timeout: 120_000 }
+      );
+      if (await welcome.isVisible()) {
+        if (scenario.keepWelcome !== true) {
+          await page.keyboard.press('Escape');
+          await welcome.waitFor({ state: 'hidden' });
+        }
+      } else if (scenario.keepWelcome === true) {
+        throw new Error(`${scenario.id}: the welcome overlay never opened.`);
+      }
     }
 
     const steps = scenario.steps ?? [];
@@ -748,30 +946,36 @@ async function captureScenario(browser, scenario, urls) {
       }
     }
 
-    const clip = await resolveClip(page, scenario.shot);
-    const undoPaint = await paint(page, scenario, clip);
+    const subject = await resolveClip(page, scenario.shot);
+    const painted = await paint(page, scenario, subject);
+    const clip = painted.clip;
     const { bytes, settled } = await settledScreenshot(
       page,
       clip,
       scenario.settle
     );
-    await assertCropStillFramed(page, scenario.shot, clip);
-    await undoPaint();
+    await assertCropStillFramed(page, scenario.shot, subject);
+    await painted.undo();
 
     const targetWidth = await emitWidthFor(scenario, clip);
     const native = pngDimensions(bytes);
+    const format = formatOf(scenario);
     let finalBytes = bytes;
-    if (native.width !== targetWidth) {
-      const encoded = await page.evaluate(resizePngInPage, {
+    let emitted = native;
+    if (native.width !== targetWidth || format.type !== 'image/png') {
+      const encoded = await page.evaluate(encodeInPage, {
         data: bytes.toString('base64'),
         width: targetWidth,
+        type: format.type,
+        quality: format.quality,
       });
-      finalBytes = Buffer.from(encoded, 'base64');
+      finalBytes = Buffer.from(encoded.data, 'base64');
+      emitted = { width: encoded.width, height: encoded.height };
     }
-    const emitted = pngDimensions(finalBytes);
 
     return {
       bytes: finalBytes,
+      loggedErrors,
       record: {
         id: scenario.id,
         topic: scenario.topic,
@@ -779,12 +983,14 @@ async function captureScenario(browser, scenario, urls) {
         describes: scenario.describes,
         dataset: scenario.dataset ?? null,
         theme: scenario.theme ?? 'light',
-        viewport: `${VIEWPORT.width}x${VIEWPORT.height}`,
+        viewport: `${viewport.width}x${viewport.height}${viewport.touch ? ' touch' : ''}`,
         device_scale_factor: DEVICE_SCALE_FACTOR,
         crop: scenario.shot.mode === 'window' ? 'full window' : describeCrop(scenario.shot),
         captured_css: `${clip.width}x${clip.height}`,
         native_px: `${native.width}x${native.height}`,
         emitted_px: `${emitted.width}x${emitted.height}`,
+        format: format.extension,
+        ...(format.quality === undefined ? {} : { quality: format.quality }),
         cursor: scenario.cursor ? `${scenario.cursor.state ?? 'hover'} on ${scenario.cursor.on}` : null,
         rings: (scenario.rings ?? []).map(ring => ring.on),
         settled,
@@ -793,6 +999,10 @@ async function captureScenario(browser, scenario, urls) {
         sha256: digest(finalBytes),
       },
     };
+  } catch (error) {
+    // What the page logged is usually the reason a step never came true.
+    error.loggedErrors = [...consoleErrors.map(text => `page: ${text}`), ...loggedErrors];
+    throw error;
   } finally {
     await context.close();
   }
@@ -810,6 +1020,16 @@ function describeCrop(shot) {
 // ---------------------------------------------------------------------------
 
 function figureBlock(record, relativePrefix) {
+  if (record.format === 'webp') {
+    // Placed by the page's own markup (see `formatOf`), so the snippet is an
+    // `<img>` with the intrinsic size that reserves its box before it loads.
+    const [width, height] = record.emitted_px.split('x');
+    return (
+      `<img src="${relativePrefix}_static/screenshots/${record.topic}/` +
+      `${record.name}.webp" width="${width}" height="${height}" ` +
+      `alt="${record.describes}" loading="lazy" decoding="async">`
+    );
+  }
   return [
     '```{figure} ' +
       `${relativePrefix}_static/screenshots/${record.topic}/${record.name}.png`,
@@ -859,7 +1079,8 @@ async function main() {
   if (command === 'list') {
     for (const scenario of SCENARIOS) {
       process.stdout.write(
-        `${scenario.id.padEnd(34)} ${scenario.topic}/${scenario.name}.png\n` +
+        `${scenario.id.padEnd(34)} ${scenario.topic}/${scenario.name}.` +
+          `${formatOf(scenario).extension}\n` +
           `${' '.repeat(35)}${scenario.describes}\n`
       );
     }
@@ -896,17 +1117,151 @@ async function main() {
   const ports = await resolvePorts();
   const { chromium } = require('playwright');
 
-  const exportsRoot = path.join(DATASETS_REPO, 'exports-v3');
-  const exportsServer = await startExportsServer(exportsRoot, ports.exportsPort);
-  const appServer = await startApplicationServer(ports);
-  const browser = await chromium.launch();
+  const restoreLocale = await pinNumberLocale();
+  let catalogServer = null;
+  let appServer = null;
+  let browser = null;
+  try {
+    catalogServer = await startCatalogServer(
+      await requireSampleCatalog(),
+      ports.catalogPort
+    );
+    appServer = await startApplicationServer(ports);
+    browser = await chromium.launch({
+      args: ['--lang=en-US'],
+      env: { ...process.env, LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' },
+    });
+    await assertDecimalPointLocale(browser);
+    await shootAll({ browser, ports, catalogServer, selected, flags, checking });
+  } finally {
+    await browser?.close();
+    await appServer?.close();
+    await catalogServer?.close();
+    restoreLocale();
+  }
+}
 
+// ---------------------------------------------------------------------------
+// Number locale
+// ---------------------------------------------------------------------------
+
+/**
+ * The CFPreferences domain of the browser `chromium.launch()` runs headless:
+ * Playwright's `chrome-headless-shell`, an unbundled executable, whose
+ * application domain is its executable name. Its renderer is the same binary,
+ * so this one domain reaches the process that draws form controls.
+ */
+const HEADLESS_SHELL_DEFAULTS_DOMAIN = 'chrome-headless-shell';
+
+/** A region that writes a decimal point and English month names. */
+const CAPTURE_APPLE_LOCALE = 'en_US';
+
+/**
+ * Make number fields draw a decimal point, whatever this machine's region is.
+ *
+ * Blink formats the text of an `<input type=number>` itself. The context's
+ * `locale` (navigator.language, Intl, Accept-Language) and `--lang` do not
+ * reach it on macOS: there the renderer asks `NSLocale currentLocale`
+ * whenever the page language and the system region share a language, so an
+ * English page on an `en_TR` Mac draws "0,05". On Linux `--lang` and
+ * `LANG`/`LC_ALL` (passed at launch) decide it.
+ *
+ * On macOS the region is overridden for the headless shell only — an
+ * `AppleLocale` default in that executable's own preferences domain, never
+ * the global domain — and the previous value is put back when the run ends,
+ * including on Ctrl-C. `assertDecimalPointLocale` then proves the result in
+ * pixels, so a machine where this does not take still fails before anything
+ * is captured.
+ *
+ * @returns {Promise<() => void>} restores the previous preference
+ */
+async function pinNumberLocale() {
+  if (process.platform !== 'darwin') return () => {};
+  const domain = HEADLESS_SHELL_DEFAULTS_DOMAIN;
+  let previous = null;
+  try {
+    const { stdout } = await run('defaults', ['read', domain, 'AppleLocale']);
+    previous = stdout.trim();
+  } catch {
+    previous = null; // not set, which is the normal case
+  }
+  await run('defaults', ['write', domain, 'AppleLocale', CAPTURE_APPLE_LOCALE]);
+  // Synchronous, and on `exit`: that event fires after a normal end, after
+  // `process.exit` (the signal handlers below call it) and after an uncaught
+  // exception, and only synchronous work runs in it. A run that crashes must
+  // not leave the preference behind.
+  let restored = false;
+  const restore = () => {
+    if (restored) return;
+    restored = true;
+    try {
+      if (previous === null) {
+        execFileSync('defaults', ['delete', domain, 'AppleLocale'], { stdio: 'ignore' });
+      } else {
+        execFileSync('defaults', ['write', domain, 'AppleLocale', previous], { stdio: 'ignore' });
+      }
+    } catch {
+      // `delete` of a key that is already gone fails; nothing is left to undo.
+    }
+  };
+  process.on('exit', restore);
+  for (const [signal, number] of [['SIGINT', 2], ['SIGTERM', 15], ['SIGHUP', 1]]) {
+    process.once(signal, () => process.exit(128 + number));
+  }
+  process.stdout.write(
+    `number locale: ${domain} AppleLocale=${CAPTURE_APPLE_LOCALE} for this run ` +
+      `(was ${previous ?? 'unset'}; restored on exit)\n`
+  );
+  return restore;
+}
+
+/**
+ * Refuse to capture unless number fields draw a decimal point.
+ *
+ * The rendered text of a number field lives in a closed user-agent shadow
+ * tree, so script cannot read it; pixels can. The same value is drawn in a
+ * text field (which never localises) and in a number field with identical
+ * metrics. Equal bytes mean the number field wrote "1234.05".
+ *
+ * @param {import('@playwright/test').Browser} browser
+ */
+async function assertDecimalPointLocale(browser) {
+  const context = await browser.newContext({
+    locale: 'en-US',
+    deviceScaleFactor: DEVICE_SCALE_FACTOR,
+  });
+  try {
+    const page = await context.newPage();
+    await page.setContent(
+      '<style>input{font:16px monospace;width:120px;border:0;padding:0;' +
+        'margin:4px;outline:0;-webkit-appearance:none;appearance:textfield}' +
+        'input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}' +
+        '</style><input id="t" type="text" value="1234.05">' +
+        '<input id="n" type="number" value="1234.05">'
+    );
+    const text = await page.locator('#t').screenshot({ caret: 'hide' });
+    const number = await page.locator('#n').screenshot({ caret: 'hide' });
+    if (digest(text) !== digest(number)) {
+      throw new Error(
+        'Number fields in this browser do not draw "1234.05" (the region ' +
+          'writes a decimal comma or other digits), so every slider value in a ' +
+          'capture would be wrong. On macOS the tool sets AppleLocale for ' +
+          `${HEADLESS_SHELL_DEFAULTS_DOMAIN} only; if that did not take, capture ` +
+          'on Linux with LANG=en_US.UTF-8.'
+      );
+    }
+  } finally {
+    await context.close();
+  }
+}
+
+async function shootAll({ browser, ports, catalogServer, selected, flags, checking }) {
   const manifest = await loadManifest();
   const revision = await webRepositoryRevision();
   const capturedAt = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
   const failures = [];
 
-  try {
+  {
     // The qualifier must survive the abbreviation: `slice(0, 12)` on
     // `<sha>-dirty` would print exactly the string a clean tree prints.
     const [revisionSha, ...revisionQualifier] = revision.split('-');
@@ -914,7 +1269,7 @@ async function main() {
       '-'
     );
     process.stdout.write(
-      `app ${ports.origin}  exports ${exportsServer.origin}  ` +
+      `app ${ports.origin}  catalog ${catalogServer.origin}  ` +
         `chromium ${browser.version()}  web@${shortRevision}\n\n`
     );
     if (revisionIsProvisional(revision)) {
@@ -933,16 +1288,22 @@ async function main() {
       try {
         captured = await captureScenario(browser, scenario, {
           appOrigin: ports.origin,
-          exportsOrigin: exportsServer.origin,
+          // The web repository's permissive-CORS mirror, which answers
+          // single-range requests: the host a data link reads a file from.
+          sampleOrigin: `http://${ports.host}:${ports.samplePort}`,
+          catalogOrigin: catalogServer.origin,
         });
       } catch (error) {
         // One broken scenario must not cost the whole sweep. The failure is
         // reported at the end and the exit status is non-zero.
         failures.push(`${scenario.id}: ${error.message}`);
         process.stdout.write(`  ${scenario.id}  FAILED: ${error.message}\n`);
+        for (const logged of error.loggedErrors ?? []) {
+          process.stdout.write(`      console error: ${logged}\n`);
+        }
         continue;
       }
-      const { bytes, record } = captured;
+      const { bytes, record, loggedErrors } = captured;
       record.web_repository_revision = revision;
       record.browser = `chromium ${browser.version()}`;
       record.captured_at = capturedAt;
@@ -973,7 +1334,7 @@ async function main() {
           ? path.join(PUBLISHED_SCREENSHOTS, record.topic)
           : path.join(path.resolve(flags.out), record.topic);
         await mkdir(directory, { recursive: true });
-        const file = path.join(directory, `${record.name}.png`);
+        const file = path.join(directory, `${record.name}.${record.format}`);
         await writeFile(file, bytes);
         if (flags.emit) {
           // Provenance describes the *published* bytes, so only a run that
@@ -987,12 +1348,13 @@ async function main() {
         if (flags.emit) {
           // `test_every_documented_screenshot_uses_its_intrinsic_responsive_width`
           // asserts `referenced == screenshots`: every PNG under
-          // `_static/screenshots/` must be named by a `{figure}` block. An
-          // emitted image with no reference fails `python -m pytest` for the
-          // whole repository until the block lands, so the two are one change.
+          // `_static/screenshots/` must be named by a `{figure}` block, and
+          // every WebP by a page's markup. An emitted image with no reference
+          // fails `python -m pytest` for the whole repository until the
+          // reference lands, so the two are one change.
           process.stdout.write(
-            '  NOTE: this PNG now fails python -m pytest until the {figure} ' +
-              'block below is pasted into a page.\n'
+            `  NOTE: this ${record.format.toUpperCase()} now fails python -m ` +
+              'pytest until the reference below is pasted into a page.\n'
           );
         }
       }
@@ -1017,6 +1379,9 @@ async function main() {
           process.stdout.write(`      page error: ${error}\n`);
         }
       }
+      for (const error of loggedErrors) {
+        process.stdout.write(`      console error: ${error}\n`);
+      }
       if (!checking) {
         process.stdout.write(
           `\n${figureBlock(record, '../../../')}\n\n`
@@ -1035,10 +1400,6 @@ async function main() {
         'utf8'
       );
     }
-  } finally {
-    await browser.close();
-    await appServer.close();
-    await exportsServer.close();
   }
 
   if (failures.length > 0) {
@@ -1048,3 +1409,7 @@ async function main() {
 }
 
 await main();
+// Scenarios may leave servers and child processes running (a loopback host,
+// `cellucid serve`, an R session); each is stopped on `exit`, and nothing
+// else would end the process while they hold the event loop open.
+process.exit(process.exitCode ?? 0);

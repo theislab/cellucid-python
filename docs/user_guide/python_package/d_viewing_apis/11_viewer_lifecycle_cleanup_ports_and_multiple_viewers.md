@@ -9,7 +9,8 @@ This page is about running Cellucid viewers/servers safely over long sessions:
 
 **Audience**
 - Notebook users (most common source of “why is my port in use?”)
-- Anyone serving `.h5ad` in backed mode (file handles matter)
+- Anyone viewing an in-memory `AnnData` or `MuData` (each viewer writes a
+  temporary `.h5ad` or `.h5mu`)
 
 ## The three lifecycles you might be in
 
@@ -22,13 +23,13 @@ If you close the terminal or the process dies, the viewer stops working.
 
 ### 2) Python server lifecycle (non-notebook)
 
-- Start (blocking): `serve(...)` / `serve_anndata(...)`
-- Start (non-blocking): `CellucidServer(...).start_background()`, `AnnDataServer(...).start_background()`
+- Start (blocking): `serve_anndata(...)`
+- Start (non-blocking): `AnnDataServer(...).start_background()`
 - Stop: `server.stop()`
 
 ### 3) Notebook viewer lifecycle
 
-`show(...)` / `show_anndata(...)` returns a viewer object that:
+`show_anndata(...)` returns a viewer object that:
 - starts a server in the background, and
 - embeds an iframe that points at that server.
 
@@ -47,8 +48,9 @@ In notebooks, it’s very common to:
 
 Calling `viewer.stop()`:
 - stops the server,
-- closes AnnData file handles (important for `.h5ad` backed mode),
-- and frees memory used by internal caches.
+- closes its port,
+- and removes the temporary `.h5ad` (`.h5mu`) an in-memory `AnnData`
+  (`MuData`) was written to (a path is served in place and left untouched).
 
 ```{note}
 Cellucid registers an interpreter-exit cleanup handler that logs shutdown
@@ -61,21 +63,26 @@ handle any failure before interpreter teardown.
 ### Defaults
 
 - CLI/server functions and classes default to the exact port `8765`.
-- Notebook viewer classes default to `port=None`, which requests one
-  operating-system-assigned port.
+- Notebook viewer classes default to `port=None`: port 8765 (the one local
+  port Google sign-in accepts), else the next free port.
 
 ### What happens if the port is already in use?
 
 - CLI/server mode binds the requested port exactly and raises if it is unavailable.
-- Notebook viewers use an operating-system-selected free port when `port=None`.
+- Notebook viewers with `port=None` take the next free port after 8765 and
+  print a note that Google sign-in works only on 8765; a port given is used or
+  refused.
 
 **Rule:** use the CLI/server banner for blocking server mode and
 `viewer.viewer_url` for notebook viewer objects; never assume port `8765`.
 
-### Choosing a fixed port (useful for SSH tunnels)
+### Choosing a fixed port (SSH tunnels, Google Drive)
 
-The convenience functions `show(...)` and `show_anndata(...)` do not expose `port` directly.
-If you need a fixed port, instantiate the viewer class:
+The convenience function `show_anndata(...)` does not expose `port` directly.
+If you need a fixed port, instantiate the viewer class. Port `8765` is also
+the one local port on which Google Drive files open in a notebook viewer:
+Google answers only the addresses Cellucid registered, port included
+({doc}`../../web_app/b_data_loading/16_private_drive_onedrive`).
 
 ```python
 from cellucid import AnnDataViewer
@@ -90,13 +97,6 @@ viewer = AnnDataViewer(
 viewer.display()
 ```
 
-```python
-from cellucid import CellucidViewer
-
-viewer = CellucidViewer("/path/to/export_dir", port=8765, height=600)
-viewer.display()
-```
-
 ## Multiple viewers: what’s safe and what’s risky
 
 ### Safe patterns
@@ -108,7 +108,8 @@ viewer.display()
 
 - Creating many viewers in a loop without calling `stop()` → lots of servers, lots of open sockets, possible file-handle exhaustion.
 - Using `show_anndata(adata, dataset_name=..., dataset_id=...)` on a huge
-  in-memory `AnnData` repeatedly → repeated conversions/caches can spike memory.
+  in-memory `AnnData` repeatedly → each call writes another temporary `.h5ad`
+  until its viewer is stopped; pass the file's path instead when it is on disk.
 
 ## Cleanup strategies in notebooks
 

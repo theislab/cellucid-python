@@ -14,75 +14,58 @@ If you just want “copy/paste and go”, start with {doc}`04_cli_cellucid_serve
 - Computational power users (HPC, SSH tunnels)
 - Developers (debugging, integrations)
 
-## Two server implementations (exported vs AnnData)
+## The server (`AnnDataServer`)
 
-Cellucid runs one of two servers depending on what you are viewing:
+Every Python entry point — `cellucid serve`, {func}`~cellucid.serve_anndata`,
+{func}`~cellucid.show_anndata` — runs one server class:
 
-### Exported dataset server (`CellucidServer`)
 
-- serves static files from a directory (fast + cacheable)
-- viewer URL looks like:
-
-```text
-http://127.0.0.1:<port>/?source=remote
-```
-
-The exact `source=remote` marker declares prepared-server launch intent before
-the first paint. Open `server.viewer_url` rather than constructing a bare URL;
-ordinary sample-catalog onboarding is intentionally not presented for this
-explicitly user-served source. This URL opens the server's
-`/_cellucid/datasets` catalog. A unique catalog selects its sole dataset; a
-multi-dataset catalog requires an exact dataset-id selection. Neither
-`CellucidServer.viewer_url` nor the viewer guesses the first catalog entry.
-
-### AnnData server (`AnnDataServer`)
-
-- serves “virtual” Cellucid-format files computed from AnnData
+- hands one dataset to the viewer, which reads it itself — in place with HTTP
+  range requests where the format allows it, once from the start for an R
+  object or a MatrixMarket folder; the server computes nothing per request
+- serves the bytes of a file under `/_cellucid/anndata/<dataset_id><ending>`,
+  keeping the file's own ending (`.h5ad`, `.zarr.zip`, `.h5mu`, `.loom`,
+  `.rds.gz`, …); a Zarr store folder key by key under
+  `/_cellucid/anndata/<dataset_id>.zarr/<key>`; and a folder of files (a
+  MatrixMarket folder, a Cell Ranger `outs/`) file by file under
+  `/_cellucid/anndata/<dataset_id>/<file>`, its files listed in
+  `/_cellucid/datasets` because a browser cannot list a folder. `Range`
+  requests are answered exactly (`206 Partial Content`, `Content-Range`,
+  `HEAD`, `ETag`, `Accept-Ranges`). The route is named by the dataset id, so
+  the local file name is never published
+- an in-memory `AnnData` is written once to a temporary `.h5ad` (a `MuData` to
+  a temporary Cellucid-ready `.h5mu`) and served the same way; the file is
+  removed when the server stops
+- threaded, with HTTP/1.1 keep-alive, because a browser reads a file with many
+  range requests; bytes are sent by the kernel (`sendfile`), and a reload of an
+  unchanged file revalidates what the browser kept (`ETag`, `304`) instead of
+  downloading it again
 - viewer URL includes:
 
 ```text
 http://127.0.0.1:<port>/?anndata=true
 ```
 
+The exact `anndata=true` marker declares the user-served launch before the
+first paint. Open `server.viewer_url` rather than constructing a bare URL;
+ordinary sample-catalog onboarding is intentionally not presented for this
+explicitly user-served source. The viewer opens the one dataset the server
+lists at `/_cellucid/datasets`.
+
 ## Startup steps and what each one reports
 
-The two servers report different numbers of steps, because they do different
-amounts of work before the socket opens.
+`[1/4]` Detecting format · `[2/4]` Reading metadata · `[3/4]` Checking launch
+choices · `[4/4]` Starting server.
 
-| Server | Steps |
-| --- | --- |
-| Exported (`CellucidServer`, `serve`) | `[1/3]` Validating dataset · `[2/3]` Loading dataset info · `[3/3]` Starting server |
-| Direct AnnData (`AnnDataServer`, `serve_anndata`, `cellucid serve` on an AnnData path) | `[1/5]` Detecting format · `[2/5]` Loading AnnData · `[3/5]` Analyzing dataset · `[4/5]` Building manifests · `[5/5]` Starting server |
+No array is read before the server binds. It reads the store's metadata (cell
+and gene counts, the names of the stored elements), checks each launch choice
+you set against it, and binds; the viewer then reads what each view needs. The
+transcript is in {doc}`../../web_app/b_data_loading/04_server_tutorial`.
 
-The direct-AnnData path reports **five** steps. Step 2 reports the adapter build
-as it happens instead of running silently behind one success line, and the
-manifest/centroid phase — previously unannounced work after that success line —
-is now its own reported step:
-
-Startup prints five numbered steps; the transcript is in {doc}`../../web_app/b_data_loading/04_server_tutorial`.
-
-`Embeddings: 2D from obsm['X_umap']` names the key that was resolved for each
-dimension. `X_umap_1d`, `X_umap_2d`, and `X_umap_3d` each name their own
-dimension; an object declaring none of them and carrying a bare `X_umap` has it
-read at the dimension its column count states, which is why the report names
-both the dimension and the key it came from. Full rule:
-{doc}`05_python_serve_and_serve_anndata_quickstart`.
-
-`Connectivity` in the step-3 dataset report has three states, not two:
-
-```text
-      Connectivity: yes (74,771 edges)
-      Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)
-      Connectivity: no
-```
-
-The middle line is a graph this object carries that this server was not asked to
-serve. Reporting `no` there would read as missing data. Deciding between the
-three costs one `in` test against `obsp` — a key lookup, not a read of the
-matrix — so naming the state costs nothing that opting out was meant to save.
-
-The prepared-export server is unchanged: an export's manifests already hold the
-counts, so three steps still cover it.
+Step 3 lists each launch choice as the viewer receives it. A choice left unset
+is not listed: the viewer takes it from the store's
+`uns['cellucid']['defaults']`, else its default rule. Full rules:
+{doc}`08_anndata_mode_show_anndata_and_serve_anndata`.
 
 ## Where the server binds, and what the banner prints
 
@@ -94,12 +77,12 @@ the addresses another machine needs separately:
 
 A wildcard bind prints the loopback origin plus the machine's own name; see {doc}`12_remote_servers_ssh_tunneling_and_cloud`.
 
-The same three properties are readable from Python on both server classes:
+The same three properties are readable from Python on the server:
 
 | Property | Value |
 | --- | --- |
 | `server.url` | the origin this machine can open — the loopback origin for a wildcard bind, the bound host otherwise |
-| `server.viewer_url` | `server.url` plus the launch query (`/?anndata=true` or `/?source=remote`) |
+| `server.viewer_url` | `server.url` plus the launch query (`/?anndata=true`) |
 | `server.network_urls` | `(label, origin)` pairs for the **Bound to every network interface** block; empty for a loopback bind, and empty for a wildcard bind on a machine with no non-loopback name |
 
 Reading the block:
@@ -115,8 +98,8 @@ Reading the block:
 :::{note}
 A viewer reached through an SSH tunnel always uses the **loopback** origin. The
 tunnel terminates on your own machine, so the URL you open there is
-`http://127.0.0.1:<port>/?anndata=true` (or `/?source=remote` for a prepared
-export), whatever host the far-side server bound to. The wildcard bind exists so
+`http://127.0.0.1:<port>/?anndata=true`, whatever host the far-side server
+bound to. The wildcard bind exists so
 that a second hop — a login node forwarding into a compute node — can connect at
 all; it is not the address you type. See
 {doc}`12_remote_servers_ssh_tunneling_and_cloud`.
@@ -124,7 +107,7 @@ all; it is not the address you type. See
 
 ## Verified local UI generation
 
-By default, both servers publish one verified local UI generation:
+By default, the server publishes one verified local UI generation:
 
 - before binding the public server, Cellucid establishes every file declared by
   the configured source's `cellucid-web-assets.json`;
@@ -147,8 +130,8 @@ cellucid serve /path/to/data --web-cache-dir /path/to/cache
 Python callers pass the same choice explicitly:
 
 ```python
-from cellucid import serve
-serve("/path/to/data", web_cache_dir="/path/to/cache")
+from cellucid import serve_anndata
+serve_anndata("/path/to/data.h5ad", web_cache_dir="/path/to/cache")
 ```
 
 ### Generation publication
@@ -168,7 +151,7 @@ print(get_web_cache_dir())
 clear_web_cache()
 ```
 
-## Debug endpoints (exported + AnnData)
+## Debug endpoints
 
 These endpoints are useful for “is the server alive” and “what does it think it’s serving?”:
 
@@ -176,11 +159,10 @@ These endpoints are useful for “is the server alive” and “what does it thi
 - `/_cellucid/info`
 - `/_cellucid/datasets`
 - `/_cellucid/protocol`
-- `/_cellucid/mapping/candidates.json` (AnnData servers only: the data mapping
-  being served, and every candidate array)
-- `/_cellucid/mapping/embeddings/{obsm}/{c0-c1-c2}.bin` (AnnData servers only:
-  one candidate `obsm` array at the given 0-based columns, normalized like a
-  served embedding)
+- `/_cellucid/anndata/<dataset_id>.h5ad` (or the file's own ending,
+  `.zarr/<key>`, or `<dataset_id>/<file>` for a folder of files): the store's
+  bytes
+- `/_cellucid/ws`: the viewer channel (a WebSocket), below
 
 ### Example: health probe
 
@@ -188,11 +170,20 @@ These endpoints are useful for “is the server alive” and “what does it thi
 http://127.0.0.1:<port>/_cellucid/health
 ```
 
-Exported servers return a small “ok + version” payload.
-AnnData servers also include:
-- `format` (`h5ad`, `zarr`, `in-memory`)
-- `is_backed`
-- `n_cells`, `n_genes`
+The server returns:
+
+```json
+{"status": "ok", "type": "anndata", "version": "<cellucid version>", "format": "h5ad", "n_cells": 4096, "n_genes": 512}
+```
+
+`format` is the input format id of the served store (`h5ad`, `zarr`, `h5mu`,
+`mudata-zarr`, `loom`, `tenx-h5`, `tenx-outs`, `rds`, `rda`, `mtx`); an
+in-memory `AnnData` reports `h5ad` and an in-memory `MuData` `h5mu`, because
+they are served as temporary files. `n_cells` and `n_genes` are `null` for a
+format only the browser reads (an R object, Loom, 10x, MatrixMarket).
+`/_cellucid/info` carries `version`, `type`, `format`, `n_cells`, `n_genes`,
+plus `host`, `port`, and `runtime`: the program serving the viewer (`python`,
+or `jupyter` for a notebook viewer), which the viewer names.
 
 ### Example: what datasets are visible?
 
@@ -200,7 +191,18 @@ AnnData servers also include:
 http://127.0.0.1:<port>/_cellucid/datasets
 ```
 
-This is especially useful when serving a directory that contains multiple export subfolders.
+The server lists its one dataset with an `anndata` member naming the store and
+the launch choices you set:
+
+```json
+{"datasets": [{"id": "pbmc-demo", "name": "PBMC demo", "anndata": {"file": {"url": "_cellucid/anndata/pbmc-demo.h5ad", "kind": "h5ad", "layout": "file", "size": 2799976}, "defaults": {"knn": "connectivities"}}}]}
+```
+
+`url` is relative to the server's base URL; `kind` is the input format id (as
+`format` above); `layout` is `file`, `zip`, or `folder`; `size` is given for a
+file and absent for a folder, and a folder of files (MatrixMarket, `outs/`)
+lists its `files` with each one's `path` and `size`. `defaults` holds only the
+choices you set.
 
 ### Example: which wire capabilities does this `cellucid` accept?
 
@@ -208,86 +210,32 @@ This is especially useful when serving a directory that contains multiple export
 http://127.0.0.1:<port>/_cellucid/protocol
 ```
 
-Two lists — `events` and `commands` — describing what the notebook side of the
-protocol accepts. The web build reads this before emitting an event that an
+The viewer channel's route (`channel`, `_cellucid/ws`) and two lists —
+`events` and `commands` — describing what the notebook side of the protocol
+accepts. The web build reads this before emitting an event that an
 older `cellucid` would reject; it is also the quickest way to confirm which
 version of the protocol a running server speaks.
 
-## Connectivity routes on the direct-AnnData server (opt-in)
+## The neighbor graph
 
-On the direct-AnnData server the neighbor graph is served only when you ask for
-it: `knn_key="connectivities"` on `AnnDataAdapter`, `AnnDataAdapter.from_file`,
-`AnnDataServer`, `serve_anndata`, `AnnDataViewer`, or `show_anndata`, or
-`--knn connectivities` on the command line. The default is off, because building the
-edge list is the single longest part of opening a large object — a 50-neighbor
-graph over millions of cells is hundreds of millions of stored neighbors — and
-most sessions never draw the graph.
-
-| Route | Off (default) | On |
-| --- | --- | --- |
-| `/connectivity_manifest.json` | `404 No connectivity data` | the weighted edge manifest |
-| `/connectivity/edges.src.bin` | `404` | source indices |
-| `/connectivity/edges.dst.bin` | `404` | destination indices |
-| `/connectivity/edges.weights.f64.bin` | `404` | Float64 weights, one per edge |
-
-With connectivity off, `obsp['connectivities']` is never read, and
-`dataset_identity.json` reports `stats.has_connectivity` as `false` with
-`stats.n_edges` as `null`. With it on, the whole graph is read and validated
-**before** the server binds, because the manifest the viewer fetches first
-declares `n_edges` and `max_neighbors`, and the payload routes have to agree
-with it byte for byte. Asking for connectivity that `adata.obsp` does not carry
-is an error at construction, not a quiet omission.
-
-Two things this does *not* change:
-
-- `prepare()` was already opt-in through its own `connectivities=` argument and
-  is untouched.
-- The prepared-export server is untouched. An export either holds
-  `connectivity_manifest.json` and the three `connectivity/edges.*` artifacts or
-  it does not; there is nothing to decide at serve time.
-
-Debug it the same way as any other route — `curl -I` the manifest and read the
-status:
-
-```bash
-curl -sI http://127.0.0.1:8765/connectivity_manifest.json | head -1
-```
+The server has no connectivity routes: the viewer reads the
+`obsp` graph from the store itself, the first time a view draws edges. Without
+`knn_key` (`--knn`) it uses `obsp['connectivities']` when the store has it;
+with it, the graph named. Naming a graph the store does not carry stops the
+server before it binds.
 
 ## Frontend ↔ Python communication endpoints
 
-Even in “server mode”, the server includes endpoints used by notebook integrations and hooks:
+Even in “server mode”, the server answers the viewer channel used by notebook
+integrations and hooks:
 
-- `POST /_cellucid/events` (frontend → Python events)
-- `POST /_cellucid/selection` (frontend → Python selections, as binary cell indices)
-- `POST /_cellucid/session_bundle` (frontend uploads session bundle bytes for notebook workflows)
+- `GET /_cellucid/ws` (a WebSocket): commands to the viewer, events,
+  selections and session bundles back, opened only by a registered viewer with
+  its token
 
-If you are not using notebook hooks, you can ignore these.
-
-## Serving multiple exported datasets (advanced)
-
-You can run:
-
-```bash
-cellucid serve /path/to/exports_root
-```
-
-and the server will list subdirectories that look like datasets.
-
-Recommended layout:
-
-```text
-exports_root/
-  dataset_a/
-    dataset_identity.json
-    obs_manifest.json
-    embeddings/
-    ...
-  dataset_b/
-    dataset_identity.json
-    obs_manifest.json
-    embeddings/
-    ...
-```
+A server started by `cellucid serve` or `serve_anndata(...)` registers no
+viewer, so no channel opens; it answers no `POST` (405). If you are not using
+notebook hooks, you can ignore this.
 
 ## Logging and diagnostics
 

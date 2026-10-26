@@ -23,7 +23,7 @@ This is the workflow you want when:
 
 **Prerequisites**
 - A notebook environment
-- A viewer (`show(...)` or `show_anndata(...)`)
+- A viewer (`show_anndata(...)`)
 
 ---
 
@@ -33,7 +33,8 @@ A session bundle is a single file with extension:
 - `.cellucid-session`
 
 It contains:
-- a manifest (`datasetFingerprint`, chunk list, codecs)
+- a manifest (`datasetFingerprint`, `source`, `requires` — the obs columns and
+  genes the session uses — and the chunk list with codecs)
 - a sequence of chunks (JSON or binary; optionally gzip-compressed)
 
 In Python, it is represented by:
@@ -58,7 +59,9 @@ See web-app docs:
 
 ### Option B (recommended in notebooks): capture from Python (no browser download)
 
-Cellucid can request the session from the iframe and receive it back over HTTP.
+Cellucid asks the viewer for the session and receives it back on the viewer
+channel (the WebSocket the viewer opened to the local server, as one binary
+frame), written to a temporary file; nothing is downloaded in the browser.
 
 ---
 
@@ -184,17 +187,17 @@ selected
 
 ## Exact dataset identity (read this!)
 
-A bundle's `datasetFingerprint` carries exactly `sourceType`, `datasetId`,
+A bundle's `datasetFingerprint` carries exactly `datasetId`, `name`,
 `cellCount`, `varCount`, a `cellOrder` record, and a `dataMapping` record — the
-current session fingerprint:
+current (format 2) session fingerprint:
 
 ```python
 bundle.dataset_fingerprint
 ```
 
 ```text
-{'sourceType': 'jupyter',
- 'datasetId': 'my-study-v1',
+{'datasetId': 'my-study-v1',
+ 'name': 'My study',
  'cellCount': 3696,
  'varCount': 3753,
  'cellOrder': {'embedding': {'key': 'X_umap', 'columns': [0, 1]},
@@ -223,13 +226,13 @@ shared rule, and read from the mapping's expression matrix.
 ### What `cellOrder` is, and why Python does not check its digest
 
 Everything a session records about your cells is a **row number**. That is safe
-only for as long as row 417 keeps meaning the same cell. Re-export a dataset
+only for as long as row 417 keeps meaning the same cell. Rewrite a dataset
 from a re-sorted `AnnData` and the id, the cell count, and the gene count are
 all still identical, while every stored row number now denotes something else.
 
 `cellOrder` closes that hole in the viewer. It is a digest of the coordinates
 of one embedding — the one `cellOrder.embedding` names, an `obsm` key with its
-0-based columns or an exported embedding id — plus that embedding's dimension.
+0-based columns — plus that embedding's dimension.
 Every embedding is normalized on its own, so a digest only means anything for
 the embedding it was taken over.
 
@@ -264,8 +267,8 @@ was saved on.
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/highlighting-selected-page.png
-:alt: The Highlighting panel with one page renamed "Left lobe" carrying 842 cells, the summary "842 cells highlighted", and one group row labelled "Lasso (842 cells) (842)".
-:width: 516px
+:alt: The Highlighting panel with one page renamed "Left lobe" carrying 826 cells, the summary "826 cells highlighted", and one group row labelled "Lasso (826 cells) (826)".
+:width: 532px
 
 Highlighted cells are stored on a named page that can be used by analysis and session workflows.
 ```

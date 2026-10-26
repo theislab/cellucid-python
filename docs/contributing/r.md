@@ -1,6 +1,6 @@
 # Contributing to Cellucid (R package)
 
-The `cellucid-r` package exports data to the same on-disk format used by the Cellucid viewer.
+The `cellucid-r` package writes single-cell data as a Cellucid-ready AnnData store (AnnData Zarr), which the Cellucid viewer opens directly.
 
 ## Where the R contribution guide lives
 
@@ -9,7 +9,7 @@ The `cellucid-r` package exports data to the same on-disk format used by the Cel
 **authoritative** guide for working on the R package: the development
 environment, `devtools::test()` / `devtools::check()`, how the hand-written
 `man/` pages and `NAMESPACE` are maintained, the design constraints, how to
-validate an export end-to-end, pull request rules, and troubleshooting. It
+validate a store end-to-end, pull request rules, and troubleshooting. It
 ships beside the code it describes and is the file GitHub shows a contributor
 when they open an issue or a pull request, so it is kept self-sufficient.
 

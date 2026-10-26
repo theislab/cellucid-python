@@ -4,8 +4,9 @@ This page is the “source of truth” reference for the notebook hooks system.
 
 Primary sources in this repo:
 - Python: `cellucid-python/src/cellucid/jupyter/`
+- Python: `cellucid-python/src/cellucid/_viewer_channel.py` (the viewer channel)
 - Python: `cellucid-python/src/cellucid/_server_base.py`
-- Web app: `cellucid/assets/js/data/jupyter-source.js`
+- Web app: `cellucid/assets/js/data/viewer-host-source.js`
 - Web app: `cellucid/assets/js/app/main.js`
 
 If you are new, start with:
@@ -18,10 +19,9 @@ If you are new, start with:
 ### Creating a viewer
 
 ```python
-from cellucid import show, show_anndata
+from cellucid import show_anndata
 ```
 
-- `show("./export_dir", height=600) -> CellucidViewer`
 - `show_anndata(...) -> AnnDataViewer`, with this closed call surface:
 
   ```text
@@ -31,13 +31,16 @@ from cellucid import show, show_anndata
       *,
       latent_key=None,
       gene_id_column=None,
-      normalize_embeddings=True,
-      centroid_outlier_quantile=0.95,
-      centroid_min_points=10,
-      dataset_name=<required string>,
-      dataset_id=<required string>,
+      normalize_embeddings=None,
+      centroid_min_points=None,
+      dataset_name=None,
+      dataset_id=None,
       obs_keys=None,
+      embedding_keys=None,
+      knn_key=None,
+      expression_source=None,
       vector_field_default=None,
+      modality=None,
       client_server_url=None,
       web_source_url="https://www.cellucid.com",
       web_cache_dir=None,
@@ -45,15 +48,21 @@ from cellucid import show, show_anndata
   )
   ```
 
-  `obs_keys` names the exact `adata.obs` columns to serve; every column is served
-  when it is omitted. `vector_field_default` is required when direct AnnData
-  declares more than one vector field. The convenience function does not accept `port`; construct
+  `dataset_name` and `dataset_id` default to `uns['cellucid']['name']` and
+  `uns['cellucid']['id']`, and are required when the data declares neither.
+  Every launch choice (`latent_key` through `modality`) is optional:
+  each one named is checked against the data's metadata before the server
+  starts and handed to the viewer as a launch default; one left unset is taken
+  from `uns['cellucid']['defaults']`, else the viewer's default rule.
+  `obs_keys` names the exact `adata.obs` columns the viewer shows; every column
+  is shown when it is omitted. `vector_field_default` names the vector field the
+  overlay opens on. The convenience function does not accept `port`; construct
   `AnnDataViewer` for a fixed port.
 
 ### Basic properties
 
 - `viewer.server_url` → the underlying data server URL (usually `http://127.0.0.1:<port>`)
-- `viewer.viewer_url` → the iframe URL (includes `jupyter=true`, `viewerId`, `viewerToken`, and `anndata=true` for AnnDataViewer)
+- `viewer.viewer_url` → the iframe URL (includes `viewer=true`, `viewerId`, `viewerToken`, and `anndata=true` for AnnDataViewer)
 
 ### Display and lifecycle
 
@@ -80,8 +89,7 @@ Decorators:
 - `@viewer.on_hover`
 - `@viewer.on_click`
 - `@viewer.on_command_error` (a command this notebook sent was rejected by the
-  viewer; registering one also silences the default `sys.stderr` notice, and
-  only the web build that emits `command_error` sends it)
+  viewer; registering one also silences the default `sys.stderr` notice)
 - `@viewer.on_data_mapping` (the viewer resolved or changed its data mapping;
   `viewer.data_mapping` holds the latest one)
 - `@viewer.on_message` (catches all nine current event types)
@@ -115,8 +123,8 @@ Data mapping (the viewer reports it because this package lists `data_mapping` in
 ### Connectivity / cache utilities
 
 - `viewer.debug_connection(timeout=5.0)` → structured connectivity report,
-  including `dataset_identity_probes`, keyed by every exact server-declared
-  dataset id/path, and `recent_events["command_errors"]`, the most recent
+  including `anndata_store_probes`, keyed by every exact listed dataset id (a
+  `HEAD` and a one-byte `Range` read of the served AnnData store), and `recent_events["command_errors"]`, the most recent
   commands the viewer rejected
 - `viewer.ensure_web_ui_cached(force=True, show_progress=True)` → establish the
   complete source UI generation
@@ -128,13 +136,15 @@ Data mapping (the viewer reports it because this package lists `data_mapping` in
 
 ## Event schemas (viewer → Python)
 
-Browser events are delivered via `POST /_cellucid/events` and routed by the
-authenticated `viewerId`/`viewerToken` pair. `selection` is built by the server
-from the binary `POST /_cellucid/selection` body, and `session_bundle` by the
-authenticated Python upload endpoint.
+Browser events are delivered on the viewer channel (`/_cellucid/ws`), which
+the viewer authenticated with its `viewerId`/`viewerToken` pair when it opened
+it. Most are JSON text frames; `selection` is built by the server from a binary
+frame of cell indices, and `session_bundle` from a binary frame holding the
+bundle (see {doc}`05_architecture_viewer_channel`).
 
-Python receives payloads **without** `type`, `viewerId`, or `viewerToken`.
-Every listed field is required and undeclared fields are rejected.
+Python receives payloads **without** `type`; no event carries `viewerId` or
+`viewerToken`. Every listed field is required and undeclared fields are
+rejected.
 
 ### `ready`
 
@@ -178,7 +188,6 @@ Every listed field is required and undeclared fields are rejected.
   "origin": str,
   "serverUrl": str,
   "connected": bool,
-  "parentOrigin": str,
   "userAgent": str | None,
 }
 ```
@@ -199,7 +208,17 @@ Every listed field is required and undeclared fields are rejected.
 ```python
 {
   "command": str,   # one of the command types below
-  "reason": str,    # one line, at most 500 characters
+  "reason": str,    # one line: the viewer sends at most 240 characters, Python accepts 500
+}
+```
+
+### `data_mapping`
+
+```python
+{
+  "requestId": str | None,  # a str exactly when origin is "notebook"
+  "origin": str,            # "default", "best_guess", "session", "user" or "notebook"
+  "mapping": dict,          # the complete data mapping, validated and canonical
 }
 ```
 
@@ -215,16 +234,20 @@ For each current event type `X`, `@viewer.on_message` receives:
 
 ## Command schemas (Python → viewer)
 
-All commands are sent via `postMessage` into the iframe.
+Commands are sent on the viewer channel as JSON text frames, exactly the
+fields below; a command carries no `viewerId` or `viewerToken`. A command that
+names cells (`highlight`, `setVisibility`) is one binary frame instead: a
+little-endian `uint32` header length, the JSON header (exactly the header
+fields below, padded with spaces to a multiple of 4 bytes), then the cells as
+little-endian `uint32`, strictly ascending. `viewer.send_message()` takes them
+with their cells under `"cells"` (a list of ints or a NumPy integer array, in
+any order). A command sent before the viewer connects waits and is sent, in
+order, when it does.
 
-You typically send only the message-specific fields; the embedding layer injects:
-- `viewerId`
-- `viewerToken`
-
-### `highlight`
+### `highlight` (binary)
 
 ```python
-{"type": "highlight", "cells": [0, 10, 42], "color": "#ff00ff"}
+{"type": "highlight", "color": "#ff00ff"}  # header; then the cells, at least one
 ```
 
 ### `clearHighlights`
@@ -239,10 +262,11 @@ You typically send only the message-specific fields; the embedding layer injects
 {"type": "setColorBy", "field": "cell_type"}
 ```
 
-### `setVisibility`
+### `setVisibility` (binary)
 
 ```python
-{"type": "setVisibility", "cells": [0, 10, 42], "visible": False}
+{"type": "setVisibility", "visible": False, "all": False}  # header; then the cells, at least one
+{"type": "setVisibility", "visible": True, "all": True}    # every cell; no cells follow
 ```
 
 ### `resetCamera`
@@ -250,6 +274,15 @@ You typically send only the message-specific fields; the embedding layer injects
 ```python
 {"type": "resetCamera"}
 ```
+
+### `setDataMapping` (sent by `viewer.set_data_mapping()`)
+
+```python
+{"type": "setDataMapping", "requestId": "...", "mapping": {...}}  # a complete data mapping
+```
+
+Answered by a `data_mapping` event of origin `notebook` with the same
+`requestId`, or a `command_error` naming `setDataMapping`.
 
 ### Session/diagnostics (internal)
 
@@ -268,73 +301,52 @@ All of these are served by the Python data server that backs the viewer:
 
 ### `GET /_cellucid/health`
 
-Used for:
-- connectivity probing
-
-It is not used to discover or select a notebook proxy.
+Returns `status` (`"ok"`), `type` (`"anndata"`), `version`, `format` (the
+input format id, such as `"h5ad"`), `n_cells` and `n_genes` (`null` for a
+format only the browser reads). Used for connectivity probing (and by the
+viewer once, to tell a stopped Python from a proxy that refuses WebSockets);
+it is not used to discover or select a notebook proxy.
 
 ### `GET /_cellucid/info`
 
-Returns server metadata (version, mode, etc.).
+Returns `version`, `type`, `format`, `host`, `port`, `n_cells`, `n_genes` and
+`runtime`: the program serving the viewer, `"jupyter"` for a viewer started in
+a notebook kernel and `"python"` otherwise, which the viewer names.
 
 ### `GET /_cellucid/datasets`
 
-Returns dataset listings (one dataset in AnnData mode; one or many in exported mode).
+Returns the one dataset the server serves: its id, name, store route and launch choices.
 
 ### `GET /_cellucid/protocol`
 
-Returns the wire capabilities this installation accepts: `events` (the inbound
-event types it validates) and `commands` (the commands it may send, which is
-also the set of names a `command_error` may report). Both are lists that grow
-between releases; the key set does not, and there is no version number. A web
-build asks this route before emitting an event that older notebooks would
-reject. See
+Returns where the viewer channel is and what it carries: `channel` (its path,
+`_cellucid/ws`), `events` (the inbound event types it validates) and
+`commands` (the commands it may send, which is also the set of names a
+`command_error` may report). The lists grow between releases; there is no
+version number. A web build asks this route before it opens the channel and
+sends only the events listed. See
 {doc}`../h_developer_docs/09_server_mode_architecture_endpoints_and_security`.
 
-### `POST /_cellucid/events`
+### `GET /_cellucid/ws` (WebSocket)
 
-Hooks endpoint.
-
-Behavior:
-- requires exact `Content-Type: application/json`
-- requires a JSON object with non-empty, whitespace-free `viewerId` and `type`
-- requires the registered viewer's exact `viewerToken` for successful delivery
-- request size limit: **1 MiB** (to guard against accidental giant payloads)
-- refuses `selection` and `session_bundle` records with HTTP 400; only their
-  own routes below may produce them
-- responds with `{"status": "ok", "delivered": true}` only after successful
-  routing
-- returns HTTP 404 when the viewer is not registered, HTTP 403 for invalid
-  credentials, HTTP 400 for a malformed request, and HTTP 500 if the callback
-  fails
-
-### `POST /_cellucid/selection?viewerId=...&viewerToken=...&source=...`
-
-Selection delivery endpoint.
+The viewer channel ({doc}`05_architecture_viewer_channel`).
 
 Behavior:
-- the query names `viewerId`, `viewerToken` and `source`, each exactly once;
-  `viewerId` and `source` are non-empty and whitespace-free
-- authenticates the viewer before reading the body (HTTP 404 unregistered,
-  HTTP 403 invalid credentials)
-- requires exact `Content-Type: application/octet-stream`
-- the body is the selected row indices as little-endian unsigned 32-bit
-  integers, strictly ascending, at least one; anything else is HTTP 400
-- no size cap: a selection of any size is delivered; the only bounds are the
-  format's own (every `uint32` index once) and the server's memory (HTTP 413
-  when it cannot hold the body)
-- routes one `selection` event and responds with
-  `{"status": "ok", "delivered": true}`; HTTP 500 if the callback fails
+- the upgrade passes the `Host` check (421) and an `Origin` check (403): the
+  server's own host, a loopback name, or a host in `allowed_hosts`
+- the first frame must be `{"type": "hello", "viewerId", "viewerToken"}`; the
+  answer is `{"type": "welcome"}`, or close code 4401 for an unknown viewer or
+  a wrong token
+- commands: JSON text frames, and binary frames for `highlight` and
+  `setVisibility`; events: JSON text frames (at most 1 MiB each) and binary
+  frames for `selection` and `session_bundle` (uint32 little-endian header
+  length, JSON header, body)
+- close codes: 1001 the viewer or its server was stopped, 4409 a newer channel of the same
+  viewer replaced this one, 1008 a frame broke the protocol
+- the server pings every 20 s; a session bundle is streamed to a temporary
+  file, with no size cap but the temporary directory's free space
 
-### `POST /_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
-
-Session bundle upload endpoint (Jupyter no-download capture).
-
-Behavior:
-- requires a pre-registered pending request
-- streams upload to a temp file
-- hard size cap: **512MB**
-- validates a MAGIC header (`CELLUCID_SESSION\n`)
+The server answers no `POST` (405).
 
 ---
 
@@ -345,7 +357,7 @@ Behavior:
 | `web_cache_dir` | Directory for the active verified web generation | Controlled writable location or explicit inspection |
 | `web_source_url` | Exact origin publishing `cellucid-web-assets.json` | Testing or an explicitly operated source |
 | `client_server_url` | Exact browser-facing HTTP(S) server base used in iframe embeds | Remote kernels, custom proxies, unusual notebook frontends |
-| `allowed_hosts` | Extra exact `Host` names the data server answers to; one bare host name per entry, no port, scheme or wildcard | Required behind a reverse proxy, which forwards the browser's `Host` verbatim |
+| `allowed_hosts` | Extra exact host names the data server answers to (`Host`) and accepts viewer pages from (`Origin`); one bare host name per entry, no port, scheme or wildcard | Required behind a reverse proxy, which forwards the browser's `Host` verbatim |
 
 ---
 
@@ -354,7 +366,7 @@ Behavior:
 - **Indices are positional** (row index), not stable cell IDs.
 - `event["cells"]` is a Python `list[int]`, about 36 bytes per cell in memory
   (4 bytes a cell on the wire).
-- Hook callbacks can run on a server thread; keep them fast and avoid heavy work inline.
+- Hook callbacks run on the viewer channel's thread, one event at a time; keep them fast and avoid heavy work inline.
 - Session bundle application requires the exact `expected_dataset_id` and
   matching cell/variable counts; any fingerprint mismatch raises before
   AnnData is mutated.
@@ -364,7 +376,7 @@ Behavior:
 ## Related pages
 
 - Overview: {doc}`01_overview_bidirectional_communication`
-- Architecture: {doc}`05_architecture_message_routing_http_vs_postmessage`
+- Architecture: {doc}`05_architecture_viewer_channel`
 - Commands: {doc}`06_python_to_frontend_commands`
 - Events: {doc}`07_frontend_to_python_events`
 - Troubleshooting: {doc}`14_troubleshooting_hooks`

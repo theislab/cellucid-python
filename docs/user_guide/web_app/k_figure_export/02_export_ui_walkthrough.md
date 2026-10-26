@@ -3,7 +3,7 @@
 **Audience:** wet lab + computational users (figures for slides, reports, and papers)  
 **Time:** 10–20 minutes  
 **What you’ll learn:**
-- Where the Figure Export panel lives and how to open it
+- Where the **Figure export** panel lives and how to open it
 - The difference between preview and export
 - How to set size/aspect ratio and use the framing overlay
 - How export behaves for live views vs snapshots (and multi-view layouts, if supported)
@@ -26,7 +26,7 @@ This is the “no excuses” workflow that works for most people.
 2) **Make sure the correct view is active**
    - If you have snapshot views: click inside the panel you want to export (in grid compare) or switch to “edit selected view” to make it obvious.
 
-3) **Open** the **Figure Export** panel (left sidebar).
+3) **Open** the **Figure export** panel (left sidebar).
 
 4) **Choose plot size**
    - Start with **Screen (half)** or **1200 × 900**.
@@ -49,13 +49,13 @@ This is the “no excuses” workflow that works for most people.
 
 ---
 
-## Where the Figure Export panel lives
+## Where the Figure export panel lives
 
-Figure export is controlled from the **Figure Export** panel in the left sidebar.
+Figure export is controlled from the **Figure export** panel in the left sidebar.
 
 ```{figure} ../../../_static/screenshots/figure_export/panel-overview.png
-:alt: The Figure Export panel with its four collapsed groups — Framing, Labels and Annotations, Style, Download — above the Export button, with the pointer on Export.
-:width: 516px
+:alt: The Figure export panel with its four collapsed groups, Framing, Labels and annotations, Style and Download, above the Export button, with the pointer on Export.
+:width: 532px
 
 The panel opens with all four groups collapsed. They are mutually exclusive:
 opening one closes the others, so work through them in order rather than
@@ -72,8 +72,8 @@ expecting to see them side by side.
 
 **Are export settings saved?**
 
-- Figure export settings are **not stored in session bundles** (by design).
-- Treat export settings as “ephemeral UI”: if you care about reproducing a figure later, record the settings or rely on embedded metadata in the exported artifact (see {doc}`05_metadata_and_provenance`).
+- Yes: every setting in this panel (size, frame, background, fonts, labels, legend, preview, format, DPI, SVG strategy, **Export all views**) is saved in a session bundle and restored by **Load**.
+- The exported artifact also embeds metadata (see {doc}`05_metadata_and_provenance`).
 
 ---
 
@@ -116,8 +116,8 @@ Cellucid exposes **Plot size** controls as width × height in pixels. In the UI 
 - Editable numeric inputs for **W** and **H**.
 
 ```{figure} ../../../_static/screenshots/figure_export/framing.png
-:alt: The Figure Export Framing group open, showing the plot size preset with its width and height boxes, the preview toggle with a colourblind-simulation selector and Refresh, and the frame-export crop controls with the aspect readout.
-:width: 472px
+:alt: The Framing group open: Plot size on Screen (half) with its W and H boxes, and Preview with its Show preview checkbox, above the Export button.
+:width: 532px
 
 The **Framing** group. The preset writes into the same two boxes you can type
 into; **Screen (half)** fills them from the current window on open, which is why
@@ -282,8 +282,8 @@ Emphasize selection does nothing if there are no highlighted/selected cells.
 ## Download options and large dataset strategies
 
 ```{figure} ../../../_static/screenshots/figure_export/download.png
-:alt: The Figure Export Download group open, showing the download format selector, the PNG DPI selector, the SVG point-strategy selector and the export-all-views checkbox, with the pointer on that checkbox.
-:width: 472px
+:alt: The Download group open with the format set to SVG: the SVG point strategy select on its placeholder, shortened to "Choose S…", and Export all views (split-view) with the pointer on its checkbox, above the Export button.
+:width: 532px
 
 The **Download** group. The strategy selector opens on the placeholder
 `Choose SVG strategy…`, which is not a valid choice: Cellucid never picks one
@@ -456,7 +456,7 @@ If you want all panels to be directly comparable, show the same embedding in the
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/figure_export/preview.png
-:alt: Cellucid Figure Export preview showing the configured embedding and sidebar controls.
+:alt: The whole window with Preview on in the Framing group: the sidebar shows the figure as it will be written, beside the live view on the canvas.
 :width: 1440px
 
 Preview exposes the current framing and visual state before a file is written.

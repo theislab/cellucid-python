@@ -1,0 +1,370 @@
+/* The documentation home page (docs/index.md).
+
+   The home page is the documentation's brand card, built on the same
+   principles as the app's (cellucid/assets/css/README.md, "Site Design
+   Principles"): one calm heading, one short sentence, clear actions with the
+   first one filled, then the product itself. Square surfaces with quiet
+   edges, Inter at a flat scale with hierarchy from weight and colour, the
+   theme's ink and cyan in light and dark, and no motion under
+   `prefers-reduced-motion`.
+
+   Every rule is scoped to a `cl-` class that only docs/index.md uses, or to
+   the article that contains `.cl-hero`, so no other page changes. Colours
+   come from the PyData theme variables that `custom.css` sets to the app's
+   tokens. */
+
+/* ------------------------------------------------------------------ Frame */
+
+/* conf.py gives the home page neither sidebar; its column widens to match. */
+.bd-main .bd-content .bd-article-container:has(.cl-hero) {
+    max-width: 72rem;
+}
+
+/* The page title is the product name, set as the line above the tagline. */
+.bd-article:has(.cl-hero) section > h1 {
+    margin: 0.75rem 0 0.75rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--pst-color-secondary);
+}
+
+.bd-article:has(.cl-hero) section > h2 {
+    margin-top: 3.25rem;
+}
+
+/* ------------------------------------------------------------------- Hero */
+
+.cl-hero {
+    margin: 0 0 1rem;
+}
+
+.cl-hero-tagline {
+    max-width: 20ch;
+    margin: 0 0 1.1rem;
+    font-size: clamp(2.1rem, 1.35rem + 3vw, 3.4rem);
+    font-weight: 600;
+    line-height: 1.06;
+    letter-spacing: -0.02em;
+    color: var(--pst-color-heading-color);
+    text-wrap: balance;
+}
+
+.cl-hero-tagline span {
+    color: var(--pst-color-secondary);
+}
+
+.cl-hero-lead {
+    max-width: 44rem;
+    margin: 0 0 1.6rem;
+    font-size: 1.15rem;
+    line-height: 1.6;
+    color: var(--pst-color-text-muted);
+}
+
+/* Calls to action at a documentation size, the first one filled. */
+.cl-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 0 0 1.4rem;
+}
+
+.cl-hero-actions p {
+    margin: 0;
+}
+
+.cl-hero-actions .sd-btn {
+    padding: 0.6rem 1.15rem;
+    border-radius: 0;
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.4;
+    box-shadow: none;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.cl-hero-actions .sd-btn-primary {
+    background-color: var(--pst-color-text-base);
+    border-color: var(--pst-color-text-base);
+    color: var(--pst-color-background);
+}
+
+.cl-hero-actions .sd-btn-primary:hover {
+    background-color: var(--pst-color-secondary);
+    border-color: var(--pst-color-secondary);
+    color: var(--pst-color-background);
+}
+
+.cl-hero-actions .sd-btn-outline-secondary {
+    background-color: transparent;
+    border-color: var(--pst-color-border);
+    color: var(--pst-color-text-base);
+}
+
+.cl-hero-actions .sd-btn-outline-secondary:hover {
+    background-color: var(--pst-color-surface);
+    border-color: var(--pst-color-text-base);
+    color: var(--pst-color-text-base);
+}
+
+.cl-hero-actions .sd-btn:focus-visible {
+    outline: 3px solid var(--pst-color-accent);
+    outline-offset: 2px;
+}
+
+/* What it opens: AnnData first, then the rest, then where to read more. */
+.cl-formats p {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--pst-color-text-muted);
+}
+
+.cl-formats strong {
+    margin-right: 0.2rem;
+    font-weight: 600;
+    color: var(--pst-color-text-base);
+}
+
+.cl-formats .sd-badge {
+    border-radius: 2px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 0.3em 0.55em;
+}
+
+.cl-formats .sd-badge.sd-bg-primary {
+    background-color: var(--pst-color-text-base) !important;
+    color: var(--pst-color-background) !important;
+}
+
+.cl-formats .sd-badge.sd-outline-secondary {
+    border-color: var(--pst-color-border) !important;
+    color: var(--pst-color-text-base) !important;
+}
+
+.cl-formats a {
+    margin-left: 0.3rem;
+}
+
+/* The product itself, framed as a surface with a quiet edge. */
+.cl-hero-shot {
+    position: relative;
+    margin: 2.5rem 0 0;
+    padding: 0;
+}
+
+/* A soft wash of the app's own palette behind the frame. */
+.cl-hero-shot::before {
+    content: "";
+    position: absolute;
+    inset: 6% 0 auto;
+    height: 80%;
+    z-index: 0;
+    background:
+        radial-gradient(40% 60% at 25% 50%, rgba(3, 105, 161, 0.22), transparent 70%),
+        radial-gradient(40% 60% at 75% 45%, rgba(124, 58, 237, 0.18), transparent 70%);
+    filter: blur(32px);
+    pointer-events: none;
+}
+
+html[data-theme="dark"] .cl-hero-shot::before {
+    background:
+        radial-gradient(40% 60% at 25% 50%, rgba(68, 203, 249, 0.2), transparent 70%),
+        radial-gradient(40% 60% at 75% 45%, rgba(167, 139, 250, 0.2), transparent 70%);
+}
+
+.cl-hero-frame {
+    position: relative;
+    z-index: 1;
+    aspect-ratio: 1440 / 1000;
+    overflow: hidden;
+    border: 1px solid var(--pst-color-border);
+    background: var(--pst-color-surface);
+    box-shadow: 0 12px 28px rgba(17, 24, 39, 0.14);
+}
+
+html[data-theme="dark"] .cl-hero-frame {
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+}
+
+.cl-hero-frame img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.cl-hero-shot figcaption {
+    position: relative;
+    z-index: 1;
+    max-width: 44rem;
+    margin: 0.9rem 0 0;
+    padding: 0;
+    text-align: left;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--pst-color-text-muted);
+}
+
+/* ------------------------------------------------------------------ Cards */
+
+/* Every card on the page: a square surface whose edge darkens and lifts a
+   little on hover, and which shows the keyboard focus ring of its link. */
+.cl-ways .sd-card,
+.cl-features .sd-card,
+.cl-capabilities .sd-card,
+.cl-community .sd-card {
+    border: 1px solid var(--pst-color-border);
+    background: var(--pst-color-background);
+    box-shadow: none;
+    transition: border-color 150ms ease, box-shadow 200ms ease, transform 200ms ease;
+}
+
+.cl-ways .sd-card:hover,
+.cl-features .sd-card:hover,
+.cl-capabilities .sd-card:hover,
+.cl-community .sd-card:hover {
+    border-color: var(--pst-color-secondary);
+    box-shadow: 0 6px 16px var(--pst-color-shadow);
+    transform: translateY(-2px);
+}
+
+.cl-ways .sd-card:has(.sd-stretched-link:focus-visible),
+.cl-features .sd-card:has(.sd-stretched-link:focus-visible),
+.cl-capabilities .sd-card:has(.sd-stretched-link:focus-visible),
+.cl-community .sd-card:has(.sd-stretched-link:focus-visible) {
+    outline: 3px solid var(--pst-color-accent);
+    outline-offset: 2px;
+}
+
+.cl-ways .sd-card-title,
+.cl-capabilities .sd-card-title,
+.cl-community .sd-card-title {
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+}
+
+.cl-ways .sd-card-title svg,
+.cl-capabilities .sd-card-title svg,
+.cl-community .sd-card-title svg {
+    color: var(--pst-color-secondary);
+}
+
+.cl-ways .sd-card-text,
+.cl-capabilities .sd-card-text,
+.cl-community .sd-card-text,
+.cl-features .sd-card-text {
+    color: var(--pst-color-text-muted);
+}
+
+/* The three ways in carry a footer that names where the card goes. */
+.cl-ways .sd-card-footer {
+    padding: 0.6rem 1rem 0.8rem;
+    border-top: 0;
+    background: transparent;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--pst-color-secondary);
+}
+
+.cl-ways .sd-card-footer p {
+    margin: 0;
+}
+
+/* Feature cards: the picture edge to edge, then a title and one sentence. */
+.cl-feature {
+    overflow: hidden;
+}
+
+.cl-feature .cl-feature-media {
+    padding: 0;
+    border-bottom: 1px solid var(--pst-color-border);
+    background: var(--pst-color-surface);
+    aspect-ratio: 1440 / 1000;
+    overflow: hidden;
+}
+
+.cl-feature .cl-feature-media img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 400ms ease;
+}
+
+.cl-feature:hover .cl-feature-media img {
+    transform: scale(1.03);
+}
+
+.cl-feature .sd-card-body {
+    padding: 1rem 1.15rem 1.15rem;
+}
+
+.cl-feature .sd-card-body p:first-child {
+    margin-bottom: 0.3rem;
+    font-size: 1.05rem;
+    color: var(--pst-color-text-base);
+}
+
+/* Compact capability and learning cards. */
+.cl-capabilities .sd-card-body {
+    padding: 0.8rem 0.95rem;
+}
+
+.cl-capabilities .sd-card-title {
+    margin-bottom: 0.3rem;
+    font-size: 0.98rem;
+}
+
+.cl-capabilities .sd-card-text {
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.cl-features {
+    margin-bottom: 1rem;
+}
+
+/* ----------------------------------------------------- Phone and motion */
+
+@media (max-width: 575.98px) {
+    .cl-hero-lead {
+        font-size: 1.05rem;
+    }
+
+    .cl-hero-actions .sd-btn {
+        width: 100%;
+    }
+
+    .cl-hero-actions p {
+        flex: 1 1 100%;
+    }
+
+    .cl-hero-shot {
+        margin-top: 1.75rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cl-hero-actions .sd-btn,
+    .cl-ways .sd-card,
+    .cl-features .sd-card,
+    .cl-capabilities .sd-card,
+    .cl-community .sd-card,
+    .cl-feature .cl-feature-media img {
+        transition: none;
+    }
+
+    .cl-ways .sd-card:hover,
+    .cl-features .sd-card:hover,
+    .cl-capabilities .sd-card:hover,
+    .cl-community .sd-card:hover,
+    .cl-feature:hover .cl-feature-media img {
+        transform: none;
+    }
+}

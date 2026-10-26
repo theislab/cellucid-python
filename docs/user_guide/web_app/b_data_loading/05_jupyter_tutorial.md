@@ -3,8 +3,8 @@
 This tutorial shows how to load data into Cellucid **from inside a notebook** (JupyterLab, classic Jupyter, VSCode notebooks, etc.).
 
 You will learn:
-- how to display a **pre-exported** dataset with `show()` (fastest + most reproducible)
-- how to display an **AnnData / `.h5ad` / `.zarr`** directly with `show_anndata()` (most convenient for analysis)
+- how to display an **AnnData or MuData object, an `.h5ad`, a Zarr store, or any
+  other file or folder Cellucid reads** with `show_anndata()`
 - how to work with **vector fields** (velocity/drift overlays) in notebooks
 - how the integration works under the hood (so you can debug it)
 - how to drive the viewer from Python (highlight/color/visibility) and react to UI events (hooks)
@@ -23,8 +23,8 @@ embedded viewer and connection report.
 
 **Audience**
 - Wet lab / beginner: copy/paste the “Minimal cells” sections and focus on “What success looks like”.
-- Computational users: focus on read-only-backed H5AD access, eager Zarr
-  loading, dataset sizes, vector fields, and cleanup.
+- Computational users: focus on how the viewer reads a store in place, dataset
+  sizes, vector fields, and cleanup.
 - Power users: focus on remote/HPC workflows, hooks, and debugging endpoints.
 
 **Time**
@@ -77,7 +77,7 @@ viewer = show_anndata(
 viewer  # (optional) display again in some notebook UIs
 ```
 
-### Minimal: show a `.h5ad` read-only-backed or an eagerly loaded `.zarr`
+### Minimal: show a `.h5ad` file or a Zarr store, read in place
 
 ```python
 from cellucid import show_anndata
@@ -88,32 +88,31 @@ viewer = show_anndata(
     dataset_name="My study",
     dataset_id="my-study-v1",
 )
-# A .zarr path uses the same identity arguments and is loaded eagerly.
+# A Zarr store folder or a zipped Zarr store (.zip) takes the same arguments.
 ```
 
-### Minimal: show a pre-exported dataset directory
+### Minimal: show a Cellucid-ready AnnData
+
+A file written by `cellucid.prepare(...)` names itself in `uns['cellucid']`,
+so it needs no `dataset_name` or `dataset_id`:
 
 ```python
-from cellucid import show
+from cellucid import show_anndata
 
-viewer = show("./exports/pbmc_demo", height=600)
-```
-
-```{note}
-If you don’t have an export directory yet, create one with `cellucid.prepare(...)`.
-See {doc}`02_local_demo_tutorial` for a complete export workflow.
+viewer = show_anndata("pbmc_demo.zarr", height=600)
 ```
 
 ### What success looks like
 
-```{figure} ../../../_static/screenshots/jupyter/pancreas-notebook-embed.png
-:alt: A JupyterLab window with a notebook file browser on the left. The notebook's output cell holds an interactive Cellucid viewer with its Session panel and a rendered single-cell embedding, and beneath it a printed ready report and a ViewerState line.
+```{figure} ../../../_static/screenshots/jupyter/show-anndata-driven-from-python.png
+:alt: The viewer cellucid.show_anndata() serves, opened at its viewer URL, after Python called viewer.set_color_by("clusters") and viewer.highlight_cells() on the Ductal cells: the Pancreas sample coloured by clusters with the Ductal cells highlighted.
 :width: 1440px
 
-A real notebook after one `show_anndata(...)` call. The viewer is *inside* the
-output cell, not a separate tab or window — you scroll the notebook and the
-viewer scrolls with it. Below it, ordinary Python output continues: the ready
-report and the cell counts printed by the next cell.
+The viewer `show_anndata()` serves, opened at its `viewer.viewer_url` in a
+browser tab: in a notebook the same page sits *inside* the output cell, and
+scrolls with the notebook. Here Python has already coloured it by `clusters`
+and highlighted the Ductal cells; the Dataset box reads *Zarr v2 folder ·
+Python*.
 ```
 
 Three things confirm the call worked:
@@ -124,22 +123,28 @@ Three things confirm the call worked:
 
 ## How It Works (Mental Model)
 
-When you call `show(...)` or `show_anndata(...)`, Cellucid does two things:
+When you call `show_anndata(...)`, Cellucid does two things:
 
 1) Starts a **local data server** (usually `127.0.0.1:<some_port>`)
-   - This server reads your data and exposes a small HTTP API (e.g. `/embeddings/0_2d.bin`, `/obs_manifest.json`, `/dataset_identity.json`).
+   - It computes nothing: it serves the store's bytes under
+     `/_cellucid/anndata/<dataset_id>.h5ad` (or `.zarr.zip`, or `.zarr/<key>`
+     for a Zarr store folder, or the file's own ending for another format),
+     and the viewer's own HDF5/Zarr reader reads them in place with HTTP range
+     requests, only what a view needs. An in-memory `AnnData` (`MuData`) is
+     first written once to a temporary `.h5ad` (`.h5mu`), removed when the
+     viewer stops.
    - The server is intentionally **localhost-bound** in Jupyter mode for safety (it is not meant to be public).
 
 2) Displays an **iframe** in your notebook pointing at the **same server**:
 
    - Local notebooks often use direct loopback:
      ```text
-     http://127.0.0.1:<port>/?jupyter=true&viewerId=<id>&viewerToken=<token>
+     http://127.0.0.1:<port>/?viewer=true&viewerId=<id>&viewerToken=<token>
      ```
    - For HTTPS/remote notebooks, the caller may expose the selected port
      through an HTTPS proxy and pass that exact browser base:
      ```text
-     https://<notebook-origin>/<base>/proxy/<port>/?jupyter=true&viewerId=<id>&viewerToken=<token>
+     https://<notebook-origin>/<base>/proxy/<port>/?viewer=true&viewerId=<id>&viewerToken=<token>
      ```
 
 The viewer UI and the dataset API share the same origin, so the viewer loads data from relative paths (no mixed-content).
@@ -172,71 +177,29 @@ print(viewer.viewer_url)  # the embedded viewer URL (usually same as server_url 
 
 Then try:
 - `http://127.0.0.1:<port>/_cellucid/health` (server alive?)
-- `http://127.0.0.1:<port>/dataset_identity.json` (dataset id + vector fields metadata)
+- `http://127.0.0.1:<port>/_cellucid/datasets` (the dataset id and name,
+  where the store is, and the launch choices you set)
 
-## Choose `show()` vs `show_anndata()`
-
-| Function | Best for | What you pass | Performance |
-|---|---|---|---|
-| `show(data_dir)` | Fast, reproducible viewing | a **pre-exported** directory | Best |
-| `show_anndata(data, dataset_name=..., dataset_id=...)` | Convenience in analysis workflows | `AnnData` / `.h5ad` / `.zarr` | Good (but slower than exports) |
-
-If you’re preparing a dataset for collaborators or repeated viewing, prefer `prepare()` + `show()`.
-
-## Option #12 — `show()` (Pre-exported Dataset)
-
-### Step 1 — Create an export (one-time)
-
-Use `cellucid.prepare(...)` to create an export directory.
-
-For a complete workflow (including GitHub sharing), see {doc}`02_local_demo_tutorial`.
-
-### Step 2 — Show it in a notebook
-
-```python
-from cellucid import show
-
-viewer = show("./exports/pbmc_demo", height=600)
-```
-
-### What success looks like
-
-- An interactive Cellucid viewer appears directly in the output cell.
-- You can pan/zoom/select cells.
-- If your export includes vector fields, the overlay can be enabled (see {ref}`vector-fields`).
-
-### Advanced: choose a fixed port (useful for SSH tunneling)
-
-The convenience function `show(...)` requests an operating-system-assigned
-port. If you need a fixed port:
-
-```python
-from cellucid import CellucidViewer
-
-viewer = CellucidViewer("./exports/pbmc_demo", port=8765, height=600)
-viewer.display()
-```
-
-```{note}
-Fixed ports are especially useful for remote notebooks, because you can pre-configure an SSH tunnel to `127.0.0.1:8765`.
-```
-
-```python
-from cellucid import show
-
-# Open the exported directory used throughout this page.
-viewer = show("./exports/pbmc_demo", height=600)
-viewer.stop()
-```
-
-## Option #13/#14 — `show_anndata()` (AnnData / `.h5ad` / `.zarr`)
+## `show_anndata()` (AnnData / `.h5ad` / Zarr store)
 
 `show_anndata()` is the fastest way to get started in an analysis notebook.
 
 It supports:
-- an in-memory `AnnData`
-- a `.h5ad` file (always opened read-only-backed)
-- a `.zarr` directory (loaded eagerly by `anndata.read_zarr`)
+- an in-memory `AnnData`, written once to a temporary `.h5ad` (sparse
+  matrices column-major, uncompressed) that is removed when the viewer stops,
+  or an in-memory `MuData`, written once to a temporary `.h5mu`
+- a `.h5ad` file, served as it is on disk
+- a Zarr store folder (Zarr v2 with `.zgroup`, or v3 with `zarr.json`) or a
+  zipped Zarr store (`.zip`, such as `.zarr.zip`), served as it is on disk
+- any other file or folder Cellucid reads (`.h5mu` or MuData Zarr, `.loom`, a
+  10x `.h5` or `outs/` folder, a MatrixMarket folder, an `.rds` / `.rda`),
+  served as it is on disk ({doc}`07_file_format_expectations`)
+
+Nothing is copied or converted: the viewer reads the store itself, with range
+requests. The one exception is a store holding an array stored with a codec
+the browser cannot decode (an HDF5 filter such as Blosc, Zstandard or szip; a
+Zarr codec such as bz2, lzma or zfpy): it is read once with `anndata` and its
+codec plugins and served as a decodable temporary `.h5ad`.
 
 ### Minimal examples
 
@@ -268,40 +231,48 @@ followed by these exact keyword-only parameters:
   entry — no port, no scheme, no wildcard
 - `web_source_url`: exact origin publishing the web asset inventory
 - `web_cache_dir`: directory where the verified generation is published
-- `latent_key`: choose one exact latent-space key in `obsm`; `None` leaves
-  latent-derived outlier quantiles unavailable
+- `latent_key`: the `obsm` latent space (scVI, PCA) the outlier filter
+  measures in; `None` takes the store's own default, else no latent space (the
+  filter then waits for one chosen in **Data mapping**)
 - `gene_id_column`: `None` uses `var.index` (`raw.var.index` with
   `expression_source="raw"`); any non-blank string names that exact column
   (default: `None`). Empty values take the index name and repeated names are
   made unique (`MATR3`, `MATR3-1`)
-- `obs_keys`: exact `obs` columns to serve; `None` (the default) serves every
-  column. Name them to leave out a column Cellucid cannot serve, such as a
-  datetime column
-- `normalize_embeddings`: normalize coordinates to `[-1, 1]` (default: True)
-- `centroid_outlier_quantile`: quantile used for categorical centroids
-- `centroid_min_points`: minimum category size used for categorical centroids
+- `obs_keys`: exact `obs` columns the viewer shows, in this order; `None`
+  (the default) shows every column
+- `normalize_embeddings`: whether the viewer scales embeddings into its
+  coordinate range (default `None`: the viewer's default, which scales them)
+- `centroid_min_points`: the fewest cells a category needs to get outlier
+  quantiles (default `None`: 10)
 - `embedding_keys`: the `obsm` array a dimension shows by default, such as
   `{"2d": "X_tsne"}` or `{"2d": ("X_pca", [0, 1])}` with 0-based columns
   (default: `None`, which uses `X_umap_1d`/`X_umap_2d`/`X_umap_3d` or a bare
   `X_umap`, then a deterministic best guess)
-- `knn_key`: the `obsp` matrix to read, validate, and serve as the neighbor
-  graph, such as `"connectivities"` (default: `None`). No graph is touched
-  unless you name one, and a matrix that is not symmetric is refused
+- `knn_key`: the `obsp` matrix the viewer draws as the neighbor graph, such
+  as `"connectivities"` (default: `None`: `obsp['connectivities']` when
+  present). The graph is read only when a view draws it
 - `expression_source`: where expression is read: `"X"`, `"raw"`, or
   `"layer:<name>"` (default `None`: `X`, or without `X` `raw`, then a layer,
   reported as guessed)
-- `serve_vector_fields`: read, validate, and serve the `<field>_umap_<n>d`
-  arrays in `obsm` as the velocity/drift overlay (default: `False`), for the
-  same reason — every declared field is read in full before the viewer appears
-- `dataset_name`: required non-empty, unpadded label without control
-  characters; human-readable Unicode is preserved
-- `dataset_id`: required portable 1–180 character ASCII identity (letter or
-  digit first; then letters, digits, `.`, `_`, or `-`; no trailing `.` or
-  reserved Windows device name), important for sessions; see
-  {doc}`06_dataset_identity_why_it_matters`
-- `vector_field_default`: exact field ID; required when the AnnData declares
-  more than one *served* vector field. It selects among served fields, so
-  passing it without `serve_vector_fields=True` raises
+- `dataset_name`: non-empty, unpadded label without control characters;
+  human-readable Unicode is preserved. Defaults to the store's
+  `uns['cellucid']['name']`; required when it has none
+- `dataset_id`: portable 1–180 character ASCII identity (letter or digit
+  first; then letters, digits, `.`, `_`, or `-`; no trailing `.` or reserved
+  Windows device name), important for sessions; see
+  {doc}`06_dataset_identity_why_it_matters`. Defaults to the store's
+  `uns['cellucid']['id']`; required when it has none
+- `vector_field_default`: the vector field the overlay opens on: the
+  `<field>` of an `obsm['<field>_<basis>']` array drawn over `obsm['X_<basis>']`
+  (`"velocity"` for `velocity_umap`)
+- `modality`: the modality a MuData dataset opens on (default `None`: its
+  default modality); see {doc}`19_multimodal_mudata`
+
+Every option you name is checked against the store's metadata before the
+server starts — a key that does not exist raises at once — and passed to the
+viewer as a launch default. An option left at `None` is taken from the store's
+own `uns['cellucid']['defaults']`, else from the viewer's default rule (see
+{doc}`13_data_mapping`).
 
 The convenience function does not accept `port`. Use
 `AnnDataViewer(..., port=<fixed port>)` when a tunnel or proxy requires a fixed
@@ -322,7 +293,7 @@ from cellucid import show_anndata
 #     dataset_id="my-study-v1",
 # )
 
-# Read-only-backed H5AD (recommended for large datasets)
+# An .h5ad file, read in place
 # viewer = show_anndata(
 #     "/path/to/data.h5ad",
 #     height=600,
@@ -330,7 +301,7 @@ from cellucid import show_anndata
 #     dataset_id="my-study-v1",
 # )
 
-# Zarr is materialized eagerly by anndata.read_zarr
+# A Zarr store folder (or a zipped Zarr store), read in place
 # viewer = show_anndata(
 #     "/path/to/data.zarr",
 #     height=600,
@@ -352,15 +323,16 @@ from cellucid import show_anndata
 ### Which `obsm` key becomes the embedding
 
 `X_umap_1d` / `X_umap_2d` / `X_umap_3d` each decide their own dimension. An
-object declaring none of them is served from a bare `X_umap` at the dimension its
+object declaring none of them is shown from a bare `X_umap` at the dimension its
 column count states, so a Scanpy object needs no rename. Full rules, including
 what an unreadable width reports:
 {doc}`../../python_package/d_viewing_apis/08_anndata_mode_show_anndata_and_serve_anndata`.
 
-### Connectivity (KNN graph) is opt-in
+### The neighbor graph is read when it is drawn
 
-`show_anndata()` and `AnnDataViewer` do not read `adata.obsp['connectivities']`
-unless you ask. The parameter is keyword-only and `False` by default:
+The viewer shows `obsp['connectivities']` as the neighbor graph when the store
+has one, and reads it only when a view draws connectivity edges or the KNN drag
+tool is used. To open on another graph, name it:
 
 ```python
 viewer = show_anndata(
@@ -371,60 +343,35 @@ viewer = show_anndata(
 )
 ```
 
-With it off, the matrix is never read, `dataset_identity.json` reports
-`stats.has_connectivity` as `false` and `stats.n_edges` as `null`, and
-`connectivity_manifest.json`, `connectivity/edges.src.bin`,
-`connectivity/edges.dst.bin`, and `connectivity/edges.weights.f64.bin` all
-answer `404`. The viewer offers no edge drawing; everything else — points, obs
-fields, gene expression, centroids, vector fields — is unaffected.
+Naming a matrix the store does not have raises before the server starts:
 
-With it on, the whole graph is read and validated before the server binds,
-because the manifest the viewer fetches first declares the edge count and the
-neighbor maximum. That is the most expensive thing a direct-AnnData startup can
-do: a 50-neighbor graph over millions of cells is hundreds of millions of stored
-neighbors. Off is the default because most sessions never draw the graph.
-
-```{important}
-Asking for connectivity on an object whose `obsp` holds no `connectivities`
-matrix raises instead of producing a graph-less viewer. Run
-`sc.pp.neighbors(adata)` first, or leave the parameter alone.
+```text
+knn_key names obsp['connectivities'], which this store does not have. obsp holds: []. Compute the neighbour graph with sc.pp.neighbors(adata), or leave knn_key unset.
 ```
 
-`prepare()` is unaffected: its `connectivities=` argument was always opt-in, and
-an export pays the validation once rather than once per session.
+A graph is checked when it is read: it must be symmetric, so the `distances`
+matrix `sc.pp.neighbors()` also writes is refused. Any other `obsp` graph can be
+chosen later under **Session › Data mapping › Neighbour graph**
+({doc}`13_data_mapping`).
 
-### The viewer builds quietly
+### What the constructor does
 
-A notebook viewer suppresses server output, so the numbered startup report a
-terminal prints — `[1/5] Detecting format` through `[5/5] Starting server` —
-never appears in a cell. On a large object the cell therefore runs for minutes
-with nothing printed, and the constructor is where that time goes, in this
-order:
+A notebook viewer suppresses server output, so the four-step report a terminal
+prints — `[1/4] Detecting format` through `[4/4] Starting server` (see
+{doc}`04_server_tutorial`) — never appears in a cell. The constructor does the
+same work, in this order:
 
-1. **Obs columns** — every served column is classified, so an unservable dtype
-   fails here rather than inside a later request.
-2. **Embeddings** — `obsm` keys are resolved, then each embedding is validated
-   and normalized.
-3. **Vector fields** — `obsm` is scanned and every declared
-   `<field>_umap_<dim>d` array read, *only* when `serve_vector_fields=True`.
-4. **Connectivity** — the edge list, *only* when `knn_key="connectivities"`.
-5. **Manifests and centroids** — one centroid per categorical field per
-   available dimension, then a cross-check of every served route.
-6. **Viewer generation and bind** — the configured web generation is
+1. **Format** — the path is classified by the input format registry (an
+   `.h5ad` file, a Zarr store folder, a zipped Zarr store, an `.h5mu`, …); an
+   in-memory `AnnData` is written once to a temporary `.h5ad` (a `MuData` to an
+   `.h5mu`), as is a store with an array the browser cannot decode.
+2. **Metadata** — the cell and gene counts and the names of `obs`, `var`,
+   `obsm`, `obsp` and the layers are read; no array is read.
+3. **Launch choices** — every option you named is checked against those names.
+4. **Viewer generation and bind** — the configured web generation is
    established and the port is bound.
 
-To watch the same work happen with labels, run the object through a terminal
-server once with `cellucid serve` (its five-step report is described in
-{doc}`04_server_tutorial`), or enable logging in the kernel before constructing
-the viewer — the `cellucid.connectivity` logger warns, naming the stored
-neighbor count and the cell count, before validating a graph of 50,000,000 or
-more stored neighbors:
-
-```python
-import logging
-
-logging.basicConfig(level=logging.INFO)
-```
+Everything else happens in the browser, as each view needs it.
 
 (vector-fields)=
 ## Vector Fields in Notebooks (Velocity/Drift Overlay)
@@ -432,61 +379,40 @@ logging.basicConfig(level=logging.INFO)
 Vector fields are optional per-cell displacement vectors (e.g. RNA velocity, drift, directed transitions) that Cellucid can render as an animated overlay on top of your embedding.
 
 This matters for data loading because:
-- the overlay is only available if the server advertises `vector_fields` in `dataset_identity.json`
 - vector fields must be aligned to the **same cells** and **same embedding basis/dimension**
-
-### The overlay is opt-in, exactly like connectivity
-
-`show_anndata()` and `AnnDataViewer` do **not** read the vector arrays unless
-you ask. The parameter is keyword-only and `False` by default:
-
-```python
-viewer = show_anndata(
-    adata,
-    dataset_name="My study",
-    dataset_id="my-study-v1",
-    serve_vector_fields=True,
-)
-```
-
-Correctly named vectors with the flag left off produce a viewer with no overlay
-and no explanation: `dataset_identity.json` carries no `vector_fields` block,
-and `vectors/…` answers `404`. Everything else — points, obs fields, gene
-expression, centroids — is unaffected. The default is `False` because every
-declared field is read and validated before the viewer appears, which is time
-most sessions do not spend.
-
-```{important}
-`vector_field_default` selects among *served* fields, so passing it without
-`serve_vector_fields=True` raises rather than being ignored.
-```
-
-`prepare()` is unaffected: an export written with `vector_fields=...` carries
-the vectors already, and `show()` on that export needs no flag.
+- for `show_anndata()`, every `obsm` array named `<field>_<basis>` after an
+  embedding `X_<basis>` with the same number of columns is offered as the
+  field `<field>`, and is read only when the overlay shows it
 
 ### Quick checklist (AnnData)
 
 To make a vector field appear when using `show_anndata(...)`, you need:
 
-1) A UMAP embedding in `adata.obsm`: `X_umap_1d`, `X_umap_2d`, or `X_umap_3d`,
-   or a bare `X_umap` read at the dimension its own column count states
-2) A vector field in `adata.obsm` with a **Cellucid-compatible key**
-3) The vector array shape must be `(n_cells, dim)` where `dim` matches the embedding (2 or 3)
-4) `serve_vector_fields=True` in the call — without it, steps 1–3 are correct
-   and the overlay still does not appear
-5) If more than one field ID is served, pass the exact choice as
-   `vector_field_default="velocity_umap"` (or, for the forward-drift example,
-   `vector_field_default="T_fwd_umap"`)
+1) An embedding in `adata.obsm` named `X_<basis>` (`X_umap`, `X_umap_3d`,
+   `X_pca`, `X_branches`, ...) that a view shows
+2) A vector field in `adata.obsm` named `<field>_<basis>` after it (scVelo's
+   convention: `velocity_umap` for `X_umap`)
+3) The vector array shape must be `(n_cells, n_columns)`, with exactly as many
+   columns as the embedding
+4) If the store declares more than one field, the overlay opens on the one
+   you name with `vector_field_default="velocity"` (or, for the
+   forward-drift example, `vector_field_default="T_fwd"`)
 
-### Naming convention (UMAP basis)
+### Naming convention (scVelo's `<field>_<basis>`)
 
-Cellucid detects vector fields in `adata.obsm` using keys like:
+Cellucid detects vector fields in `adata.obsm` by the key `<field>_<basis>`
+beside the embedding `X_<basis>`, for any basis:
 
-- `velocity_umap_2d` (shape `(n_cells, 2)`)
-- `velocity_umap_3d` (shape `(n_cells, 3)`)
-- `T_fwd_umap_2d` (shape `(n_cells, 2)`)
+- `velocity_umap` (shape `(n_cells, 2)`, over a 2-column `X_umap`)
+- `velocity_umap_3d` (shape `(n_cells, 3)`, over `X_umap_3d`)
+- `T_fwd_umap` (shape `(n_cells, 2)`, over `X_umap`)
+- `velocity_branches` (over `X_branches`, as many columns as it)
 
-For full expectations (including exported-folder layout), see {doc}`07_folder_file_format_expectations_high_level_link_to_spec`.
+The keys of one field on every embedding are one field: `velocity_umap` and
+`velocity_umap_3d` are both listed as `velocity`. A `velocity_umap_2d` beside a
+bare `X_umap` (no `X_umap_2d`) is not detected; name it `velocity_umap`.
+
+For full expectations (files, catalogs and `uns['cellucid']`), see {doc}`07_file_format_expectations`.
 
 ### Minimal example: attach a 2D vector field
 
@@ -495,9 +421,9 @@ import numpy as np
 
 # A complete synthetic counter-clockwise field for an interface check.
 # Do not interpret this constructed field as biological velocity.
-coordinates = np.asarray(adata.obsm["X_umap_2d"], dtype=np.float32)
+coordinates = np.asarray(adata.obsm["X_umap"], dtype=np.float32)  # 2 columns
 offsets = coordinates - coordinates.mean(axis=0, keepdims=True)
-adata.obsm["velocity_umap_2d"] = np.column_stack(
+adata.obsm["velocity_umap"] = np.column_stack(
     (-offsets[:, 1], offsets[:, 0])
 ).astype(np.float32)
 
@@ -505,7 +431,6 @@ viewer = show_anndata(
     adata,
     dataset_name="My study",
     dataset_id="my-study-v1",
-    serve_vector_fields=True,
 )
 ```
 
@@ -516,7 +441,7 @@ If you have a transition matrix `T` and UMAP coordinates, Cellucid ships helpers
 ```python
 from cellucid import add_transition_drift_to_obsm
 
-# Adds e.g. "T_fwd_umap_2d" into adata.obsm (key depends on dim/basis)
+# Adds "T_fwd_umap" (<field_prefix>_<basis>) into adata.obsm, as wide as X_umap
 out_key = add_transition_drift_to_obsm(
     adata,
     T,
@@ -530,27 +455,21 @@ viewer = show_anndata(
     adata,
     dataset_name="My study",
     dataset_id="my-study-v1",
-    serve_vector_fields=True,
 )
 ```
 
-### Verify that the server is advertising vector fields
+### Verify that the viewer bound the vector fields
 
-After `viewer = show_anndata(...)`:
+After `viewer = show_anndata(...)`, the data mapping the viewer reports lists
+every bound field:
 
 ```python
-import json, urllib.request
-
-with urllib.request.urlopen(viewer.server_url + "/dataset_identity.json") as f:
-    ident = json.load(f)
-
-print("Has vector_fields?", "vector_fields" in ident)
+viewer.wait_for_event("data_mapping")
+print(viewer.data_mapping["vectorFields"])
 ```
 
-If the overlay is missing in the UI and `vector_fields` is absent:
-- first confirm you passed `serve_vector_fields=True`; without it this check
-  always prints `Has vector_fields? False`, however correct your keys are
-- then double-check your `adata.obsm` keys and shapes
+If the overlay is missing in the UI and the list is empty:
+- double-check your `adata.obsm` keys and shapes
 - confirm you have a matching embedding dimension (2D vs 3D)
 - see {doc}`08_troubleshooting_data_loading` and {doc}`../i_vector_field_velocity/07_troubleshooting_velocity_overlay`
 
@@ -602,7 +521,10 @@ the result before sending it, and waits until the viewer has applied it:
 
 ```python
 viewer.set_data_mapping(
-    embeddings={"1d": None, "2d": {"key": "X_pca", "columns": [0, 1]}, "3d": None},
+    embeddings={
+        "enabled": [{"key": "X_pca", "columns": [0, 1]}],
+        "defaults": {"1d": None, "2d": {"key": "X_pca", "columns": [0, 1]}, "3d": None},
+    },
 )
 ```
 
@@ -625,7 +547,7 @@ Supported hooks:
 - `@viewer.on_hover`
 - `@viewer.on_click`
 - `@viewer.on_command_error` (a command this notebook sent was rejected by the
-  viewer; only the web build that emits `command_error` sends it)
+  viewer)
 - `@viewer.on_data_mapping` (the viewer resolved or changed which arrays it plots)
 - `@viewer.on_message` (raw debugging)
 
@@ -711,34 +633,41 @@ report
 ```
 
 This checks server endpoints (`/_cellucid/health`, `/_cellucid/info`,
-`/_cellucid/datasets`), probes every declared identity under its exact id/path,
-performs a ping/pong roundtrip, and reports recent accepted-event counts.
+`/_cellucid/datasets`), probes the served AnnData store with a `HEAD` and a
+one-byte range request (`anndata_store_probes`), performs a
+ping/pong roundtrip, and reports recent accepted-event counts.
 It also includes a frontend “debug snapshot” (the iframe’s `location.href`, origin, and user agent), which is useful in proxied notebook environments.
 
-```{figure} ../../../_static/screenshots/jupyter/pancreas-debug-connection.png
-:alt: A JupyterLab notebook whose output cell holds the debug_connection dictionary, showing the viewer and server URLs, the web build identity, a health status of ok, the dataset identity probe, and the frontend round-trip result, followed by a viewer.stop() cell.
-:width: 1440px
+An abridged healthy report (the real one also carries the viewer and server
+URLs with the viewer's token, the web cache's absolute path, the browser's
+user agent and timestamps; `<version>` is your package version):
+
+```text
+{'server_running': True,
+ 'channel_connected': True,
+ 'server_health': {'status': 'ok', 'type': 'anndata', 'version': '<version>',
+                   'format': 'zarr', 'n_cells': 3696, 'n_genes': 3753},
+ 'anndata_store_probes': {'pancreas': {'head': {'status': 200, ...},
+                                       'range': {'status': 206,
+                                                 'content_range': 'bytes 0-0/19089'}}},
+ 'recent_events': {'count': 2, 'by_type': {'data_mapping': 1, 'ready': 1},
+                   'command_errors': []},
+ 'frontend_roundtrip': {'ok': True, 'pong': {...}},
+ 'frontend_debug_snapshot': {'ok': True, 'snapshot': {'connected': True, ...}},
+ ...}
+```
 
 `viewer.debug_connection()` returns a dictionary; it prints nothing by itself.
 Read it top to bottom: `server_health` proves the server is alive,
-`dataset_identity_probes` proves it is serving the dataset you think it is, and
+`anndata_store_probes` proves it is serving the dataset you think it is, and
 `frontend_roundtrip` proves the browser can talk back to Python. A hook problem
 that survives all three is a proxy or extension problem, not a Cellucid one.
-```
 
 :::{note}
 `debug_connection()` is a diagnostic, and it degrades rather than raising. Any
 probe that fails is recorded as a `*_error` string beside the others instead of
 stopping the report, so read the keys rather than assuming an exception would
 have told you.
-
-When `show()` serves a prepared export that ships a published default session,
-each such entry in `server_datasets` carries three extra fields —
-`state_manifest`, `state_sha256` and `state_bytes` — beside `id`, `path`, and
-`name`. They are the same fields the catalog advertises (see
-{doc}`../l_sessions_sharing/04_official_sample_states`), and
-`dataset_identity_probes` is reported for those datasets exactly as for any
-other.
 :::
 
 ## Cleanup (Do This If You Re-run Cells Often)
@@ -746,8 +675,10 @@ other.
 Each viewer starts a local server in the background.
 
 - If you create many viewers and never stop them, you can accumulate background servers.
-- Each default viewer asks the operating system for an available port; repeated
-  cells can therefore leave several servers on unrelated port numbers.
+- A viewer without `port=` takes 8765, or the next free port when another
+  viewer holds it (a printed note says so); repeated cells can therefore leave
+  several servers on 8765, 8766, …. Google sign-in (Google Drive data,
+  community annotation) works only on port 8765.
 
 ### Recommended pattern
 
@@ -815,13 +746,13 @@ The robust solution is SSH local port forwarding:
    ssh -N -L 8765:127.0.0.1:8765 <user>@<remote-host>
    ```
 
-Now, when your browser loads `http://127.0.0.1:8765/?jupyter=true&...`,
+Now, when your browser loads `http://127.0.0.1:8765/?viewer=true&...`,
 it hits your laptop’s `127.0.0.1:8765`, which SSH forwards to the remote kernel’s Cellucid server.
 
 ```{important}
-If you do **not** set a fixed port on `AnnDataViewer`, Cellucid requests an
-operating-system-assigned port.
-That makes remote tunneling awkward because you need to update your SSH forwarding every time.
+If you do **not** set a fixed port on `AnnDataViewer`, Cellucid takes 8765, or
+the next free port when another viewer holds it. A tunnel forwards one fixed
+port, so name it with `port=`: a viewer given a port uses that port or fails.
 ```
 
 ### Common remote variants
@@ -888,10 +819,10 @@ compute node, is in
 - **Notebook blocks iframes** (security policy): you may need to open `viewer.viewer_url` in a new browser tab.
 - **Socket allocation failure**: the operating system can reject a new listener
   when process or network resource limits are exhausted.
-- **Corporate proxies / ad blockers**: can block cross-origin requests or event POSTs (hooks).
-- **Huge in-memory `AnnData`**: can exhaust kernel RAM; use a `.h5ad` path
-  for read-only-backed access. Direct `.zarr` loading is eager and must fit
-  memory.
+- **Corporate proxies**: can block cross-origin requests or drop the viewer's WebSocket (hooks and commands); the viewer then says it cannot open its channel.
+- **Huge in-memory `AnnData`**: the object is written once to a temporary
+  `.h5ad`, which needs disk space about the size of the object. Pass the path
+  of a saved `.h5ad` or Zarr store instead, and it is read in place.
 
 (troubleshooting)=
 ## Troubleshooting (Massive)
@@ -949,7 +880,7 @@ This section is intentionally redundant and explicit: it is designed for “I ne
 - If you need a stable AnnData port, construct
   `AnnDataViewer(..., port=..., dataset_name=..., dataset_id=...)`.
 
-### Symptom: “`show_anndata` says Cellucid found nothing to plot”
+### Symptom: “The viewer says Cellucid found nothing to plot”
 
 **Likely causes**
 - No `obsm` array can be plotted: each one is a table, sparse, not one row per
@@ -957,50 +888,49 @@ This section is intentionally redundant and explicit: it is designed for “I ne
 
 **How to confirm**
 - `print(adata.obsm.keys())`
-- Read the error itself: it lists every `obsm` entry and why it was not used.
+- Read the message the viewer shows: it lists every `obsm` entry and why it
+  was not used.
 
 **Fix**
 - Compute UMAP (`sc.tl.umap(adata)` writes a two-column `X_umap`, which is read
   as 2D as written), or
 - name a usable array explicitly:
   `show_anndata(adata, embedding_keys={"2d": "X_tsne"}, dataset_name=..., dataset_id=...)`.
-- If you serve a `.h5ad` or `.zarr` path rather than an in-memory object,
+- If you show a `.h5ad` or Zarr store path rather than an in-memory object,
   re-save the file after a repair.
 
 ### Symptom: “The KNN graph is there, but there is no edge overlay”
 
 **Likely causes**
-- The neighbor graph is opt-in, and this viewer did not ask for it.
+- The store's graph is not named `connectivities`, so the viewer did not pick
+  it, or the store's `uns['cellucid']['defaults']` names no graph.
+- The graph was refused when it was read (not symmetric, such as `distances`).
 
 **How to confirm**
 
 ```python
-import json, urllib.request
-
-with urllib.request.urlopen(viewer.server_url + "/dataset_identity.json") as f:
-    identity = json.load(f)
-
-print(identity["stats"]["has_connectivity"], identity["stats"]["n_edges"])
+viewer.wait_for_event("data_mapping")
+print(viewer.data_mapping["knn"])
 ```
 
-`False None` means the graph was not served.
+`None` means no neighbor graph is chosen.
 
 **Fix**
-- Recreate the viewer with `knn_key="connectivities"`.
+- Choose the graph under **Session › Data mapping › Neighbour graph**, or
+  recreate the viewer with `knn_key="<obsp key>"`.
 
-### Symptom: “The cell has printed nothing for minutes”
+### Symptom: “The cell runs for a long time before the viewer appears”
 
 **Likely causes**
-- You are inside the constructor on a large object. A notebook viewer builds
-  quietly, so no step report appears.
-- You passed `knn_key="connectivities"`, and the edge list is being built.
+- You passed an in-memory `AnnData`, and it is being written to a temporary
+  `.h5ad`.
+- The store holds an array stored with a codec the browser cannot decode, and
+  it is being read once and written to a decodable temporary `.h5ad`.
+- The viewer generation is being established from its configured source.
 
 **Fix**
-- Wait, but first drop `knn_key="connectivities"` if this session will not draw
-  edges.
-- Narrow `obs_keys=` to the columns you actually color by.
-- Export once with `cellucid.prepare(...)` and use `show()` for repeated
-  viewing.
+- Pass the path of a saved `.h5ad` or Zarr store, which is read in place.
+- Save the store without the undecodable codec (gzip, or no compression).
 
 ### Symptom: “Vector field overlay is missing (no toggle / no fields)”
 
@@ -1010,17 +940,15 @@ print(identity["stats"]["has_connectivity"], identity["stats"]["n_edges"])
 - You have vectors, but they don’t match `adata.n_obs` (filtered/shuffled mismatch).
 
 **How to confirm**
-- Inspect `dataset_identity.json`:
+- Inspect the bound fields the viewer reports:
 
   ```python
-  import json, urllib.request
-  with urllib.request.urlopen(viewer.server_url + "/dataset_identity.json") as f:
-      ident = json.load(f)
-  print(ident.get("vector_fields"))
+  viewer.wait_for_event("data_mapping")
+  print(viewer.data_mapping["vectorFields"])
   ```
 
 **Fix**
-- Follow the naming rules in {ref}`vector-fields` (and {doc}`07_folder_file_format_expectations_high_level_link_to_spec`).
+- Follow the naming rules in {ref}`vector-fields` (and {doc}`07_file_format_expectations`).
 - If you have both 2D and 3D points, make sure you provide the matching vector dimension.
 
 ### Symptom: “Gene search returns nothing / the wrong gene names”
@@ -1035,13 +963,13 @@ type.
 
 **Fix**
 - Pass `gene_id_column="..."` to `show_anndata()`.
-- Or export with `prepare(var_gene_id_column="...")` and use `show()`.
+- Or write the file with `prepare(var_gene_id_column="...")`, which records it.
 
 ### Symptom: “Hooks don’t fire (selection events never reach Python)”
 
 **Likely causes**
-- Requests from the viewer to `/_cellucid/events` or `/_cellucid/selection` are blocked by a proxy/ad blocker.
-- The local server is unreachable from the browser (hooks need HTTP POST).
+- The viewer's channel (`/_cellucid/ws`, a WebSocket) is blocked by a proxy that does not pass WebSockets; the viewer says it cannot open its channel.
+- The local server is unreachable from the browser.
 
 **How to confirm**
 - Register a raw handler:
@@ -1052,30 +980,36 @@ type.
       print(event)
   ```
 
-- Open browser devtools → Network and look for requests to `/_cellucid/events` (and `/_cellucid/selection` for selections).
+- Check `viewer.debug_connection()["channel_connected"]`.
+- Open browser devtools → Network, filter `WS`, and look at the `/_cellucid/ws` connection: each selection, hover or click adds a frame.
 
 **Fix**
 - Ensure the data server is reachable (`/_cellucid/health` works).
-- Temporarily disable extensions/ad blockers for `cellucid.com`.
+- Behind a proxy, make it pass WebSockets (Jupyter Server Proxy does), or use SSH port forwarding.
 
-### Symptom: “It’s slow compared to pre-exported data”
+### Symptom: “The first gene takes noticeably longer than the next ones”
 
 **Explanation**
-- Direct AnnData mode is designed for convenience, not maximum speed.
+- The viewer reads a gene from the store itself. For a row-major (CSR) sparse
+  matrix it first builds a gene index over the stored entries, once per
+  matrix; every later gene reads only its own entries. With the kernel on the
+  same machine the index starts as soon as the dataset opens, so a gene asked
+  for within the first seconds waits for it; behind a remote JupyterHub (a
+  slower link, as the browser measures it) the index starts with the first
+  gene.
 
 **Fix**
-- Export once with `prepare()` and use `show()`.
-- For a large direct dataset, keep it as `.h5ad` so Python can open it
-  read-only-backed; use `.zarr` only when its eager materialization fits
-  memory.
+- Nothing is needed. To make the first gene as fast as the rest, save the
+  matrix column-major (CSC); an in-memory `AnnData` is written that way
+  already.
 
 ## Next Steps
 
 - Stable dataset identity + sessions: {doc}`06_dataset_identity_why_it_matters`
-- File/key expectations (including vector fields): {doc}`07_folder_file_format_expectations_high_level_link_to_spec`
+- File/key expectations (including vector fields): {doc}`07_file_format_expectations`
 - General loading troubleshooting: {doc}`08_troubleshooting_data_loading`
 - Vector field overlay usage: {doc}`../i_vector_field_velocity/index`
 - Hooks deep dive: {doc}`../../python_package/e_jupyter_hooks/index`
 - Runnable Pancreas notebook and verified Jupyter captures:
   {doc}`../../python_package/f_notebooks_tutorials/05_jupyter_embedding_hooks_sessions_gallery`
-- If you want to share datasets publicly: export + GitHub workflow ({doc}`02_local_demo_tutorial`)
+- If you want to share datasets publicly: a dataset catalog on GitHub or a static host ({doc}`02_local_demo_tutorial`)

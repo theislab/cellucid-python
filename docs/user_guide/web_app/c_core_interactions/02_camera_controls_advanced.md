@@ -5,7 +5,7 @@
 **What you’ll learn:**
 - Every camera/navigation knob in the UI (and when it applies)
 - Keyboard shortcuts that affect camera/navigation
-- What “Reset Camera” does (and what it doesn’t)
+- What “Reset camera” does (and what it doesn’t)
 - Persistence: what is saved in sessions vs browser preferences
 
 ---
@@ -15,7 +15,7 @@
 All navigation/camera controls are in:
 
 - **Navigation** accordion
-- **Camera Path** accordion → saved positions, timing, and interpolation
+- **Camera path** accordion → saved positions, timing, and interpolation
 
 The controls shown depend on the current navigation **Mode**:
 
@@ -29,20 +29,23 @@ The controls shown depend on the current navigation **Mode**:
 
 Camera Path animates between camera positions that you save explicitly:
 
-1) Frame the view and choose **Save Position**.
+1) Frame the view and choose **Save position**.
 2) Move to a second view and save it.
 3) After two valid positions exist, the playback bar becomes available at the
    top of the viewport.
 4) Select **Play** in that bar to start movement, or enable **Autoplay** directly
    below **Loop playback**.
 
-Autoplay is off by default. Enabling it starts a ready path immediately. Save
-State records the setting; after a complete successful Load State operation,
+Autoplay is off by default. Enabling it starts a ready path immediately. A
+saved session records the setting; after a complete successful **Load**,
 an enabled ready path starts without another Play action. **Loop playback**
 controls whether it repeats or stops at the final keyframe. With zero or one
 saved position, the top playback bar is not available and Autoplay waits until
 the path becomes ready. Loading another dataset clears the current path so
-positions from one dataset cannot move the camera over another.
+positions from one dataset cannot move the camera over another. The camera
+itself starts over too: a dataset opens at the default framing of the
+dimension it opens in, never at the pose the dataset before it was left in
+(its session or published preset, when it has one, then moves it).
 
 :::{note}
 The playback bar auto-hides when idle. Move the pointer over the viewport or
@@ -66,7 +69,7 @@ In Orbit mode you rotate around an anchor.
 Planar mode is a 2D map-like camera.
 
 - **Keyboard speed**: scales planar pan + zoom speed for keyboard navigation.
-- **Zoom to cursor (pinch-style)** (default on): zoom centers on cursor location (not the view center).
+- **Zoom to cursor** (default on): zoom centers on cursor location (not the view center).
 - **Invert axes**: flips pan direction (useful on some trackpad/remote setups).
 
 ---
@@ -89,8 +92,8 @@ Free-fly is first-person movement.
 - **Projectile shooting** (optional): enables a “click/hold-to-charge” demo interaction.
 
 ```{figure} ../../../_static/screenshots/web_app/navigation-controls-freefly.png
-:alt: A panel headed NAVIGATION with a MODE dropdown reading Free-fly and a bordered box below holding a LOOK SENSITIVITY slider reading 0.05x, a MOVE SPEED slider reading 1.00 u/s, an INVERT LOOK AXES checkbox, a PROJECTILE SHOOTING checkbox and a CAPTURE POINTER checkbox with a small circled i beside it.
-:width: 472px
+:alt: The Navigation block with Mode set to Free-fly: Look sensitivity and Move speed sliders with their readouts, Invert look axes and Projectile shooting, and Capture pointer with its (i).
+:width: 488px
 
 The complete Free-fly control set, with the printed readouts beside each
 slider. Those readouts are the value that matters — the slider position is a
@@ -112,7 +115,7 @@ These work unless you’re typing in an input/select.
 - `Shift`: move faster (all modes)
 - `F`: fullscreen
 - `H`: toggle sidebar
-- `?`: open the in-app “Keyboard Shortcuts” section
+- `?`: open the in-app “Keyboard shortcuts” section
 
 :::{note}
 If you press keys and nothing happens, click the canvas once (focus issues are the #1 cause). For more, see {doc}`06_troubleshooting_core_interactions`.
@@ -124,7 +127,7 @@ If you press keys and nothing happens, click the canvas once (focus issues are t
 
 There are two different “reset” concepts:
 
-1) **Reset Camera button** (in the UI)
+1) **Reset camera button** (in the UI)
    - Resets the camera.
    - Also restores many visualization + navigation UI controls to their initial
      defaults (captured at app init).
@@ -148,7 +151,7 @@ Practical implication: if you want “start over visually”, use the **button**
 
 Cellucid uses multiple persistence layers:
 
-- **Session bundles (`.cellucid-session`)**: Save/Load State captures camera
+- **Session bundles (`.cellucid-session`)**: **Save** and **Load** capture camera
   state, Camera Path keyframes, timing, interpolation, navigation interaction
   controls, Loop playback, Autoplay, and the other current UI control values.
 - **Browser preferences (`localStorage`)**: small UI preferences like background/theme can persist across reloads.
@@ -193,8 +196,8 @@ This section is for readers who want repeatable “feel” across machines and s
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/web_app/camera-path-configured-panel.png
-:alt: Camera Path panel with two saved keyframes and playback settings.
-:width: 246px
+:alt: The Camera path panel after two positions were saved: keyframes KF 1 and KF 2 with the KF 1 → KF 2 duration on auto, End with a return to the first keyframe, Set all with Apply, and Playback with Default speed, Position interpolation Catmull-Rom spline, Rotation interpolation SLERP (smooth), Easing Linear, Loop playback and Autoplay.
+:width: 532px
 
 Two valid keyframes expose camera-path timing and interpolation settings.
 Autoplay remains off until the user explicitly enables it.

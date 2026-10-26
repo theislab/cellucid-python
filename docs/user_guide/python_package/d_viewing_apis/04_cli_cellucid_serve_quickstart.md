@@ -3,7 +3,10 @@
 `cellucid serve` is the fastest way to open the Cellucid viewer from a terminal.
 
 It:
-- detects your input format (`exported` folder vs `.h5ad` vs `.zarr`),
+- detects your input format (any file or folder Cellucid reads: `.h5ad`, an
+  AnnData Zarr folder or `.zip`, `.h5mu` or MuData Zarr, `.loom`, a 10x `.h5`
+  file or Cell Ranger `outs/` folder, a MatrixMarket folder, an `.rds`/`.rda`/
+  `.RData`, gzipped or not),
 - starts a small local HTTP server,
 - prints a **Viewer URL** you open in your browser,
 - and keeps serving data until you stop it.
@@ -12,7 +15,7 @@ It:
 
 **Audience**
 - Wet lab / non-technical: copy/paste the commands; you don’t need to write Python.
-- Computational: focus on backed mode (`.h5ad`) and SSH tunnel workflows.
+- Computational: focus on direct input (AnnData, MuData, Loom, 10x, MatrixMarket, R objects) and SSH tunnel workflows.
 
 **Time**
 - Local machine: ~5–10 minutes
@@ -20,7 +23,8 @@ It:
 
 **Prerequisites**
 - `pip install cellucid`
-- One of: export directory, `.h5ad`, `.zarr`
+- One of: `.h5ad`, a Zarr store (folder or `.zip`), `.h5mu`, `.loom`, a 10x
+  `.h5` or `outs/` folder, a MatrixMarket folder, an `.rds`/`.rda`/`.RData`
 
 ## Step-by-step (fast path)
 
@@ -36,7 +40,24 @@ pip install cellucid
 cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 # or:
 # cellucid serve /path/to/data.zarr --dataset-name "My dataset" --dataset-id my-dataset
-# cellucid serve /path/to/export_dir
+```
+
+The viewer reads the file itself — in place where the format allows it, once
+from the start for an R object or a MatrixMarket folder; the server serves its
+bytes (with `sendfile` and exact `Range` answers). `--dataset-name` and
+`--dataset-id` default to the AnnData or MuData's own
+`uns['cellucid']['name']` and `['id']`, and are required when it has none —
+always for an R object, a Loom, 10x or MatrixMarket dataset, whose identity
+Python does not read. A file written by `cellucid.prepare()` declares both, so
+`cellucid serve pbmc_cellucid.h5ad` is the whole command for one.
+
+The same command serves the other formats:
+
+```bash
+cellucid serve cite.h5mu                       # a MuData from cellucid.prepare()
+cellucid serve GSM4567_seurat.rds.gz --dataset-name "GSM4567" --dataset-id gsm4567
+cellucid serve GSE164378_RAW/ --dataset-name "GSE164378" --dataset-id gse164378   # GSM…_matrix.mtx.gz files
+cellucid serve outs/ --dataset-name "PBMC 1k" --dataset-id pbmc-1k            # a Cell Ranger outs/ folder
 ```
 
 You should see a banner like:
@@ -47,8 +68,7 @@ Local URL:  http://127.0.0.1:8765
 Viewer URL: http://127.0.0.1:8765/?anndata=true
 ```
 
-The direct AnnData command above prints `?anndata=true`. A prepared export
-prints `?source=remote`. Copy the printed **Viewer URL** exactly; the bare
+Copy the printed **Viewer URL** (ending in `?anndata=true`) exactly; the bare
 Local URL is the server origin for diagnostics, not the launch URL.
 
 ### Step 2 — Open the viewer in your browser
@@ -71,64 +91,56 @@ Press **Ctrl+C** in the terminal.
 
 ## What startup prints
 
-Direct AnnData input (`.h5ad` / `.zarr`) runs **five numbered steps**. A prepared
-export runs three — `Validating dataset`, `Loading dataset info`,
-`Starting server` — because it has no AnnData object to open and its manifests
-are already written on disk.
+Startup runs **four numbered steps**.
 
 ```text
-[1/5] Detecting format...
-      Path: /path/to/data.h5ad
-      Format: h5ad
+[1/4] Detecting format...
+      Path: /path/to/pbmc_demo.h5ad
+      Format: AnnData (.h5ad)
       ✓ Format detected
 
-[2/5] Loading AnnData...
-      Mode: read-only backed h5ad
-      Obs columns: classifying 34
-      Embeddings: resolving obsm keys
-      Embeddings: 2D from obsm['X_umap']
-      ✓ File opened
+[2/4] Reading metadata...
+      Cells: 4,096
+      Genes: 512
+      obsm: X_umap
+      obs fields: 3
+      obsp: connectivities
+      layers: none
+      ✓ Metadata read
 
-[3/5] Analyzing dataset...
-      Cells: 1,462,702
-      Genes: 5,001
-      Embeddings: 2D
-      Obs fields: 22 categorical, 12 continuous
-      Vector fields: no
-      Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)
-      ✓ Analysis complete
+[3/4] Checking launch choices...
+      ✓ Launch choices checked
 
-[4/5] Building manifests...
-      Centroids: one per categorical field and embedding
-      ✓ Manifests built
-
-[5/5] Starting server...
+[4/4] Starting server...
       ✓ Server ready
 ```
 
-Step 2 reports the adapter as it is built — obs columns, embeddings, vector
-fields, and connectivity when it was asked for — so a long startup names the
-phase it is in instead of sitting silent. Step 4 is the manifest and centroid
-phase; it is its own numbered step rather than unreported work after a success
-line. On a large object nearly all of the wall time is inside step 2.
-
-The `Embeddings:` line names the array each dimension came from, and
-`Connectivity:` has three states — served, present but not asked for, or absent.
-Both rules are in
+Step 2 lists what the store holds, from its metadata; no array is read. Step 3
+checks each launch choice you set (`--embedding-2d`, `--knn`, `--expression`,
+…) against that metadata and lists it; a name the store does not have stops
+the server here, before it binds. A format Python does not read (an R object,
+Loom, 10x, a MatrixMarket folder) prints `Contents: read by the browser when it
+opens the data` in step 2, and its choices are checked only for their form
+here and against the data by the viewer when it opens it. A choice you leave unset is taken from the
+store's `uns['cellucid']['defaults']`, else the viewer's default rule — see
 {doc}`08_anndata_mode_show_anndata_and_serve_anndata`.
 
 ## What the CLI auto-detects (important for debugging)
 
 `cellucid serve <data_path>` decides what you meant using these rules:
 
-- A regular file must use the exact `.h5ad` suffix.
-- A Zarr v2 directory must contain both `.zgroup` and `.zattrs` as valid root
-  metadata and must not also contain `zarr.json`.
+- A regular file must be named as a format names it (`.h5ad`, a `.zip` holding a
+  Zarr store, `.h5mu`, `.loom`, `.h5`, `.rds[.gz]`, `.rda[.gz]`,
+  `.RData[.gz]`); its first bytes then decide what it is (an HDF5 root marked
+  `mudata` is a MuData whatever its name).
+- A Zarr store folder must hold `zarr.json` (Zarr v3) or `.zgroup` (Zarr v2) at
+  its root; a MuData Zarr store says so in its root attributes.
+- Any other folder must be a Cell Ranger `outs/` (holding
+  `filtered_feature_bc_matrix.h5`) or a MatrixMarket folder (`matrix.mtx[.gz]`
+  with its lists, also under a shared prefix such as `GSM4567_matrix.mtx.gz`).
 - A directory name ending in `.zarr` is not sufficient by itself, and a valid
   Zarr store does not need that suffix.
-- Any other directory that is one complete prepared dataset or contains
-  complete prepared dataset subdirectories is treated as **exported**.
-- Otherwise → error
+- Anything else → error: `Unable to detect format for: <path>`.
 
 If detection fails, the error message will tell you what it expected.
 
@@ -176,36 +188,36 @@ to an IPv6 literal is bracketed as a URL requires, so `--host ::` prints
 - `--quiet, -q`: suppress progress banners
 - `--verbose, -v`: debug logging (useful when reporting bugs)
 
-### AnnData-specific knobs (only for `.h5ad`/`.zarr`)
+### Dataset and launch choices
 
-- `--latent-key KEY`: choose the latent space in `adata.obsm` used for some derived quantities (e.g. outlier quantiles / centroids)
-- `--dataset-name NAME`: exact display name, required for direct AnnData input
-- `--dataset-id ID`: exact stable identifier, required for direct AnnData input
-- `--obs-key KEY`: serve only this `adata.obs` column; repeat once per column.
-  Every column is served when it is omitted. Use it to leave out a column
-  Cellucid cannot serve, such as a `datetime64` collection date
-- `--vector-field-default FIELD_ID`: exact default field ID; required when
-  direct AnnData declares more than one vector field
-- `--knn connectivities`: also serve the `obsp['connectivities']` neighbor graph.
-  **Off by default** — see below
+- `--latent-key KEY`: the `adata.obsm` latent space (scVI, PCA) the outlier
+  filter measures in, never a 2D/3D layout. Without it the store's own
+  `latentKey` is used, else none: the filter then waits for one chosen in
+  **Data mapping** ({doc}`../../web_app/e_filtering/02_outlier_filtering_per_active_field`)
+- `--dataset-name NAME`: exact display name; defaults to the store's
+  `uns['cellucid']['name']`, required when it has none
+- `--dataset-id ID`: exact stable identifier; defaults to the store's
+  `uns['cellucid']['id']`, required when it has none
+- `--obs-key KEY`: show only this `adata.obs` column; repeat once per column, in
+  order. Every column is shown when it is omitted. Use it to leave out a column
+  Cellucid cannot show, such as a `datetime64` collection date
+- `--vector-field-default FIELD_ID`: exact vector field id the overlay opens on
+- `--modality NAME`: the modality a multimodal dataset (a MuData) opens on;
+  when omitted, the first gene-expression modality (`rna`, `gex`, …), else the first
+- `--embedding-1d/2d/3d KEY[:COLUMNS]`: the `obsm` array plotted in that
+  dimension
+- `--normalize-embeddings` / `--no-normalize-embeddings`: scale every embedding
+  into the viewer's coordinate range (the default), or show the coordinates the
+  store holds
+- `--centroid-min-points N`: the fewest cells a category needs for the outlier
+  filter to measure it (10 when neither this nor the store says otherwise)
+- `--knn KEY`: the `obsp` neighbor graph the viewer draws, read only when a view
+  draws it
+- `--gene-id-column COLUMN`, `--expression X|raw|layer:NAME`: gene names and
+  the expression matrix
 
-Every flag in this group applies to direct AnnData input only. Supplying one
-alongside a prepared export directory is an error naming the flag, because an
-export already declares its identity, its columns, and its artifacts in
-`dataset_identity.json`.
-
-### The graph and the overlay are opt-in
-
-```bash
-cellucid serve /path/to/data.h5ad --dataset-name "My study" --dataset-id my-study-v1 \
-    --knn connectivities
-```
-
-`--vector-fields` does the same for the `obsm` `<field>_umap_<n>d` overlay
-arrays. Both are off by default, because each is read and validated in full
-before the server binds and most sessions turn neither overlay on.
-AnnData input only: the flag is refused for a prepared export, which already
-declares the artifacts it holds.
+A flag overrides the store's own `uns['cellucid']['defaults']` for this
+server only; the file is not changed.
 
 ## Remote server (HPC / cloud): recommended SSH tunnel recipe
 
@@ -277,28 +289,21 @@ If something looks wrong, open these in a browser (replace `<port>`):
 
 - `http://127.0.0.1:<port>/_cellucid/health` (is the server alive?)
 - `http://127.0.0.1:<port>/_cellucid/info` (server config + version)
-- `http://127.0.0.1:<port>/_cellucid/datasets` (what datasets does it think exist?)
+- `http://127.0.0.1:<port>/_cellucid/datasets` (the dataset id and name, the
+  store's route under `_cellucid/anndata/`, and the launch choices)
 - `http://127.0.0.1:<port>/_cellucid/protocol` (which wire capabilities does this
   `cellucid` accept?)
-- `http://127.0.0.1:<port>/dataset_identity.json` (dataset metadata)
-- `http://127.0.0.1:<port>/connectivity_manifest.json` (edge count and neighbor
-  maximum — 404 unless the server was started with `--knn connectivities`)
 
 ## Edge cases (common)
 
 - **Port already in use**: the requested port fails. Choose another explicit
   port, or use `--port 0` to request one operating-system-assigned port.
-- **`--knn connectivities` on an object with no graph**: startup fails naming
-  `obsp['connectivities']` instead of serving a dataset with no edges.
-- **`--knn connectivities` (or any other AnnData flag) on an export directory**:
-  startup fails naming the flag; remove it and run the command again.
-- **A bare `X_umap` that is not 1, 2, or 3 columns wide**: startup fails and the
-  message names the array's shape.
+- **`--knn connectivities` on an object with no graph**: startup fails in step 3
+  naming `obsp['connectivities']` instead of serving a dataset with no edges.
+- **No `uns['cellucid']` identity and no `--dataset-name`/`--dataset-id`**:
+  startup fails asking for both.
 - **Viewer source blocked**: startup fails instead of substituting a local
   generation; see {doc}`15_troubleshooting_viewing`.
-- **Export folder is incomplete**: startup rejects missing required metadata,
-  point files, and declared artifacts before binding the server; validate your
-  export: {doc}`07_exported_directory_mode_show_and_serve`.
 
 ## Troubleshooting
 

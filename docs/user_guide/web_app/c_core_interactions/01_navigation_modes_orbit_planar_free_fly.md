@@ -54,24 +54,24 @@ show a camera moving — but it can show you exactly which knobs you have, and
 that is what people actually get lost looking for.
 
 ```{figure} ../../../_static/screenshots/web_app/navigation-controls-orbit.png
-:alt: A panel headed NAVIGATION with a small circled i button, a MODE dropdown reading Orbit with the mouse pointer pressing it, and a bordered box below containing a KEYBOARD SPEED slider reading 0.40x, a ticked GOOGLE EARTH-STYLE DRAG checkbox and a ticked SHOW ORBIT ANCHOR checkbox.
-:width: 472px
+:alt: The Navigation block with Mode set to Orbit and the pointer pressing the select: a Keyboard speed slider, Google Earth-style drag and Show orbit anchor.
+:width: 488px
 
 **Orbit** — a keyboard speed slider and two checkboxes.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/navigation-controls-planar.png
-:alt: The same NAVIGATION panel with the MODE dropdown reading Planar and a bordered box below containing a KEYBOARD SPEED slider reading 0.0075x, a ZOOM TO CURSOR (PINCH-STYLE) checkbox and an INVERT AXES checkbox.
-:width: 472px
+:alt: The Navigation block with Mode set to Planar: a Keyboard speed slider, Zoom to cursor and Invert axes.
+:width: 488px
 
 **Planar** — a keyboard speed slider and two different checkboxes. Orbit and
-Planar both label their slider `Keyboard speed:`; the value beside it is on a
+Planar both label their slider `Keyboard speed`; the value beside it is on a
 different scale in each, because one scales rotation and the other pan.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/navigation-controls-freefly.png
-:alt: The same NAVIGATION panel with the MODE dropdown reading Free-fly and a taller bordered box below containing a LOOK SENSITIVITY slider reading 0.05x, a MOVE SPEED slider reading 1.00 u/s, an INVERT LOOK AXES checkbox, a PROJECTILE SHOOTING checkbox and a CAPTURE POINTER checkbox with a small circled i beside it.
-:width: 472px
+:alt: The Navigation block with Mode set to Free-fly: Look sensitivity and Move speed sliders with their readouts, Invert look axes and Projectile shooting, and Capture pointer with its (i).
+:width: 488px
 
 **Free-fly** — two sliders, three checkboxes, and the pointer-lock checkbox
 that does not exist in the other two modes.
@@ -140,7 +140,7 @@ Planar mode is designed for 2D embeddings: you pan and zoom like a map. Rotation
 - **Click + drag**: pan (always)
 - **Scroll wheel / trackpad scroll**: zoom
 
-If **Zoom to cursor (pinch-style)** is enabled (default), the zoom centers around your cursor location rather than the view center.
+If **Zoom to cursor** is enabled (default), the zoom centers around your cursor location rather than the view center.
 
 ### Keyboard (Planar)
 
@@ -166,7 +166,7 @@ fingers.
 In **Navigation → Planar**:
 
 - **Keyboard speed**: scales keyboard pan/zoom speed.
-- **Zoom to cursor (pinch-style)** (default on): zoom around cursor.
+- **Zoom to cursor** (default on): zoom around cursor.
 - **Invert axes**: flips pan direction (useful for unusual trackpad/remote desktop setups).
 
 ---

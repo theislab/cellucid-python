@@ -6,7 +6,7 @@
 - What a Cellucid “session” is (and what it is not)
 - The three persistence layers: dataset vs session bundle vs browser preferences
 - Why restore is all-or-nothing under the current format
-- How to choose between sharing a link, sharing a session, and sharing the dataset export folder
+- How to choose between sharing a link, sharing a session, and sharing the dataset file
 
 **Prerequisites:**
 - A dataset loaded in the web app (demo datasets are fine)
@@ -26,10 +26,10 @@ If you’re not technical, think:
 - **Dataset** = the “slide under the microscope” (the actual data).
 - **Session** = “how you set up the microscope” (where you looked, what you colored by, what you highlighted).
 
-When you click **Save State**, Cellucid downloads a file like:
+When you click **Save** under **Session file**, Cellucid downloads a file like:
 `cellucid-session-2025-12-30T02-00-14.cellucid-session`
 
-When you click **Load State**, Cellucid uses that file to restore the UI back to the saved state.
+When you click **Load**, Cellucid uses that file to restore the UI back to the saved state.
 
 :::{important}
 A session bundle does **not** contain the dataset itself.
@@ -48,7 +48,7 @@ Cellucid uses multiple “memory” layers. They are easy to mix up:
    - Lost if you refresh, crash, or close the tab.
 
 2) **Session bundle (`.cellucid-session`)**
-   - Explicit file you download via **Save State**.
+   - Explicit file you download via **Save**.
    - Intended for:
      - reopening later,
      - reproducibility (“these exact views/filters/highlights”),
@@ -60,7 +60,7 @@ Cellucid uses multiple “memory” layers. They are easy to mix up:
    - Not meant to be shared.
 
 Practical implication:
-- If you want to **share** or **reproduce**, rely on **session bundles** (and the dataset export folder).
+- If you want to **share** or **reproduce**, rely on **session bundles** (and the dataset file).
 - If you only want the UI to “feel the same” next time on your machine, preferences are enough.
 
 ---
@@ -69,14 +69,16 @@ Practical implication:
 
 1) Load your dataset.
 2) Explore until you have what you want (color-by, filters, highlights, snapshots).
-3) Open **Session** → **Session state**.
-4) Click **Save State**.
+3) Open **Session** → **Session file**.
+4) Click **Save**.
 5) Find the downloaded file (usually in your Downloads folder).
-6) Send the file to your collaborator **together with the dataset export folder** (or tell them where the dataset is hosted).
+6) Send the file to your collaborator. A session saved on a sample, a data link
+   or a server records where the dataset is and opens it; for a dataset opened
+   from your own computer, send the dataset file with it.
 
-To reopen later:
-1) Load the same dataset again.
-2) Click **Load State** and pick your `.cellucid-session` file.
+To reopen later, click **Load** and pick your `.cellucid-session` file.
+Its dataset opens first if it is not open already; a session saved on a local
+file needs that file opened again before it is loaded.
 
 ---
 
@@ -103,7 +105,7 @@ Sessions use two scheduling classes:
 - **Eager chunks** contain the state needed by later chunks, such as field
   definitions, active views, and highlight metadata.
 - **Lazy chunks** contain heavier arrays, such as highlight membership and
-  analysis artifacts.
+  user-defined field codes.
 
 This ordering keeps the browser responsive, but it is **not partial success**.
 The public load operation waits for both classes, prepares and commits every
@@ -116,15 +118,17 @@ restore aborts the older operation without publishing false success.
 
 ### Dataset identity (the first restore check)
 
-Each session carries a **dataset fingerprint** with six parts: source type,
-dataset id, cell count, variable count, a **cell-order record**, and the
-**data mapping** — which stored embeddings and arrays the dataset was shown
-with.
+Each session carries a **dataset fingerprint**: the dataset id (and its
+display name, used only in messages), cell count, variable count, a
+**cell-order record**, and the **data mapping** — which stored embeddings and
+arrays the dataset was shown with. Beside it the session lists every
+observation field and gene it uses, so a dataset missing one is refused before
+anything changes, naming every missing key.
 
-The first four say *which* dataset. The cell-order record says *which ordering
-of its cells*, which the first four cannot: a session stores your selections as
+The first three say *which* dataset. The cell-order record says *which ordering
+of its cells*, which the first three cannot: a session stores your selections as
 row numbers, and a dataset republished under the same name with the same number
-of cells and genes but its rows in a different order matches all four scalars
+of cells and genes but its rows in a different order matches all three scalars
 while every row number now points at a different cell. The record is a short
 digest of the coordinates the session was saved against, plus the embedding
 (and its dimension) the digest was taken over — every embedding is a separate
@@ -142,16 +146,13 @@ You will see one of these messages, each naming what actually happened:
 |---|---|---|
 | The session was saved on a different dataset (with both cell and gene counts named) | it is not this dataset | open the dataset the session was saved on |
 | The session was saved on a different copy of this dataset (with both identities named) | the sizes agree exactly and the publication identity does not — one dataset reached two ways, such as a locally served copy of a published export | open the dataset the session was saved on |
-| The session uses an embedding (or graph, gene names, expression matrix, latent space, or vector field) this dataset does not have or cannot use, naming it | it was saved on another version of the dataset; a choice this dataset has is restored instead | open the dataset version the session was saved on |
+| The session uses an embedding (or neighbour graph, modality, gene names, expression matrix, expression transform, highly variable genes, latent space, or vector field) this dataset does not have or cannot use, naming it | it was saved on another version of the dataset (a saved choice this dataset does have is restored, not refused) | open the dataset version the session was saved on |
 | The dataset has the same name and counts but its cell coordinates differ | either the cells are stored in a different order, or the same cells were exported again from a re-computed embedding — a one-way digest cannot say which | load the version the session was saved on, or re-create the selections here |
-| The file was saved before Cellucid started recording which cells a selection contains | it is a session file older than this check | re-create the selections and save a new session file |
-| The file was saved by an earlier Cellucid release, before sessions recorded the data mapping | it is a session file older than export format 3 | re-create the view on the current dataset and save a new session file |
+| The session uses observation fields or genes the dataset does not have, naming every one | it was saved on another version of the dataset | open the dataset version the session was saved on |
+| The file is not a Cellucid session file of format 2 | it does not start with the format-2 signature `CELLUCID_SESSION/2` | check that you picked a session file saved by this release |
 
-The last case is a deliberate refusal, not a limitation. Such a file records
-selections as bare row numbers with nothing tying them to cell content, so
-there is no way to confirm they still mark the same cells. Opening it anyway
-would reproduce exactly the silent mis-selection the record was added to
-prevent.
+The format version is part of every session file's signature, and this
+release reads format 2 only.
 
 See {doc}`07_versioning_compatibility_and_dataset_identity` for the exact
 matching rules and safe collaboration recipes.
@@ -194,7 +195,7 @@ Sessions are great for:
 
 Sessions are not ideal for:
 - multi-user, long-running labeling workflows (use community annotation),
-- distribution of the dataset itself (share the export folder or hosting link).
+- distribution of the dataset itself (share the dataset file or hosting link).
 
 ---
 
@@ -204,8 +205,8 @@ Loading a session is intentionally “strong”:
 
 - It **overwrites** most of your current view state (camera, active fields, filters, etc.).
 - It may **cancel** an in-progress session restore if you load another session.
-- It explicitly replaces empty state too: an empty Camera Path or analysis
-  cache clears the corresponding destination state.
+- It explicitly replaces empty state too: an empty Camera Path clears the
+  destination's path.
 
 If you want to preserve your current work, save a session *first*, then load the other session.
 
@@ -214,10 +215,10 @@ If you want to preserve your current work, save a session *first*, then load the
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: Cellucid Session panel showing sample, local-file, remote-server, GitHub, and session-state controls.
-:width: 524px
+:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Data mapping group.
+:width: 532px
 
-The Session panel presents each loading path separately and keeps Save State and Load State beside the dataset controls.
+The Session panel gathers every loading path under **Open data** and keeps the **Save** and **Load** buttons under **Session file**, directly below it.
 ```
 
 ---
@@ -225,6 +226,6 @@ The Session panel presents each loading path separately and keeps Save State and
 ## Next steps
 
 - {doc}`02_what_gets_saved_and_restored` (explicit inclusion/exclusion list)
-- {doc}`03_save_restore_ux` (Save State / Load State step-by-step)
-- {doc}`05_share_workflows_links_bundles_exports` (how to share with collaborators)
+- {doc}`03_save_restore_ux` (**Save** / **Load** step-by-step)
+- {doc}`05_share_workflows_links_sessions_data_files` (how to share with collaborators)
 - {doc}`10_troubleshooting_sessions` (if anything goes wrong)

@@ -1,151 +1,67 @@
-# Connectivities / KNN Graph
+# Connectivities (neighbour graph)
 
-**Audience:** computational users  
-**Time:** 10–20 minutes  
-**Goal:** export a cell–cell graph safely (without shape/order bugs).
+**Audience:** computational users
+**Time:** 10 minutes
+**Goal:** store a neighbour graph the viewer can draw and use.
 
-`connectivities` is an optional `(n_cells, n_cells)` adjacency/connectivity matrix.
+## What to pass
 
-In the Cellucid ecosystem, this is typically a KNN/SNN graph derived from:
-- scRNA-seq neighbor graphs,
-- integrated embeddings,
-- or any graph you want to visualize/use for neighbor-based interactions.
+`connectivities` is an optional **cells x cells** matrix of edge weights:
 
-## Requirements
+- a `Matrix` sparse matrix (recommended; any numeric or pattern class -- a
+  pattern matrix gives every edge weight 1), or
+- a dense numeric or logical base matrix (needs the `Matrix` package installed).
 
-- shape must be `(n_cells, n_cells)`
-- rows/cols must correspond to the same cell ordering as embeddings/obs
-- input can be:
-  - a base R `matrix` of numeric or logical values, or
-  - a real (`dMatrix`), logical (`lMatrix`), or pattern (`nMatrix`)
-    `Matrix::Matrix` (recommended). A pattern matrix carries no weights, so
-    every stored coordinate becomes the exact weight `1.0`.
-- values must be finite and non-negative
-- topology and weights must be exactly symmetric
-- every diagonal value must be exactly `0`
-- the `Matrix` package must be installed when the input is sparse
-- sparse matrices must not contain stored zero entries or duplicate
-  coordinates
+It is stored as `obsp['connectivities']`, the name scanpy uses, so the viewer
+finds it without configuration.
 
-```{note}
-If you do not need connectivity features, skip this entirely. Exports load fine without it.
-```
+## Rules
 
-An export carries one graph, chosen here. To compare several graphs, open an
-AnnData `.h5ad` that holds them, in the browser or served
-({doc}`../../web_app/b_data_loading/04_server_tutorial`): **Session › Data
-mapping › Neighbour graph** then switches between every `obsp` matrix, with
-the same checks ({doc}`../../web_app/b_data_loading/13_data_mapping`).
+- **Shape:** exactly cells x cells.
+  `connectivities must be 3 x 3 (one row and one column per cell), got 2 x 2.`
+- **Weights:** finite and non-negative.
+- **No self-loops:** the diagonal must be exactly zero.
+  `Connectivity diagonal values must all be exactly zero.`
+- **Exactly symmetric** in topology and weight (an undirected graph).
+  `Connectivity matrix must be exactly symmetric.`
+- A stored zero is not an edge and is dropped (`Matrix::drop0()`).
 
-## Exact exported representation
-
-Cellucid validates the graph without changing it. It does not symmetrize,
-binarize, discard weights, coalesce coordinates, remove self-edges, or
-otherwise reinterpret scientific input. Asymmetric, directed, negative,
-non-finite, nonzero-diagonal, sparse-stored-zero, and duplicate-coordinate
-graphs fail before graph artifacts are written. Logical `TRUE` is the explicit
-unit edge and is written as the exact Float64 weight `1.0`.
-
-For a valid graph, the exporter:
-
-1) extracts each undirected edge once from the upper triangle (`src < dst`);
-2) sorts the pairs lexicographically;
-3) writes three aligned arrays:
-   - `edges.src.bin`
-   - `edges.dst.bin`
-   - `edges.weights.f64.bin`
-
-Indices are **zero-based** in the binary files.
-Weights are exact little-endian Float64 values.
-A valid graph with no edges remains present and reports `n_edges: 0` and
-`max_neighbors: 0`; all three payloads are zero length.
-
-## Output files
-
-- `connectivity_manifest.json`
-- `connectivity/edges.src.bin` (or `.gz`)
-- `connectivity/edges.dst.bin` (or `.gz`)
-- `connectivity/edges.weights.f64.bin` (or `.gz`)
-
-The manifest records:
-- `n_cells`
-- `n_edges`
-- `max_neighbors` (maximum degree in the validated graph)
-- `index_dtype` / `index_bytes` (`uint16` or `uint32`)
-- `weightsPath`, `weight_dtype: "float64"`, and `weight_bytes: 8`
-
-## Index dtype and dataset size limits
-
-Cell indices are stored using the smallest unsigned integer that fits:
-
-| `n_cells` | dtype |
-|---:|---|
-| 1–65,536 | `uint16` |
-| 65,537–4,294,967,296 | `uint32` |
-| larger | rejected; no current `uint64` graph format |
-
-R matrices have lower practical dimension and memory limits than the format's
-mathematical `uint32` ceiling. Prefer sparse matrices. In the web app the
-browser's memory is the only limit on the graph (about 12 bytes an edge once
-loaded); a graph it cannot allocate leaves the dataset loaded without edges.
-
-## Practical recipes (where to get a graph)
-
-### Seurat
-
-Seurat often stores graphs in `seu@graphs`, for example:
-- `seu@graphs$RNA_snn`
-
-You must ensure it matches the cell order you export:
+With `data =`, the object's graph is chosen and its diagonal removed for you
+(Seurat's `<active assay>_snn`, a SingleCellExperiment `colPair` named
+`connectivities` or like `snn`; {doc}`../e_integrations_recipes/index`).
+Graphs you pass yourself from common tools often need one step first:
 
 ```r
-cells <- colnames(seu)
-conn <- seu@graphs$RNA_snn
-conn <- conn[cells, cells]
+# Seurat: the shared-nearest-neighbour graph links each cell to itself.
+graph <- seu@graphs[["RNA_snn"]]
+Matrix::diag(graph) <- 0
+
+# A directed k-nearest-neighbour graph: make it symmetric (stays sparse).
+graph <- (knn + Matrix::t(knn)) / 2
 ```
 
-Then pass `connectivities = conn`.
+Avoid `pmax(knn, t(knn))` on large sparse matrices: `Matrix` turns it into a
+dense matrix, which for 100,000 cells needs tens of gigabytes.
 
-### SingleCellExperiment
+## How it is stored
 
-Graph storage varies by workflow. Common patterns include:
-- adjacency matrices stored in `metadata(sce)`
-- KNN graphs stored as edge lists / igraph objects
+`obsp['connectivities']` is an AnnData `csr_matrix` of shape cells x cells:
 
-If you can obtain an adjacency matrix `conn` with shape `(n_cells, n_cells)`, you can export it.
+- `data`: float32 weights
+- `indices`: int32 column indices
+- `indptr`: int32 row offsets
 
-## Edge cases
+For a symmetric matrix the column-compressed arrays of R's `dgCMatrix` are
+exactly the row-compressed arrays of the same matrix, so they are written
+without reordering. Python reads it as `scipy.sparse.csr_matrix`.
 
-### Directed or asymmetric graphs
+## What the viewer does with it
 
-Rejected. Construct and review the intended symmetric weighted graph explicitly
-before calling `cellucid_prepare()`.
+The viewer reads the graph's edges when they are first needed, not when the
+dataset opens, so a large graph does not slow opening. `cellucid_prepare()`
+stores one graph, under `connectivities`.
 
-### Weighted graphs
+## Next
 
-Accepted when weights are finite, non-negative, exactly symmetric, and exactly
-representable as Float64. They are preserved in the aligned weight payload.
-
-### Self-edges, negative values, or non-finite values
-
-Rejected. The diagonal must be exactly zero and every value must be finite and
-non-negative.
-
-### Dense matrices
-
-A dense `(n_cells, n_cells)` matrix becomes huge quickly. Prefer sparse matrices.
-
-## Troubleshooting pointers
-
-- `Matrix package is required to validate sparse connectivity matrices.` →
-  install `Matrix`, or pass a dense base R matrix.
-- `Connectivity matrix shape must exactly match the cell axis: expected (…), got
-  (…).` → you have an ordering or subset mismatch.
-- `Sparse connectivity storage must omit zero-weight coordinates.` → drop
-  explicit zeros with `Matrix::drop0(conn)`.
-- `Connectivity values must be real numeric or logical values.` → the sparse
-  matrix is not a real (`dMatrix`), logical (`lMatrix`), or pattern (`nMatrix`)
-  `Matrix`; convert it first.
-- `Connectivity contains duplicate sparse coordinates at (i, j).` → the sparse
-  storage lists one coordinate twice; rebuild the matrix rather than editing it.
-- Viewer is slow/crashes after adding connectivities → your graph is too dense (too many edges).
+- {doc}`08_vector_fields_velocity_displacement`
+- The same topic for Python, `cellucid.prepare()`: {doc}`../../python_package/c_data_preparation_api/07_connectivities_knn_graph`

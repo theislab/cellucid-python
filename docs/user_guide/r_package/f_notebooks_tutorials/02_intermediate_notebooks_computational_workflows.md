@@ -1,227 +1,122 @@
-# Intermediate Notebooks (Computational Workflows)
+# Intermediate Tutorial (Computational Workflows)
 
-**Audience:** computational users  
-**Time:** 30–90 minutes  
-**What you’ll learn**
-- How to export *reproducibly* (stable dataset IDs, curated fields, versioning)
-- How to keep exports small enough to share (gene panels + quantization + compression)
-- How to include connectivities when available
-- How to validate an export before sending it to collaborators
+**Audience:** computational users
+**Time:** 20 minutes
+**Goal:** write expression, gene symbols, several embeddings, launch defaults and
+citation metadata, and check the result.
 
-This tutorial is “intermediate” because it assumes:
-- you can navigate Seurat/SCE structures,
-- you care about data curation and reproducibility,
-- and you want predictable behavior when sharing exports.
-
----
-
-## Part 0 — A reproducible export plan (do this before coding)
-
-### Decide:
-
-1) **Dataset identity**
-   - `dataset_id`: stable machine-friendly ID (recommended)
-   - `dataset_name`: human-friendly name
-2) **What cells are included**
-   - whole dataset or a subset?
-3) **What metadata is exported**
-   - keep it focused (the UI gets noisy with 200 columns)
-4) **Gene export strategy**
-   - all genes (often too big)
-   - a gene panel (recommended)
-   - or “no expression” (fastest)
-5) **Performance knobs**
-   - `var_quantization=8`
-   - `obs_continuous_quantization=8`
-   - `compression=6`
-
-If you have not read it yet, dataset identity matters: {doc}`../b_concepts_mental_models/03_dataset_identity_and_reproducibility`.
-
----
-
-## Part 1 — Build a gene panel (recommended)
-
-Start with something practical:
-
-- marker genes you expect to check visually
-- HVGs
-- pathway gene sets
-
-Example (toy list):
-
-```r
-gene_panel <- c("MS4A1", "CD3D", "NKG7", "LYZ", "PPBP")
-```
-
-You will intersect this with your object’s gene IDs later.
-
----
-
-## Part 2 — Export from Seurat (curated, shareable)
-
-This is a compact version of the full Seurat recipe, focused on reproducible exports.
+## Step 1 — Simulate a dataset
 
 ```r
 library(cellucid)
-library(Seurat)
-library(Matrix)
+set.seed(11)
 
-cells <- colnames(seu)
+n_cells <- 2000
+n_genes <- 500
+cells <- sprintf("cell%04d", seq_len(n_cells))
+ensembl <- sprintf("ENSG%011d", seq_len(n_genes))
+symbols <- sprintf("GENE%d", seq_len(n_genes))
+symbols[c(10, 20)] <- "MATR3"       # a repeated symbol
+symbols[30] <- NA                   # a gene without a symbol
 
-# Embedding + latent
-umap2 <- Embeddings(seu, "umap")[cells, 1:2, drop = FALSE]
-latent_space <- Embeddings(seu, "pca")[cells, , drop = FALSE]
+expr <- Matrix::rsparsematrix(n_cells, n_genes, density = 0.08,
+                              rand.x = function(k) round(log1p(rpois(k, 3) + 1), 3))
+dimnames(expr) <- list(cells, ensembl)
 
-# Curated obs
-obs_all <- seu@meta.data[cells, , drop = FALSE]
-obs_keys <- intersect(c("seurat_clusters", "orig.ident", "nCount_RNA", "nFeature_RNA"), colnames(obs_all))
-obs <- obs_all[, obs_keys, drop = FALSE]
-if ("seurat_clusters" %in% colnames(obs)) obs$seurat_clusters <- factor(obs$seurat_clusters)
+var <- data.frame(symbol = symbols, highly_variable = seq_len(n_genes) <= 100,
+                  row.names = ensembl)
+obs <- data.frame(
+  leiden = factor(sample(0:7, n_cells, TRUE)),
+  donor = sample(sprintf("D%d", 1:4), n_cells, TRUE),
+  pct_mito = runif(n_cells, 0, 0.1),
+  row.names = cells
+)
+pca <- matrix(rnorm(n_cells * 30), ncol = 30, dimnames = list(cells, NULL))
+umap <- pca[, 1:2] + matrix(rnorm(n_cells * 2, sd = 0.1), ncol = 2)
+umap3 <- pca[, 1:3]
+```
 
-# Expression (optional; skip if too big)
-expr_gxc <- GetAssayData(seu, slot = "data")[, cells, drop = FALSE]   # genes x cells
-expr_cxg <- Matrix::t(expr_gxc)                                       # cells x genes
+## Step 2 — Write the store
 
-var <- data.frame(symbol = rownames(expr_gxc), stringsAsFactors = FALSE)
-rownames(var) <- var$symbol
-
-gene_panel <- intersect(gene_panel, rownames(var))
-
-# Optional connectivities
-conn <- NULL
-if ("RNA_snn" %in% names(seu@graphs)) {
-  conn <- seu@graphs$RNA_snn
-  conn <- conn[cells, cells]
-}
-
-out_dir <- file.path(getwd(), "exports", "seurat_shareable_v1")
-dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-
-cellucid_prepare(
-  latent_space = latent_space,
+```r
+store <- cellucid_prepare(
+  out_path = file.path(tempdir(), "intermediate.zarr"),
+  format = "zarr",
+  embeddings = list(X_umap = umap, X_umap_3d = umap3, X_pca = pca),
+  dataset_id = "intermediate-tutorial",
+  dataset_name = "Intermediate tutorial",
+  dataset_description = "2,000 simulated cells from four donors.",
+  citation_text = "Doe J et al. A simulated atlas. 2026.",
+  citation_url = "https://example.org/simulated-atlas",
+  source_name = "Simulation",
   obs = obs,
   var = var,
-  gene_expression = expr_cxg,
-  gene_identifiers = gene_panel,
-  embeddings = list(X_umap = umap2),
-  connectivities = conn,
-  obs_categorical_dtype = "uint16",
-  out_dir = out_dir,
-  force = TRUE,
-  compression = 6,
-  var_quantization = 8,
-  obs_continuous_quantization = 8,
-  dataset_id = "my_project_pbmc_v1",
-  dataset_name = "My Project PBMC (v1)",
-  dataset_description = "Curated export for collaboration.",
-  source_name = "MyLab",
-  source_url = "https://example.org",
-  source_citation = "Add your paper/preprint citation here."
+  gene_expression = expr,
+  embedding_defaults = list("2d" = "X_umap", "3d" = "X_umap_3d"),
+  latent_key = "X_pca",
+  obs_keys = c("leiden", "donor", "pct_mito"),
+  var_gene_id_column = "symbol",
+  centroid_min_points = 20,
+  force = TRUE
 )
 ```
 
-### Validate before sharing
+What each argument does:
+
+- `embeddings` — all three arrays are stored whole in `obsm`; the viewer plots
+  `X_umap` in 2D and `X_umap_3d` in 3D first (`embedding_defaults`) and offers
+  `X_pca` too, by any of its columns.
+- `latent_key` — the outlier quantiles of `leiden`, `donor` and every other
+  categorical `obs` column are computed in `X_pca` and stored in
+  `uns['cellucid']['outlierQuantiles']`, so the viewer's outlier filter works
+  as soon as the file opens; `centroid_min_points` sets how many cells a
+  category needs for them (10 when not set).
+- `obs_keys` — the fields the viewer lists, in this order. Every `obs` column is
+  stored either way.
+- `var_gene_id_column` — the viewer names genes by `symbol`. The gene without a
+  symbol is shown under its Ensembl id, and the second `MATR3` as `MATR3-1`.
+- The metadata arguments end up in `uns['cellucid']`; only the defaults you set
+  are stored.
+
+## Step 3 — Only the genes you need
+
+A gene panel keeps the store small: `gene_identifiers` names the genes by the
+names the viewer shows (here, the symbols).
 
 ```r
-ident <- jsonlite::read_json(file.path(out_dir, "dataset_identity.json"), simplifyVector = TRUE)
-ident$stats
-```
-
-Confirm:
-- `n_cells` matches
-- `n_genes` equals `length(gene_panel)`
-- `has_connectivity` is correct
-
----
-
-## Part 3 — Export from SingleCellExperiment (curated, shareable)
-
-```r
-library(cellucid)
-library(SingleCellExperiment)
-library(SummarizedExperiment)
-library(Matrix)
-
-cells <- colnames(sce)
-
-umap2 <- reducedDim(sce, "UMAP")[cells, 1:2, drop = FALSE]
-latent_space <- reducedDim(sce, "PCA")[cells, , drop = FALSE]
-
-obs_all <- as.data.frame(colData(sce))[cells, , drop = FALSE]
-obs <- obs_all
-
-expr_gxc <- assay(sce, "logcounts")[, cells, drop = FALSE]  # genes x cells
-expr_cxg <- Matrix::t(expr_gxc)
-
-var <- data.frame(symbol = rownames(sce), stringsAsFactors = FALSE)
-rownames(var) <- var$symbol
-
-gene_panel <- intersect(gene_panel, rownames(var))
-
-out_dir <- file.path(getwd(), "exports", "sce_shareable_v1")
-dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-
-cellucid_prepare(
-  latent_space = latent_space,
+panel <- cellucid_prepare(
+  out_path = file.path(tempdir(), "panel.zarr"),
+  format = "zarr",
+  embeddings = list(X_umap = umap),
+  dataset_id = "intermediate-panel",
+  dataset_name = "Intermediate tutorial, gene panel",
   obs = obs,
   var = var,
-  gene_expression = expr_cxg,
-  gene_identifiers = gene_panel,
-  embeddings = list(X_umap = umap2),
-  obs_categorical_dtype = "uint16",
-  out_dir = out_dir,
-  force = TRUE,
-  compression = 6,
-  var_quantization = 8,
-  obs_continuous_quantization = 8,
-  dataset_id = "my_project_sce_v1",
-  dataset_name = "My Project SCE (v1)"
+  gene_expression = expr,
+  var_gene_id_column = "symbol",
+  gene_identifiers = c("GENE1", "GENE2", "MATR3", "MATR3-1"),
+  force = TRUE
 )
+dir_size <- function(path) sum(file.size(list.files(path, recursive = TRUE, all.files = TRUE, full.names = TRUE)))
+c(all_genes = dir_size(store), panel = dir_size(panel))
 ```
 
-```{warning}
-If your assay is delayed/HDF5-backed, you may need to realize/convert it. For large datasets, prefer exporting a gene panel and/or skipping expression entirely.
+## Step 4 — Check what was written
+
+```r
+cellucid_dir <- file.path(store, "uns", "cellucid")
+list.dirs(cellucid_dir, full.names = FALSE)
+jsonlite::read_json(file.path(store, "X", ".zattrs"))
 ```
 
----
+`X` is a `csc_matrix`: gene-major, so the viewer reads one gene as one
+contiguous range. In Python:
 
-## Part 4 — Hosting and sharing
+```python
+import anndata
+adata = anndata.read_zarr("intermediate.zarr")
+adata.uns["cellucid"]["defaults"]
+```
 
-After export, you can:
-- load locally via file picker, or
-- host via a static server (better for sharing)
-
-Start here:
-- {doc}`../d_viewing_loading/02_host_exports_for_sharing`
-
----
-
-## Massive troubleshooting (intermediate)
-
-### Symptom: “Export loads, but gene coloring looks washed out”
-
-**Likely cause**
-- A few extreme expression values stretched the min/max scaling.
-
-**Confirm**
-- Inspect the gene’s value range before export (summary/quantiles).
-
-**Fix**
-- Export log-normalized expression rather than raw counts.
-- Clip extreme values before export (advanced; do carefully).
-
-### Symptom: “The export is too big to share”
-
-**Fixes (ordered)**
-1) Export fewer genes (gene panel)
-2) Quantize expression (`var_quantization=8`)
-3) Compress (`compression=6`)
-4) Export fewer cells (subsample or subset to a cell type)
-
-### Symptom: “My collaborator sees different cells/labels than I do”
-
-**Likely cause**
-- You overwrote an export folder or changed cell order without versioning.
-
-**Fix**
-- Version your export folders and dataset IDs. See {doc}`../b_concepts_mental_models/03_dataset_identity_and_reproducibility`.
+Next: {doc}`03_advanced_notebooks_expert_developer` adds vector fields and a
+neighbour graph.

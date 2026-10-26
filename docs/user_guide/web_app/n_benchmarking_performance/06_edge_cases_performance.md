@@ -49,13 +49,13 @@ vector-field overlay also scales with the view count in every layout.
 
 ### How to confirm
 1) Go back to a single view. If FPS recovers, the extra views were the cost.
-2) Turn on **Level-of-Detail** (Visualization panel). If FPS recovers, you were
+2) Turn on **Level of detail** (Visualization panel). If FPS recovers, you were
    bound by the number of points drawn; the same four views took 13.5 ms with it.
 3) If you use large points and were on two or three views, try four. If FPS
    recovers there, you were fill-rate bound and the smaller points fixed it.
 
 ### Fix
-- Turn on Level-of-Detail before comparing views of a large dataset: kept views
+- Turn on Level of detail before comparing views of a large dataset: kept views
   draw the same reduced levels as the live view.
 - Tune filters/fields in the live view first.
 - With large points, prefer one view or the four-view grid to a two- or
@@ -115,7 +115,7 @@ published, and datasets are switched **in place**:
 
 - **Point size** is chosen so the total drawn area stays roughly constant, so
   the dot diameter falls with the square root of the cell count.
-- **`Antialiasing (smooth point edges)`** is chosen automatically — on below
+- **`Antialiasing`** is chosen automatically — on below
   5,000,000 cells in 3D and below 200,000 cells in a 1D or 2D view, off at or
   above.
 
@@ -124,12 +124,12 @@ two datasets that are not the same size. But nothing announces the point-size
 change, so it reads as the app behaving differently for no reason.
 
 ### How to confirm
-1) Read the line under the antialiasing checkbox. While the choice is still
-   automatic it names the count and dimension, as in
+1) Open the antialiasing (i). While the choice is still automatic its first
+   line names the count and dimension, as in
    `Chosen automatically: 18,142,044 cells in 3D.`
-   Once you have clicked the checkbox yourself the line goes quiet and the box
+   Once you have clicked the checkbox yourself that line is gone and the box
    holds your answer on every dataset from then on.
-2) Compare `Point size (log):` against what you remember. The opening size is
+2) Compare `Point size` against what you remember. The opening size is
    applied on every dataset publication — but *before* a saved session or a
    published preset is replayed, so a size you stored still wins.
 
@@ -195,7 +195,7 @@ Related docs:
 
 ### Why it happens
 Smoke mode is a ray-marched volumetric rendering:
-- **Render resolution** sets the rays rendered each frame: 0.25x to 1.00x of
+- **Render resolution** sets the rays rendered each frame: 0.25× to 1.00× of
   the canvas, and never more than 2560×1440 rays.
 - **Ray quality** sets samples per voxel along each ray (0.5 to 2).
 - **Grid density** sets density-build time and, through the voxel size, the
@@ -216,7 +216,7 @@ matter there.
   slider debounce and then rebuild the volume.
 
 ### Fix
-- Lower render resolution and ray quality in **Volumetric smoke:**.
+- Lower render resolution and ray quality in **Smoke quality**.
 - Lower noise detail next.
 - Lower grid density for build latency.
 - Set animation speed to 0 (`Still`) when nothing needs to move: a settled
@@ -288,7 +288,7 @@ category count. What still grows with it:
 - Treat unique IDs (barcodes, UUIDs) as *identifiers*, not visualization categories.
 
 ### Prevention
-- Export “human-facing” categorical fields with manageable category counts.
+- Publish “human-facing” categorical fields with manageable category counts.
 
 Related docs:
 - {doc}`../d_fields_coloring_legends/index`
@@ -318,7 +318,7 @@ This is especially punishing when:
 - Turn Live filtering off and apply once; if it becomes smooth, you found it.
 
 ### Fix
-- Live filtering off → stage slider changes → click `FILTER` once.
+- Live filtering off → stage slider changes → click `Filter` once.
 - Reduce enabled filters (disable or remove no-op filters).
 
 ### Prevention
@@ -367,20 +367,25 @@ Related docs:
 
 ### Why it happens
 A cell-major (CSR) matrix stores each gene spread across the whole file, so it
-is reorganised by gene once, in the background, after opening. Genes asked for
-meanwhile are answered by the same pass. Without the browser's private file
-storage (some private windows), a matrix too large for memory is scanned for
-each gene instead.
+is indexed by gene once. From a local file, or a server on the same machine or
+network, the index starts in the background as soon as the file opens; over a
+slower link (as the browser measures it while opening), when the first gene is
+shown. Genes asked for meanwhile are answered by the same pass. Without the
+browser's private file storage (some private windows), a matrix too large for
+memory is scanned for each gene instead.
 
 ### How to confirm
-- Watch the progress notice; or open the same file via Server Mode, which
-  answers genes from Python with no reorganisation.
+- Watch the progress notice, or the `[cellucid:read] … indexed by gene` lines
+  in the console. Opening the file through `cellucid serve` behaves the same:
+  the server hands the browser the file's bytes, and the same reader indexes it.
 
 ### Fix
-- Use Server Mode for large `.h5ad` / `.zarr`.
+- Store the matrix gene-major (CSC): a gene is then one contiguous read and no
+  index is built. `cellucid.prepare()` writes a Cellucid-ready AnnData that way;
+  an in-memory object passed to `show_anndata()` is written that way too.
 
 ### Prevention
-- Treat in-browser `.h5ad` load as a “small quick preview” workflow only.
+- Keep large datasets you open often gene-major (CSC).
 
 Related docs:
 - {doc}`../b_data_loading/03_browser_file_picker_tutorial`

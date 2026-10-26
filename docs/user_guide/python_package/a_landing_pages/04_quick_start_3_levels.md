@@ -7,7 +7,7 @@
 This page gives you three depth levels. Stop as soon as you have what you need:
 
 - **Level 1**: see an AnnData immediately (minimal setup)
-- **Level 2**: create an export folder (fast, shareable, reproducible)
+- **Level 2**: write a Cellucid-ready AnnData (fast, shareable, names itself)
 - **Level 3**: treat the viewer as an interactive UI in your notebook (hooks + commands)
 
 ```{note}
@@ -22,7 +22,8 @@ This is the fastest way to prove “Cellucid works” and to start exploring a d
 
 ### Prerequisites
 
-- A notebook environment (Jupyter / JupyterLab / VSCode notebooks / Colab)
+- A notebook environment: Jupyter or JupyterLab (VS Code notebooks and Colab
+  are untested by the project; see {doc}`03_compatibility_matrix_must_be_explicit`)
 - An AnnData object with at least one embedding in `obsm` — the `X_umap` that
   `sc.tl.umap()` writes is read as written
 
@@ -107,10 +108,12 @@ viewer.highlight_cells([0, 2], color="#00cc66")
 ### What this does (mental model)
 
 `show_anndata(...)`:
-- starts a small local HTTP server (AnnData → “virtual files”),
+- starts a small local HTTP server that hands the data to the viewer, which
+  reads it itself with HTTP range requests (an in-memory object is first
+  written once to a temporary `.h5ad`, or `.h5mu` for a MuData),
 - embeds the Cellucid web app as an iframe,
-- routes UI events back to Python via `POST /_cellucid/events`, and
-  selections via `POST /_cellucid/selection`.
+- carries commands to the viewer and UI events back to Python on one
+  WebSocket the viewer opens to that server (`/_cellucid/ws`).
 
 ### What success looks like
 
@@ -128,140 +131,129 @@ viewer.highlight_cells([0, 2], color="#00cc66")
 - **Viewer source unavailable**: viewer-serving startup stops; see
   {doc}`../installation`.
 - **A gene that will not colour**: `show_anndata(...)` starts fine on an object
-  whose `adata.X` holds NaN or infinities, because nothing reads a gene column
-  until you select one. Selecting it answers HTTP 422 for that one request and
-  the viewer shows a notification titled `Gene cannot be shown`; the response
-  body names the gene, counts the offending values, and lists the first
-  offending cells. Everything else in the session keeps working. Repair the
+  whose `adata.X` holds infinities, because nothing reads a gene column until
+  you select one. Selecting it shows a notification titled
+  `Gene cannot be shown` that names the gene, counts the offending values, and
+  lists the first offending cells (`NaN` is drawn, as the neutral grey for "no
+  value here"). Everything else in the session keeps working. Repair the
   matrix and reload — see
   {doc}`../d_viewing_apis/15_troubleshooting_viewing`.
 
 ---
 
-## Level 2 — Practical path: `prepare(...); show("./export")`
+## Level 2 — Practical path: `prepare(...)`, then open the file
 
-This is the “real workflow” for large datasets and collaboration: you create an **export folder** that loads quickly and can be archived/shared.
+This is the “real workflow” for large datasets and collaboration: you write a
+**Cellucid-ready AnnData** — a standard AnnData laid out for fast browser
+reads, naming itself in `uns['cellucid']` — that you can archive, share, or
+host.
 
-### Prerequisites (minimum required inputs)
+### Inputs
 
-`prepare(...)` currently requires:
-
-- `latent_space` (shape `(n_cells, n_latent_dims)`)  
-  Used for outlier quantile calculation (category summaries).  
-  Good choices: PCA, scVI latent space, ScanVI, etc.
-- `obs` (DataFrame with `n_cells` rows)
-- At least one embedding in `embeddings={...}` (any number per dimension)
-
-Optional but common:
-- `var` + `gene_expression` (for gene coloring/search)
-- `connectivities` (for neighbor-based interactions)
-- `vector_fields` (velocity / drift / displacement overlays)
+`prepare(...)` requires an output path, its `format`, a `dataset_id` and a
+`dataset_name`, and at least one embedding: pass an AnnData (or a MuData) as
+`data=`, which fills every component it holds, or pass the components one by
+one, starting with `embeddings={...}`. An argument given explicitly replaces
+that one component of `data`. The identity may be omitted when `data` declares
+it in `uns['cellucid']`. Everything else is optional:
+- `obs` (cell metadata)
+- `var` + `gene_expression` (gene colouring and search)
+- `connectivities` (the neighbour graph)
+- `vector_fields` (velocity / drift overlays)
+- a latent space for outlier measurement: pass it as one of the `embeddings`
+  and name it with `latent_key`
 
 ```{warning}
-If you pass an AnnData’s matrices into `prepare(...)`, **row order is identity**.  
-Every array you pass must be aligned so that row `i` always refers to the same cell across embeddings, `obs`, latent space, expression, connectivities, and vector fields.
+**Row order is identity.** Every array you pass must be aligned so that row
+`i` always refers to the same cell across embeddings, `obs`, expression,
+connectivities, and vector fields. Take them all from one AnnData.
 ```
 
-### Step 1: Choose an export directory
-
-Pick a location you can archive/share later:
-
-```python
-from pathlib import Path
-
-EXPORT_DIR = Path("exports/pbmc_demo")
-```
-
-### Step 2: Extract inputs from AnnData
-
-This is a “starter” extraction pattern. Your pipeline may differ.
-
-```python
-import numpy as np
-
-umap = np.asarray(adata.obsm["X_umap"], dtype=np.float32)
-
-latent = np.asarray(adata.obsm["X_pca"], dtype=np.float32)
-```
-
-### Step 3: Export (recommended defaults for most users)
+### Step 1: Prepare
 
 ```python
 from cellucid import prepare
 
-prepare(
-    # Required
-    latent_space=latent,
+path = prepare(
+    "pbmc_demo.h5ad",
+    format="h5ad",
+    embeddings={"X_umap": adata.obsm["X_umap"], "X_pca": adata.obsm["X_pca"]},
+    dataset_id="pbmc-demo",
+    dataset_name="PBMC demo",
     obs=adata.obs,
-    embeddings={"X_umap": umap},
-
-    # Optional but common (enables gene coloring/search)
     var=adata.var,
     gene_expression=adata.X,
+    latent_key="X_pca",
+    force=True,  # replace an earlier output at the same path
+)
+```
 
-    # Output
-    out_dir=EXPORT_DIR,
-    dataset_name="PBMC demo",
+`format` is required: `"zarr"` (a folder of small files) for GitHub, which
+refuses files over 100 MB; `"h5ad"` (or `"zarr.zip"`, the Zarr store in one
+file) for everything else — single-file hosts such as Zenodo, Figshare,
+Hugging Face, S3 or a lab server, local files, `cellucid serve` and Jupyter
+({ref}`which-format`). The path must end in the matching `.h5ad`, `.zarr` or
+`.zarr.zip`. A MuData passed as `data=` is written as `format="h5mu"` (one
+`.h5mu` file), or as MuData Zarr with `"zarr"` / `"zarr.zip"`; see
+{doc}`../c_data_preparation_api/12_prepare_from_anndata_or_mudata`.
+
+Or let the AnnData fill the components (every numeric `obsm` array is then
+written, not only the two named above):
+
+```python
+path = prepare(
+    "pbmc_demo.h5ad",
+    format="h5ad",
+    data=adata,  # obs, X with var, every numeric obsm array, obsp['connectivities']
     dataset_id="pbmc-demo",
-
-    # Performance / size (recommended starting point)
-    compression=6,
-    var_quantization=8,
-    obs_continuous_quantization=8,
-    obs_categorical_dtype="uint16",
-
-    # Overwrite behavior
+    dataset_name="PBMC demo",
+    latent_key="X_pca",
     force=True,
 )
 ```
 
-### Step 4: View the export (pick one)
+### Step 2: Open it (pick one)
 
 **Option A: embed in a notebook**
 
 ```python
-from cellucid import show
+from cellucid import show_anndata
 
-viewer = show(EXPORT_DIR, height=700)
+viewer = show_anndata(path, height=700)
 ```
 
 **Option B: open in a browser via CLI (recommended for non-notebook users)**
 
-```bash
-cellucid serve exports/pbmc_demo
-```
+`cellucid serve pbmc_demo.h5ad` — the file names itself, so no identity flags
+are needed.
 
-**Option C: open the folder in the hosted web app**
+**Option C: open the file in the hosted web app**
 
-If you prefer not to run a local server, you can open the web app and load an export folder via the browser file picker. For click-by-click instructions, see {doc}`../../web_app/b_data_loading/index`.
+If you prefer not to run a local server, open the web app and load the file
+with **Open…**, or host it and paste its address into the **Link or server**
+bar. For
+click-by-click instructions, see {doc}`../../web_app/b_data_loading/index`.
 
-### What you get on disk (high-level)
+### What you get on disk
 
-An export folder is intentionally “boring”:
-- a few JSON manifests (what files exist, how to interpret them),
-- plus binary files for points/fields/genes.
-
-Common top-level files/folders:
-- `dataset_identity.json`
-- `obs_manifest.json` and `obs/`
-- `var_manifest.json` and `var/` (only if you export gene expression)
-- `embeddings/` (one coordinate file per embedding you provided)
-- `connectivity_manifest.json` and `connectivity/` (optional)
-- `vectors/` (optional)
+One standard AnnData: `anndata.read_h5ad("pbmc_demo.h5ad")` reads it. Its
+expression matrix is gene-major, its arrays are chunked for range reads, and
+`uns['cellucid']` holds the id, name and any launch defaults you set. The full
+contract: {doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification`.
 
 ### What success looks like
 
-- The export folder contains the expected manifests and points files.
-- The viewer loads quickly and you can:
+- The viewer opens the dataset under the name you gave it, and you can:
   - color by `obs` fields,
   - (optionally) search genes and color by expression.
 
 ### Common pitfalls (Level 2)
 
-- **Missing `latent_space`**: `prepare(...)` will error (latent is required in the current implementation).
 - **Wrong shapes**: `obs` length, embedding row counts, expression matrix shape must all match.
 - **Expression orientation**: `gene_expression` must be `(n_cells, n_genes)` with `len(var) == n_genes`.
-- **Stale exports**: if you re-export into the same folder, use `force=True` or pick a fresh directory.
+- **Existing output**: writing to the same path again needs `force=True`, or pick a fresh path.
+
+Every refusal and its fix: {doc}`../c_data_preparation_api/11_troubleshooting_prepare`.
 
 ---
 
@@ -271,15 +263,10 @@ This level is for notebook users who want the viewer as a live UI:
 - select cells in the browser → run Python analysis on that subset,
 - compute results → send highlights/colors back to the viewer.
 
-### Step 1: Create a viewer (exported data recommended)
+### Step 1: Create a viewer
 
-```python
-from cellucid import show
-
-viewer = show(EXPORT_DIR, height=700)
-```
-
-You can also do this in AnnData direct mode:
+A prepared file opens as it is (`show_anndata(path, height=700)`); any other
+AnnData takes its identity:
 
 ```python
 from cellucid import show_anndata
@@ -317,7 +304,10 @@ def _highlight(ev):
 
 - Always guard against empty selections.
 - Let analysis failures surface, or catch only errors you can report with
-  explicit context; do not swallow callback exceptions.
+  explicit context; do not swallow callback exceptions. A hook runs on the
+  viewer channel's thread, not in your cell: an exception it raises is logged
+  (logger `cellucid.viewer_channel`) and the channel stays open, so record
+  failures where your notebook will see them.
 - If your analysis is slow, consider:
   - running it asynchronously,
   - debouncing rapid selection events.
@@ -333,8 +323,8 @@ report
 
 Look for:
 - `server_health` / `server_info` (server reachable?)
-- `dataset_identity_probes` (did every exact declared dataset identity load and
-  match its id/path?)
+- `anndata_store_probes` (does the served store answer a range read under its
+  exact dataset id?)
 - `client_server_url` (is the iframe using the right URL?)
 - `web_ui.cache` (do you have cached UI assets?)
 - `frontend_roundtrip` and `frontend_debug_snapshot` (is the live iframe
@@ -362,22 +352,19 @@ cleanup_all()
 
 ## Edge cases (read this before scaling up)
 
-- **Huge datasets**: start with exports + quantization; AnnData-direct mode will be slower.
+- **Huge datasets**: the viewer transfers only what a view needs; for a dataset
+  you will share or host, write it once with `prepare()` so every gene is one
+  small read.
 - **Missing embeddings**: no embedding → no viewer; compute one first.
-- **NaN/Inf values**: neither Python path ever publishes them, so there is no
-  surprising rendering to meet — there is a refusal instead, and which refusal
-  depends on the input. `prepare(...)` stops the whole export: an embedding or
-  `latent_space` fails with a `ValueError` naming the array, while gene
-  expression and continuous `obs` columns fail with a counted
-  `NonFinitePayloadError` that reports how many values are NaN, `+Inf`, `-Inf`,
-  beyond the float32 range, or below the smallest float32, the first five
-  offending cell indices, and a one-line repair. Direct-AnnData serving refuses
-  one request at a time instead: the gene or column you selected answers HTTP
-  `422 non_finite_continuous_payload` with that same diagnosis as JSON, and the
-  rest of the session keeps working. In the viewer `NaN` and infinity are not
-  alike — `NaN` is drawable and renders as the neutral grey meaning "not
-  measured here", an infinity has no position on a colour scale — but neither
-  reaches a prepared export or a Python-served payload.
+- **NaN/Inf values**: `prepare(...)` refuses an embedding, expression matrix,
+  graph or vector field holding NaN or an infinity before writing anything,
+  with a count of what it found and the first affected positions (`obs` columns
+  may hold NaN, as a missing value, but not infinities). The viewer reads the
+  values itself and refuses one field at a time instead: a gene or continuous
+  column holding an infinity is refused with a counted diagnosis, and the rest
+  of the session keeps working. In the viewer `NaN` and infinity are not alike
+  — `NaN` is drawable and renders as the neutral grey meaning "not measured
+  here", an infinity has no position on a colour scale.
 - **Category explosions**: categorical fields with very high cardinality can become unusable in the UI; consider grouping or filtering.
 - **Remote kernels**: forward the port and pass its browser-reachable base as
   `client_server_url=` (see
@@ -413,28 +400,19 @@ Organize by symptom. Each entry points to the most likely root causes.
 
 ---
 
-### Symptom: `prepare(...)` fails with “latent_space is required…”
-
-**Likely cause**
-- You did not pass `latent_space=...`.
-
-**Fix**
-- Use PCA, scVI, or another `n_cells`-aligned representation as `latent_space`. If the embedding is the only representation you have, pass it as `latent_space` too and record that choice in your workflow.
-
----
-
-### Symptom: export succeeds, but the viewer can’t find fields / genes
+### Symptom: `prepare(...)` succeeds, but the viewer can’t find fields / genes
 
 **Likely causes**
-- You didn’t export `gene_expression` + `var`.
-- You exported only a subset of obs columns (advanced; see Data Preparation API).
+- You didn’t pass `gene_expression` + `var`.
+- `obs_keys` lists only some `obs` columns, so the viewer lists only those.
 
 **How to confirm**
-- Check that `var_manifest.json` exists (for gene expression).
-- Check `obs_manifest.json` for field listings.
+- `anndata.read_h5ad(path)` shows what the file holds; `uns['cellucid']['defaults']`
+  shows `obsKeys` when it was set.
 
 **Fix**
-- Re-export with `var=adata.var` and `gene_expression=adata.X`.
+- Prepare again with `var=adata.var` and `gene_expression=adata.X` (and
+  `force=True`), or change `obs_keys`.
 
 ---
 
@@ -450,7 +428,7 @@ Organize by symptom. Each entry points to the most likely root causes.
 
 ## Next steps
 
-- Detailed export inputs/edge cases: {doc}`../c_data_preparation_api/index`
+- Detailed `prepare()` inputs/edge cases: {doc}`../c_data_preparation_api/index`
 - All viewing modes (CLI/server/notebook): {doc}`../d_viewing_apis/index`
 - Hooks system deep dive: {doc}`../e_jupyter_hooks/index`
 - Notebook-style tutorials: {doc}`../f_notebooks_tutorials/index`

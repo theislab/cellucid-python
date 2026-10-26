@@ -218,8 +218,8 @@ Best practices:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/figure_export/style.png
-:alt: Figure Export Style controls for background, typography, and text sizes.
-:width: 224px
+:alt: The Style group open: background, font family and the text sizes for the base text, legend, ticks, axis labels, title and centroid labels.
+:width: 532px
 
 Style controls expose background, typography, and text sizing.
 ```

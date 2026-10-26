@@ -1,52 +1,46 @@
 from __future__ import annotations
 
 import html as html_module
-from pathlib import Path
 
 import pytest
 
 
-def test_jupyter_viewer_port_sync(monkeypatch, tmp_path: Path) -> None:
-    """
-    If the bound server reports a different port, the viewer must use that exact port.
-    """
+class _DummyServer:
+    """Stands in for the AnnData server: records the bind, serves nothing."""
+
+    port_offset = 0
+
+    def __init__(self, **kwargs: object) -> None:
+        self.host = kwargs["host"]
+        self.port = int(kwargs["port"] or 8765) + self.port_offset
+
+    @property
+    def url(self) -> str:
+        return f"http://{self.host}:{self.port}"
+
+    def start_background(self) -> None:
+        return None
+
+    def is_running(self) -> bool:
+        return True
+
+    def stop(self) -> None:
+        return None
+
+
+def test_jupyter_viewer_port_sync(monkeypatch) -> None:
+    """If the bound server reports a different port, the viewer must use that exact port."""
+    import cellucid.anndata_server as anndata_server
     import cellucid.jupyter as jupyter
-    import cellucid.jupyter._exported as jupyter_exported
 
-    class DummyServer:
-        def __init__(
-            self,
-            data_dir: Path,
-            port: int,
-            host: str,
-            open_browser: bool,
-            quiet: bool,
-            **_kwargs,
-        ):
-            self.data_dir = data_dir
-            self.host = host
-            self.port = int(port) + 1
-            self.open_browser = open_browser
-            self.quiet = quiet
+    class BoundElsewhere(_DummyServer):
+        port_offset = 1
 
-        @property
-        def url(self) -> str:
-            return f"http://{self.host}:{self.port}"
+    # ``AnnDataViewer._start_server`` imports ``AnnDataServer`` from its module
+    # when it runs, so the patch names that module.
+    monkeypatch.setattr(anndata_server, "AnnDataServer", BoundElsewhere)
 
-        def start_background(self) -> None:
-            return None
-
-        def is_running(self) -> bool:
-            return True
-
-        def stop(self) -> None:
-            return None
-
-    # ``CellucidViewer._start_server`` resolves ``CellucidServer`` in the module
-    # that defines the viewer, so the patch has to name that module.
-    monkeypatch.setattr(jupyter_exported, "CellucidServer", DummyServer)
-
-    viewer = jupyter.CellucidViewer(data_dir=tmp_path, port=8765, auto_open=False)
+    viewer = jupyter.AnnDataViewer("data.h5ad", port=8765, auto_open=False)
     try:
         assert viewer.port == 8766
         assert "8766" in viewer.viewer_url
@@ -59,39 +53,16 @@ def test_jupyter_viewer_port_sync(monkeypatch, tmp_path: Path) -> None:
         viewer.stop()
 
 
-def test_jupyter_uses_only_the_explicit_browser_server_url(
-    monkeypatch,
-    tmp_path: Path,
-) -> None:
+def test_jupyter_uses_only_the_explicit_browser_server_url(monkeypatch) -> None:
+    import cellucid.anndata_server as anndata_server
     import cellucid.jupyter as jupyter
-    import cellucid.jupyter._exported as jupyter_exported
 
-    class DummyServer:
-        def __init__(self, **kwargs):
-            self.host = kwargs["host"]
-            self.port = kwargs["port"]
-
-        @property
-        def url(self) -> str:
-            return f"http://{self.host}:{self.port}"
-
-        def start_background(self) -> None:
-            return None
-
-        def is_running(self) -> bool:
-            return True
-
-        def stop(self) -> None:
-            return None
-
-    # ``CellucidViewer._start_server`` resolves ``CellucidServer`` in the module
-    # that defines the viewer, so the patch has to name that module.
-    monkeypatch.setattr(jupyter_exported, "CellucidServer", DummyServer)
+    monkeypatch.setattr(anndata_server, "AnnDataServer", _DummyServer)
     monkeypatch.setenv("CELLUCID_CLIENT_SERVER_URL", "https://ignored.example")
 
     explicit = "https://notebook.example/user/alice/gateway/8765"
-    viewer = jupyter.CellucidViewer(
-        data_dir=tmp_path,
+    viewer = jupyter.AnnDataViewer(
+        "data.h5ad",
         port=8765,
         auto_open=False,
         client_server_url=explicit,
@@ -123,13 +94,15 @@ def test_jupyter_uses_only_the_explicit_browser_server_url(
 )
 def test_jupyter_rejects_invalid_explicit_browser_server_urls(
     value: str,
-    tmp_path: Path,
+    monkeypatch,
 ) -> None:
+    import cellucid.anndata_server as anndata_server
     import cellucid.jupyter as jupyter
 
+    monkeypatch.setattr(anndata_server, "AnnDataServer", _DummyServer)
     with pytest.raises((TypeError, ValueError), match="client_server_url"):
-        jupyter.CellucidViewer(
-            data_dir=tmp_path,
+        jupyter.AnnDataViewer(
+            "data.h5ad",
             auto_open=False,
             client_server_url=value,
         )

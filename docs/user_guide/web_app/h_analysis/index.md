@@ -35,12 +35,16 @@ If you’re here because “analysis is empty / missing results”, start with {
 | Get a quick read on a selection/group | Quick | You want a fast “is this different?” summary | {doc}`03_analysis_mode_quick_insights` |
 | Inspect distributions and details | Detailed | You need shape/variance/outliers, not just a single number | {doc}`04_analysis_mode_detailed_analysis` |
 | See relationships between genes/fields | Correlation | You’re asking “do these move together?” | {doc}`05_analysis_mode_correlation_analysis` |
-| Compare genes between two groups | Differential Expression | You have gene expression and two pages to compare (A vs B) | {doc}`06_analysis_mode_differential_expression_de` |
-| Score a curated gene program | Gene Signature | You have a predefined gene set (pathway/module) | {doc}`07_analysis_mode_gene_signature` |
-| Find markers for many groups at once | Marker Genes | You want one-vs-rest markers for every group in a categorical field | {doc}`08_analysis_mode_genes_panel` |
+| Find markers for many groups at once | Marker genes | You want one-vs-rest markers for every group in a categorical field | {doc}`08_analysis_mode_genes_panel` |
+| Compare genes between two groups | Differential expression | You have gene expression and two pages to compare (A vs B) | {doc}`06_analysis_mode_differential_expression_de` |
+| Check a marker panel across groups | Dot plot | You have genes and want mean expression and % expressing per group | {doc}`13_analysis_mode_dot_plot` |
+| Score a curated gene program | Gene signature | You have a predefined gene set (pathway/module) | {doc}`07_analysis_mode_gene_signature` |
+| Compare cell-type proportions between conditions | Composition | You have cell types, samples and a condition (disease vs healthy) | {doc}`12_analysis_mode_composition` |
 
 The names in the second column are the labels the app itself uses, exactly as
-they appear in the panel.
+they appear in the panel. The panel groups its rows by what they ask about:
+**Genes** (Marker genes, Differential expression, Dot plot, Gene signature),
+**Cells** (Composition) and **Explore** (Quick, Detailed, Correlation).
 
 ---
 
@@ -57,11 +61,11 @@ they appear in the panel.
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/analysis/analysis-panel-modes.png
-:alt: Six stacked rows reading Quick (Automatic insights), Detailed (Full control over options), Correlation (Explore variable relationships), Differential Expression (Find DE genes between groups), Gene Signature (Compute signature scores) and Marker Genes (Discover markers across groups). Each row carries a small copy-window icon and a chevron.
-:width: 808px
+:alt: The Analysis panel with every analysis collapsed, in three groups: Genes (Marker genes, Differential expression, Dot plot, Gene signature), Cells (Composition) and Explore (Quick, Detailed, Correlation); each row carries a chevron, an (i) and a copy-window button.
+:width: 532px
 
-The Analysis panel exposes six explicit modes, each with its own validated inputs
-and result area. The icon on each row undocks that mode into a floating window;
+The Analysis panel exposes eight analyses in three groups, each with its own
+validated inputs and result area. The icon on each row undocks that mode into a floating window;
 the chevron opens it in place.
 ```
 
@@ -73,7 +77,7 @@ the chevron opens it in place.
    screenshotted steps. Start here if you have not used the panel before.
 2) {doc}`01_analysis_mental_model` (what analysis operates on + what is cached)
 3) {doc}`02_analysis_ui_overview` (where things live; sidebar vs expanded; copy/restore behaviors)
-4) Mode pages (`03`–`08`) for the specific analysis you need
+4) Mode pages (`03`–`08`, `12`, `13`) for the specific analysis you need
 5) {doc}`09_exporting_analysis_results` (tables/plots, what is reproducible)
 6) {doc}`10_troubleshooting_analysis` (symptom → diagnosis → fix)
 

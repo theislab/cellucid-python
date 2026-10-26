@@ -4,11 +4,11 @@ Cellucid’s notebook integration is intentionally **simple and robust**:
 
 - **Python** starts a small **local HTTP server** that serves your dataset.
 - The notebook displays the Cellucid **web app UI** in an **iframe**.
-- You get **two channels** for communication:
-  1. **Python → viewer**: commands via **`postMessage`** (e.g., highlight, set color-by).
-  2. **Viewer → Python**: events via **HTTP POST** to `/_cellucid/events` (e.g., hover, click), and selections to `/_cellucid/selection`.
+- The viewer opens **one channel** to that server, a WebSocket at `/_cellucid/ws`, and both directions travel on it:
+  1. **Python → viewer**: commands (e.g., highlight, set color-by).
+  2. **Viewer → Python**: events (e.g., selection, hover, click).
 
-This design avoids “special Jupyter extensions” and works across notebook frontends (classic Jupyter, JupyterLab, VSCode notebooks, Colab) as long as the **browser can reach the server URL** the iframe is using.
+This design needs no Jupyter extension and no code in the notebook output (the output is a plain iframe), so it works the same in every notebook front end that can show the iframe, as long as the **browser can reach the server URL** the iframe is using (and, behind a proxy, the proxy passes WebSockets).
 
 ## At a glance
 
@@ -23,12 +23,12 @@ This design avoids “special Jupyter extensions” and works across notebook fr
 
 **Prerequisites**
 - `pip install cellucid`
-- A notebook environment (classic, JupyterLab, VSCode, or Colab)
-- A dataset you can view via `show_anndata(...)` or `show(...)`
+- A notebook environment (classic Jupyter or JupyterLab; VS Code and Colab are untested, see {doc}`03_supported_environments_matrix`)
+- A dataset you can view via `show_anndata(...)`
 
 ## Fast path (what you can do)
 
-Once you have a `viewer` (from `show_anndata(...)` or `show(...)`), you can:
+Once you have a `viewer` (from `show_anndata(...)`), you can:
 
 - **Send commands (Python → viewer)**
   - highlight cells by index (`viewer.highlight_cells(...)`)
@@ -43,7 +43,6 @@ Once you have a `viewer` (from `show_anndata(...)` or `show(...)`), you can:
   - `@viewer.on_hover`: user hovers cells (debounced)
   - `@viewer.on_click`: user clicks a cell
   - `@viewer.on_command_error`: a command you sent was rejected by the viewer
-    (only the web build that emits `command_error` sends it)
   - `@viewer.on_data_mapping`: the viewer resolved or changed its data mapping
   - `@viewer.on_message`: one envelope stream for all nine current event types
 
@@ -71,36 +70,36 @@ viewer = show_anndata(
 Cellucid:
 1. Starts a local server (usually `http://127.0.0.1:<port>`).
 2. Embeds the viewer as an iframe pointing at that same server:
-   - `.../?jupyter=true&viewerId=<id>&viewerToken=<token>[&anndata=true]`
+   - `.../?viewer=true&viewerId=<id>&viewerToken=<token>&anndata=true`
 
 The key idea is **same-origin**: the UI and the dataset endpoints share the same origin, which makes the integration much less fragile (no mixed-content, fewer CORS surprises).
 
-### Channel A: Python → viewer (commands)
+### The viewer channel
 
-When you call `viewer.highlight_cells(...)`, Python injects a small JavaScript snippet into the notebook output that uses `postMessage(...)` to send a command into the iframe.
+When the viewer page loads, it opens a WebSocket to `/_cellucid/ws` on the
+same server and says hello with its `viewerId` and `viewerToken`. The server
+checks the token and answers `welcome`; from then on the socket belongs to
+that one viewer.
 
-Commands are authenticated with a per-viewer token (`viewerToken`) to avoid accepting arbitrary parent-frame messages.
+- When you call `viewer.highlight_cells(...)`, Python sends the command on the
+  channel. A command sent before the viewer has connected waits and is sent,
+  in order, as soon as it does.
+- When a user selects, hovers or clicks, the viewer sends an event on the
+  channel (a selection as binary cell indices), and Python triggers your
+  registered hooks.
 
-### Channel B: viewer → Python (events)
-
-When a user selects / hovers / clicks in the UI, the viewer sends an HTTP POST:
-
-```text
-POST /_cellucid/events
-Content-Type: application/json
-{ "type": "selection", "viewerId": "...", ...payload... }
-```
-
-The Python server routes that JSON event to the right `viewer` instance using `viewerId`, then triggers your registered hooks.
+See {doc}`05_architecture_viewer_channel` for the frames and the rules.
 
 ## Deep path (implementation pointers)
 
 If you want to trace the implementation:
 
 - Python: `cellucid-python/src/cellucid/jupyter/` (viewer classes + hook registry)
-- Python: `cellucid-python/src/cellucid/_server_base.py` (`/_cellucid/events`,
-  session bundle upload, verified web-generation delivery)
-- Web app: `cellucid/assets/js/data/jupyter-source.js` (JupyterBridgeDataSource; message handling + event POST)
+- Python: `cellucid-python/src/cellucid/_viewer_channel.py` (the channel:
+  handshake, command outbox, events, session bundles)
+- Python: `cellucid-python/src/cellucid/_server_base.py` (verified web-generation delivery)
+- Web app: `cellucid/assets/js/data/viewer-channel.js` (the channel) and
+  `data/viewer-host-source.js` (ViewerHostDataSource; commands and events)
 - Web app: `cellucid/assets/js/app/main.js` (wires session bundle capture + ready event)
 
 ## Important notebook constraint: HTTPS / mixed content
@@ -110,16 +109,17 @@ If your notebook is served on **HTTPS** (common on JupyterHub), browsers may blo
 Cellucid uses exactly the `client_server_url=` argument when one is supplied;
 otherwise it uses the bound server URL. It does not infer or probe a proxy.
 For Jupyter Server Proxy, Colab, or another reverse proxy, obtain the exact
-browser-reachable HTTP(S) base URL and pass it to `show(...)`,
-`show_anndata(...)`, or the viewer constructor. See
+browser-reachable HTTP(S) base URL and pass it to `show_anndata(...)` or the
+viewer constructor. See
 {doc}`13_security_cors_origins_and_mixed_content` and
 {doc}`03_supported_environments_matrix`.
 
 ## Edge cases (high-level)
 
-- Multiple viewers: each viewer has a unique `viewerId`; events route by ID.
+- Multiple viewers: each viewer has a unique `viewerId` and its own channel.
 - Large selections: sending huge index lists back and forth can be slow.
-- Backed AnnData (`.h5ad` backed mode): be careful with thread-safety in callbacks.
+- Callbacks run on the viewer channel's thread, not the notebook's: be careful
+  with thread-safety when they touch shared objects such as your `adata`.
 - Source-restricted environments: viewer/server startup fails directly when it
   cannot establish the configured exact UI generation.
 

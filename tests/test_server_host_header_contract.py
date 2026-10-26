@@ -1,4 +1,4 @@
-"""Host-header contract: the servers answer only their own loopback authority.
+"""Host-header contract: the server answers only its own loopback authority.
 
 A page on any origin can publish a short-lived DNS record that re-resolves its
 own hostname to ``127.0.0.1``. The browser then treats the local Cellucid data
@@ -32,73 +32,35 @@ from cellucid._server_base import (
     require_allowed_hosts,
 )
 from cellucid.anndata_server import AnnDataServer
-from cellucid.server import CellucidServer
+from cellucid.prepare_data import prepare
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 REBOUND_HOST = "cellucid-rebind.evil.example"
 # The authority a jupyter-server-proxy front end forwards verbatim.
 PROXY_HOST = "hub.example.org"
-POINTS_BYTES = b"\x11\x22\x33\x44\x55\x66\x77\x88"
+#: The route the prepared store's bytes are served under.
+STORE_ROUTE = "/_cellucid/anndata/host-contract.h5ad"
+#: The first bytes of every HDF5 file: what a leaked store would show.
+HDF5_SIGNATURE = b"\x89HDF\r\n\x1a\n"
 
 
 def _prepared_dataset(root: Path) -> Path:
-    root.mkdir()
-    (root / "dataset_identity.json").write_text(
-        json.dumps(
-            {
-                "version": 3,
-                "id": "host-contract",
-                "name": "Host contract",
-                "description": "",
-                "stats": {
-                    "n_cells": 1,
-                    "n_genes": 0,
-                    "n_obs_fields": 0,
-                    "n_categorical_fields": 0,
-                    "n_continuous_fields": 0,
-                    "has_connectivity": False,
-                    "n_edges": None,
-                },
-                "embeddings": {
-                    "default_dimension": 2,
-                    "defaults": {"2d": "X_umap"},
-                    "items": {
-                        "X_umap": {
-                            "label": "X_umap",
-                            "dimension": 2,
-                            "file": "embeddings/0_2d.bin",
-                            "source": {"key": "X_umap", "columns": [0, 1]},
-                        }
-                    },
-                },
-                "obs_fields": [],
-                "export_settings": {
-                    "compression": None,
-                    "var_quantization": None,
-                    "obs_continuous_quantization": None,
-                    "obs_categorical_dtype": "uint16",
-                },
-            }
-        ),
-        encoding="utf-8",
+    """A Cellucid-ready AnnData that names itself ``host-contract``."""
+    root.mkdir(exist_ok=True)
+    return prepare(
+        root / "host-contract.h5ad",
+        format="h5ad",
+        embeddings={"X_umap": np.array([[0.0, 0.0], [1.0, 1.0]], dtype=np.float32)},
+        dataset_id="host-contract",
+        dataset_name="Host contract",
+        gene_expression=np.array([[1.0], [2.0]], dtype=np.float32),
+        var=pd.DataFrame(index=["gene-1"]),
+        force=True,
     )
-    (root / "obs_manifest.json").write_text(
-        json.dumps(
-            {
-                "_format": "compact_v2",
-                "n_points": 1,
-                "centroid_outlier_quantile": None,
-                "latent_key": "latent_space",
-                "compression": None,
-                "_obsSchemas": {},
-                "_continuousFields": [],
-                "_categoricalFields": [],
-            }
-        ),
-        encoding="utf-8",
-    )
-    (root / "embeddings").mkdir()
-    (root / "embeddings" / "0_2d.bin").write_bytes(POINTS_BYTES)
-    return root
+
+
+def _store_bytes(tmp_path: Path) -> bytes:
+    return (tmp_path / "dataset" / "host-contract.h5ad").read_bytes()
 
 
 def _anndata() -> AnnData:
@@ -118,8 +80,8 @@ def _prepared_server(
     tmp_path: Path,
     *,
     allowed_hosts: Sequence[str] | None = None,
-) -> Iterator[tuple[CellucidServer, int]]:
-    server = CellucidServer(
+) -> Iterator[tuple[AnnDataServer, int]]:
+    server = AnnDataServer(
         _prepared_dataset(tmp_path / "dataset"),
         host="127.0.0.1",
         port=0,
@@ -193,16 +155,16 @@ def _request(
 def test_rebound_dns_name_never_reaches_a_route_on_the_prepared_server(
     tmp_path: Path,
 ) -> None:
-    """A rebound hostname must not be served prepared artifacts."""
+    """A rebound hostname must not be served the store's bytes."""
     with _prepared_server(tmp_path) as (_server, port):
         status, raw = _exchange(
             port,
-            _request("/embeddings/0_2d.bin", [f"{REBOUND_HOST}:{port}"]),
+            _request(STORE_ROUTE, [f"{REBOUND_HOST}:{port}"]),
         )
 
     assert status == 421
     # The private payload was never routed, let alone written.
-    assert POINTS_BYTES not in raw
+    assert HDF5_SIGNATURE not in raw
     # The attacker-supplied authority is never reflected back.
     assert REBOUND_HOST.encode("ascii") not in raw
 
@@ -212,7 +174,7 @@ def test_rebound_dns_name_never_reaches_a_route_on_the_anndata_server() -> None:
     with _anndata_server() as (_server, port):
         status, raw = _exchange(
             port,
-            _request("/dataset_identity.json", [f"{REBOUND_HOST}:{port}"]),
+            _request("/_cellucid/datasets", [f"{REBOUND_HOST}:{port}"]),
         )
 
     assert status == 421
@@ -227,7 +189,7 @@ def test_rebound_dns_name_is_refused_on_every_method(tmp_path: Path) -> None:
             method: _exchange(
                 port,
                 _request(
-                    "/_cellucid/events" if method == "POST" else "/_cellucid/info",
+                    "/_cellucid/ws" if method == "POST" else "/_cellucid/info",
                     [REBOUND_HOST],
                     method=method,
                 ),
@@ -236,6 +198,23 @@ def test_rebound_dns_name_is_refused_on_every_method(tmp_path: Path) -> None:
         }
 
     assert results == {"GET": 421, "HEAD": 421, "POST": 421, "OPTIONS": 421}
+
+
+def test_a_preflight_advertises_only_the_methods_the_server_answers() -> None:
+    """POST is refused with 405, so a preflight never offers it (cellucid-r agrees)."""
+    with _anndata_server() as (_server, port):
+        _status, preflight = _exchange(
+            port, _request("/_cellucid/datasets", [f"127.0.0.1:{port}"], method="OPTIONS")
+        )
+        post_status, _raw = _exchange(
+            port, _request("/_cellucid/datasets", [f"127.0.0.1:{port}"], method="POST")
+        )
+
+    assert b"\r\nAccess-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n" in preflight
+    assert post_status == 405
+    r_server = REPOSITORY_ROOT.parent / "cellucid-r" / "R" / "viewer-server.R"
+    if r_server.is_file():
+        assert '`Access-Control-Allow-Methods` = "GET, HEAD, OPTIONS"' in r_server.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize(
@@ -311,11 +290,11 @@ def test_loopback_authorities_are_served(tmp_path: Path, template: str) -> None:
     with _prepared_server(tmp_path) as (_server, port):
         status, raw = _exchange(
             port,
-            _request("/embeddings/0_2d.bin", [template.format(port=port)]),
+            _request(STORE_ROUTE, [template.format(port=port)]),
         )
 
     assert status == 200
-    assert raw.endswith(POINTS_BYTES)
+    assert raw.endswith(_store_bytes(tmp_path))
 
 
 def test_the_real_serving_path_still_works_end_to_end(tmp_path: Path) -> None:
@@ -324,14 +303,14 @@ def test_the_real_serving_path_still_works_end_to_end(tmp_path: Path) -> None:
         base = server.url
         with urllib.request.urlopen(f"{base}/_cellucid/health", timeout=5) as response:
             health = json.loads(response.read())
-        with urllib.request.urlopen(f"{base}/dataset_identity.json", timeout=5) as response:
-            identity = json.loads(response.read())
-        with urllib.request.urlopen(f"{base}/embeddings/0_2d.bin", timeout=5) as response:
+        with urllib.request.urlopen(f"{base}/_cellucid/datasets", timeout=5) as response:
+            datasets = json.loads(response.read())
+        with urllib.request.urlopen(f"{base}{STORE_ROUTE}", timeout=5) as response:
             points = response.read()
 
     assert health["status"] == "ok"
-    assert identity["id"] == "host-contract"
-    assert points == POINTS_BYTES
+    assert datasets["datasets"][0]["id"] == "host-contract"
+    assert points == _store_bytes(tmp_path)
 
 
 def test_the_anndata_serving_path_still_works_end_to_end() -> None:
@@ -475,15 +454,15 @@ def test_enforcement_uses_the_os_assigned_port_not_the_requested_one(
 def test_a_declared_proxy_authority_is_served_the_real_payload(tmp_path: Path) -> None:
     """The documented `jupyter-server-proxy` path works again, end to end."""
     with _prepared_server(tmp_path, allowed_hosts=[PROXY_HOST]) as (_server, port):
-        status, raw = _exchange(port, _request("/embeddings/0_2d.bin", [PROXY_HOST]))
+        status, raw = _exchange(port, _request(STORE_ROUTE, [PROXY_HOST]))
 
     assert status == 200
-    assert raw.endswith(POINTS_BYTES)
+    assert raw.endswith(_store_bytes(tmp_path))
 
 
 def test_a_declared_proxy_authority_is_served_by_the_anndata_server() -> None:
     with _anndata_server(allowed_hosts=[PROXY_HOST]) as (_server, port):
-        status, raw = _exchange(port, _request("/dataset_identity.json", [PROXY_HOST]))
+        status, raw = _exchange(port, _request("/_cellucid/datasets", [PROXY_HOST]))
 
     assert status == 200
     assert b"host-contract" in raw
@@ -521,7 +500,7 @@ def test_declaring_one_name_does_not_admit_any_other(tmp_path: Path) -> None:
     """The hole stays shut for every authority the operator did not name."""
     with _prepared_server(tmp_path, allowed_hosts=[PROXY_HOST]) as (_server, port):
         results = {
-            value: _exchange(port, _request("/embeddings/0_2d.bin", [value]))
+            value: _exchange(port, _request(STORE_ROUTE, [value]))
             for value in (
                 f"{REBOUND_HOST}:{port}",
                 REBOUND_HOST,
@@ -543,14 +522,14 @@ def test_declaring_one_name_does_not_admit_any_other(tmp_path: Path) -> None:
         "*.example.org": 421,
     }
     for _status, raw in results.values():
-        assert POINTS_BYTES not in raw
+        assert HDF5_SIGNATURE not in raw
 
 
 def test_the_proxy_authority_is_refused_without_the_declaration(tmp_path: Path) -> None:
     """No opt-in means byte-identical behaviour to the loopback-only guard."""
     with _prepared_server(tmp_path) as (_server, port):
-        bare, _raw = _exchange(port, _request("/embeddings/0_2d.bin", [PROXY_HOST]))
-        ported, _raw = _exchange(port, _request("/embeddings/0_2d.bin", [f"{PROXY_HOST}:{port}"]))
+        bare, _raw = _exchange(port, _request(STORE_ROUTE, [PROXY_HOST]))
+        ported, _raw = _exchange(port, _request(STORE_ROUTE, [f"{PROXY_HOST}:{port}"]))
 
     assert bare == 421
     assert ported == 421
@@ -558,7 +537,7 @@ def test_the_proxy_authority_is_refused_without_the_declaration(tmp_path: Path) 
 
 def test_the_proxy_authority_is_refused_without_the_declaration_on_anndata() -> None:
     with _anndata_server() as (_server, port):
-        status, raw = _exchange(port, _request("/dataset_identity.json", [PROXY_HOST]))
+        status, raw = _exchange(port, _request("/_cellucid/datasets", [PROXY_HOST]))
 
     assert status == 421
     assert b"host-contract" not in raw
@@ -569,11 +548,11 @@ def test_the_local_loopback_authority_still_works_beside_a_declared_name(
 ) -> None:
     """Declaring a proxy name must not cost the operator their own `curl`."""
     with _prepared_server(tmp_path, allowed_hosts=[PROXY_HOST]) as (server, port):
-        with urllib.request.urlopen(f"{server.url}/embeddings/0_2d.bin", timeout=5) as response:
+        with urllib.request.urlopen(f"{server.url}{STORE_ROUTE}", timeout=5) as response:
             points = response.read()
         wrong_port, _raw = _exchange(port, _request("/_cellucid/info", ["127.0.0.1:8765"]))
 
-    assert points == POINTS_BYTES
+    assert points == _store_bytes(tmp_path)
     # The loopback branch still pins the bound port; only declared names do not.
     assert wrong_port == 421
 
@@ -796,16 +775,6 @@ def test_a_bad_declaration_is_refused_at_construction_not_first_request(
 ) -> None:
     """A typo must fail where the operator can see it, before anything binds."""
     with pytest.raises(ValueError, match="allowed_hosts entry"):
-        CellucidServer(
-            _prepared_dataset(tmp_path / "dataset"),
-            host="127.0.0.1",
-            port=0,
-            quiet=True,
-            serve_web_ui=False,
-            allowed_hosts=[entry],
-        )
-
-    with pytest.raises(ValueError, match="allowed_hosts entry"):
         AnnDataServer(
             _anndata(),
             dataset_name="Host contract",
@@ -821,7 +790,7 @@ def test_a_bad_declaration_is_refused_at_construction_not_first_request(
 def test_the_declaration_is_validated_before_the_dataset_is_read(tmp_path: Path) -> None:
     """Ordering proof: a missing directory is never reached for a bad entry."""
     with pytest.raises(ValueError, match="allowed_hosts entry"):
-        CellucidServer(
+        AnnDataServer(
             tmp_path / "does-not-exist",
             host="127.0.0.1",
             port=0,

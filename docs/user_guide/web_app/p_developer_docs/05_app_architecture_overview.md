@@ -24,15 +24,15 @@ If you are new to the codebase, start here before diving into any single module.
 ```
 cellucid/index.html
   ├─ defines: sidebar DOM + <canvas id="glcanvas">, CSP, deferred (disabled) controls
-  ├─ loads:   ui/core/theme-init.js, ui/core/ga-init.js   (classic, pre-module)
+  ├─ loads:   ui/core/*-init.js, code-load-watch.js, file-drop-guard.js (classic, pre-module)
   └─ runs:    assets/js/app/main.js  (ES module)
 
 main.js (orchestrator)
   ├─ createViewer()     → rendering/viewer.js (WebGL2 renderer)
   ├─ createDataState()  → app/state/core/data-state.js (typed arrays + state managers)
   ├─ initUI()           → app/ui/core/ui-coordinator.js (DOM + modules)
-  ├─ data sources       → data/data-source-manager.js (local/remote/GitHub/Jupyter)
-  ├─ data loaders       → data/data-loaders.js (binary + manifests + h5ad/zarr adapters)
+  ├─ data sources       → data/data-source-manager.js (sample catalog, files, server, links, viewer)
+  ├─ data loaders       → data/data-loaders.js (AnnData adapters over the reader worker)
   ├─ sessions           → app/session/session-serializer.js (.cellucid-session bundles)
   ├─ analysis           → app/analysis/* (compute backends + plots + UI)
   └─ admits deferred controls once their listeners exist
@@ -59,8 +59,13 @@ Design goal: **keep “hot” work** (per-frame render and per-point math) insid
 
 The high-level startup flow is:
 
-1) `cellucid/index.html` runs its two classic bootstraps (`ui/core/theme-init.js`,
-   `ui/core/ga-init.js`), then loads `assets/js/app/main.js` as an ES module.
+1) `cellucid/index.html` declares its import map (every module at the URL
+   naming its bytes), runs its classic bootstraps (`ui/core/preconnect-init.js`,
+   `ga-init.js`, `theme-init.js`, `viewport-init.js`, `code-load-watch.js`,
+   `file-drop-guard.js`), then loads `assets/js/app/main.js` as an ES module.
+   `main.js` marks the root `data-code-started` once its whole static graph has
+   run; an uncaught error before that mark, or a module that did not download,
+   is the code-load watch's **Cellucid could not load** card.
 2) `main.js` creates a WebGL2 viewer: `createViewer({ canvas, labelLayer, viewTitleLayer })`.
    The full signature also accepts `onViewFocus`; the bootstrap does not pass it.
    If the canvas yields no `webgl2` context this throws immediately and the
@@ -72,22 +77,25 @@ The high-level startup flow is:
    privacy blocker refuses them. Then it sets up the `DataSourceManager`.
 5) The app decides what to load first — it resolves the startup selection
    (source, dataset id, load method) but loads nothing yet:
-   - URL params (`?remote=…`, `?github=…`, `?dataset=…`) may override the default demo.
-   - Jupyter context (iframe) may register a Jupyter data source and select its dataset.
+   - URL params (`?remote=…`, `?data=gh:…`, `?dataset=…`) may override the default demo.
+   - A viewer page a host program opened (`?viewer=true&viewerId=…&viewerToken=…`,
+     Python `show_anndata()` or R `cellucid_view()`) registers the `jupyter`
+     data source and selects the dataset its server serves.
 6) The app publishes the empty runtime and initializes the UI coordinator
    (`initUI`), which wires the sidebar modules to state/viewer.
 7) Only once their listeners exist are the deferred controls (data sources,
    renderer toggles, benchmark) enabled, and the live-region line under the
-   dataset picker switches from *“Starting Cellucid…”* to *“Data sources are
+   **Open data** heading (`#data-source-status`) switches from *“Starting Cellucid…”* to *“Data sources are
    ready…”*. The render loop starts.
 8) The startup selection loads as the first ordinary dataset change
    (`ui.loadStartupDataset` → `reloadActiveDatasetInPlace`), under the same
    transaction owner as every later change, so any choice the user makes while
    it loads replaces it:
-   - dataset metadata, `dataset_identity.json`, `obs_manifest.json`, optional
-     `var_manifest.json` and the connectivity manifest
+   - the AnnData file opened in the reader worker, then the identity, obs and
+     var inventories and the graph description the AnnData adapter builds from
+     it
    - points buffers (embedding positions, colors, outlier quantiles, etc.)
-   - the published sample view, when the catalog advertises one
+   - the default session, when the dataset's catalog names one
    A failure of this load that nothing superseded is the terminal startup
    failure; otherwise startup publishes `ready` when it settles.
 
@@ -110,12 +118,13 @@ Cellucid supports multiple data sources through a single coordinator:
   - Produces a **dataset base URL** (`baseUrl`) used by the low-level loaders.
 
 Common sources:
-- **local-demo**: datasets loaded from an exports base URL (configured via `<meta name="cellucid-exports-base-url" ...>` or `?exportsBaseUrl=...`; in production this typically points at a separate `cellucid-datasets` host)
-- **local-user**: the three browser controls for a prepared directory, one
-  H5AD file, or one portable Zarr ZIP
-- **remote**: connects to a `cellucid-python` server (lazy loading; best for large h5ad/zarr)
-- **github-repo**: reads exports from a GitHub repo/path (sharing; no server)
-- **jupyter**: a special source used when running inside an embedded notebook viewer
+- **local-demo**: the sample dataset list, read from a dataset catalog (`datasets.json` and the AnnData files it lists) at the sample catalog URL (configured via `<meta name="cellucid-sample-catalog" ...>` or `?sampleCatalog=...`; in production `https://theislab.github.io/cellucid-datasets/anndata/`)
+- **local-user**: **Open… → File…** or **Folder…** (and drag and drop) for one
+  file or folder of any format in `data/input-formats.js` (AnnData `.h5ad` and
+  Zarr, MuData, Loom, 10x `.h5` and `outs/`, R objects, MatrixMarket folders)
+- **remote**: connects to a `cellucid serve` server; the browser's AnnData reader reads the file or store it names in place with range requests
+- **link**: data opened from a link through a provider of `data/sources/registry.js` (GitHub, CELLxGENE, GEO, Zenodo, Hugging Face, Figshare, Dropbox, Google Drive, OneDrive) or any web address of a file, a store folder or a dataset catalog folder (sharing; no server)
+- **jupyter**: the viewer a host program opened (Python notebook or script, R), with its command/event channel (`data/viewer-channel.js`)
 
 Deep dive: {doc}`09_data_loading_pipeline_and_caching`.
 
@@ -185,7 +194,7 @@ Cellucid has multiple persistence-like mechanisms; they are different and must n
    - Documented in: {doc}`04_configuration_env_vars_and_feature_flags` and {doc}`../o_accessibility_privacy_security/02_privacy_model`.
 
 3) **URL state** (deep links)
-   - `?dataset=…`, `?remote=…`, `?github=…`, `?annotations=…`.
+   - `?dataset=…`, `?remote=…`, `?data=gh:…`, `?annotations=…` (full list: {doc}`04_configuration_env_vars_and_feature_flags`).
    - Code: `cellucid/assets/js/app/url-state.js`.
 
 Deep dive: {doc}`10_sessions_persistence_and_serialization`.
@@ -211,7 +220,7 @@ If you are reporting an issue (even as a non-developer), include:
 
 1) **Environment**
    - Browser + OS
-   - Hosted (`https://www.cellucid.com`) vs local app (`http://localhost:8000`) vs Jupyter iframe
+   - Hosted (`https://www.cellucid.com`) vs local app (`http://localhost:8000`) vs a Python/R viewer (notebook or browser tab)
 
 2) **Dataset identity**
    - dataset id (and where it came from: local-user folder, remote server, GitHub repo/path)

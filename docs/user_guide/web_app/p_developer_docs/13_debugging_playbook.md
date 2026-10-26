@@ -24,17 +24,17 @@ Before you click anything else, write down:
 1) **Where you ran Cellucid**
    - Hosted: `https://www.cellucid.com`
    - Local app: `http://localhost:8000` (your own `cellucid/` checkout)
-   - Embedded viewer in Jupyter (iframe)
+   - A viewer opened by Python (`show_anndata()`, in a notebook or a browser tab) or R (`cellucid_view()`)
 
 2) **Browser + OS**
    - Browser name + version
    - OS name + version
 
 3) **Dataset source**
-   - local-demo / local-user / remote server / GitHub / Jupyter
+   - local-demo / local-user (and the file's format) / remote server / link (which provider) / Python or R viewer
 
 4) **Dataset identity**
-   - dataset id (from the UI dataset info block or from `dataset_identity.json`)
+   - dataset id (`uns['cellucid']['id']` in the file, or the id its route gives it; the **Dataset** box shows the name, not the id)
 
 Why this matters:
 - the same bug can be caused by CORS in one environment and by caching in another.
@@ -119,27 +119,32 @@ Fix:
 
 Likely causes (ordered):
 1) CORS/mixed-content blocked a fetch.
-2) Wrong path/manifest missing and the UI is waiting on a fetch that never completes.
-3) Very large file in browser file picker mode (no lazy loading).
+2) Wrong path, and the UI is waiting on a fetch that never completes.
+3) A large read on a slow host, or a file not written gene-major read over a
+   slow link (the `[cellucid:read]` console lines show what is still reading).
 
 How to confirm:
 - Read `document.documentElement.dataset.startupPhase`. Startup publishes the
-  step it is in — `sign-in`, `health`, `catalog`, `ui`, `identity`,
+  step it is in — `sign-in`, `health`, `catalog`, `ui`, `dataset`,
   `positions`, `session`, then `ready` — so a page that never finishes says
   where it stopped. The interface (`ui`) is built before the startup dataset
   loads; a dataset chosen in the data controls while it loads replaces it, and
   startup then publishes `ready` without it.
-- The request/response steps (`sign-in`, `health`, `catalog`, `identity`, and
-  `session`, which reads a sample's published default session) each have a
-  60-second deadline. A server that never answers ends startup on the
-  startup-failure page, naming the step and the URL it was waiting on.
+- The request/response steps (`sign-in`, `health`, `catalog` and `session`,
+  which reads a sample's published default session) each have a 60-second
+  deadline. A server that never answers ends startup on the startup-failure
+  page, naming the step and the URL it was waiting on. `dataset` (opening the
+  startup dataset: its metadata, field lists and the embedding its first view
+  draws) stalls only when nothing at all has arrived for 60 s; every request
+  it makes is retried or fails on its own, naming its URL, and the error names
+  the reads that were open.
   `positions` and `ui` have no deadline, because their time grows with the
   dataset; a slow but progressing load is not a stall.
 - Network tab: which request is pending/blocked?
 - Console: enable `CELLUCID_DEBUG` and look for the last “loading…” log.
 
 Fix:
-- For large h5ad/zarr, use remote server mode (cellucid-python).
+- For a large cell-major (CSR) h5ad, the first gene waits for the gene index (watch the `[cellucid:read]` console lines); this is the same opened in the browser or served by cellucid-python.
 - For GitHub datasets, verify raw URLs are reachable.
 - For CORS, run the local app and connect from the same origin when possible.
 
@@ -178,17 +183,17 @@ Deep dive:
 ### Symptom: “Field selector is empty”
 
 Likely causes (ordered):
-1) `obs_manifest.json` missing/unreadable.
-2) `obs_manifest.json` contains no usable fields.
+1) The file's `obs` has no columns (or none Cellucid can show).
+2) The launch defaults list only some columns (`uns['cellucid']['defaults']['obsKeys']`, or `cellucid serve --obs-key`).
 3) You are in a snapshot view with a different view context.
 
 How to confirm:
-- Network tab: did `obs_manifest.json` return 200?
+- Read the file with anndata (`adata.obs.columns`).
 - Console: check `window._cellucidState.pointCount` and whether a field loader exists.
 
 Fix:
-- Fix exports to include `obs_manifest.json` (or use `prepare()`).
-- Ensure the correct dataset base URL is in use.
+- Add the columns to `obs` and save the file again (or write it with `prepare(obs=...)`).
+- Ensure the correct dataset is open.
 
 ### Symptom: “Colors look wrong / legend doesn’t match”
 
@@ -293,7 +298,7 @@ frames slower, the most likely cause is that you put work on the draw path
 without a gate.
 
 How to confirm:
-1) Open the **Performance Benchmark** panel once, so the harness module is
+1) Open the **Benchmark** panel once, so the harness module is
    published on `window._cellucidBenchmarkHarness`.
 2) Build a harness against the live viewer and canvas. It shadows the GL context
    and counts, per frame: buffer allocations and bytes, sub-updates and bytes,
@@ -315,7 +320,7 @@ Fix:
 :::{note}
 The headline FPS and frame-time tiles in the benchmark panel are CPU wall-clock
 measurements between frames, so they include everything else the tab is doing.
-Only **Analyze Performance** uses real GPU timer queries, and only where the
+Only **Analyze performance** uses real GPU timer queries, and only where the
 driver provides the extension. Do not attribute a frame-time change to the GPU
 on the strength of the headline tiles alone.
 :::

@@ -18,10 +18,21 @@ The goal here is to make validation repeatable.
 - The web app is shipped as static files (no required bundler build).
 - `npm test` runs the complete Node contract suite.
 - `npm run test:browser` runs the Playwright browser suite.
+- `npm run test:worker-bundle` checks that the community-annotation worker
+  (a Cloudflare Worker, not a web worker) bundles (a `wrangler deploy --dry-run`).
+- `npm test` also refuses web worker bundles (`assets/workers/`) that are not
+  exactly what `node scripts/generate-web-asset-inventory.mjs` builds from the
+  sources. The browser suite runs the app from `127.0.0.1`, where workers
+  start from their sources; `tests/browser/deploy-skew.spec.mjs` opens it as a
+  deployed site, and
+  `CELLUCID_BROWSER_TEST_APP_HOST=deployed.localhost npm run test:browser -- <specs>`
+  runs specs that way, every worker started from its bundle (a spec that
+  holds a module a worker imports, such as `dataset-load-supersede`, needs
+  the sources, and runs from `127.0.0.1`).
 - UI and state changes also require the manual smoke checks below.
 
-In CI, `npm test` runs on Ubuntu, macOS, and Windows across Node 20, 22, 24,
-and 26. Every push and pull request runs the browser suite in Chromium,
+In CI, `npm test` runs on Ubuntu, macOS, and Windows across Node 22, 24, and
+26 (Node.js 22.15 or newer is required). Every push and pull request runs the browser suite in Chromium,
 Firefox, and WebKit on Ubuntu, plus WebKit on macOS; every engine on every
 operating system runs nightly and on manual dispatch. A failed browser job
 uploads its Playwright screenshots and error context as a workflow artifact.
@@ -63,7 +74,7 @@ Run these steps on at least one small dataset (fast) and optionally one larger d
 
 ### B) Data + fields
 
-1) Load a dataset via at least one relevant path (local-demo / local-user / remote / GitHub).
+1) Load a dataset via at least one relevant path (local-demo / local-user / remote / link), in the format your change touches.
 2) Switch between:
    - a categorical field
    - a continuous field
@@ -103,7 +114,7 @@ Run these steps on at least one small dataset (fast) and optionally one larger d
 
 ### G) Analysis
 
-1) Open Page Analysis and run at least one plot.
+1) Open the **Analysis** panel and run at least one plot.
 2) Switch highlight pages and confirm analysis UI reacts.
 3) (Optional) Open a copied analysis window and close it; confirm resources clean up.
 
@@ -146,7 +157,7 @@ column reconstructs as a single monotone tent, the silhouette stays inside the
 voxels written, and empty-space skipping through the occupancy volume loses no
 smoke. In the Node suite, `smoke-control-scales.test.mjs` pins every smoke
 slider's shipped readout to its fixed scale, and `smoke-transaction.test.mjs`
-pins the per-frame ray budget, the 0.25x–1.00x resolution range, and that a
+pins the per-frame ray budget, the 0.25×–1.00× resolution range, and that a
 still smoke view asks for no frames once its noise exists.
 
 Keep these checks cross-engine. Do not replace the historical GPU authority
@@ -170,21 +181,6 @@ These catch:
 - accidental raw hex usage outside token files
 - theme mapping contract issues
 
-### Dev-only dataset reload self-test (analysis cache reset)
-
-When `CELLUCID_DEBUG=true`, the dataset UI exposes a dev helper:
-- local-user in-place dataset switching self-test
-
-It is also exposed as:
-- `window.__CELLUCID_DEV__.runLocalUserInPlaceSwitchSelfTest(...)`
-
-This is useful to catch:
-- analysis caches not resetting on dataset switch
-- leaked pending requests
-
-Code:
-- `cellucid/assets/js/app/ui/modules/dataset-controls.js`
-
 ---
 
 ## Documentation build sanity check (optional but recommended)
@@ -207,7 +203,7 @@ Before deploying:
 1) Run the manual smoke tests on a clean browser profile.
 2) Confirm no console errors on load.
 3) Confirm dataset loading works in the target deployment environment (CORS, mixed content, CSP).
-4) Confirm `.gz` exports are not double-decompressed by the host (see {doc}`03_build_run_and_deployment`).
+4) Confirm the dataset host answers range requests with `206` and does not re-encode AnnData files (see {doc}`03_build_run_and_deployment`).
 5) Confirm session save/load and export still work.
 6) If community annotation is enabled, confirm worker origin + CORS allowlist are correct (see `cellucid/assets/js/app/community-annotations/REPO_SETUP.md`).
 

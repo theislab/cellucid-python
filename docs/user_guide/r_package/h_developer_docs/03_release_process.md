@@ -17,14 +17,16 @@ The full step-by-step checklist lives in:
    `vignettes/installation.Rmd` to match, plus the pinned release literal in
    `tests/testthat/test-current-contract.R`.
 3) Record user-visible changes in `NEWS.md`.
-4) Ensure tests pass (`devtools::test()` / `R CMD check`).
+4) Ensure tests pass (`testthat::test_local()`, including the anndata round
+   trip with `CELLUCID_ANNDATA_PYTHON` set, and `R CMD check --as-cran`).
 5) Merge to main.
 6) Create a GitHub Release tag. It must be exactly `v` followed by the
    `DESCRIPTION` version — `release.yaml` reads `DESCRIPTION`, computes
    `EXPECTED_TAG="v${VERSION}"`, and fails the build when the tag or the
    branch provenance does not match.
-7) `release.yaml` then builds the source tarball, runs `R CMD check` twice
-   (default and `--as-cran`), and uploads it as the `r-source-tarball`
+7) `release.yaml` then builds the source tarball, runs
+   `R CMD check --as-cran` on it (a manual run can choose the default check
+   instead), and uploads it with its SHA-256 as the `r-source-tarball`
    artifact.
 8) Publish targets, in the order `cellucid-r/publishing.md` documents:
    - GitHub release (source of truth)
@@ -60,14 +62,21 @@ manual step in both release checklists.
 
 ## What contributors should keep in mind
 
-- The R package is an exporter that must remain compatible with the viewer format.
-- Changes to file formats should be documented and tested.
-- Apply format changes atomically across the R writer, Python writer/server, web
-  reader, validators, tests, and format documentation; retain only the exact
-  current schema.
+- The package writes a standard AnnData store plus `uns['cellucid']`; the web
+  app and the Python package read and write the same contract.
+- A change to what the store holds lands in the R writer, the Python writer,
+  the web reader, their tests, and the documentation together; only the one
+  current layout is kept.
 
 ## Where to update docs
 
-When export behavior changes, update:
+When the store or the arguments change, update:
+- the hand-written help pages under `cellucid-r/man/` (`cellucid_prepare.Rd`,
+  `cellucid_view.Rd` and the other viewer pages), and the reference index in
+  `cellucid-r/_pkgdown.yml` when a topic is added (the article index when a
+  vignette is added; `.github/scripts/validate-pkgdown.R` refuses a site whose
+  indexes miss one)
+- `cellucid-r/README.md` and `cellucid-r/vignettes/cellucid.Rmd` (and
+  `vignettes/viewer.Rmd` for the viewer)
 - user guide API docs: {doc}`../c_data_preparation_api/index`
-- format spec: {doc}`../c_data_preparation_api/09_output_format_specification_exports_directory`
+- the store specification: {doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification`

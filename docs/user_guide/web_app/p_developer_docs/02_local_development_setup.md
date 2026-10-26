@@ -78,11 +78,12 @@ What this does:
 
 ### Option A: Use built-in demo datasets (fastest)
 
-If the app can fetch `datasets.json` from the configured exports base URL, the dataset dropdown will populate from the **local-demo** source.
+If the app can fetch `datasets.json` from the configured sample catalog, the dataset dropdown will populate from the **local-demo** source.
 
-Configure the exports base URL via:
-- `<meta name="cellucid-exports-base-url" ...>` in `cellucid/index.html`, or
-- `?exportsBaseUrl=...` as a runtime override (useful in development).
+Configure the sample catalog via:
+- `<meta name="cellucid-sample-catalog" ...>` in `cellucid/index.html`, or
+- `?sampleCatalog=...` as a runtime override (useful in development): one
+  absolute folder URL ending in `/` that holds a `datasets.json`.
 
 This is best for:
 - UI work
@@ -91,16 +92,21 @@ This is best for:
 
 ### Option B: Use the browser file picker (local-user)
 
-Use the “Browse local data…” UI to select:
-- a prepared `exports/` folder, or
-- a `.h5ad` file, or
-- a `.zarr` directory
+Use **Open…** under **Open data → File or folder** to select:
+- a file (**File…**): `.h5ad`, `.h5mu`, `.loom`, a 10x Cell Ranger `.h5`, an
+  R object (`.rds`, `.rda`/`.RData`, gzipped or not), or a `.zarr.zip`
+  archive holding one AnnData or MuData Zarr store, or
+- a folder (**Folder…**): a `.zarr` store (AnnData or MuData), a Cell Ranger
+  `outs/` folder, or a MatrixMarket folder
+
+or drop one of them anywhere on the page. The formats are the entries of
+`data/input-formats.js`.
 
 This is best for:
 - “real user” workflows with no Python server running
 - testing permission/UX issues around file pickers
 
-### Option C: Connect to a local Python server (recommended for large h5ad/zarr)
+### Option C: Connect to a local Python server (`cellucid serve`)
 
 Run (in another terminal) from your `cellucid-python` environment:
 
@@ -110,11 +116,17 @@ cellucid serve /path/to/dataset.h5ad --dataset-name "My dataset" --dataset-id my
 cellucid serve /path/to/dataset.zarr --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
-Then in the Cellucid UI, use the “Remote server” connection and point it at:
-- `http://127.0.0.1:<port>`
+Then in the Cellucid UI, type the server's address into the **Link or server**
+bar under **Open data** and click **Open**:
+- `127.0.0.1:<port>`, `http://127.0.0.1:<port>`, or just `<port>`
 
 This is best for:
-- large H5AD datasets (read-only backed access)
+- debugging the served-AnnData path (`data/remote-source.js`,
+  `data/served-anndata.js`): the browser reads the store in place with range
+  requests, and the server only serves its bytes
+- Zarr store folders, which the server serves key by key
+- any other format of the registry (`.h5mu`, `.loom`, 10x, MatrixMarket, R
+  objects): the server serves the bytes and the browser reads them
 - reproducible debugging (server logs + client logs)
 
 :::{note}
@@ -122,7 +134,7 @@ If you are using the hosted app (`https://www.cellucid.com`) and a local server,
 Most modern browsers allow `https://…` pages to talk to `http://localhost` / `http://127.0.0.1`, but if your environment blocks it, run the web app locally (`http://localhost:8000`) and connect to the server from there.
 :::
 
-### Option D: Jupyter embedded viewer (hooks + events)
+### Option D: Notebook viewer (hooks + events)
 
 If you are developing the Python↔frontend hooks system:
 - Read the Python docs section: {doc}`../../python_package/e_jupyter_hooks/index`
@@ -138,6 +150,20 @@ In Chrome/Edge DevTools:
 - Keep DevTools open while reloading
 
 This avoids “I fixed it but it still reproduces” confusion caused by cached ES modules.
+
+Every script URL carries its content version (`?v=`, written by
+`node scripts/generate-web-asset-inventory.mjs`; see
+{doc}`03_build_run_and_deployment`, checklist item 5). The server ignores it, so
+an edited module loads without running anything, as long as the browser does
+not answer it from its cache; once the generator has run, each changed module
+has a new URL and a plain reload loads it.
+
+Workers start from their sources too while the page is served from this
+machine (`localhost`, `127.0.0.1`, `[::1]`), so an edited worker module is live
+on the next reload. A deployed site starts them from the bundles the generator
+builds into `assets/workers/`; to try those locally, run the generator and open
+the same server as `http://deployed.localhost:8000` (every browser resolves a
+`.localhost` name to this machine).
 
 ### Keep reproducible datasets handy
 
@@ -155,14 +181,16 @@ This helps you reproduce edge cases quickly without waiting for large loads.
 
 ### Symptom: “Blank page / canvas is black”
 
-First, check whether you got a **“Cellucid could not start”** card. If you did,
-the bootstrap failed deliberately and the line beneath the heading is the reason
-— read it before anything else. A truly blank page means the module graph never
-ran at all, which is a serving problem, not an application one.
+First, check whether you got a full-screen startup failure card. If you did,
+the bootstrap failed deliberately: the heading names the kind of problem and
+**Details** holds the exact reason — read it before anything else. A truly
+blank page means the module graph never ran at all, which is a serving problem,
+not an application one.
 
 Likely causes (ordered):
-1) WebGL2 not available (browser/GPU issue) — you will get the card, reading
-   “WebGL2 is required but not supported in this browser.”
+1) WebGL2 not available (browser/GPU issue) — you will get the card headed
+   “This browser cannot run Cellucid”, with “WebGL2 is required but not
+   supported in this browser.” under Details.
 2) A JS exception during startup prevented viewer initialization.
 3) The app cannot fetch required files due to server/CORS/missing paths.
 
@@ -174,7 +202,8 @@ How to confirm:
 
 That is the intended initial state. Controls whose listeners are wired after an
 `await` in the bootstrap are authored `disabled` and enabled only once they are
-live; the line under the dataset picker says which phase you are in. If they
+live; the line under the **Open data** heading (`#data-source-status`) says
+which phase you are in. If they
 never enable, the bootstrap threw — look for the startup card or the console.
 
 Locally this window is short enough to miss; throttle the network in DevTools if

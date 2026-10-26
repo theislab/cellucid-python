@@ -3,6 +3,81 @@
 Working material, not published. ``docs/conf.py`` excludes this directory from
 the Sphinx build.
 
+:::{important}
+**Cellucid 0.9.5 reads AnnData only.** The prepared export format, its folders
+and packs, the **Prepared** button, `?exportsBaseUrl=`, `state-snapshots.json`
+and the `cellucid-datasets/exports-v3/` tree are gone. Wherever a record below
+names them, read instead:
+
+| Record says | Now |
+| --- | --- |
+| **Prepared** button, `#user-data-browse-btn` | **Open… › Folder…**, `#user-data-open-btn` then `#user-data-folder-item` (`#user-data-folder-input`, a directory input for one `.zarr` store; a folder can also be dropped on the page) |
+| `?exportsBaseUrl=…` | `?sampleCatalog=…` (meta element `cellucid-sample-catalog`) |
+| `cellucid-datasets/exports-v3/` | the AnnData sample catalog, `https://theislab.github.io/cellucid-datasets/anndata/` |
+| `datasets.json` with `version`, `state_manifest`, `state_sha256`, `state_bytes` | `datasets.json` schema 2: `{schema, default, datasets: [{id, path, session: {path, bytes, sha256}}]}` |
+| `dataset_identity.json`, `obs_manifest.json`, `vectors/*.bin.gz` on disk | the AnnData file itself: `uns['cellucid']`, `obs`, `obsm` |
+| `tests/browser/fixtures/exports/current-ui-prepared/`, `broken-exports/`, `demo-custom-exports/` | `catalog/current-ui.h5ad`, `current-ui-smoke.h5ad`, `current-ui-smoke.zarr.zip`, `demo-catalog/`, `broken-catalogs/` |
+| `theislab/cellucid-demo-custom-datasets/exports`, `…/main/exports/datasets.json`, `cellucid serve ./exports` | `theislab/cellucid-demo-custom-datasets/catalog` (three Zarr folders and `datasets.json`), `…/HEAD/catalog/datasets.json`; a catalog folder is checked locally with any static server that sends CORS headers (`?data=http://127.0.0.1:8000/`) |
+
+Every published image that shows the **Prepared** button (the Session panel
+captures in `_static/screenshots/data_loading/` among them) needs recapturing.
+The capture tooling in `docs/_tooling/screenshots/` loads the AnnData sample
+catalog (`serve-catalog.mjs`, `?sampleCatalog=`, `cellucid-datasets/anndata/`);
+it shoots once that folder exists in the datasets checkout, and every image
+taken from `exports-v3` is then rechecked with `node capture.mjs check --all`.
+:::
+
+:::{important}
+**The Session panel was redesigned on 2026-10-23.** Wherever a record below
+names its earlier controls, read instead:
+
+| Record says | Now |
+| --- | --- |
+| `#dataset-info` as a two-column table (Name, Description, Source, URL, Citation, Cells, Genes, Obs fields, Connectivity; `#dataset-url`, `#dataset-source`, …) | the **Dataset** box, `#dataset-info` with `data-state` `empty` / `loading` / `ready`: `#dataset-name` ("No dataset open" with none), `#dataset-summary` (`#dataset-cells` · `#dataset-genes`), `#dataset-origin` (format · host), `#dataset-description` with **More**, `#dataset-read` ("5.5 MB read in 43 requests"), and a collapsed **Details** (`#dataset-details`, `#dataset-details-list`: Source, Citation, File, Format, Size, Read, Cells, Genes, Obs fields, Embeddings, Layers, Raw, Neighbour graph, Latent space, Vector fields). It never shows the dataset id. |
+| **Files** with **H5AD** `#user-data-h5ad-btn`, **Zarr ZIP** `#user-data-zarr-archive-btn`, **Zarr folder** `#user-data-zarr-folder-btn` | **File or folder**: one **Open…** button, `#user-data-open-btn`, whose menu `#user-data-open-menu` has **File…** `#user-data-file-item` (`#user-data-file-input`; hint "AnnData, Seurat/SCE .rds/.rda, Loom, 10x .h5, .h5mu") and **Folder…** `#user-data-folder-item` (`#user-data-folder-input`; hint "Zarr, 10x outs, MatrixMarket") |
+| **Server** `#remote-server-url` + **Connect** `#remote-connect-btn`, **Reconnect**; **Open from link** `#data-link-url` + **Connect** `#data-link-connect-btn` | **Link or server**: one bar `#data-address` (placeholder `Link or localhost:8765`) and **Open** `#data-address-open-btn`; while connected one line, `#remote-disconnect-container` (**Server**, `#remote-connection-target`) or `#data-link-disconnect-container` (**Link**, `#data-link-connection-target`), with a compact **Disconnect**. No Reconnect. |
+| the **Transfers** list (`#transfers-block`, `#transfers-list`) | gone: the read line of the Dataset box, notifications for progress and retries, `[cellucid:transfer]` in the console |
+| linked datasets listed in **Sample dataset** as **Linked data** | the dropdown lists one source: the samples, or a connected catalog's datasets labelled "Dataset from <host>"; it shows "—" (`__dataset_unlisted__`) while a file, single-dataset link or server dataset is open |
+| **Data mapping** opening by itself for a file without a UMAP | it never opens on its own: the best-guess notification's **Show** opens it |
+| the outlier slider greyed out with a line and **Choose latent space** | without a latent space only the label, its (i) and **Choose latent space**; with one, the slider and at most one line |
+
+The new captures are listed in {doc}`07_open_from_link_captures`.
+:::
+
+:::{important}
+**The analysis panel changed on 2026-10-24.** Its **Performance settings**
+block is gone; **Marker genes**, **Differential expression** and **Dot plot**
+gained an **Expression matrix** select, differential expression a
+**Replicates** select (pseudobulk), and clicking a gene in a result colours the
+plot by that gene. Every record below that shows or specifies the analysis
+panel's settings predates this. Recapture `analysis-panel-modes.png`,
+`marker-genes-ranked.png`, `autorun-vs-run-b.png` and `de-page-selection.png`
+(they show the removed Performance settings or the earlier panel).
+:::
+
+:::{important}
+**Status on 2026-10-25.** Every published image is a scenario capture with a
+`captures.json` record taken from a clean web repository (`git status` empty),
+on a decimal-point number locale. The images no scenario produced are gone:
+`community_annotation/disconnected-panel.png`,
+`filtering/coloring-filtering-cell-type-panel.png`,
+`web_app/dimension-2d-planar-default.png` (each replaced by its scenario
+capture), `data_loading/h5ad-current-visualization.png`, `h5ad-firefox.png`
+and `h5ad-webkit.png` (the tool is Chromium-only; supported browsers are in
+``a_orientation/02_system_requirements``), and the two JupyterLab images
+`jupyter/pancreas-notebook-embed.png` (replaced by the viewer
+`show_anndata()` serves, `python-viewer-driven-from-python`) and
+`jupyter/pancreas-debug-connection.png` (replaced by a text transcript of a
+real `viewer.debug_connection()` run). New figures: the R objects, Loom, 10x
+`outs/`, MatrixMarket and `.h5mu` Modality captures, the opening progress and
+failure panels, the Drive and OneDrive sign-in lines, the Composition and Dot
+plot results, the R viewer, and the phone layout (a `viewport` scenario).
+``data_loading/gdrive-admin-blocked.png`` followed once the sign-in line's
+layout fix was committed (web ``fc1a33117``). Still by hand, because no scenario can drive them: RStudio and Positron
+Viewer panes, VS Code's notebook output, JupyterLab itself, Google's and
+Microsoft's own consent and picker windows, and Safari's folder dialog.
+:::
+
 **Start with `{doc}`00_capture_tooling_and_conventions``.** It has the tool, the
 size rule, the contract the Python suite enforces, and every trap found while
 building it. Nothing here is useful until you have read that.
@@ -18,6 +93,7 @@ building it. Nothing here is useful until you have read that.
 | `{doc}`04_pages_velocity_annotation_export`` | I velocity · J community annotation · K figure export | 23 | **assignment** |
 | `{doc}`05_pages_sessions_performance`` | L sessions/sharing · N benchmarking/performance | 23 | **assignment** |
 | `{doc}`06_pages_developer`` | P developer docs | 20 | **assignment** |
+| `{doc}`07_open_from_link_captures`` | B data loading and E filtering: the Session panel (Dataset box, Open…, Link or server bar, Data mapping) and the outlier filter | 9 | **assignment** (scenarios ready, not emitted) |
 
 Each per-page record in an **assignment** file carries: the page path, what it
 explains, what figure it had *when the audit was written*, a verdict, and — for

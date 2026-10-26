@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 from scipy import sparse
 
+from cellucid.data_mapping import parse_vector_field_key
 from cellucid.vector_fields import (
     add_transition_drift_to_obsm,
     compute_transition_drift,
@@ -14,8 +15,8 @@ def test_compute_transition_drift_identity_dense():
     X = rng.standard_normal((5, 2), dtype=np.float32)
     T = np.eye(5, dtype=np.float32)
     drift = compute_transition_drift(T, X, normalize_rows=False)
-    # Drift is an export input, so it is not rounded here; the export rounds
-    # the scaled result once, as cellucid-r does.
+    # Drift keeps the precision it was computed in; it is rounded to float32
+    # once, when it is written.
     assert drift.dtype == np.float64
     assert drift.shape == X.shape
     assert np.allclose(drift, 0)
@@ -37,87 +38,76 @@ def test_compute_transition_drift_sparse():
     assert np.allclose(drift, 0, atol=1e-6)
 
 
-def test_add_transition_drift_to_obsm_infers_dim_from_explicit_key():
+def _adata_with(**obsm: np.ndarray) -> ad.AnnData:
     adata = ad.AnnData(X=np.zeros((3, 0), dtype=np.float32))
-    adata.obsm["X_umap_3d"] = np.array(
-        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float32
-    )
-    T = np.eye(3, dtype=np.float32)
-    key = add_transition_drift_to_obsm(
-        adata,
-        T,
-        basis="umap",
-        field_prefix="T_fwd",
-        normalize_rows=False,
-    )
-    assert key == "T_fwd_umap_3d"
-    assert key in adata.obsm
-    assert adata.obsm[key].shape == (3, 3)
+    for key, values in obsm.items():
+        adata.obsm[key] = values
+    return adata
+
+
+TRIANGLE_2D = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+TRIANGLE_3D = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float32)
+
+
+def test_add_transition_drift_to_obsm_names_the_drift_for_its_basis():
+    adata = _adata_with(X_umap=TRIANGLE_2D)
+    key = add_transition_drift_to_obsm(adata, np.eye(3, dtype=np.float32), normalize_rows=False)
+    assert key == "T_fwd_umap"
+    assert adata.obsm[key].shape == (3, 2)
     assert np.allclose(adata.obsm[key], 0)
 
 
-def test_add_transition_drift_to_obsm_reads_the_generic_umap_key_by_width():
-    adata = ad.AnnData(X=np.zeros((3, 0), dtype=np.float32))
-    adata.obsm["X_umap"] = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
-    T = np.eye(3, dtype=np.float32)
-    key = add_transition_drift_to_obsm(
-        adata,
-        T,
-        basis="umap",
-        field_prefix="T_fwd",
-        normalize_rows=False,
-    )
-    assert key == "T_fwd_umap_2d"
+@pytest.mark.parametrize(
+    ("basis", "embedding", "expected"),
+    [
+        ("umap_3d", TRIANGLE_3D, "T_fwd_umap_3d"),
+        ("branches", TRIANGLE_3D, "T_fwd_branches"),
+        ("pca", np.arange(30, dtype=np.float32).reshape(3, 10), "T_fwd_pca"),
+    ],
+)
+def test_add_transition_drift_to_obsm_works_on_any_basis(basis, embedding, expected):
+    adata = _adata_with(X_umap=TRIANGLE_2D, **{f"X_{basis}": embedding})
+    T = np.array([[0.0, 1.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=np.float32)
+    key = add_transition_drift_to_obsm(adata, T, basis=basis, normalize_rows=True)
+    assert key == expected
+    # The drift is as wide as the embedding, in its coordinates.
+    np.testing.assert_allclose(adata.obsm[key], T @ embedding - embedding)
+    parsed = parse_vector_field_key(key, set(adata.obsm.keys()))
+    assert parsed is not None
+    assert (parsed.field, parsed.embedding_key) == ("T_fwd", f"X_{basis}")
 
 
-def test_add_transition_drift_to_obsm_rejects_an_unreadable_generic_width():
-    adata = ad.AnnData(X=np.zeros((3, 0), dtype=np.float32))
-    adata.obsm["X_umap"] = np.zeros((3, 10), dtype=np.float32)
-    T = np.eye(3, dtype=np.float32)
-    with pytest.raises(ValueError, match="X_umap_1d.*X_umap_2d.*X_umap_3d"):
+def test_add_transition_drift_to_obsm_names_the_missing_embedding():
+    adata = _adata_with(X_umap_2d=TRIANGLE_2D, X_umap_3d=TRIANGLE_3D)
+    with pytest.raises(ValueError, match=r"obsm\['X_umap'\].*X_umap_2d.*X_umap_3d"):
+        add_transition_drift_to_obsm(adata, np.eye(3, dtype=np.float32), normalize_rows=False)
+
+
+def test_add_transition_drift_to_obsm_refuses_a_key_that_reads_as_another_field():
+    adata = _adata_with(X_umap=TRIANGLE_2D, X_fwd_umap=TRIANGLE_2D)
+    with pytest.raises(ValueError, match=r"reads as the field 'T' on obsm\['X_fwd_umap'\]"):
+        add_transition_drift_to_obsm(adata, np.eye(3, dtype=np.float32), normalize_rows=False)
+    with pytest.raises(ValueError, match="starts with 'X_'"):
         add_transition_drift_to_obsm(
-            adata,
-            T,
-            basis="umap",
-            field_prefix="T_fwd",
-            normalize_rows=False,
+            adata, np.eye(3, dtype=np.float32), field_prefix="X", normalize_rows=False
         )
+    assert set(adata.obsm.keys()) == {"X_umap", "X_fwd_umap"}
 
 
-def test_add_transition_drift_to_obsm_uses_explicit_key_and_ignores_generic_key():
-    adata = ad.AnnData(X=np.zeros((3, 0), dtype=np.float32))
-    adata.obsm["X_umap_2d"] = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
-    adata.obsm["X_umap"] = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
-    T = np.eye(3, dtype=np.float32)
+def test_add_transition_drift_to_obsm_keeps_an_existing_key_unless_told():
+    adata = _adata_with(X_umap=TRIANGLE_2D, T_fwd_umap=np.ones((3, 2), dtype=np.float32))
+    with pytest.raises(KeyError, match="overwrite=True"):
+        add_transition_drift_to_obsm(adata, np.eye(3, dtype=np.float32), normalize_rows=False)
     key = add_transition_drift_to_obsm(
-        adata,
-        T,
-        basis="umap",
-        field_prefix="T_fwd",
-        normalize_rows=False,
+        adata, np.eye(3, dtype=np.float32), normalize_rows=False, overwrite=True
     )
-    assert key == "T_fwd_umap_2d"
+    assert np.allclose(adata.obsm[key], 0)
 
 
-def test_add_transition_drift_requires_dim_when_multiple_embeddings_exist():
-    adata = ad.AnnData(X=np.zeros((3, 0), dtype=np.float32))
-    adata.obsm["X_umap_2d"] = np.array(
-        [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]],
-        dtype=np.float32,
-    )
-    adata.obsm["X_umap_3d"] = np.array(
-        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
-        dtype=np.float32,
-    )
-
-    with pytest.raises(ValueError, match="dim must be explicit"):
-        add_transition_drift_to_obsm(
-            adata,
-            np.eye(3, dtype=np.float32),
-            basis="umap",
-            field_prefix="T_fwd",
-            normalize_rows=False,
-        )
+def test_compute_transition_drift_takes_any_embedding_width():
+    X = np.arange(15, dtype=np.float32).reshape(3, 5)
+    drift = compute_transition_drift(np.eye(3, dtype=np.float32), X, normalize_rows=False)
+    assert drift.shape == (3, 5)
 
 
 def test_compute_transition_drift_rejects_zero_row_sum_instead_of_substitution():

@@ -15,8 +15,8 @@ Cellucid is a browser-first viewer for exploring large single-cell datasets in r
 
 - **GPU-accelerated WebGL rendering** with level-of-detail culling; a built-in
   synthetic benchmark measures what your own GPU sustains
-- **AnnData-first workflow** for the Scanpy ecosystem (`.h5ad` and Zarr supported)
-- **Shareable exports** you can host locally, on GitHub, or behind a server
+- **AnnData-first workflow** for the Scanpy ecosystem (`.h5ad` and Zarr), plus MuData (`.h5mu`, MuData Zarr), Loom, 10x Cell Ranger `.h5` and `outs/`, MatrixMarket folders and R objects (`.rds`, `.rda`), read by the browser itself
+- **Cellucid-ready AnnData** (`prepare()`): one standard `.h5ad`, `.zarr` or `.zarr.zip`, laid out for fast browser reads, that you can host locally, on GitHub, on any web host, or behind a server
 - **Genes + metadata overlays** optimized for interactive querying
 - **Connectivity + dynamics**: KNN edges and animated vector fields (RNA velocity / drift)
 - **Collaboration**: community annotation voting with optional GitHub sync
@@ -51,7 +51,9 @@ describe.
 Try the web app (no setup):
 
 1. Open [cellucid.com](https://www.cellucid.com)
-2. Load a prepared folder, one `.h5ad`, or one `.zarr.zip` archive
+2. Open a dataset file or folder: an `.h5ad`, a Zarr store (folder or
+   `.zarr.zip`), an `.h5mu`, a `.loom`, a 10x `.h5` or `outs/` folder, a
+   MatrixMarket folder, or an `.rds`/`.rda`
 
 Or visualize an AnnData from Python/Jupyter:
 
@@ -65,7 +67,51 @@ show_anndata(
 )
 ```
 
-An `adata` straight out of Scanpy works as written.
+An `adata` straight out of Scanpy works as written, and so does a `MuData`.
+The viewer reads the data itself, as each view needs it: `cellucid serve`
+hands it any file or folder in place (`.h5ad`, a Zarr store, `.h5mu`, `.loom`,
+a 10x `.h5` or `outs/` folder, a MatrixMarket folder, an `.rds`/`.rda`), and
+an in-memory object is written once to a temporary `.h5ad` (or `.h5mu`).
+Python and the notebook viewer talk over one WebSocket to the local server,
+so hooks and commands work wherever the notebook's browser can reach that
+server: Jupyter and JupyterLab on the same machine, an SSH-forwarded port, or
+a proxy that passes WebSockets (VS Code's notebook webview and Google Colab
+have not been tested).
+
+To share or host a dataset, write a Cellucid-ready AnnData once. It is still a
+standard AnnData, with the expression matrix gene-major and the dataset's name,
+citation and launch defaults in `uns['cellucid']`, so the browser reads one
+gene with one round trip and the file names itself (on a 562k-cell dataset
+over a simulated 80 ms link: opened in 0.25 s, the first gene in 0.09 s; see
+the specification's measured choices):
+
+```python
+from cellucid import prepare
+
+prepare(
+    "my_dataset.h5ad",
+    format="h5ad",
+    data=adata,
+    dataset_id="my-dataset",
+    dataset_name="My dataset",
+)
+```
+
+`data=` takes an AnnData or a MuData whole (a MuData is written as `.h5mu`
+with `format="h5mu"`, or as MuData Zarr with `"zarr"`/`"zarr.zip"`; `pip
+install "cellucid[mudata]"`); any
+component passed explicitly (`embeddings=`, `obs=`, `gene_expression=`, …)
+replaces that one component.
+
+`format` is required: `"zarr"` (a folder of small files) for GitHub, which
+refuses files over 100 MB and serves many small files at once over HTTP/2;
+`"h5ad"` (or `"zarr.zip"`, the Zarr store in one file) for everything else —
+single-file hosts such as Zenodo, Figshare, Hugging Face, S3 or a lab server,
+local files, `cellucid serve` and Jupyter. The documentation's "Which format?"
+guide has the measurements.
+
+Then `cellucid serve my_dataset.h5ad`, `show_anndata("my_dataset.h5ad")`, or
+open the file in the web app.
 
 ## Documentation and ecosystem
 
@@ -75,7 +121,7 @@ An `adata` straight out of Scanpy works as written.
   [web viewer source](https://github.com/theislab/cellucid)
 - [R package](https://github.com/theislab/cellucid-r)
 - [Official public demo datasets](https://github.com/theislab/cellucid-datasets)
-- [Three custom dataset repository examples](https://github.com/theislab/cellucid-demo-custom-datasets)
+- [Custom dataset repository examples](https://github.com/theislab/cellucid-demo-custom-datasets)
 - [Community annotation repository](https://github.com/theislab/cellucid-annotation)
   and [annotation guide](https://docs.cellucid.com/en/latest/user_guide/web_app/j_community_annotation/index.html)
 - [Python package issues](https://github.com/theislab/cellucid-python/issues)

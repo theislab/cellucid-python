@@ -30,9 +30,9 @@ Filtering is about **visibility**:
 
 | You want to… | Best filter | Where it lives | Notes |
 |---|---|---|---|
-| Hide specific clusters/samples/batches | Category visibility filter | Categorical legend checkboxes | Fast and intuitive; use `Show All` to undo |
+| Hide specific clusters/samples/batches | Category visibility filter | Categorical legend checkboxes | Fast and intuitive; use `Show all` to undo |
 | Gate by QC / score ranges | Numeric range filter | Continuous legend Min/Max sliders | Turn Live filtering off for large datasets |
-| Hide “fringe” cells within clusters | Outlier filter (latent space) | Display options (when available) | `95%` is a common starting point |
+| Hide “fringe” cells within clusters | Outlier filter | Legend box, for a categorical field, once a latent space is chosen | `95%` is a common starting point |
 | Show only gene-expressing cells | Gene expression range filter | Gene legend Min/Max sliders | Applies only while that gene is active |
 
 ---
@@ -40,15 +40,16 @@ Filtering is about **visibility**:
 ## Where all of this lives
 
 Everything on this page happens inside one sidebar accordion,
-**Coloring & Filtering**. Open it once and keep it open.
+**Coloring & filtering**. Open it once and keep it open.
 
 ```{figure} ../../../_static/screenshots/filtering/panel-clusters-unfiltered.png
-:alt: The Coloring and Filtering panel with a Categorical obs select holding clusters, empty Continuous obs and Gene Expression controls, a dashed Display options box containing an Outlier filter (latent space) slider at 100 percent, Show centroids and Show labels checkboxes, Show All and Hide All buttons and eight category rows with colour swatches and cell counts, and below the box a heading reading ACTIVE FILTERS (SELECTED VIEW ONLY), the line Showing all 3,696 points, and a bordered area reading No filters active.
-:width: 516px
+:alt: The Coloring & filtering panel with the clusters field selected: Color by with its three field selectors, Show cell info, the Legend group with Show centroids, Show labels and the Outlier filter at 100 percent, the Show all and Hide all buttons above the eight-category legend, and Filters reading Showing all 3,696 cells above No filters active.
+:width: 532px
 
 The panel in its resting state on the Pancreas sample. The three selectors at
-the top decide **what colours the points**. The dashed **Display options** box
-and everything below it decide **which points are drawn**. The last two lines —
+the top decide **what colours the points**. The **Legend** group (with the
+**Outlier filter**) and everything below it decide **which points are
+drawn**. The last two lines —
 the count, and the filter list — are the only place the app tells you the truth
 about what is hidden.
 ```
@@ -56,8 +57,8 @@ about what is hidden.
 Once you actually filter something, that last block fills up:
 
 ```{figure} ../../../_static/screenshots/filtering/active-filters-three-rows.png
-:alt: The Active filters block reading Showing 709 of 3,696 points above three rows, each with a ticked checkbox and a circled cross; the first reads S_score minus 0.15 to 1.14 followed by a cell count, the second reads clusters colon hiding Ductal, Epsilon and is cut off, the third reads clusters colon outlier less than or equal to 95 percent.
-:width: 480px
+:alt: The Filters block holding three rows of different kinds at once: an S_score range row ending in its cell count, cut off with an ellipsis, a clusters hiding row, and a clusters: outlier ≤ 95% row with no count.
+:width: 496px
 
 Three of the four filter types active at once on the same 3,696 cells. Filters
 combine with **AND**: a cell is drawn only if it survives every ticked row.
@@ -93,14 +94,14 @@ What filtering means (visibility, not deletion), how stacking works, and how fil
 :link: 02_outlier_filtering_per_active_field
 :link-type: doc
 
-How to hide extreme values for the active field, what the slider means, and what happens when quantiles are missing.
+How to hide cells far from their category's centre in a latent space, choosing that latent space, and where the distances come from (stored in the file or computed once).
 :::
 
 :::{grid-item-card} {octicon}`list-unordered;1.5em;sd-mr-1` Filter stack UI
 :link: 03_filter_stack_ui_active_filters
 :link-type: doc
 
-How to inspect, disable, and remove filters using the Active filters panel.
+How to inspect, disable, and remove filters using the Filters panel.
 :::
 
 :::{grid-item-card} {octicon}`list-ordered;1.5em;sd-mr-1` Filter types reference

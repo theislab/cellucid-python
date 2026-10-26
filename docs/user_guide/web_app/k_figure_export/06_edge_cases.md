@@ -40,7 +40,7 @@ If positions/colors contain NaN/Inf:
 - exact export validation terminates before rendering.
 
 If you see odd axes or missing regions:
-- verify your exported dataset does not contain NaN/Inf in embeddings,
+- verify your dataset file does not contain NaN/Inf in embeddings,
 - try exporting a smaller subset or a different view to isolate the issue.
 
 ### Missing/renamed/deleted fields
@@ -155,7 +155,7 @@ warn afterwards — it stops before rendering anything and says what is in the
 way.
 
 ```{figure} ../../../_static/screenshots/figure_export/read-export-blocked-dialog.png
-:alt: The Export blocked dialog over the app, headed "Export blocked", explaining that Cellucid will not create an export that differs from the active view, listing "Velocity overlay not exported" with its reason, and offering a single Back button.
+:alt: The Export blocked dialog over the app: "Cellucid will not create an export that differs from the active view", Velocity overlay not exported with its reason, and a single Back button.
 :width: 1440px
 
 Pressing **Export** with the velocity overlay running. One heading, one reason

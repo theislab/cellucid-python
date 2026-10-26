@@ -69,10 +69,9 @@ The card is designed to cost nothing you can see, even on millions of cells:
   thread, so the page never pauses for it (on ten million cells the first hover
   answers in about a millisecond and the card appears once the index is ready).
   Level of detail, frustum culling and the selection tools use the same index.
-  The worker needs its own copy of the positions, so above 256 MB of positions
-  (about 21 million cells in 3D, 32 million in 2D) no background build is made
-  and the card appears on that view only once one of those features has built
-  the index.
+  The worker receives the positions in slices, so the page never holds a second
+  full copy of them, at any size. On a smaller view the lookup scans its cells
+  directly and nothing is built.
 - **Counts are made in idle time.** The per-category count is one pass over the
   view's cells (about 25 ms at ten million), run when the page is idle rather
   than on a hover, and kept until that view's colouring or visibility changes.

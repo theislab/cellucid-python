@@ -16,14 +16,14 @@ UI workflows, rendering/performance, sessions, figure export, and community anno
 :link: contributing/python
 :link-type: doc
 
-`prepare()`/export format, `serve` backend, Jupyter integration, Python APIs, and this documentation site.
+`prepare()` and the Cellucid-ready AnnData, `serve` backend, Jupyter integration, Python APIs, and this documentation site.
 :::
 
 :::{grid-item-card} {octicon}`beaker;1.5em;sd-mr-1` R Package (`cellucid-r`)
 :link: contributing/r
 :link-type: doc
 
-R exporter (`cellucid_prepare()`), R-side recipes (Seurat/SCE), and R testing + docs.
+R writer (`cellucid_prepare()`), R-side recipes (Seurat/SCE), and R testing + docs.
 :::
 
 ::::
@@ -31,8 +31,8 @@ R exporter (`cellucid_prepare()`), R-side recipes (Seurat/SCE), and R testing + 
 ## Quick routing guide
 
 - **UI bug / rendering / figure export / sessions** → Web App
-- **Python `prepare()` / exports / CLI / server / notebooks / docs** → Python package
-- **R export issues / Seurat or SCE recipes** → R package
+- **Python `prepare()` / CLI / server / notebooks / docs** → Python package
+- **R `cellucid_prepare()` issues / Seurat or SCE recipes** → R package
 
 ```{toctree}
 :maxdepth: 1

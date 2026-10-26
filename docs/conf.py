@@ -22,7 +22,7 @@ try:
 
     release = version = __version__
 except Exception:
-    release = version = "0.9.4"  # CELLUCID_VERSION
+    release = version = "0.9.5"  # CELLUCID_VERSION
 
 # -- General configuration ---------------------------------------------------
 extensions = [
@@ -67,6 +67,10 @@ autodoc_member_order = "bysource"
 autodoc_typehints = "description"
 autodoc_typehints_format = "short"
 
+# mudata is an optional extra (``cellucid[mudata]``) the docs build does not
+# install; the signatures name ``mudata.MuData`` only for type checkers.
+autodoc_mock_imports = ["mudata"]
+
 autodoc_type_aliases = {
     "anndata.AnnData": "anndata.AnnData",
     "AnnData": "anndata.AnnData",
@@ -92,13 +96,15 @@ intersphinx_mapping = {
 html_theme = "pydata_sphinx_theme"
 html_title = "Cellucid"
 html_logo = "_static/cellucid-logo.svg"
-html_favicon = "_static/cellucid-logo.svg"
+# The app's favicon (cellucid/assets/img/favicon.svg): the mark, not the wordmark.
+html_favicon = "_static/favicon.svg"
 
 html_theme_options = {
     # Note: analytics config removed due to pydata-sphinx-theme bug causing duplicate scripts
     # Using custom template in _templates/layout.html instead
+    # The wordmark already says "Cellucid"; no text beside it.
     "logo": {
-        "text": "Cellucid",
+        "alt_text": "Cellucid",
     },
     "header_links_before_dropdown": 5,
     "navbar_align": "left",
@@ -117,7 +123,9 @@ html_theme_options = {
     ],
     "footer_start": ["copyright"],
     "footer_end": ["sphinx-version"],
-    "secondary_sidebar_items": ["page-toc"],
+    # The home page (index.md) is a landing page laid out at full width: no
+    # "On this page" column, and no section navigation (see html_sidebars).
+    "secondary_sidebar_items": {"**": ["page-toc"], "index": []},
     # Navigation
     "navigation_with_keys": True,
     "show_nav_level": 1,
@@ -133,11 +141,12 @@ html_static_path = ["_static"]
 # `/robots.txt` from the root of the default version (`latest`), so the
 # `_extra/robots.txt` of the `latest` build is the one crawlers see.
 html_extra_path = ["_extra"]
-html_css_files = ["custom.css"]
+html_css_files = ["custom.css", "home.css"]
 
-# Sidebar - show navigation on all pages
+# Sidebar: section navigation on every page but the home page.
 html_sidebars = {
     "**": ["sidebar-nav-bs"],
+    "index": [],
 }
 
 # -- Canonical URL and sitemap ---------------------------------------------

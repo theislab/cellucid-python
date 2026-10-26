@@ -6,7 +6,7 @@
 - Where field selection lives in the UI (and how it behaves in multiview)
 - How obs field dropdowns differ from gene expression search
 - What **Duplicate / Rename / Delete / Clear** actually do
-- How **Deleted Fields** restore + “Confirm deletion” work (soft delete vs purge)
+- How **Deleted fields** restore + “Confirm deletion” work (soft delete vs purge)
 - What the `*` marker means and why renames don’t break loading
 
 ---
@@ -15,12 +15,12 @@
 
 All field selection for coloring happens in the left sidebar:
 
-- **Coloring & Filtering** → the three selectors:
+- **Coloring & filtering** → the three selectors:
   - **Categorical obs**
   - **Continuous obs**
-  - **Gene Expression**
+  - **Gene expression**
 
-The legend and related controls appear underneath in the dashed **Display options** box.
+The legend and related controls appear underneath in the **Legend** section.
 
 :::{important}
 In multiview (live + snapshots), the sidebar controls apply to the **currently active view**.
@@ -29,8 +29,8 @@ If you’re in Grid compare, click a panel first to make it the active view, the
 :::
 
 ```{figure} ../../../_static/screenshots/web_app/field-selectors-three-routes.png
-:alt: Three stacked field controls labelled CATEGORICAL OBS with a dropdown reading clusters, CONTINUOUS OBS with a dropdown reading None, and GENE EXPRESSION with a text box reading Search genes; each is followed by four small square icon buttons showing two overlapping rectangles, a pencil, a bin and a cross, greyed out on the two unused rows, with the mouse pointer pressing the clusters dropdown.
-:width: 488px
+:alt: The Color by heading with its (i), above the three field selectors stacked in order — Categorical obs holding clusters, Continuous obs holding None, and an empty Gene expression search box — each followed by four small icon buttons, with the pointer pressing the first.
+:width: 504px
 
 The three selectors, in the order they appear. The four small buttons to the
 right of each are **Duplicate**, **Rename**, **Delete** and **Clear**; they are
@@ -84,7 +84,7 @@ This is not cosmetic: the app keeps the original key internally so it can still 
 **The obs dropdowns carry no `Original:` tooltip.** The option text is the only
 thing the app sets there, so hovering a renamed obs option shows nothing. An
 `Original: <old name>` tooltip does exist in two other places — on **gene
-search results**, and on rows in the **Deleted Fields** panel — so if you need
+search results**, and on rows in the **Deleted fields** panel — so if you need
 to see what a renamed field used to be called, look there.
 :::
 
@@ -94,13 +94,14 @@ to see what a renamed field used to be called, look there.
 
 Gene expression is usually a long list (thousands of genes), so the UI is a search box:
 
-- Click in **Gene Expression** → results dropdown opens
+- Click in **Gene expression** → results dropdown opens
 - Type to filter genes by substring match
 - Click a result to load and activate it
 
 Keyboard shortcuts:
 - `↓` / `↑` move the highlighted result through the dropdown (opening it if
-  it is closed)
+  it is closed); they wrap from the last result to the first and back, and
+  `↑` with nothing highlighted starts at the last result
 - `Enter` selects the highlighted result, or the **top** result when none is
   highlighted
 - `Esc` closes the dropdown (and removes focus)
@@ -124,8 +125,8 @@ Results:
 - **Home** and **End** jump to the first and the last match
 
 ```{figure} ../../../_static/screenshots/web_app/gene-search-dropdown-open.png
-:alt: A field row labelled GENE EXPRESSION with a text box containing the letters Rp, and an open dropdown list below it showing gene names that contain Rp, one per row.
-:width: 480px
+:alt: The Gene expression search box holding the letters Rp with its list open below, naming the genes that contain them.
+:width: 496px
 
 Typing into the box opens the list immediately and filters it on every
 keystroke. Matching is a case-insensitive substring test, so `Rp` matches
@@ -135,11 +136,11 @@ anywhere in the name, not only at the start.
 If nothing matches, the dropdown says so rather than going blank:
 
 ```{figure} ../../../_static/screenshots/web_app/gene-search-no-match.png
-:alt: The same field row with CD19 typed into the box and a dropdown below reading No gene matches, followed by a sentence stating how many gene names this dataset publishes and warning that it may be a subset of the source data and to check for typos, and a link reading Why a gene may be missing.
-:width: 480px
+:alt: The Gene expression list after typing a symbol this sample does not publish: No gene matches "CD19", a sentence giving the 3,753 gene names the dataset publishes, and a link Why a gene may be missing.
+:width: 496px
 
 The empty state names the number of genes **this** dataset publishes, which is
-the number you need in order to tell “I mistyped it” apart from “this export
+the number you need in order to tell “I mistyped it” apart from “this dataset
 does not contain it”. See {doc}`07_genes_in_the_built_in_samples`.
 ```
 
@@ -151,11 +152,11 @@ Loading a gene can take time (especially on remote datasets). While a gene is lo
 
 The dropdown holds exactly the gene names the loaded dataset published, plus any
 gene fields you created inside Cellucid. There is no second identifier to search
-instead and no alias table, so a name the export did not publish matches nothing
+instead and no alias table, so a name the file does not hold matches nothing
 even when the gene exists in the underlying study.
 
 That is worth knowing before you conclude a gene is missing from your data: the
-four human built-in samples publish only part of their prepared gene axis, for a
+four human built-in samples publish only part of their upstream gene axis, for a
 documented reason. See {doc}`07_genes_in_the_built_in_samples`.
 
 
@@ -206,10 +207,14 @@ If Community Annotation voting is enabled for a categorical field, rename may be
 ### Delete (soft delete)
 
 Removes the field from dropdowns *without destroying it*:
-- the field moves to **Deleted Fields**
+- the field moves to **Deleted fields**
 - you can restore it later
 
 This is a “soft delete” and is designed to be safe.
+
+Like a rename, a delete is dataset-wide: when you next select a kept view,
+the field is in its **Deleted fields** too, and is no longer that view's
+active field. A restore and a Confirm are dataset-wide too.
 
 ### Clear (clear selection)
 
@@ -221,9 +226,9 @@ If all selectors are cleared, there is no active field:
 
 ---
 
-## Deleted Fields panel (Restore vs Confirm deletion)
+## Deleted fields panel (Restore vs Confirm deletion)
 
-When you delete fields (or when Cellucid creates derived fields and hides the originals), a **Deleted Fields** section appears at the bottom of **Coloring & Filtering**.
+When you delete fields (or when Cellucid creates derived fields and hides the originals), a **Deleted fields** section appears at the bottom of **Coloring & filtering**.
 
 It contains:
 - an **Obs** group (deleted obs fields)
@@ -239,7 +244,7 @@ Brings the field back into the dropdowns, and reports `Restored "<name>"`.
 **A restore that would collide with a visible name is refused, not renamed.**
 Cellucid stops with
 `Cannot restore "<name>" while that visible field name exists` and the field
-stays in Deleted Fields. There is no automatic `(restored)` suffix.
+stays in Deleted fields. There is no automatic `(restored)` suffix.
 
 To get the field back, rename the field that is currently holding the name,
 then restore again.

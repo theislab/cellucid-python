@@ -12,8 +12,8 @@ Most Cellucid failures fall into one of these buckets:
 
 1) **The exact viewer generation cannot be established or served**
 2) **The browser can’t reach the Python server** (port/network/tunnel/proxy)
-3) **The dataset can’t be interpreted** (missing embeddings/manifests)
-4) **Hooks/events aren’t being delivered** (routing/viewerId mismatch)
+3) **The dataset can’t be interpreted** (no plottable embedding, an undecodable array, stale Zarr metadata)
+4) **Hooks/events aren’t being delivered** (the viewer channel is not open, a hook raised, or a different viewer object)
 5) **Session capture/apply fails** (not ready, requestId gating, exact dataset fingerprint mismatch)
 
 The fastest way to debug is to test these buckets in order.
@@ -31,8 +31,9 @@ report
 
 This returns a structured dict that checks:
 - server probes (`/_cellucid/health`, `/_cellucid/info`, `/_cellucid/datasets`)
-- every declared dataset identity under its exact id/path
+- the served store of every listed dataset, keyed by its exact id
 - whether the verified viewer UI (`/index.html`) is being served
+- whether the viewer's channel (its WebSocket) is connected (`channel_connected`)
 - a Python → frontend roundtrip (ping/pong)
 - a frontend debug snapshot (iframe URL/origin/user agent)
 - recent accepted-event counts grouped by exact event type
@@ -41,9 +42,10 @@ This returns a structured dict that checks:
 
 - `server_health` / `server_health_error`
   - If this fails: the server isn’t reachable (port/network problem).
-- `dataset_identity_probes`
-  - Every declared dataset id maps to its exact path, URL, and parsed identity,
-    or to that dataset’s explicit probe error.
+- `anndata_store_probes`
+  - Every listed dataset id maps to its store's URL and the answer to a `HEAD`
+    and a one-byte `Range` read (a readable store answers `206` with
+    `Content-Range`), or to that probe's explicit error.
 - `viewer_index_probe` / `viewer_index_probe_error`
   - If this fails: the active verified generation is not being served.
 - `frontend_roundtrip`
@@ -199,22 +201,36 @@ def debug(event):
 ```
 
 If you see nothing when interacting in the UI:
-- the browser is not POSTing to `/_cellucid/events` (selections:
-  `/_cellucid/selection`), or
-- the `viewerId` in the browser doesn’t match the viewer object that registered the hooks.
+- the viewer's channel (`/_cellucid/ws`) is not open
+  (`viewer.debug_connection()["channel_connected"]` is `False`), or
+- you are looking at an iframe of a different viewer object than the one that
+  registered the hooks.
+
+If a hook of yours raises, the exception is not raised in your cell: hooks run
+on the viewer channel's thread, so it is logged by the `cellucid.viewer_channel`
+logger ("A viewer event hook failed", with the traceback) and the channel stays
+open. The event is recorded in `viewer.state` and handed to
+`wait_for_event(...)` before any hook runs, and every other hook still runs
+for it, so one failing hook costs neither (nor `get_session_bundle()`, which
+waits for its event). The record is logged at
+`ERROR` level, which Python writes to stderr even when logging is not
+configured (in a notebook it may land in the kernel's log rather than the
+cell); a handler on that logger collects it where you want it.
 
 ### Browser-side confirmation
 
-Open browser devtools → Network and look for:
-- `POST /_cellucid/events` (JSON events)
-- `POST /_cellucid/selection` (a selection)
+Open browser devtools → Network, filter `WS`, and select the `/_cellucid/ws`
+connection:
+- it should be `101 Switching Protocols`, with `hello` and `welcome` as its
+  first frames;
+- every selection, hover or click adds a frame.
 
-If there are no POSTs:
-- the UI may not be wired to the server URL you think it is,
+If there is no connection, or it closed:
+- a proxy in between does not pass WebSockets (the viewer says so),
 - or the server URL is unreachable.
 
-If POSTs exist but Python sees nothing:
-- the viewerId is mismatched (old iframe / old kernel / multiple viewers).
+If the connection was closed with code 4401, the iframe is older than the
+kernel (a restart): the viewer froze and says Python stopped.
 
 Mitigation:
 - recreate the viewer,
@@ -257,26 +273,27 @@ Likely causes:
   a file, a sample, **None** — replaces it, and that viewer then never reports
   ready),
 - iframe not displayed,
-- browser can’t POST to `/_cellucid/session_bundle` due to proxy/mixed-content issues.
+- the viewer's channel is not connected, due to proxy/mixed-content issues.
 
 How to confirm:
 - `viewer.debug_connection()` (look at `state.ready`, `frontend_roundtrip`,
   `frontend_debug_snapshot`, and `recent_events`)
-- browser network tab for
-  `POST /_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
+- browser network tab (filter `WS`) for the `requestSessionBundle` command and
+  the binary frame that answers it on `/_cellucid/ws`
 
 Fix:
 - call `viewer.wait_for_ready(timeout=60)` first,
 - ensure the viewer is displayed,
 - fix remote notebook connectivity (Step 3).
 
-### “No pending session bundle request”
+### “Dropped a session bundle nobody is waiting for” (log)
 
 Meaning:
-- an upload arrived without a matching requestId (stale iframe, TTL expired, wrong viewerId).
+- a bundle arrived after its `get_session_bundle()` call stopped waiting (its
+  timeout passed).
 
 Fix:
-- request again from the current viewer instance.
+- request again from the current viewer instance, with a longer `timeout=`.
 
 For more: {doc}`05_sessions_to_anndata_bridge`
 
@@ -312,8 +329,8 @@ Fix:
 ### Symptom: “Viewer loads but hooks don’t work”
 
 Likely causes:
-- no POSTs to `/_cellucid/events` (or `/_cellucid/selection`, for selection hooks),
-- viewerId mismatch.
+- the viewer channel (`/_cellucid/ws`) did not open, or closed,
+- an iframe left over from before a kernel restart.
 
 Fix:
 - check browser Network tab,

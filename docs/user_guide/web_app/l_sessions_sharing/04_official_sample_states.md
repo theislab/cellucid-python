@@ -1,127 +1,122 @@
-# Official sample starting states
+# Default sessions named by a catalog
 
 Choosing an official sample should open a useful biological view, not make you
-recreate the same setup before you can explore. Each built-in sample therefore
-publishes one small, reviewed starting state beside its prepared scientific
-files. Cellucid applies that state automatically; it is not a second dataset
-and it is not a manual **Load State** step.
+recreate the same setup before you can explore. A dataset catalog
+(`datasets.json`) can therefore name one small, reviewed **default session**
+for each dataset it lists. Cellucid applies it automatically when the dataset
+is opened from that catalog; it is not a second dataset and it is not a manual
+**Load** step. The built-in samples use this, and so can any catalog you
+publish ({doc}`../b_data_loading/02_local_demo_tutorial`).
 
-## What happens when you choose a sample
+## What happens when you choose a dataset from a catalog
 
-1. Cellucid validates and loads the selected prepared dataset.
+1. Cellucid opens the dataset's AnnData file and loads it.
 2. The positions, fields, metadata, and other scientific data become the live
    dataset.
-3. Only after the scientific dataset has been published, Cellucid reads the
-   state capability advertised for that exact generation.
-4. It validates the manifest, downloads the one declared state, verifies the
-   state bytes against the catalog's SHA-256, and confirms that the selected
-   generation has not changed.
-5. Cellucid automatically applies the verified static starting view.
+3. Only after the dataset has been published, Cellucid reads the default
+   session the catalog names for it — if it names one.
+4. It downloads that one file, stops reading past the byte length the catalog
+   declares, refuses a file of any other length, verifies its SHA-256 against
+   the catalog, and confirms that the selected dataset has not changed.
+5. Cellucid applies the verified static starting view.
 
 This order matters: an unverified view file is never treated as scientific
-data. If an advertised manifest, state, or digest is invalid, Cellucid reports
-that failure after the dataset is available; it does not guess another
-filename or silently substitute a different preset.
+data. If the named session is missing, the wrong length, or fails its digest,
+Cellucid reports that failure after the dataset is available; it does not
+guess another filename or substitute a different view.
 
-The published `default.cellucid-session` is an internal five-chunk starting
-state, not a manual user bundle. Downloading it and choosing **Load State** is
-unsupported and the strict generic reader rejects it. To create a portable
-manual state, choose the sample, wait for this verified view, and then use
-**Save State**.
+A published default session is a seven-chunk starting state, not a manual user
+bundle. Downloading it and choosing **Load** is unsupported and the strict
+generic reader rejects it. To create a portable manual state, choose the
+dataset, wait for its default view, and then use **Save**.
 
-That is also why a **Save State** file cannot simply be renamed and published. A
-save differs from a published preset in two ways, and the reader refuses both
+That is also why a file from **Save** cannot simply be renamed and published. A
+save differs from a published default in two ways, and the reader refuses both
 while the file itself stays perfectly well-formed:
 
-- **Chunks.** A save writes the whole static chunk registry; a published preset
-  carries five of them. The reader refuses a bundle carrying the extra chunks,
-  and one of them, a recorded Camera Path, is refused by name.
-- **Identity.** A preset is authored by serving the prepared generation locally,
-  so the save records that source (`local-user`, and an id the local source
-  invented), while the catalog serves the same bytes as `local-demo` under the
-  generation's own id. Every session bundle records the dataset it was captured
-  against, and the reader compares that record before applying anything — so a
-  save published as-is is refused on every open, and the sample shows none of
-  its intended view.
+- **Chunks.** A save writes the whole static chunk registry; a published
+  default carries seven of them (everything but the Camera Path). The reader refuses a bundle carrying the extra
+  chunks, and one of them, a recorded Camera Path, is refused by name.
+- **Source.** A save records where its data came from (a local file, a server,
+  a link). A published default is applied to the dataset it is listed beside,
+  so it records no source, and the dataset it was captured against must be the
+  one the catalog lists. Every session bundle records that dataset, and the
+  reader compares it before applying anything.
 
-The publishing step in `cellucid-datasets`
-(`scripts/publish_session_preset.mjs`) performs both, importing the rules from
+The publishing step of the sample repository
+([`cellucid-datasets`](https://github.com/theislab/cellucid-datasets),
+`scripts/publish_session_preset.mjs`) performs both, importing the rules from
 the viewer rather than restating them. It refuses to drop a chunk that still
-holds content instead of discarding it silently, and it restates the identity
-only after re-deriving the generation's cell and gene counts and recomputing its
-cell-order digest from the coordinates it publishes — so a capture taken against
-different data is refused rather than relabelled. It also repoints the catalog's
-`state_sha256` and `state_bytes` at the file it just wrote, because a preset
-replaced without that is refused for its digest or its length instead. If you maintain your own catalog, use that
-script rather than editing a save by hand.
+holds content instead of discarding it silently, and it checks the capture's
+dataset against the dataset it publishes for, so a capture taken against
+different data is refused rather than relabelled. If you maintain your own
+catalog, use that script rather than editing a save by hand, then write the
+file's new `bytes` and `sha256` into `datasets.json`.
 
-## The exact publication contract
+## The catalog entry
 
-Every official export generation contains both sidecars:
-
-| Built-in sample | State bundle | Manifest |
-| --- | --- | --- |
-| Suo | `exports-v3/suo/default.cellucid-session` | `exports-v3/suo/state-snapshots.json` |
-| Garcia | `exports-v3/garcia/default.cellucid-session` | `exports-v3/garcia/state-snapshots.json` |
-| He | `exports-v3/he/default.cellucid-session` | `exports-v3/he/state-snapshots.json` |
-| Kanemaru | `exports-v3/kanemaru/default.cellucid-session` | `exports-v3/kanemaru/state-snapshots.json` |
-| Pancreas | `exports-v3/pancreas/default.cellucid-session` | `exports-v3/pancreas/state-snapshots.json` |
-
-The manifest has one exact root, `states`, and one exact entry:
-
-```json
-{ "states": ["default.cellucid-session"] }
-```
-
-The matching entry in
-[`exports-v3/datasets.json`](https://github.com/theislab/cellucid-datasets/blob/main/exports-v3/datasets.json)
-advertises `state_manifest`, `state_sha256` and `state_bytes` together. Each
-entry has this shape:
+A dataset's default session is its `session` entry in `datasets.json`:
 
 ```json
 {
-  "state_manifest": "state-snapshots.json",
-  "state_sha256": "<64 lowercase hexadecimal characters>",
-  "state_bytes": "<exact byte length, a positive integer>"
+  "schema": 2,
+  "default": "pancreas",
+  "datasets": [
+    {
+      "id": "pancreas",
+      "path": "pancreas.zarr/",
+      "session": {
+        "path": "pancreas.cellucid-session",
+        "bytes": 123456,
+        "sha256": "<64 lowercase hexadecimal characters>"
+      }
+    }
+  ]
 }
 ```
 
-`state_manifest` names the manifest beside that dataset generation.
-`state_sha256` pins the exact bytes of `default.cellucid-session`; it is not a
-digest of the JSON manifest. `state_bytes` is that file's exact length: the
-viewer stops reading past it and refuses a file of any other length, so a
-published state has no size limit of its own. All three fields are required for
-the capability to be advertised.
+- `path` is the session file's path inside the catalog folder; it ends in
+  `.cellucid-session` and stays below the folder.
+- `bytes` is that file's exact length: the viewer stops reading past it and
+  refuses a file of any other length, so a published session has no size
+  limit of its own.
+- `sha256` pins the exact bytes of the file, as 64 lowercase hexadecimal
+  characters.
 
-A published state is regenerated whenever the reviewed view or the session
-format changes, and its `state_sha256` and `state_bytes` change with it. Read the current value
-out of the catalog rather than copying one from documentation — that is why the
-example above shows the field's shape instead of a digest. A digest written into
-prose is correct only until the next generation is published, and it then
-becomes a value a reader can check against and be misled by.
+All three are required. A dataset without `session` opens without a default
+view, and no request is made for one.
 
-You can inspect all five generation directories in the
-[`cellucid-datasets` exports](https://github.com/theislab/cellucid-datasets/tree/main/exports-v3).
-For what each generation is an export of, what to cite, and how far its build is
-pinned, see {doc}`../b_data_loading/12_sample_dataset_provenance`.
+A published session is regenerated whenever the reviewed view or the session
+format changes, and its `bytes` and `sha256` change with it. Read the current
+values out of the catalog rather than copying them from documentation — that
+is why the example above shows the field's shape instead of a digest.
+
+The built-in samples' catalog is
+[`theislab.github.io/cellucid-datasets/anndata/`](https://theislab.github.io/cellucid-datasets/anndata/datasets.json).
+For what each sample is, what to cite, and how far its build is pinned, see
+{doc}`../b_data_loading/12_sample_dataset_provenance`.
 
 ## What the reviewed view changes
 
-Each official state:
+Each official default session:
 
 - activates the `cell_type` observation field;
 - restores a modest, static close-up in the 3-D **Orbit** camera;
 - uses the light theme and the **Studio (light)** background; and
 - starts without active filters or kept snapshots.
 
+The Pancreas view also enables the first two components of its PCA as a 2D
+view: that PCA is the dataset's latent space, which Cellucid does not list as a
+view on its own.
+
 ```{figure} ../../../_static/screenshots/sessions_sharing/official-01-sample-state-applied.png
-:alt: The full application window shortly after choosing the Pancreas built-in sample, showing the dataset coloured by cell type in a 3-D orbit view on a light grid background, with the Session accordion open and the dataset summary filled in.
+:alt: The whole application window shortly after the Pancreas built-in sample was chosen, showing the embedding coloured by cell type in a 3-D orbit view on the light Studio backdrop, with the Session accordion open beside it.
 :width: 1440px
 
 The Pancreas sample moments after it was chosen. Nothing was clicked beyond
-picking the sample: the dataset published first, then its verified starting
-state put the view into 3-D **Orbit** on the light studio background with
-`cell_type` active. **Save State** and **Load State** were not involved.
+picking the sample: the dataset published first, then its verified default
+session put the view into 3-D **Orbit** on the light studio background with
+`cell_type` active. **Save** and **Load** were not involved.
 ```
 
 You can confirm each of those four from the sidebar in the figure: the
@@ -134,30 +129,25 @@ These are deliberately **static-only** presets. They contain no
 **Loop playback**, or **Autoplay**. The static camera position can change when
 the state is applied, but moving-camera playback remains off.
 
-## Which catalogs opt in—and which sources are not probed
+## Which datasets get a default session
 
-Automatic starting states belong to a `local-demo` catalog generation whose
-entry explicitly advertises the `state_manifest`, `state_sha256` and
-`state_bytes` fields together. The official catalog uses this capability. A
-custom `exportsBaseUrl` catalog may deliberately opt in by publishing the same
-fields and exact sidecars.
+Only a dataset opened from a catalog — the sample catalog the dataset picker
+reads, or a catalog opened from a link in the **Link or server** bar — whose catalog entry names
+a `session` gets one. Nothing else is probed:
 
-Custom hosting is therefore not rejected as a class: only explicit catalog
-advertisement enables the state requests. Jupyter, GitHub, local-user, and
-remote sources are not probed, and neither is any catalog entry without the
-complete capability.
+- a file or folder chosen with **Open…** or dropped from your computer, in
+  any format Cellucid reads;
+- a single file, store or folder opened from a link;
+- a dataset served by `cellucid serve`, `serve_anndata()` or Jupyter; and
+- any catalog entry without `session`.
 
-- Jupyter (`jupyter`);
-- a GitHub repository (`github-repo`);
-- a locally selected prepared export (`local-user`);
-- a remote prepared-data server (`remote`); and
-- any catalog entry without the complete state capability.
+Cellucid does not infer session paths from filenames or look for an unnamed
+session. This keeps custom hosting predictable and avoids unrequested network
+traffic. A file's own `uns['cellucid']` cannot name a session either: a
+`session` key there is ignored
+({doc}`../b_data_loading/07_file_format_expectations`).
 
-Cellucid does not infer sidecar paths from filenames or look for an
-unadvertised state. This keeps custom hosting predictable and avoids
-unrequested network traffic.
-
-For those zero-probe sources, configure the view you want and use the ordinary
+For those sources, configure the view you want and use the ordinary
 {doc}`03_save_restore_ux` workflow. Your own `.cellucid-session` remains a
 manual, identity-matched working-state file. See
 {doc}`07_versioning_compatibility_and_dataset_identity` for the matching rules.

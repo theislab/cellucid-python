@@ -18,7 +18,7 @@ not documentation for a reader of the app.
 | ``capture.mjs`` | The engine and the command line. |
 | ``scenarios.mjs`` | The registry of named, reproducible scenarios. |
 | ``overlay.mjs`` | The pointer and annotation layer, injected into the page. |
-| ``serve-exports.mjs`` | A loopback host for a prepared dataset export tree. |
+| ``serve-catalog.mjs`` | A loopback host for the AnnData sample catalog (``datasets.json`` and the stores it lists), with range requests. |
 | ``captures.json`` | Generated provenance: one record per captured image. |
 
 It lives in the **Python repository** rather than the web repository for three
@@ -57,7 +57,7 @@ two variables that server does, plus one of its own:
 | --- | --- | --- |
 | ``CELLUCID_BROWSER_TEST_PORT`` | 4173 | the application |
 | ``CELLUCID_BROWSER_TEST_SAMPLE_PORT`` | main + 1 | the permissive-CORS mirror |
-| ``CELLUCID_DOCS_EXPORTS_PORT`` | main + 2 | ``cellucid-datasets/exports-v3/`` |
+| ``CELLUCID_DOCS_CATALOG_PORT`` | main + 2 | ``cellucid-datasets/anndata/`` (``?sampleCatalog=``) |
 
 **Check the defaults are free before you run.** A browser-test run or another
 capture run may already hold them, and the server refuses to bind rather than
@@ -66,14 +66,19 @@ adopting someone else's. Move all three together:
 ```sh
 CELLUCID_BROWSER_TEST_PORT=4213 \
 CELLUCID_BROWSER_TEST_SAMPLE_PORT=4214 \
-CELLUCID_DOCS_EXPORTS_PORT=4215 \
+CELLUCID_DOCS_CATALOG_PORT=4215 \
 node capture.mjs shoot --all --out /tmp/shots
 ```
 
 ### Data
 
-Scenarios load the **real published exports** from
-``cellucid-datasets/exports-v3/``, served over loopback. That is deliberate: a
+Scenarios load the **real published sample datasets** from the AnnData sample
+catalog ``cellucid-datasets/anndata/`` (``datasets.json`` schema 2 and the
+stores it lists, the folder published at
+``https://theislab.github.io/cellucid-datasets/anndata/``), served over loopback
+and named to the app with ``?sampleCatalog=``. Set ``CELLUCID_DATASETS_REPO``
+when the checkout is elsewhere; a run without the folder stops at once and
+names the path it looked for. That is deliberate: a
 reader has to recognise the picture as the app they are using, and a 120-cell
 synthetic fixture does not look like single-cell data. The tree is pinned on
 disk, so it is reproducible in the way that matters.
@@ -125,6 +130,47 @@ and the same object is what regenerates the image a year later.
 | ``{ wait: ms }`` | last resort; recorded in ``captures.json`` as a determinism weakness |
 | ``{ run: async page => {} }`` | raw Playwright escape hatch |
 
+### Scenario fields beyond the steps
+
+| Field | Effect |
+| --- | --- |
+| ``query: urls => ({...})`` | launch parameters; may be ``async`` (a ``?data=`` link to a host the scenario starts) |
+| ``setup: ({ context, page, urls }) => {}`` | routes and init scripts installed before navigation (the annotation mock, provider stubs) |
+| ``servedAs: 'http://127.0.0.1:8765'`` | show the app under that origin, answered by this run's server through a route; Google and Microsoft sign-in exist only on the origins they registered |
+| ``entry: async urls => address`` | open an address a product printed (the Viewer URL of ``cellucid serve``, of ``show_anndata()``, of ``cellucid_view()``) instead of the app with its sample catalog |
+| ``awaitStartup: false`` | do not wait for startup or the welcome overlay: the subject is a startup still under way (the opening panel) |
+| ``viewport: { width, height, touch }`` | another screen than the 1440×1000 window: the phone layout is ``{ width: 390, height: 844, touch: true }``; ``touch`` makes the context a touch device (``isMobile``, ``hasTouch``), so the app sees a phone's coarse pointer rather than a narrow desktop window |
+
+### Files and servers a scenario makes
+
+- ``fixtures/build-format-fixtures.py`` (with ``build-format-fixtures.R``)
+  writes the files the "open a format" scenarios pick, from the public
+  Pancreas sample and the web repository's MuData corpus file: an ``.h5ad``,
+  a Zarr ZIP, a Loom file, a Cell Ranger ``outs/`` folder, a MatrixMarket
+  folder, a Seurat ``.rds`` and an ``.rda`` of two objects. ``formatFixture()``
+  builds them once into a cache folder of the system temporary directory,
+  named by the scripts' digest. It needs ``CELLUCID_DOCS_PYTHON`` (anndata,
+  mudata, h5py, scipy) and ``CELLUCID_DOCS_RSCRIPT`` (SeuratObject); both
+  default to the names on the ``PATH``. Nothing is committed but the recipe.
+- Every server a scenario starts listens on a port derived from what it
+  serves (``freePort(key)``: ``20000``–``39999``, the next one only when that
+  one is busy), never on one the system hands out, so a port printed in an
+  image is the same on every run and ``check`` can compare the bytes.
+- ``serveFolder()`` is a loopback host with CORS, HEAD and single ranges; it
+  can stall at a byte offset (the opening panel part-way), hold every request
+  while a gate is set (a differential expression held at its first read), and
+  answer named paths itself.
+- ``webBuildOrigin()`` serves the web repository as a web build, with an
+  inventory computed by the repository's own generator over the served files,
+  so ``cellucid serve``, ``show_anndata()`` and ``cellucid_view()`` (R) show
+  this tree's application. ``CELLUCID_CLI`` names the ``cellucid`` executable.
+  The viewer refuses a host package older than itself, so the R scenario runs
+  with the ``cellucid-r`` of the same tree: ``CELLUCID_DOCS_RSCRIPT`` is the
+  shared environment's ``.environments/r/bin/Rscript``, whose installed copy
+  ``.environments/bootstrap.sh r-current`` keeps to this tree (it reinstalls
+  when the tree changed; ``r-check`` fails while it has not).
+  ``CELLUCID_DOCS_R_LIBS`` puts another library first on R's search path.
+
 ### Shot modes
 
 - ``{ mode: 'window' }`` — the whole 1440×1000 viewport.
@@ -144,7 +190,9 @@ cannot happen.
 ``right``, ``top``, ``bottom``; ``state`` is ``hover`` or ``press``.
 
 The tool performs a **real** ``page.hover()`` at that point and *then* draws the
-arrow there. Both, or neither: an arrow floating over an idle button is worse
+arrow there. The crop grows, within the viewport, to hold the whole arrow (and
+the ring of a press), so a pointer on a button at the edge of a panel is never
+cut in half; the rest of the crop is still named by its selectors. Both, or neither: an arrow floating over an idle button is worse
 than no arrow, because it shows an interaction state the app never entered.
 ``press`` additionally holds the mouse down, so ``:active`` styling is real, and
 adds a ring at the hotspot — a click is an event, and a still cannot show an
@@ -168,7 +216,8 @@ lifecycle sequences, where the reader is following steps.
 
 ## 4. What determinism actually rests on
 
-Fixed and recorded for every capture: viewport 1440×1000, device scale factor 2,
+Fixed and recorded for every capture: viewport 1440×1000 (or the scenario's
+own ``viewport``), device scale factor 2,
 light colour scheme, ``en-US``, UTC, reduced motion, Playwright's
 ``animations: 'disabled'`` and ``caret: 'hide'``, and a **seeded
 ``Math.random``** installed before any application code runs (the particle
@@ -189,6 +238,20 @@ For a scene that never settles — an animated particle overlay — declare
 ``settle: { frames: N }``. The capture is then pinned to N animation frames from
 a seeded start, and is recorded as **not** byte-stable. Do not pretend otherwise.
 
+### Number locale
+
+Number fields (every slider readout) are drawn by Blink in the machine's own
+region on macOS: an English page on a Mac whose region writes a decimal comma
+(``en_TR``, ``de_DE``) draws "0,05", and neither the context's ``locale`` nor
+``--lang`` reaches it. The tool therefore sets ``AppleLocale=en_US`` in the
+preferences domain of Playwright's ``chrome-headless-shell`` executable only —
+never the global domain — for the length of the run, and removes it again on
+exit, on Ctrl-C and after a crash (a synchronous ``exit`` handler). On Linux
+``--lang=en-US`` and ``LANG``/``LC_ALL`` decide it. Before the first scenario
+``assertDecimalPointLocale`` draws the same value in a text field and in a
+number field and compares the pixels: a run where the number field does not
+write "1234.05" stops there, before anything is captured.
+
 ### Provenance: capture from a clean web repository
 
 ``captures.json`` records ``web_repository_revision`` — the application the
@@ -206,6 +269,10 @@ Only the first form is provenance. ``shoot`` and ``check`` both print a warning
 when the tree is dirty, and ``check`` prints a note when a *stored* record
 carries a suffix — bytes agreeing proves an image is reproducible, but it cannot
 recover which application produced it.
+
+``test_screenshot_provenance_records_describe_the_published_images`` in the
+Python suite refuses a published image whose record carries a suffix, and
+every published image must have a record.
 
 **Commit or stash the web repository before capturing**, and be aware that
 several units may be editing it at once. A capture taken over somebody else's
@@ -330,7 +397,7 @@ the control comes back holding a different value, so you get an image captioned
 "coloured by clusters" that shows ``Field: None``. Always:
 
 ```js
-{ waitForText: '#filter-count', text: 'Showing all 3,696 points' },
+{ waitForText: '#filter-count', text: 'Showing all 3,696 cells' },
 { waitForStable: '#categorical-field' },
 { select: '#categorical-field', label: 'clusters' },
 { waitForText: '#stats', text: 'Field: clusters (category)' },
@@ -339,7 +406,7 @@ the control comes back holding a different value, so you get an image captioned
 The tool now asserts the selection stuck and fails loudly if it did not.
 
 **``#dataset-cells`` is not a ready signal.** It abbreviates to ``4K``. Use
-``#filter-count`` (``Showing all 3,696 points``) or ``#stats``
+``#filter-count`` (``Showing all 3,696 cells``) or ``#stats``
 (``Points: 3,696 • Field: clusters (category) • Centroids: 8``).
 
 **``scrollIntoView`` inside the sidebar changes what a full-window shot shows.**
@@ -363,9 +430,12 @@ caption.
 **Sidebar accordions are ``<details class="accordion-section">``.** Clicking the
 ``<summary>`` *toggles*, so a scenario that ran twice would leave the panel
 wrong. ``openSection`` / ``closeSection`` set ``.open`` directly and are
-idempotent. Open on first load: session, visualization, compare-views,
-coloring-filtering, highlighted-cells, page-analysis. Closed:
-community-annotation, cinematic-camera, figure-export, shortcuts, benchmark.
+idempotent. Open on first load: session, coloring-filtering,
+highlighted-cells, page-analysis. Closed: visualization, navigation,
+compare-views, community-annotation, cinematic-camera, figure-export,
+shortcuts, benchmark. A control in a closed section is invisible, so a step
+that uses one (``#theme-select``, ``#render-mode``, ``#navigation-mode``,
+``#split-keep-view-btn``) opens its section first.
 
 **Community-annotation dev hooks are host-gated.** The simulation flags the
 browser suite uses are behind ``isLocalDevHost()``. Pointed at anything other
@@ -381,10 +451,10 @@ render real paths and cannot be sanitised — do not capture them.
 verbatim ```` ```text ```` block, never as an image. This is a rule, not a
 preference, and it is not satisfied by a neutralised prompt:
 
-- **The leak is in the output, not the prompt.** ``cellucid serve`` over a
-  prepared export prints the **absolute** directory it resolved —
-  ``server/_server.py`` calls ``print_detail("Path", str(self.data_dir))`` — and
-  AnnData's own ``INFO`` logging prints the absolute file path beside it. Both
+- **The leak is in the output, not the prompt.** ``cellucid serve`` prints the
+  **absolute** path of the store it serves — ``anndata_server.py`` calls
+  ``print_detail("Path", str(store.path))`` — and AnnData's own ``INFO``
+  logging prints the absolute file path beside it. Both
   are correct behaviour and neither can be configured away, so *every*
   screenshot of these commands contains a host path by construction. A
   neutralised ``PS1`` hides the prompt and changes nothing about the transcript.

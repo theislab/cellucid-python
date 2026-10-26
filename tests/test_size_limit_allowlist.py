@@ -28,13 +28,17 @@ MIB_INLINE = re.compile(r"\b1024\s*\*\s*1024")
 CLASSES = {"FORMAT", "PLAT", "HOST", "PERF", "MSG"}
 
 ALLOWLIST: dict[str, tuple[str, str]] = {
+    "src/cellucid/prepare_data/_inputs.py:FLOAT32_EXACT_INTEGER_LIMIT": (
+        "FORMAT",
+        "The largest integer float32 holds exactly (2**24); counts above it are stored as float64.",
+    ),
+    "src/cellucid/prepare_data/_inputs.py:_FLOAT32_MAX": (
+        "FORMAT",
+        "The largest finite float32; a larger magnitude would be stored as an infinity.",
+    ),
     "scripts/normalize_sdist.py:MAX_NORMALIZED_SDIST_BYTES": (
         "PLAT",
         "PyPI's upload limit for one distribution file (100 MB).",
-    ),
-    "src/cellucid/_server_base.py:MAX_SELECTION_BODY_BYTES": (
-        "FORMAT",
-        "A selection is little-endian uint32 cell indices: at most 2**32 of 4 bytes.",
     ),
     "src/cellucid/_server_base.py:_MAXIMUM_HOST_LABEL_LENGTH": (
         "FORMAT",
@@ -49,13 +53,17 @@ ALLOWLIST: dict[str, tuple[str, str]] = {
         "Bounds the build-id string read from a downloaded index.html "
         "(the web app writes a date and a short hash).",
     ),
-    "src/cellucid/continuous_payload_diagnosis.py:NON_FINITE_EXAMPLE_LIMIT": (
+    "src/cellucid/_non_finite.py:NON_FINITE_EXAMPLE_LIMIT": (
         "MSG",
         "How many offending values a diagnosis quotes; every value is still checked.",
     ),
-    "src/cellucid/jupyter/_base.py:_DEBUG_COMMAND_ERROR_LIMIT": (
+    "src/cellucid/jupyter/_viewer.py:_DEBUG_COMMAND_ERROR_LIMIT": (
         "MSG",
         "How many viewer command errors debug_connection() quotes.",
+    ),
+    "src/cellucid/jupyter/_wire.py:_MAX_CELL_INDEX": (
+        "FORMAT",
+        "A command's cells are little-endian u32 on the viewer channel.",
     ),
     "src/cellucid/jupyter/_wire.py:_COMMAND_ERROR_REASON_LIMIT": (
         "HOST",
@@ -81,21 +89,13 @@ ALLOWLIST: dict[str, tuple[str, str]] = {
         "FORMAT",
         "The largest value of a uint32 code array.",
     ),
-    "src/cellucid/_server_base.py:MAX_EVENT_BODY_BYTES": (
+    "src/cellucid/_viewer_channel.py:MAX_EVENT_TEXT_BYTES": (
         "HOST",
-        "One posted viewer event record; selections and sessions have their own routes.",
+        "One text event frame on the viewer channel; selections and sessions are binary frames.",
     ),
-    "src/cellucid/server/_handler.py:_READ_CHUNK_BYTES": (
+    "src/cellucid/_viewer_channel.py:_BUNDLE_CHUNK_BYTES": (
         "PERF",
-        "The size of one read while a served artifact is streamed.",
-    ),
-    "src/cellucid/anndata_mapping.py:DEFAULT_MAPPING_CACHE_BYTES": (
-        "PERF",
-        "How many decoded mapping arrays stay cached; a larger one is read again, never refused.",
-    ),
-    "src/cellucid/anndata_adapter.py:GENE_EXPRESSION_CACHE_BYTES": (
-        "PERF",
-        "How many decoded gene columns stay cached; others are read again, never refused.",
+        "The read buffer a session bundle streams to disk through; the bundle itself has no bound.",
     ),
 }
 

@@ -41,12 +41,32 @@ If you haven’t read the mental model yet, start with {doc}`01_performance_ment
 - remote server latency (each request has overhead even if data is small).
 
 **Big practical reality:**
-- a large cell-major (CSR) `.h5ad` opened directly in the browser answers its first genes only as its background reorganisation by gene reaches them; server mode answers them from Python.
+- a large cell-major (CSR) `.h5ad` answers its first genes only once the browser has indexed the matrix by gene; this holds whether the file is opened in the browser or served by `cellucid serve` / `show_anndata()`, which hand the same reader the file's bytes.
+
+What one machine measured for a served `.h5ad` (one Mac, localhost; 562,000
+cells × 8,192 genes, CSR, gzip): the server started in 0.16 s; the obs fields
+loaded in about 90 ms and the 2D and 3D UMAP in about 40 ms each; the gene
+index was built once, in the background from the moment the dataset opened
+(about 2 s: the browser measured the localhost link as fast as a disk), after
+which a gene took a few ms and 100 genes about 20 ms (a gene asked for before
+the index was built waited for it, 1.3 s); 1,000 cell rows took 0.55 s and the
+neighbour graph 0.65 s when first drawn. The same data passed to `show_anndata()` as an
+in-memory object was written to a column-major temporary `.h5ad` in 0.8 s
+(925 MB); its first gene then took 8 ms and 100 genes 68 ms.
+
+Publishing an opened dataset to the viewer is one step the interface cannot
+interleave with anything (state, renderer and every panel move to the new
+dataset together), so it is kept small: its GPU stores are allocated in a task
+of their own just before it (a WebGL allocation is checked by a round trip
+that waits for the GPU), its positions and colors go to the GPU with the first
+frame, and each per-cell array is written once. Chromium on an Apple M1 Pro
+(ANGLE Metal), a 10,000,000-cell 3D Cellucid-ready Zarr: no task over 50 ms
+while it opens or when switched to (one of 227–349 ms before 0.9.5).
 
 Best practices and alternatives:
 - {doc}`../b_data_loading/01_loading_options_overview`
 - {doc}`../b_data_loading/03_browser_file_picker_tutorial` (browser-only limits)
-- {doc}`../b_data_loading/04_server_tutorial` (recommended for large files)
+- {doc}`../b_data_loading/04_server_tutorial` (data on a remote machine)
 
 ---
 
@@ -71,7 +91,25 @@ Three things that are commonly assumed to cost per frame, and do not:
   GPU at all and nothing is redrawn. Holding a view steady does not accumulate
   cost — with or without a highlighted selection, except in `Full` shader
   quality, whose highlight ring pulses and so keeps drawing while anything is
-  highlighted.
+  highlighted. A frame drawn only for the pulse waits until the browser has
+  finished the frames before it and the page has then been free for as long as
+  they held it, so on a slow renderer (software WebGL, a weak GPU under
+  millions of points) the pulse slows down, to at most half of the main
+  thread, instead of taking it from analyses and input. A pulse frame draws
+  only the highlights and what lies over them (edges, centroids, the orbit
+  anchor) over a kept copy of the rest of the pane, so its cost follows the
+  highlighted cells, not the dataset (10 million cells with 20,000
+  highlighted: about 0.5 ms of GPU time a frame, against 10 ms drawn whole).
+  With antialiasing on, the multisampled samples of the rest of the pane
+  cannot be copied (WebGL2 cannot copy or read them back, and a resolved copy
+  would change the pixels where a ring's edge and a point's edge share a
+  pixel), so the frame keeps its own samples and draws again only the samples
+  the rings cover: every point is still submitted, but only those under a ring
+  are shaded. Its cost follows the screen area the rings cover. Measured at 10
+  million cells: 20,000 highlighted cells in one region, 40 against 7.5 ms of
+  GPU time a frame drawn whole; 300,000 in one region, 70 against 16 ms;
+  20,000 scattered over the whole embedding, whose rings cover most of it, 37
+  against 25 ms. The frame is the frame drawn whole, pixel for pixel.
 - **Shader quality.** `Full`, `Light` and `Ultra-light` measured the same on the
   machine below in 3D views, at every point size tested — see the next section.
   A **2D view** draws without depth testing and shades every overlapping point;
@@ -84,7 +122,7 @@ Three things that are commonly assumed to cost per frame, and do not:
 High-leverage knobs:
 - **Make the window smaller** while exploring (fewer pixels) — *usually the biggest immediate win*.
 - **Filter down to what you are actually looking at** — hidden points stop costing anything to draw.
-- **Enable Level-of-Detail (LOD)** (points mode) — reduces draw cost when zoomed
+- **Enable Level of detail (LOD)** (points mode) — reduces draw cost when zoomed
   out, at every dataset size. `Auto` has a floor, and the floor is the coarsest
   level still holding at least `min(2,000,000, total points ÷ 8)` points: it may
   never reduce a cloud by more than 8×, and it may never take a large one below
@@ -95,10 +133,10 @@ High-leverage knobs:
   `Auto` falls to it when you pull back and draws more as you move in. The forced
   level slider is deliberately *not* bounded by either limit, so asking for a
   coarser level explicitly is still honoured.
-- **Reduce `Point size (log):`** once points are big enough to overlap — the one
+- **Reduce `Point size`** once points are big enough to overlap — the one
   rendering setting that measurably moves frame time, and it is measured below.
-- **Turn off `Antialiasing (smooth point edges)`** under **Visualization →
-  Image quality** — measured below, and the largest single lever left on the
+- **Turn off `Antialiasing`** under **Visualization →
+  Performance** — measured below, and the largest single lever left on the
   plain path once filtering and window size have been used. It applies to the
   next frame. Check the box's state before reaching for it: on a 3D view of
   5,000,000 cells or more, or a 1D/2D view of 200,000 or more, it is already
@@ -130,7 +168,7 @@ Separate build cost from frame cost:
   takes.
 - **Render resolution** and **Ray quality** are the main steady-state
   per-frame costs: a frame costs about rays × samples per ray. Render
-  resolution runs from 0.25x to 1.00x of the canvas and a frame never marches
+  resolution runs from 0.25× to 1.00× of the canvas and a frame never marches
   more than 2560×1440 rays; Ray quality is 0.5 to 2 samples per voxel.
 - **Animation speed** decides whether smoke costs anything while you are not
   interacting: at 0 (`Still`) a settled view is not redrawn.
@@ -173,6 +211,16 @@ and culling off, because it then draws a full-detail frame about three times
 faster (10,000,000 points: 3D 10 ms against 30, 2D 21 ms against 67), and
 each recolor pays a few milliseconds once for it.
 
+Coloring by a category also counts the cells of each category and places its
+labels at the categories' centroids: one pass over every cell and its
+position, done once per field and representation. For a large dataset that
+pass runs in slices of about 8 ms before the colors change, so the interface
+keeps answering; the visible counts are then read from the category totals
+whenever the only filter is the field's own. On a 10,000,000-cell 3D dataset
+(Chromium, Apple M1 Pro): no task over 50 ms when coloring by a 30-category field (one of about
+190 ms before 0.9.5), and hiding one category from the legend about 40 ms (330
+ms before).
+
 ---
 
 ### Filtering (visibility recomputation)
@@ -199,13 +247,13 @@ recomputation, repeated once per slider frame.
 The most common performance mistake is **scrubbing sliders** while Live filtering is on.
 
 Best practices:
-- for continuous filters: turn **Live filtering** off and click **FILTER** once,
+- for continuous filters: turn **Live filtering** off and click **Filter** once,
 - avoid stacking many enabled filters if you can disable/remove no-op filters,
 - tune filters in a single view first, then create snapshots after you stabilize the filter state.
 
 Related docs:
 - {doc}`../e_filtering/05_performance_considerations`
-- {doc}`../d_fields_coloring_legends/03_color_by_behavior` (Live filtering vs FILTER)
+- {doc}`../d_fields_coloring_legends/03_color_by_behavior` (Live filtering vs Filter)
 
 ---
 
@@ -215,12 +263,22 @@ Highlighting is often cheap for moderate sizes, but there are “cliffs”:
 
 - huge selections/highlight groups (hundreds of thousands → millions of cells),
 - many highlight groups/pages that must be merged/resolved per draw,
-- frequent selection updates (dragging lasso over millions of points).
+- the highlight upload behind each selection preview while dragging over
+  millions of points (the lasso, proximity and KNN queries themselves cost
+  only the cells near each change).
 
 What it feels like:
 - selection tools lag while dragging,
 - highlight updates stutter,
 - sessions get very large (saving/restoring takes longer).
+
+A highlight costs the highlighted cells, not the dataset: a page with one
+group is painted and counted from that group's cell list as it is, and the
+highlight layer packs one record per highlighted cell. What remains is
+proportional to the selection and is large only for a large one: on a
+10,000,000-cell 3D dataset (Chromium, Apple M1 Pro), highlighting 1,000,000
+cells takes about 23 ms and the next frame about 21 ms; highlighting all ten
+million about 70 ms and 145 ms (177 ms and 164 ms before 0.9.5).
 
 Related docs:
 - {doc}`../f_highlighting_selection/05_edge_cases_highlighting` (large highlights)
@@ -236,35 +294,16 @@ Analysis cost depends on the mode, but the big drivers are usually:
 - the number of features involved (e.g., genes),
 - repeated reruns caused by changing inputs frequently.
 
-Differential expression and Marker Genes stream one gene at a time, and each
-gene of a prepared export is one request. The gene is inflated and dequantized
-in a decode worker and its statistics run in the analysis worker pool, so the
-main thread only fetches and hands work over: the page stays responsive during
-a run. With an export served over the network, the downloads of the genes
-queued next run ahead of decoding, as many at once as the connection needs to
-stay full, so the run is bound by the connection's bandwidth rather than by one
-round trip per gene. The downloads are kept (compressed) for the dataset you
-opened, so a second run over the same genes makes no requests. A gene you
-choose while a run is downloading goes first. With a local folder there is no
-network, and decoding and statistics set the pace instead.
-
-Measured with Chromium against an HTTP/2 server shaped to typical links, over
-the prepared sample exports (Wilcoxon DE of two category pages, every gene):
-
-| Export, link | Genes, bytes | First run | Second run |
-| --- | --- | --- | --- |
-| Pancreatic endocrinogenesis (3,696 cells), 4G (9 Mbit/s, 170 ms RTT) | 3,753 genes, 1.9 MB | 4.6 s | 0.8 s, no requests |
-| Pancreatic endocrinogenesis, cable (5 Mbit/s, 28 ms RTT) | 3,753 genes, 1.9 MB | 3.3 s | 0.8 s, no requests |
-| Developing human lung (He; 71,650 cells), 4G | 5,146 genes, 12.3 MB | 12.0 s | 1.5 s, no requests |
-| Developing human immune system (Suo; 561,947 cells), cable | 5,097 genes, 58.8 MB | 94 s | 2.8 s, no requests |
-
-Before downloads ran ahead, the pancreatic run took about 58 s over 4G, bound by
-round trips rather than bytes, and a second run took as long, because every
-gene was requested again and answered "not modified". Suo over cable is bound
-by the link's bandwidth (58.8 MB at 5 Mbit/s is 94 s), so only fewer bytes
-can make that first run faster. A gene chosen in the sidebar during a first
-run over 4G arrives in about one round trip: 0.2 s for the pancreatic export,
-0.3 s for Suo, whose run fills the link.
+Differential expression and Marker Genes stream genes from the AnnData file.
+The reader worker reads and decompresses them off the page's thread and their
+statistics run in the analysis worker pool, so the page stays responsive during
+a run. How many bytes a gene costs depends on how the file stores its matrix:
+in a gene-major (CSC) matrix — what `prepare()` and `cellucid_prepare()` write
+— one gene is one small range read, and genes asked for together go out as one
+set of coalesced, parallel requests. A cell-major (CSR) matrix is first indexed
+by gene, which over a slow link means reading the matrix's indices once (see
+{ref}`reading-anndata-directly`). A gene you choose while a run is reading goes
+first.
 
 Per-page statistics are linear in the number of cells: medians, quartiles and
 ranks (Quick, Detailed summaries and tests, Spearman correlation, Kruskal–Wallis,
@@ -277,9 +316,9 @@ Insights median and quartiles, a histogram's bins, and the box statistics,
 violin densities and density curves of plots. A plot's main-thread work is
 therefore mostly drawing, and the loops that must stay on the main thread —
 gathering a page's values, aligning two variables for a scatter plot, scoring a
-gene signature, counting a Quick Insights composition — hand the interface back
+gene signature, counting a Quick composition — hand the interface back
 every few milliseconds. Measured in Chromium on a ten-million-cell page, no
-summary, test, histogram, density, violin, bar, pie or Quick Insights step
+summary, test, histogram, density, violin, bar, pie or Quick step
 holds the interface for more than 50 ms at a time (a violin used to hold it for
 1.5 s). Box plots are the exception: Plotly draws every outlier as its own SVG
 element, so a continuous page with tens of thousands of outliers still holds it
@@ -369,9 +408,9 @@ page:
   table below.
 
 :::{note}
-The **Analyze Performance** tool used to report a "Shader overhead" figure and
+The **Analyze performance** tool used to report a "Shader overhead" figure and
 suggest switching to `Ultra-light`. Both are gone, and the sidebar's
-`Shader quality:` tooltip no longer claims a speed benefit either — it describes
+`Shader quality` tooltip no longer claims a speed benefit either — it describes
 what the setting changes about how points *look*. The tool reports point-size
 response in that row now. Reach for point size, window size, filtering or
 antialiasing.
@@ -398,12 +437,12 @@ are reproducing the number: the curve is capped at 8
 a field of overlapping discs, and the chosen position is snapped to the slider's
 own 0.5 step — which is why 100,000 cells land on 1.52 rather than exactly 1.5.
 
-`Point size (log):` runs from position -24 to position 100 in steps of 0.5. The
+`Point size` runs from position -24 to position 100 in steps of 0.5. The
 positions are exponents of a curve anchored at 0.25 (position 0) and 200
 (position 100), so the reachable sizes run from 0.050 to 200.
 
 It does not respond everywhere on its range. Below roughly **`gl_PointSize` 15**
-— `Point size (log):` at position 50, a point size of about 7, or a point size
+— `Point size` at position 50, a point size of about 7, or a point size
 of 0.75 after zooming in about sixfold — the frame is bound by the per-sprite
 cost, and shrinking points further buys very little. Above it the frame becomes
 fill-bound and point size becomes the dominant term. In practice:
@@ -427,7 +466,7 @@ per sprite and nothing else.
 
 ### Antialiasing: what it costs and what it buys
 
-Antialiasing lives under **Visualization → Image quality** and follows your
+Antialiasing lives under **Visualization → Performance** and follows your
 dataset until you tell it otherwise. It is not a cosmetic setting, so both
 halves of the trade are stated here.
 
@@ -436,11 +475,11 @@ count and the active view's dimension: **in 3D, on below 5,000,000 cells; in a
 1D or 2D view, on below 200,000 cells; off at or above**. It is re-decided every
 time a dataset is published, because datasets are switched in place — so opening
 an atlas after a small dataset clears the box on its own — and whenever the
-active view switches between 2D and 3D. While the choice is automatic the line
-under the control says so, naming the count and the dimension
+active view switches between 2D and 3D. While the choice is automatic the first
+line of the control's (i) says so, naming the count and the dimension
 (`Chosen automatically: 18,142,044 cells in 3D.`). Clicking the checkbox ends automatic
 selection permanently, in both directions: from then on the box holds your answer
-on every dataset, and the status line goes quiet. This is why the 10,000,000-point
+on every dataset, and that line is gone. This is why the 10,000,000-point
 workload measured below is *not* the default configuration — at that size the
 automatic answer is already off.
 
@@ -502,9 +541,9 @@ Use this when you just need the “one thing that helps”.
 | Camera movement is choppy | GPU | Reduce window size | fewer pixels shaded per frame |
 | Choppy only in a two- or three-view row | GPU | Go back to one view, or add a fourth | the 2×2 grid halves point diameter; a row does not |
 | Everything is slower on retina | GPU (pixels) | Reduce window size | fewer pixels shaded per frame |
-| Filter sliders stutter | CPU | Live filtering off → `FILTER` once | avoids repeated per-cell recompute |
+| Filter sliders stutter | CPU | Live filtering off → `Filter` once | avoids repeated per-cell recompute |
 | Lag increases with more filters | CPU | Disable/remove no-op filters | fewer tests per cell |
-| Switching genes is slow | I/O | Use server mode / keep data local | reduces bytes/latency |
+| Switching genes is slow | I/O | Keep data local, or serve it where it lives; store the matrix CSC | reduces bytes/latency |
 | Overlay is slow | GPU | Lower overlay density / disable bloom | reduces per-frame GPU load |
 | App crashes / “context lost” | GPU memory | Reduce smoke/overlays/snapshots | reduces VRAM pressure |
 
@@ -534,7 +573,7 @@ If an action is known to be expensive (filter recompute, big analysis, export):
 - then apply once.
 
 Examples:
-- continuous filtering: Live filtering off → move sliders → `FILTER`.
+- continuous filtering: Live filtering off → move sliders → `Filter`.
 - analysis: define groups → run once → export results if needed.
 
 ### 3) Reduce pixels intentionally
@@ -574,11 +613,11 @@ If you hit these repeatedly, treat it as a data preparation issue:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/benchmarking_performance/benchmark-panel-controls.png
-:alt: The Performance Benchmark panel before any run, showing the six point-count presets from 500K to 40M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons; the live performance readout is omitted.
-:width: 516px
+:alt: The Benchmark panel before any run: Synthetic data with six presets from 500K to 40M, Point count, Pattern and Embeddings, the Load synthetic data button, and Diagnostics with Analyze performance and Copy situation report; the live performance readout is omitted.
+:width: 532px
 
 Every knob in this section that produces a number lives in one place: the
-**Performance Benchmark** accordion in the left sidebar. Use it to find the
+**Benchmark** accordion in the left sidebar. Use it to find the
 shape of *your* machine’s limits — the answer is different on every GPU, so
 there is no number here to copy, and the live readout is omitted from this
 picture for the same reason. {doc}`05_benchmark_tools` explains each control

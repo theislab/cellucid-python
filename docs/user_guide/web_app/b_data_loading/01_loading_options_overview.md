@@ -1,129 +1,113 @@
-# Data Loading Overview (All 14 Options)
+# Data Loading Overview (Every Route)
 
-This page is the **map** of how Cellucid can load data.
+This page is the **map** of how Cellucid loads data.
 
-If you are new, start here. If you already know what you want, jump to the tutorial that matches your workflow:
+If you are new, start here. If you already know what you want, jump to the page that matches your workflow:
 
-- {doc}`02_local_demo_tutorial`: publish/share a dataset without running a server (GitHub-hosted exports)
-- {doc}`03_browser_file_picker_tutorial`: load data from your computer using the browser file picker
-- {doc}`04_server_tutorial`: run a local/remote Python server for large datasets
-- {doc}`05_jupyter_tutorial`: embed Cellucid inside a notebook and interact programmatically
+- {doc}`02_local_demo_tutorial`: publish a dataset catalog on GitHub or any static host, with no server
+- {doc}`03_browser_file_picker_tutorial`: open a file or folder from your computer
+- {doc}`04_server_tutorial`: serve a file from a local or remote Python process
+- {doc}`05_jupyter_tutorial`: embed Cellucid in a notebook and interact programmatically
 - {doc}`11_custom_dataset_repository`: publish and validate a public multi-dataset
   repository, starting from a complete reference implementation
-- {doc}`12_sample_dataset_provenance`: what each built-in sample is an export
-  of, what to cite, and how far its build is pinned
+- {doc}`12_sample_dataset_provenance`: what each built-in sample is, what to cite,
+  and how far its build is pinned
 
 ## At A Glance
 
 **Audience**
 - Wet lab / non-technical: choose a safe workflow and avoid common traps.
-- Computational: understand formats, lazy loading, and performance tradeoffs.
+- Computational: understand formats, lazy reading, and performance tradeoffs.
 - Power users: understand what happens under the hood so you can debug failures.
 
 **Time**
 - Fast path decision: ~5 minutes
-- Full read (with edge cases): ~20–30 minutes
+- Full read (with edge cases): ~20 minutes
 
 **What you’ll learn**
-- What “exported”, “h5ad”, and “zarr” mean in Cellucid
-- What “lazy loading” is and why it matters for large datasets
-- How to choose between **File Picker**, **Server Mode**, **GitHub-hosted exports**, and **Jupyter**
-- The top failure modes (and how to quickly diagnose them)
+- What Cellucid reads (AnnData, and the formats it reads as AnnData) and what a dataset catalog is
+- What “lazy reading” is and why it matters for large datasets
+- How to choose between a file or folder (**Open…**), a link or a server (the
+  **Link or server** bar), and **Jupyter**
+- The top failure modes, and how to diagnose them quickly
 
-## The Three Data Formats (What You Actually Load)
+## What Cellucid Reads
 
-Cellucid understands your data in three high-level ways:
+Cellucid reads **AnnData**. The browser has its own AnnData reader, which
+reads an AnnData dataset in any of three containers:
 
-1) **Pre-exported folder (recommended)**
-   - Produced by `cellucid.prepare(...)` in Python, or by `cellucid_prepare()`
-     in R ({doc}`../../r_package/index`). The viewer reads either identically.
-   - Output is a directory containing binary files + `dataset_identity.json` + compact manifests.
-   - **Fastest** in the browser and the most stable.
-   - Can optionally include **vector fields** (e.g. RNA velocity) for the overlay.
+1) **An `.h5ad` file** (HDF5).
+2) **An AnnData Zarr store folder** (`.zarr`, Zarr v2 or v3).
+3) **A zipped Zarr store** (`.zarr.zip`, or `.zip` holding one store).
 
-2) **AnnData `.h5ad` file**
-   - A single HDF5 file.
-   - Can be loaded in several ways:
-     - directly in the browser (works, but has hard performance limits)
-     - via a Python server (recommended for large datasets)
-     - inside Jupyter (recommended for analysis workflows)
+It reads the other common formats as AnnData, as they are: MuData (`.h5mu`
+or MuData Zarr), Loom, a 10x Cell Ranger `.h5` or `outs/` folder, a Seurat or
+SingleCellExperiment `.rds`/`.rda`, and a MatrixMarket folder. The full list,
+and how each one is read, is in
+[What Cellucid reads](07_file_format_expectations.md#what-cellucid-reads).
 
-3) **AnnData Zarr v2 store**
-   - A directory-based format made of chunked arrays.
-   - The browser UI accepts one portable `.zarr.zip` (or `.zip`) archive
-     containing the complete store.
-   - Python server and Jupyter APIs accept the Zarr directory itself and
-     materialize it eagerly with `anndata.read_zarr`.
+Any AnnData file written by anndata, Scanpy, scVelo, CELLxGENE, SeuratDisk or
+R's anndata opens as it is. `cellucid.prepare()` in Python and
+`cellucid_prepare()` in R ({doc}`../../python_package/c_data_preparation_api/index`,
+{doc}`../../r_package/index`) write a **Cellucid-ready AnnData**: a standard
+AnnData file (anndata reads it) laid out so the browser reads it fast over a
+network (the expression matrix gene-major, arrays chunked for range requests)
+and carrying its name, description, citation and launch defaults in
+`uns['cellucid']`. It is not a separate format: every route below opens it,
+and every other tool reads it as AnnData.
 
-**Rule of thumb:** if you care about smooth interaction and reproducibility, **export once** using `prepare()`.
+A **dataset catalog** lists several AnnData files for one link or for the
+**Sample dataset** list: a folder holding `datasets.json` and the files it
+names ({doc}`07_file_format_expectations`).
 
 For deeper context:
-- why stable IDs matter: {doc}`06_dataset_identity_why_it_matters`
-- what files/keys are expected: {doc}`07_folder_file_format_expectations_high_level_link_to_spec`
+- why stable ids matter: {doc}`06_dataset_identity_why_it_matters`
+- what files and keys are expected: {doc}`07_file_format_expectations`
 - when loading fails: {doc}`08_troubleshooting_data_loading`
 
-## What “Lazy Loading” Means (In Plain Language)
+## What “Lazy Reading” Means (In Plain Language)
 
-When you load a dataset, Cellucid needs several kinds of data:
+When you open a dataset, Cellucid needs several kinds of data:
 
-- **Embeddings** (UMAP coordinates): small-ish (n_cells × 2/3) → loaded early
-- **Obs fields** (metadata for coloring/filtering): usually manageable → loaded early
-- **Gene expression** (n_cells × n_genes): huge → ideally loaded **on demand**
+- **Embeddings** (UMAP coordinates): n_cells × 1 to 3 values, read when a view shows them
+- **Obs fields** (metadata for colouring and filtering): read when a field is first used
+- **Gene expression** (n_cells × n_genes): huge, read **one gene at a time, on demand**
 
-**Lazy loading** means:
-- Cellucid loads just enough to render and interact.
-- When you search a gene (or request some data), it fetches only what it needs.
+**Lazy reading** means Cellucid reads only what the current view needs, from
+wherever the file is: from your disk, or from a web host with HTTP range
+requests. Nothing is copied into memory up front, so there is no file size
+limit; the only bound is the memory the arrays actually shown need. An R
+object (`.rds`, `.rda`) and a MatrixMarket folder are the exception: they
+cannot be read in place, so they are read once from start to end into this
+browser's storage for the tab, and read from there as views need them
+({doc}`17_open_r_objects`).
 
-Why you care:
-- For large datasets, loading everything up front can crash the browser or take minutes.
-- Lazy loading keeps memory bounded and makes the UI responsive sooner.
-
-Important nuance:
-- Some formats/modes are truly lazy.
-- Some are “lazy-ish” (metadata up front; some chunks later).
-- A browser `.h5ad` is read lazily from disk; a cell-major (CSR) matrix is first reorganised by gene in the background.
+How fast a gene reads depends on how the matrix is stored:
+- A **gene-major (CSC)** or dense matrix reads one gene directly. A
+  Cellucid-ready AnnData stores its matrix this way.
+- A **cell-major (CSR)** matrix is first indexed by gene, once. When the file
+  arrives as fast as a disk does (a local file, or a server on the same
+  machine or network, as the browser measures while opening), the index is
+  built in the background as soon as the file opens; over a slower link, when
+  the first gene is shown, so opening downloads only what the first view
+  draws.
 
 ## Vector fields (velocity/drift overlay): what you need for it to appear
 
-Vector fields are optional per-cell vectors (e.g. RNA velocity, drift/displacement) that Cellucid can render as an animated overlay on top of your embedding.
+Vector fields are optional per-cell vectors (e.g. RNA velocity) that Cellucid
+draws as an animated overlay on an embedding. The browser discovers them in
+`obsm` by scVelo's naming convention, `<field>_<basis>` (for example
+`velocity_umap`), binds each to the embedding `X_<basis>` it is named for when
+both have the same number of columns, and reads a field's vectors only when the
+overlay shows it. Nothing has to be switched on.
 
-Important rules:
-- Vector fields are **embedding-specific**: each is bound to the embedding it was computed on (2D vectors for a 2D embedding, 3D for 3D).
-- Vector fields must match the **same row order** as your points/cells.
+- Vector fields are **embedding-specific**: one component per column of the embedding they are drawn over.
+- They must have the **same row order** as the cells.
 - The overlay only shows fields bound to the embedding the view **shows**.
 
-Where vector fields come from depends on your loading format:
-
-- **Exports (`prepare`)**: `dataset_identity.json` contains a `vector_fields` block, and binary vectors live under `vectors/`.
-- **AnnData (`.h5ad` / `.zarr` / in-memory)**: vector fields are discovered from `adata.obsm` keys like:
-  - `velocity_umap_2d`, `velocity_umap_3d`
-  - `T_fwd_umap_2d`
-
-:::{important}
-**Where the vectors come from depends on which of three things reads them.**
-
-- The browser's **H5AD** and **Zarr ZIP** pickers scan `obsm` themselves and
-  adopt whatever `<field>_umap_<dim>d` arrays they find. Nothing to switch on.
-- A **prepared export** — whether opened by the browser's **Prepared** picker or
-  served by `cellucid serve <export_dir>` / `show(export_dir)` — carries whatever
-  `prepare(vector_fields=...)` wrote. There is no `obsm` left to read, so there
-  is nothing to switch on there either.
-- **Reading an AnnData object directly** — `cellucid serve` on an AnnData input,
-  `serve_anndata()`, `show_anndata()` — never touches the arrays unless you pass
-  `--vector-fields` (CLI) or `serve_vector_fields=True` (Python), because every
-  declared field is read and checked in full before the server binds. Without it
-  the overlay is simply absent, and nothing in the browser says why — the
-  terminal does, in step 3 of startup. Passing `vector_field_default` without
-  the opt-in is an error, not a hint.
-:::
-
-If you expect vector fields but don’t see the overlay toggle or dropdown:
-- if you started a Python server or notebook viewer, check you passed the opt-in above
-- then check your data format/naming: {doc}`07_folder_file_format_expectations_high_level_link_to_spec`
-- then check the overlay section: {doc}`../i_vector_field_velocity/index`
-
-Naming conventions:
-- {doc}`../i_vector_field_velocity/01_what_vector_fields_are_user_facing`
+If you expect vector fields but don’t see the overlay toggle or dropdown, see
+{doc}`07_file_format_expectations` and
+{doc}`../i_vector_field_velocity/index`.
 
 ## Fast Path: Choose A Workflow (Decision Tree)
 
@@ -131,68 +115,67 @@ Pick the first row that matches you.
 
 | Your situation | Recommended workflow | Why |
 |---|---|---|
-| “I just want to look at my data quickly, no Python.” | Browser File Picker | Zero setup; any file size, read from disk as each view needs it |
-| “My dataset is big (hundreds of thousands to millions of cells).” | Server Mode or pre-export + Server Mode | True lazy loading; avoids browser memory limits |
-| “I’m already working in a notebook.” | Jupyter (`show_anndata`, `show`) | Tight analysis loop; programmatic control |
-| “I want to share a dataset publicly without running a server.” | GitHub-hosted exports | Exact dataset-specific URL; no running server |
-| “I already have a static host, CDN, or intranet server.” | Self-hosted exports root (`?exportsBaseUrl=`) | Your catalog fills the app's own `Sample datasets:` dropdown; no GitHub, no running server |
-| “I need the fastest possible web experience.” | Pre-exported folder | Best performance and stability |
+| “I just want to look at my data, no Python.” | **Open…** under **File or folder** (an `.h5ad`, a `.zarr` folder or a `.zarr.zip`) | Nothing installed or uploaded; any file size |
+| “The data is already on CELLxGENE, GEO, Zenodo, Figshare, Hugging Face, Dropbox, a public Google Drive file or any web host.” | The **Link or server** address bar | Read in place where it is published ({doc}`14_open_from_link`) |
+| “My collaborator shared a file with me on Google Drive or OneDrive.” | The **Link or server** address bar, then one sign-in | Read in place from Google or Microsoft with your own sign-in ({doc}`16_private_drive_onedrive`) |
+| “I want to share datasets publicly without running a server.” | A dataset catalog on GitHub or a static host | One shareable link; no running server ({doc}`02_local_demo_tutorial`) |
+| “The data is on a remote machine.” | Server Mode over an SSH tunnel | The server hands the file to the browser, which reads only what each view needs |
+| “I’m already working in a notebook.” | Jupyter (`show_anndata`) | Tight analysis loop; programmatic control |
+| “I want the fastest possible web experience.” | Write a Cellucid-ready AnnData with `prepare()` | Gene-major matrix and chunking made for range reads |
 
-If you’re unsure, start with **Server Mode** for `.h5ad`/`.zarr`, or **File Picker** for exported folders.
+## Every Route Into Cellucid
 
-## The 14 Loading Options (Complete Matrix)
+Every dataset reaches the viewer in one of two ways: **the browser reads it
+itself**, from your computer or from a web address, or **a Cellucid server
+hands it over** (one you start in a terminal, from Python, or that a notebook
+starts for you). Either way, the same browser AnnData reader reads it.
 
-This is the canonical list used throughout the documentation.
+### The browser reads it (nothing to install)
 
-**Legend**
-- **Exported** = folder created by `cellucid.prepare()` in Python or
-  `cellucid_prepare()` in R
-- **Lazy genes**: whether gene expression is fetched on demand (best) vs effectively “load all” (worst)
-- **‡** marks the rows where the velocity/drift overlay is **opt-in**: pass
-  `--vector-fields` or `serve_vector_fields=True`, or the vectors are never read
+| Route | How you point Cellucid at the data | What it opens |
+|---|---|---|
+| **Sample dataset** | Pick from the **Sample dataset** list: Cellucid's own catalog on www.cellucid.com | The catalog's AnnData files |
+| **Link** | Paste a link or id into the **Link or server** bar and click **Open**, or put it in `?data=...` ({doc}`14_open_from_link`) | An `.h5ad`, a Zarr ZIP, a Zarr store folder, any other file Cellucid reads (an `.rds`, a `.loom`, an `.h5mu`, a GEO MatrixMarket sample), or a dataset catalog folder |
+| **File or folder** | **Open…** under **File or folder**, then **File…** (an `.h5ad`, `.zarr.zip`, `.rds`, `.loom`, 10x `.h5` or `.h5mu`) or **Folder…** (a `.zarr` store, a Cell Ranger `outs/`, a MatrixMarket folder); or a file or folder dropped anywhere on the page | Every format of {doc}`07_file_format_expectations` |
 
-| # | Where you run things | How you point Cellucid to the data | Data format | Lazy genes | Best for |
-|---:|---|---|---|---|---|
-| 1 | Cellucid web app | Pick from `Sample datasets:`, which lists whatever exports root the page is configured with — Cellucid's own catalog on www.cellucid.com, or yours via `?exportsBaseUrl=https://host/exports/` | Exported | ✅ | Learning the UI with known-good data; publishing a catalog on a static host or CDN |
-| 2 | Cellucid web app (public GitHub) | Connect to a public exports root (or use `?github=...&dataset=...`) | Exported | ✅ | Sharing a dataset publicly, no running server |
-| 3 | Cellucid web app | Browser **Prepared** picker | Exported | ✅ | Fast local viewing of prepared exports |
-| 4 | Cellucid web app | Browser **.h5ad** picker | `.h5ad` | ✅* | Viewing a `.h5ad` of any size without Python |
-| 5 | Cellucid web app | Browser **Zarr ZIP** picker | `.zarr.zip` / `.zip` containing one Zarr v2 store | ✅† | Portable Zarr viewing without Python |
-| 6 | Terminal CLI | `cellucid serve <export_dir>` | Exported | ✅ | Reliable viewing of large exports |
-| 7‡ | Terminal CLI | `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset` | `.h5ad` | ✅ | Large `.h5ad` with read-only backed access |
-| 8‡ | Terminal CLI | `cellucid serve data.zarr --dataset-name "My dataset" --dataset-id my-dataset` | `.zarr` | ✅ | Eager Python load with on-demand browser gene requests |
-| 9 | Python | `cellucid.serve(<export_dir>)` | Exported | ✅ | Scripting server startup |
-| 10‡ | Python | `cellucid.serve_anndata(<data.h5ad>, dataset_name="My dataset", dataset_id="my-dataset")` | `.h5ad` | ✅ | Scripting server startup |
-| 11‡ | Python | `cellucid.serve_anndata(<data.zarr>, dataset_name="My dataset", dataset_id="my-dataset")` | `.zarr` | ✅ | Scripting server startup |
-| 12 | Jupyter | `cellucid.show(<export_dir>)` | Exported | ✅ | Notebook-based exploration of exports |
-| 13‡ | Jupyter | `cellucid.show_anndata(<data.h5ad>, dataset_name="My dataset", dataset_id="my-dataset")` | `.h5ad` | ✅ | Notebook-based exploration of `.h5ad` |
-| 14‡ | Jupyter | `cellucid.show_anndata(<data.zarr or AnnData>, dataset_name="My dataset", dataset_id="my-dataset")` | `.zarr` / in-memory | ✅ | Notebook-based exploration of `.zarr` or in-memory |
+### A Cellucid server hands it over
 
-\* Browser `.h5ad` loading is lazy: the file is read where it is, in a
-background worker, as each view needs it, and is never copied into memory, so
-it has no size limit. A cell-major (CSR) matrix is reorganised by gene in the
-background after opening, in memory or in the browser's private file storage.
+The server runs where the data is; the web app connects to it, either because
+the server opened it (`cellucid serve` opens your browser, a notebook embeds
+it) or through the **Link or server** bar under **Open data** (type its
+address, for example `localhost:8765`, or just the port). The server computes
+nothing: it serves the file's bytes as they are on disk, and the browser reads
+them with range requests, exactly as it reads a linked file (Python first
+writes an in-memory AnnData once to a temporary `.h5ad`; R serves an
+in-memory object as a Zarr store built as the browser asks for it).
 
-† Browser Zarr ZIP loading indexes and validates archive metadata before
-adoption, then reads gene-expression chunks on demand. Archive extraction and
-decoded chunk memory remain subject to the documented browser limits.
+| Route | Command | Best for |
+|---|---|---|
+| **Terminal** | `cellucid serve data.h5ad` (or `data.zarr`, `data.zarr.zip`, any other format Cellucid reads) | A dataset on a remote machine (over an SSH tunnel) |
+| **Python** | `cellucid.serve_anndata("data.h5ad")` | Scripting server startup |
+| **Jupyter** | `cellucid.show_anndata(adata_or_path)` | Exploring while you analyze |
+| **R** | `cellucid::cellucid_view(obj)` (a Seurat, SingleCellExperiment or SummarizedExperiment object, or a path) | Exploring from an R session ({doc}`../../r_package/index`) |
 
-‡ These are the direct-AnnData paths, and on all six the neighbor graph **and**
-the vector fields are off unless asked for — `--knn connectivities` /
-`--vector-fields` on the CLI, `knn_key="connectivities"` /
-`serve_vector_fields=True` in Python. The other eight rows either read a
-prepared export or scan `obsm` in the browser, so there is nothing to switch on.
+The dataset's id and name come from the file's `uns['cellucid']`; a file that
+does not state them needs `--dataset-id` and `--dataset-name`
+(`dataset_id=`, `dataset_name=` in Python).
 
 :::{note}
-Row 1 covers two situations that look different and are the same mechanism. The
-`Sample datasets:` dropdown always reads one **exports root** — a directory
-holding `datasets.json` and one folder per dataset. www.cellucid.com is
-configured with Cellucid's own; `?exportsBaseUrl=` replaces it for one launch,
-so any static host, CDN, or intranet server you control can drive that dropdown
-with your catalog. The value must be an absolute `http(s)` directory URL ending
-in `/`, with no query, fragment, or credentials — anything else is refused as a
-configuration error. Worked example:
+The **Sample dataset** list and a linked catalog folder read the same thing:
+a folder holding `datasets.json` and the AnnData files it lists. The sample
+catalog is the one the page is deployed with (Cellucid's own on
+www.cellucid.com); a linked one is any catalog you point at, on GitHub, a
+static host, a CDN or an intranet server, and it behaves identically: it opens
+on the dataset its catalog names as default, and applies the default session
+its catalog names for that dataset. Worked example:
 {doc}`11_custom_dataset_repository`.
+:::
+
+:::{tip}
+A saved session (**Save** under **Session file**) records which of these routes its dataset
+came from when another person could take it too: a sample, a link or a server.
+Loading the session then opens that dataset first. See
+{doc}`../l_sessions_sharing/03_save_restore_ux`.
 :::
 
 ## Minimal Commands (Copy/Paste)
@@ -203,92 +186,42 @@ configuration error. Worked example:
 pip install cellucid
 ```
 
-### 1) Export once (recommended)
+### 1) Write a Cellucid-ready AnnData (optional, fastest)
 
 ```python
-from cellucid import prepare
+import cellucid
 
-# prepare(...) writes an export folder that loads fast in the browser.
-# You will typically pass:
-# - obs (cell metadata)
-# - var (gene metadata)
-# - gene_expression (adata.X)
-# - embeddings (e.g., X_umap_2d / X_umap_3d)
-# - vector_fields (optional: velocity/drift overlays)
-# See the prepare() documentation for full details.
+cellucid.prepare(
+    "pbmc.zarr",
+    format="zarr",                     # "zarr" (folder), "zarr.zip" or "h5ad"
+    embeddings={"X_umap": adata.obsm["X_umap"]},
+    obs=adata.obs,
+    var=adata.var,
+    gene_expression=adata.X,
+    dataset_id="pbmc-demo-v1",
+    dataset_name="PBMC demo",
+)
 ```
 
-### 2) Serve any data (auto-detected)
+Open `pbmc.zarr` with **Open…** › **Folder…**, serve it, or publish it in a
+catalog. See {doc}`../../python_package/c_data_preparation_api/index` for every
+argument.
+
+### 2) Serve a file
 
 ```bash
-cellucid serve /path/to/data.h5ad \
-  --dataset-name "My study" \
-  --dataset-id my-study-v1
-cellucid serve /path/to/data.zarr \
-  --dataset-name "My study" \
-  --dataset-id my-study-v1
-cellucid serve /path/to/export_dir
+cellucid serve /path/to/data.h5ad --dataset-name "My study" --dataset-id my-study-v1
 ```
+
+A store written by `prepare()` states its own id and name in
+`uns['cellucid']`, so `cellucid serve /path/to/pbmc.zarr` needs neither flag.
 
 ### 3) Notebook quick start
 
 ```python
 from cellucid import show_anndata
 
-viewer = show_anndata(
-    "data.h5ad",
-    dataset_name="My study",
-    dataset_id="my-study-v1",
-)
-```
-
-```python
-# Optional: sanity-check your AnnData quickly
-#
-# This cell is intentionally lightweight; it's here so you can quickly
-# confirm that your dataset has the minimum requirements before you pick a workflow.
-
-from __future__ import annotations
-
-from pathlib import Path
-
-import numpy as np
-
-try:
-    import anndata as ad
-except Exception as e:  # pragma: no cover
-    raise RuntimeError(
-        "anndata is required for this cell. Install with: pip install anndata"
-    ) from e
-
-
-def summarize_anndata(path: str | Path) -> dict:
-    path = Path(path)
-    adata = ad.read_h5ad(path, backed="r")  # doesn't load full X into memory
-    try:
-        # Vector fields use exact dimension-suffixed obsm keys and no X_ prefix:
-        # <field>_umap_<dim>d (for example, velocity_umap_2d).
-        import re
-
-        vector_field_re = re.compile(r"^(?!X_).+_umap_[123]d$")
-        vector_field_obsm_keys = sorted(
-            [k for k in adata.obsm.keys() if vector_field_re.match(k)]
-        )
-        return {
-            "path": str(path),
-            "n_cells": int(adata.n_obs),
-            "n_genes": int(adata.n_vars),
-            "obsm_keys": list(adata.obsm.keys()),
-            "vector_field_obsm_keys": vector_field_obsm_keys,
-            "has_X": adata.X is not None,
-            "X_type": type(adata.X).__name__,
-        }
-    finally:
-        adata.file.close()
-
-
-# Example usage (uncomment):
-# print(summarize_anndata("/path/to/data.h5ad"))
+viewer = show_anndata("data.h5ad", dataset_name="My study", dataset_id="my-study-v1")
 ```
 
 ## Interface reference
@@ -296,13 +229,53 @@ def summarize_anndata(path: str | Path) -> dict:
 For the complete verified loading gallery, see {doc}`09_screenshots`.
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The Cellucid Session panel with a dataset loaded, showing the dataset summary table, the Sample datasets dropdown, the H5AD, Zarr ZIP and Prepared buttons, the Remote server and GitHub data fields with their Connect buttons, and the Save State and Load State buttons.
-:width: 524px
+:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Data mapping group.
+:width: 532px
 
-Options 1–5 in the table above are the controls in this panel; options 6–11 are
-reached through **Remote server**, and options 12–14 need no control at all
-because the notebook supplies the address.
+The browser routes in the table above are the controls in this panel; a
+server started in a terminal or from Python is reached through the **Link or
+server** bar, and a notebook needs no control at all because it supplies the
+address.
 ```
+
+## The Dataset box
+
+The **Dataset** box at the top of the **Session** panel describes the dataset
+that is open, and only that one; opening another rewrites all of it.
+
+- **The name**, then one line with its cells and genes.
+- **Where it is read from:** the format (`h5ad file`, `Zarr v2 folder`,
+  `Zarr v3 ZIP`, `Loom (.loom)`, `R object (.rds)`, …) and the host
+  (`theislab.github.io`, `localhost:8765`), `this computer` for a file you
+  opened, or the program that opened the viewer (`Python`, `Jupyter`, `R`).
+- **For an R object or a MatrixMarket folder**, one more line: *Read once into
+  this browser's storage for this tab* (or *into memory*, when the browser
+  gives the page no storage, as in a private window), and how many parts of
+  the file were not read.
+- **The description** the dataset states (`uns['cellucid']['description']`),
+  two lines with **More**.
+- **How much has been read**, for data read in place from a host:
+  "5.5 MB read in 43 requests", or "Reading… 5.5 MB read in 43 requests" while
+  bytes arrive. Nothing is saved to disk; what was read is released when the
+  dataset closes.
+- **Details**, collapsed: the source and citation as links, the file, its
+  format and size, how it is read (and, for a format read once, where it is
+  kept and what was not read), cells, genes, obs fields, the embeddings shown
+  (of how many `obsm` arrays), the modality of a MuData dataset, layers, raw,
+  the neighbour graph, the latent space and the vector fields. A change in
+  **Data mapping** updates them.
+
+While a dataset opens, the box shows a spinner and what is opening. With no
+dataset open it says so. Progress of long reads and anything that went wrong
+are notifications, not text in the panel.
+
+Every opening (a link, a file, a sample, a catalog dataset, a server or a
+notebook) is shown from its first moment: over the empty viewer while no
+dataset is shown, or as a notification with **Cancel** while another dataset
+stays on screen. It names what is opened, the step under way, how much has
+arrived, how fast and how long is left when that is known; a request made
+again shows as *Retrying…* with why. **Cancel** stops the opening where it is
+and keeps the dataset on screen. How it ended goes to the notification center.
 
 ## Edge Cases (Read This If Something Feels “Weird”)
 
@@ -311,44 +284,45 @@ because the notebook supplies the address.
   `X_umap` opens on a best guess from its other `obsm` arrays
   ({doc}`13_data_mapping`); only a file with nothing drawable is refused.
 - **NaN/Inf in embeddings**: an embedding holding one is refused, naming the
-  cell, before it can replace what is shown. A UMAP the file carries is never
-  replaced silently: its NaN refuses the file; a guessed candidate with one is
-  skipped for the next.
-- **Duplicate variable names**: direct AnnData readers reject them because a
-  gene request must identify exactly one column.
-- **Huge categorical fields** (e.g., 100k unique categories): they load (32-bit codes) and the legend scrolls, but their colours are not distinguishable.
+  cell, before it can replace what is shown.
+- **Duplicate variable names**: the reader makes repeated gene names unique as
+  AnnData's `var_names_make_unique()` does (`MATR3`, `MATR3-1`) and says so.
+- **Huge categorical fields** (e.g., 100k unique categories): they load (32-bit
+  codes) and the legend scrolls, but their colours are not distinguishable.
+- **A malformed `uns['cellucid']`**: an unknown key or a wrong value refuses the
+  file with a message naming it ({doc}`07_file_format_expectations`).
 
 ### Scale edge cases
-- **Very large browser `.h5ad`**: opens at any size; the first genes of a
-  cell-major (CSR) matrix wait for the background reorganisation, which reports
-  its progress. A browser without private file storage (some private windows)
-  scans the file for each gene instead once the matrix is too large for memory,
-  which is slow; use server mode there.
-- **Millions of cells + dense gene matrix**: even with lazy loading, gene queries can be slow or memory-heavy.
+- **Very large `.h5ad` with a cell-major (CSR) matrix**: opens at any size; the
+  first genes wait for the background index, which reports its progress. A
+  gene-major (CSC) matrix needs no index.
+- **Millions of cells + dense gene matrix**: even with lazy reading, gene queries can be slow or memory-heavy.
 
 ### Environment edge cases
-- **Prepared directory picker**: it requires the browser's directory-input
-  capability. H5AD and Zarr ZIP use ordinary single-file inputs.
-- **Corporate environments**: content blockers can break `raw.githubusercontent.com` (GitHub-hosted exports).
+- **Folder picker**: **Open… › Folder…** uses the browser's folder-input
+  capability, which every supported browser has (Safari's leaves out the
+  hidden files of a Zarr v2 store: drop the folder instead, see
+  {doc}`03_browser_file_picker_tutorial`). **Open… › File…** is an ordinary
+  single-file input for every file format Cellucid reads.
+- **Corporate environments**: content blockers can break `raw.githubusercontent.com` (GitHub-hosted catalogs).
 
 ## Troubleshooting (Quick Index)
 
-This is a compact troubleshooting index. Each follow-up notebook contains a **much longer** troubleshooting section.
-
 ### Symptom: “Nothing loads / it spins forever”
 **Likely causes**
-- Large `.h5ad` opened directly in the browser
-- CORS/network blocked (server mode or GitHub mode)
+- CORS/network blocked (a link, server mode or GitHub)
+- The first gene of a large cell-major matrix is waiting for its index
 - Browser GPU/WebGL context lost due to memory pressure
 
 **How to confirm**
 - Open Developer Tools → Console → look for network errors / memory warnings
-- Try loading a built-in demo dataset: if demos load, your environment is probably fine
+- Look at the **Dataset** box: for linked data it shows how much has been
+  read ("Reading…" while bytes arrive), and a retried request is a notification
+- Try a built-in sample: if samples load, your environment is probably fine
 
 **Fix**
-- Prefer `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`
-  for large `.h5ad`
-- Prefer exports created by `prepare()` for best performance
+- Write the file again with `prepare()` (gene-major matrix), or serve it with
+  `cellucid serve`
 
 ---
 
@@ -356,10 +330,6 @@ This is a compact troubleshooting index. Each follow-up notebook contains a **mu
 **Likely causes**
 - AnnData has no drawable `obsm` array: only tables, sparse arrays, or arrays
   holding missing or infinite values (the message lists each entry and why).
-  A file without a UMAP but with another drawable array opens on a best guess.
-
-**How to confirm**
-- In Python: `print(adata.obsm.keys())`
 
 **Fix**
 - Compute an embedding (for example `sc.tl.umap(adata)`) before viewing, or
@@ -367,22 +337,19 @@ This is a compact troubleshooting index. Each follow-up notebook contains a **mu
 
 ---
 
-### Symptom: “GitHub connect says datasets.json not found”
+### Symptom: “A link says the folder holds no datasets.json”
 **Likely causes**
-- The repo path points at the wrong folder
-- You uploaded only a single dataset folder without a top-level `datasets.json`
+- The link points at the wrong folder, or at a page instead of the folder
+- The folder holds AnnData files but no `datasets.json`
 
 **Fix**
-- Create an exports root directory containing `datasets.json` and one or more dataset subfolders.
-- See {doc}`02_local_demo_tutorial` for the exact layout and a helper function to generate `datasets.json`.
+- Link to one file or Zarr store folder directly, or add a `datasets.json`
+  listing the files ({doc}`02_local_demo_tutorial`).
 
 ## Next Steps
 
-Choose your path:
-
-- Want to share a dataset publicly (no server)? → {doc}`02_local_demo_tutorial`
-- Want a complete public repository to inspect and adapt? →
-  {doc}`11_custom_dataset_repository`
-- Want to load from your own machine right now? → {doc}`03_browser_file_picker_tutorial`
-- Working with a big `.h5ad`/`.zarr`? → {doc}`04_server_tutorial`
+- Want to share datasets publicly (no server)? → {doc}`02_local_demo_tutorial`
+- Want a complete public repository to inspect and adapt? → {doc}`11_custom_dataset_repository`
+- Want to open a file from your own machine right now? → {doc}`03_browser_file_picker_tutorial`
+- Working with data on another machine? → {doc}`04_server_tutorial`
 - Already in notebooks? → {doc}`05_jupyter_tutorial`

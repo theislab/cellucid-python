@@ -15,21 +15,24 @@ Everything downstream depends on this.
 
 Pick the closest match:
 
-### Mode A: Export folder
+### Mode A: `prepare()` failed
 
-- you ran `cellucid.prepare(...)` and have a directory export.
-- you start the viewer with `cellucid serve ./export_dir` or `cellucid.show("./export_dir")`.
+- `cellucid.prepare(...)` raised: read its message, which names the argument
+  and the fix ({doc}`../c_data_preparation_api/11_troubleshooting_prepare`).
 
-### Mode B: AnnData server
+### Mode B: data server
 
-- you are serving `.h5ad`/`.zarr` or an in-memory AnnData.
+- you are serving a file or folder Cellucid reads (`.h5ad`, Zarr, `.h5mu`,
+  `.loom`, 10x, MatrixMarket, `.rds`/`.rda`; prepared or not) or an in-memory
+  AnnData or MuData.
 - you start the viewer with
   `cellucid serve ./data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`
   or `cellucid.show_anndata(...)`.
 
 ### Mode C: Notebook embedding
 
-- you are in Jupyter/VSCode/Colab.
+- you are in a notebook (classic Jupyter or JupyterLab are tested; VS Code
+  notebooks and Colab have not been tested by the project).
 - you see an iframe (or a blank output where you expected an iframe).
 
 ---
@@ -48,8 +51,12 @@ If these fail:
 
 If the port differs, find it in:
 - the CLI banner output, or
-- `viewer.server_url` (notebook), or
+- `viewer.server_url` (notebook; a notebook viewer takes 8765, or the next free
+  port when another viewer holds it, and prints a note), or
 - `server.url` (Python).
+
+`/_cellucid/info` also names the dataset's `format` and the `runtime` serving
+the viewer (`"python"` or `"jupyter"`).
 
 ---
 
@@ -70,44 +77,26 @@ See: {doc}`09_server_mode_architecture_endpoints_and_security` and {doc}`06_conf
 
 ## Step 3 — Confirm dataset endpoints return data
 
-### Export folder mode
+### The store route
 
-Check that the directory contains:
-
-- `dataset_identity.json`
-- `obs_manifest.json`
-- an `embeddings/` folder holding every `embeddings.items[*].file` the identity declares
-
-Then probe:
+The server serves one store; the viewer reads it with range requests. Read the
+store's route (`file.url`) from `/_cellucid/datasets`, then probe it the way
+the viewer does — a readable store answers a `Range` request with `206` and
+`Content-Range`:
 
 ```bash
-curl -I http://127.0.0.1:<port>/dataset_identity.json
-curl -I http://127.0.0.1:<port>/obs_manifest.json
-curl -I http://127.0.0.1:<port>/embeddings/0_2d.bin.gz
+curl -s http://127.0.0.1:<port>/_cellucid/datasets | python -m json.tool
+curl -sI -H 'Range: bytes=0-7' http://127.0.0.1:<port>/_cellucid/anndata/<dataset_id>.h5ad
 ```
 
-(Use the exact `file` path an item declares; it ends in `.gz` exactly when the
-export is compressed.)
+The route ends in the file's own ending (`.h5ad`, `.h5mu`, `.loom`, `.h5`,
+`.rds.gz`, `.zarr.zip`, ...); a folder of files (`outs/`, MatrixMarket) is
+served file by file under `<dataset_id>/`, listed in `file.files`.
 
-### AnnData server mode
-
-Probe:
-
-```bash
-curl -I http://127.0.0.1:<port>/dataset_identity.json
-curl -I http://127.0.0.1:<port>/obs_manifest.json
-curl -I http://127.0.0.1:<port>/embeddings/0_2d.bin
-```
-
-To test a gene or obs endpoint, read the payload index out of the manifest
-first — routes are named by index, never by identifier. The index of a field is
-element `[0]` of its manifest entry:
-
-```bash
-curl -s http://127.0.0.1:<port>/var_manifest.json | python -m json.tool | head -20
-curl -I http://127.0.0.1:<port>/var/0.values.f32
-curl -I http://127.0.0.1:<port>/obs/0.codes.u8
-```
+For a Zarr store folder the route ends in `.zarr/`, and each key is its own
+path (`…/<dataset_id>.zarr/.zmetadata`, or `zarr.json` for Zarr v3); an
+absent key is a `404`. `viewer.debug_connection()` runs the same probe and
+reports it under `anndata_store_probes`.
 
 ---
 
@@ -115,7 +104,7 @@ curl -I http://127.0.0.1:<port>/obs/0.codes.u8
 
 This is the fastest way to distinguish:
 - server failures (404/500),
-- format/schema issues (manifest parse errors),
+- format issues (an array the reader cannot decode, a stale Zarr metadata document),
 - and frontend/UI issues.
 
 ### 4.1 Network tab checklist
@@ -125,10 +114,12 @@ In browser DevTools → Network:
 1) filter for `_cellucid`:
    - `/_cellucid/health` should be 200
    - `/_cellucid/info` should be 200
-2) filter for `obs_manifest.json` and `var_manifest.json`:
-   - should be 200 and have JSON content
+2) filter for `_cellucid/anndata/`:
+   - range requests should answer `206` with `Content-Range`
 3) look for 404s:
-   - missing `.gz` files often means a partial export / compression mismatch
+   - for a Zarr store folder, a 404 on a chunk key is normal (an unwritten
+     chunk is its fill value); a 404 on `.zmetadata` or `zarr.json` means the
+     route is wrong
 4) look for CORS errors:
    - “CORS blocked” usually means origin mismatch or a proxy issue
 
@@ -140,7 +131,7 @@ In DevTools → Console:
 - look for:
   - “Failed to fetch”
   - “CORS blocked”
-  - JSON parse errors (manifest schema mismatch)
+  - refusals naming `uns['cellucid']` (a key or value the viewer does not accept)
 
 If you suspect web-app internal bugs, also consult:
 - {doc}`../../web_app/p_developer_docs/13_debugging_playbook`
@@ -149,7 +140,7 @@ If you suspect web-app internal bugs, also consult:
 
 ## Step 5 — Notebook-specific debugging (`viewer.debug_connection()`)
 
-If you have a `viewer` object (Jupyter/VSCode/Colab), run:
+If you have a `viewer` object, run:
 
 ```python
 report = viewer.debug_connection()
@@ -158,13 +149,15 @@ report
 
 The report includes:
 - server health/info probes,
-- `dataset_identity_probes`, keyed by every dataset declared by the server,
-  preserving each exact dataset id/path and recording failures per dataset,
-- whether the viewer is displayed,
+- `anndata_store_probes`, keyed by every dataset the server lists, recording
+  each store's range-read answer or failure,
+- whether the viewer is displayed, and whether its channel is connected
+  (`channel_connected`),
 - web UI cache status + build id,
 - a Python→frontend ping/pong roundtrip,
 - a frontend “debug snapshot” (URL/origin/userAgent as seen by the iframe),
-- and recent accepted-event counts grouped by exact event type.
+- and recent accepted-event counts grouped by exact event type, with the
+  commands the viewer refused (`recent_events["command_errors"]`).
 
 If you are filing a bug report, paste the report as JSON:
 
@@ -179,31 +172,33 @@ print(json.dumps(report, indent=2, default=str))
 
 ### Pattern: “Viewer UI loads, but data is missing”
 
-Export folder mode:
-- manifests might reference files that don’t exist (partial export)
-- exact identifier/path mismatch
-- `.gz` mismatch (exported compressed, but viewer requests uncompressed or vice versa)
-
-AnnData server mode:
-- route for that path may not exist (wrong filename/ext)
-- adapter could be raising internally (check server logs)
+- the store route answers something other than `206` to a `Range` request
+  (probe it as above)
+- the viewer's reader refused part of the store (read the notification and
+  the browser console)
 
 Start with:
-- {doc}`08_export_format_spec_and_invariants`
-- {doc}`07_prepare_export_pipeline_architecture`
+- {doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification`
+- {doc}`07_prepare_writer_architecture`
 
 ### Pattern: “Hooks don’t fire”
 
-Confirm in browser Network tab:
-- `POST /_cellucid/events` is happening and returns 200.
+Confirm in browser Network tab (filter `WS`):
+- the `/_cellucid/ws` connection is open (`101`), and frames appear as you
+  interact.
 
-If it is not happening:
-- frontend may not be configured for notebook mode,
-- iframe may be blocked by proxy/mixed-content issues.
+If it is not open:
+- the page was not opened with the viewer's own URL (`viewer.viewer_url`,
+  carrying `viewer=true`, `viewerId` and `viewerToken`),
+- the channel was closed `4401` (a stale iframe of a viewer that was stopped,
+  garbage-collected or replaced by a new one),
+- iframe may be blocked by proxy/mixed-content issues, or a proxy does not
+  pass WebSockets (the viewer says so).
 
-If it is happening:
-- viewerId may mismatch (stale iframe vs new viewer),
-- Python viewer may have been stopped/garbage-collected.
+If it is open and frames flow but a hook does not run:
+- the hook is registered on a different viewer object than the iframe's,
+- a hook raised: the `cellucid.viewer_channel` log says "A viewer event hook
+  failed".
 
 Start with:
 - {doc}`11_hooks_events_protocol_and_schema`
@@ -228,7 +223,7 @@ Fix:
 
 Minimum:
 
-- mode (export folder vs AnnData vs notebook)
+- mode (`prepare()` vs data server vs notebook)
 - `cellucid` version + Python version + OS
 - reproduction steps (code or click-by-click)
 - expected vs actual

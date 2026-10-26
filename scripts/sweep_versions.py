@@ -19,10 +19,10 @@ equal" is false here and a sweep that pretends otherwise is useless:
                      reservation pinned at 0.0.1 on purpose (see
                      ``cellucid/npm/publishing.md``); flagging it would train
                      maintainers to ignore the sweep.
-* ``artifact``    -- the exporter release that produced a committed export, or
-                     prose that describes one. Older exports legitimately record
-                     older values; these are printed for visibility and never
-                     counted as drift.
+* ``artifact``    -- the producer release that wrote a committed dataset, or
+                     prose that describes one. Datasets built earlier
+                     legitimately record older values; these are printed for
+                     visibility and never counted as drift.
 
 Every ``release`` declaration must also be reachable from inside its own
 checkout, so each one carries the marker on its declaring line. A line that
@@ -33,7 +33,7 @@ a declaration nobody can grep for is a declaration a bump will miss.
 
 Only files in each repository's Git index are read. A glob that walked the
 working tree would pick up ignored scratch directories, so the verdict would
-depend on what happened to be lying around and a stale local export could inject
+depend on what happened to be lying around and a stale local build could inject
 a version into a release report.
 
 Repositories that are not checked out are reported as such rather than skipped
@@ -102,7 +102,6 @@ class Declaration:
     pattern: str
     kind: str
     note: str = ""
-    glob: bool = False
     # Changelogs list every past release. Only the topmost heading declares the
     # current version; the history below it must stay as written.
     first_only: bool = False
@@ -290,26 +289,6 @@ DECLARATIONS: tuple[Declaration, ...] = (
     ),
     Declaration(
         "cellucid-python",
-        "docs/user_guide/python_package/c_data_preparation_api/"
-        "09_output_format_specification_exports_directory.md",
-        r"`cellucid_data_version` is `([^`]+)`",
-        RELEASE,
-    ),
-    Declaration(
-        "cellucid-python",
-        "docs/user_guide/python_package/c_data_preparation_api/"
-        "09_output_format_specification_exports_directory.md",
-        r'"cellucid_data_version": "([^"]+)"',
-        RELEASE,
-        "the worked schema example the prose above it pins",
-        marker_alternative=f"<!-- {MARKER} -->",
-        marker_reason=(
-            "JSON has no comment syntax and the block is validated against the "
-            "reader's key set; the prose line that pins this value is marked"
-        ),
-    ),
-    Declaration(
-        "cellucid-python",
         "docs/user_guide/r_package/installation.md",
         r"Version `([^`]+)` from `packageVersion`",
         RELEASE,
@@ -371,9 +350,9 @@ DECLARATIONS: tuple[Declaration, ...] = (
         "docs/user_guide/web_app/b_data_loading/10_standard_pancreas_dataset.md",
         rf"the exact Cellucid {VERSION} producer-source digest",
         ARTIFACT,
-        "describes the exporter release recorded in "
+        "describes the producer release recorded in "
         "cellucid-datasets/sources/build-environment.json; it changes when the "
-        "sample generations are rebuilt, not at a bump",
+        "sample stores are rebuilt, not at a bump",
     ),
     # -- cellucid-r ----------------------------------------------------------
     Declaration(
@@ -413,22 +392,8 @@ DECLARATIONS: tuple[Declaration, ...] = (
         "sources/build-environment.json",
         r'(?s)"cellucid_producer": \{.*?"version": "([^"]+)"',
         ARTIFACT,
-        "exporter release every sample generation is built with",
-    ),
-    Declaration(
-        "cellucid-datasets",
-        "tests/catalog-contract.test.mjs",
-        r"(?s)'https://github\.com/theislab/cellucid-python',\s*\n\s*version: '([^']+)'",
-        ARTIFACT,
-        "test pin of the recorded exporter release",
-    ),
-    Declaration(
-        "cellucid-datasets",
-        "exports-v3/*/dataset_identity.json",
-        r'"cellucid_data_version": "([^"]+)"',
-        ARTIFACT,
-        "stamped when the export was built; older exports keep older values",
-        glob=True,
+        "producer release every sample store (anndata/<id>.zarr) is built "
+        "with; the stores themselves carry no version stamp",
     ),
     # -- cellucid-demo-custom-datasets ---------------------------------------
     Declaration(
@@ -453,16 +418,8 @@ DECLARATIONS: tuple[Declaration, ...] = (
     Declaration(
         "cellucid-demo-custom-datasets",
         "README.md",
-        rf"`{VERSION}` is the release these example exports were built with",
+        rf"`{VERSION}` is the version these example files were built with",
         RELEASE,
-    ),
-    Declaration(
-        "cellucid-demo-custom-datasets",
-        "exports/*/dataset_identity.json",
-        r'"cellucid_data_version": "([^"]+)"',
-        ARTIFACT,
-        "stamped when the export was built",
-        glob=True,
     ),
 )
 
@@ -476,8 +433,8 @@ def tracked_files(root: Path) -> frozenset[str] | None:
     """Repository-relative paths in ``root``'s Git index, or None if unreadable.
 
     The sweep reads only these. A working-tree walk would also pick up ignored
-    scratch directories — `cellucid-datasets/exports-v3/_*/` is ignored precisely
-    so local experiments stay local — and a release verdict that depends on
+    scratch directories — the build stages beside `cellucid-datasets/anndata/`
+    are ignored precisely so local builds stay local — and a release verdict that depends on
     uncommitted files is not reproducible from a clean checkout.
     """
     if not (root / ".git").exists():
@@ -498,15 +455,8 @@ def _resolve(
     workspace: Path, declaration: Declaration, tracked: frozenset[str]
 ) -> list[Path]:
     root = workspace / declaration.repository
-    if declaration.glob:
-        candidates = sorted(root.glob(declaration.relative_path))
-    else:
-        candidates = [root / declaration.relative_path]
-    return [
-        path
-        for path in candidates
-        if path.is_file() and path.relative_to(root).as_posix() in tracked
-    ]
+    path = root / declaration.relative_path
+    return [path] if path.is_file() and declaration.relative_path in tracked else []
 
 
 def _line_of(text: str, offset: int) -> int:
@@ -623,7 +573,7 @@ def report(workspace: Path) -> int:
 
     artifact_groups = _grouped(findings, ARTIFACT)
     out.append(
-        "ARTIFACT STAMPS — exporter release recorded in a committed artifact; "
+        "ARTIFACT STAMPS — producer release recorded in a committed artifact; "
         "older values are expected"
     )
     for value, group in artifact_groups.items():

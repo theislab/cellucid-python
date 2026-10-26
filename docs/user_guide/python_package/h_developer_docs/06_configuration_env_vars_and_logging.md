@@ -8,11 +8,16 @@ behavior.
 
 ## Configuration layers (highest priority wins)
 
-In general, configuration flows like this:
+There are two layers, and the first given wins:
 
-1) **Function arguments** (e.g. `serve(..., host=..., port=...)`)
-2) **CLI flags** (e.g. `cellucid serve ... --host ... --port ...`)
-3) **Defaults** in code (`DEFAULT_HOST`, `DEFAULT_PORT`)
+1) **Function arguments** (e.g. `serve_anndata(..., host=..., port=...)`), or
+   the **CLI flags** that `cellucid serve` passes to the same function
+   (`--host ... --port ...`)
+2) **Defaults** in code (`DEFAULT_HOST`, `DEFAULT_PORT`)
+
+For a dataset's launch choices (embeddings, graph, expression, modality, ...)
+an explicit argument or flag wins over the store's own
+`uns['cellucid']['defaults']`, which wins over the viewer's default rule.
 
 ---
 
@@ -37,6 +42,12 @@ Defined in `cellucid-python/src/cellucid/_server_base.py`:
 
 For remote access, explicitly bind:
 - `--host 0.0.0.0` (and use SSH tunneling or a firewall)
+
+A notebook viewer (`show_anndata`, `AnnDataViewer` with `port=None`) binds
+`127.0.0.1:8765` — the one local port Google sign-in accepts — or, when another
+viewer holds it, the next free port, and prints a note saying so. A port given
+explicitly is used or refused, never replaced. `serve_anndata`,
+`AnnDataServer` and `cellucid serve` always bind exactly the port given.
 
 ---
 
@@ -98,6 +109,15 @@ When you import `cellucid` as a library, logging is “normal Python logging”:
 - by default you may see little/no output,
 - configure logging in your application/notebook if you want debug output.
 
+The package logs under these logger names:
+
+| Logger | What it reports |
+|---|---|
+| `cellucid.server` | refused requests (a `Host` that does not name the server); clients that went away mid-response, at `DEBUG` |
+| `cellucid.anndata_server` | per-request lines (at `DEBUG`), request failures, background-server failures |
+| `cellucid.viewer_channel` | refused or closed viewer channels and failing notebook hooks |
+| `cellucid.jupyter` | notebook viewer start, stop and channel registration |
+
 Example:
 
 ```python
@@ -131,7 +151,9 @@ Cause:
 - but the viewer tries to load `http://127.0.0.1:<port>`.
 
 Fix options (ordered):
-1) Use `jupyter-server-proxy` (recommended).
+1) Route the server through `jupyter-server-proxy` and pass the proxy base as
+   `client_server_url=` and its host as `allowed_hosts=[...]` (Cellucid does
+   not select a proxy itself).
 2) Use a tunnel/reverse proxy and pass its exact base as
    `client_server_url=`.
 

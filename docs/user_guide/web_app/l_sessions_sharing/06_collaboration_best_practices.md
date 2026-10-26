@@ -51,9 +51,9 @@ Recommended folder layout for a project:
 
 ```
 project/
-  exports/
-    dataset_v1/
-    dataset_v2/
+  data/
+    dataset_v1.zarr/
+    dataset_v2.zarr/
   sessions/
     dataset_v1/
       2025-12-30__qc__v1.cellucid-session
@@ -70,13 +70,13 @@ project/
 Why this works:
 - sessions don’t contain data, so you keep them paired by dataset version;
 - session filenames stay short but meaningful;
-- you can quickly answer “which session goes with which export?”
+- you can quickly answer “which session goes with which dataset version?”
 
 ---
 
 ## Best practice #3: treat sessions like “milestones”, not “autosave”
 
-Sessions can store large artifacts (highlight memberships, caches).
+Sessions can store large payloads (highlight memberships, user-defined fields, analysis results).
 Saving constantly produces:
 - huge files,
 - noisy timelines,
@@ -186,6 +186,6 @@ Related: {doc}`../k_figure_export/index`, {doc}`../h_analysis/index`
 
 ## Next steps
 
-- {doc}`05_share_workflows_links_bundles_exports` (share workflow patterns)
+- {doc}`05_share_workflows_links_sessions_data_files` (share workflow patterns)
 - {doc}`07_versioning_compatibility_and_dataset_identity` (exact cross-machine identity rules)
 - {doc}`10_troubleshooting_sessions` (what to do when collaboration fails anyway)

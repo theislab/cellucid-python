@@ -1,5 +1,12 @@
 # Figure-coverage audit — `user_guide/web_app/p_developer_docs/`
 
+:::{important}
+Audited before Cellucid 0.9.5, which reads AnnData only. The capture
+instructions use the current controls, fixtures and sample catalog; where a
+record says what a page or an image showed at audit time (the **Prepared**
+button, a prepared export), that is history. {doc}`index` maps the old names.
+:::
+
 Section audited: 20 `.md` files (19 numbered pages + section index). Every page read in full.
 Web app source cross-checked against `cellucid/` (1575 tracked files enumerated).
 
@@ -114,7 +121,7 @@ Every other backticked path in all 20 pages resolves. I extracted 255 path-shape
 **notes** — Real defects on the highest-value verification target:
 
 - **`:63` — dead path.** `assets/exports/` does not exist. `cellucid/assets/` contains exactly `css external fonts img js`. Delete the line.
-- **`:46–64` — tree is materially incomplete.** Missing real directories: `assets/js/analytics/` (`performance.js`, `tracker.js`), `assets/js/dev/` (`benchmark.js`), `assets/external/`, `assets/fonts/`, `assets/img/`. Missing real `app/` children: `registries/`, `utils/`, `dockable-accordions/` + `dockable-accordions.js`, `notification-center/` + `notification-center.js`, `url-state.js` (which page 04 and page 05 both reference), `startup-failure.js`, `startup-url-intent.js`, `jupyter-command-handler.js`. Missing top-level repo dirs a developer needs: `tests/`, `scripts/`, `types/` — all three are referenced by page 14 and page 16.
+- **`:46–64` — tree is materially incomplete.** Missing real directories: `assets/js/analytics/` (`performance.js`, `tracker.js`), `assets/js/dev/` (`benchmark.js`), `assets/external/`, `assets/fonts/`, `assets/img/`. Missing real `app/` children: `registries/`, `utils/`, `dockable-accordions/` + `dockable-accordions.js`, `notification-center/` + `notification-center.js`, `url-state.js` (which page 04 and page 05 both reference), `startup-failure.js`, `startup-url-intent.js`, `viewer-host-command-handler.js`. Missing top-level repo dirs a developer needs: `tests/`, `scripts/`, `types/` — all three are referenced by page 14 and page 16.
 - **`:96–99` — dev globals list is incomplete.** Documents `window._cellucidViewer`, `window._cellucidState`, `window._comparisonModule`. Source also sets `window._cellucidUi` (`main.js:2314`) and `window._cellucidBenchmarkHarness` (`main.js:3520`).
 - **Duplication / drift risk.** `cellucid/assets/js/app/README.md` contains a second hand-maintained ASCII tree of the same `app/` layer. The two already disagree (the in-repo README lists `registries/` and `app/utils/`, this page lists neither). Two hand-maintained maps of one tree is one map too many — generating (a) resolves it, or the page should link the in-repo README instead of restating it.
 - All 14 code-pointer paths in the "Where do I look for…?" table (`:125–133`) resolve, including the two `.md` targets (`figure-export/README.md`, `community-annotations/REPO_SETUP.md`). The four entry-point files at `:76–117` all resolve.
@@ -186,7 +193,7 @@ If a figure is added *after* the corrections land, restrict it to a single Appli
 
 The keys that **are** correct, verified: `CELLUCID_DEBUG` (`utils/debug.js`), `cellucid_theme` (`utils/theme-manager.js:14`), `cellucid_viewer_background` (`render-controls.js:37`), `cellucid_last_quote_index` (`onboarding/welcome-modal.js`), `cellucid:community-annotations:repo-map` (`community-annotations/*.js:15`), `cellucid:community-annotations:lock:*` (`scope-lock.js:27` `LOCK_PREFIX`), `cellucid:community-annotations:cache:*:files:shas` (`cache-scope.js:98`), `cellucid:community-annotations:cache:*:session` (`cache-scope.js:92`), `cellucid:community-annotations:tab-id:v1` (`:26`), `window.CELLUCID_DEBUG`, `window.__CELLUCID_DEBUG__` (`analysis/shared/debug-utils.js:62`), `?debug=1` and `localStorage.debug` (same file, `:43`/`:56`), `window.__CELLUCID_GITHUB_WORKER_ORIGIN__` (`github-auth.js`).
 
-One omission: the URL-parameter table (`:27–33`) does not list `?exportsBaseUrl=`, even though it is a real query key (`EXPORTS_QUERY_KEY = 'exportsBaseUrl'`) and both page 02 (`:85`) and page 09 (`:64`, `:94`) tell readers to use it. It belongs in this table — this is the page that claims to be the complete parameter inventory.
+One omission: the URL-parameter table (`:27–33`) does not list `?sampleCatalog=`, even though it is a real query key (`SAMPLE_CATALOG_QUERY_KEY` in `data/data-source.js`) and both page 02 (`:85`) and page 09 (`:64`, `:94`) tell readers to use it. It belongs in this table — this is the page that claims to be the complete parameter inventory.
 
 ---
 
@@ -213,7 +220,7 @@ Derived from: `cellucid/assets/js/app/main.js` (the import list gives band 2 exa
 - **`:54` — dead identifier.** `createViewer({ canvas, labelLayer, viewTitleLayer, sidebar })`. There is no `sidebar` parameter. Real signature: `createViewer({ canvas, labelLayer, viewTitleLayer, onViewFocus })` (`assets/js/rendering/viewer.js:536`); the sole call site passes three arguments (`assets/js/app/main.js:250`). Page 07 `:28` documents the same call correctly — fix 05 to match 07.
 - Every other code pointer resolves (`:73`, `:95`, `:115`, `:130`, `:131`, `:132`, `:144`, `:152`), as do both external `{doc}` targets.
 - The six event names at `:104–109` all match `cellucid/assets/js/app/README.md`. The four `viewer.*` methods at `:117–120` are real. The boot sequence at `:51–65` is consistent with `main.js`.
-- `:78`'s description of `local-demo` (exports base URL via meta tag or `?exportsBaseUrl=`) matches page 09 `:93–95` and the source constant. Good cross-page consistency here.
+- `:78`'s description of `local-demo` (exports base URL via meta tag or `?sampleCatalog=`) matches page 09 `:93–95` and the source constant. Good cross-page consistency here.
 
 ---
 
@@ -274,7 +281,7 @@ A second, lower-priority diagram: the six render subsystems as boxes under `view
 
 - **Dataset:** one of the built-in demo datasets from the sample picker (Pancreas — small, fast, and every sidebar section populates). Do not use a local-user dataset; it puts a filesystem path in the dataset info block.
 - **Interaction:** load the dataset, then **expand every accordion section** so each labelled region has visible content rather than a collapsed summary row. This will exceed one viewport — capture the sidebar as a tall single image (devtools device-mode with a tall viewport, or two stacked crops), not a scrolled screenshot with cut-off sections.
-- **Crop target:** the sidebar column only, full height, plus ~40px of canvas on the right edge for context. Exclude the browser chrome and the URL bar (the URL carries `?dataset=` and possibly `?exportsBaseUrl=`).
+- **Crop target:** the sidebar column only, full height, plus ~40px of canvas on the right edge for context. Exclude the browser chrome and the URL bar (the URL carries `?dataset=` and possibly `?sampleCatalog=`).
 - **Cursor:** none — no hover state. Hover would highlight one section and imply it is the subject.
 - **Annotation:** outline + callout label per region, labels reading e.g. `ui/modules/filter-controls.js`. Labels in a consistent accent colour that survives both the light and dark docs theme.
 
@@ -299,13 +306,13 @@ Secondary (cheaper, complements it): a **DIAGRAM** of the coordinator's import g
 
 **needs** — Two figures.
 
-*(a) Source fan-in → baseUrl → loader fan-out.* Left column: five source nodes, each labelled with its file — `local-demo` (`data/local-demo-source.js`), `github-repo` (`data/github-data-source.js`), `local-user` (`data/local-user-source.js`), `remote` (`data/remote-source.js`), `jupyter` (`data/jupyter-source.js`). All five converge on a single node `DataSourceManager` (`data/data-source-manager.js`) emitting `{ sourceType, datasetId, baseUrl, metadata }`. That feeds one node `data/data-loaders.js`, which fans out to the artifact list: `dataset_identity.json`, `obs_manifest.json`, `var_manifest.json` (dashed = optional), embeddings/points buffers, `connectivity_manifest.json` + edges (dashed). The bottleneck shape is the page's entire thesis ("the base URL is the critical bridge", `:40`) and prose cannot draw a bottleneck. Derived from: `data/data-source-manager.js` registration list plus the five source modules' filenames — a generator can list `assets/js/data/*-source.js` directly.
+*(a) Source fan-in → baseUrl → loader fan-out.* Left column: five source nodes, each labelled with its file — `local-demo` (`data/local-demo-source.js`), `link` (`data/link-source.js`), `local-user` (`data/local-user-source.js`), `remote` (`data/remote-source.js`), `jupyter` (`data/viewer-host-source.js`). All five converge on a single node `DataSourceManager` (`data/data-source-manager.js`) emitting `{ sourceType, datasetId, baseUrl, metadata }`. That feeds one node `data/data-loaders.js`, which fans out to the artifact list: the identity (`uns['cellucid']`, `obsm`, `obsp`), the obs and var inventories (dashed = optional), embeddings/points buffers, the neighbour graph (`obsp`, dashed). The bottleneck shape is the page's entire thesis ("the base URL is the critical bridge", `:40`) and prose cannot draw a bottleneck. Derived from: `data/data-source-manager.js` registration list plus the five source modules' filenames — a generator can list `assets/js/data/*-source.js` directly.
 
-*(b) Caching-layer stack.* Four stacked bands with what lives in each and who invalidates it: HTTP cache (browser, every dataset artifact revalidated with `{cache:'no-cache'}`), in-memory source/manifest caches (`DataSourceManager`), `DataState` bounded LRU field caches (obs ≤50 / var ≤20 entries — numbers from page 06 `:57–58`), IndexedDB + localStorage sha index (`community-annotations/file-cache.js`). Four bands is exactly the kind of thing a reader must hold simultaneously to debug "why is my changed file not reloading", and it is stable — these four layers are architectural, not implementation detail.
+*(b) Caching-layer stack.* Four stacked bands with what lives in each and who invalidates it: HTTP cache (browser: catalogs and sessions revalidated with `{cache:'no-cache'}`, range reads of a file bypass it with `no-store`), in-memory source and catalog caches (`DataSourceManager`), `DataState` bounded LRU field caches (obs ≤50 / var ≤20 entries — numbers from page 06 `:57–58`), IndexedDB + localStorage sha index (`community-annotations/file-cache.js`). Four bands is exactly the kind of thing a reader must hold simultaneously to debug "why is my changed file not reloading", and it is stable — these four layers are architectural, not implementation detail.
 
 *Supporting devtools capture (optional, medium value):* Network waterfall of one real demo-dataset load, filtered to XHR/Fetch, showing the actual request order the page claims at `:69–75`. **Leak risk low** — the exports base URL is a public host — but crop the URL bar and any `Authorization` header.
 
-**notes** — Page verifies clean. All eleven code pointers resolve; both `{doc}` targets resolve. `:93–95`'s two-step `EXPORTS_BASE_URL` resolution order (query field, then meta tag) matches the source constant `EXPORTS_QUERY_KEY = 'exportsBaseUrl'` and page 02 `:83–85`. `:114`'s `owner/repo/path` is a user-input template, not a filesystem path. The four source interface methods at `:81–84` and the two health endpoints at `:150–151` are plausible and consistent with the rest of the section. `DecompressionStream` handling at `:203–205` is consistent with page 03 `:76–84`. No dead paths, no stale prose found.
+**notes** — Page verifies clean. All eleven code pointers resolve; both `{doc}` targets resolve. `:93–95`'s two-step sample-catalog resolution order (query field, then meta tag) matches `readSampleCatalogConfiguration` (`SAMPLE_CATALOG_QUERY_KEY = 'sampleCatalog'`) and page 02 `:83–85`. `:114`'s `owner/repo/path` is a user-input template, not a filesystem path. The four source interface methods at `:81–84` and the two health endpoints at `:150–151` are plausible and consistent with the rest of the section. `DecompressionStream` handling at `:203–205` is consistent with page 03 `:76–84`. No dead paths, no stale prose found.
 
 ---
 
@@ -319,7 +326,7 @@ Secondary (cheaper, complements it): a **DIAGRAM** of the coordinator's import g
 
 **needs** — Two diagrams. Both describe byte-level and control-flow contracts, which is the one category of diagram that does **not** rot with refactors — it changes only when the format breaks, and a format break is exactly when the docs must be rewritten anyway.
 
-*(a) Container byte-layout figure.* A horizontal byte-ribbon, left to right: `"CELLUCID_SESSION\n"` (magic) │ `u32 LE manifest length` │ `manifest JSON (UTF-8, exactly that many bytes)` │ then a repeating group `u32 LE stored length` │ `stored payload bytes` × N chunks. Below the ribbon, an expansion of the manifest object showing its exactly-three keys (`createdAt`, `datasetFingerprint`, `chunks`), the fingerprint's exactly-five keys, and a chunk's exactly-nine keys. Derived from: `cellucid/assets/js/app/session/bundle/format.js` (framing) and `session/session-context.js` (`getDatasetFingerprint`). This turns `:51–74` — currently three dense paragraphs a reader must reconstruct mentally — into one glance.
+*(a) Container byte-layout figure.* A horizontal byte-ribbon, left to right: `"CELLUCID_SESSION/2\n"` (signature with format version) │ `u32 LE manifest length` │ `manifest JSON (UTF-8, exactly that many bytes)` │ then a repeating group `u32 LE stored length` │ `stored payload bytes` × N chunks. Below the ribbon, an expansion of the manifest object showing its exactly-five keys (`createdAt`, `datasetFingerprint`, `source`, `requires`, `chunks`), the fingerprint's exactly-six keys, and a chunk's exactly-nine keys. Derived from: `cellucid/assets/js/app/session/bundle/format.js` (framing) and `session/session-context.js` (`getDatasetFingerprint`). This turns `:51–74` — currently three dense paragraphs a reader must reconstruct mentally — into one glance.
 
 *(b) Restore pipeline with the rollback edge.* Ten numbered steps down the page as stated at `:127–139` (supersede → frame under limits → validate manifest/profile/fingerprint → register reversible snapshots → eager decode/apply → lazy decode/apply → prepare all participants → commit in order → final UI refresh → publish "Session fully restored"), with a **red return edge** from any step back through "rollback in reverse participant order". The all-or-nothing property (`:24`, `:142–143`) is the page's most important claim and the reverse edge is the only way to show it. Derived from `session/session-serializer.js`.
 
@@ -389,7 +396,7 @@ Derived from: `cellucid/assets/js/app/ui/modules/figure-export/index.js` (module
 
 **Leak risk — the highest in the section; handle deliberately.**
 - The Console prints the dataset base URL. On a local-user dataset this can include a filesystem path with the operator's username. Use a **built-in demo dataset only**.
-- The Network panel's request rows show the full origin. Capture from `http://localhost:8000`, and crop the browser URL bar out — it may carry `?remote=`, `?github=`, or `?exportsBaseUrl=`.
+- The Network panel's request rows show the full origin. Capture from `http://localhost:8000`, and crop the browser URL bar out — it may carry `?remote=`, `?data=gh:`, or `?sampleCatalog=`.
 - Never capture with community annotation signed in: the UI displays the GitHub identity (`:313`) and Session Storage holds the OAuth token.
 - Devtools request headers can contain `Cookie` / `Authorization`. Capture the **Response** headers pane, not Request, or redact.
 - Use a clean browser profile (the page itself recommends this at `14:188`) so no unrelated extensions or personal tabs appear.

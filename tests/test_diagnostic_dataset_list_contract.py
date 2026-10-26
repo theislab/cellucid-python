@@ -2,184 +2,65 @@
 
 ``debug_connection()`` fetches ``/_cellucid/datasets`` and validates it with
 :func:`cellucid.jupyter._wire._require_debug_dataset_list` before probing every
-declared identity. The validator and the server hold two separate declarations
-of the same entry shape, and nothing forced them to agree: a prepared export
-that ships a published default session serves a five-key entry, the validator
-accepted only three, and the report silently lost ``dataset_identity_probes``.
-
-These tests tie the two declarations together in both directions -- what the
-server emits is accepted, and the exactness that makes the validator worth
-having is preserved for everything else.
+listed store. The validator and the server hold two separate declarations of
+the same entry shape, so these tests tie them together in both directions:
+what the server emits is accepted, and anything else is refused.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+import pandas as pd
 import pytest
+from _serverless_viewer import serverless_viewer
 
-from cellucid import jupyter
-from cellucid.jupyter._wire import (
-    _PUBLISHED_STATE_FIELDS,
-    _PUBLISHED_STATE_MANIFEST_NAME,
-    _require_debug_dataset_list,
-)
-from cellucid.server._datasets import _list_exported_datasets
-from cellucid.server._state import (
-    _PUBLISHED_STATE_BUNDLE,
-    _PUBLISHED_STATE_MANIFEST,
-)
-
-STATE_MANIFEST_BYTES = b'{ "states": ["default.cellucid-session"] }\n'
-STATE_BUNDLE_BYTES = b"exact published state"
+from cellucid import prepare
+from cellucid.anndata_server import AnnDataServer
+from cellucid.jupyter._wire import _require_debug_dataset_list
 
 
-def _prepared_dataset(root: Path, *, dataset_id: str) -> Path:
-    root.mkdir(parents=True)
-    (root / "dataset_identity.json").write_text(
-        json.dumps(
-            {
-                "version": 3,
-                "id": dataset_id,
-                "name": f"Prepared {dataset_id}",
-                "description": "",
-                "stats": {
-                    "n_cells": 1,
-                    "n_genes": 0,
-                    "n_obs_fields": 0,
-                    "n_categorical_fields": 0,
-                    "n_continuous_fields": 0,
-                    "has_connectivity": False,
-                    "n_edges": None,
-                },
-                "embeddings": {
-                    "default_dimension": 2,
-                    "defaults": {"2d": "X_umap"},
-                    "items": {
-                        "X_umap": {
-                            "label": "X_umap",
-                            "dimension": 2,
-                            "file": "embeddings/0_2d.bin",
-                            "source": {"key": "X_umap", "columns": [0, 1]},
-                        }
-                    },
-                },
-                "obs_fields": [],
-                "export_settings": {
-                    "compression": None,
-                    "var_quantization": None,
-                    "obs_continuous_quantization": None,
-                    "obs_categorical_dtype": "uint16",
-                },
-            }
-        ),
-        encoding="utf-8",
+def _served_entry(tmp_path: Path) -> dict[str, Any]:
+    path = prepare(
+        tmp_path / "alpha.h5ad",
+        format="h5ad",
+        embeddings={"X_umap": np.zeros((3, 2))},
+        dataset_id="alpha",
+        dataset_name="Alpha",
+        gene_expression=np.ones((3, 1)),
+        var=pd.DataFrame(index=["gene-1"]),
     )
-    (root / "obs_manifest.json").write_text(
-        json.dumps(
-            {
-                "_format": "compact_v2",
-                "n_points": 1,
-                "centroid_outlier_quantile": None,
-                "latent_key": "latent_space",
-                "compression": None,
-                "_obsSchemas": {},
-                "_continuousFields": [],
-                "_categoricalFields": [],
-            }
-        ),
-        encoding="utf-8",
-    )
-    (root / "embeddings").mkdir()
-    (root / "embeddings" / "0_2d.bin").write_bytes(b"\x00" * 8)
-    return root
+    server = AnnDataServer(path, quiet=True, serve_web_ui=False)
+    document = server._datasets_document()
+    assert len(document["datasets"]) == 1
+    return document
 
 
-def _publish_state(dataset: Path) -> str:
-    assert len(STATE_MANIFEST_BYTES) == 43
-    (dataset / _PUBLISHED_STATE_MANIFEST).write_bytes(STATE_MANIFEST_BYTES)
-    (dataset / _PUBLISHED_STATE_BUNDLE).write_bytes(STATE_BUNDLE_BYTES)
-    return hashlib.sha256(STATE_BUNDLE_BYTES).hexdigest()
-
-
-def _entry(**overrides: object) -> dict[str, object]:
-    entry: dict[str, object] = {
-        "id": "alpha",
-        "path": "/alpha/",
-        "name": "Alpha",
-        "state_manifest": _PUBLISHED_STATE_MANIFEST_NAME,
-        "state_sha256": "0" * 64,
-        "state_bytes": 3268,
-    }
-    entry.update(overrides)
-    return entry
-
-
-def test_wire_and_server_declare_the_same_published_state_pair() -> None:
-    """One published-state shape, two modules, and now one check that ties them."""
-    assert _PUBLISHED_STATE_MANIFEST_NAME == _PUBLISHED_STATE_MANIFEST
-    assert sorted(_PUBLISHED_STATE_FIELDS) == ["state_bytes", "state_manifest", "state_sha256"]
-
-
-def test_diagnostics_accept_the_exact_catalog_the_prepared_server_serves(
-    tmp_path: Path,
-) -> None:
+def test_diagnostics_accept_the_exact_catalog_the_server_serves(tmp_path: Path) -> None:
     """The served entry is the input; no hand-written stand-in can drift from it."""
-    exports = tmp_path / "exports"
-    exports.mkdir()
-    _prepared_dataset(exports / "alpha", dataset_id="alpha")
-    beta = _prepared_dataset(exports / "beta", dataset_id="beta")
-    digest = _publish_state(beta)
-
-    served = _list_exported_datasets(exports)
-    assert served == [
-        {"id": "alpha", "path": "/alpha/", "name": "Prepared alpha"},
-        {
-            "id": "beta",
-            "path": "/beta/",
-            "name": "Prepared beta",
-            "state_manifest": _PUBLISHED_STATE_MANIFEST,
-            "state_sha256": digest,
-            "state_bytes": len(STATE_BUNDLE_BYTES),
-        },
-    ]
-
-    assert _require_debug_dataset_list({"datasets": served}) == served
+    document = _served_entry(tmp_path)
+    assert _require_debug_dataset_list(document) == document["datasets"]
 
 
-def test_debug_connection_probes_identity_for_a_published_state_catalog(
+def test_debug_connection_probes_every_listed_store(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The diagnostic's whole point is the identity probe; it must still run."""
-    viewer = jupyter.BaseViewer(
+    viewer = serverless_viewer(
         port=8765,
         client_server_url="http://127.0.0.1:8765",
         web_cache_dir=tmp_path / "cache",
     )
+    document = _served_entry(tmp_path)
     responses: dict[str, object] = {
         "http://127.0.0.1:8765/_cellucid/health": {"status": "ok"},
-        "http://127.0.0.1:8765/_cellucid/info": {"version": "0.9.1"},
-        "http://127.0.0.1:8765/_cellucid/datasets": {
-            "datasets": [
-                {
-                    "id": "beta",
-                    "path": "/beta/",
-                    "name": "Prepared beta",
-                    "state_manifest": _PUBLISHED_STATE_MANIFEST_NAME,
-                    "state_sha256": "b" * 64,
-                    "state_bytes": 3268,
-                }
-            ]
-        },
-        "http://127.0.0.1:8765/beta/dataset_identity.json": {
-            "id": "beta",
-            "name": "Prepared beta",
-        },
+        "http://127.0.0.1:8765/_cellucid/info": {"version": "0.9.5"},
+        "http://127.0.0.1:8765/_cellucid/datasets": document,
     }
+    probed: list[str] = []
 
     class Response:
         def __init__(self, payload: object) -> None:
@@ -201,107 +82,52 @@ def test_debug_connection_probes_identity_for_a_published_state_catalog(
             raise OSError(f"unmapped diagnostic URL: {url}")
         return Response(responses[url])
 
+    def probe(url: str) -> dict[str, Any]:
+        probed.append(url)
+        return {"url": url}
+
     monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    monkeypatch.setattr("cellucid.jupyter._viewer._probe_served_store", probe)
     report = viewer.debug_connection()
 
     assert "server_datasets_error" not in report
-    assert report["server_datasets"] == [
-        {
-            "id": "beta",
-            "path": "/beta/",
-            "name": "Prepared beta",
-            "state_manifest": _PUBLISHED_STATE_MANIFEST_NAME,
-            "state_sha256": "b" * 64,
-            "state_bytes": 3268,
-        }
-    ]
-    assert report["dataset_identity_probes"]["beta"] == {
-        "path": "/beta/",
-        "url": "http://127.0.0.1:8765/beta/dataset_identity.json",
-        "identity": {"id": "beta", "name": "Prepared beta"},
-    }
-
-
-def test_diagnostics_still_accept_a_catalog_without_a_published_state() -> None:
-    payload = {"datasets": [{"id": "alpha", "path": "/alpha/", "name": "Alpha"}]}
-    assert _require_debug_dataset_list(payload) == [
-        {"id": "alpha", "path": "/alpha/", "name": "Alpha"}
-    ]
+    assert report["server_datasets"] == document["datasets"]
+    store_url = f"http://127.0.0.1:8765/{document['datasets'][0]['anndata']['file']['url']}"
+    assert probed == [store_url]
+    assert report["anndata_store_probes"] == {"alpha": {"url": store_url}}
+    assert "dataset_identity_probes" not in report
 
 
 @pytest.mark.parametrize(
     ("entry", "match"),
     [
         pytest.param(
-            {"id": "alpha", "path": "/alpha/", "name": "Alpha", "state_manifest": "x.json"},
-            "exactly id, name, and path",
-            id="manifest-without-digest",
+            {"id": "alpha", "path": "/alpha/", "name": "Alpha"},
+            "exactly id, name, and anndata",
+            id="a-directory-entry",
         ),
         pytest.param(
-            {"id": "alpha", "path": "/alpha/", "name": "Alpha", "state_sha256": "0" * 64},
-            "exactly id, name, and path",
-            id="digest-without-manifest",
+            {"id": "alpha", "name": "Alpha", "anndata": {"file": {"url": "x.h5ad"}, "defaults": {}}},
+            "anndata must name one served store",
+            id="a-store-outside-the-route",
         ),
         pytest.param(
-            _entry(unexpected="value"),
-            "exactly id, name, and path",
+            {"id": "alpha", "name": "Alpha", "anndata": {"file": {"url": "_cellucid/anndata/a.h5ad"}}},
+            "anndata must name one served store",
+            id="no-defaults",
+        ),
+        pytest.param(
+            {
+                "id": "alpha",
+                "name": "Alpha",
+                "anndata": {"file": {"url": "_cellucid/anndata/a.h5ad"}, "defaults": {}},
+                "extra": 1,
+            },
+            "exactly id, name, and anndata",
             id="unknown-extra-key",
-        ),
-        pytest.param(
-            _entry(state_manifest="states.json"),
-            "state_manifest must be exactly",
-            id="foreign-manifest-name",
-        ),
-        pytest.param(
-            _entry(state_manifest=None),
-            "state_manifest must be exactly",
-            id="manifest-not-text",
-        ),
-        pytest.param(
-            _entry(state_sha256="0" * 63),
-            "state_sha256 must be exactly",
-            id="digest-too-short",
-        ),
-        pytest.param(
-            _entry(state_sha256="A" * 64),
-            "state_sha256 must be exactly",
-            id="digest-uppercase",
-        ),
-        pytest.param(
-            _entry(state_sha256="../etc/passwd".ljust(64, "0")),
-            "state_sha256 must be exactly",
-            id="digest-not-hexadecimal",
-        ),
-        pytest.param(
-            _entry(state_sha256=0),
-            "state_sha256 must be exactly",
-            id="digest-not-text",
-        ),
-        pytest.param(
-            {k: v for k, v in _entry().items() if k != "state_bytes"},
-            "exactly id, name, and path",
-            id="manifest-and-digest-without-length",
-        ),
-        pytest.param(
-            _entry(state_bytes=0),
-            "state_bytes must be the default state's exact positive byte length",
-            id="length-zero",
-        ),
-        pytest.param(
-            _entry(state_bytes="3268"),
-            "state_bytes must be the default state's exact positive byte length",
-            id="length-not-integer",
-        ),
-        pytest.param(
-            _entry(state_bytes=True),
-            "state_bytes must be the default state's exact positive byte length",
-            id="length-boolean",
         ),
     ],
 )
-def test_diagnostics_reject_every_malformed_published_state_declaration(
-    entry: dict[str, object],
-    match: str,
-) -> None:
+def test_diagnostics_reject_every_other_entry(entry: dict[str, object], match: str) -> None:
     with pytest.raises((TypeError, ValueError), match=match):
         _require_debug_dataset_list({"datasets": [entry]})

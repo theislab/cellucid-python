@@ -34,9 +34,22 @@ Figure export is split into three layers so it stays fast and maintainable:
    - `cellucid/assets/js/app/ui/modules/figure-export/figure-export-engine.js`
 
 3) **Renderers (SVG/PNG)**  
-   Turn the payload into a Blob (no DOM manipulation for SVG; Canvas/WebGL for PNG).
+   Turn the payload into a Blob (no DOM manipulation for SVG; a composed
+   Canvas for PNG).
    - `cellucid/assets/js/app/ui/modules/figure-export/renderers/svg-renderer.js`
    - `cellucid/assets/js/app/ui/modules/figure-export/renderers/png-renderer.js`
+
+4) **Export worker**  
+   Runs every per-cell pass and every encode off the page's main thread: axis
+   bounds, the shader-accurate WebGL2 point pass (on OffscreenCanvas), the
+   vector point markup (returned as one Blob), and PNG encoding with
+   `OffscreenCanvas.convertToBlob` plus the `iTXt` metadata. The page only
+   composes, so exporting a large dataset does not freeze the tab. In a
+   browser whose workers have no WebGL2 (WebKitGTK and WPE,
+   [WebKit bug 209809](https://bugs.webkit.org/show_bug.cgi?id=209809)) the
+   same handler draws the point pass on the page.
+   - `cellucid/assets/js/app/ui/modules/figure-export/utils/figure-export-worker.js`
+   - `cellucid/assets/js/app/ui/modules/figure-export/utils/figure-export-worker-client.js`
 
 Key utilities/components:
 - Layout (single-view layout plus `computeGridPaneLayout()`, which owns one grid cell: label row, plot rect, panel legend rect): `cellucid/assets/js/app/ui/modules/figure-export/utils/layout.js`
@@ -54,6 +67,8 @@ Key utilities/components:
 - Background-derived annotation ink: `cellucid/assets/js/app/ui/modules/figure-export/utils/figure-ink.js`
 - Density reduction: `cellucid/assets/js/app/ui/modules/figure-export/utils/density-reducer.js`
 - Point projection: `cellucid/assets/js/app/ui/modules/figure-export/utils/point-projector.js`
+- Vector point markup (written in the export worker): `cellucid/assets/js/app/ui/modules/figure-export/renderers/svg-point-markup.js`
+- Session record of the panel's settings: `cellucid/assets/js/app/ui/modules/figure-export/utils/session-settings.js`
 - WebGL point rasterizer (PNG + Hybrid SVG): `cellucid/assets/js/app/ui/modules/figure-export/utils/webgl-point-rasterizer.js`
 - PNG UTF-8 iTXt metadata: `cellucid/assets/js/app/ui/modules/figure-export/utils/png-metadata.js`
 - Deterministic stored ZIP batches: `cellucid/assets/js/app/ui/modules/figure-export/utils/zip-archive.js`
@@ -130,7 +145,7 @@ Include enough context to reproduce without guessing:
 - **Browser + version**, **OS**, and (if relevant) **GPU model**
 - **Dataset identity**:
   - dataset name/id,
-  - how it was loaded (export folder / server / URL / Jupyter),
+  - how it was loaded (local file / server / link / Jupyter),
   - approximate point count and #categories in the active field
 - **Exact steps** (click-by-click) to reach the failing state
 - **Export settings**:

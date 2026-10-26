@@ -31,14 +31,14 @@ Filtering is **not deletion**.
 This is the single most useful thing to know before you touch a control.
 
 ```{figure} ../../../_static/screenshots/filtering/window-clusters-all-visible.png
-:alt: The whole application window, sidebar on the left and the Pancreas 3D embedding on a light grid, with eight ticked legend rows carrying cell counts and the line Showing all 3,696 points beneath them.
+:alt: The whole application window with the Pancreas embedding coloured by clusters, every legend row checked, and the Filters block reading Showing all 3,696 cells above No filters active.
 :width: 1440px
 
 **Before.** All 3,696 cells drawn, every category ticked.
 ```
 
 ```{figure} ../../../_static/screenshots/filtering/window-clusters-three-hidden.png
-:alt: The same window after unchecking three legend rows; the orange, purple and blue point groups are absent from the canvas, those rows are greyed and read 0 of 916, 0 of 642 and 0 of 262 cells, and the sidebar reads Showing 1,876 of 3,696 points above one filter row.
+:alt: The same window after unchecking Ductal, Ngn3 high EP and Ngn3 low EP: those points are absent from the canvas, their legend rows are unchecked and read 0 of their cell counts, and the Filters block reads Showing 1,876 of 3,696 cells above one clusters row.
 :width: 1440px
 
 **After.** Three categories unchecked. The cells are *gone from the picture*,
@@ -51,37 +51,39 @@ category holds (`0 / 916 cells`), which is how you know nothing was deleted.
 ## Where filters come from (the three surfaces)
 
 Cellucid creates filters through three UI surfaces, all of them inside
-**Coloring & Filtering**.
+**Coloring & filtering**.
 
 ### 1) Categorical legend — checkboxes
 
 ```{figure} ../../../_static/screenshots/filtering/type-category-visibility.png
-:alt: A legend with Show All and Hide All buttons above eight rows; three rows are unchecked with grey swatches and read 0 of their total cells while five ticked rows read a plain cell count, and each row carries a pencil and a bin icon.
-:width: 428px
+:alt: The categorical legend for clusters: Show all and Hide all above eight rows, three of them (Ductal, Ngn3 high EP, Ngn3 low EP) unchecked and reading 0 of their cell counts, each row carrying a colour swatch, a label, a cell count, a rename pencil and a delete bin.
+:width: 488px
 
-Unchecking a row creates a **category visibility** filter. `Show All` and
-`Hide All` act on every row you are currently allowed to toggle.
+Unchecking a row creates a **category visibility** filter. `Show all` and
+`Hide all` act on every row you are currently allowed to toggle.
 ```
 
 ### 2) Continuous legend — Min/Max sliders
 
 ```{figure} ../../../_static/screenshots/filtering/type-numeric-range.png
-:alt: A block headed Filtering with the subtitle Visible range, the help line Adjust limits then click FILTER or enable Live filtering, a Live filtering toggle reading Off, the hint Drag sliders then click Filter, Min and Max sliders with numeric readouts, and black FILTER and RESET buttons with the pointer on FILTER.
-:width: 428px
+:alt: The Visible range block of the continuous S_score legend with Live filtering switched off: Minimum and Maximum sliders with their values, and the Filter button beside Reset enabled, with the pointer on Filter.
+:width: 488px
 
 Narrowing the range creates a **numeric range** filter. The same block appears
 for a continuous obs field and for a gene.
 ```
 
-### 3) Display options — Outlier filter (latent space)
+### 3) Legend — Outlier filter
 
 ```{figure} ../../../_static/screenshots/filtering/outlier-slider-95.png
-:alt: A control labelled Outlier filter (latent space) whose slider handle sits a short distance in from the right end, with 95 percent printed beside it and the mouse pointer on the handle.
-:width: 436px
+:alt: The Outlier filter with its (i), its slider moved left of the end stop and its readout showing 95 percent, with the pointer on the slider.
+:width: 496px
 
 Lowering the percentage creates an **outlier** filter that hides the cells
-furthest from their own category's centre. The control is only present when the
-active field carries outlier statistics.
+furthest from their own category's centre in a latent space (scVI, PCA), never
+in the 2D/3D layout. The control is present for every categorical field of the
+file; until a latent space is chosen it is a **Choose latent space** button
+instead of the slider ({doc}`02_outlier_filtering_per_active_field`).
 ```
 
 There is also a scope rule that catches everyone once:
@@ -92,7 +94,7 @@ There is also a scope rule that catches everyone once:
   field.**
 
 If you ever feel “the plot is lying to me”, the debugging rule is:
-**trust the Active filters panel** (it lists every filter you can create in the
+**trust the Filters panel** (it lists every filter you can create in the
 UI that currently affects visibility in the active view).
 
 :::{note}
@@ -102,7 +104,7 @@ directly. That mask is tested *before* every filter on this page, no filter can
 make a cell it hides visible again, and it deliberately produces **no Active
 filters row** — there is no UI configuration for a row to reset.
 
-So a notebook session can legitimately read `Showing 1,200 of 3,696 points`
+So a notebook session can legitimately read `Showing 1,200 of 3,696 cells`
 above the words `No filters active`. If you see that, the mask is the
 explanation; call `viewer.set_visibility(None, visible=True)` to clear it. See
 {doc}`../b_data_loading/05_jupyter_tutorial`.
@@ -112,7 +114,7 @@ explanation; call `viewer.set_visibility(None, visible=True)` to clear it. See
 
 ## Fast path (wet lab / non-technical): “hide what I don’t want to see”
 
-1) Pick what you want to look at in **Coloring & Filtering**:
+1) Pick what you want to look at in **Coloring & filtering**:
    - clusters / cell types (categorical), or
    - QC metrics / scores (continuous), or
    - a gene (gene expression).
@@ -120,9 +122,9 @@ explanation; call `viewer.set_visibility(None, visible=True)` to clear it. See
    - **categorical:** uncheck categories you want to hide,
    - **continuous:** narrow the Min/Max slider range,
    - **outliers (if available):** set outlier slider to `95%` to hide the most outlier-like cells.
-3) Look at **Active filters**:
+3) Look at **Filters**:
    - confirm your filter is listed,
-   - confirm “Showing X of Y points” matches your expectation.
+   - confirm “Showing X of Y cells” matches your expectation.
 4) If you “lost” cells:
    - disable filters one-by-one (checkbox next to each filter),
    - or remove them (×) to reset fully.
@@ -148,10 +150,11 @@ These are easy-to-miss gotchas:
 - **Continuous range filters**: a cell whose value is `NaN` is treated as
   “outside range” and becomes invisible whenever that filter is active.
   :::{note}
-  A **prepared export cannot contain `NaN` in a continuous obs field or a
-  gene** — both writers refuse it, counting the offending values and naming the
-  first affected cells. You can only meet this case by opening a raw `.h5ad`
-  or Zarr archive in the browser, where the values are read as they are.
+  A file written by `prepare()` or `cellucid_prepare()` stores a missing value
+  in a continuous obs column as `NaN`, so you meet this whenever a column does
+  not measure every cell. Gene expression cannot hold `NaN` in such a file —
+  both writers refuse it, counting the offending values and naming the first
+  affected cells.
   :::
 - **Categorical visibility filters**: a cell whose category code is the
   missing-value marker is **skipped** by category filters, so it stays visible
@@ -159,22 +162,22 @@ These are easy-to-miss gotchas:
   and has no legend row of its own.
 - **Outlier filtering**: a cell without an outlier quantile is never removed by
   outlier filtering. This happens for every cell in a category smaller than
-  `centroid_min_points` (default `10`) at export time.
+  `centroid_min_points` (default `10`), and for a cell with no category.
 
 ### Enable/disable vs remove (two different workflows)
 
 Cellucid supports both:
 
-- **Disable a filter** (checkbox in Active filters):
+- **Disable a filter** (checkbox in Filters):
   - keeps the filter configured (useful for “what if?” comparisons),
   - but stops it from affecting visibility.
-- **Remove a filter** (× in Active filters):
+- **Remove a filter** (× in Filters):
   - resets it to its default “no filtering” state (e.g., show all categories, full numeric range, outlier = `100%`),
   - and re-enables it, so a removed filter usually disappears from the list entirely.
 
 ```{figure} ../../../_static/screenshots/filtering/active-filters-row-disabled.png
-:alt: Three filter rows where the middle one has an empty checkbox and is greyed and struck through while the other two stay black with ticked checkboxes, the mouse pointer resting on the cleared checkbox, and the line above reading Showing 1,472 of 3,696 points.
-:width: 480px
+:alt: The same three-row Filters list with the clusters hiding row unchecked under the pointer: that row is greyed and struck through while the other two stay black, and the count line above has risen.
+:width: 496px
 
 **Disabled**, not removed. The row keeps its configuration and its `×`, and it
 is drawn greyed and struck through so it is obvious at a glance which rows are
@@ -182,8 +185,8 @@ still doing work. Ticking the box puts the filter back exactly as it was.
 ```
 
 ```{figure} ../../../_static/screenshots/filtering/active-filters-remove-button.png
-:alt: A single filter row with the mouse pointer resting on the circled cross button at its right edge.
-:width: 480px
+:alt: A one-row Filters list with the pointer resting on the remove cross at the right edge of the row.
+:width: 496px
 
 **Removed.** The `×` resets that filter to its no-op state — show all
 categories, full numeric range, outlier back to `100%` — and the row then
@@ -202,7 +205,7 @@ Filtering is **view-scoped**:
 - In **Live + Snapshots** (small multiples), each view/snapshot keeps its own filter state.
 
 Practical implication:
-- If a snapshot looks “wrong”, click/select that snapshot first and then check **Active filters** (the panel reflects the currently active view).
+- If a snapshot looks “wrong”, click/select that snapshot first and then check **Filters** (the panel reflects the currently active view).
 
 ---
 
@@ -215,7 +218,7 @@ High-level performance model:
 - Cells that are already hidden short-circuit: the mask is tested first, and no
   filter predicate is evaluated for a cell that is hidden anyway.
 - Some UI interactions are intentionally optimized:
-  - continuous filtering can be applied only on demand (turn off Live filtering → click FILTER),
+  - continuous filtering can be applied only on demand (turn off Live filtering → click Filter),
   - outlier slider updates are throttled to at most one recomputation every 50 ms while dragging.
 
 :::{note}

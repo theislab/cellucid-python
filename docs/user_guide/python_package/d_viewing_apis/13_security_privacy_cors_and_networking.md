@@ -17,7 +17,7 @@ This page documents the security/privacy model of Cellucid viewing workflows, es
 
 ### Your dataset
 
-In the recommended workflows (`cellucid serve`, `show`, `show_anndata`):
+In the recommended workflows (`cellucid serve`, `serve_anndata`, `show_anndata`):
 - your **dataset bytes are served by your local Python server**,
 - and your **browser downloads the dataset from that local server**.
 
@@ -75,7 +75,8 @@ Binding to `0.0.0.0` makes the server reachable from other machines on the netwo
 This can expose:
 - embeddings and cell metadata (obs fields),
 - gene expression values,
-- and any other exported artifacts the server can serve.
+- and everything else in the file — the whole served file or folder, byte
+  for byte, including `uns` and every layer.
 
 ```{warning}
 CORS does not “secure” a server. CORS is a browser policy; any machine that can reach your server can still download data using non-browser clients (curl, Python, etc.).
@@ -98,9 +99,8 @@ every user who can route to that port — not only to you, and not only to the
 tunnel you opened. Anyone with a shell on that node, and usually anyone with a
 shell on any node of the cluster, can fetch:
 
-- the embeddings you served,
-- the obs columns you served,
-- and every expression value the viewer is able to request.
+- every byte of the file or store you served: the embeddings, every obs
+  column, every expression value, `uns`, and every layer.
 
 They need the port number and nothing else. A single `curl` against
 `http://compute-node:8765/` is enough — no browser, no Cellucid installation, no
@@ -149,18 +149,19 @@ The full recipe (finding the node, Slurm job scripts, port collisions) is in
   cluster that admits `ssh -J you@login-node … you@compute-node` all support
   `ssh -N -L 8765:127.0.0.1:8765 you@remote-host` against the default bind,
   which publishes nothing to anyone.
-- **Serve less.** `--obs-key` restricts the served obs columns to the ones you
-  name, so an exposed server cannot hand out the clinical columns you never
-  asked it to read.
+- **Serve less by serving a smaller file.** `--obs-key` only chooses the obs
+  columns the viewer lists; the server still hands out the whole store byte for
+  byte. To keep columns, layers or genes off the port, write a copy without
+  them (`prepare()` with only the columns you need, or a subset `.h5ad`) and
+  serve that.
 - **Add firewall rules** where the site allows them, and treat a site policy
   against non-loopback binds as authoritative over this page.
 
 Together, on a compute node:
 
 ```bash
-cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset \
-    --host 0.0.0.0 --no-browser --port 47231 \
-    --obs-key cell_type --obs-key total_counts
+cellucid serve /path/to/data_shareable.h5ad --dataset-name "My dataset" --dataset-id my-dataset \
+    --host 0.0.0.0 --no-browser --port 47231
 ```
 
 ### A wildcard bind turns the `Host` check off
@@ -213,10 +214,12 @@ High-level behavior:
 
 ## Notebook-specific security notes
 
-Notebook mode uses two channels:
-
-1) Python → frontend commands via `postMessage` (includes a per-viewer `viewerToken`)
-2) Frontend → Python events via `POST /_cellucid/events` and selections via `POST /_cellucid/selection` (identified by `viewerId`, authenticated by `viewerToken`)
+Notebook mode uses one channel: the viewer opens a WebSocket to the server
+(`/_cellucid/ws`), says hello with its `viewerId` and `viewerToken`, and the
+server checks the token before anything passes. The upgrade also passes the
+`Host` check and an `Origin` check (the server's own host, a loopback name or
+a host in `allowed_hosts`). Python's commands and the viewer's events
+(selections as binary cell indices) both travel on it.
 
 Practical guidance:
 - keep the server bound to localhost unless you have a strong reason,

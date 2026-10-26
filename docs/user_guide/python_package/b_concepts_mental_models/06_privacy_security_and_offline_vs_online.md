@@ -32,9 +32,9 @@ Your dataset is **not uploaded** anywhere automatically.
 
 ### Web app file picker mode (no Python server)
 
-If you open the Cellucid web app and use the browser file picker to select an export folder:
-- the browser reads files locally,
-- nothing is uploaded unless you explicitly host/share the export folder yourself.
+If you open the Cellucid web app and use its **Open…** button (or drop a file or folder on the page) to open a file or folder it reads (an `.h5ad`, a `.zarr.zip` or `.zarr` folder, an `.h5mu`, a `.loom`, a 10x `.h5` or `outs/` folder, a MatrixMarket folder, an `.rds`/`.rda`):
+- the browser reads the file locally,
+- nothing is uploaded unless you explicitly host/share the file yourself.
 
 Start here: {doc}`../../web_app/b_data_loading/index`
 
@@ -44,7 +44,7 @@ Start here: {doc}`../../web_app/b_data_loading/index`
 
 ### Default: localhost-only
 
-`CellucidServer` and notebook viewers bind to `127.0.0.1` by default.
+`AnnDataServer` (`cellucid serve`, `serve_anndata`) and notebook viewers bind to `127.0.0.1` by default.
 
 That means:
 - only the same machine can reach the server,
@@ -107,8 +107,11 @@ Keep the exposure bounded instead of avoiding it:
 - **Prefer a loopback bind plus a direct tunnel whenever your client can reach
   the machine directly** — a lab server, a cloud VM, or a cluster that lets you
   `ssh` through to the compute node. That publishes nothing to anyone.
-- **Serve less**: name the obs columns you actually need with `obs_keys=` (or
-  `--obs-key`), so an exposed server cannot hand out columns it never read.
+- **Serve less**: the server hands out the file or store whole -- every byte
+  of it, to anyone who can reach the port -- and `obs_keys=` (`--obs-key`) only
+  chooses which columns the viewer lists. To publish less, write a reduced
+  copy first (for example `prepare(...)` with only the components you need, or
+  a subset AnnData) and serve that.
 
 Both hops of the decision are worked through in
 {doc}`../d_viewing_apis/12_remote_servers_ssh_tunneling_and_cloud` and
@@ -173,9 +176,9 @@ cellucid serve /path/to/data --allowed-host hub.example.org
 ```
 
 ```python
-from cellucid import serve
+from cellucid import serve_anndata
 
-serve("/path/to/data", allowed_hosts=["hub.example.org"])
+serve_anndata("/path/to/data.h5ad", allowed_hosts=["hub.example.org"])
 ```
 
 Rules for an entry, all enforced when the server is constructed:
@@ -234,7 +237,7 @@ Before binding its HTTP server, Cellucid:
 
 ### What this means without source access
 
-- `cellucid serve`, `show(...)`, and `show_anndata(...)` require the configured
+- `cellucid serve`, `serve_anndata(...)`, and `show_anndata(...)` require the configured
   source at each startup when they serve the viewer UI.
 - Source or inventory failure stops startup. A previous local generation is
   kept intact but is not served as a substitute.
@@ -300,7 +303,7 @@ A `.cellucid-session` file is not “just UI state” — it can encode:
 
 Treat session bundles as data artifacts:
 - don’t share them publicly if the underlying dataset is sensitive,
-- version them alongside the matching dataset export folder.
+- version them alongside the matching dataset file.
 
 ---
 

@@ -76,8 +76,8 @@ http://127.0.0.1:8765/?anndata=true
 
 ```{note}
 This works because your browser connects to *your laptop* at `localhost:8765`, and SSH forwards that traffic to the remote machine’s `localhost:8765`.
-Use the exact Viewer URL printed by the remote command. The H5AD command above
-prints `?anndata=true`; a prepared export prints `?source=remote`.
+Use the exact Viewer URL printed by the remote command; it ends in
+`?anndata=true`.
 ```
 
 ## Common variations
@@ -101,6 +101,11 @@ Then open:
 ```text
 http://127.0.0.1:9000/?anndata=true
 ```
+
+Forward the same port number on both ends. A server bound to loopback answers
+only a `Host` naming loopback on its own bound port, so
+`ssh -L 9999:127.0.0.1:9000` (browser on `:9999`, server on `:9000`) is
+refused with `421 Misdirected Request`.
 
 Pin the port explicitly whenever you tunnel. `--port 0` asks the operating
 system for any free port, which is useful on a shared machine but leaves you
@@ -216,9 +221,10 @@ with one extra constraint: the embedded viewer always binds its data server to
 argument. So the embedded iframe cannot be reached through a login-node forward.
 Two things do work there:
 
-- forward the **notebook's own** port instead, so the browser, the kernel, and
-  the viewer's loopback all sit on the same machine as far as the connection is
-  concerned; or
+- forward the **notebook's own** port instead, and reach the viewer through
+  the notebook server's `jupyter-server-proxy` route: pass that route as
+  `client_server_url=` and the host name your browser uses for it as
+  `allowed_hosts=` ({doc}`10_notebook_widget_mode_advanced`); or
 - start a separate server that can accept the login node's connection, and open
   it in its own browser tab:
 
@@ -248,7 +254,7 @@ If you run Cellucid inside a container and want to access it from the host machi
 Example:
 
 ```bash
-cellucid serve /data/export_dir --host 0.0.0.0 --port 8765 --no-browser
+cellucid serve /data/pbmc.h5ad --dataset-name "PBMC" --dataset-id pbmc --host 0.0.0.0 --port 8765 --no-browser
 ```
 
 A container's loopback interface belongs to the container, so a published port

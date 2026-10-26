@@ -24,7 +24,12 @@ It assumes **zero knowledge** of Cellucid, and only minimal Python.
 - A dataset in one of these forms:
   - an in-memory `AnnData`
   - a `.h5ad` file
-  - a `.zarr` store directory
+  - a Zarr store (a folder, or zipped as `.zip`)
+  - (also opened by path, without conversion: a MuData `.h5mu` or MuData Zarr,
+    a `.loom` file, a 10x `.h5` file or Cell Ranger `outs/` folder, a
+    MatrixMarket folder, an R object `.rds`/`.rda`; see
+    {doc}`24_citeseq_mudata_prepare_and_show` and
+    {doc}`25_serve_loom_10x_and_matrixmarket`)
 
 ---
 
@@ -255,16 +260,19 @@ def _set_default_color(_event):
 ```
 
 ```{note}
-If the field name is wrong or missing, nothing catastrophic happens; the command will simply not do what you expect. Use the UI field selector to confirm the real field name.
+If the field name is wrong or missing, the viewer stays as it was and reports a
+`command_error`: Cellucid prints it to `sys.stderr` (or hands it to your
+`@viewer.on_command_error` hook instead). Use the UI field selector to confirm the real
+field name.
 ```
 
 ---
 
 ## Interface reference
 
-```{figure} ../../../_static/screenshots/filtering/coloring-filtering-cell-type-panel.png
-:alt: Coloring and Filtering panel with a categorical cell-type field selected and its legend visible.
-:width: 246px
+```{figure} ../../../_static/screenshots/filtering/panel-clusters-unfiltered.png
+:alt: The Coloring & filtering panel with the clusters field selected: Color by with its three field selectors, Show cell info, the Legend group with Show centroids, Show labels and the Outlier filter at 100 percent, the Show all and Hide all buttons above the eight-category legend, and Filters reading Showing all 3,696 cells above No filters active.
+:width: 532px
 
 Selecting a categorical observation field colors the embedding and exposes its complete category legend.
 ```
@@ -316,7 +324,7 @@ See web-app docs:
 ### Symptom: “The viewer iframe is blank or says it can’t load”
 
 Likely causes (most common first):
-1) the Python server failed to start (port conflict, exception)
+1) the Python server failed to start (an exception in the cell output)
 2) the configured web generation could not be fetched, verified, or published
 3) remote kernel without proxy/tunnel
 
@@ -326,7 +334,9 @@ viewer.debug_connection()
 ```
 
 Fix:
-- pick a different port (advanced: construct viewer with `port=...`)
+- a busy port does not stop `show_anndata` (it serves on 8765, or the next
+  free port when another viewer holds it); with an explicit
+  `AnnDataViewer(port=...)`, pick a different port
 - clear the web cache and retry (see {doc}`../../web_app/b_data_loading/05_jupyter_tutorial`)
 - use Jupyter Server Proxy or SSH tunneling (see {doc}`22_large_dataset_server_mode_and_lazy_gene_expression`)
 
@@ -352,4 +362,4 @@ Fix:
 
 - {doc}`12_find_marker_genes_and_export_a_figure` (go from clusters → marker genes → figure)
 - {doc}`13_compare_two_groups_and_interpret_results` (compare groups safely)
-- {doc}`21_prepare_exports_with_quantization_and_compression` (reproducible, shareable exports)
+- {doc}`21_prepare_a_cellucid_ready_anndata` (a reproducible, shareable file)

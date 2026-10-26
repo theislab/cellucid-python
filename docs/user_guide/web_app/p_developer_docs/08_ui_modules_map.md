@@ -70,10 +70,11 @@ Most — not all — are imported and initialized by:
 
 :::{important}
 “Lives under `ui/modules/`” and “is initialized by the coordinator” are two
-different facts, and three of the modules below are initialized by a *sibling
+different facts, and four of the modules below are initialized by a *sibling
 module* rather than by the coordinator:
 
 - `dataset-connections.js` ← initialized by `dataset-controls.js`
+- `dataset-drop.js` ← initialized by `dataset-connections.js`
 - `field-selector-gene-expression.js` ← initialized by `field-selector.js`
 - `field-selector-deleted-fields.js` ← initialized by `field-selector.js`
 
@@ -101,15 +102,23 @@ The `ui/` layer also has directories this page does not otherwise cover:
 | Sidebar toggle/resize | `ui/modules/sidebar-controls.js` | sidebar visibility (`inert` while hidden) + `--sidebar-width`; publishes the sidebar's left occlusion of the canvas, from which the viewer resolves the presented layout |
 | Selection bar placement | `ui/modules/select-bar-placement.js` | centres `#select-bar` in the viewer's presented area (`viewer.onPresentedLayoutChange`) |
 | Stats display | `ui/modules/stats-display.js` | top stats line (dataset/field/cell counts) |
+| Cell info | `ui/modules/cell-info.js` | the card describing the cell under the pointer (**Show cell info**) |
+| Cite dialog | `ui/modules/cite-dialog.js` | the footer's Cite Cellucid dialog, read from the deployed `CITATION.cff` |
+| Place names | `ui/place-names.js` | the names of the panels and blocks a message sends someone to (`PLACES`, `placePath`), as their headings write them; `tests/ui-place-names-contract.test.mjs` holds each to its heading in `index.html` and fails on a message that names a place in words of its own |
 
 ### Dataset + session modules
 
 | Module | File | Owns |
 |---|---|---|
-| Dataset controls | `ui/modules/dataset-controls.js` | dataset dropdown + dataset info block |
-| Dataset connections | `ui/modules/dataset-connections.js` | local-user picker, remote server connect, GitHub connect |
+| Dataset controls | `ui/modules/dataset-controls.js` | dataset dropdown (the samples, or a connected catalog's datasets as "Dataset from <host>"; `__dataset_unlisted__` while a file, single-dataset link or server dataset is open) |
+| Dataset box | `ui/modules/dataset-card.js` | the **Dataset** box (`#dataset-info`, `data-state` empty/loading/ready): name, cells · genes, format · host, description, bytes read in place, **Details**; the retry notification |
+| Open… menu | `ui/modules/open-data-menu.js` | the **Open…** button's two-item menu (**File…**, **Folder…**) and its keyboard handling |
+| Address routing | `ui/modules/address-routing.js` | what the **Link or server** bar opens: a `cellucid serve` server, linked data, or (asked over `/_cellucid/health`) either |
+| Dataset connections | `ui/modules/dataset-connections.js` | local file and folder pickers, the **Link or server** bar (server and link connectors), the **Server** / **Link** connection lines with **Disconnect**, the sign-in step |
+| Dataset drop | `ui/modules/dataset-drop.js` | a file or folder dropped anywhere on the page, opened as the matching picker would (initialized by `dataset-connections.js`; `ui/core/file-drop-guard.js` stops the browser navigating to a dropped file) |
+| Share dialog | `ui/modules/share-dialog.js` | the Dataset box's **Share**: link, badge and embed snippet for a dataset a URL can reopen |
 | Session controls | `ui/modules/session-controls.js` | save/load `.cellucid-session` buttons |
-| Data mapping controls | `ui/modules/data-mapping-controls.js` | Session › Data mapping: the Embeddings checklist (on/off, defaults, column selections), Apply/Revert, Read from file |
+| Data mapping controls | `ui/modules/data-mapping-controls.js` (+ `ui/modules/data-mapping/`) | Session › Data mapping: the Embeddings checklist (on/off, defaults, column selections; arrays rarely drawn under **Other arrays (N)**), the Genes (**Modality** for a dataset of several, Expression, Gene names, Values, Highly variable genes), Neighbour graph, Latent space and Vector fields sections, Revert/Apply |
 
 ### Field/filter/highlight modules
 
@@ -120,6 +129,7 @@ The `ui/` layer also has directories this page does not otherwise cover:
 | Deleted fields panel | `ui/modules/field-selector-deleted-fields.js` | restore/purge UI |
 | Filter controls | `ui/modules/filter-controls.js` | filter stack UI + count |
 | Legend renderer | `ui/modules/legend-renderer.js` | legend DOM + outlier UI container |
+| Outlier filter control | `ui/modules/outlier-filter-control.js` | the legend's **Outlier filter**: **Choose latent space** without a latent space, else the slider with at most one line, progress and **Cancel** |
 | Highlight controls | `ui/modules/highlight-controls.js` | highlight pages + groups + selection mode tools |
 
 ### View/render/camera modules
@@ -128,7 +138,7 @@ The `ui/` layer also has directories this page does not otherwise cover:
 |---|---|---|
 | View controls | `ui/modules/view-controls.js` | multiview (“Keep view”), layout mode, **Link cameras**, one row per view (what it shows, field, navigation mode, linked), the Navigation “Applies to” row |
 | Representation controls | `ui/modules/representation-controls.js` | the `View N shows` picker (`#view-representation-select`) + keys 1/2/3 (default, then cycle) |
-| Render controls | `ui/modules/render-controls.js` | points vs smoke, smoke sliders, connectivity toggles |
+| Render controls | `ui/modules/render-controls.js` | points vs smoke, smoke sliders (scales in `smoke-control-scales.js`; the unavailable-device message in `smoke-availability.js`), connectivity toggles |
 | Velocity overlay controls | `ui/modules/velocity-overlay-controls.js` | vector field overlay settings + field selection |
 | Camera controls | `ui/modules/camera-controls.js` | the Navigation accordion: mode select of the focused view, pointer capture, projectiles |
 | Navigation settings | `ui/modules/navigation-settings.js` | per-mode settings boxes, speed sliders and option checkboxes |
@@ -144,7 +154,7 @@ These are bigger subsystems but still treated as modules:
 | Community annotation (split parts) | `ui/modules/community-annotation/` | the controls module's own submodules (browser integration, connection flow, consensus column, modal shell, auto-pull storage) |
 | Community annotation dialogs | `ui/modules/community-annotation-voting-modal.js`, `ui/modules/community-annotation-modal-owner.js` | the voting dialog and its ownership/lifecycle |
 | Cinematic camera | `ui/modules/cinematic-camera/` | camera-path authoring, transport bar, playback. Initialized by the coordinator; persisted as a mandatory session chunk (see {doc}`10_sessions_persistence_and_serialization`) |
-| Performance benchmark | `ui/modules/benchmark/` | synthetic data generation contract + worker, the configuration-matrix harness, GL upload counters, frame recorder, camera path. The panel’s wiring lives in `main.js`; the measurement code is here and in `assets/js/dev/benchmark.js` |
+| Benchmark | `ui/modules/benchmark/` | synthetic data generation contract + worker, the configuration-matrix harness, GL upload counters, frame recorder, camera path. The panel’s wiring lives in `main.js`; the measurement code is here and in `assets/js/dev/benchmark.js` |
 | Highlight subsystem | `ui/modules/highlight/` | the four selection tools, their copy, and the highlight-page UI |
 | Legend subsystem | `ui/modules/legend/` | categorical and continuous legend rendering |
 | Visualization reset | `ui/modules/visualization-reset.js` | reset actions (clear filters/highlights/etc.), and the global `R` reset-camera key |
@@ -160,7 +170,7 @@ looking for a module that is not there.
 :::
 
 :::{note}
-Page Analysis (plots / DE / correlation / etc.) is initialized directly in `cellucid/assets/js/app/main.js` (not via `ui-coordinator.js`).
+Analysis (plots / DE / correlation / etc.) is initialized directly in `cellucid/assets/js/app/main.js` (not via `ui-coordinator.js`).
 Its UI lives in `cellucid/assets/js/app/analysis/ui/`.
 See {doc}`11_analysis_architecture`.
 :::
@@ -201,7 +211,12 @@ the embedding the active view shows (the vector-field block: a field is bound
 to one embedding). See `cellucid/assets/js/app/state-serializer/README.md`.
 
 Examples:
-- Figure export section is excluded (`cellucid/index.html` and the figure-export UI code).
+- Figure export section is excluded from the generic control inventory; its
+  settings are saved as one validated record instead (`ui/figure-export`,
+  `exportSessionSettings()`/`importSessionSettings()` of the panel).
+- The docked analysis panels are excluded likewise; the comparison module's
+  `exportSessionState()`/`importSessionState()` record them (`analysis/docked`).
+- `#hp-antialias` is never captured (a device capability); the theme is.
 - Benchmark section is excluded.
 - Dataset connection controls are excluded (sessions assume the dataset is already loaded).
 - Community annotation UI state is excluded (auth/network-driven).

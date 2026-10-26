@@ -57,9 +57,9 @@ function repoInfo(fullName, { author, push, allowForking }) {
 
 function schemaDocument(kind) {
   const ids = {
-    user: 'https://cellucid.com/contracts/community-annotation/user-v1.schema.json',
+    user: 'https://cellucid.com/contracts/community-annotation/user-v2.schema.json',
     config: 'https://cellucid.com/contracts/community-annotation/config-v1.schema.json',
-    merges: 'https://cellucid.com/contracts/community-annotation/merges-v1.schema.json',
+    merges: 'https://cellucid.com/contracts/community-annotation/merges-v2.schema.json',
   };
   return { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: ids[kind] };
 }
@@ -101,16 +101,24 @@ export const SUGGESTION = Object.freeze({
 });
 
 function user(id, login, displayName, title, suggestions, votes) {
+  // Contract v2 (`user-v2.schema.json`): everything a contributor wrote is
+  // kept per dataset id, so two datasets in one repository never mix.
   return {
-    version: 1,
+    version: 2,
     username: `ghid_${id}`,
     githubUserId: id,
     login,
     displayName,
     ...(title ? { title } : {}),
     updatedAt: AT,
-    suggestions,
-    votes,
+    datasets: {
+      pancreas: {
+        fieldsToAnnotate: ['clusters'],
+        lastAccessedAt: AT,
+        suggestions,
+        votes,
+      },
+    },
   };
 }
 
@@ -343,7 +351,7 @@ export async function installGitHubMock({
       return encoded(config ?? configDocument(), 'd');
     }
     if (contentPath === 'annotations/moderation/merges.json') {
-      return encoded({ version: 1, updatedAt: AT, merges: [] }, 'f');
+      return encoded({ version: 2, updatedAt: AT, merges: [] }, 'f');
     }
     const blob = blobs.find(entry => entry.path === contentPath);
     if (blob !== undefined) {

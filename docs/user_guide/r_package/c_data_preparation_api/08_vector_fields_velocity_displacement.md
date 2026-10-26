@@ -1,151 +1,138 @@
-# Vector Fields (Velocity / Displacement)
+# Vector fields (velocity / displacement)
 
-**Audience:** computational users and developers  
-**Time:** 15–25 minutes  
-**Goal:** export per-cell vector overlays (velocity/displacement) correctly.
+**Audience:** computational users with RNA velocity, CellRank drift, or other per-cell vectors
+**Time:** 15 minutes
+**Goal:** store vectors the viewer draws as an animated overlay on an embedding.
 
-Vector fields are optional, but powerful: they let Cellucid render per-cell arrows/flows (for example RNA velocity).
+Vector fields are per-cell **direction + magnitude** vectors in embedding
+space. The viewer draws them as an animated particle flow over the embedding
+({doc}`../../web_app/i_vector_field_velocity/index`).
 
-In `cellucid_prepare()`, vector fields are provided as:
+## What to pass
 
-- `vector_fields`: a **named list of named lists** — field id, then the id of
-  the exported embedding each array is drawn over:
-  `list(velocity = list(X_umap = v2, X_umap_3d = v3))`
-
-Each array must be a numeric matrix with one row per cell and **exactly the
-number of columns of the embedding it is bound to**. A plain numeric vector of
-length `n_cells` is accepted for a 1D embedding.
-
-## Binding a field to embeddings
-
-A vector field is drawn over one embedding at a time, so every array names the
-embedding it belongs to. One field may be bound to several embeddings —
-typically a 2D and a 3D UMAP — and an embedding with no binding simply shows no
-overlay: a velocity computed in UMAP space points the wrong way over a t-SNE.
-
-- Every embedding id a field names must be one of the exported `embeddings`.
-- A field must bind at least one embedding.
-- `vector_field_default` names the field selected first; it is required when
-  more than one field is exported.
-
-## Field IDs are names, not filenames
-
-A field id is recorded in `dataset_identity.json` and is never used as a path.
-Its payloads are written to `vectors/<i>_<e>.bin`, where `<i>` is the field's
-position once the ids are sorted by code point and `<e>` is the payload index of
-the bound embedding. So a field id carries no filename rule at all — no
-character restriction, no length limit, no Windows device-name rule.
-
-What remains are the identity rules every exported identifier obeys: a field id
-must be a non-empty string, **distinct**, and text the viewer can draw verbatim —
-no control or zero-width characters and no leading or trailing whitespace,
-because the id becomes a UI label. `RNA velocity (steady state)` is a legal id.
-
-```{note}
-Sorting by code point is what makes `cellucid-r` and the `cellucid` Python
-package assign the same index to the same field, so the two writers produce
-byte-identical layouts from the same input.
-```
-
-### Automatic scaling (critical)
-
-Each embedding is normalized on its own (center + scale). To keep vectors
-consistent with the normalized coordinates, `cellucid-r` multiplies each array
-by the `scale_factor` of **the embedding it is bound to**.
-
-Practical implication:
-- provide vectors in the same coordinate system/units as the original
-  coordinates of their embedding
-- for an embedding exported from chosen columns (`cellucid_embedding(columns = ...)`),
-  pass the vectors for those same columns, in the same order
-- the exported vectors will “match” the exported points
-
-## Output files and metadata
-
-Vector files are written under:
-- `<out_dir>/vectors/`
-
-Each file is:
-- float32, little-endian
-- row-major
-- shape `(n_cells, dim)` of the bound embedding
-
-Example, for the field at payload index `0` bound to the embeddings at payload
-indices `1` and `3`:
-- `vectors/0_1.bin` and `vectors/0_3.bin` (or `.gz`)
-
-Metadata is written into `dataset_identity.json` under `vector_fields`, and that
-is what maps each field id to its files. Each field entry records exactly
-`label` and `files`:
-
-- `label` is derived by the writer, not chosen by you: it is the field id
-  **character for character**. The web app compares it and refuses to load the
-  dataset if it differs, so there is no display-name field in this format; to
-  show a prettier name, rename the list entry.
-- `files` maps each bound embedding id to its exact payload path, in embedding
-  order.
-
-The exporter also records one exact `default_field`:
-- with one vector field, that field is the default;
-- with more than one, `vector_field_default` is required, and passing it without
-  `vector_fields` is an error rather than a no-op.
-
-## Minimal example
+`vector_fields` maps each field to the embeddings its arrays belong to:
 
 ```r
-vector_fields <- list(
-  velocity = list(
-    X_umap = matrix(
-      c(0.1, 0,
-        0.1, 0,
-        0.1, 0),
-      ncol = 2, byrow = TRUE
-    )
-  )
-)
-
 cellucid_prepare(
-  latent_space = latent,
-  obs = obs,
-  embeddings = list(X_umap = umap2),
-  vector_fields = vector_fields,
-  obs_categorical_dtype = "uint8",
-  dataset_name = "My dataset",
-  dataset_id = "my_dataset",
-  out_dir = out_dir,
-  centroid_min_points = 1,
-  force = TRUE
+  ...,
+  embeddings = list(X_umap = umap, X_umap_3d = umap3, X_pca = pca),
+  vector_fields = list(
+    velocity = list(X_umap = velocity_2d, X_umap_3d = velocity_3d, X_pca = velocity_pca),
+    drift = list(X_umap = drift_2d)
+  ),
+  vector_field_default = "velocity"
 )
 ```
 
-## Edge cases
+Each array has **one row per cell** and **exactly as many columns as its
+embedding** (any number: 50 for a 50-column `X_pca`), and must be finite and
+within the float32 range. Pass
+the vectors in the same coordinates as the embedding itself; the viewer scales
+them together with the embedding.
 
-### Mismatched shapes
+## How they are stored: the `<field>_<basis>` rule
 
-Export fails if:
-- a vector array has a different number of rows than your embeddings (`n_cells`)
-- a vector array has a different number of columns than the dimension of the
-  embedding it is bound to
+Each array is stored in `obsm` under scVelo's name for it: bound to the
+embedding `X_<basis>`, the field `<field>` becomes `obsm['<field>_<basis>']`:
 
-### Bindings
+| You pass | Stored as |
+|---|---|
+| `velocity = list(X_umap = v)` | `obsm['velocity_umap']` |
+| `velocity = list(X_umap_3d = v)` | `obsm['velocity_umap_3d']` |
+| `velocity = list(X_branches = v)` | `obsm['velocity_branches']` |
+| `drift = list(X_umap = v)` | `obsm['drift_umap']` |
 
-Export fails if:
-- a field's value is not a named list of arrays,
-- a field binds no embedding,
-- a field names an embedding id that is not exported.
+The viewer binds such an array by its name: an `obsm` key `<field>_<basis>` is
+the field `<field>` drawn over `obsm['X_<basis>']` whenever a view shows that
+embedding, provided both have the same number of columns. The arrays of one
+field on every embedding are one field in the viewer, listed by its name:
+`velocity_umap`, `velocity_umap_3d` and `velocity_branches` are all
+**`velocity`**. The exact key rule — `X_` keys are embeddings, the longest
+matching basis wins — is in
+{doc}`../../python_package/c_data_preparation_api/09_cellucid_ready_anndata_specification`.
 
-## Troubleshooting pointers
+That rule decides what can be bound:
 
-- `Vector field 'velocity' on embedding 'X_umap' must have exactly 2 columns, got 3.`
-  → bind the 3D vectors to the 3D embedding, or pass the matching 2D vectors.
-- `Vector field 'velocity' is bound to embedding 'X_tsne', which is not one of the exported embeddings: …`
-  → export that embedding, or bind the field to one you export.
-- `Vector field 'velocity' must map embedding ids to arrays, for example list(velocity = list(X_umap = vectors)).`
-  → wrap the array in a list named by its embedding id.
-- `vector_field_default is required when more than one vector field is declared.`
-  → name the field you want selected on load.
-- `vector_field_default 'drift' does not match an available field: …` → the value
-  must be one of the field ids.
-- `vector_field_default was provided but no vector fields exist.` → you named a
-  default but passed no vectors.
-- “Vectors look too long/short” → remember vectors are scaled by their embedding's normalization.
+- The embedding must be one of the `embeddings` and its name must start with
+  `X_` (`X_<basis>`); any other name is refused:
+
+  ```text
+  Vector field 'velocity' on embedding 'pca': the viewer binds a vector field to the embedding 'X_<basis>' it is named for ('velocity_umap' to 'X_umap'), so the embedding needs an 'X_<basis>' key. Rename 'pca', for example to 'X_pca'.
+  ```
+
+- The array has exactly as many columns as its embedding.
+- The stored name must not collide with an embedding name, and two arrays may
+  not be stored under the same name.
+- The stored name must read back as its own field and embedding: a field named
+  `X_...`, or a name another embedding's longer basis claims (`T_fwd` on
+  `X_umap` beside an embedding `X_fwd_umap` would read as `T` on
+  `X_fwd_umap`), is refused; rename the field.
+
+To draw an array over a layout it is not named for, pass it as one more entry
+of `embeddings` (it is stored as `obsm[<name>]` like any other array) and bind
+it to that layout in the viewer under **Session › Data mapping › Vector
+fields** ({doc}`../../web_app/b_data_loading/13_data_mapping`).
+
+## Computing drift from a transition matrix
+
+`cellucid_transition_drift()` computes a CellRank-style drift from a
+cell-cell transition matrix in the coordinates of an embedding, every column
+of it: the transition-weighted mean position of each cell's successors minus
+its own position, `T %*% E - E`, with the product divided by the row sums of
+`T` first when `normalize_rows = TRUE`. Pass the result as a vector field on
+that embedding:
+
+```r
+drift_2d <- cellucid_transition_drift(transition_matrix, umap, normalize_rows = TRUE)
+drift_3d <- cellucid_transition_drift(transition_matrix, umap3, normalize_rows = TRUE)
+cellucid_prepare(
+  ...,
+  embeddings = list(X_umap = umap, X_umap_3d = umap3),
+  vector_fields = list(T_fwd = list(X_umap = drift_2d, X_umap_3d = drift_3d))
+)  # obsm['T_fwd_umap'] and obsm['T_fwd_umap_3d']
+```
+
+`transition_matrix` is cells x cells, finite and non-negative, as a `Matrix`
+sparse matrix or a numeric matrix, in the cell order of the embedding;
+`embedding` takes any form `embeddings` takes, such as
+`Seurat::Embeddings(seu, "umap")` or `SingleCellExperiment::reducedDim(sce, "UMAP")`.
+`normalize_rows` has no default: `TRUE` divides every row by its sum and
+refuses a row that sums to zero, `FALSE` uses a row-stochastic matrix (such as
+CellRank's) as given. The result is a double matrix as wide as the embedding,
+rounded to float32 once, when `cellucid_prepare()` writes it.
+
+This is the computation of Python's `cellucid.compute_transition_drift()`.
+Python's `add_transition_drift_to_obsm()`, which writes the drift into the
+`obsm` of an AnnData held in memory, has no R counterpart: R holds no AnnData
+in memory, and `vector_fields` already names the key `<field>_<basis>` and
+checks it by the same rule (above). Both packages are held to one shared
+conformance fixture computed with exact rational arithmetic: bit for bit where
+the product and the row sums are exact in double precision, and otherwise
+within the forward-error bound of the computation, since a BLAS, a sparse
+kernel and `rowSums()` may add the terms in different orders.
+
+## Which field is selected first
+
+`vector_field_default` names the field selected first, by the name you used in
+`vector_fields` (`"velocity"`). It is stored as
+`uns['cellucid']['defaults']['vectorFieldDefault']` unchanged, since that name
+is also the viewer's field id. Without it the viewer chooses.
+
+## When the overlay does not show
+
+- The view shows another embedding: a field bound to `X_umap` is drawn only
+  while the 2D view shows `X_umap`. Choose it with
+  `embedding_defaults = c("2d" = "X_umap")` or in the viewer.
+- The field has no array for the embedding the view shows: a field bound to
+  `X_umap` only is not drawn in a view showing `X_umap_3d`.
+- An `obsm[['velocity_umap_2d']]` written by hand beside a bare `X_umap` (no
+  `X_umap_2d`) no longer binds: name it `velocity_umap`, scVelo's own name, or
+  pass it through `vector_fields = list(velocity = list(X_umap = v))`.
+- The vectors are in another coordinate system than the embedding (wrong basis),
+  or all zero.
+
+## Next
+
+- {doc}`09_cellucid_ready_anndata_specification`
+- The same topic for Python, `cellucid.prepare()`: {doc}`../../python_package/c_data_preparation_api/08_vector_fields_velocity_displacement`
+- Transition drift in Python, `cellucid.add_transition_drift_to_obsm()`: [Computing drift from a transition matrix](../../python_package/c_data_preparation_api/08_vector_fields_velocity_displacement.md#computing-drift-from-a-transition-matrix)

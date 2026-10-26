@@ -4,7 +4,7 @@
 .. currentmodule:: cellucid
 ```
 
-Viewer classes are the **stateful** notebook objects returned by {func}`~cellucid.show` and {func}`~cellucid.show_anndata`.
+The viewer class is the **stateful** notebook object returned by {func}`~cellucid.show_anndata`.
 
 They are designed for two-way interaction:
 - **Viewer → Python:** hooks/events like `@viewer.on_selection`
@@ -16,16 +16,7 @@ If you prefer a minimal interface, start with {doc}`jupyter`.
 
 ## Fast path
 
-### A) Exported data (recommended for speed)
-
-```python
-from cellucid import CellucidViewer
-
-viewer = CellucidViewer("./my_export")
-viewer.display()
-```
-
-### B) AnnData mode (convenient for exploration)
+### A) Any AnnData
 
 ```python
 from cellucid import AnnDataViewer
@@ -35,6 +26,15 @@ viewer = AnnDataViewer(
     dataset_name="My study",
     dataset_id="my-study-v1",
 )
+viewer.display()
+```
+
+### B) A Cellucid-ready AnnData (written by `prepare()`)
+
+```python
+from cellucid import AnnDataViewer
+
+viewer = AnnDataViewer("my_study.h5ad")  # names itself (uns['cellucid'])
 viewer.display()
 ```
 
@@ -65,8 +65,7 @@ viewer.reset_view()
 
 These calls return `None` without waiting for the viewer. If the viewer refuses
 one, it reports a `command_error` back to Python, which Cellucid prints to
-`sys.stderr` unless you take it over. Only the web build that emits
-`command_error` sends it; older builds refuse a command silently.
+`sys.stderr` unless you take it over.
 
 ```python
 @viewer.on_command_error
@@ -91,24 +90,29 @@ See {doc}`sessions` for applying the bundle back to AnnData.
 ### 5) Read and change the data mapping
 
 ```python
-viewer.wait_for_event("data_mapping")
+# wait_for_event waits for the NEXT event; skip it once the mapping has arrived
+if viewer.data_mapping is None:
+    viewer.wait_for_event("data_mapping")
 print(viewer.data_mapping["embeddings"])
 viewer.set_data_mapping(
-    embeddings={"1d": None, "2d": {"key": "X_tsne", "columns": [0, 1]}, "3d": None},
+    embeddings={
+        "enabled": [{"key": "X_tsne", "columns": [0, 1]}],
+        "defaults": {"1d": None, "2d": {"key": "X_tsne", "columns": [0, 1]}, "3d": None},
+    },
 )
 ```
 
-`viewer.data_mapping`, `viewer.data_mapping_origin`, `viewer.set_data_mapping()`
-and `@viewer.on_data_mapping` are shared by both viewers. The viewer reports
-its mapping because this package lists `data_mapping` among the events of
-`GET /_cellucid/protocol`; a viewer older than this release never reports one,
-so `set_data_mapping()` raises before sending anything.
+The viewer reports its mapping once the dataset loads (and again whenever it
+changes); until then `viewer.data_mapping` is `None` and `set_data_mapping()`
+raises before sending anything.
 
 ---
 
 ## Lifecycle and cleanup (important)
 
-Under the hood, a viewer starts a local server process/thread.
+Under the hood, a viewer starts a local server on a background thread of the
+kernel: on port 8765, or the next free port when 8765 is taken (a printed note
+says so).
 
 Best practices:
 - If you create many viewers in a long-running notebook, call `viewer.stop()` when done.
@@ -118,20 +122,11 @@ Best practices:
 
 ## API reference
 
-### `CellucidViewer`
-
-```{eval-rst}
-.. autoclass:: CellucidViewer
-   :members:
-   :show-inheritance:
-```
-
 ### `AnnDataViewer`
 
 ```{eval-rst}
 .. autoclass:: AnnDataViewer
    :members:
-   :show-inheritance:
 ```
 
 ---
@@ -146,8 +141,13 @@ Best practices:
 - If you re-run the cell repeatedly without stopping old viewers, you may end up with multiple servers and confusing behavior.
 
 ### Callbacks and exceptions
-- Hook callbacks run in registration order. A callback exception propagates
-  through event delivery and is reported by the event request.
+- Hook callbacks run in registration order (`on_message` callbacks first), on
+  the viewer channel's thread. An exception a callback raises is logged with
+  its traceback (logger `cellucid.viewer_channel`) and never reaches the
+  notebook. The event is recorded in `viewer.state` and handed to
+  `wait_for_event` before any callback runs, and the callbacks after a failing
+  one still run (several failures are logged together, as one
+  `ExceptionGroup`). The channel stays open.
 
 ---
 
@@ -155,7 +155,7 @@ Best practices:
 
 ### Symptom: “`viewer.display()` prints a URL instead of showing an embedded viewer”
 Fix:
-- You are likely not in a notebook context; open the printed URL in a browser tab, or run inside Jupyter/VSCode/Colab.
+- You are likely not in a notebook context; open the printed URL in a browser tab, or run inside Jupyter or JupyterLab.
 
 ### Symptom: “Hooks never fire”
 Fix:
@@ -171,5 +171,5 @@ Fix:
 
 ## See also
 
-- {doc}`jupyter` for function-level entry points (`show`, `show_anndata`)
+- {doc}`jupyter` for the function-level entry point (`show_anndata`)
 - {doc}`server` for serving in a browser tab

@@ -5,12 +5,12 @@
 **Goal:** install `cellucid`, verify the CLI, and avoid the most common environment pitfalls
 
 :::{note}
-**Active package version: 0.9.4.** Version 0.9.4 is the current PyPI <!-- CELLUCID_VERSION -->
+**Active package version: 0.9.5.** Version 0.9.5 is the current PyPI <!-- CELLUCID_VERSION -->
 release. If the [PyPI package page](https://pypi.org/project/cellucid/) lists
-0.9.4, the normal install and pin commands below retrieve it. Until then, they <!-- CELLUCID_VERSION -->
+0.9.5, the normal install and pin commands below retrieve it. Until then, they <!-- CELLUCID_VERSION -->
 resolve only to versions available from PyPI; install the active source
 straight from the official GitHub repository (see **From the official source
-repository** below) when validating 0.9.4 before publication. <!-- CELLUCID_VERSION -->
+repository** below) when validating 0.9.5 before publication. <!-- CELLUCID_VERSION -->
 :::
 
 ## Requirements
@@ -21,7 +21,7 @@ repository** below) when validating 0.9.4 before publication. <!-- CELLUCID_VERS
 - **Network (at viewer startup):** the Python server establishes the exact web
   generation published by `https://www.cellucid.com` before it starts serving
   the viewer. The configured source must be reachable for every
-  `cellucid serve`, `show(...)`, or `show_anndata(...)` startup that serves the
+  `cellucid serve`, `serve_anndata(...)`, or `show_anndata(...)` startup that serves the
   web UI.
 
 ```{note}
@@ -120,7 +120,7 @@ pip install -U cellucid
 Pin a specific version (recommended for paper pipelines):
 
 ```bash
-pip install "cellucid==0.9.4"  # CELLUCID_VERSION
+pip install "cellucid==0.9.5"  # CELLUCID_VERSION
 ```
 
 ### Core scientific runtime
@@ -131,9 +131,21 @@ The core installation includes the coupled direct-data runtime:
 - `zarr>=3.1.4,<4`
 - `numcodecs>=0.16.3,<0.17`
 
-Python `.zarr` input is one complete Zarr v2 root containing both `.zgroup` and
-`.zattrs`. The core installation supplies the complete reader runtime,
-including the compiled numcodecs wheel used on Python 3.14.
+A Zarr store Python serves or reads is a Zarr v2 root (`.zgroup`, and
+`.zattrs` when it has one; anndata before 0.8 wrote none) or a Zarr v3 root
+(`zarr.json`), as a folder or zipped. The core installation supplies the
+complete reader runtime, including the compiled numcodecs wheel used on
+Python 3.14.
+
+Building or reading a MuData object (for `prepare(data=mdata)` or
+`show_anndata(mdata)`) needs the `mudata` package, which the `mudata` extra
+installs:
+
+```bash
+pip install "cellucid[mudata]"
+```
+
+Serving an `.h5mu` or MuData Zarr file by path does not.
 
 ### Additional tools you might need
 
@@ -182,7 +194,8 @@ python -c "from cellucid import clear_web_cache; print(clear_web_cache())"
 
 ## Deep path (developers/maintainers)
 
-- Editable install (repo development):
+- Editable install (repo development; the `dev` extra brings the `mudata`
+  extra, so the MuData tests run):
   ```bash
   pip install -e ".[dev,docs]"
   ```
@@ -285,10 +298,12 @@ python -m pip show cellucid
 
 ---
 
-### Symptom: browser opens but shows “Port already in use”
+### Symptom: `cellucid serve` stops with “Port 8765 is already in use”
 
 **Likely causes**
-- Another process is using the port (default: 8765).
+- Another process is using the port (default: 8765). A notebook viewer
+  (`show_anndata`) never stops for this: it takes the next free port and
+  prints a note.
 
 **Fix**
 - Pick a different port:

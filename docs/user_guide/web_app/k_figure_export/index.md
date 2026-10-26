@@ -55,7 +55,7 @@ In typical usage, exports include:
 - **Overlays tied to the view buffers** such as highlights (rings) and centroid overlays (if enabled in the viewer).
 
 :::{important}
-Figure export settings are intentionally **not persisted in session bundles**. If you want to reproduce a specific export later, record the export settings (or rely on embedded metadata; see {doc}`05_metadata_and_provenance`).
+Figure export settings are **saved in session bundles** with the views they export. To reproduce a specific export later, save a session after exporting (the exported file also embeds metadata; see {doc}`05_metadata_and_provenance`).
 :::
 
 ---
@@ -112,8 +112,8 @@ or strip metadata.
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/figure_export/panel-overview.png
-:alt: Figure Export panel showing Framing, Labels and Annotations, Style, Download, and Export controls.
-:width: 516px
+:alt: The Figure export panel with its four collapsed groups, Framing, Labels and annotations, Style and Download, above the Export button, with the pointer on Export.
+:width: 532px
 
 The Figure Export panel groups framing, labels, style, and download settings before the explicit Export action.
 ```

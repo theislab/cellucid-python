@@ -3,7 +3,10 @@
 ## Address already in use
 
 Another process owns the requested port. Identify that process or choose a
-different explicit port; do not terminate an unknown process.
+different explicit port (`--port 9000`, or `--port 0` for any free port and the
+Viewer URL it prints); do not terminate an unknown process. A notebook viewer
+created without `port=` never fails this way: it takes 8765, or the next free
+port when 8765 is taken, and prints a note saying so.
 
 ## The server starts but another machine cannot connect
 
@@ -32,8 +35,6 @@ Read the banner as follows:
   machine. A loopback bind never prints the block at all.
 - An IPv6 bind is bracketed as a URL requires, `http://[::1]:8765`, and a
   loopback origin derived from a `::` bind is `[::1]`, not `127.0.0.1`.
-- The prepared-export server prints `/?source=remote` where the direct-AnnData
-  server prints `/?anndata=true`.
 
 `--host 0.0.0.0` is what a compute node needs when the tunnel terminates on a
 different machine, such as a cluster login node; `cellucid serve --help` says
@@ -43,32 +44,24 @@ dataset.
 ## The browser reports an HTTP error
 
 Record the exact URL, method, status, and response body. The status decides
-what to do, and the data routes emit three distinct ones:
+what to do:
 
-- **404** — the route or the name in it does not exist: an unknown path, a gene
-  absent from `var.index`, a `.gz` variant, or a dataset-prefixed copy of a
-  rooted path. Verify that you supplied the export root or supported AnnData
-  input expected by the command, then test the same URL from the browser host.
-- **422** — the payload was examined and refused. Only
-  `/var/<index>.values.f32` and `/obs/<index>.values.f32` answer this, and only
-  when the column is not entirely finite. The request was well formed, the
-  server is working, and the input directory is correct: nothing about the URL,
-  the host, or the command is the problem. The fix is to repair the values in
-  `adata.X` or `adata.obs`.
+- **404** — the route or the name in it does not exist: an unknown path, a
+  route under `/_cellucid/anndata/` other than the one `/_cellucid/datasets`
+  names, or a Zarr store key the store does not hold (a Zarr reader takes that
+  404 as "absent", so an unwritten chunk is not an error). Verify that you
+  supplied a file or folder Cellucid reads (an `.h5ad`, an AnnData or MuData
+  Zarr store, `.h5mu`, `.loom`, a 10x `.h5` or `outs/` folder, a MatrixMarket
+  folder, an `.rds`/`.rda`), then test the same URL from the browser host.
+- **416** — a `Range` request the file cannot satisfy, or more than one range
+  in one request. The viewer's reader sends exactly one satisfiable range; a
+  416 in the browser points at a proxy that rewrote the request.
 - **500** — a genuine internal fault. Read the server log, which carries the
   traceback.
 
-The `422` body is `application/json`, not the plain text every other error
-status returns, and it carries the whole diagnosis: the field name, how many
-values are NaN / `+Inf` / `-Inf` / beyond the float32 range / below the smallest
-float32, and the first offending cell indices. Fetch it with `GET` —
-`curl -I` issues a `HEAD`, which returns the `422` status and no body:
-
-```bash
-curl -s "http://127.0.0.1:<port>/var/0.values.f32" | python -m json.tool
-```
-
-The symptom, the body's exact shape, and the repair are in
+A gene or column the viewer cannot draw (one holding an infinity) is not an
+HTTP error: the viewer reads the values itself and says
+so in a notification — see
 {doc}`../d_viewing_apis/15_troubleshooting_viewing`.
 
 ## The process does not stop cleanly
@@ -78,32 +71,24 @@ In a CLI session, use the terminal interrupt described by the command banner.
 
 ## Serving says nothing for minutes
 
-Silence here is work, not a stall. The direct-AnnData server runs five numbered
-steps and reports inside each one, so the last line on screen names the phase
+Silence here is work, not a stall. The direct-AnnData server runs four numbered
+steps — `[1/4] Detecting format`, `[2/4] Reading metadata`,
+`[3/4] Checking launch choices`, `[4/4] Starting server` — and reads only the
+store's metadata before it binds, so the last line on screen names the phase
 you are waiting on. The full startup transcript is in
 {doc}`../../web_app/b_data_loading/04_server_tutorial`.
 
 Where the time goes:
 
-- **Step 2** builds the adapter and is where a large object spends most of its
-  startup. Each line appears as that piece of work begins, so `Obs columns`,
-  `Embeddings: resolving obsm keys`, `Vector fields`, and `Connectivity` mark
-  the phase in progress rather than one already finished.
-- **Step 4** builds the manifests and the per-category centroids. That phase
-  used to run silently after a success line; it is now its own reported step.
-- **Step 5** verifies the current viewer build against its configured source
-  before binding, which is where a machine with no outbound access stalls. Serve
-  the data endpoints alone with `--no-web-ui` on such a machine.
-
-If you asked for connectivity, `Connectivity: reading obsp['connectivities']` in
-step 2 is followed by the longest wait of the run, and a graph of 50,000,000
-stored neighbors or more logs a warning that names the cost before the work
-starts.
-
-The prepared-export server is unchanged and still runs three steps: validating
-the dataset, loading its info, and starting the server. An export holds its
-artifacts already, so none of the adapter phases exist there.
-
+- **Step 1** writes a temporary file when it has to: an `.h5ad` (`.h5mu` for a
+  MuData) for an in-memory object, and an `.h5ad` for an AnnData store holding
+  arrays the browser cannot decode (it prints `Browser cannot decode: …` naming
+  them, then `Serving: a decodable copy, written once to a temporary .h5ad`).
+  Any other format holding such arrays is refused with that reason.
+- **Step 4** downloads and verifies the current viewer build from its
+  configured source, at every start, before binding; that is where a machine
+  with no outbound access stalls. Serve the data endpoints alone with
+  `--no-web-ui` on such a machine.
 
 ## Cellucid says a package is missing that I know is installed
 

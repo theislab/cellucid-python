@@ -18,10 +18,12 @@ Key sections:
 
 - `[project]`
   - `name = "cellucid"`
-  - `version = "0.9.4"` (beta) <!-- CELLUCID_VERSION -->
-  - runtime dependencies (`numpy`, `pandas`, `scipy`, `anndata`, `ipython`, `jupyter-server-proxy`)
+  - `version = "0.9.5"` (beta) <!-- CELLUCID_VERSION -->
+  - `requires-python = ">=3.11,<3.15"`
+  - runtime dependencies (`numpy`, `pandas`, `scipy`, `tqdm`, `anndata`, `zarr`, `numcodecs`, `ipython`, `jupyter-server-proxy`)
 - `[project.optional-dependencies]`
-  - `dev`: `pytest`, `ruff`, `mypy`, `pre-commit`
+  - `mudata`: `mudata`, for building or reading a MuData (`prepare(data=mdata)`, `.h5mu` and MuData Zarr)
+  - `dev`: the `mudata` extra, `pytest`, `pytest-cov`, `ruff`, `mypy`, `pre-commit` (ruff and mypy pinned exactly)
   - `docs`: `sphinx`, `myst-nb`, theme, etc.
 - `[project.scripts]`
   - `cellucid = "cellucid.cli:main"`
@@ -113,6 +115,7 @@ Cellucid has a split personality:
 
 So:
 - runtime dependencies live in `[project.dependencies]`,
+- MuData support lives in `[project.optional-dependencies].mudata`,
 - docs tooling lives in `[project.optional-dependencies].docs`,
 - dev tooling lives in `[project.optional-dependencies].dev`.
 
@@ -122,10 +125,10 @@ This keeps `pip install cellucid` usable for typical users while allowing mainta
 
 ## Troubleshooting
 
-### Symptom: “`cellucid.__version__` is `0.0.0`”
+### Symptom: “`import cellucid` raises `PackageNotFoundError`”
 
 Likely cause:
-- installed from source without metadata (some editable workflows) or a broken install.
+- the source tree is on `sys.path` without an install (no package metadata), or a broken install.
 
 Fix:
 1) reinstall: `python -m pip install -e .`

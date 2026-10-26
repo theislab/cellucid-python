@@ -106,69 +106,26 @@ def _cache_snapshot(cache_dir: Path) -> dict[str, bytes]:
     }
 
 
-def _write_current_prepared_dataset(
-    root: Path,
-    *,
-    dataset_id: str,
-    dataset_name: str,
-) -> None:
-    root.mkdir(parents=True, exist_ok=True)
-    (root / "dataset_identity.json").write_text(
-        json.dumps(
-            {
-                "version": 3,
-                "id": dataset_id,
-                "name": dataset_name,
-                "description": "",
-                "stats": {
-                    "n_cells": 1,
-                    "n_genes": 0,
-                    "n_obs_fields": 0,
-                    "n_categorical_fields": 0,
-                    "n_continuous_fields": 0,
-                    "has_connectivity": False,
-                    "n_edges": None,
-                },
-                "embeddings": {
-                    "default_dimension": 2,
-                    "defaults": {"2d": "X_umap"},
-                    "items": {
-                        "X_umap": {
-                            "label": "X_umap",
-                            "dimension": 2,
-                            "file": "embeddings/0_2d.bin",
-                            "source": {"key": "X_umap", "columns": [0, 1]},
-                        }
-                    },
-                },
-                "obs_fields": [],
-                "export_settings": {
-                    "compression": None,
-                    "var_quantization": None,
-                    "obs_continuous_quantization": None,
-                    "obs_categorical_dtype": "uint16",
-                },
-            }
-        ),
-        encoding="utf-8",
+def _anndata_server(**kwargs: object):
+    import anndata as ad
+    import numpy as np
+    import pandas as pd
+
+    from cellucid.anndata_server import AnnDataServer
+
+    adata = ad.AnnData(
+        X=np.ones((2, 1), dtype=np.float32),
+        obs=pd.DataFrame(index=["cell-1", "cell-2"]),
+        var=pd.DataFrame(index=["gene-1"]),
+        obsm={"X_umap": np.zeros((2, 2), dtype=np.float32)},
     )
-    (root / "obs_manifest.json").write_text(
-        json.dumps(
-            {
-                "_format": "compact_v2",
-                "n_points": 1,
-                "centroid_outlier_quantile": None,
-                "latent_key": "latent_space",
-                "compression": None,
-                "_obsSchemas": {},
-                "_continuousFields": [],
-                "_categoricalFields": [],
-            }
-        ),
-        encoding="utf-8",
+    return AnnDataServer(
+        adata,
+        dataset_name="Web assets",
+        dataset_id="web-assets",
+        port=0,
+        **kwargs,
     )
-    (root / "embeddings").mkdir()
-    (root / "embeddings" / "0_2d.bin").write_bytes(b"\x00" * 8)
 
 
 @pytest.mark.parametrize(
@@ -879,12 +836,12 @@ def test_a_cache_recorded_against_a_plaintext_http_source_is_refused(
 def test_cache_establishment_is_the_exact_current_default() -> None:
     import inspect
 
-    from cellucid.jupyter import BaseViewer
+    from cellucid.jupyter import AnnDataViewer
     from cellucid.web_cache import ensure_web_ui_cached
 
     assert inspect.signature(ensure_web_ui_cached).parameters["force"].default is True
     assert (
-        inspect.signature(BaseViewer.ensure_web_ui_cached)
+        inspect.signature(AnnDataViewer.ensure_web_ui_cached)
         .parameters["force"]
         .default
         is True
@@ -895,22 +852,12 @@ def test_server_start_propagates_cache_initialization_failure(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    from cellucid.server import CellucidServer
-
-    _write_current_prepared_dataset(
-        tmp_path,
-        dataset_id="cache-failure",
-        dataset_name="Cache failure",
-    )
-
     def fail(**kwargs):
         assert kwargs["force"] is True
         raise OSError("cache directory is read-only")
 
     monkeypatch.setattr("cellucid.web_cache.ensure_web_ui_cached", fail)
-    server = CellucidServer(
-        tmp_path,
-        port=0,
+    server = _anndata_server(
         quiet=True,
         serve_web_ui=True,
         web_source_url="https://viewer.example",
@@ -923,38 +870,28 @@ def test_server_start_propagates_cache_initialization_failure(
     assert server.is_running() is False
 
 
-def test_prepared_server_reports_exact_viewer_generation_establishment(
+def test_the_server_reports_exact_viewer_generation_establishment(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
-    from cellucid.server import CellucidServer
-
-    dataset = tmp_path / "dataset"
-    _write_current_prepared_dataset(
-        dataset,
-        dataset_id="generation-report",
-        dataset_name="Generation report",
-    )
     detail_calls: list[tuple[str, str]] = []
     success_calls: list[str] = []
     cache_calls: list[dict[str, object]] = []
 
     monkeypatch.setattr(
-        "cellucid.server._server.print_detail",
+        "cellucid.anndata_server.print_detail",
         lambda label, value: detail_calls.append((label, value)),
     )
     monkeypatch.setattr(
-        "cellucid.server._server.print_success",
+        "cellucid.anndata_server.print_success",
         lambda message: success_calls.append(message),
     )
     monkeypatch.setattr(
         "cellucid.web_cache.ensure_web_ui_cached",
         lambda **kwargs: cache_calls.append(kwargs),
     )
-    server = CellucidServer(
-        dataset,
+    server = _anndata_server(
         host="127.0.0.1",
-        port=0,
         quiet=False,
         serve_web_ui=True,
         web_source_url="https://viewer.example",
@@ -975,12 +912,11 @@ def test_prepared_server_reports_exact_viewer_generation_establishment(
         server.stop()
 
 
-def test_exported_server_reserves_inventory_and_unlisted_asset_paths(
+def test_the_server_reserves_inventory_and_unlisted_asset_paths(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
     from cellucid import web_cache
-    from cellucid.server import CellucidServer
 
     assets = _asset_payloads("build-1")
     _install_fetch_fixture(
@@ -996,20 +932,8 @@ def test_exported_server_reserves_inventory_and_unlisted_asset_paths(
         show_progress=False,
     )
 
-    dataset = tmp_path / "dataset"
-    (dataset / "assets").mkdir(parents=True)
-    (dataset / "assets" / "not-listed.js").write_bytes(b"must not be served")
-    (dataset / "cellucid-web-assets.json").write_bytes(b"must not be served")
-    _write_current_prepared_dataset(
-        dataset,
-        dataset_id="reserved-routes",
-        dataset_name="Reserved routes",
-    )
-
-    server = CellucidServer(
-        dataset,
+    server = _anndata_server(
         host="127.0.0.1",
-        port=0,
         quiet=True,
         serve_web_ui=True,
         web_source_url="https://viewer.example",
@@ -1023,7 +947,7 @@ def test_exported_server_reserves_inventory_and_unlisted_asset_paths(
         try:
             connection.request(
                 "GET",
-                "/?jupyter=true&viewerId=viewer-1&viewerToken=secret-1",
+                "/?viewer=true&viewerId=viewer-1&viewerToken=secret-1",
             )
             response = connection.getresponse()
             assert response.status == 200
@@ -1057,3 +981,30 @@ def test_cache_cleanup_failure_is_propagated(monkeypatch, tmp_path: Path) -> Non
     )
     with pytest.raises(OSError, match="cannot remove cache"):
         clear_web_cache(cache_dir=cache_dir)
+
+
+def test_an_asset_is_verified_once_per_version_not_on_every_request(monkeypatch, tmp_path: Path) -> None:
+    """Hashing every asset on every request cost 30 ms each: seconds before a first frame."""
+    from cellucid import web_cache
+
+    assets = _asset_payloads("build-1")
+    _install_fetch_fixture(monkeypatch, build_id="build-1", assets=assets)
+    cache_dir = tmp_path / "cache"
+    web_cache.ensure_web_ui_cached(
+        cache_dir=cache_dir, source_url="https://viewer.example", force=True, show_progress=False
+    )
+    hashed: list[str] = []
+    loaded: list[Path] = []
+    verify, load = web_cache._verify_asset_bytes, web_cache._load_cached_inventory
+    monkeypatch.setattr(web_cache, "_verify_asset_bytes", lambda asset, data: (hashed.append(asset.path), verify(asset, data)))
+    monkeypatch.setattr(web_cache, "_load_cached_inventory", lambda path, **kw: (loaded.append(path), load(path, **kw))[1])
+    for _ in range(5):
+        assert web_cache.read_cached_web_asset(cache_dir, "assets/js/app.js")[0] == assets["assets/js/app.js"][0]
+    assert hashed == ["assets/js/app.js"]
+    assert len(loaded) == 1
+    # A replaced file is a new version: checked again, and refused when wrong.
+    target = cache_dir / "assets" / "js" / "app.js"
+    target.unlink()
+    target.write_bytes(b"x" * len(assets["assets/js/app.js"][0]))
+    with pytest.raises(ValueError, match="sha256"):
+        web_cache.read_cached_web_asset(cache_dir, "assets/js/app.js")

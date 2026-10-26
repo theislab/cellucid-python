@@ -63,10 +63,10 @@ Two key consequences:
 Here is what that looks like once one selection has been confirmed:
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/04-view-highlighted-cells.png
-:alt: The whole window after confirming the lasso group: the 842 enclosed cells in the upper part of the left lobe are drawn in the highlight colour, and the Highlighting panel reports 842 cells highlighted with one Lasso group.
+:alt: The whole window after confirming the lasso group: the 826 enclosed cells in the upper part of the left lobe are drawn in the highlight colour, and the Highlighting panel reports 826 cells highlighted with one Lasso group.
 :width: 1440px
 
-One confirmed group. The panel counts membership (`842 cells highlighted`); the
+One confirmed group. The panel counts membership (`826 cells highlighted`); the
 canvas draws the members it is currently allowed to draw. Those are two
 different numbers whenever a filter is active, and the panel says so by
 switching to *“N of M highlighted cells visible”*.
@@ -80,7 +80,7 @@ switching to *“N of M highlighted cells visible”*.
 Internally, Cellucid identifies a cell by its **index**: `0..(n_cells-1)` in the loaded dataset’s order.
 
 This makes highlights **dataset-dependent**:
-if you reorder/re-export your dataset, “cell #123” may no longer refer to the same biological cell.
+if you reorder your dataset or write it again, “cell #123” may no longer refer to the same biological cell.
 
 :::{important}
 Session restore rejects and rolls back the complete operation if the saved
@@ -142,8 +142,8 @@ That includes:
 - standard filters ({doc}`../e_filtering/index`),
 - view-specific filters in multi-view snapshots (if snapshots have independent filters).
 
-It does **not** include LOD/downsampling. With **Visualization → Renderer settings →
-Level-of-Detail (LOD)** enabled ({doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke`),
+It does **not** include LOD/downsampling. With **Visualization → Performance →
+Level of detail (LOD)** enabled ({doc}`../c_core_interactions/03_render_modes_points_vs_volumetric_smoke`),
 a zoomed-out camera makes Cellucid draw only a subset of the points — but a lasso,
 proximity drag, or KNN growth still evaluates every unfiltered cell. So a gesture can
 select cells the view is not currently drawing, and the group you confirm can be larger
@@ -222,7 +222,7 @@ Large highlights can make sessions much larger; see {doc}`05_edge_cases_highligh
 - Anything if you reload without restoring a session
 
 ### Dataset binding (important)
-Highlights are dataset-dependent. If the session’s dataset fingerprint doesn’t match your currently loaded dataset, Cellucid restores only dataset-agnostic layout and skips highlight data.
+Highlights are dataset-dependent. If the session’s dataset fingerprint doesn’t match your currently loaded dataset, Cellucid rejects the whole restore: nothing, highlights included, is applied.
 
 ---
 
@@ -239,12 +239,11 @@ Goal: select a cluster and make it persist.
 7) You now have a highlight group in the list, and the highlight remains even if you change fields.
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/choose-highlight-mode.png
-:alt: The Highlighting panel before anything is selected: the four Highlight mode buttons — Annotation based (active), KNN drag, Proximity drag and Lasso — ringed, with the pointer on Lasso; below a dashed divider the Select mode switch, off, with the hint "tap, click or drag selects without Alt"; the Annotation based help text; one page tab reading Page 1 (0); and the empty group list reading "No cells highlighted".
-:width: 516px
+:alt: The Highlighting panel before anything is selected: the Selection (i) and the four Tool buttons — Annotation (active), KNN drag, Proximity drag and Lasso — ringed, with the pointer on Lasso; the Select mode switch, off; Highlights with one page tab reading Page 1 (0) and the empty list reading No cells highlighted; and the collapsed Create categorical.
+:width: 532px
 
-Step 3 in the panel. The help text below the buttons (under the **Select mode**
-switch) always describes the mode that is currently active, so it is the fastest
-way to confirm you are in the tool you think you are in.
+Step 3 in the panel. The pressed **Tool** button is the tool in use, and the
+**Selection** (i) describes every tool and its modifier keys.
 ```
 
 The four steps as they actually look, gesture by gesture, are in
@@ -303,12 +302,12 @@ The highlight UI distinguishes:
 If you zoom/pan and see “visible highlighted” change, you may be seeing LOD behavior rather than filters.
 
 ### Session storage (high level)
-For session bundles, highlight memberships are stored as dataset-dependent chunks and compressed (delta-encoded indices + varint + gzip).
-This is efficient for typical selections but can still be large for very big groups.
+For session bundles, each highlight group's membership is one dataset-dependent chunk, stored in whichever encoding is smallest for it (sorted gaps, a bitset over all cells, or runs of consecutive cells) and gzip-compressed.
+A group made from a whole category is stored relative to that category and costs a few bytes whatever its size; on restore the category's cells are recomputed and checked against the saved count and digest.
 
 ### Python/Jupyter synchronization (implemented)
 
-Cellucid has a notebook bridge (`cellucid-python`) that supports:
+Cellucid has a viewer channel (one WebSocket, `/_cellucid/ws`) to `cellucid-python` that supports:
 - **Python → UI commands** (e.g. `viewer.highlight_cells(...)`, `viewer.set_color_by(...)`)
 - **UI → Python hooks** (e.g. `@viewer.on_selection`, `@viewer.on_click`, `@viewer.on_hover`)
 - **No-download session capture**: pull the current `.cellucid-session` into Python as an object and apply it onto an `AnnData`

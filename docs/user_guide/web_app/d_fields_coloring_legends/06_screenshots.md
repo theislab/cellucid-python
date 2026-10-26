@@ -10,24 +10,24 @@ pixel ratio. Each names the scenario in
 ## Choosing a field
 
 ```{figure} ../../../_static/screenshots/web_app/field-selectors-three-routes.png
-:alt: Three stacked controls labelled CATEGORICAL OBS holding clusters, CONTINUOUS OBS holding None and GENE EXPRESSION showing the placeholder Search genes, each followed by four small icon buttons that are greyed out on the two empty rows, with the mouse pointer pressing the first dropdown.
-:width: 488px
+:alt: The Color by heading with its (i), above the three field selectors stacked in order — Categorical obs holding clusters, Continuous obs holding None, and an empty Gene expression search box — each followed by four small icon buttons, with the pointer pressing the first.
+:width: 504px
 
 The three selectors and their four per-field actions. Scenario
 `fields-selector-rows`.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/gene-search-dropdown-open.png
-:alt: The GENE EXPRESSION row with the letters Rp typed into the search box and an open dropdown beneath listing matching mouse gene names one per row.
-:width: 480px
+:alt: The Gene expression search box holding the letters Rp with its list open below, naming the genes that contain them.
+:width: 496px
 
 Gene search matches a case-insensitive substring anywhere in the name.
 Scenario `fields-gene-search-open`.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/gene-search-no-match.png
-:alt: The same row with CD19 typed in and a dropdown reading No gene matches, a sentence giving the number of gene names this dataset publishes and warning it may be a subset of the source data, and a link reading Why a gene may be missing.
-:width: 480px
+:alt: The Gene expression list after typing a symbol this sample does not publish: No gene matches "CD19", a sentence giving the 3,753 gene names the dataset publishes, and a link Why a gene may be missing.
+:width: 496px
 
 The empty state, which names this dataset's own published gene count. Scenario
 `fields-gene-search-no-match`.
@@ -38,22 +38,22 @@ The empty state, which names this dataset's own published gene count. Scenario
 ## The two legends
 
 ```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
-:alt: A legend with the hint Click a swatch to pick a color, Show All and Hide All buttons, and eight alphabetically ordered rows each with a checkbox, a coloured swatch, a category name, a cell count, a pencil icon and a bin icon.
-:width: 428px
+:alt: The categorical legend for clusters: the Show all and Hide all buttons above eight rows, each holding a checkbox, a colour swatch, a label, a cell count, a rename pencil and a delete bin.
+:width: 488px
 
 Categorical. Scenario `fields-legend-categorical`.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/legend-continuous-sscore.png
-:alt: A legend headed COLOR SCALE (VIRIDIS) with a purple to yellow gradient bar labelled minus 0.37 and 1.14, a Log color scale toggle reading Off, a Rescale colorbar to slider range toggle reading On, and a FILTERING block with a Live filtering toggle reading On, Min and Max sliders and FILTER and RESET buttons.
-:width: 428px
+:alt: The continuous legend for S_score: the Color scale (Viridis) bar with its two end values, Log color scale off and Rescale to range on, each with its (i), and below a rule the Visible range block with Live filtering on, Minimum and Maximum sliders, and Filter and Reset.
+:width: 488px
 
 Continuous. Scenario `fields-legend-continuous`.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/legend-colormap-menu-open.png
-:alt: The same continuous legend with the gradient bar expanded into a grid of small named gradient swatches, Viridis marked active, followed by Plasma, Inferno, Magma, Cividis, Turbo and many more.
-:width: 428px
+:alt: The colormap list open under the S_score colour bar: seven named gradients, Viridis, Plasma, Inferno, Magma, Cividis, Turbo and Twilight, with Viridis marked as the active one.
+:width: 488px
 
 The colormap menu, open. Scenario `fields-colormap-menu`.
 ```
@@ -63,7 +63,7 @@ The colormap menu, open. Scenario `fields-colormap-menu`.
 ## What that does to the canvas
 
 ```{figure} ../../../_static/screenshots/web_app/window-orientation-map.png
-:alt: The whole application window with the sidebar scrolled to Coloring and Filtering, the Pancreas 3D embedding drawn on a light grid, and the eight-row clusters legend whose swatch colours match the coloured groups of points on the canvas.
+:alt: The whole application window with the Pancreas sample loaded, the sidebar showing Coloring & filtering with the embedding coloured by clusters, and the eight-row legend beside the matching colours on the canvas.
 :width: 1440px
 
 Colouring by a categorical field. The legend swatches and the point colours are
@@ -72,7 +72,7 @@ on. Scenario `orientation-window-map`.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/window-color-by-gene-ins1.png
-:alt: The whole application window coloured by expression of the gene Ins1 on a dark-purple to yellow Viridis scale, with most of the embedding dark and one region bright, and the continuous legend open in the sidebar.
+:alt: The whole window coloured by expression of the gene Ins1 on a Viridis scale, dark where the gene is absent and bright in one lobe of the embedding, with the continuous legend in the sidebar.
 :width: 1440px
 
 Colouring by a gene. The same continuous legend as a continuous obs field, and
@@ -80,7 +80,7 @@ the same controls. Scenario `fields-window-gene-coloring`.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/window-centroids-and-labels.png
-:alt: The whole application window coloured by clusters with Show centroids and Show labels both ticked, and the category names Alpha, Beta, Delta, Ductal, Epsilon, Ngn3 high EP, Ngn3 low EP and Pre-endocrine printed on the canvas at the centre of each coloured group.
+:alt: The Pancreas embedding coloured by clusters with Show centroids and Show labels both ticked, so each cluster carries a marker at its centre with its category name printed on it.
 :width: 1440px
 
 Centroids and labels on. Scenario `fields-window-centroids`.
@@ -91,12 +91,10 @@ Centroids and labels on. Scenario `fields-window-centroids`.
 ## The wide overview capture shared with other sections
 
 ```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
-:alt: The Cellucid web app with the sidebar scrolled to the Session panel showing the Suo dataset summary, and a large multicoloured single-cell embedding filling the canvas on a light grid.
+:alt: The whole Cellucid window with the Pancreas sample coloured by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colours.
 :width: 1440px
 
-The wide **Suo** overview used across several sections of this documentation.
-It is a 1× capture of a different sample, and its sidebar is scrolled to
-**Session** rather than to the legend, so use the Pancreas captures above when
-you need to read a control. It is kept here because six other pages reference
-it.
+The overview used across several sections of this documentation: the
+Pancreas sample coloured by `cell_type`, with **Coloring & filtering** at the
+top of the sidebar. Scenario `orientation-app-overview-cell-type`.
 ```

@@ -3,20 +3,22 @@
 ## A callback never runs
 
 Confirm that the callback is registered on the same live viewer object shown in
-the notebook. Reproduce one event, then inspect requests to
-`/_cellucid/events` (for a selection hook, `/_cellucid/selection`); preserve
-the first non-success response and its body.
+the notebook, and that `viewer.debug_connection()["channel_connected"]` is
+`True`. Reproduce one event, then inspect the `/_cellucid/ws` WebSocket in the
+browser's Network panel (filter `WS`); preserve its close code and reason if it
+closed, and any exception logged by `cellucid.viewer_channel`.
 
 ## A command targets the wrong viewer
 
-Use the viewer ID returned by the object that owns the displayed frame. This is
+Send it from the viewer object that owns the displayed frame. This is
 especially important when a notebook contains multiple viewers or a cell was
-re-run.
+re-run: each viewer has its own channel.
 
 ## Session-bundle request rejected
 
-Session-bundle uploads require the exact registered viewer/request pair and are
-single-use. Start a new request instead of replaying an expired or consumed one.
+A session bundle answers exactly one pending `get_session_bundle()` request and
+is single-use; one that arrives after the request stopped waiting is dropped.
+Start a new request (with a longer `timeout=`) instead.
 
 ## A command returned without changing the viewer
 
@@ -24,8 +26,7 @@ Commands are one-way: `viewer.set_color_by(...)` returns `None` whether the
 viewer applied it or refused it. A refusal comes back as a `command_error`
 event, printed to `sys.stderr` and listed by
 `viewer.debug_connection()["recent_events"]["command_errors"]`. Handle it in
-code with `@viewer.on_command_error`. Only the web build that emits
-`command_error` sends it; older builds refuse a command silently.
+code with `@viewer.on_command_error`.
 
 ## Event payload rejected
 

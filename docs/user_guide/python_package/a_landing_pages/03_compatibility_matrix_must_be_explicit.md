@@ -1,4 +1,4 @@
-# Compatibility matrix (must be explicit)
+# Compatibility matrix
 
 **Audience:** notebook users, IT-restricted environments, power users  
 **Time:** 10–15 minutes  
@@ -13,14 +13,20 @@ This page is intentionally explicit because many “it doesn’t work” reports
 Legend:
 - `OK`: works out of the box in common setups
 - `Setup`: works with setup / common caveats
+- `Untested`: expected to work as described, but not tested by the project
 - `No`: not supported (use browser workflow instead)
+
+Commands and events travel on one WebSocket the viewer opens to the Cellucid
+server (`/_cellucid/ws`), so they work exactly when the iframe loads and that
+WebSocket opens; the canonical list of what has and has not been tested is
+{doc}`../e_jupyter_hooks/03_supported_environments_matrix`.
 
 | Environment | Viewer embeds (iframe) | Python → frontend commands | Frontend → Python hooks/events | Notes |
 |---|---:|---:|---:|---|
 | Classic Jupyter Notebook (local) | OK | OK | OK | Usually simplest; notebook is often `http://localhost`. |
 | JupyterLab (local) | OK | OK | OK | If JupyterLab is served from **HTTPS**, expose the Cellucid port through an HTTPS route and pass that route explicitly. |
-| VSCode notebooks (local) | OK | OK | OK | If VSCode runs in Remote/SSH containers, treat it like “remote kernel”. |
-| Google Colab | Setup | OK | OK | Obtain Colab's HTTPS proxy base, pass it as `client_server_url=`, and declare its host as `allowed_hosts=[...]`; Cellucid does not call the proxy API. |
+| VSCode notebooks (local) | Untested | Untested | Untested | Works when VS Code's notebook webview loads a loopback iframe. If VSCode runs in Remote/SSH containers, treat it like “remote kernel”. |
+| Google Colab | Untested (Setup) | Untested | Untested | Obtain Colab's HTTPS proxy base, pass it as `client_server_url=`, and declare its host as `allowed_hosts=[...]`; Cellucid does not call the proxy API. Colab's proxy must also pass the `/_cellucid/ws` WebSocket. |
 | JupyterHub / remote notebooks (HTTPS) | Setup | OK | OK | Configure an HTTPS route for the selected port, pass its exact base as `client_server_url=`, and declare the route's host as `allowed_hosts=[...]`. |
 
 ### Network requirements
@@ -33,13 +39,13 @@ Cellucid has two different network surfaces:
 
 | Feature | Source access required? | Notes |
 |---|---:|---|
-| `cellucid serve exports/...` with its viewer | Yes, at startup | The server downloads, stages, byte-verifies, and atomically publishes the complete source generation before binding its HTTP server. |
-| `show(...)` / `show_anndata(...)` | Yes, at startup | The notebook viewer uses the same establishment contract. |
+| `cellucid serve data.h5ad` with its viewer | Yes, at startup | The server downloads, stages, byte-verifies, and atomically publishes the complete source generation before binding its HTTP server. |
+| `show_anndata(...)` | Yes, at startup | The notebook viewer uses the same establishment contract. |
 | `cellucid serve ... --no-web-ui` | No | Explicit data-endpoint-only mode; no viewer is served. |
 | Hosted web app (`cellucid.com`) | Yes | The browser loads the website directly. |
 | `ensure_web_ui_cached(force=True)` | Yes | Establishes the complete source generation now. |
 | `ensure_web_ui_cached(force=False)` | No | Verifies an existing generation only; it does not alter normal viewer startup. |
-| Hooks/events after a viewer has started | No additional source request | Messages use `/_cellucid/events` on the Python server; selections use `/_cellucid/selection`. |
+| Hooks/events after a viewer has started | No additional source request | Commands and events use the viewer channel (`/_cellucid/ws`, a WebSocket) on the Python server. |
 
 ## Practical notes per environment
 
@@ -65,7 +71,11 @@ Fixes:
 
 ### VSCode notebooks
 
-Local VSCode works like local Jupyter: embedding + hooks typically work.
+Local VSCode is expected to work like local Jupyter, but the project has not
+tested VS Code's notebook webview: the iframe loads from
+`http://127.0.0.1:<port>`, and whether a given VS Code build lets the webview
+load a loopback iframe decides it. `viewer.debug_connection()` says which part
+fails (`channel_connected`, `frontend_roundtrip`).
 
 Remote VSCode (SSH / containers) is different:
 - Your **kernel** runs remotely.
@@ -89,8 +99,10 @@ Recommended pattern (SSH/remote):
 
 ### Google Colab
 
-Colab runs the kernel on a remote VM. The caller must obtain Colab's HTTPS
-proxy base for one fixed port and pass it explicitly:
+Colab runs the kernel on a remote VM. The project has not tested Colab's
+proxy; Colab's `proxyPort` URL must also carry the `/_cellucid/ws` WebSocket
+upgrade, which is Colab's behaviour, not Cellucid's. The caller must obtain
+Colab's HTTPS proxy base for one fixed port and pass it explicitly:
 
 Typical pattern:
 1) Install in the Colab runtime:
@@ -125,9 +137,9 @@ Cellucid does not call `google.colab.kernel.proxyPort(...)` itself.
 If it fails:
 - Run `viewer.debug_connection()` and look at:
   - `client_server_url`
-  - `allowed_hosts`
+  - `channel_connected`
   - `server_health`
-  - `dataset_identity_probes`
+  - `anndata_store_probes`
   - `frontend_roundtrip` and `frontend_debug_snapshot`
 
 ## Security / browser constraints (what’s going on under the hood)
@@ -162,10 +174,12 @@ served as a substitute.
 ## Edge cases (things that look like “bugs”)
 
 - **Ad blockers / strict corporate CSP**: can break the hosted web UI fetch or iframe behavior.
-- **Port collisions**: an explicitly requested busy port fails. In Python,
-  `port=0` asks the operating system to allocate one port; use the actual URL
-  reported by the viewer/server object.
-- **Multiple viewers in one notebook**: hooks are routed by `viewerId`. If you re-run cells many times, stop old viewers (`viewer.stop()`) or restart the kernel.
+- **Port collisions**: a notebook viewer created without `port=` serves on
+  8765 or, when another viewer holds it, on the next free port, and prints a
+  note (Google sign-in works only on 8765). An explicitly requested busy port
+  fails. `port=0` asks the operating system to allocate one port; use the
+  actual URL reported by the viewer/server object.
+- **Multiple viewers in one notebook**: each viewer's page authenticates its own channel with its `viewerId` and token, so events reach the right viewer. If you re-run cells many times, stop old viewers (`viewer.stop()`) or restart the kernel.
 - **Remote access**: binding `--host 0.0.0.0` exposes your server to the network; do this only if you understand the security implications.
 
 ## Troubleshooting (compatibility)
@@ -201,7 +215,7 @@ served as a substitute.
 **Likely causes**
 - Viewer isn’t fully loaded yet (wait for `on_ready`).
 - Old viewer is still registered (multiple viewers, stale kernel state).
-- Browser can’t reach `/_cellucid/events` (or `/_cellucid/selection`) on the server.
+- The viewer's channel (`/_cellucid/ws`) could not open (a proxy that does not pass WebSockets; the viewer says so).
 
 **How to confirm**
 - Add a raw message logger:

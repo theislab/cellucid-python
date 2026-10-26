@@ -31,7 +31,7 @@ Cellucid is intentionally split across repos:
 When debugging a web app issue, always record whether it happened in:
 - the public hosted app (`https://www.cellucid.com`),
 - a locally hosted copy of `cellucid/`, or
-- the embedded viewer inside Jupyter (Cellucid loaded in an iframe).
+- a viewer opened by the Python or R package (`show_anndata()`, `cellucid_view()`), in a notebook output or a browser tab.
 
 These environments share code, but differ in **CORS**, **caching**, and **data-source behavior**.
 :::

@@ -58,7 +58,7 @@ Key files involved:
 ### 2) Add an analysis mode / plot / compute operation
 
 When you want:
-- a new analysis UI mode (e.g. new “tab” in Page Analysis)
+- a new analysis UI mode (e.g. new “tab” in the Analysis panel)
 - a new plot type
 - a new transform/statistical test
 
@@ -87,15 +87,21 @@ Key files involved:
 
 ### 4) Add a new data source
 
-When you want:
-- a new way to load datasets (beyond local-demo/local-user/remote/github/jupyter)
+Pick the smallest of three extension points:
 
-Start with:
-- `cellucid/assets/js/data/data-source-manager.js`
-- `cellucid/assets/js/data/data-source.js` (contracts + validation)
-
-Then wire it into:
-- `cellucid/assets/js/app/main.js` and/or dataset connections UI
+- **A new host for links** (a repository or cloud drive): one provider module
+  under `cellucid/assets/js/data/sources/providers/` plus one line in
+  `DEFAULT_PROVIDERS` (`data/sources/registry.js`, whose header states the
+  provider contract). A provider only says where the bytes are; it never
+  parses a format.
+- **A new file format**: one entry in `cellucid/assets/js/data/input-formats.js`
+  (regenerate `tests/fixtures/input-formats.json`, which Python and R read),
+  plus a layout view under `data/anndata/views/` for a format read in place,
+  or a transcoder under `data/anndata/transcode/` for one read once.
+- **A new kind of source** (beyond local-demo/local-user/remote/link/jupyter):
+  start with `cellucid/assets/js/data/data-source-manager.js` and
+  `cellucid/assets/js/data/data-source.js` (contracts + validation), then wire
+  it into `cellucid/assets/js/app/main.js` and the dataset connections UI.
 
 ### 5) Add session persistence coverage
 

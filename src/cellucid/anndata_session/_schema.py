@@ -25,13 +25,13 @@ _HIGHLIGHT_GROUP_REQUIRED_KEYS = {
     "enabled",
     "cellCount",
 }
+# A field-bound group names its field and category; their positions in the
+# viewer's inventories are resolved from the names and are not stored.
 _HIGHLIGHT_FIELD_GROUP_KEYS = _HIGHLIGHT_GROUP_REQUIRED_KEYS | {
     "fieldKey",
-    "fieldIndex",
     "fieldSource",
 }
 _HIGHLIGHT_CATEGORY_GROUP_KEYS = _HIGHLIGHT_FIELD_GROUP_KEYS | {
-    "categoryIndex",
     "categoryName",
 }
 _HIGHLIGHT_RANGE_GROUP_KEYS = _HIGHLIGHT_FIELD_GROUP_KEYS | {
@@ -120,12 +120,30 @@ _CURRENT_GENERIC_STATIC_CHUNK_PROFILES = (
         "datasetDependent": False,
     },
     {
-        "id": "analysis/windows",
-        "contributorId": "analysis-windows",
+        "id": "ui/figure-export",
+        "contributorId": "figure-export",
         "priority": "eager",
         "kind": "json",
         "codec": "gzip",
+        "label": "Figure export",
+        "datasetDependent": False,
+    },
+    {
+        "id": "analysis/windows",
+        "contributorId": "analysis-windows",
+        "priority": "eager",
+        "kind": "binary",
+        "codec": "gzip",
         "label": "Analysis windows",
+        "datasetDependent": True,
+    },
+    {
+        "id": "analysis/docked",
+        "contributorId": "analysis-docked",
+        "priority": "eager",
+        "kind": "binary",
+        "codec": "gzip",
+        "label": "Docked analysis",
         "datasetDependent": True,
     },
     {
@@ -135,15 +153,6 @@ _CURRENT_GENERIC_STATIC_CHUNK_PROFILES = (
         "kind": "json",
         "codec": "gzip",
         "label": "Highlight metadata",
-        "datasetDependent": True,
-    },
-    {
-        "id": "analysis/cache-inventory",
-        "contributorId": "analysis-artifacts",
-        "priority": "eager",
-        "kind": "json",
-        "codec": "gzip",
-        "label": "Analysis cache inventory",
         "datasetDependent": True,
     },
     {
@@ -169,15 +178,14 @@ _CONTRIBUTOR_ORDER = (
     "cinematic-camera",
     "core-state",
     "dockable-layout",
+    "figure-export",
     "analysis-windows",
+    "analysis-docked",
     "highlights-meta",
     "highlights-cells",
-    "analysis-artifacts",
 )
 _CONTRIBUTOR_INDEX = {
     contributor_id: index for index, contributor_id in enumerate(_CONTRIBUTOR_ORDER)
 }
-_ANALYSIS_ARTIFACT_PREFIX = "analysis/artifacts/bulk-gene/"
 _HIGHLIGHT_CELLS_PREFIX = "highlights/cells/"
 _USER_DEFINED_CODES_PREFIX = "user-defined/codes/"
-_JAVASCRIPT_URI_COMPONENT_SAFE = "-_.!~*'()"

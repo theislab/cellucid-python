@@ -48,9 +48,24 @@ HEAVY_DEPENDENCIES = (
 )
 
 
-def _run_mypy_on_consumer(source: str, tmp_path: Path) -> str:
-    """Type-check ``source`` as a standalone project that depends on cellucid."""
-    pytest.importorskip("mypy")
+@pytest.fixture(scope="module")
+def mypy_cache(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """One mypy cache for the module's consumer checks.
+
+    A cold check analyses cellucid and every library it imports, about five
+    seconds; sharing the cache lets the later checks reuse that analysis. Each
+    consumer module is still new to mypy, so what it reports about the
+    consumer is unchanged.
+    """
+    return tmp_path_factory.mktemp("mypy_cache")
+
+
+def _run_mypy_on_consumer(source: str, tmp_path: Path, cache_dir: Path) -> str:
+    """Type-check ``source`` as a standalone project that depends on cellucid.
+
+    mypy comes with the ``dev`` extra; without it the run's output names the
+    missing module and the assertions on that output fail.
+    """
     consumer_dir = tmp_path / "consumer"
     consumer_dir.mkdir()
     (consumer_dir / CONSUMER_MODULE).write_text(source, encoding="utf-8")
@@ -60,7 +75,7 @@ def _run_mypy_on_consumer(source: str, tmp_path: Path) -> str:
             "-m",
             "mypy",
             "--cache-dir",
-            str(tmp_path / "mypy_cache"),
+            str(cache_dir),
             CONSUMER_MODULE,
         ],
         capture_output=True,
@@ -72,14 +87,14 @@ def _run_mypy_on_consumer(source: str, tmp_path: Path) -> str:
     return completed.stdout + completed.stderr
 
 
-def test_every_public_export_has_a_real_type_for_a_consumer(tmp_path: Path) -> None:
+def test_every_public_export_has_a_real_type_for_a_consumer(tmp_path: Path, mypy_cache: Path) -> None:
     """No export may resolve to ``Any``; the lazy ``__getattr__`` used to erase them all."""
     lines = ["import cellucid", ""]
     revealed_at: dict[int, str] = {}
     for name in LAZY_EXPORTS:
         lines.append(f"reveal_type(cellucid.{name})  # noqa: F821")
         revealed_at[len(lines)] = name
-    output = _run_mypy_on_consumer("\n".join(lines) + "\n", tmp_path)
+    output = _run_mypy_on_consumer("\n".join(lines) + "\n", tmp_path, mypy_cache)
 
     revealed: dict[str, str] = {}
     for line in output.splitlines():
@@ -97,14 +112,34 @@ def test_every_public_export_has_a_real_type_for_a_consumer(tmp_path: Path) -> N
     assert erased == [], f"these exports are still Any for a consumer: {erased}"
 
 
-def test_a_wrong_keyword_argument_is_a_consumer_visible_type_error(tmp_path: Path) -> None:
+def test_a_wrong_keyword_argument_is_a_consumer_visible_type_error(
+    tmp_path: Path, mypy_cache: Path
+) -> None:
     """``prepare(nonexistent_argument=123)`` used to type-check clean."""
     output = _run_mypy_on_consumer(
         "import cellucid\n\ncellucid.prepare(nonexistent_argument=123)\n",
         tmp_path,
+        mypy_cache,
     )
     assert 'Unexpected keyword argument "nonexistent_argument" for "prepare"' in output
     assert "[call-arg]" in output
+
+
+def test_a_missing_or_unknown_format_is_a_consumer_visible_type_error(
+    tmp_path: Path, mypy_cache: Path
+) -> None:
+    """``format`` has no default, and only its three values type-check."""
+    output = _run_mypy_on_consumer(
+        "import cellucid\n\n"
+        'cellucid.prepare("a.h5ad", embeddings={}, dataset_id="a", dataset_name="A")\n'
+        'cellucid.prepare("a.loom", format="loom", embeddings={}, dataset_id="a", dataset_name="A")\n'
+        'cellucid.prepare("a.zarr", format="zarr", embeddings={}, dataset_id="a", dataset_name="A")\n',
+        tmp_path,
+        mypy_cache,
+    )
+    assert f'{CONSUMER_MODULE}:3: error: Missing named argument "format" for "prepare"' in output
+    assert f'{CONSUMER_MODULE}:4: error: Argument "format" to "prepare" has incompatible type' in output
+    assert f"{CONSUMER_MODULE}:5:" not in output
 
 
 def test_importing_cellucid_stays_lazy() -> None:

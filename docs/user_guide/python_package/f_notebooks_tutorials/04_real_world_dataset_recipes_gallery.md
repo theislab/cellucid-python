@@ -11,8 +11,8 @@ inputs, or values that you must ask someone to supply.
 :link: prepare_pancreas
 :link-type: doc
 
-Turn 2,531 real pancreatic endocrinogenesis cells into a compact prepared
-dataset, validate the manifests, and open the result in Cellucid.
+Turn 2,531 real pancreatic endocrinogenesis cells into a compact Cellucid-ready
+AnnData, read it back with anndata, and open the result in Cellucid.
 :::
 
 ::::
@@ -21,18 +21,18 @@ dataset, validate the manifests, and open the result in Cellucid.
 
 Run the notebook when you want to:
 
-- see the exact boundary between an `AnnData` object and a prepared dataset,
+- see the exact boundary between an `AnnData` object and a Cellucid-ready one,
 - learn which embedding, observation, expression, and connectivity inputs map
   to `prepare(...)`,
-- make a small network-efficient export before scaling the same pattern to your
+- write a small network-efficient file before scaling the same pattern to your
   full study, or
 - verify a Python environment with a known public input before debugging your
   own data.
 
-The notebook deliberately exports 128 highly variable genes so it finishes
-quickly. Your production export can select a larger gene panel or all genes.
-For the reasoning behind each size and precision choice, continue with
-{doc}`21_prepare_exports_with_quantization_and_compression`.
+The notebook deliberately keeps 128 highly variable genes so it finishes
+quickly. Your production file can keep a larger gene panel or all genes.
+For the reasoning behind each argument, continue with
+{doc}`21_prepare_a_cellucid_ready_anndata`.
 
 ## Run the notebook
 
@@ -44,9 +44,9 @@ jupyter lab docs/user_guide/python_package/f_notebooks_tutorials/prepare_pancrea
 ```
 
 ```{note}
-The notebook writes its prepared dataset to a temporary directory and prints
-the exact location. Its final cell stops the viewer and removes that directory.
-Copy the export elsewhere before cleanup if you want to keep it.
+The notebook writes its `.h5ad` to a temporary directory and prints the exact
+location. Its final cell stops the viewer and removes that directory. Copy the
+file elsewhere before cleanup if you want to keep it.
 ```
 
 ```{toctree}

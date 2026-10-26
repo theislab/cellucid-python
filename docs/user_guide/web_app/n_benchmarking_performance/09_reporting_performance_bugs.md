@@ -26,8 +26,8 @@ Performance problems are often workflow/environment issues. Before filing:
 2) Reduce views (clear snapshots) and retry.
 3) Reduce pixels (smaller window) and retry.
 4) Disable smoke mode and overlays and retry.
-5) If filtering is slow: Live filtering off → `FILTER` once.
-6) If loading is slow: switch to Server Mode for large `.h5ad`/`.zarr`.
+5) If filtering is slow: Live filtering off → `Filter` once.
+6) If loading is slow: keep the file on a local disk, and for a large cell-major `.h5ad` try a gene-major copy written by `prepare()`.
 
 If none of these change the behavior, it is likely worth reporting.
 
@@ -40,9 +40,9 @@ If none of these change the behavior, it is likely worth reporting.
 Include:
 - the synthetic benchmark result, and/or
 - your measured FPS and view/window settings,
-- and the three render settings a reader cannot guess: `Point size (log):`,
-  whether `Antialiasing (smooth point edges)` is ticked, and whether
-  `Level-of-Detail (LOD)` is on. The first two are chosen from the dataset's
+- and the three render settings a reader cannot guess: `Point size`,
+  whether `Antialiasing` is ticked, and whether
+  `Level of detail (LOD)` is on. The first two are chosen from the dataset's
   cell count when it opens, so they differ between datasets on their own.
 
 See {doc}`05_benchmark_tools` and {doc}`04_benchmarking_methodology_and_metrics`.
@@ -58,7 +58,7 @@ Include:
 ### C) “Loading is slow / freezes” (I/O + memory)
 
 Include:
-- loading mode (browser `.h5ad` vs server mode vs export folder),
+- loading mode (browser `.h5ad` / Zarr, a link, server mode, Jupyter), and whether the file was written by `prepare()`,
 - whether the slowdown is cold-cache only,
 - and any network/storage constraints (remote server, network drive).
 
@@ -106,7 +106,7 @@ If the dataset is private:
 
 ### Loading method
 
-- `<export folder / server mode / remote server / browser file picker>`
+- `<browser file picker / link / server mode / remote server / Jupyter>`
 - If server/remote:
   - server location: `<local / LAN / remote>`
   - approximate latency/bandwidth if known
@@ -138,11 +138,11 @@ Pick what matches the issue:
 
 - TTFR (load → first render): `<median>`, `<range>`, `<cold/warm>`
 - FPS while navigating: `<approx>`
-- Filter apply time (Live filtering off, click FILTER once): `<seconds>`
-- “Analyze Performance” result from benchmark panel (if used): paste output
+- Filter apply time (Live filtering off, click Filter once): `<seconds>`
+- “Analyze performance” result from benchmark panel (if used): paste output
 
 If the app exposes it:
-- Paste **Copy Situation Report** from the **Performance Benchmark** panel.
+- Paste **Copy situation report** from the **Benchmark** panel.
 
 ### Attachments (optional but high value)
 
@@ -206,5 +206,5 @@ If you’re unsure, err on the side of redacting.
 ## Next steps
 
 - {doc}`04_benchmarking_methodology_and_metrics` (how to produce comparable numbers)
-- {doc}`05_benchmark_tools` (synthetic benchmark + “Copy Situation Report”)
+- {doc}`05_benchmark_tools` (synthetic benchmark + “Copy situation report”)
 - {doc}`07_troubleshooting_performance` (if you want to try more fixes first)

@@ -1,6 +1,6 @@
 # Extension point: add an analysis mode
 
-This guide explains how to extend Cellucid’s **Page Analysis** subsystem.
+This guide explains how to extend Cellucid’s **Analysis** subsystem.
 
 There are multiple “kinds” of analysis extensions; pick the right one before you start:
 
@@ -42,7 +42,7 @@ Add a new registration in `_registerAnalysisTypes()`:
 - optionally provide `factoryOptions` if you need callbacks
 
 Reference implementation:
-- existing registrations for `simple`, `detailed`, `correlation`, `differential`, etc.
+- existing registrations for `simple`, `detailed`, `correlation`, `differential`, `signature`, `genesPanel`, `dotplot` and `composition`.
 
 ### Step A3: Ensure the container exists
 
@@ -52,6 +52,19 @@ Confirm your new mode has a matching container in the analysis accordion markup.
 Code pointer:
 - analysis accordion HTML is built inside `ComparisonModule` (see `comparison-module.js`).
 - UI manager contract: `cellucid/assets/js/app/analysis/ui/analysis-ui-manager.js`
+
+### Step A3b: Declare its settings once
+
+Every setting of a mode is one entry of its options schema under
+`cellucid/assets/js/app/analysis/options/` (`option-schema.js` defines the
+entry: `key`, `kind`, `label`, `tip`, `group`, `default`, …; for example
+`marker-options.js`, `de-options.js`). The form is rendered from the schema
+(`render-options-form.js`, used by `ui/analysis-types/base/form-based-analysis.js`),
+sessions save the record it validates, and each `tip` names an entry of
+`cellucid/assets/js/app/ui/components/info-tips.js`. The user guide's options
+table is held to the schema by `tests/analysis-options-schema-contract.test.mjs`,
+so a new or changed setting updates the matching `h_analysis` page in the same
+change.
 
 ### Step A4: Wire data access through `DataLayer`
 

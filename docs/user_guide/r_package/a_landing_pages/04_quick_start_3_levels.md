@@ -2,199 +2,149 @@
 
 **Audience:** everyone (choose your depth)  
 **Time:** 5–30 minutes  
-**What you’ll get:** an export folder that loads in the Cellucid web app
+**What you’ll get:** a Cellucid-ready AnnData store that opens in the Cellucid web app
 
-This page gives you three “depth levels”. Stop as soon as you have what you need.
+Stop as soon as you have what you need.
 
-- **Level 1**: tiny toy dataset (proves your installation works)
-- **Level 2**: “real data” from Seurat / SingleCellExperiment
-- **Level 3**: advanced export (compression, quantization, subsets, connectivity, vector fields)
+- **Level 1**: view your Seurat / SingleCellExperiment object from R (no file written)
+- **Level 2**: write it as a store to share, or a tiny toy dataset from matrices
+- **Level 3**: everything at once — expression, graph, vector field, metadata, launch defaults, one `.zarr.zip` file
 
 ```{note}
-If you prefer a notebook-style, highly verbose walkthrough, go to {doc}`../f_notebooks_tutorials/index`.
+For a notebook-style, verbose walkthrough, go to {doc}`../f_notebooks_tutorials/index`.
 ```
 
-## Level 1 — Minimal toy export (5 minutes)
-
-### Prerequisites
+## Level 1 — View an object (2 minutes)
 
 ```r
 library(cellucid)
+library(SeuratObject)
+data("pbmc_small")
+
+viewer <- cellucid_view(pbmc_small)   # RStudio / Positron Viewer pane, else the browser
+cellucid_color_by(viewer, "groups")
+cellucid_stop(viewer)
 ```
 
-### Step 1: Create small inputs
+**What success looks like:** the 80 cells of `pbmc_small` on their t-SNE in the
+Viewer pane, coloured by `groups`. A SingleCellExperiment works the same way.
+More: {doc}`../d_viewing_loading/04_view_in_rstudio_positron`.
+
+## Level 2 — Write a store to share (5 minutes)
+
+From an object, every component comes from it:
 
 ```r
-latent <- matrix(c(0, 0,
-                   1, 1,
-                   2, 2),
-                 ncol = 2, byrow = TRUE)
+cellucid_prepare(
+  "pbmc.zarr", "zarr",
+  data = seu,                          # a Seurat, SingleCellExperiment or SummarizedExperiment
+  dataset_id = "pbmc",
+  dataset_name = "PBMC",
+  latent_key = "X_pca"
+)
+```
 
+Full recipes: {doc}`../e_integrations_recipes/01_seurat_recipe`,
+{doc}`../e_integrations_recipes/02_singlecellexperiment_recipe`.
+
+Without an object, pass matrices and data frames:
+
+```r
 obs <- data.frame(
   cluster = factor(c("A", "A", "B")),
   score = c(0.1, 0.2, 0.3)
 )
+umap <- matrix(c(0, 0,
+                 1, 0,
+                 0, 1),
+               ncol = 2, byrow = TRUE)
 
-umap2 <- matrix(c(0, 0,
-                  1, 0,
-                  0, 1),
-                ncol = 2, byrow = TRUE)
-```
-
-### Step 2: Export
-
-```r
-out_dir <- file.path(tempdir(), "cellucid_quickstart_toy")
-dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-
-cellucid_prepare(
-  latent_space = latent,
-  obs = obs,
-  embeddings = list(X_umap = umap2),
-  obs_categorical_dtype = "uint8",
+store <- cellucid_prepare(
+  out_path = file.path(tempdir(), "quickstart_toy.zarr"),
+  format = "zarr",
+  embeddings = list(X_umap = umap),
+  dataset_id = "quickstart-toy",
   dataset_name = "Quick Start Toy",
-  dataset_id = "cellucid_quickstart_toy",
-  out_dir = out_dir,
-  centroid_min_points = 1,
+  obs = obs,
   force = TRUE
 )
 
-list.files(out_dir, recursive = TRUE)
+list.files(store, all.files = TRUE, no.. = TRUE)
+#>  [1] ".zattrs"    ".zgroup"    ".zmetadata" "layers"     "obs"
+#>  [6] "obsm"       "obsp"       "uns"        "var"        "varm"
+#> [11] "varp"
 ```
 
-### Step 3: Open in the web app
+`cellucid_prepare()` returns the store's absolute path (invisibly). **Open it:**
+{doc}`../d_viewing_loading/01_open_stores_in_cellucid_web_app`; Cellucid shows
+3 points, coloured by `cluster` or `score`.
 
-Go to {doc}`../d_viewing_loading/01_open_exports_in_cellucid_web_app` for a click-by-click guide.
-
-**What success looks like**
-- Cellucid loads quickly and shows 3 points.
-- You can color by `cluster` and `score`.
-
-## Level 2 — Export from Seurat or SingleCellExperiment (10–20 minutes)
-
-You can export from common R single-cell containers by extracting:
-- embeddings (UMAP)
-- a latent space (often PCA)
-- `obs` metadata
-- (optional) gene expression and connectivity
-
-Pick one:
-
-- Seurat: {doc}`../e_integrations_recipes/01_seurat_recipe`
-- SingleCellExperiment: {doc}`../e_integrations_recipes/02_singlecellexperiment_recipe`
-
-## Level 3 — Advanced export (quality + performance + extra features)
-
-This is for large datasets, sharing, or “publication-grade” exports where you want explicit control.
-
-### A) Reduce disk size (recommended)
-
-You have three main levers:
-
-1) **Compression** (gzip)
-2) **Quantization** (8-bit / 16-bit) for continuous fields and gene expression
-3) **Export fewer genes / fewer metadata columns**
-
-Example:
+## Level 3 — Everything at once (15–30 minutes)
 
 ```r
-cellucid_prepare(
-  latent_space = latent,
-  obs = obs,
-  embeddings = list(X_umap = umap2),
-  obs_categorical_dtype = "uint8",
-  dataset_name = "Quick Start Toy",
-  dataset_id = "cellucid_quickstart_toy",
-  out_dir = out_dir,
-  force = TRUE,
-  compression = 6,
-  obs_continuous_quantization = 8
+library(cellucid)
+library(Matrix)
+
+set.seed(1)
+n_cells <- 500
+n_genes <- 200
+
+expr <- rsparsematrix(n_cells, n_genes, density = 0.05)   # cells x genes
+expr@x <- abs(expr@x)
+dimnames(expr) <- list(paste0("cell", seq_len(n_cells)), paste0("ENSG", seq_len(n_genes)))
+var <- data.frame(symbol = paste0("GENE", seq_len(n_genes)), row.names = colnames(expr))
+obs <- data.frame(
+  cluster = factor(sample(c("T", "B", "NK"), n_cells, TRUE)),
+  row.names = rownames(expr)
 )
-```
+pca <- matrix(rnorm(n_cells * 20), n_cells)
+umap <- matrix(rnorm(n_cells * 2), n_cells)
+velocity <- matrix(rnorm(n_cells * 2, sd = 0.1), n_cells)
 
-### B) Add gene expression (optional but common)
+# A symmetric neighbour graph with a zero diagonal
+knn <- rsparsematrix(n_cells, n_cells, density = 0.01)
+knn@x <- abs(knn@x)
+knn <- knn + t(knn)
+diag(knn) <- 0
+knn <- drop0(knn)
 
-If you include gene expression, you must also include `var` (gene metadata).
-
-```r
-expr <- matrix(c(0, 1,
-                 2, 3,
-                 4, 5),
-               nrow = 3, ncol = 2, byrow = TRUE) # cells x genes
-
-var <- data.frame(symbol = c("G1", "G2"))
-rownames(var) <- var$symbol
-
-cellucid_prepare(
-  latent_space = latent,
+store <- cellucid_prepare(
+  out_path = file.path(tempdir(), "quickstart_advanced.zarr.zip"),
+  format = "zarr.zip",
+  embeddings = list(X_umap = umap, X_pca = pca),
+  dataset_id = "quickstart-advanced",
+  dataset_name = "Quick Start Advanced",
+  dataset_description = "Simulated cells for the quick start.",
+  citation_text = "Doe et al. (2026)",
+  citation_url = "https://example.org/doe2026",
+  source_name = "Simulation",
   obs = obs,
   var = var,
   gene_expression = expr,
-  embeddings = list(X_umap = umap2),
-  obs_categorical_dtype = "uint8",
-  dataset_name = "Quick Start Toy",
-  dataset_id = "cellucid_quickstart_toy",
-  out_dir = out_dir,
-  centroid_min_points = 1,
-  force = TRUE,
-  compression = 6,
-  var_quantization = 8
-)
-```
-
-### C) Add a connectivity graph (optional)
-
-If you have a KNN/SNN graph as an adjacency matrix (dense or sparse), pass it as `connectivities=`.
-
-```r
-connectivities <- matrix(0, nrow = 3, ncol = 3)
-connectivities[1, 2] <- 1
-connectivities[1, 3] <- 1
-
-cellucid_prepare(
-  latent_space = latent,
-  obs = obs,
-  embeddings = list(X_umap = umap2),
-  connectivities = connectivities,
-  obs_categorical_dtype = "uint8",
-  dataset_name = "Quick Start Toy",
-  dataset_id = "cellucid_quickstart_toy",
-  out_dir = out_dir,
-  centroid_min_points = 1,
+  connectivities = knn,
+  vector_fields = list(velocity = list(X_umap = velocity)),
+  embedding_defaults = list("2d" = "X_umap", "3d" = list(key = "X_pca", columns = 1:3)),
+  latent_key = "X_pca",
+  var_gene_id_column = "symbol",
+  vector_field_default = "velocity",
   force = TRUE
 )
 ```
 
-### D) Add vector fields (velocity / displacement; optional)
+What each option does:
 
-Vector fields are per-cell vectors (1/2/3 components). They are exported as float32 and automatically scaled to match the embedding normalization.
+- `format = "zarr.zip"` writes one `.zarr.zip` file instead of a `.zarr` folder — for everything but GitHub: single-file hosts, local files, `cellucid serve` and Jupyter.
+- `vector_fields` stores `obsm['velocity_umap']` (scVelo's name for velocity on `X_umap`), drawn whenever a view shows `X_umap`
+  ({doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement`).
+- `embedding_defaults`, `latent_key`, `var_gene_id_column`, and `vector_field_default`
+  are **launch defaults** stored in `uns['cellucid']['defaults']`; the viewer
+  chooses for itself wherever you set none. `latent_key` also stores each
+  categorical `obs` column's outlier quantiles in `X_pca`
+  (`uns['cellucid']['outlierQuantiles']`), which the outlier filter reads.
+- `gene_identifiers = c(...)` would store only those genes.
 
-```r
-vector_fields <- list(
-  velocity = list(X_umap = matrix(c(0.2, 0,
-                              0.2, 0,
-                              0.2, 0),
-                            ncol = 2, byrow = TRUE))
-)
+## Next steps
 
-cellucid_prepare(
-  latent_space = latent,
-  obs = obs,
-  embeddings = list(X_umap = umap2),
-  vector_fields = vector_fields,
-  obs_categorical_dtype = "uint8",
-  dataset_name = "Quick Start Toy",
-  dataset_id = "cellucid_quickstart_toy",
-  out_dir = out_dir,
-  centroid_min_points = 1,
-  force = TRUE
-)
-```
-
-To understand naming rules and edge cases, see {doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement`.
-
-## Quick troubleshooting
-
-If anything fails:
-- Export-time issues → {doc}`../i_troubleshooting_index/02_data_preparation_issues`
-- Loading in the browser → {doc}`../i_troubleshooting_index/04_web_app_loading_issues`
+- What exactly is in the store? {doc}`../b_concepts_mental_models/01_what_is_a_cellucid_ready_anndata`
+- Every argument in detail: {doc}`../c_data_preparation_api/index`
+- Share it with others: {doc}`../d_viewing_loading/02_host_stores_for_sharing`

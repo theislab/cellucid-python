@@ -29,18 +29,20 @@ Handled by:
 | `dataset` | `?dataset=suo` | Selects a local-demo dataset by id; on a page served by the Python server (which auto-connects to its own origin) a bare `dataset` names a server dataset instead |
 | `source` | `?source=local-demo&dataset=suo` | Selects the source type for `dataset` (default: `local-demo`). Picking a sample writes this explicit form, so the URL reloads as the sample on any origin |
 | `remote` | `?remote=https://data.example.org&dataset=study-a` | Connects to a remote data server; `dataset` is required when its manifest contains multiple datasets |
-| `anndata` | `?remote=http://127.0.0.1:8765&anndata=true` | Hint: remote server is serving live AnnData (UI shows performance warning) |
-| `github` | `?github=owner/repo/path&dataset=study-a` | Connects to a GitHub-hosted exports path; `dataset` is required when its manifest contains multiple datasets |
+| `anndata` | `?remote=http://127.0.0.1:8765&anndata=true` | Says the source is a Python server serving one dataset (`cellucid serve`, `serve_anndata()`; any format of `data/input-formats.js`); startup requires a server source and refuses a static origin. The browser reads the file or store the server's `_cellucid/datasets` names |
+| `data` | `?data=gh:owner/repo/path&dataset=study-a` | Opens a link through a provider of `data/sources/registry.js`: `gh:owner/repo/path` (GitHub), `cellxgene:<dataset id>`, `geo:<GSE or GSM>[/<file>]`, `zenodo:<record>[/<file>]`, `hf:<user>/<repo>[@<revision>][/<path>]` (Hugging Face), `figshare:<item>[/<file>]`, `gdrive:<id>` (Google Drive, sign-in), `onedrive:<drive>/<item>` (OneDrive, sign-in), a Dropbox link, or a web address of a file, a store folder or a dataset catalog folder. `dataset` is required when the link holds several datasets ({doc}`../b_data_loading/14_open_from_link`) |
+| `sampleCatalog` | `?sampleCatalog=http://localhost:9000/catalog/` | Replaces the configured sample catalog (`<meta name="cellucid-sample-catalog">`) for this page: one absolute folder URL ending in `/` that holds a `datasets.json` (`data/data-source.js`) |
+| `viewer`, `viewerId`, `viewerToken` | `?viewer=true&viewerId=…&viewerToken=…` | The page of a viewer a host program opened (Python `show_anndata()`, R `cellucid_view()`), on that program's own server; the viewer connects its channel (`/_cellucid/ws`) with the id and token. Written by the host, never by the app (`data/viewer-host-source.js`, `data/viewer-protocol.js`) |
 
 Notes:
-- A remote or GitHub manifest containing exactly one dataset selects that sole
-  dataset when `dataset` is omitted. A manifest containing multiple datasets
+- A remote or linked dataset list containing exactly one dataset selects that sole
+  dataset when `dataset` is omitted. A list containing multiple datasets
   requires `dataset=<exact-dataset-id>`; Cellucid does not choose an arbitrary
   catalog entry.
-- **Mixed content:** when the viewer origin is HTTPS (e.g. `https://www.cellucid.com`), browsers will block `remote=http://127.0.0.1:<port>` (HTTPS page fetching HTTP). For local prepared-data servers, open the exact server-backed Viewer URL (`http://127.0.0.1:<port>/?source=remote`) served by `cellucid-python`; direct AnnData uses `?anndata=true`.
+- **Mixed content:** when the viewer origin is HTTPS (e.g. `https://www.cellucid.com`), browsers will block `remote=http://127.0.0.1:<port>` (HTTPS page fetching HTTP). For a local `cellucid serve`, open the exact server-backed Viewer URL it prints (`http://127.0.0.1:<port>/?anndata=true`), served by `cellucid-python` itself.
 - For **local-user** (browser file picker), the URL is intentionally kept clean (no local paths in the URL).
 - `url-state.js` uses `history.replaceState()` so UI changes don’t spam browser history.
-- Publishing a new data source replaces every data-source param (`dataset`, `source`, `remote`, `github`, `anndata`); `anndata=true` describes the Python AnnData server the page was opened from, so it is not carried over to another source.
+- Publishing a new data source replaces every data-source param (`dataset`, `source`, `remote`, `data`, `anndata`); `anndata=true` describes the Python AnnData server the page was opened from, so it is not carried over to another source.
 
 ### Community annotation param
 
@@ -87,13 +89,13 @@ parameter — by design. Check it to find out whether the current origin reports
 | `cellucid_antialias` | Antialiasing preference — `auto` (also what an absent key means), `on`, or `off`. `auto` resolves from the dataset's cell count on every dataset publication | `cellucid/assets/js/app/ui/core/antialias-preference.js`, `cellucid/assets/js/app/ui/modules/render-controls.js` |
 | `cellucid_last_quote_index` | Welcome modal “quote rotation” state | `cellucid/assets/js/app/ui/onboarding/welcome-modal.js` |
 | `debug` | Analysis-module debug toggle | `cellucid/assets/js/app/analysis/shared/debug-utils.js` |
+| `cellucid:cellxgene-census-release` | The CELLxGENE Census release this browser read last, so a `cellxgene:` link probes its file in that release while the release list loads | `cellucid/assets/js/data/sources/providers/cellxgene.js` |
 
 Community annotation (localStorage-backed):
 
 | Key / prefix | Purpose | Notes |
 |---|---|---|
-| `cellucid:community-annotations:repo-map` | “datasetId + user → chosen annotation repo” mapping | Convenience only; no secrets |
-| `cellucid:community-annotations:repo-meta` | Small per-repo preferences (e.g. branch mode) | Convenience only |
+| `cellucid:community-annotations:repo-map` | “datasetId + user → chosen annotation repo” mapping, with its branch mode | Convenience only; no secrets |
 | `cellucid:community-annotations:auto-pull:v1` | Auto-pull preference | Convenience only |
 | `cellucid:community-annotations:lock:*` | Cross-tab “single editor per scope” lease locks | Safety feature to prevent silent data loss |
 | `cellucid:community-annotations:cache:*:files:shas` | SHA index for cached GitHub files | Content is in IndexedDB; this is only the small index |
@@ -114,13 +116,24 @@ privacy model: {doc}`../o_accessibility_privacy_security/02_privacy_model`.
 | Database | Store | Contents |
 |---|---|---|
 | `cellucid_community_annotation_file_cache` | `files` | Raw annotation JSON downloaded from GitHub |
-| `cellucid_marker_cache` | `markers` | Marker-discovery results, including computed statistic arrays |
 
-Both hold data derived from the user's dataset. The marker cache degrades
-**silently** when IndexedDB is unavailable — no notification is raised.
+It is the only database. Marker-discovery results are cached in memory for the
+dataset load they were computed on and never written to IndexedDB
+(`cellucid/assets/js/app/analysis/genes-panel/marker-cache.js`). When IndexedDB
+is unavailable, Community Annotation Pull fails with a message and leaves the
+annotation view as it was.
 
-Code: `cellucid/assets/js/app/community-annotations/file-cache.js`,
-`cellucid/assets/js/app/analysis/genes-panel/marker-cache.js`.
+Code: `cellucid/assets/js/app/community-annotations/file-cache.js`.
+
+### Origin-private file system (OPFS)
+
+The AnnData reader worker writes **dataset-derived** bytes to the
+origin-private file system, never anything else:
+
+| Directory | Contents | Lifetime |
+|---|---|---|
+| `cellucid-transcoded/<digest>-<random>` | The AnnData store an R object (`.rds`, `.rda`) or a MatrixMarket folder is converted into as it is read once (`data/anndata/transcode/space.js`) | Kept, under a Web Lock, while the tab is open, so reopening the same file in the tab reads no second time; removed when no tab holds it (at startup, before a new conversion, after a cancelled one). Memory instead where the browser has no OPFS |
+| `cellucid-column-index/<directory>` | A gene-column index of a row-major (CSR) matrix, spilled to disk when it outgrows its memory budget (`data/column-store-placement.js`) | Held by a Web Lock while its reader lives; removed at startup and before a new index is written when no tab holds it |
 
 ### `sessionStorage` keys
 
@@ -128,10 +141,55 @@ Session storage is used for **short-lived secrets and per-tab identity**.
 
 | Key | Purpose | Notes |
 |---|---|---|
-| `cellucid:github-app-auth:session` | GitHub access token **and** the signed-in user payload, in one record | Explicitly not persisted across tab close; the code refuses to write it to `localStorage` |
+| `cellucid:github-app-auth:session` | GitHub access token **and** the signed-in user payload, in one record | Community annotations |
+| `cellucid:google-auth:session` | Google access token (`drive.file`), its expiry and granted scope | Google Drive files; about an hour, renewed with one click |
+| `cellucid:microsoft-auth:session` | Microsoft access token, refresh token, their expiries and granted scopes | OneDrive files; renewed without a click for 24 hours |
 | `cellucid:community-annotations:tab-id:v1` | Unique tab id for scope locks | Used by scope-lock lease mechanism |
 
-`sessionStorage` holds exactly one secret, and closing the tab destroys it.
+`sessionStorage` holds the app's three sign-ins, and closing the tab destroys
+them.
+
+#### The sign-in token model
+
+Every sign-in goes through one module,
+`cellucid/assets/js/data/sources/auth/token-store.js`: GitHub
+(`app/community-annotations/github-auth.js`), Google (`data/sources/auth/google.js`)
+and Microsoft (`data/sources/auth/microsoft.js`). The rules, each held by a
+contract test (`tests/source-sign-in-contract.test.mjs`):
+
+- A token lives in the tab's `sessionStorage` and in memory: it survives a
+  reload of the tab and is gone when the tab closes. Nothing writes one to
+  `localStorage`, IndexedDB, cookies, a URL, a session file, figure
+  provenance, the console, analytics or an error message.
+- No client secret exists. Google uses the token model of Google Identity
+  Services (a popup, no refresh token); Microsoft uses the authorization code
+  flow with PKCE for a single-page application, redeemed in the page. The
+  click opens the popup empty, on the page's own origin, and the page then
+  sends it to Microsoft: Safari hands a popup opened at
+  `login.microsoftonline.com` to a Mac's single sign-on extension (Microsoft's,
+  from Company Portal), which signs in in a hidden window and closes it. The
+  popup returns to `assets/auth/callback.html`, which posts the code over a
+  `BroadcastChannel` and closes once the page answers that it has it; a popup
+  found closed before then offers the step again, and the page keeps
+  listening until the step ends (a popup cut off by a
+  Cross-Origin-Opener-Policy reads as closed while still open). The public client IDs, API key, project
+  number and the origins registered with Google (`registeredOrigins`) are in
+  `assets/js/data/sources/provider-config.js`; empty values mean "not
+  configured on this site yet". Where Google or Microsoft cannot answer the
+  page (another origin, a plain `http://` page of another computer, a viewer
+  embedded in another site, `data/sources/auth/page-context.js`), Cellucid
+  says so before any request or popup.
+- A file read behind a sign-in names only `{provider, ref}` in its resource
+  (`data/sources/access.js`). The AnnData reader worker asks the page for the
+  URL and headers to read from (`{event: 'source-access'}`), holds them in
+  memory, and shares one renewal across all its parallel reads
+  (`httpByteSource`'s `access` in `formats/io/byte-source.js`). Sessions and
+  `?data=` links record the provider and file ids (`gdrive:<id>`,
+  `onedrive:<drive>/<item>`), never a token or a download address.
+- A step the person must take (sign in, sign in again, grant more access)
+  waits in `data/sources/auth/sign-in.js` and is shown under the address bar
+  and as a notification (`app/source-sign-in-view.js`); its button runs the
+  sign-in inside the click, because a popup opens only from one.
 
 ---
 
@@ -145,7 +203,7 @@ These are intended for local development and troubleshooting only.
 | `window.__CELLUCID_DEBUG__ = true` | Enables analysis-module debug logging | `cellucid/assets/js/app/analysis/shared/debug-utils.js` |
 | `window.__CELLUCID_GITHUB_WORKER_ORIGIN__` | Override GitHub auth worker origin (local dev only) | `cellucid/assets/js/app/community-annotations/github-auth.js` |
 | `window._cellucidViewer`, `window._cellucidState` | The live viewer and state, for console debugging | `cellucid/assets/js/app/main.js` |
-| `window._cellucidBenchmarkHarness` | The configuration-matrix benchmark harness, published when the Performance Benchmark panel is first opened | `cellucid/assets/js/app/main.js` |
+| `window._cellucidBenchmarkHarness` | The configuration-matrix benchmark harness, published when the Benchmark panel is first opened | `cellucid/assets/js/app/main.js` |
 | `window.cellucidAnalyticsEnabled` | Read-only: whether this origin reports analytics | `cellucid/assets/js/app/ui/core/ga-init.js` |
 
 :::{important}

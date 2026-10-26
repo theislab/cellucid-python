@@ -45,29 +45,28 @@ Obs fields are cell-level columns such as:
 - pseudotime / diffusion pseudotime / latent dimensions (if exported as obs)
 
 In the UI, obs fields appear in two dropdowns:
-- **Coloring & Filtering → Categorical obs**
-- **Coloring & Filtering → Continuous obs**
+- **Coloring & filtering → Categorical obs**
+- **Coloring & filtering → Continuous obs**
 
 ### Var (variables) = per-gene (feature) values per cell
 
 Var fields are feature-level “things you can color by”, most commonly **genes**.
 
 In the UI, var fields appear as:
-- **Coloring & Filtering → Gene Expression** (search box + dropdown results)
+- **Coloring & filtering → Gene expression** (search box + dropdown results)
 
 :::{important}
 Cellucid treats gene expression as **continuous**: selecting a gene always creates a continuous-style legend (colorbar + sliders).
 :::
 
-For a prepared dataset the var axis is whatever the export published — the
-genes and their names, decided when the dataset was prepared. It is not
-necessarily every gene the study measured, and Cellucid neither knows nor can
-recover what was left out. For the built-in samples this is documented: see
-{doc}`07_genes_in_the_built_in_samples`. An exported dataset with several
-gene-name sets can switch between them.
+The var axis is whatever the file holds — the genes and their names, decided
+when the file was written. It is not necessarily every gene the study
+measured, and Cellucid neither knows nor can recover what was left out. For the
+built-in samples this is documented: see
+{doc}`07_genes_in_the_built_in_samples`.
 
-For an AnnData file (opened in the browser, served, or shown from a notebook)
-the var axis is that of the chosen expression matrix — `X`, a layer, or
+However the AnnData file is opened (in the browser, served, or shown from a
+notebook), the var axis is that of the chosen expression matrix — `X`, a layer, or
 `raw.X`, which has its own gene list — named by the var index or a var column.
 Both are chosen under **Session › Data mapping › Genes**; see
 {doc}`../b_data_loading/13_data_mapping`.
@@ -88,11 +87,11 @@ In the legend you can typically:
 - rename categories,
 - merge or delete categories (creating derived fields).
 
-Categorical fields can also expose **centroids** (category centers) if present or computed.
+Categorical fields also have **centroids** (category centers), which the browser computes for every category that holds cells.
 
 ```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
-:alt: A legend with the hint Click a swatch to pick a color, Show All and Hide All buttons, and eight rows in alphabetical order each holding a checkbox, a coloured square swatch, a category name, a cell count, a pencil icon and a bin icon.
-:width: 428px
+:alt: The categorical legend for clusters: the Show all and Hide all buttons above eight rows, each holding a checkbox, a colour swatch, a label, a cell count, a rename pencil and a delete bin.
+:width: 488px
 
 A categorical legend. **Checkboxes and swatches** are the tell — if you see
 these, the active field is categorical.
@@ -112,8 +111,8 @@ In the legend you can typically:
 - optionally rescale the colorbar to match your slider range.
 
 ```{figure} ../../../_static/screenshots/web_app/legend-continuous-sscore.png
-:alt: A legend headed COLOR SCALE (VIRIDIS) above a purple to yellow gradient bar labelled minus 0.37 and 1.14 at its ends, a Log color scale toggle reading Off, the note Zero negative and NaN values use the None color, a Rescale colorbar to slider range toggle reading On, the note On colors track sliders Off full data range, then a FILTERING heading, a VISIBLE RANGE subtitle, a Live filtering toggle reading On, Min and Max sliders with numeric readouts, and FILTER and RESET buttons.
-:width: 428px
+:alt: The continuous legend for S_score: the Color scale (Viridis) bar with its two end values, Log color scale off and Rescale to range on, each with its (i), and below a rule the Visible range block with Live filtering on, Minimum and Maximum sliders, and Filter and Reset.
+:width: 488px
 
 A continuous legend for the same dataset. **A colour bar with Min/Max sliders**
 is the tell. The same legend appears for a gene — a gene *is* a continuous
@@ -121,11 +120,13 @@ field, just from the var axis instead of the obs axis.
 ```
 
 :::{tip}
-Two one-line notes the legend prints for you, which answer questions this page
+The (i) beside each colour-mapping toggle answers two questions this page
 would otherwise need paragraphs for:
 
-- `Zero/negative/NaN values use the None color`
-- `On: colors track sliders; Off: full data range`
+- **Log color scale**: zero, negative and missing values have no logarithm and
+  take the None color.
+- **Rescale to range**: On, the colour map stretches across the visible range;
+  Off, colours span the field's full data range.
 :::
 
 ---
@@ -134,11 +135,11 @@ would otherwise need paragraphs for:
 
 From a user perspective, a field can come from:
 
-1) **Your dataset export** (the “source-of-truth” columns and genes you provided).
+1) **Your dataset** (the “source-of-truth” columns and genes you provided).
 2) **A derived field created inside Cellucid** (user-defined fields), for example:
    - duplicating a field (“(copy)”),
    - deleting/merging categories (“(edited)” / “(merged)”),
-   - building a categorical field from highlight pages (Category Builder).
+   - building a categorical field from highlight pages (`Create categorical`).
 3) **A renamed or restored field**, where the UI name differs from the original key used for loading.
 
 This matters because derived fields are still “real fields”:
@@ -165,9 +166,8 @@ This matters because derived fields are still “real fields”:
   drawn in the single colour from the middle of the colormap, and the Min/Max
   sliders have nothing to divide — see
   {doc}`../e_filtering/06_edge_cases_filtering`.
-- Constant fields and constant genes are published, not dropped: the export
-  format encodes them as `minValue == maxValue` with every code `0`, and the
-  viewer decodes that back to the exact constant. A gene detected in no cell of
+- Constant fields and constant genes are kept, not dropped: the viewer reads
+  the exact constant from the file. A gene detected in no cell of
   a published subset is therefore still in the gene menu, at its exact value.
 
 ### Negative values + log scale

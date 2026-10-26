@@ -1,127 +1,180 @@
-# Public Functions and Objects
+# Public Functions
 
-**Audience:** everyone looking an argument up  
+**Audience:** everyone who calls the package  
 **Time:** 5 minutes  
-**What you'll get:** every argument of `cellucid_prepare()` with its default and the page that explains it
+**What you'll get:** the complete public surface of `cellucid-r` on one page
 
-`cellucid-r` exports exactly one user-facing function. There are no classes, no
-S4 generics, and no companion helpers: `cellucid_prepare()` writes an export
-folder and returns `NULL` invisibly.
+`cellucid-r` exports the functions below. The viewer functions return and
+take a viewer (an object of class `cellucid_viewer`, printed with its address
+and state); there are no S4 classes or methods.
 
-## The shortest call that works
+| Function | What it does | Returns |
+|---|---|---|
+| `cellucid_prepare()` | Writes a Cellucid-ready AnnData (or, for several assays, MuData) store from an R object (`data =`) or from matrices: a `.zarr` folder (`format = "zarr"`) or one `.zarr.zip` file (`format = "zarr.zip"`) | Invisibly, the absolute path of the written store |
+| `cellucid_transition_drift()` | Computes the drift of every cell in an embedding's coordinates from a cell-cell transition matrix, a vector field to pass to `cellucid_prepare(vector_fields = )` | A double matrix as wide as the embedding |
+| `cellucid_view()`, `cellucid_serve()` | Open an object or a file in the viewer (Viewer pane or browser), or serve it for a browser elsewhere | The viewer, invisibly |
+| `cellucid_stop()`, `cellucid_stop_all()`, `cellucid_viewers()` | Stop one viewer, every viewer; list the running ones | The viewer; the number stopped; a list |
+| `cellucid_highlight()`, `cellucid_clear_highlights()`, `cellucid_color_by()`, `cellucid_set_visibility()`, `cellucid_reset_camera()`, `cellucid_freeze()`, `cellucid_set_data_mapping()` | Commands to an open viewer | The viewer, invisibly (the applied mapping for `cellucid_set_data_mapping()`) |
+| `cellucid_on()`, `cellucid_off()`, `cellucid_selection()`, `cellucid_wait_ready()`, `cellucid_session()` | Events from the viewer: hooks, the last selection, readiness, the session file | See {doc}`../d_viewing_loading/06_hooks_selection_and_sessions` |
+| `cellucid_apply_session()` | A saved session's highlights and user-defined fields added to the object's cell metadata (Python's `apply_cellucid_session_to_anndata()`) | See {doc}`../d_viewing_loading/06_hooks_selection_and_sessions` |
+| `cellucid_debug_connection()` | Checks what works between R and an open viewer: the server's routes, the store's range reads, a ping and a debug snapshot over the channel | A list, the report |
+| `cellucid_clear_web_cache()` | Removes the cached web app | The folder removed, invisibly |
 
-Three arguments carry no default, and you also need one embedding, a latent
-space, and cell metadata:
+## Signature
 
 ```r
 cellucid_prepare(
-  latent_space = pca,
-  obs = obs,
-  embeddings = list(X_umap = umap2),
-  obs_categorical_dtype = "uint16",
-  dataset_name = "My dataset",
-  dataset_id = "my_dataset",
-  out_dir = file.path(getwd(), "exports", "my_dataset")
+  out_path,
+  format,
+  data = NULL,
+  embeddings = NULL,
+  dataset_id = NULL,
+  dataset_name = NULL,
+  obs = NULL,
+  var = NULL,
+  gene_expression = NULL,
+  connectivities = NULL,
+  vector_fields = NULL,
+  modalities = NULL,
+  gene_identifiers = NULL,
+  dataset_description = NULL,
+  citation_text = NULL,
+  citation_url = NULL,
+  source_name = NULL,
+  source_url = NULL,
+  embedding_defaults = NULL,
+  latent_key = NULL,
+  obs_keys = NULL,
+  var_gene_id_column = NULL,
+  vector_field_default = NULL,
+  normalize_embeddings = NULL,
+  centroid_min_points = NULL,
+  modality = NULL,
+  zarr_format = NULL,
+  force = FALSE
 )
 ```
 
-Everything else on this page is optional. Start at
-{doc}`../a_landing_pages/04_quick_start_3_levels` if you want a runnable
-version, or {doc}`../c_data_preparation_api/01_cellucid_prepare_overview` for
-what the exporter does with each input.
+`out_path` and `format` have no default; without `data`, neither do
+`embeddings`, `dataset_id` and `dataset_name`. With `data`, every other
+argument defaults to what the object holds
+({doc}`../e_integrations_recipes/01_seurat_recipe`,
+{doc}`../e_integrations_recipes/02_singlecellexperiment_recipe`).
+Leaving any of them out is reported, all at once, as
+`cellucid_prepare() is missing N required argument(s):` followed by each name
+and what a valid value is.
 
-## `cellucid_prepare()` arguments
+## Arguments by purpose
 
-A dash in the **Default** column means the argument has no default at all:
-leaving it out is reported as a missing argument, not as a value of the wrong
-type.
+### Where the store goes
 
-### Required
+| Argument | Default | Meaning | Explained in |
+|---|---|---|---|
+| `out_path` | required | A folder ending in `.zarr` for `format = "zarr"`, a file ending in `.zarr.zip` for `format = "zarr.zip"`; a mismatch is refused with the path to write instead; missing parent folders are created | {doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification` |
+| `format` | required | `"zarr"` or `"zarr.zip"`. No default: a folder of many small files and one file suit different hosts, and only you know where the store goes. `"zarr"` writes a `.zarr` folder, for GitHub (no file over 100 MB, no LFS); `"zarr.zip"` writes the same store as one `.zarr.zip` file, for everything else: single-file hosts (Zenodo, Figshare, Hugging Face, S3, a lab server), local files, `cellucid serve` and Jupyter. There is no `"h5ad"`: this package writes no HDF5, so it needs no HDF5 library; Python's `cellucid.prepare(format = "h5ad")` writes `.h5ad`. | {doc}`../c_data_preparation_api/index` |
+| `zarr_format` | `NULL` (2) | `2` or `3`: the Zarr format of the store; anndata 0.8 and later read format 2, anndata 0.11 and later format 3, the web app both equally fast | {doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification` |
+| `force` | `FALSE` | `TRUE` replaces an existing store once the new one is complete; never a folder that is not a Zarr store | {doc}`../c_data_preparation_api/01_cellucid_prepare_overview` |
 
-| Argument | Default | What it is |
+### Data
+
+| Argument | Default | Stored as | Explained in |
+|---|---|---|---|
+| `data` | `NULL` | A Seurat, SingleCellExperiment or SummarizedExperiment object whose contents are every other argument's default; several assays or alternative experiments write a Cellucid-ready MuData | {doc}`../e_integrations_recipes/index` |
+| `embeddings` | required without `data` | `obsm[<key>]`, float32, every column | {doc}`../c_data_preparation_api/03_embeddings_and_coordinates` |
+| `obs` | `NULL` | `obs`, every column | {doc}`../c_data_preparation_api/04_obs_cell_metadata` |
+| `var` | `NULL` | `var`, every column (requires `gene_expression`) | {doc}`../c_data_preparation_api/05_var_gene_metadata` |
+| `gene_expression` | `NULL` | `X`, cells x genes, gene-major float32, float64 for integer counts above 2^24 (`csc_matrix` for a sparse matrix, stored zeros dropped) | {doc}`../c_data_preparation_api/06_gene_expression_matrix` |
+| `connectivities` | `NULL` | `obsp['connectivities']`, float32 `csr_matrix` | {doc}`../c_data_preparation_api/07_connectivities_knn_graph` |
+| `vector_fields` | `NULL` | `obsm['<field>_<basis>']` for each embedding `X_<basis>` (`velocity_umap`) | {doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement` |
+| `gene_identifiers` | `NULL` | Narrows `X` and `var` to these genes, in this order | {doc}`../c_data_preparation_api/05_var_gene_metadata` |
+| `modalities` | `NULL` | The modalities of `data` to write, in order (all, the active assay or main experiment first, when `NULL`); one name writes an AnnData | {doc}`../d_viewing_loading/07_multimodal_assays` |
+
+### What the dataset says about itself (`uns['cellucid']`)
+
+| Argument | Default | Stored as |
 |---|---|---|
-| `latent_space` | `NULL`, but required | Numeric matrix-like `(n_cells, n_dims)`. Measured, never written: the per-cell outlier quantiles are distances in it. |
-| `obs` | `NULL`, but required | `data.frame` with `n_cells` rows. |
-| `obs_categorical_dtype` | — | Exactly `"uint8"`, `"uint16"` or `"uint32"`. The storage width of every categorical code. |
-| `dataset_name` | — | Non-empty name, shown to the reader verbatim. |
-| `dataset_id` | — | Portable identifier: 1–180 ASCII letters, numbers, `.`, `_`, `-`. |
+| `dataset_id` | required without `data` (or its record) | `uns['cellucid']['id']` |
+| `dataset_name` | required without `data` (or its record) | `uns['cellucid']['name']` and `uns['title']` |
+| `dataset_description` | `NULL` | `uns['cellucid']['description']` |
+| `citation_text`, `citation_url` | `NULL` | `uns['cellucid']['citation']` `text`, `url` (a URL needs its text) |
+| `source_name`, `source_url` | `NULL` | `uns['cellucid']['source']` `name`, `url` (a URL needs its name) |
 
-`embeddings`, with at least one embedding, is also required.
+See {doc}`../b_concepts_mental_models/03_dataset_identity_and_reproducibility`.
 
-Details: {doc}`../c_data_preparation_api/02_input_requirements_global` ·
-{doc}`../c_data_preparation_api/04_obs_cell_metadata`
+### Launch defaults (`uns['cellucid']['defaults']`, only the ones you set)
 
-### Embeddings and overlays
-
-| Argument | Default | What it is |
+| Argument | Stored key | Meaning |
 |---|---|---|
-| `embeddings` | — | Named list mapping each embedding id to a coordinate matrix (1–3 columns), a numeric vector (1D), or a `cellucid_embedding()`. Any number per dimension. |
-| `embedding_defaults` | `NULL` | Named character vector or list such as `c("2d" = "X_umap")`, naming the embedding each dimension shows first. Required for every dimension with more than one embedding. |
-| `vector_fields` | `NULL` | Named list of fields, each a named list binding arrays to exported embedding ids: `list(velocity = list(X_umap = v2))`. Each array has its embedding's dimension. |
-| `vector_field_default` | `NULL` | Field id to select on load. Required when `vector_fields` holds more than one field. |
-| `connectivities` | `NULL` | `(n_cells, n_cells)` symmetric graph with a zero diagonal. |
+| `embedding_defaults` | `embedding1d`, `embedding2d`, `embedding3d` | The embedding each view dimension shows first: an `obsm` key, or `list(key = , columns = )` with 1-based columns (stored 0-based) |
+| `latent_key` | `latentKey` | The latent space (an `embeddings` key, such as `"X_pca"`) the viewer's outlier filter measures in; also stores `outlierQuantiles` (below) |
+| `obs_keys` | `obsKeys` | The `obs` columns the viewer shows, in order (every column is stored either way) |
+| `var_gene_id_column` | `geneIdColumn` | The `var` column that names genes in the viewer |
+| `vector_field_default` | `vectorFieldDefault` | The vector field selected first, by its `vector_fields` name (`"velocity"`), which is also the viewer's field id |
+| `normalize_embeddings` | `normalizeEmbeddings` | `FALSE` shows embeddings at their own coordinates |
+| `centroid_min_points` | `centroidMinPoints` | The fewest cells a category needs to get outlier quantiles (10 when `NULL`) |
+| `modality` | `modality` | The modality a multimodal store opens on (else the first named like gene expression, else the first) |
 
-Details: {doc}`../c_data_preparation_api/03_embeddings_and_coordinates` ·
-{doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement` ·
-{doc}`../c_data_preparation_api/07_connectivities_knn_graph`
+An argument left at `NULL` writes no key, so the viewer keeps its own choice.
 
-### Gene expression
+### Outlier quantiles (`uns['cellucid']['outlierQuantiles']`, only with `latent_key`)
 
-| Argument | Default | What it is |
+| Key | Type | Value |
 |---|---|---|
-| `var` | `NULL` | `data.frame` with `n_genes` rows. Required when `gene_expression` is supplied. |
-| `gene_expression` | `NULL` | Matrix-like `(n_cells, n_genes)`. Cells are rows; the matrix is never transposed for you. |
-| `var_gene_id_column` | `NULL` | Column of `var` holding the default gene names. `NULL` uses `rownames(var)`. Empty values take the row name; repeated names are made unique (`MATR3`, `MATR3-1`). |
-| `var_gene_name_columns` | `NULL` | Character vector of further `var` columns offered as alternative gene-name sets; metadata only. |
-| `gene_identifiers` | `NULL` | Character vector selecting which genes to export. `NULL` exports all of them. |
+| `latentKey` | text | `latent_key` |
+| `minPoints` | int64 | `centroid_min_points`, or 10 |
+| `fields` | dict | one float32 array of one value per cell for every `obs` column the viewer shows as categorical (a factor, a character column, a logical column with or without `NA`), in `obs` column order; only a column with a category of at least `minPoints` cells |
 
-Details: {doc}`../c_data_preparation_api/05_var_gene_metadata` ·
-{doc}`../c_data_preparation_api/06_gene_expression_matrix`
+Each value is the share of the cell's category at its distance from the
+category's centre in the latent space, or closer; `NaN` for `NA` and for a
+category under `minPoints` cells. `?cellucid_prepare` states the rule, which
+Python's `cellucid.prepare()` and the web app follow bit for bit.
 
-### Metadata selection and category summaries
+## `cellucid_transition_drift()`
 
-| Argument | Default | What it is |
-|---|---|---|
-| `obs_keys` | `NULL` | Columns of `obs` to export. `NULL` exports all of them. |
-| `centroid_outlier_quantile` | `0.95` | Distance quantile kept as inliers when placing category centroids. `NULL` disables centroids; per-cell outlier quantiles are still computed. |
-| `centroid_min_points` | `10` | Cells a category needs before it gets a centroid and non-`NaN` outlier quantiles. |
+```r
+cellucid_transition_drift(transition_matrix, embedding, normalize_rows)
+```
 
-Details: {doc}`../c_data_preparation_api/04_obs_cell_metadata`
+All three arguments are required.
 
-### Size and encoding
+| Argument | Meaning |
+|---|---|
+| `transition_matrix` | Cells x cells, finite and non-negative: a `Matrix` sparse or dense matrix with numeric values, or a base numeric matrix; row `i` holds the weights of the cells cell `i` moves to (CellRank's transition matrix, for example) |
+| `embedding` | The coordinates the drift is computed in, one row per cell, in any form `cellucid_prepare()` takes for an embedding; every column is used, every value finite and representable in float32 |
+| `normalize_rows` | `TRUE` divides every row of `transition_matrix` by its sum (a zero row sum is refused); `FALSE` uses it as given |
 
-| Argument | Default | What it is |
-|---|---|---|
-| `compression` | `NULL` | gzip level `1`–`9`, or `NULL` for uncompressed payloads. |
-| `var_quantization` | `NULL` | `8` or `16` bits for gene expression, or `NULL` for float32. |
-| `obs_continuous_quantization` | `NULL` | `8` or `16` bits for continuous obs fields *and* categorical outlier quantiles, or `NULL` for float32. |
+It returns `T %*% E - E` (the product divided by the row sums first with
+`normalize_rows = TRUE`) as a double matrix with the embedding's dimensions
+and dimnames, the computation of Python's `cellucid.compute_transition_drift()`.
+Store it with `vector_fields = list(T_fwd = list(X_umap = drift))`; see
+{doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement`.
 
-Details: {doc}`../c_data_preparation_api/10_performance_tuning_prepare_export`
+## The viewer
 
-### Output and provenance
+```r
+cellucid_view(data, ..., pane = c("auto", "viewer", "browser", "none"), port = 8765L,
+              host = "127.0.0.1", allowed_hosts = NULL, serve_web_ui = TRUE,
+              web_cache_dir = NULL, web_source_url = "https://www.cellucid.com",
+              cache_bytes = 268435456, quiet = FALSE)
+cellucid_serve(data, ..., port = 8765L, host = "127.0.0.1", allowed_hosts = NULL,
+               serve_web_ui = TRUE, web_cache_dir = NULL,
+               web_source_url = "https://www.cellucid.com", cache_bytes = 268435456,
+               quiet = FALSE)
+```
 
-| Argument | Default | What it is |
-|---|---|---|
-| `out_dir` | `file.path(getwd(), "exports")` | Where the export goes. It must name a dedicated directory: the working directory and the home directory are refused. |
-| `force` | `FALSE` | `TRUE` atomically replaces an existing generation. `FALSE` requires that `out_dir` does not already exist. |
-| `dataset_description` | `NULL` | Optional description. `NULL` and `""` both publish an empty description. |
-| `source_name` | `NULL` | Data source name. Required whenever `source_url` or `source_citation` is given. |
-| `source_url` | `NULL` | Data source URL. |
-| `source_citation` | `NULL` | Citation text. |
-| `created_at` | `NULL` | Exact UTC timestamp, `YYYY-MM-DDTHH:MM:SSZ`. Defaults to now; set it for a reproducible `dataset_identity.json`. |
+`...` takes the arguments of `cellucid_prepare()` that choose what is shown
+(for a path: the identity and launch defaults). See
+{doc}`../d_viewing_loading/04_view_in_rstudio_positron`,
+{doc}`../d_viewing_loading/05_serve_from_hpc_and_ssh` and
+{doc}`../d_viewing_loading/06_hooks_selection_and_sessions`; `?cellucid_view`
+has every argument.
 
-Details: {doc}`../b_concepts_mental_models/03_dataset_identity_and_reproducibility` ·
-{doc}`../c_data_preparation_api/09_output_format_specification_exports_directory`
+## Messages
 
-## Return value
-
-`invisible(NULL)`. The function is called for its side effect — the files it
-writes to `out_dir` — and there is no object to keep.
-
-## When a call fails
-
-Every failure is a `stop()` raised before publication, with nothing written. The
-error families and how to read them are on
-{doc}`02_error_messages_and_exceptions_document_patterns`; the
-symptom-by-symptom guide is
-{doc}`../c_data_preparation_api/11_troubleshooting_prepare_export`.
+`cellucid_prepare()` reports with `message()` (not a warning) when it makes
+repeated cell or gene names unique, for example
+`Gene names: 1 duplicate name was made unique, e.g. 'A' → 'A-1'.`, and, with
+`data =`, each part of the object it leaves out
+(`From the Seurat object: ...`). Every other problem stops the call with an
+error; see
+{doc}`02_error_messages_and_exceptions_document_patterns`.

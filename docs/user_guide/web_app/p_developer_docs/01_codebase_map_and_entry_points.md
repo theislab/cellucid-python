@@ -28,7 +28,12 @@ Cellucid is intentionally organized into layers so performance-critical code sta
   - Goal: “fast pixels” for millions of points.
 
 - **Data layer** (`cellucid/assets/js/data/`)
-  - Owns data sources (local demo, file picker, remote server, GitHub, Jupyter) and binary loaders.
+  - Owns the data sources (sample catalog, files and folders picked or dropped,
+    a `cellucid serve` server, links through the providers in `data/sources/`,
+    the notebook/R viewer), the input-format registry (`data/input-formats.js`)
+    and the AnnData reader worker.
+  - The container readers it uses live in `cellucid/assets/js/formats/`
+    (HDF5, Zarr, ZIP, R serialization, MatrixMarket text, byte I/O).
   - Goal: “load only what you need” + predictable caching.
 
 - **App layer** (`cellucid/assets/js/app/`)
@@ -49,7 +54,7 @@ cellucid/
 └── assets/
     ├── css/                       # Design system + themes
     ├── external/                  # Vendored third-party libraries, served from
-    │                              #   this origin (plotly, gl-matrix, h5wasm).
+    │                              #   this origin (plotly, gl-matrix).
     │                              #   Nothing is loaded from a CDN; the page CSP
     │                              #   would block it. plotly.min.js carries one
     │                              #   local, test-pinned patch (violin density;
@@ -75,18 +80,28 @@ cellucid/
         │   ├── dockable-accordions/   # Sidebar panel docking/undocking
         │   ├── notification-center/   # The toast/notification surface
         │   └── registries/            # Shared registration points
-        ├── data/                  # Data sources + binary loaders + h5ad/zarr adapters
+        ├── data/                  # Data sources, input-format registry, link providers
+        │                          #   (data/sources/), AnnData reader worker + views
+        ├── formats/               # Container readers: hdf5/, zarr/, zip/, rds/,
+        │                          #   text/ (MatrixMarket), io/ (byte sources, decode pool)
         ├── dev/                   # benchmark.js — the measurement harness behind
-        │                          #   the Performance Benchmark panel. Lazily
+        │                          #   the Benchmark panel. Lazily
         │                          #   imported; never on the product render path.
         ├── rendering/             # WebGL viewer + shaders + overlays (smoke, highlight, etc.)
-        └── utils/                 # Shared utilities (debug, theme, style manager, exact records)
+        ├── utils/                 # Shared utilities (debug, theme, style manager, exact records)
+        └── workers/               # worker-script.js: where each worker starts from
+                                   #   (its source on this machine, its bundle elsewhere)
+    └── workers/                   # Generated, never edited: one bundle per worker
+                                   #   (<name>.<sha256>.js + source map) and
+                                   #   scripts.js, the URL of each; written by
+                                   #   scripts/generate-web-asset-inventory.mjs
 ```
 
 :::{note}
-There is no `assets/exports/` directory. Demo datasets are **not** in this
-repository — they live in `cellucid-datasets` and are reached through an exports
-base URL. See {doc}`09_data_loading_pipeline_and_caching`.
+Sample datasets are **not** in this repository — they live in
+`cellucid-datasets` as a dataset catalog (AnnData files plus `datasets.json`)
+and are reached through the sample catalog URL (the
+`cellucid-sample-catalog` meta element in `index.html`). See {doc}`09_data_loading_pipeline_and_caching`.
 :::
 
 :::{tip}
@@ -103,18 +118,25 @@ It is the bootstrap orchestrator and intentionally contains *no* per-frame logic
 
 `cellucid/index.html` contains:
 - A restrictive content security policy. `default-src 'self'`; the only external
-  script origin allowed is Google’s tag manager. Adding a CDN dependency means
-  editing this policy, which is the intended friction.
+  script origins allowed are Google’s tag manager and, for Google Drive files
+  only, Google's sign-in and picker (`accounts.google.com`,
+  `apis.google.com`). Adding a CDN dependency means editing this policy, which
+  is the intended friction.
 - The `<canvas id="glcanvas">` used by the WebGL renderer.
 - The sidebar markup (accordion sections, inputs, buttons). Data-source,
   renderer and benchmark controls are authored **disabled** and are enabled
   later by `ui/core/deferred-control-readiness.js`, so a control can never be
   clicked before something is listening for it.
-- Early “must not throw” bootstraps: `ui/core/theme-init.js` and
-  `ui/core/ga-init.js` (classic scripts, not modules, so they run before the
-  module graph).
+- Early “must not throw” bootstraps, classic scripts (not modules) that run
+  before the module graph: `ui/core/preconnect-init.js`, `ui/core/ga-init.js`,
+  `ui/core/theme-init.js`, `ui/core/viewport-init.js`,
+  `ui/core/code-load-watch.js` and `ui/core/file-drop-guard.js`.
+- The import map that gives every module the URL naming its bytes
+  (`CELLUCID_MODULE_VERSIONS`, written by
+  `scripts/generate-web-asset-inventory.mjs`; see
+  {doc}`03_build_run_and_deployment`, checklist item 5).
 - The module entry point:
-  - `<script type="module" src="assets/js/app/main.js"></script>`
+  - `<script type="module" src="assets/js/app/main.js?v=…"></script>`
 
 ### 2) `cellucid/assets/js/app/main.js` (bootstrap orchestrator)
 
@@ -158,7 +180,7 @@ The public API is assembled from manager mixins (see `app/state/managers/*`).
 | If you’re looking for… | Start with | Then |
 |---|---|---|
 | “How does the app decide what dataset to load?” | `cellucid/assets/js/data/data-source-manager.js` | `cellucid/assets/js/app/main.js` |
-| “Where are the file format assumptions?” | `cellucid/assets/js/data/data-loaders.js` | {doc}`09_data_loading_pipeline_and_caching` |
+| “Which files and folders does the app open?” | `cellucid/assets/js/data/input-formats.js` (the format registry) | `cellucid/assets/js/data/anndata/views/` (HDF5/Zarr layouts read in place), `cellucid/assets/js/data/anndata/transcode/` (R objects, MatrixMarket), {doc}`09_data_loading_pipeline_and_caching` |
 | “Where are filters implemented?” | `cellucid/assets/js/app/state/managers/filter-manager.js` | `cellucid/assets/js/app/ui/modules/filter-controls.js` |
 | “Where does color-by happen?” | `cellucid/assets/js/app/state/managers/color-manager.js` | `cellucid/assets/js/app/ui/modules/legend-renderer.js` |
 | “Where do highlights live?” | `cellucid/assets/js/app/state/managers/highlight-manager.js` | `cellucid/assets/js/app/ui/modules/highlight-controls.js` |
@@ -179,8 +201,8 @@ These show up everywhere (state, UI, analysis, sessions):
 - **Visibility**: what points are currently shown after filters/outliers.
 - **Highlight**: annotation overlay on top of visibility (can exist even for filtered-out points).
 - **Highlight page**: independent collection of highlight groups; switching pages changes overlay state.
-- **Representation**: one embedding (an export's embedding id, or an `obsm`
-  key at 1 to 3 of its columns) a view can show, identified by its
+- **Representation**: one embedding (an `obsm` key at 1 to 3 of its
+  columns) a view can show, identified by its
   `layoutKey`. The data mapping turns any number on and names each
   dimension's default; a view's **dimension level** (1D/2D/3D) is that of the
   representation it shows.
@@ -195,6 +217,11 @@ Likely causes (ordered):
 1) Browser cache is serving old modules.
 2) You edited a file not loaded in your current code path (e.g. a different module).
 3) Your local server is serving the wrong directory (not `cellucid/`).
+4) You edited a worker's code and opened the page under another name than
+   `localhost`, `127.0.0.1` or `[::1]`: there it is a deployed site, and its
+   workers start from their bundles in `assets/workers/` until
+   `node scripts/generate-web-asset-inventory.mjs` rebuilds them
+   (see {doc}`03_build_run_and_deployment`, checklist item 5).
 
 How to confirm:
 - In DevTools → Network, enable “Disable cache” and hard-reload.

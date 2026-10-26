@@ -35,6 +35,12 @@ dataset declares a vector field for the selected 1D, 2D, or 3D embedding.
 5) {doc}`06_edge_cases` and {doc}`07_troubleshooting_velocity_overlay` (when something breaks)
 6) {doc}`04_advanced_parameters_document_every_setting` (polish / cinematic tuning)
 
+Writing the fields: `obsm['<field>_<basis>']` beside `obsm['X_<basis>']`
+(scVelo's naming), from Python
+({doc}`../../python_package/c_data_preparation_api/08_vector_fields_velocity_displacement`,
+end to end in {doc}`../../python_package/f_notebooks_tutorials/33_vector_fields_and_velocity_overlay_end_to_end`)
+or R ({doc}`../../r_package/c_data_preparation_api/08_vector_fields_velocity_displacement`).
+
 ---
 
 ## Pages in this section

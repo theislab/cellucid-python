@@ -16,9 +16,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from _serverless_viewer import serverless_viewer
 
 import cellucid.jupyter as jupyter
-import cellucid.jupyter._base as jupyter_base
+import cellucid.jupyter._viewer as jupyter_viewer
 import cellucid.jupyter._wire as wire
 
 CONFORMANCE = Path(__file__).parent / "fixtures" / "data_mapping_conformance.json"
@@ -29,13 +30,9 @@ ANNDATA_MAPPING: dict[str, Any] = {
     "knn": None,
     "geneNames": "index",
     "expression": "X",
+    "log1p": {},
+    "highlyVariable": None,
     "latent": None,
-    "vectorFields": [],
-}
-EXPORT_MAPPING: dict[str, Any] = {
-    "kind": "export",
-    "embeddings": {"enabled": [{"key": "X_umap", "columns": None}], "defaults": {"1d": None, "2d": {"key": "X_umap", "columns": None}, "3d": None}},
-    "geneNames": "index",
     "vectorFields": [],
 }
 
@@ -48,7 +45,6 @@ def _invalid_mapping_cases() -> list[dict[str, Any]]:
 def _event(viewer_id: str, **overrides: Any) -> dict[str, Any]:
     event: dict[str, Any] = {
         "type": "data_mapping",
-        "viewerId": viewer_id,
         "requestId": None,
         "origin": "default",
         "mapping": copy.deepcopy(ANNDATA_MAPPING),
@@ -67,7 +63,7 @@ def test_the_wire_declares_exactly_these_field_sets() -> None:
         {"type", "requestId", "mapping"}
     )
     assert wire._INBOUND_EVENT_FIELDS["data_mapping"] == frozenset(
-        {"type", "viewerId", "requestId", "origin", "mapping"}
+        {"type", "requestId", "origin", "mapping"}
     )
     origins = wire._DATA_MAPPING_ORIGINS
     assert origins == {"default", "best_guess", "session", "user", "notebook"}
@@ -77,7 +73,7 @@ def test_the_capability_document_lists_both_halves() -> None:
     document = wire._protocol_capability_document()
     assert "setDataMapping" in document["commands"]
     assert "data_mapping" in document["events"]
-    assert jupyter_base._COMMAND_PYTHON_CALLERS["setDataMapping"] == "viewer.set_data_mapping(...)"
+    assert jupyter_viewer._COMMAND_PYTHON_CALLERS["setDataMapping"] == "viewer.set_data_mapping(...)"
 
 
 # ---------------------------------------------------------------------------
@@ -126,16 +122,14 @@ def test_set_data_mapping_refuses_every_invalid_conformance_mapping(case: dict[s
 @pytest.mark.parametrize("origin", ["default", "best_guess", "session", "user"])
 def test_a_reported_mapping_carries_no_request_id(origin: str) -> None:
     event_type, payload = wire._require_inbound_jupyter_event(
-        _event("v", origin=origin), expected_viewer_id="v"
-    )
+        _event("v", origin=origin))
     assert event_type == "data_mapping"
     assert payload == {"requestId": None, "origin": origin, "mapping": ANNDATA_MAPPING}
 
 
 def test_a_notebook_answer_names_its_request() -> None:
     _event_type, payload = wire._require_inbound_jupyter_event(
-        _event("v", origin="notebook", requestId="request-1"), expected_viewer_id="v"
-    )
+        _event("v", origin="notebook", requestId="request-1"))
     assert payload["requestId"] == "request-1"
 
 
@@ -153,33 +147,30 @@ def test_a_notebook_answer_names_its_request() -> None:
 )
 def test_a_malformed_report_is_refused(overrides: dict[str, Any], match: str) -> None:
     with pytest.raises((TypeError, ValueError), match=match):
-        wire._require_inbound_jupyter_event(_event("v", **overrides), expected_viewer_id="v")
+        wire._require_inbound_jupyter_event(_event("v", **overrides))
 
 
 @pytest.mark.parametrize("case", _invalid_mapping_cases(), ids=lambda case: case["name"])
 def test_a_report_with_an_invalid_conformance_mapping_is_refused(case: dict[str, Any]) -> None:
     with pytest.raises(ValueError):
         wire._require_inbound_jupyter_event(
-            _event("v", mapping=case["value"]), expected_viewer_id="v"
-        )
+            _event("v", mapping=case["value"]))
 
 
 def test_a_report_missing_a_field_is_refused() -> None:
     event = _event("v")
     del event["origin"]
     with pytest.raises(ValueError, match="missing origin"):
-        wire._require_inbound_jupyter_event(event, expected_viewer_id="v")
+        wire._require_inbound_jupyter_event(event)
 
 
 def test_command_error_may_name_set_data_mapping() -> None:
     _event_type, payload = wire._require_inbound_jupyter_event(
         {
             "type": "command_error",
-            "viewerId": "v",
             "command": "setDataMapping",
             "reason": "obsp['distances'] is not symmetric",
         },
-        expected_viewer_id="v",
     )
     assert payload["command"] == "setDataMapping"
 
@@ -190,7 +181,7 @@ def test_command_error_may_name_set_data_mapping() -> None:
 
 
 def test_the_viewer_holds_the_latest_reported_mapping() -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     assert viewer.data_mapping is None
     assert viewer.data_mapping_origin is None
     hooked: list[dict[str, Any]] = []
@@ -215,14 +206,14 @@ def test_the_viewer_holds_the_latest_reported_mapping() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _viewer_with_mapping(mapping: dict[str, Any]) -> jupyter.BaseViewer:
-    viewer = jupyter.BaseViewer()
+def _viewer_with_mapping(mapping: dict[str, Any]) -> jupyter.AnnDataViewer:
+    viewer = serverless_viewer()
     viewer._handle_frontend_message(_event(viewer._viewer_id, mapping=copy.deepcopy(mapping)))
     return viewer
 
 
 def test_set_data_mapping_needs_a_reported_mapping() -> None:
-    viewer = jupyter.BaseViewer()
+    viewer = serverless_viewer()
     with pytest.raises(RuntimeError, match="has not reported its data mapping yet"):
         viewer.set_data_mapping(knn="connectivities")
 
@@ -232,7 +223,6 @@ def test_set_data_mapping_needs_a_reported_mapping() -> None:
     [
         (ANNDATA_MAPPING, {"kind": "export"}, TypeError, "cannot change the mapping kind"),
         (ANNDATA_MAPPING, {"embedding": {}}, TypeError, "unknown field"),
-        (EXPORT_MAPPING, {"knn": "connectivities"}, TypeError, "unknown field"),
         (ANNDATA_MAPPING, {"expression": "layers:x"}, ValueError, "expression"),
         (
             ANNDATA_MAPPING,
@@ -328,7 +318,6 @@ def test_set_data_mapping_raises_the_viewer_refusal(
         viewer._handle_frontend_message(
             {
                 "type": "command_error",
-                "viewerId": viewer._viewer_id,
                 "command": "setDataMapping",
                 "reason": "obsp['distances'] is not symmetric",
             }
@@ -348,7 +337,6 @@ def test_an_earlier_refusal_does_not_fail_a_later_request(
     viewer._handle_frontend_message(
         {
             "type": "command_error",
-            "viewerId": viewer._viewer_id,
             "command": "setDataMapping",
             "reason": "an older refusal",
         }

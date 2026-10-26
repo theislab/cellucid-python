@@ -10,15 +10,15 @@ If you want the guided flow first:
 
 ---
 
-## Community Annotation Accordion (Sidebar)
+## Community annotation accordion (sidebar)
 
-You’ll find **Community Annotation** in the left sidebar.
+You’ll find **Community annotation** in the left sidebar.
 The accordion starts collapsed.
 
 ### Entry button states
 
-Before a repository is connected, the compact panel reads
-`No annotation repo connected.` and exposes one action:
+Before a repository is connected, the compact panel reads **Repository**,
+`Not connected.`, and exposes one action:
 
 - **Connect repo**: opens the four-step connection wizard.
 
@@ -32,19 +32,19 @@ authentication state:
 When offline, GitHub actions are disabled. Existing annotation local state can
 still be edited, but it cannot be Pulled or Published.
 
-```{figure} ../../../_static/screenshots/community_annotation/disconnected-panel.png
-:alt: Community Annotation panel before an annotation repository is connected.
-:width: 246px
+```{figure} ../../../_static/screenshots/community_annotation/lifecycle-01-disconnected.png
+:alt: The Community annotation panel before any repository is connected: Repository with its (i), the line Not connected. and a Connect repo button, with the pointer on that button.
+:width: 504px
 
 The Community Annotation entry point reports that no repository is connected and offers the explicit Connect repo action.
 ```
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-06-connected-status.png
-:alt: The connected panel showing Dataset, GitHub and Repo rows, a GitHub sync button, a Profile block reporting the signed-in user, and collapsed sections for Manage annotation, Derived consensus column, and Consensus snapshot and local cache.
-:width: 488px
+:alt: The connected Community annotation panel: GitHub sync with the Dataset, GitHub and Repo rows and a GitHub sync… button, a Profile block naming the signed-in user with Edit and Clear, and the collapsed Annotated columns, Consensus column and Snapshot and cache groups.
+:width: 504px
 
 The same panel after a repository is connected. The three header rows —
-**Dataset**, **Github**, **Repo** — are the annotation scope; the sections below
+**Dataset**, **GitHub**, **Repo** — are the annotation scope; the sections below
 them are the working surface.
 ```
 
@@ -63,11 +63,11 @@ If you are reporting a problem, a screenshot of this status panel often contains
 
 ## “GitHub sync” Modal (Repo Discovery + Pull/Publish)
 
-Open it from the Community Annotation accordion.
+Open it from the **Community annotation** accordion.
 
 This modal is a 4-step wizard:
 
-### 1) Sign in with GitHub
+### 1) Sign in
 
 - Button: **Continue with GitHub**
 
@@ -77,14 +77,14 @@ Notes:
 - Tokens are stored only in `sessionStorage` (closing the tab signs you out).
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-02-signin.png
-:alt: Step 1 of 4 of the GitHub sync wizard, headed "Sign in with GitHub", with a Continue with GitHub button, and a header showing Dataset, GitHub not connected, and Repo not connected.
+:alt: Step 1 of 4 of the GitHub sync wizard: a header showing the dataset with GitHub and Repo both not connected, the four steps Sign in, Install app, Choose repository and Sync with Sign in current, the line "Cellucid gets no repository access until you install its GitHub App on repositories you choose.", and a Continue with GitHub button.
 :width: 1040px
 
 Step 1 of 4. The four step names stay visible down the left, and the header
 tracks the dataset, the GitHub identity, and the bound repository throughout.
 ```
 
-### 2) Install the GitHub App
+### 2) Install app
 
 Buttons:
 
@@ -94,14 +94,14 @@ Buttons:
 If your annotation repo does not appear later, this step is the usual cause.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-03-install-app.png
-:alt: Step 2 of 4 listing three repositories as cards marked Public or Private, with Add repo and Reload buttons above and a status line reading "Showing 1-3 of 3 repositories. Page 1 of 1." below.
+:alt: Step 2 of 4 of the GitHub sync wizard, Install app: the header shows the dataset, the signed-in GitHub account and Repo not connected; the line "Add repo opens GitHub to choose repositories; then Reload.", Add repo (under the pointer) and Reload, three repository cards marked Public or Private, and "Showing 1–3 of 3 repositories. Page 1 of 1."
 :width: 1040px
 
 Step 2 of 4. The status line always states the exact count and page, because an
 organisation can expose thousands of repositories.
 ```
 
-### 3) Select an annotation repository
+### 3) Choose repository
 
 - Filter input: **Filter repositories…**
 - Repos are shown as cards (public/private).
@@ -109,7 +109,7 @@ organisation can expose thousands of repositories.
 - If replacing an existing repository, the same button reads **Switch repo**.
 
 ```{figure} ../../../_static/screenshots/community_annotation/state-no-repository-matches-filter.png
-:alt: Step 3 of 4 with a filter applied that matches no repository, showing "No repositories match this filter." above a status line reading "No repositories to display."
+:alt: Step 3 of 4 of the GitHub sync wizard, Choose repository, with a filter typed that matches no repository and the line No repositories match this filter. under it.
 :width: 1040px
 
 The empty filter result on step 3. `No repositories match this filter.` is a
@@ -127,7 +127,7 @@ What “connect” means:
   - `annotations/moderation/merges.schema.json`
   - `annotations/users/`
 
-### 4) Sync (Pull / Publish)
+### 4) Sync
 
 Buttons:
 
@@ -151,7 +151,7 @@ still running. Wait for it to finish, then try again.`; one you cancel reports
 `Cancelled.`. Only a completed transaction reports its success text.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-05-sync.png
-:alt: Step 4 of 4, headed "Sync (pull / publish)", with Pull latest and Publish buttons, an Auto pull selector offering 10, 15 and 60 minute intervals, and a status line reading "Pulled latest annotations."
+:alt: Step 4 of 4 of the GitHub sync wizard, Sync: the dataset, GitHub account and repository in the header, the line "Pull fetches the latest votes; Publish writes them for everyone.", Pull latest and Publish, an Auto pull checkbox with its interval, and the status line "Pulled latest annotations."
 :width: 1040px
 
 Step 4 of 4 after a successful **Pull latest**. The status line under the
@@ -159,7 +159,7 @@ buttons is where every outcome is reported verbatim.
 ```
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-17-publish.png
-:alt: The same step 4 panel with a status line reading "Publish complete."
+:alt: The same Sync step after Publish, its status line reading "Publish complete." under the Pull latest and Publish buttons.
 :width: 1040px
 
 The same panel after **Publish**. `Publish complete.` means GitHub accepted the
@@ -217,7 +217,7 @@ Common publish pitfalls:
 
 ## Profile (Optional) and “Your identity” Modal
 
-In the Community Annotation accordion, you will see **Profile (optional)**.
+In the **Community annotation** accordion, you will see the optional **Profile** block.
 
 Buttons:
 
@@ -226,10 +226,10 @@ Buttons:
 
 The “Your identity” modal includes:
 
-- **Name:** free text used to search ORCID (e.g. “Alice Smith”)
-- **Affiliation / role:** free text (e.g. “Theis Lab, Postdoc”)
-- **LinkedIn:** handle only (no URL; lowercase `a-z0-9-`)
-- **ORCID:** accepts a checksum-valid ORCID iD and auto-suggests matches
+- **Name**: free text used to search ORCID (e.g. “Alice Smith”)
+- **Affiliation / role**: free text (e.g. “Theis Lab, Postdoc”)
+- **LinkedIn**: handle only (no URL; lowercase `a-z0-9-`)
+- **ORCID**: accepts a checksum-valid ORCID iD and auto-suggests matches
 - **Save** / **Cancel**
 
 Notes:
@@ -249,21 +249,21 @@ Notes:
 
 ---
 
-## MANAGE ANNOTATION (Author Only)
+## Annotated columns (author only)
 
-Accordion title: **MANAGE ANNOTATION**
+Collapsible title: **Annotated columns**
 
 You must be an **author** (GitHub maintain/admin on the repo) to use these controls.
 
 Controls:
 
-- Dropdown: **Categorical obs:** (choose a categorical column)
+- Dropdown: **Categorical obs** (choose a categorical column)
 - Buttons:
   - **Add**: add the selected column to the annotatable list
   - **Remove**: remove the selected column from the annotatable list
   - **Close** / **Reopen**: lock/unlock annotator interaction for this column
 
-Per-column consensus settings (shown only when the column is annotatable):
+Per-column **Consensus settings** (shown only when the column is annotatable):
 
 - **Threshold** slider (maps to `annotations/config.json` threshold)
 - **Min annotators** numeric input
@@ -273,10 +273,10 @@ Per-column consensus settings (shown only when the column is annotatable):
 Remember: config changes become shared only after the author clicks **Publish** in the GitHub sync modal.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-07-manage-annotation.png
-:alt: The Manage annotation section expanded, showing a categorical obs dropdown with Add, Remove and Close buttons, and an Annotatable consensus settings block with a Threshold slider reading 50 percent, a Min annotators field, and Apply and Reset buttons.
-:width: 488px
+:alt: Annotated columns open in the Community annotation panel: the Categorical obs picker on the voting column clusters with Add, Remove and Close, and its consensus settings with a Threshold slider and a Min annotators field.
+:width: 504px
 
-**Manage annotation** with a column already annotatable, so the per-column
+**Annotated columns** with a column already annotatable, so the per-column
 consensus settings are shown. **Threshold** is edited in whole percent; it is
 stored as a signed fraction whose full range is −100 % to +100 %, because
 confidence is itself signed.
@@ -286,8 +286,8 @@ The defaults, for a column with no explicit settings, are **1** minimum
 annotator and a **0.5** threshold.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-08-votable-badge.png
-:alt: The Coloring and Filtering panel with the categorical obs dropdown showing an entry prefixed by a ballot-box emoji.
-:width: 458px
+:alt: The Categorical obs select holding clusters, prefixed by a ballot-box badge marking it open for voting, and the legend beneath it: each category with its consensus label (Beta cell under Beta) and its up and down vote counts.
+:width: 496px
 
 A column that is open for annotation is prefixed with 🗳️ wherever it is
 offered. A column an author has closed is prefixed with 🗳️🏁 instead, and a
@@ -296,31 +296,30 @@ column that was never opened has no prefix at all.
 
 ---
 
-## DERIVED CONSENSUS COLUMN (Optional)
+## Consensus column (optional)
 
-Accordion title: **DERIVED CONSENSUS COLUMN**
+Collapsible title: **Consensus column**
 
 This section builds a local categorical obs column for visualization:
 
-- Dropdown: **Annotatable column:**
-- Input: **New column key:**
+- Dropdown: **Annotatable column**
+- Input: **New column key**
 - Settings:
-  - **Consensus threshold:**
-  - **Min annotators:**
+  - **Consensus threshold**
+  - **Min annotators**
 - Button: **Build derived column**
 
 This does not publish anything; it is a local view helper.
 
 ---
 
-## CONSENSUS SNAPSHOT + LOCAL CACHE
+## Consensus snapshot + local cache
 
-Accordion title: **CONSENSUS SNAPSHOT + LOCAL CACHE**
+Collapsible title: **Snapshot and cache**
 
 ### Consensus snapshot
 
-- Label: **Consensus snapshot (cellucid-consensus.json)**
-- Button: **Download**
+- Button: **Download** (its tooltip reads `Download cellucid-consensus.json`)
 
 Downloads a locally built `cellucid-consensus.json` snapshot (not written back
 to GitHub). Pull first when the export must include the newest shared files.
@@ -348,7 +347,7 @@ Two different clears exist (they do different things):
 
 The annotation “session” above is separate from Cellucid's portable
 `.cellucid-session` files. Community Annotation is intentionally excluded from
-ordinary Save State/Load State bundles. GitHub tokens remain tab-scoped in
+the ordinary bundles **Save** and **Load** handle. GitHub tokens remain tab-scoped in
 `sessionStorage`; annotation intent and pulled-file caches retain their own
 dataset/repo/branch/user scope. See
 {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
@@ -360,8 +359,8 @@ dataset/repo/branch/user scope. See
 You open this by clicking a category label in the categorical legend when the selected field is annotatable.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-11-consensus.png
-:alt: The voting modal for the Beta cluster whose status banner reads Consensus, "Beta cell", 100 percent, 4 voters, above one suggestion card at net 4 with its vote buttons, attribution line and comment box, and a New suggestion form at the bottom.
-:width: 996px
+:alt: The voting view for the Beta cluster with a banner reading "Consensus: "Beta cell" (100% • 4 voters)", the suggestion card with its ontology id, marker, evidence and four upvotes, and the New suggestion form below.
+:width: 988px
 
 The voting modal for one category: the status line, the suggestion cards, and
 the **New suggestion** form beneath them.
@@ -382,8 +381,8 @@ The status line is exact about which of the three states applies and why:
 | Pending | `Pending (<n> voters)` | fewer than `minAnnotators` voters; no confidence is reported |
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-12-disputed.png
-:alt: A voting modal whose status banner reads Disputed, "Beta (immature), Beta cell", 0 percent, 4 voters, above two suggestion cards each at net 0 with two upvotes and two downvotes.
-:width: 996px
+:alt: The voting view for the Beta cluster with a banner reading "Disputed: "Beta (immature), Beta cell" (0% • 4 voters)", two suggestion cards each at net 0 with two upvotes and two downvotes, and the New suggestion form below.
+:width: 988px
 
 **Disputed by a tie.** Both suggestions have identical net votes and identical
 upvote counts, so neither leads. A tie is disputed regardless of confidence, and
@@ -391,8 +390,8 @@ the banner names every tied label alphabetically.
 ```
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-09-pending.png
-:alt: A voting modal whose status banner reads "Pending (1 voters)" above one suggestion card showing net 1.
-:width: 996px
+:alt: The voting view for the Beta cluster with a banner reading "Pending (1 voter)", one suggestion card (Beta cell, its ontology id, marker and evidence, one upvote), and the New suggestion form below.
+:width: 988px
 
 **Pending.** One voter against a three-annotator minimum. No confidence figure
 is reported, because the column's own rule says there is not yet enough
@@ -402,8 +401,8 @@ participation to compute one.
 ### Suggestion card anatomy
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-10-vote.png
-:alt: One suggestion card headed "Beta cell" with net 4 at the right, Ontology, Markers and Evidence lines, an upvote button at 4 under the mouse pointer and a downvote button at 0, Edit and Delete buttons, an attribution line naming the proposer and their title, and a comment input showing a 0 of 500 counter.
-:width: 1028px
+:alt: One suggestion card showing its label, net score, ontology, marker and evidence lines, its up and down vote buttons, the proposer attribution and the comment box, with the pointer on the upvote button.
+:width: 1020px
 
 One card, with every element named below present: label, `net` score, the three
 evidence rows, the vote buttons, the owner-only actions, the attribution line,
@@ -514,7 +513,7 @@ Checklist:
   - annotator = everything else
 - Fix: ensure your GitHub account has maintain/admin access, then reconnect and Pull.
 
-#### Repo does not show up under “Select an annotation repository”
+#### Repo does not show up under “Choose repository”
 
 - Ensure the GitHub App is installed on the repo owner and includes this repo.
 - If installed with “Only select repositories”, add the repo explicitly.

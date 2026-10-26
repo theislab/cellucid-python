@@ -23,9 +23,9 @@ Cellucid treats “coloring” and “filtering” as coupled:
 
 | You want to… | Do this in the UI | Why |
 |---|---|---|
-| Color by clusters / sample / batch | **Coloring & Filtering → Categorical obs** | Best for discrete labels; legend lets you hide categories and edit labels/colors |
-| Color by a score (QC, pseudotime, marker score) | **Coloring & Filtering → Continuous obs** | Gives a continuous colorbar; you can filter by min/max and rescale the palette |
-| Color by a gene | **Coloring & Filtering → Gene Expression** | Search genes, load on demand, and use the same continuous legend controls |
+| Color by clusters / sample / batch | **Coloring & filtering → Categorical obs** | Best for discrete labels; legend lets you hide categories and edit labels/colors |
+| Color by a score (QC, pseudotime, marker score) | **Coloring & filtering → Continuous obs** | Gives a continuous colorbar; you can filter by min/max and rescale the palette |
+| Color by a gene | **Coloring & filtering → Gene expression** | Search genes, load on demand, and use the same continuous legend controls |
 
 ---
 
@@ -34,8 +34,8 @@ Cellucid treats “coloring” and “filtering” as coupled:
 All three rows of the table above live in the same place, one under the other:
 
 ```{figure} ../../../_static/screenshots/web_app/field-selectors-three-routes.png
-:alt: Three stacked controls labelled CATEGORICAL OBS holding clusters, CONTINUOUS OBS holding None, and GENE EXPRESSION holding the placeholder Search genes, each followed by four small icon buttons, with the mouse pointer pressing the first dropdown.
-:width: 488px
+:alt: The Color by heading with its (i), above the three field selectors stacked in order — Categorical obs holding clusters, Continuous obs holding None, and an empty Gene expression search box — each followed by four small icon buttons, with the pointer pressing the first.
+:width: 504px
 
 Only one of the three can be active at a time. Choosing a field in one selector
 clears the other two.
@@ -45,15 +45,15 @@ Which one you choose decides which legend you get, and the legend is where most
 of the work happens:
 
 ```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
-:alt: A legend with the hint Click a swatch to pick a color, Show All and Hide All buttons, and eight rows each with a checkbox, a coloured swatch, a category name, a cell count, a pencil icon and a bin icon.
-:width: 428px
+:alt: The categorical legend for clusters: the Show all and Hide all buttons above eight rows, each holding a checkbox, a colour swatch, a label, a cell count, a rename pencil and a delete bin.
+:width: 488px
 
 **Categorical** → a list of rows you can tick, recolour, rename and merge.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/legend-continuous-sscore.png
-:alt: A legend headed COLOR SCALE (VIRIDIS) with a purple to yellow gradient bar under it, the numbers minus 0.37 and 1.14 at its ends, a Log color scale toggle reading Off with the note Zero negative and NaN values use the None color, a Rescale colorbar to slider range toggle reading On with the note On colors track sliders Off full data range, then a FILTERING section with a VISIBLE RANGE subtitle, a Live filtering toggle reading On, Min and Max sliders with numeric readouts, and FILTER and RESET buttons.
-:width: 428px
+:alt: The continuous legend for S_score: the Color scale (Viridis) bar with its two end values, Log color scale off and Rescale to range on, each with its (i), and below a rule the Visible range block with Live filtering on, Minimum and Maximum sliders, and Filter and Reset.
+:width: 488px
 
 **Continuous or gene** → a colour bar, two colour-mapping toggles, and a
 filtering block.
@@ -89,7 +89,7 @@ Obs vs var, categorical vs continuous, and what “gene expression” means in C
 :link: 02_field_selector_ux
 :link-type: doc
 
-How to pick a field, search genes, duplicate/rename/delete fields, and restore from Deleted Fields.
+How to pick a field, search genes, duplicate/rename/delete fields, and restore from Deleted fields.
 :::
 
 :::{grid-item-card} {octicon}`sliders;1.5em;sd-mr-1` Color-by Behavior

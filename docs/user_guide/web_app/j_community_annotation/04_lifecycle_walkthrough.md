@@ -29,15 +29,15 @@ to step 3.
 
 ## Step 1 — Find the panel
 
-Community Annotation is an accordion in the left sidebar. It starts collapsed,
+**Community annotation** is an accordion in the left sidebar. It starts collapsed,
 and before a repository is connected it holds exactly one action.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-01-disconnected.png
-:alt: The Community Annotation sidebar panel reading "No annotation repo connected." above a Connect repo button.
-:width: 488px
+:alt: The Community annotation panel before any repository is connected: Repository with its (i), the line Not connected. and a Connect repo button, with the pointer on that button.
+:width: 504px
 
-Before a repository is connected the panel states `No annotation repo
-connected.` and offers only **Connect repo**. Nothing else in the feature is
+Before a repository is connected the panel reads **Repository** with its (i),
+`Not connected.`, and offers only **Connect repo**. Nothing else in the feature is
 reachable yet, and nothing is hidden behind a disabled control.
 ```
 
@@ -57,11 +57,11 @@ and it does not contact GitHub until you ask it to.
 ## Step 3 — Sign in with GitHub
 
 The wizard's four steps are always visible down the left of the dialog, so you
-can see how far along you are: **Sign in with GitHub**, **Install the GitHub
-App**, **Select an annotation repository**, **Sync (pull / publish)**.
+can see how far along you are: **Sign in**, **Install app**,
+**Choose repository**, **Sync**.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-02-signin.png
-:alt: The GitHub sync dialog on step 1 of 4, headed "Sign in with GitHub", with a Continue with GitHub button and a header reading GitHub not connected, Repo not connected.
+:alt: Step 1 of 4 of the GitHub sync wizard: a header showing the dataset with GitHub and Repo both not connected, the four steps Sign in, Install app, Choose repository and Sync with Sign in current, the line "Cellucid gets no repository access until you install its GitHub App on repositories you choose.", and a Continue with GitHub button.
 :width: 1040px
 
 Step 1 of 4. The dialog header tracks three facts throughout: the **dataset**
@@ -87,7 +87,7 @@ Once the Cellucid GitHub App is installed on the account or organisation that
 owns the repository, the repositories it can see are listed for you.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-03-install-app.png
-:alt: Step 2 of 4 of the wizard listing three repositories as cards, each marked Public or Private, above a pagination status reading "Showing 1-3 of 3 repositories. Page 1 of 1."
+:alt: Step 2 of 4 of the GitHub sync wizard, Install app: the header shows the dataset, the signed-in GitHub account and Repo not connected; the line "Add repo opens GitHub to choose repositories; then Reload.", Add repo (under the pointer) and Reload, three repository cards marked Public or Private, and "Showing 1–3 of 3 repositories. Page 1 of 1."
 :width: 1040px
 
 Step 2 of 4. Each repository is a card marked **Public** or **Private**, and the
@@ -100,18 +100,17 @@ The list is paged and filterable because an organisation can expose thousands of
 repositories. If your repository is missing, it is almost always because the
 GitHub App has not been given access to it — use **Add repo**, then **Reload**.
 
-Step 3, **Select an annotation repository**, is where you actually pick one and
+Step 3, **Choose repository**, is where you actually pick one and
 press **Connect**. When the list is long enough to need it, step 3 also offers a
 filter box.
 
 ### When the filter matches nothing
 
 ```{figure} ../../../_static/screenshots/community_annotation/state-no-repository-matches-filter.png
-:alt: Step 3 of 4 of the wizard with a filter applied that matches no repository, showing the message "No repositories match this filter." above a status line reading "No repositories to display."
+:alt: Step 3 of 4 of the GitHub sync wizard, Choose repository, with a filter typed that matches no repository and the line No repositories match this filter. under it.
 :width: 1040px
 
-An empty result says `No repositories match this filter.` and the status line
-reads `No repositories to display.` This is a filter result, not a permission
+An empty result says `No repositories match this filter.` This is a filter result, not a permission
 problem: clear the filter to get the full list back.
 ```
 
@@ -123,10 +122,10 @@ After **Connect**, the sidebar panel changes from one button to the working
 surface for the whole feature.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-06-connected-status.png
-:alt: The connected Community Annotation panel showing Dataset, GitHub and Repo rows, a GitHub sync button, a Profile block, and the collapsed Manage annotation, Derived consensus column, and Consensus snapshot sections.
-:width: 488px
+:alt: The connected Community annotation panel: GitHub sync with the Dataset, GitHub and Repo rows and a GitHub sync… button, a Profile block naming the signed-in user with Edit and Clear, and the collapsed Annotated columns, Consensus column and Snapshot and cache groups.
+:width: 504px
 
-The connected panel. **Github sync** re-opens the wizard at step 4. **Profile**
+The connected panel. **GitHub sync…** re-opens the wizard at step 4. **Profile**
 holds the optional name, title, ORCID, and LinkedIn that get written into your
 user file when you publish — they are saved locally first, like your votes.
 ```
@@ -143,10 +142,10 @@ under the other dataset.
 An author decides which categorical columns the group may vote on.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-07-manage-annotation.png
-:alt: The Manage annotation section expanded, showing a categorical column picker with Add, Remove and Close buttons, and an Annotatable consensus settings block with a Threshold slider reading 50% and a Min annotators field.
-:width: 488px
+:alt: Annotated columns open in the Community annotation panel: the Categorical obs picker on the voting column clusters with Add, Remove and Close, and its consensus settings with a Threshold slider and a Min annotators field.
+:width: 504px
 
-**Manage annotation** is present for everyone but only operable by an author.
+**Annotated columns** is present for everyone but only operable by an author.
 Pick a categorical column, press **Add**, and set the two numbers that decide
 consensus for it: **Threshold** and **Min annotators**. **Apply** stages the
 change locally; publishing writes it to `annotations/config.json`.
@@ -167,8 +166,8 @@ The out-of-the-box defaults, when a column has no explicit settings, are
 Once a column is open for annotation it is badged everywhere it is offered.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-08-votable-badge.png
-:alt: The Coloring and Filtering categorical obs dropdown showing the clusters entry prefixed by a ballot-box badge, above the legend listing the cluster categories.
-:width: 458px
+:alt: The Categorical obs select holding clusters, prefixed by a ballot-box badge marking it open for voting, and the legend beneath it: each category with its consensus label (Beta cell under Beta) and its up and down vote counts.
+:width: 496px
 
 The 🗳️ badge in the **Categorical obs** dropdown marks a column that is open for
 voting. A column with no badge is an ordinary column; a column the author has
@@ -184,7 +183,7 @@ in your browser. Do this at the start of a session, so you are voting on what
 everyone else has already proposed rather than duplicating it.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-05-sync.png
-:alt: Step 4 of 4 of the wizard, headed "Sync (pull / publish)", with Pull latest and Publish buttons, an Auto pull selector, and a status line reading "Pulled latest annotations."
+:alt: Step 4 of 4 of the GitHub sync wizard, Sync: the dataset, GitHub account and repository in the header, the line "Pull fetches the latest votes; Publish writes them for everyone.", Pull latest and Publish, an Auto pull checkbox with its interval, and the status line "Pulled latest annotations."
 :width: 1040px
 
 Step 4 of 4. The status line under the buttons reports the outcome verbatim —
@@ -216,8 +215,8 @@ Suggestions are ranked by net votes first, then by raw upvote count. The state
 follows from three comparisons, in this order.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-09-pending.png
-:alt: The voting modal for the Beta cluster with a status banner reading Pending and a voter count below the column minimum, above a single suggestion card.
-:width: 996px
+:alt: The voting view for the Beta cluster with a banner reading "Pending (1 voter)", one suggestion card (Beta cell, its ontology id, marker and evidence, one upvote), and the New suggestion form below.
+:width: 988px
 
 **Pending** — fewer voters than the column's minimum. Here one person has voted
 and the column requires three, so no confidence figure is reported at all; the
@@ -226,8 +225,8 @@ real, but it is not yet a decision.
 ```
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-11-consensus.png
-:alt: The voting modal for category beta with a status banner reading Consensus, "Beta cell", 100 percent, 4 voters, above a suggestion card showing net 4 with ontology, marker and evidence lines.
-:width: 996px
+:alt: The voting view for the Beta cluster with a banner reading "Consensus: "Beta cell" (100% • 4 voters)", the suggestion card with its ontology id, marker, evidence and four upvotes, and the New suggestion form below.
+:width: 988px
 
 **Consensus** — enough voters, one clear leader, and confidence at or above the
 threshold. Four people voted, all four supported *Beta cell* and none opposed
@@ -235,8 +234,8 @@ it, so confidence is 100 %.
 ```
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-12-disputed.png
-:alt: The voting modal for the Beta cluster with a status banner reading Disputed and naming two tied labels at 0 percent with four voters, above two suggestion cards each showing net 0 with two upvotes and two downvotes.
-:width: 996px
+:alt: The voting view for the Beta cluster with a banner reading "Disputed: "Beta (immature), Beta cell" (0% • 4 voters)", two suggestion cards each at net 0 with two upvotes and two downvotes, and the New suggestion form below.
+:width: 988px
 
 **Disputed** — everything else. Here two suggestions are tied on both net votes
 and upvotes, so there is no single leader; a tie is always disputed, whatever
@@ -259,8 +258,8 @@ Click a category name in the legend to open its voting modal.
 ### A suggestion card
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-10-vote.png
-:alt: A single suggestion card headed "Beta cell" with its net score at the right, lines for Ontology, Markers and Evidence, up and down vote buttons, Edit, Delete and Merge buttons, an attribution line naming the proposer, and a comment input, with the pointer on the upvote button.
-:width: 1028px
+:alt: One suggestion card showing its label, net score, ontology, marker and evidence lines, its up and down vote buttons, the proposer attribution and the comment box, with the pointer on the upvote button.
+:width: 1020px
 
 One suggestion. The **▲** and **▼** buttons cast your vote — pressing the one you
 already chose withdraws it. **Edit** and **Delete** appear only on suggestions
@@ -274,8 +273,8 @@ resolved: state the evidence, not the conclusion.
 ### Proposing a label
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-13-new-suggestion.png
-:alt: The New suggestion form filled in with a label, an ontology id and two marker genes, showing Search CAP, Search Ontology and Search Markers buttons beside the fields and Add and Clear buttons below.
-:width: 984px
+:alt: The New suggestion form filled in with a label, an ontology id and marker genes, with Search CAP, Search Ontology and Search Markers buttons beside the fields and Add and Clear buttons below, and the pointer on Add.
+:width: 1040px
 
 **New suggestion** takes a label plus three optional pieces of evidence: an
 ontology id, marker genes, and free text. The three search buttons look the
@@ -295,7 +294,7 @@ Nothing you have done so far is visible to anyone else. Everything up to this
 point lives in your browser.
 
 ```{figure} ../../../_static/screenshots/community_annotation/lifecycle-17-publish.png
-:alt: Step 4 of 4 of the wizard with a status line reading "Publish complete."
+:alt: The same Sync step after Publish, its status line reading "Publish complete." under the Pull latest and Publish buttons.
 :width: 1040px
 
 **Publish** writes your work to GitHub and reports `Publish complete.` when the
@@ -341,15 +340,15 @@ both of two merged suggestions still counts once.
 
 ### You are not signed in
 
-You get the step 1 panel: it reports `No annotation repo connected.` and offers
-**Connect repo**. There is no half-signed-in state in which some controls work.
+You get the step 1 panel: under **Repository** it reads `Not connected.` and
+offers **Connect repo**. There is no half-signed-in state in which some controls work.
 
 ### You can read the repository but not write to it
 
 ### Your role cannot be determined
 
 ```{figure} ../../../_static/screenshots/community_annotation/state-repository-unreadable.png
-:alt: The full application window with the Community Annotation panel back in its disconnected state and a notification explaining that the user's role for the repository could not be determined and that the annotation repo was disconnected.
+:alt: The whole application window with the Community Annotation panel back in its disconnected state and a notification explaining that the user's role for the repository could not be determined and that the annotation repo was disconnected.
 :width: 1440px
 
 If GitHub cannot tell Cellucid what your permissions are — the repository was

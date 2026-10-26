@@ -21,7 +21,7 @@ If you can load a demo dataset but not yours, it’s usually **data loading / da
    - **Visible cells**: do you have `0 visible` due to filters? → {doc}`../e_filtering/07_troubleshooting_filtering`
    - **Active view**: are you editing the intended panel (live vs snapshot)? → {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`
    - **Still starting**: if controls look greyed out, read the line under the
-     dataset picker — see {ref}`starting-up`.
+     **Open data** heading — see {ref}`starting-up`.
 3) Reload in a clean state (private window; extensions off)  
 4) If only one dataset fails, try a known-good demo dataset  
 5) Open DevTools → Console and copy the **first** error (for bug reports)
@@ -38,22 +38,38 @@ identifies the cause on its own.
 
 ### The app refused to start at all
 
-A full-screen card headed **“Cellucid could not start”** means the application
-never reached a usable state. The line beneath it is the reason and the footer
-asks you to correct the launch configuration or server response and reload.
-Below that, **Open Cellucid without this link’s settings** (shown when the
-address carried launch settings such as `?dataset=` or `?remote=`) reopens the
-app as it starts by default, and **Troubleshooting data loading** opens
-{doc}`../b_data_loading/08_troubleshooting_data_loading`.
+**Data the link names did not open.** When the dataset, file, catalog or
+server the address names (`?data=`, `?remote=`, `?dataset=`, a sample
+catalog's default) cannot be read, Cellucid still starts, without it. The
+panel over the empty viewer says **The data could not be opened** and the
+reason, as its notification says it (a file Cellucid does not read, a file
+with no embedding, a folder without `datasets.json`, a file that is not
+shared, a host that did not answer); **Details** holds the raw error, which
+the notification log and the browser console keep too. **Try again** reloads
+the same address; **Open without this link** closes the panel and removes
+those settings from the address, leaving Cellucid open to choose other data.
+When asking again cannot change the answer, **Open without this link** comes
+first. See {doc}`../b_data_loading/08_troubleshooting_data_loading`.
 
-| The reason says | What it means | Go to |
+**The app itself could not start.** A full-screen card means Cellucid cannot
+run at all. Its heading says why, **Details** holds the exact message, and it
+offers **Try again**, **Open Cellucid without this link** when the address
+carried launch settings, and the guide for that problem.
+
+| The heading says | What it means | Go to |
 |---|---|---|
-| `WebGL2 is required but not supported in this browser.` | The browser gave the page no WebGL2 context: old browser, disabled hardware acceleration, a managed-device policy, or a remote-desktop session | {doc}`../a_orientation/02_system_requirements` |
-| Anything about a manifest, a dataset, or a server response | The launch parameters pointed at something that could not be read | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
-| A blank page instead of a card, or “module script failed to load” | The app’s own files were not served correctly (wrong MIME type, opened via `file://`) | {doc}`../p_developer_docs/02_local_development_setup` |
+| **This browser cannot run Cellucid** | The browser gave the page no WebGL2 context (Details: `WebGL2 is required but not supported in this browser.`): old browser, disabled hardware acceleration, a managed-device policy, or a remote-desktop session | {doc}`../a_orientation/02_system_requirements` |
+| **Cellucid could not load** | One of the app’s own files failed to download, or does not fit the others, so nothing could run | reload; see *The line turns red* below |
+| **Cellucid has been updated** | The page was loading while a new version was published, so its files are of two versions | **Reload** |
+| **The data could not be opened** | The Cellucid server the page itself is served from (`cellucid serve`, Jupyter) could not be read | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
+| **A server did not answer** | A server startup was waiting on (the page's own server, the sample catalog, a published default view) sent nothing for 60 s | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
+| **Cellucid could not start** | Anything else, such as an invalid launch setting (an empty `?remote=`) | Details, then {doc}`../p_developer_docs/02_local_development_setup` or report it |
 
-If JavaScript is disabled you get a plain sentence instead: *“Cellucid requires
-JavaScript and WebGL2 to run.”*
+A blank page instead of a card, or “module script failed to load” in the
+console, means the app’s own files were not served correctly (wrong MIME type,
+opened via `file://`): see {doc}`../p_developer_docs/02_local_development_setup`.
+
+If JavaScript is disabled the card reads **Cellucid needs JavaScript**.
 
 ---
 
@@ -85,36 +101,24 @@ The cause phrase tells you which class of failure it was:
 | “nothing is published at that address” | 404 — the path is wrong | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
 | “the server refused access” | 401 or 403 — it exists but you cannot read it | Check that the data is shared publicly, or that you are signed in |
 | “the server rejected the request” | Some other 4xx | Check the address |
-| **422**, with a body beginning `{"error": "non_finite_continuous_payload"` | The address was right. The server examined a gene or continuous column, found values it cannot publish, and refused to send them | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
 | “the server reported a problem of its own” | 5xx — not your fault | Wait and retry |
-| “not in a format Cellucid can read” | The bytes arrived but do not match the export format | Re-export with `cellucid prepare`; {doc}`../b_data_loading/07_folder_file_format_expectations_high_level_link_to_spec` |
-| “nothing readable came back” | Offline, DNS failure, **CORS**, or an address that simply is not a Cellucid export | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
+| “larger than Cellucid opens in a browser” | The browser could not allocate the memory the data needs | Serve it with `cellucid serve`, or publish a smaller file; {doc}`../b_data_loading/04_server_tutorial` |
+| “not in a format Cellucid can read” | The bytes arrived but are not in a format Cellucid reads | Check the format list, then write it again (for example with anndata or `cellucid.prepare()`); {doc}`../b_data_loading/07_file_format_expectations` |
+| “nothing readable came back” | Offline, DNS failure, **CORS**, or an address that does not hold Cellucid data | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
 
 :::{tip}
 **CORS is never named on the dataset path**, because the browser does not tell
 the page whether a request was blocked by CORS or simply answered with something
 unreadable. That is what “nothing readable came back” covers. If you host your
-own exports and the address is definitely right, check the CORS headers first —
+own datasets and the address is definitely right, check the CORS headers first —
 open DevTools → Network and look for a request with no response body.
-:::
-
-:::{note}
-**422 is the one 4xx that is not about the address.** When a gene or continuous
-obs column is requested from the Python AnnData server, the server validates it
-before sending anything, and refuses a column containing `NaN`, an infinity, or
-a value outside the `float32` range. The refusal is HTTP 422 with a JSON body —
-`error`, `kind`, `name`, `counts`, `examples` and a `message` — and the viewer
-quotes that body verbatim above its own explanation. Repair the values at the
-source; nothing in the viewer can place an infinity on a colour scale.
-{doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` walks
-through it.
 :::
 
 (size-limits)=
 ### It says something exceeded a limit
 
-Cellucid has no fixed size ceilings: a prepared export, a direct `.h5ad` or
-Zarr file and their metadata load at any size. What remains are the limits of
+Cellucid has no fixed size ceilings: an `.h5ad`, a Zarr store and their
+metadata load at any size. What remains are the limits of
 the browser itself, and each is reported by name rather than as a crash:
 
 - **An array the browser cannot allocate** is refused as too large, naming the
@@ -138,12 +142,13 @@ the browser itself, and each is reported by name rather than as a crash:
 | “That panel is not colored by a field, so there is nothing to select.” | The panel you pressed has no colour-by field; an annotation gesture reads the pressed panel's field, not the focused view's | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
 | “That gesture ended outside the view, so nothing was selected.” | The drag was released off the panel | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
 | “That gesture did not change the selection.” | The gesture worked; it just selected what was already selected | — |
-| “Color by a field first (Coloring & filtering), then Alt+click a cell.” | No panel on screen is colored by a field; choose a categorical or continuous obs field first | {doc}`../d_fields_coloring_legends/02_field_selector_ux` |
+| “Color by a field first (Coloring & filtering), then Alt+click a cell.” (Selection (i)) | No panel on screen is colored by a field; choose a categorical or continuous obs field first | {doc}`../d_fields_coloring_legends/02_field_selector_ux` |
 
-:::{warning}
-If you find advice anywhere telling you to **raise Point size so clicks land**,
-it is wrong and out of date. Point size changes what is *drawn*; the pick radius
-is fixed. Zoom in instead.
+:::{note}
+A click hits the dot drawn under the pointer, at its drawn size, plus a few
+pixels of slack, and only cells the viewer is currently drawing can be hit.
+Zooming in and raising **Point size** both make dots larger and so easier to
+hit; turning off level of detail makes every cell hittable.
 :::
 
 ---
@@ -165,14 +170,14 @@ is fixed. Zoom in instead.
 
 | The message | Meaning | Go to |
 |---|---|---|
-| **“No gene matches”**, followed by your query and a count of how many gene names the dataset publishes | The gene is not in *this export*. The count is the point: an export often carries a chosen subset of the source data, so a real gene can be legitimately absent | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
+| **“No gene matches”**, followed by your query and a count of how many gene names the dataset publishes | The gene is not in *this dataset*. The count is the point: a dataset often carries a chosen subset of the source data, so a real gene can be legitimately absent | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
 | “This dataset publishes no gene expression fields, so no gene panel can be built.” | There is no expression data at all here, so no marker or gene analysis is possible | {doc}`../h_analysis/08_analysis_mode_genes_panel` |
-| `Gene "<name>" not found in dataset. Check spelling or try another gene.` | That specific gene is absent | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
-| **“Gene cannot be shown”**, a multi-line notification naming the gene, counting its `+Infinity` / `-Infinity` / `NaN` values and listing the first affected cells | The values arrived (or the server refused to send them) and cannot be placed on a colour scale. The active field never changed. This is a values problem, not a transport one — repair the data at the source | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
+| `<gene> is not in the expression matrix shown` (after choosing a gene in an analysis result) | The result was computed from another expression matrix than the one **Session › Data mapping › Genes** shows | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
+| **“Gene cannot be shown”**, a multi-line notification naming the gene, counting its `+Infinity` / `-Infinity` / `NaN` values and listing the first affected cells | The values arrived and cannot be placed on a colour scale. The active field never changed. This is a values problem, not a transport one — repair the data at the source | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
 | `Field "X" has no value in any of N cells, so it has no colour scale.` | Every value in that column is `NaN`, so there is nothing to scale — usually a column that was never computed | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends` |
 | “Failed to load field: …” | A field could not be loaded. Read the rest of the line: if it counts non-finite values it is the case above, otherwise the data could not be fetched | {doc}`../d_fields_coloring_legends/05_troubleshooting_fields_legends`, then {doc}`../b_data_loading/08_troubleshooting_data_loading` |
 | “Failed to load gene: …” / “Failed to load field: …” on the progress toast | The load never finished — a dropped connection, a stopped server, a refused payload. It is the terminal state of the `Loading …` toast; the reason arrives as a separate notification beside it | {doc}`../b_data_loading/08_troubleshooting_data_loading` |
-| “No neighbor graph available for this dataset” | kNN selection needs connectivity, which this export does not include | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
+| “No neighbor graph available for this dataset” | kNN selection needs a neighbour graph (`obsp`), which this dataset does not hold | {doc}`../f_highlighting_selection/02_selection_tools_document_each_tool` |
 
 :::{note}
 If you ever see a message containing a literal `{symbol}`, `{name}` or similar
@@ -192,8 +197,8 @@ dataset publishes no gene expression fields…”*.
 | “The dataset is loaded, but its published sample view could not be applied” | The dataset opened; only its saved default view did not | {doc}`../l_sessions_sharing/07_versioning_compatibility_and_dataset_identity` |
 | “Export failed: …” | Figure export could not complete | {doc}`../k_figure_export/07_troubleshooting_figure_export` |
 | “Exact point export requires WebGL2…” / “…requires camera matrices…” | A capability the exact-point renderer needs is missing right now | {doc}`../k_figure_export/03_export_formats_and_renderers` |
-| “Analysis failed: …”, “Invalid form values” | An analysis could not run. “Invalid form values” does not name the field — check each input | {doc}`../h_analysis/10_troubleshooting_analysis` |
-| “Low memory detected…” / “High memory usage detected…” | The analysis layer is shedding cached work | {doc}`../h_analysis/10_troubleshooting_analysis` |
+| A notification titled **Analysis error** (“… failed: &lt;reason&gt;”), or a failed run in the analysis window's status | An analysis could not run; the reason is the rest of the line | {doc}`../h_analysis/10_troubleshooting_analysis` |
+| “High memory usage detected. Some cached data may need to be reloaded.” / “Memory optimization in progress…” | The analysis layer is shedding cached work | {doc}`../h_analysis/10_troubleshooting_analysis` |
 
 ---
 
@@ -216,7 +221,9 @@ dataset publishes no gene expression fields…”*.
 | The message | Meaning | Go to |
 |---|---|---|
 | **“Notebook command failed”** — “The notebook &lt;type&gt; command did not run: … The viewer is unchanged; correct the notebook cell and run it again.” | A command sent from Python was rejected by the viewer. Nothing changed, so re-running a corrected cell is safe | {doc}`../b_data_loading/05_jupyter_tutorial` |
-| **“Jupyter server disconnected”** — “The Python server stopped or returned an invalid health response. The last complete view has been frozen.” | The kernel or server went away. What you see is the last good state, not live | {doc}`../b_data_loading/05_jupyter_tutorial` |
+| **“Viewer stopped”** — “The notebook or R session that opened this viewer stopped (its server no longer answers). The last complete view stays as it is.” | The kernel, R session or server went away. What you see is the last good state, not live | {doc}`../b_data_loading/05_jupyter_tutorial` |
+| **“Viewer disconnected”** — “The notebook or R session is running, but this viewer cannot open its channel (…). A proxy between this page and the host must pass WebSockets…” | The viewer channel (one WebSocket, `/_cellucid/ws`) is blocked by a proxy | {doc}`../b_data_loading/05_jupyter_tutorial` |
+| **“Viewer opened elsewhere”** | The same viewer was opened in another page; this one stops following the notebook | {doc}`../b_data_loading/05_jupyter_tutorial` |
 | “Selection was saved locally, but Python notification failed…” | The selection is real in the browser; Python was not told | {doc}`../b_data_loading/05_jupyter_tutorial` |
 
 ---
@@ -226,9 +233,10 @@ dataset publishes no gene expression fields…”*.
 
 The data-source, renderer and benchmark controls now ship **disabled** and are
 enabled only once the code that responds to them is wired up. While the app is
-starting, a line under the dataset picker reads:
+starting, a line under the **Open data** heading, above the dataset picker,
+reads:
 
-> Starting Cellucid — the data controls below open as soon as it is ready.
+> Starting Cellucid. The controls below open as soon as it is ready.
 
 When it changes to *“Data sources are ready…”* the controls are live. Screen
 readers announce this, and each control is described by that line.
@@ -241,15 +249,25 @@ So:
   {ref}`changing-dataset-while-loading`).
 - **A click that did nothing at all** — this should no longer be reproducible.
   If it happens, it is a bug worth reporting.
-- **Never becomes ready** — that is a startup failure. Look for the “Cellucid
-  could not start” card, or check the console.
-- **The line turns red and reads “Cellucid could not load its code…”** — one of
+- **Never becomes ready** — that is a startup failure. Look for the full-screen
+  startup failure card, or check the console.
+- **The line turns red and reads “Cellucid could not load its code…”**, under a
+  card headed **Cellucid could not load** — one of
   the app's own files failed to download (a dropped connection, a proxy or
   firewall, a browser extension that blocks requests to this site, or a site
   update that landed while the page was loading), so nothing could start. Check
   the connection and reload the page; if it persists, try with extensions
   disabled. Ad and tracking blockers refusing the usage-analytics files do
   *not* cause this: analytics is optional and the app starts without it.
+  “Cellucid could not run its code: one of its files does not fit the others”
+  is the same card for a file that arrived but could not run; reload. When the
+  server already has a newer version, the card is headed **Cellucid has been
+  updated** and **Reload** opens it.
+- **A notification “Cellucid has been updated”** while you work — the page was
+  opened before a new version was published, and a part it loads on demand
+  (the benchmark panel, figure export, analysis plots) is not of its version.
+  Save a session file (Session file › Save) if you want to keep what is open,
+  then choose **Reload**.
 
 ---
 
@@ -298,10 +316,10 @@ Most “it’s broken” reports reduce to one of these mismatches:
    - {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`
 3) **Membership vs visibility**: highlight pages store membership; filters only change visibility.  
    - {doc}`../f_highlighting_selection/01_highlight_mental_model`
-4) **Dataset identity mismatch**: sessions/annotation won’t apply cleanly to a different dataset export/version.  
+4) **Dataset identity mismatch**: sessions/annotation won’t apply cleanly to a different dataset or version of it.  
    - {doc}`../b_data_loading/06_dataset_identity_why_it_matters`
-5) **What the export contains**: a gene or field that exists in your `.h5ad` need
-   not exist in the export made from it.  
+5) **What the dataset contains**: a gene or field in your source data need not
+   exist in the Cellucid-ready AnnData written from it.  
    - {doc}`../d_fields_coloring_legends/07_genes_in_the_built_in_samples`
 
 ---
@@ -325,14 +343,17 @@ Use this section when Cellucid doesn’t start, your environment blocks required
 | JavaScript | A plain sentence replaces the app |
 | **WebGL2** | Hard stop: “WebGL2 is required but not supported in this browser.” There is no software renderer |
 | **Gzip decompression** (`DecompressionStream`) | Compressed payloads are refused before the request is made, with a message naming the missing support |
-| Web Workers | Only the benchmark’s off-thread data generation needs this |
+| Web Workers | Required: every dataset is read in the AnnData reader worker; figure export and the spatial index also run in workers |
 | `localStorage` | Community Annotation refuses to run; preferences stop persisting |
-| IndexedDB | Caches degrade **silently** — repeat analyses just get slower |
+| IndexedDB | Community Annotation **Pull** fails with a message; the annotation view on screen is kept |
 | Clipboard write | “Copy” actions report that you must select the text manually |
 
-Cellucid does **not** use the File System Access API, `SharedArrayBuffer`, or
-`OffscreenCanvas`, so a browser or policy that blocks those is not the cause of
-your problem.
+Cellucid does **not** use the File System Access API's file pickers or
+`SharedArrayBuffer`, so a browser or policy that blocks those is not the cause
+of your problem. Where the browser offers the origin-private file system
+(OPFS), Cellucid keeps a large gene index and the converted copy of an R object
+there; without it they stay in memory. Figure export (PNG and Hybrid SVG) draws
+its points on an `OffscreenCanvas`.
 
 **If you’re running locally (developer / power user)**
 
@@ -348,10 +369,10 @@ This is for “my dataset won’t load”, “spinner forever”, “missing emb
 
 **First: identify your loading path**
 
-- Export folder (recommended) → {doc}`../b_data_loading/03_browser_file_picker_tutorial`
+- A local file or folder (`.h5ad`, `.zarr` folder or `.zarr.zip`, `.h5mu`, `.loom`, 10x `.h5` or `outs/` folder, `.rds`/`.rda`, MatrixMarket folder) → {doc}`../b_data_loading/03_browser_file_picker_tutorial`; formats: {doc}`../b_data_loading/07_file_format_expectations`
 - Server mode (`cellucid serve ...`) → {doc}`../b_data_loading/04_server_tutorial`
 - Jupyter notebook integration → {doc}`../b_data_loading/05_jupyter_tutorial`
-- GitHub-hosted exports → {doc}`../b_data_loading/02_local_demo_tutorial`
+- A link or a published dataset catalog → {doc}`../b_data_loading/14_open_from_link`, {doc}`../b_data_loading/02_local_demo_tutorial`
 
 If you’re not sure which applies: {doc}`../b_data_loading/01_loading_options_overview`.
 
@@ -360,7 +381,7 @@ If you’re not sure which applies: {doc}`../b_data_loading/01_loading_options_o
 1) Read the message and match it in {ref}`find-the-message` — the four
    “would not load” causes look alike and are not.  
 2) If demos fail too, this is likely an environment/browser issue → {doc}`../a_orientation/02_system_requirements`  
-3) If you loaded a large `.h5ad` directly in the browser, switch to server mode → {doc}`../b_data_loading/04_server_tutorial`  
+3) If you loaded a large cell-major (CSR) `.h5ad`, the first genes take longer: the reader indexes the matrix by gene in the background, once per dataset; `cellucid serve` hands a file to the same reader → {doc}`../b_data_loading/04_server_tutorial`  
 4) DevTools → Network: look for 404/CORS/timeout errors (don’t guess)  
 5) “Loaded but empty” can be filters/visibility → {doc}`../e_filtering/07_troubleshooting_filtering`
 
@@ -391,7 +412,7 @@ Use this section when Cellucid is slow, the canvas is blank, or you see WebGL-re
 2) Make the window smaller. This is the highest-yield single test.
 3) Switch to **Points** render mode while debugging (smoke + heavy overlays can hide root causes).  
 4) Clear snapshots. Then, if you need a comparison of a large dataset, turn on
-   Level-of-Detail first: every view draws every point again —
+   Level of detail first: every view draws every point again —
    {doc}`../n_benchmarking_performance/06_edge_cases_performance` explains it.
 5) If you see “WebGL context lost”: reload, then re-try with reduced load.
 
@@ -422,13 +443,13 @@ Selection/highlighting problems are often mismatches between:
 
 **Fast checks**
 
-1) Check **Active filters** (most “missing highlights” are just hidden): {doc}`../e_filtering/07_troubleshooting_filtering`  
+1) Check **Filters** (most “missing highlights” are just hidden): {doc}`../e_filtering/07_troubleshooting_filtering`  
 2) Confirm the active highlight page and that the group checkbox is enabled.  
 3) Confirm you are interacting with the intended panel: {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`  
 4) Confirm the tool’s modifier keys (`Alt`, `Shift+Alt`, `Ctrl/Cmd+Alt`), or on a
    touch screen that **Select mode** is on.  
-5) If clicks miss cells, **zoom in** — the pick radius is fixed and only drawn
-   cells are hittable. Point size is not the knob.
+5) If clicks miss cells, zoom in or raise **Point size**: a click hits the dot
+   as drawn, and only drawn cells are hittable.
 
 **Go to the deep dives**
 
@@ -449,7 +470,7 @@ Analysis issues usually come from one of four root causes:
 
 1) Do you have a non-empty highlight page to analyze? → {doc}`../f_highlighting_selection/index`  
 2) Are you on the view you think you are (live vs snapshot)? → {doc}`../c_core_interactions/04_view_layout_live_snapshots_small_multiples`  
-3) Does this export contain expression at all? If the panel says it publishes no
+3) Does this dataset contain expression at all? If the panel says it publishes no
    gene expression fields, no amount of configuration will help → {doc}`../h_analysis/08_analysis_mode_genes_panel`
 
 **Go to the deep dives**
@@ -489,7 +510,7 @@ sometimes a local path or source URL. See
 (community-annotation)=
 ## Community annotation issues
 
-This section is for problems in **Community Annotation** (GitHub sync, Pull/Publish, consensus, “why don’t I see other people’s votes?”).
+This section is for problems in **Community annotation** (GitHub sync, Pull/Publish, consensus, “why don’t I see other people’s votes?”).
 
 **Fast checks (fixes many reports)**
 
@@ -524,7 +545,7 @@ If you’re asking for help (or filing an issue), include:
 
 1) **Where you ran Cellucid** (hosted URL vs local app vs embedded in Jupyter)  
 2) **Browser + OS** (include versions)  
-3) **Dataset source and loading path** (export folder / server mode / Jupyter / GitHub)  
+3) **Dataset source and loading path** (local file / link / server mode / Jupyter)  
 4) **Dataset identity** (id/fingerprint, if available)  
 5) **Exact steps to reproduce** (numbered; include whether snapshots/filters/highlights were involved)  
 6) **The exact wording of the message**, not a paraphrase — the wording is what

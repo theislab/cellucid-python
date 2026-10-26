@@ -47,25 +47,23 @@ def test_console_output_escapes_only_unencodable_cp1252_text() -> None:
 def test_prepare_accepts_unicode_values_with_strict_cp1252_console(
     tmp_path: Path,
 ) -> None:
-    target = tmp_path / "输出-🧬"
+    """prepare() reports renamed cells through the console, which must not fail."""
+    target = tmp_path / "输出-🧬.h5ad"
     completed = _run_with_cp1252(
         "import sys\n"
         "from pathlib import Path\n"
         "import numpy as np\n"
         "import pandas as pd\n"
-        "from cellucid.prepare_data import prepare\n"
+        "from cellucid import prepare\n"
         "embedding = np.array([[-3.0, 1.0], [0.5, 5.0], [8.0, -2.0]], "
         "dtype=np.float32)\n"
         "prepare(\n"
-        "    latent_space=embedding.copy(),\n"
-        "    obs=pd.DataFrame({'score': [0.25, 0.5, 0.75]}),\n"
+        "    Path(sys.argv[1]),\n"
+        "    format='h5ad',\n"
+        "    obs=pd.DataFrame({'score': [0.25, 0.5, 0.75]}, index=['细胞🧬', '细胞🧬', 'b']),\n"
         "    embeddings={'X_umap': embedding},\n"
-        "    out_dir=Path(sys.argv[1]),\n"
         "    dataset_name='细胞 atlas 🧬',\n"
         "    dataset_id='unicode-console',\n"
-        "    created_at='2026-01-02T03:04:05Z',\n"
-        "    obs_categorical_dtype='uint16',\n"
-        "    centroid_min_points=1,\n"
         ")\n",
         str(target),
     )
@@ -74,10 +72,9 @@ def test_prepare_accepts_unicode_values_with_strict_cp1252_console(
     assert completed.returncode == 0, stderr
     assert "UnicodeEncodeError" not in stderr
     stdout = completed.stdout.decode("cp1252")
-    assert "\\u8f93\\u51fa-\\U0001f9ec" in stdout
+    assert "\\u7ec6\\u80de\\U0001f9ec-1" in stdout
     assert "\\u2192" in stdout
-    assert "\\u2713" in stdout
-    assert (target / "dataset_identity.json").is_file()
+    assert target.is_file()
 
 
 def test_cli_help_usage_and_version_survive_strict_cp1252_console() -> None:

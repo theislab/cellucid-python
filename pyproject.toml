@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cellucid"
-version = "0.9.4"  # CELLUCID_VERSION
+version = "0.9.5"  # CELLUCID_VERSION
 description = "Interactive Single-Cell Data Visualization"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
@@ -56,7 +56,17 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+# MuData objects (prepare(data=mdata), reading .h5mu and MuData Zarr): the
+# writer needs no mudata, but building or reading a MuData does.
+mudata = [
+    "mudata>=0.3.2,<0.5",
+]
 dev = [
+    # The test suite exercises MuData (prepare(data=mdata), serving .h5mu and
+    # MuData Zarr, the R cross-writer stores). A development install that
+    # lacked it skipped those tests without a word, in CI and in the release
+    # gate alike, so the dev extra brings the mudata extra with it.
+    "cellucid[mudata]",
     "pytest>=7.0",
     "pytest-cov>=4.0",
     # Linters are pinned to an exact version, and the docs extra already pins
@@ -98,7 +108,7 @@ Citation = "https://github.com/theislab/cellucid-python/blob/main/CITATION.cff"
 where = ["src"]
 
 [tool.setuptools.package-data]
-cellucid = ["py.typed"]
+cellucid = ["py.typed", "input_formats.json"]
 
 [tool.ruff]
 line-length = 100

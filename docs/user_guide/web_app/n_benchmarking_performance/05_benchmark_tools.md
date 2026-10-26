@@ -5,7 +5,7 @@
 **What you’ll learn:**
 - How to run the built-in **synthetic rendering benchmark**
 - How to interpret the metrics (FPS, frame time, GPU memory, LOD)
-- How to use “Copy Situation Report” for bug reports and regressions
+- How to use “Copy situation report” for bug reports and regressions
 - What this benchmark does *not* measure (and how to benchmark those separately)
 
 **Prerequisites:**
@@ -18,23 +18,26 @@
 
 Open:
 
-- Left sidebar → **Performance Benchmark** accordion
+- Left sidebar → **Benchmark** accordion
 
 It includes:
 - six quick presets: 500K, 1M, 5M, 10M, 20M, 40M points,
 - a custom point count input accepting any whole number from 1 to 250,000,000,
-- eight synthetic **data patterns**,
-- a **Load Synthetic Data** button,
+- eight synthetic **data patterns** (**Pattern**),
+- **Embeddings**: **One, as generated**, or **Five: 3 in 3D, 2 in 2D** (extra
+  rotated, warped and projected copies of the generated cloud, each built when a
+  view first shows it, as a dataset with several embeddings would be),
+- a **Load synthetic data** button,
 - a live metric readout that appears as soon as the panel is open,
-- a **Copy Situation Report** button,
-- and an **Analyze Performance** tool that suggests what to change.
+- a **Copy situation report** button,
+- and an **Analyze performance** tool that suggests what to change.
 
 ```{figure} ../../../_static/screenshots/benchmarking_performance/benchmark-panel-controls.png
-:alt: The Performance Benchmark panel before any run, showing the six point-count presets from 500K to 40M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons; the live performance readout is omitted.
-:width: 516px
+:alt: The Benchmark panel before any run: Synthetic data with six presets from 500K to 40M, Point count, Pattern and Embeddings, the Load synthetic data button, and Diagnostics with Analyze performance and Copy situation report; the live performance readout is omitted.
+:width: 532px
 
 The panel before its first run. The live metric readout that sits between
-**Load Synthetic Data** and **Copy Situation Report** is left out of this
+**Load synthetic data** and **Copy situation report** is left out of this
 picture on purpose: it would show the frame rate of the machine that took the
 screenshot. Its fields are listed in the table under *What the panel reports*
 below.
@@ -75,16 +78,16 @@ It is especially useful for answering questions like:
 
 ## Quick start (3 minutes)
 
-1) Open **Performance Benchmark** in the left sidebar.
+1) Open **Benchmark** in the left sidebar.
 2) Click a preset like **500K** or **1M**.
-3) Click **Load Synthetic Data**.
+3) Click **Load synthetic data**.
 4) Orbit/pan/zoom for ~10 seconds and watch:
    - **FPS**
-   - **Frame Time**
-   - **GPU Memory**
-5) If it feels slow, click **Analyze Performance** and read the “What to do” list.
+   - **Frame time**
+   - **GPU memory**
+5) If it feels slow, click **Analyze performance** and read the “What to do” list.
 
-If you want a copy/paste summary for a bug report, click **Copy Situation Report**.
+If you want a copy/paste summary for a bug report, click **Copy situation report**.
 
 ---
 
@@ -99,7 +102,7 @@ If you’re comparing two builds or changes, make the benchmark comparable:
 3) Start in points mode (smoke mode is a different workload).
 4) Use the same preset count and the same pattern.
 5) Let FPS stabilize for ~5–10 seconds, then record the metric.
-6) Wait for **Timing Details** to appear before trusting p95 — it needs at least
+6) Wait for **Timing details** to appear before trusting p95 — it needs at least
    30 sampled frames.
 
 If you want statistics, repeat the run 3–5 times and report the median.
@@ -117,18 +120,18 @@ eight options, in the order they appear:
 
 | Pattern | What it produces | Use it to test |
 |---|---|---|
-| **Model Surface** *(default)* | Points sampled over a loaded 3D model surface | A dense, structured shell — the pattern the acceptance samples used |
+| **Model surface** *(default)* | Points sampled over a loaded 3D model surface | A dense, structured shell — the pattern the acceptance samples used |
 | **Atlas-like** | Many groups spread across the space | “Many groups across space” intuition |
-| **Batch Effects** | Offset duplicate structure | Overlapping-population intuition |
-| **Gaussian Clusters** | Compact blobs | The closest analogue to a clustered embedding |
-| **Uniform Random** | Points everywhere, no structure | The harshest case for LOD and frustum culling |
+| **Batch effects** | Offset duplicate structure | Overlapping-population intuition |
+| **Gaussian clusters** | Compact blobs | The closest analogue to a clustered embedding |
+| **Uniform random** | Points everywhere, no structure | The harshest case for LOD and frustum culling |
 | **Octopus** | Radiating arms | Elongated, trajectory-like structure |
-| **3D Spirals** | Interleaved spiral arms | Fine structure that LOD can destroy visibly |
+| **3D spirals** | Interleaved spiral arms | Fine structure that LOD can destroy visibly |
 | **Flat UMAP** | A dense 2D manifold | The common 2D-embedding shape |
 
-If you are testing *rendering limits*, Uniform Random is often the harshest,
+If you are testing *rendering limits*, Uniform random is often the harshest,
 because nothing can be culled. If you are testing *realistic single-cell
-scenes*, Gaussian Clusters or Atlas-like are more representative.
+scenes*, Gaussian clusters or Atlas-like are more representative.
 
 Generation is seeded, so the same pattern and count produce the same points on
 every run, and it happens on a worker thread — the interface stays responsive
@@ -147,11 +150,11 @@ generation time.
 |---|---|---|
 | **Points** | count | How many synthetic points were published |
 | **FPS** | whole frames per second | Derived from recent frame times |
-| **Frame Time** | `X.XX ms`, sometimes with a `CPU Y.YY ms` line under it | Wall time for a frame; the second line is the main-thread time spent issuing the last frame's draw calls (not GPU time), shown only when the browser's coarse timer resolves it above zero |
-| **GPU Memory** | `N.N MB`, or `~N.N MB (estimate)` | Reported where the browser exposes it; otherwise estimated from the point count |
-| **LOD Level** | `Full`, or `Level N` | Which level of detail the renderer settled on |
-| **Visible Points** | count | How many points survived LOD and culling |
-| **Timing Details → min / p95 / max** | `X.XX ms` each | Frame-time distribution. Appears only once at least 30 frames have been sampled |
+| **Frame time** | `X.XX ms`, sometimes with a `CPU Y.YY ms` line under it | Wall time for a frame; the second line is the main-thread time spent issuing the last frame's draw calls (not GPU time), shown only when the browser's coarse timer resolves it above zero |
+| **GPU memory** | `N.N MB`, or `~N.N MB (estimate)` | Reported where the browser exposes it; otherwise estimated from the point count |
+| **LOD level** | `Full`, or `Level N` | Which level of detail the renderer settled on |
+| **Visible points** | count | How many points survived LOD and culling |
+| **Timing details → min / p95 / max** | `X.XX ms` each | Frame-time distribution. Appears only once at least 30 frames have been sampled |
 | **Generated in … ms** | whole ms | How long the synthetic set took to build |
 
 :::{important}
@@ -159,7 +162,7 @@ The six headline tiles are **CPU-side wall-clock measurements** taken between
 frames. They are not GPU timer readings, so they include anything else the tab
 was doing.
 
-Real GPU timing exists, but only inside **Analyze Performance**, which uses the
+Real GPU timing exists, but only inside **Analyze performance**, which uses the
 browser’s disjoint-timer-query extension where the driver provides it and falls
 back to CPU estimates where it does not. If you need to attribute time to the
 GPU specifically, that is the tool — not the headline FPS.
@@ -189,10 +192,10 @@ GPU specifically, that is the tool — not the headline FPS.
 **LOD level and visible points**
 
 - LOD exists to reduce the number of rendered points when zoomed out.
-- If LOD reduces **Visible Points** and FPS improves, the renderer is adapting
+- If LOD reduces **Visible points** and FPS improves, the renderer is adapting
   successfully.
-- If **Visible Points** stays high and FPS stays low, try LOD in Visualization —
-  and lower `Force LOD level:` too when you need to go past `Auto`'s floor of
+- If **Visible points** stays high and FPS stays low, try LOD in Visualization —
+  and lower `Force LOD level` too when you need to go past `Auto`'s floor of
   `min(2,000,000, cells ÷ 8)` points,
   a smaller window, a smaller point size, or turning antialiasing off. Shader
   quality did not change frame time measurably on the hardware measured, in 2D
@@ -204,9 +207,9 @@ Related docs:
 
 ---
 
-## “Copy Situation Report” (use this for bug reports)
+## “Copy situation report” (use this for bug reports)
 
-The **Copy Situation Report** button is meant to produce a compact block of text you can paste into:
+The **Copy situation report** button is meant to produce a compact block of text you can paste into:
 - a GitHub issue,
 - a performance regression note,
 - or a lab internal thread.
@@ -218,13 +221,13 @@ If you’re filing an issue, follow {doc}`09_reporting_performance_bugs`.
 
 ---
 
-## “Analyze Performance” (why is it slow?)
+## “Analyze performance” (why is it slow?)
 
-The **Analyze Performance** button runs a short measurement and produces:
-- a **Problems Found** list naming one primary bottleneck and any contributing
+The **Analyze performance** button runs a short measurement and produces:
+- a **Problems found** list naming one primary bottleneck and any contributing
   ones,
 - a prioritized **What to do** checklist,
-- and a collapsed **Show detailed stats** block with the per-phase overheads.
+- and a collapsed **Detailed stats** block with the per-phase overheads.
 
 The bottleneck names it can print are `GPU`, `CPU`, `Fragment/Fill Rate`,
 `Vertex Processing`, `LOD Selection`, `Frustum Culling`, `Frame Stuttering`,

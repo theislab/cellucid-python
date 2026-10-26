@@ -6,8 +6,10 @@ Context (so the ecosystem is clear):
 - **Cellucid** is the **web app** (the interactive viewer UI).
 - **cellucid-python** is the **helper package** you use from **Python/CLI** to prepare data, run servers, embed the viewer, and integrate with notebooks.
 - **cellucid-annotation** is a helper repo for community annotation workflows.
-- **cellucid-r** prepares R data for the same web export contract; Python owns
-  notebook embedding, servers, and hooks.
+- **cellucid-r** writes the same Cellucid-ready AnnData from R and has its own
+  viewer (`cellucid_view()`), which uses the same viewer channel; this chapter
+  covers the Python side (R:
+  {doc}`../../r_package/d_viewing_loading/06_hooks_selection_and_sessions`).
 
 ## Where to start (pick one)
 

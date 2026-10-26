@@ -10,8 +10,8 @@ This page focuses on the second style, which is often easier for notebook workfl
 ## `viewer.state`: latest-event snapshot
 
 `viewer.state` is a small thread-safe container with:
-- `ready`, `selection`, `hover`, `click`, `command_error`: the *latest payload*
-  for those event types (or `None`)
+- `ready`, `selection`, `hover`, `click`, `command_error`, `data_mapping`: the
+  *latest payload* for those event types (or `None`)
 - `last_event_type`, `last_event`, `last_updated_at`: generic “what happened most recently”
 
 Example:
@@ -52,13 +52,13 @@ cells = event["cells"]
 print("Selected:", len(cells))
 ```
 
-### Example: wait for a specific session-bundle requestId
+### Example: wait until the user changes the data mapping
 
 ```python
 event = viewer.wait_for_event(
-    "session_bundle",
-    timeout=60,
-    predicate=lambda e: e.get("requestId") == expected_request_id,
+    "data_mapping",
+    timeout=None,
+    predicate=lambda e: e["origin"] == "user",
 )
 ```
 

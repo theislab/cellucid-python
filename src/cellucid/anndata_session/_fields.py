@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
+from .._plural import plural
 from ..data_mapping import mapped_expression_matrix, resolve_gene_names
 from ..session_codecs import decode_user_defined_codes
 from ._primitives import (
@@ -108,8 +109,9 @@ def _numeric_series(
         or np.issubdtype(array.dtype, np.complexfloating)
     ):
         raise TypeError(f"{label} must contain real numeric values")
-    if not np.isfinite(array).all():
-        raise ValueError(f"{label} must contain only finite values")
+    # Copied as the viewer copies them (``overlay-public.js``): NaN, the
+    # stored missing value -- and every cell a MuData modality did not
+    # measure -- stays NaN.
     return pd.Series(array.copy(), index=obs_index)
 
 
@@ -409,7 +411,7 @@ def _plan_user_defined_fields(
                 raise ValueError(f"{code_chunk_id} dtype {codes.dtype} does not match {codes_type}")
             if len(codes) != codes_length:
                 raise ValueError(
-                    f"{code_chunk_id} contains {len(codes)} codes, expected {codes_length}"
+                    f"{code_chunk_id} contains {len(codes)} {plural(len(codes), 'code')}, expected {codes_length}"
                 )
 
         category_codes = codes.astype(np.int64, copy=True)
@@ -424,7 +426,7 @@ def _plan_user_defined_fields(
             code = int(category_codes[position])
             raise ValueError(
                 f"User-defined categorical field {field_id!r} contains code "
-                f"{code} at position {position}, but declares {len(categories)} categories"
+                f"{code} at position {position}, but declares {len(categories)} {plural(len(categories), 'category', 'categories')}"
             )
 
         if should_materialize:

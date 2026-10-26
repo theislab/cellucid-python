@@ -10,13 +10,13 @@ directly.
 ## The benchmark panel
 
 ```{figure} ../../../_static/screenshots/benchmarking_performance/benchmark-panel-controls.png
-:alt: The Performance Benchmark panel before any run, showing the six point-count presets from 500K to 40M, the custom point count field, the data pattern dropdown, and the Load Synthetic Data, Copy Situation Report and Analyze Performance buttons; the live performance readout is omitted.
-:width: 516px
+:alt: The Benchmark panel before any run: Synthetic data with six presets from 500K to 40M, Point count, Pattern and Embeddings, the Load synthetic data button, and Diagnostics with Analyze performance and Copy situation report; the live performance readout is omitted.
+:width: 532px
 
-The **Performance Benchmark** accordion as it appears before a run: six presets
+The **Benchmark** accordion as it appears before a run: six presets
 from 500K to 40M, a custom point count, the data pattern selector, and the three
 actions. The live metric grid that opening the panel shows below **Load
-Synthetic Data** is omitted from the capture; its fields are documented in
+synthetic data** is omitted from the capture; its fields are documented in
 {doc}`05_benchmark_tools`.
 ```
 
@@ -36,12 +36,12 @@ they can be checked against the interface and do not decay.
 ## Acceptance samples (historical, one machine)
 
 ```{figure} ../../../_static/screenshots/benchmarking_performance/benchmark-panel.png
-:alt: Cellucid Performance Benchmark rendering a 10-million-point GLB model surface while showing the live synthetic-data controls and renderer metrics.
+:alt: The whole window after the Benchmark panel generated one million points of the Model surface pattern: the synthetic point cloud on the canvas and the panel's presets, point count, pattern and embeddings controls in the sidebar; the live readout is omitted.
 :width: 1440px
 
-Build 2026-07-26.4 rendering the 10-million-point Model Surface pattern in
-Chromium on an Apple M1 Pro. Read this as evidence that a ten-million-point
-scene renders and reports coherent statistics, not as a frame rate to expect.
+One million points of the **Model surface** pattern, made by **Load
+synthetic data**, beside the panel that made them. The live readout is
+omitted: it would report the machine that took the picture, not Cellucid.
 ```
 
 The scripted 1440 × 1000 acceptance series recorded the following samples on
@@ -85,20 +85,19 @@ grid of ⌈√n⌉ columns (four as 2×2). That difference matters more than the
 the height of the pane a point is drawn in.
 
 ```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
-:alt: The whole window in Grid compare with the sidebar open: two equal panels fill the area to the right of the sidebar and show the Pancreas 3D embedding from one linked camera — the left panel, the live view, coloured by cell_type, and the right panel, the kept view, recoloured by S_score on a Viridis scale — each under a title chip naming its field. The sidebar, scrolled to Compare Views in an earlier interface, lists badge 1 cell_type and the selected badge 2 S_score above the Layout select set to Grid compare, and Coloring & Filtering shows S_score in the Continuous obs select.
+:alt: The whole window in Grid compare with the sidebar open: two equal panels to the right of the sidebar show the Pancreas 3D embedding from the same linked camera — view 1 coloured by cell_type, view 2 recoloured by S_score on a Viridis scale — each under a title chip naming its embedding and field. The sidebar shows Compare views with the two view rows, each marked linked and Orbit, View 2 shows UMAP · 3D, Keep view, Link cameras, Layout Grid compare and Clear, and Coloring & filtering with S_score in the Continuous obs select.
 :width: 1440px
 
 Two views share the full canvas height and split the width to the right of the
 sidebar equally, so each point keeps its full size and the pair draws every
 cell twice — roughly twice the point shading of a single view. This is the most
 expensive layout per unit of insight — tune in one view first, then split.
-(Earlier interface: the view rows now also name the embedding each view shows.)
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/dark-theme-multiview.png
-:alt: The whole window in the dark theme on the Grid (dark) background, in Grid compare with the sidebar open: two equal panels to the right of the sidebar show the Pancreas 3D embedding coloured by cell_type from one linked camera, each under a cell_type title chip. The sidebar, scrolled to Visualization in an earlier interface, reads Theme Dark and Background Grid (dark), and Compare Views below it lists the two view badges.
+:alt: The whole window in the dark theme on the Grid (dark) background, in Grid compare with the sidebar open: two equal panels show the Pancreas 3D embedding coloured by cell_type from the same linked camera, each under a title chip. The sidebar shows Visualization with Theme Dark and Background Grid (dark), and Compare views below it with the two view rows.
 :width: 1440px
 
 Theme and background apply to every panel of the comparison layout alike, and
-neither choice changes the cost of the frame (earlier interface).
+neither choice changes the cost of the frame.
 ```

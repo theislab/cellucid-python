@@ -15,7 +15,9 @@ report
 
 This report includes:
 - server probes (`/_cellucid/health`, `/_cellucid/info`, `/_cellucid/datasets`)
-- `dataset_identity_probes`, keyed by every exact declared dataset id/path
+- `anndata_store_probes`, keyed by every exact listed dataset id (a `HEAD` and
+  a one-byte `Range` read of the served AnnData store, which a readable store
+  answers with `206` and `Content-Range`)
 - ping/pong roundtrip (Python → iframe → Python)
 - a frontend “debug snapshot” (iframe URL/origin/user agent)
 - recent accepted-event counts grouped by exact event type
@@ -24,15 +26,23 @@ If you include this report when asking for help, debugging is usually 10× faste
 
 ---
 
-## Symptom: iframe shows “Cellucid viewer UI could not be loaded”
+## Symptom: the viewer UI cannot be established or served
 
 ### Symptom
-The iframe loads an error page saying the viewer UI could not be loaded.
+`show_anndata(...)` / `AnnDataViewer(...)` raises while establishing the
+viewer's web build, `viewer.display()` raises while verifying it, or an iframe
+that was already shown reloads to the plain text “Internal server error”.
 
 ### Likely causes (ordered)
-1. No outbound network access to the configured web source.
-2. The source inventory or one declared asset failed exact validation.
-3. The selected generation directory is not writable.
+1. No outbound network access to the configured web source (the constructor
+   raises: every viewer start establishes the build again).
+2. The source inventory or one declared asset failed exact validation (the
+   constructor raises).
+3. The selected generation directory is not writable (the constructor raises).
+4. The generation was removed after the viewer started (for example
+   `viewer.clear_web_cache()`): `display()` refuses it, and the server can no
+   longer read a verified page to answer with (the iframe text above; the
+   server log names the missing cache directory).
 
 ### How to confirm
 - In the debug report, check:
@@ -89,19 +99,26 @@ browser cannot reach the kernel-side loopback URL.
 The viewer UI is interactive, but Python callbacks do not fire.
 
 ### Likely causes (ordered)
-1. The iframe cannot reach the server’s `/_cellucid/events` or `/_cellucid/selection` endpoint (proxy/mixed-content/firewall).
-2. Requests to `/_cellucid/events` or `/_cellucid/selection` are blocked by an ad blocker / corporate proxy.
-3. You are interacting with a stale iframe (kernel restarted; viewerId no longer registered).
-4. The kernel's machine could not hold the selection (HTTP 413 from `/_cellucid/selection`). A selection costs 4 bytes a cell on the wire and about 36 bytes a cell as the `list[int]` hooks receive.
+1. The viewer's channel (`/_cellucid/ws`) could not open: a proxy in between
+   does not pass WebSockets, or refuses the page's origin. The viewer says so
+   in a notice ("…cannot open its channel…").
+2. You are interacting with a stale iframe (kernel restarted); it froze and
+   says Python stopped.
+3. A hook raised: the exception is in the log (`cellucid.viewer_channel`).
+   The event was still recorded (`viewer.state`), and the other hooks ran.
+4. The kernel's machine could not hold a very large selection. A selection
+   costs 4 bytes a cell on the wire and about 36 bytes a cell as the
+   `list[int]` hooks receive.
 
 ### How to confirm
 1. In Python, run:
    ```python
    viewer.debug_connection()
    ```
-2. In browser devtools → Network:
-   - look for requests to `/_cellucid/events` (and `/_cellucid/selection` for selections)
-   - confirm status codes (should be 200 JSON)
+   `channel_connected` must be `True`.
+2. In browser devtools → Network, filter `WS`:
+   - the `/_cellucid/ws` connection should be `101 Switching Protocols`;
+   - its frames show each event as you select, hover or click.
 3. Confirm you are using the right viewer object:
    - print `viewer.viewer_url` and compare with the iframe URL (if visible).
 
@@ -110,7 +127,10 @@ The viewer UI is interactive, but Python callbacks do not fire.
   - follow {doc}`13_security_cors_origins_and_mixed_content`
 - Stale iframe:
   - re-run the cell that creates the viewer
-- Payload too large:
+- Proxy without WebSockets:
+  - enable WebSocket proxying on the proxy, or open the viewer through SSH
+    port forwarding instead
+- Selection too large for the kernel's memory:
   - avoid selecting huge fractions of the dataset in one step
   - prefer session bundle capture for exporting large highlight membership sets
 
@@ -156,17 +176,15 @@ Calling `viewer.highlight_cells(...)` / `viewer.set_color_by(...)` / `viewer.res
 ### Likely causes (ordered)
 1. The viewer **rejected** the command — the field, index or colour was not one
    it could apply.
-2. Viewer not displayed (commands are sent via notebook JS injection).
+2. Viewer not displayed: commands wait in Python until a viewer page
+   connects, so nothing happens until one does.
 3. The iframe is stale or not the one tied to this Python viewer.
-4. Connectivity/proxy issues prevent the iframe from fully initializing Jupyter mode.
+4. Connectivity/proxy issues prevent the viewer channel (`/_cellucid/ws`)
+   from opening.
 5. The frontend and Python package did not come from the same exact current
    generation.
 
 ### How to confirm
-- Rejections are reported only by the web build that emits `command_error`.
-  Older builds — including the one currently published — refuse a command
-  silently, so on those the two checks below stay empty even when cause 1 is
-  what happened.
 - A rejected command prints to `sys.stderr` as soon as the viewer reports it:
   ```text
   [cellucid] viewer.set_color_by(...) did not take effect in the viewer: ...
@@ -177,7 +195,9 @@ Calling `viewer.highlight_cells(...)` / `viewer.set_color_by(...)` / `viewer.res
   ```
   A non-empty list means the command arrived and was refused — fix the
   argument, not the connection.
-- If `viewer._displayed` is False (notebooks): you didn’t display the viewer.
+- If `viewer.debug_connection()["displayed"]` is False (notebooks): you
+  didn’t display the viewer; `channel_connected` says whether a viewer page is
+  connected now.
 - Run:
   ```python
   viewer.wait_for_ready(timeout=60)
@@ -222,21 +242,22 @@ Calling `viewer.highlight_cells(...)` / `viewer.set_color_by(...)` / `viewer.res
 `viewer.get_session_bundle()` times out or raises.
 
 ### Likely causes
-1. Iframe can’t reach `/_cellucid/session_bundle` (connectivity/proxy).
-2. Pending request expired; server responds “No pending session bundle request”.
-3. The temporary directory has less free space than the bundle (HTTP 413).
+1. The viewer's channel is not connected (connectivity/proxy).
+2. The request timed out before the bundle arrived; the log says “Dropped a
+   session bundle nobody is waiting for”.
+3. The temporary directory has less free space than the bundle;
+   `get_session_bundle()` raises “The session bundle could not be saved: …”.
 
 ### How to confirm
-- Browser devtools → Network:
-  - look for
-    `/_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
-  - check status code and response text
-- In Python, inspect the debug report for recent `session_bundle` events.
+- Browser devtools → Network, filter `WS`: the `/_cellucid/ws` connection
+  shows the `requestSessionBundle` command and the binary frame that answers it.
+- In Python, inspect the debug report for `channel_connected` and recent
+  `session_bundle` and `command_error` events.
 
 ### Fix
 - Resolve any reported connectivity failure. An expired request is invalid;
-  one subsequent `viewer.get_session_bundle()` call creates a new exact
-  request ID.
+  one subsequent `viewer.get_session_bundle()` call (with a longer
+  `timeout=`) creates a new exact request ID.
 - Reduce session size (fewer highlight groups / less state).
 - Fix connectivity issues (proxy/mixed content).
 
@@ -249,6 +270,10 @@ An explicitly requested port is busy, or an automatically assigned viewer port
 does not match a tunnel configured earlier.
 
 ### Likely causes
+- Without `port=`, a notebook viewer takes 8765, or the next free port when
+  another viewer (or program) holds it, and prints a note saying so (Google
+  sign-in works only on 8765). A port you pass is used or refused, never
+  replaced.
 - You created multiple viewers and didn’t stop them.
 - You re-ran cells repeatedly without cleanup.
 
@@ -288,10 +313,10 @@ report
 In a browser:
 - open `<server_url>/_cellucid/health`
 - open devtools → Network:
-  - filter for `/_cellucid/events` and `/_cellucid/session_bundle`
+  - filter `WS` and select the `/_cellucid/ws` connection to see its frames
 
 ---
 
 ## Next steps
 
-- Reference (schemas + env vars): {doc}`16_reference`
+- Reference (schemas + endpoints): {doc}`16_reference`

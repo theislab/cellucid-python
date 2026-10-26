@@ -202,8 +202,8 @@ def test_the_sweep_reports_drift_and_tolerates_deliberate_divergence(tmp_path) -
         "version: 1.2.2  # CELLUCID_VERSION\n",
     )
     _write(
-        workspace / "cellucid-datasets" / "exports-v3" / "old" / "dataset_identity.json",
-        '{"cellucid_data_version": "0.0.9"}\n',
+        workspace / "cellucid-datasets" / "sources" / "build-environment.json",
+        '{"cellucid_producer": {"version": "0.0.9"}}\n',
     )
     for name in sweep.REPOSITORIES:
         _checkout(workspace / name)
@@ -309,19 +309,14 @@ def test_the_sweep_reads_the_git_index_and_not_the_working_tree(tmp_path) -> Non
         workspace / "cellucid-python" / "pyproject.toml",
         'version = "1.2.3"  # CELLUCID_VERSION\n',
     )
-    _write(workspace / "cellucid-datasets" / ".gitignore", "/exports-v3/_*/\n")
-    _write(
-        workspace / "cellucid-datasets" / "exports-v3" / "suo" / "dataset_identity.json",
-        '{"cellucid_data_version": "1.2.3"}\n',
-    )
     for name in sweep.REPOSITORIES:
         _checkout(workspace / name)
 
-    # A local scratch export, ignored and never committed. A working-tree walk
-    # would read it and put a value nobody published into a release report.
+    # A local build record, never committed. A working-tree read would put a
+    # value nobody published into a release report.
     _write(
-        workspace / "cellucid-datasets" / "exports-v3" / "_test" / "dataset_identity.json",
-        '{"cellucid_data_version": "0.0.1a2"}\n',
+        workspace / "cellucid-datasets" / "sources" / "build-environment.json",
+        '{"cellucid_producer": {"version": "0.0.1a2"}}\n',
     )
 
     artifacts = {
@@ -329,7 +324,7 @@ def test_the_sweep_reads_the_git_index_and_not_the_working_tree(tmp_path) -> Non
         for finding in sweep.collect(workspace).findings
         if finding.declaration.kind == sweep.ARTIFACT
     }
-    assert artifacts == {"cellucid-datasets/exports-v3/suo/dataset_identity.json"}
+    assert artifacts == set()
 
 
 def test_a_repository_without_a_git_index_can_not_be_swept(tmp_path, capsys) -> None:
@@ -339,8 +334,8 @@ def test_a_repository_without_a_git_index_can_not_be_swept(tmp_path, capsys) -> 
         'version = "1.2.3"  # CELLUCID_VERSION\n',
     )
     _write(
-        workspace / "cellucid-datasets" / "exports-v3" / "suo" / "dataset_identity.json",
-        '{"cellucid_data_version": "1.2.3"}\n',
+        workspace / "cellucid-datasets" / "sources" / "build-environment.json",
+        '{"cellucid_producer": {"version": "1.2.3"}}\n',
     )
     for name in sweep.REPOSITORIES:
         if name == "cellucid-datasets":

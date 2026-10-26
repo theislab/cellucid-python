@@ -114,8 +114,8 @@ So “performance” is usually about:
 
 **Typical fixes:**
 - keep the window smaller while exploring,
-- reduce `Point size (log):` once dots overlap on screen, and check whether
-  `Antialiasing (smooth point edges)` is on — those are the two rendering
+- reduce `Point size` once dots overlap on screen, and check whether
+  `Antialiasing` is on — those are the two rendering
   settings measured to move frame time
   ({doc}`02_performance_considerations_what_gets_slow_and_why`),
 - go back to one view, or go up to four (again, see the note),
@@ -158,7 +158,7 @@ every extra view is straightforwardly more work.
 
 **Fast confirmation tests:**
 1) If orbit/pan/zoom is smooth but filtering/analysis actions stutter, you’re likely CPU-bound.
-2) Turn Live filtering off (continuous fields) and apply once with `FILTER`. If it becomes smooth, you were recompute-bound.
+2) Turn Live filtering off (continuous fields) and apply once with `Filter`. If it becomes smooth, you were recompute-bound.
 
 **Typical fixes:**
 - avoid “recompute loops” (turn Live filtering off; make changes then apply once),
@@ -187,8 +187,8 @@ See {doc}`../e_filtering/05_performance_considerations` for the filtering-specif
 2) If the same action is faster the second time, you’re seeing caching effects (cold vs warm).
 
 **Typical fixes:**
-- use **Server Mode** for large `.h5ad` / huge datasets (see {doc}`../b_data_loading/04_server_tutorial`),
-- prefer exports that support lazy loading over “browser-only big file” workflows,
+- keep the data on a local disk; for data on a remote machine use **Server Mode** over an SSH tunnel (see {doc}`../b_data_loading/04_server_tutorial`), so only the bytes a view needs cross the network,
+- store a large expression matrix column-major (CSC), so no gene index has to be built before the first gene,
 - benchmark with controlled “cold vs warm cache” runs (see {doc}`04_benchmarking_methodology_and_metrics`).
 
 ---
@@ -201,7 +201,7 @@ Most costs in Cellucid are not “mysterious”—they scale with a small set of
 |---|---|---|
 | `n_cells` | Many operations are per-cell (visibility recomputation, colors, selections) | filter applies take longer; memory pressure grows |
 | Point size | A dot's area grows with the square of its size, so point size sets how many pixels the renderer has to cover | frame time rises steeply once points start overlapping on screen |
-| Number of views (1–4) | Each view draws every point again, so on a large dataset frame time grows with the view count; point size follows pane height, which only matters once points are large and overlapping | multiview stutters where one view is smooth; Level-of-Detail fixes it |
+| Number of views (1–4) | Each view draws every point again, so on a large dataset frame time grows with the view count; point size follows pane height, which only matters once points are large and overlapping | multiview stutters where one view is smooth; Level of detail fixes it |
 | Window pixel count (`width × height × dpr²`) | Overlays and post-processing scale with pixels | smoother when window is smaller |
 | `n_enabled_filters` | Each filter change re-derives visibility for every cell, testing each enabled filter | slider scrubbing becomes the main lag source |
 | Category count | Sorting labels, counts and colour mapping grow with it (the legend draws only the rows in view) | switching to the field slows; colours stop being distinguishable |
@@ -209,7 +209,7 @@ Most costs in Cellucid are not “mysterious”—they scale with a small set of
 
 :::{important}
 **Two of these were already set for you, from the cell count, when the dataset
-opened.** The point size, and whether `Antialiasing (smooth point edges)` is on
+opened.** The point size, and whether `Antialiasing` is on
 — on below 5,000,000 cells in 3D and below 200,000 in a 1D or 2D view, off at
 or above. Both are live settings you can
 change at any time, and both are the settings measured in
@@ -257,7 +257,7 @@ Avoid changing 5 settings at once—you won’t know what helped.
 Examples:
 - GPU: reduce views, reduce overlay density, avoid smoke.
 - CPU: apply filters once, reduce enabled filters, reduce analysis scope.
-- I/O: use server mode, move data to local disk, reduce data requested.
+- I/O: move data to local disk (or serve it where it lives), reduce data requested.
 
 ### Step 3 — Measure (even roughly)
 
@@ -305,7 +305,7 @@ If any of these match, start with {doc}`../a_orientation/02_system_requirements`
 1) **Pixels matter most.** Smaller windows (or lower-DPI monitors) can dramatically improve GPU-bound workflows — and so does a smaller point size, for the same reason.  
 2) **Avoid recompute loops.** Turn Live filtering off and apply once on large data.  
 3) **Measure the layout, don’t assume it.** One view and a 2×2 grid cost about the same; two- and three-view rows are the expensive ones.  
-4) **Use the right loading mode.** Big `.h5ad` in the browser is a trap; server mode is your friend.  
+4) **Keep the bytes close.** Read data from a local disk, or serve it from the machine that holds it; a column-major (CSC) matrix answers its first gene without an index pass.  
 5) **Report performance with context.** Dataset size + hardware + steps + a number beats “it’s slow”.
 
 ---

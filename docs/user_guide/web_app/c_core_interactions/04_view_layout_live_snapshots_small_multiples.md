@@ -4,8 +4,9 @@
 **Time:** 10 minutes
 
 Multiview makes controlled side-by-side comparisons of one loaded dataset.
-Cellucid supports the live view plus at most **three** kept views—up to four
-visible panels—and each view can show any embedding the dataset has turned on.
+Cellucid supports the live view plus any number of kept views (GPU memory, not
+a count, is the limit; see below), and each view can show any embedding the
+dataset has turned on.
 
 ## A useful comparison
 
@@ -74,7 +75,11 @@ A kept view starts as a copy of the selected view's:
 - centroid labels.
 
 From then on these belong to that view: coloring, filtering or switching the
-embedding of one view does not change the others. Highlight pages are a
+embedding of one view does not change the others. The fields themselves are
+the dataset's: renaming, deleting or restoring a field, or editing the
+categories of a field you made (merging or deleting a category, rebuilding a
+consensus column), changes it in every view, and each view keeps its own
+colours and hidden categories. Highlight pages are a
 separate feature: they belong to cells, not to views, and every view shows
 them.
 
@@ -156,12 +161,12 @@ Each row contains:
 - `×` when that view can be removed.
 
 ```{figure} ../../../_static/screenshots/web_app/multiview-two-panels.png
-:alt: The whole window in Grid compare with the sidebar open: two equal panels fill the area to the right of the sidebar and show the Pancreas 3D embedding from one shared camera — the left panel, the live view, coloured by cell_type, and the right panel, a kept view, recoloured by S_score on a Viridis scale — each under a title chip naming its field. The sidebar, scrolled to Compare Views in an earlier interface, lists badge 1 cell_type and the selected badge 2 S_score above the Layout select set to Grid compare, and Coloring & Filtering shows S_score in the Continuous obs select.
+:alt: The whole window in Grid compare with the sidebar open: two equal panels to the right of the sidebar show the Pancreas 3D embedding from the same linked camera — view 1 coloured by cell_type, view 2 recoloured by S_score on a Viridis scale — each under a title chip naming its embedding and field. The sidebar shows Compare views with the two view rows, each marked linked and Orbit, View 2 shows UMAP · 3D, Keep view, Link cameras, Layout Grid compare and Clear, and Coloring & filtering with S_score in the Continuous obs select.
 :width: 1440px
 
-Grid compare with the sidebar open (earlier interface: the rows now also name
-the embedding each view shows). The live view (cell_type) and a kept view
-recoloured by S_score (selected) sit in two equal panels to the right of the
+Grid compare with the sidebar open. Each row under **Views** names the
+embedding the view shows and its field: view 1 (cell_type) and the selected
+view 2, recoloured by S_score, sit in two equal panels to the right of the
 sidebar, framed by one linked camera, and each panel keeps its own coloring.
 ```
 
@@ -180,9 +185,11 @@ A matching-dataset `.cellucid-session` saves and restores:
 - whether **Link cameras** is on, and every view's own camera and navigation
   mode;
 - every view's embedding (as the embedding key and columns, so it is restored
-  onto the same array), field, filters and label.
+  onto the same array), field and filters;
+- whether each view shows centroid points and centroid labels.
 
-Restoration recreates the kept views rather than storing GPU buffers. The
+A view's label and filter summary are recomputed from its field and filters.
+Restoration recreates each kept view once rather than storing GPU buffers. The
 dataset itself is never embedded in the session. See
 {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored` and
 {doc}`../l_sessions_sharing/07_versioning_compatibility_and_dataset_identity`.

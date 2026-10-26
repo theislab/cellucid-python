@@ -11,11 +11,11 @@
 
 ---
 
-## Where the legend lives (Display options)
+## Where the legend lives (Legend)
 
 The legend appears under:
 
-- **Coloring & Filtering → Display options**
+- **Coloring & filtering → Legend**
 
 It is hidden until you select an active field (categorical obs, continuous obs, or a gene).
 
@@ -40,22 +40,22 @@ Each category row contains:
 - optional tools: **rename** (pencil) and **delete** (trash)
 
 ```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
-:alt: A legend with the hint Click a swatch to pick a color at the top, Show All and Hide All buttons below it, and eight rows; each row has a blue ticked checkbox, then a coloured square swatch, then a category name such as Alpha or Ngn3 high EP, then a right-aligned cell count such as 481 cells, then a small pencil icon and a small bin icon.
-:width: 428px
+:alt: The categorical legend for clusters: the Show all and Hide all buttons above eight rows, each holding a checkbox, a colour swatch, a label, a cell count, a rename pencil and a delete bin.
+:width: 488px
 
 One row, read left to right: **checkbox · swatch · label · count · rename ·
 delete**. The pencil renames the category; the bin merges it into
 `unassigned` and does **not** delete any cells.
 ```
 
-### Show All / Hide All
+### Show all / Hide all
 
 Buttons at the top:
-- **Show All**: checks all currently available categories
-- **Hide All**: unchecks all currently available categories
+- **Show all**: checks all currently available categories
+- **Hide all**: unchecks all currently available categories
 
 “Available” matters when other filters are active:
-- Categories with **0 available cells** are disabled (you can’t toggle them via Show/Hide All).
+- Categories with **0 available cells** are disabled (you can’t toggle them via **Show all** / **Hide all**).
 
 ### Category counts: “visible / available”
 
@@ -72,8 +72,8 @@ disabled, the row is greyed out, and hovering it shows
 `No cells available in this category after other filters`.
 
 ```{figure} ../../../_static/screenshots/filtering/legend-category-unavailable.png
-:alt: The same legend under an additional filter, where Beta, Delta, Epsilon and Pre-endocrine are drawn in grey with unticked disabled checkboxes and read 0 cells, while Alpha, Ductal, Ngn3 high EP and Ngn3 low EP remain black and ticked with counts of 1, 122, 10 and 16 cells.
-:width: 428px
+:alt: The clusters legend under a narrow S_score range filter: Alpha, Ductal, Ngn3 high EP and Ngn3 low EP stay ticked with small counts, while Beta, Delta, Epsilon and Pre-endocrine are greyed out with disabled checkboxes and read 0 cells.
+:width: 488px
 
 All three count states at once: `0 cells` on four disabled rows, and small
 plain counts on the four rows that still have cells. A row only prints
@@ -97,7 +97,7 @@ Pick high-contrast colors for categories you plan to compare side-by-side in mul
 
 Unchecking a category:
 - makes those cells invisible (fully transparent),
-- and adds a categorical filter entry to **Active filters**.
+- and adds a categorical filter entry to **Filters**.
 
 This is why hiding categories is a powerful workflow tool (not just cosmetic).
 
@@ -111,8 +111,12 @@ Cellucid tries to keep the workflow safe by preserving originals.
 :::{important}
 Editing behavior depends on whether the current field is a **source field** or a **user-defined derived field**:
 
-- For source fields: destructive edits usually create a **new derived field** and move the original into **Deleted Fields** (restorable).
+- For source fields: destructive edits usually create a **new derived field** and move the original into **Deleted fields** (restorable).
 - For already derived fields: repeated edits typically happen **in place** (faster, less clutter).
+
+An edit in place changes the field in every view at once: a kept view that
+shows the field is drawn again with its new categories, and keeps its own
+colours and hidden categories for the categories it already had.
 :::
 
 ### Rename a category
@@ -152,7 +156,7 @@ This is useful for:
 - iteratively collapsing labels while keeping a reversible history.
 
 Undo:
-- restore the original field from **Deleted Fields** (if a new derived field was created).
+- restore the original field from **Deleted fields** (if a new derived field was created).
 
 ---
 
@@ -160,7 +164,7 @@ Undo:
 
 You see a continuous legend when the active field is:
 - **Continuous obs**, or
-- **Gene Expression**
+- **Gene expression**
 
 ### Color scale (palette / colormap)
 
@@ -171,8 +175,8 @@ At the top, you’ll see:
 Click the gradient bar to open the **colormap menu**, then click a palette to apply it.
 
 ```{figure} ../../../_static/screenshots/web_app/legend-colormap-menu-open.png
-:alt: A legend headed COLOR SCALE (VIRIDIS) with its gradient bar expanded into a grid of small named gradient swatches — Viridis highlighted as active, then Plasma, Inferno, Magma, Cividis, Turbo, Twilight, Coolwarm and many more — above the Min and Max range sliders and the FILTER and RESET buttons.
-:width: 428px
+:alt: The colormap list open under the S_score colour bar: seven named gradients, Viridis, Plasma, Inferno, Magma, Cividis, Turbo and Twilight, with Viridis marked as the active one.
+:width: 488px
 
 The colormap menu, open. The active palette is marked, and the heading above
 the bar always names it — `Color scale (Viridis)` — so you can read the current
@@ -190,12 +194,12 @@ Practical guidance:
 Notes:
 - Zeros, negatives, and missing values render as neutral “None” gray.
 - Log scale affects coloring only; filtering remains in original units. With
-  **Rescale colorbar to slider range** on, a slider range that holds no positive
+  **Rescale to range** on, a slider range that holds no positive
   value simply draws its cells gray; the range filter still applies.
 
-### Rescale colorbar to slider range
+### Rescale to range
 
-**Rescale colorbar to slider range** controls whether the colormap spans:
+**Rescale to range** controls whether the colormap spans:
 - the full data range (Off), or
 - your current slider range (On).
 
@@ -205,37 +209,42 @@ On is best for bringing out contrast in a filtered subset; Off is best for consi
 
 ## Filtering controls inside the continuous legend
 
-Under **Filtering → Visible range** you’ll see:
+Under **Visible range** you’ll see:
 - **Live filtering** toggle
-- **Min** slider and **Max** slider
-- **FILTER** and **RESET** buttons
+- **Minimum** slider and **Maximum** slider
+- **Filter** and **Reset** buttons
 
 Behavior summary:
-- With Live filtering on, visibility updates as you drag sliders — and **FILTER
+- With Live filtering on, visibility updates as you drag sliders — and **Filter
   is greyed out and unclickable**, with the tooltip
   `Turn off Live filtering to use Filter`. There is nothing for it to do.
-- With Live filtering off, you drag first, then click FILTER to apply.
-- RESET works in both states and restores the full numeric range for that field.
+- With Live filtering off, you drag first, then click Filter to apply.
+- Reset works in both states and restores the full numeric range for that field.
 
 Filtering notes:
 - `Live filtering` starts `On`, and it goes back to `On` every time the legend
   is rebuilt — a different active field, a different colormap, a different kept
   view, or a loaded session. It is not saved in a `.cellucid-session`.
 - Missing (`NaN`) values are excluded when a numeric filter is active.
-- These filters appear in the **Active filters** box and (for obs fields) stack with other obs filters.
+- These filters appear in the **Filters** box and (for obs fields) stack with other obs filters.
 
-The complete filter inventory, with a screenshot of the disabled `FILTER`
+The complete filter inventory, with a screenshot of the disabled `Filter`
 button, is in
 {doc}`../e_filtering/04_common_filter_types_document_every_filter_the_ui_exposes`.
 
 ---
 
-## Extra controls in Display options
+## Extra controls in the Legend section
 
-### Outlier filter (latent space)
+### Outlier filter
 
-If the active field provides latent outlier quantiles, you’ll see:
-- **Outlier filter (latent space)** slider
+When the active field is a categorical field of the file, you’ll see, below
+**Show centroids**:
+- the **Outlier filter**: until a latent space is chosen, only its label,
+  its (i) and one **Choose latent space** button; then the slider, with at
+  most one short line under it saying what its first use reads (for example
+  "First use reads X_scVI (12 MB).") or, while that read runs, a progress bar
+  and **Cancel**
 
 See {doc}`03_color_by_behavior` for semantics and edge cases.
 
@@ -248,7 +257,7 @@ When the active field is categorical, you’ll also see:
 These controls toggle additional overlays that summarize categories in the embedding.
 
 ```{figure} ../../../_static/screenshots/web_app/window-centroids-and-labels.png
-:alt: The whole application window with the Pancreas embedding coloured by clusters, both Show centroids and Show labels ticked in the sidebar, and small markers with the category names Alpha, Beta, Delta, Ductal, Epsilon, Ngn3 high EP, Ngn3 low EP and Pre-endocrine drawn on the canvas at the centre of each coloured group.
+:alt: The Pancreas embedding coloured by clusters with Show centroids and Show labels both ticked, so each cluster carries a marker at its centre with its category name printed on it.
 :width: 1440px
 
 **Show centroids** puts a marker at each category's centre; **Show labels**
@@ -258,20 +267,25 @@ you want in a figure.
 ```
 
 Where the centres come from:
-- a dataset's own categorical fields carry the centroids written at export, one
-  set per embedding dimension;
-- a field you create — with `Create Categorical`, by merging or deleting a
+- a dataset's own categorical fields get each category's centre computed in
+  the browser from its codes and the cells' positions, once per embedding the
+  first time a view draws it, and cached on the field;
+- a field you create — with `Create categorical`, by merging or deleting a
   category, by duplicating a field — gets each category's centre as the plain
   mean of its cells' positions in the embedding the view draws. Centres are
   computed when the field is made, for every embedding already loaded; an
   embedding loaded later gets its centres when a view switches to it. Merging
-  or deleting its categories recomputes them, and a saved session stores them
-  and puts them back exactly where they were.
+  or deleting its categories recomputes them, and a saved session stores the
+  field's codes, from which its centres come back exactly where they were.
 
 Notes for multiview users:
 - centroid visibility is tracked per view, so different snapshots can show/hide centroids independently.
 
 Notes on counts:
+- a category no cell belongs to has no centre, so it gets no marker and no
+  label: a field whose category list is far longer than the categories its
+  cells use draws only the ones they use. A category that gains its first
+  cell (a merge, a rebuilt consensus column) gets its centroid then;
 - a centroid disappears when its category has no visible cells left, so
   centroids follow your filters rather than the raw data.
 

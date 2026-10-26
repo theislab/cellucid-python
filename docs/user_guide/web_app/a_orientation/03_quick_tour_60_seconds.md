@@ -13,27 +13,27 @@ If you prefer to learn by definition-first, read {doc}`04_ui_glossary_terminolog
 ## What appears on ordinary startup
 
 ```{figure} ../../../_static/screenshots/web_app/welcome-startup.png
-:alt: Cellucid welcome overlay shown over the loaded Suo single-cell embedding at page startup.
+:alt: The Cellucid welcome overlay as a first visit opens it, with Choose a dataset and Learn more, over the Suo atlas loaded behind it.
 :width: 1440px
 
 Every ordinary bundled or catalog startup opens the welcome overlay.
 The Suo dataset remains the sample
 catalog default and can finish loading behind it;
-dismissing the overlay is not remembered for the next ordinary load. An
-explicit Jupyter, remote-server, or GitHub-served startup skips the overlay
-because its data source has already been selected.
+dismissing the overlay is not remembered for the next ordinary load. A
+startup whose address already names its data (a Python or R viewer, a
+`cellucid serve` server, or a `?data=` link) skips the overlay.
 ```
 
 Choose **Choose a dataset** to open the data controls, or press {kbd}`Escape`
 to inspect the loaded default dataset first.
 
 ```{figure} ../../../_static/screenshots/web_app/startup-loaded-build.png
-:alt: Loaded Suo point cloud on a light grid with Community Annotation and Camera Path collapsed and a dated Build line in the sidebar footer.
+:alt: The Suo atlas loaded after the welcome overlay is dismissed, with every sidebar section collapsed so the footer shows, ending in the Version and Build line.
 :width: 1440px
 
-The fresh loaded state uses the light grid background. **Community Annotation** and
-**Camera Path** start collapsed, and the footer reports the exact web build
-identity. Yours will read a later build than this capture — the value changes
+Suo loaded after the welcome overlay is dismissed, on the light **Studio**
+backdrop, with every sidebar section collapsed so the footer shows: its last
+line is the version and the exact web build. Yours will read a later build than this capture — the value changes
 with every web release, which is why bug reports should quote your own.
 ```
 
@@ -45,7 +45,7 @@ This tour references UI areas by name (the app labels). One screenshot makes
 the rest of the docs much easier to follow.
 
 ```{figure} ../../../_static/screenshots/web_app/window-orientation-map.png
-:alt: The Cellucid window with a scrollable sidebar down the left side and a large canvas on the right; the sidebar is scrolled to a COLORING AND FILTERING panel holding a CATEGORICAL OBS dropdown reading clusters, a dashed DISPLAY OPTIONS box with an outlier slider and an eight-row legend of coloured category names with cell counts, and an ACTIVE FILTERS block reading Showing all 3,696 points; the canvas shows a three-dimensional point cloud inside a light grid box, coloured in the same eight colours as the legend.
+:alt: The whole application window with the Pancreas sample loaded, the sidebar showing Coloring & filtering with the embedding coloured by clusters, and the eight-row legend beside the matching colours on the canvas.
 :width: 1440px
 
 The whole app on the Pancreas sample. **Left**: one scrollable sidebar of
@@ -56,14 +56,13 @@ picture are always describing the same thing.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
-:alt: The Cellucid web app with the sidebar scrolled to a SESSION panel listing a dataset summary of 562K cells and 8K genes above sample and local-data controls, and a large multicoloured single-cell embedding filling the canvas on a light grid.
+:alt: The whole Cellucid window with the Pancreas sample coloured by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colours.
 :width: 1440px
 
-A much larger dataset — the **Suo** sample, 561,947 cells — with the sidebar
-scrolled up to the **Session** panel instead. Same two-part layout, and the
-same performance. This capture predates the current Suo generation: the gene
-count you will actually see is 5,103, not the count in the image. The published
-counts for every built-in sample are listed in
+The same sample coloured by `cell_type`, with the other sections collapsed so
+**Coloring & filtering** sits at the top: the three field selectors, the
+legend's eight rows with their cell counts, and **Filters** reading *Showing
+all 3,696 cells*. The published counts of every built-in sample are listed in
 {doc}`../b_data_loading/12_sample_dataset_provenance`.
 ```
 
@@ -75,21 +74,25 @@ counts for every built-in sample are listed in
 
 1) After dismissing the welcome overlay, inspect the **Session** accordion.
 2) Keep the loaded Suo sample, or choose another entry under **Sample
-   datasets**. **Pancreatic endocrinogenesis (scVelo)** is the standard
+   dataset**. **Pancreatic endocrinogenesis (scVelo)** is the standard
    1D/2D/3D velocity example; see
    {doc}`../b_data_loading/10_standard_pancreas_dataset`.
-3) Wait for the dataset info panel to populate (Cells/Genes/Obs fields).
+3) Wait for the **Dataset** box at the top of **Session** to name the dataset
+   and its cells and genes.
    Every sample opens each dimension on its default embedding; Pancreas also
    carries a 2D PCA embedding beside its 2D UMAP.
 
 **What success looks like**
 
 - The canvas shows points on the default light studio floor.
-- The dataset info panel shows non‑zero counts.
+- The **Dataset** box shows non‑zero cell and gene counts.
 
 :::{note}
-You can also load your own data from **Local data** (Prepared, H5AD, or Zarr
-ZIP) or from a **Remote server**, but those workflows are documented in
+You can also open your own data with **Open…** (**File…** for an `.h5ad`,
+`.zarr.zip`, `.h5mu`, `.loom`, 10x `.h5` or R `.rds` / `.rda`; **Folder…** for
+a Zarr folder, a Cell Ranger `outs/` folder or a MatrixMarket folder), or a
+link or a running server through the **Link or server** bar, but those
+workflows are documented in
 {doc}`../b_data_loading/index`.
 :::
 
@@ -103,7 +106,7 @@ ZIP) or from a **Remote server**, but those workflows are documented in
 4) In Orbit, drag to rotate, use the wheel or trackpad to zoom, and
    right-drag (or Shift-drag) to pan.
 
-The app does not start camera motion by default. **Camera Path** starts
+The app does not start camera motion by default. **Camera path** starts
 collapsed, its top transport is absent until at least two keyframes exist, and
 playback begins when you select **Play**. If you explicitly enable
 **Autoplay**, a ready path starts immediately and starts again when that
@@ -111,16 +114,16 @@ setting is restored from a session.
 
 ### 3) Color by a field (metadata or gene expression)
 
-1) Open **Coloring & Filtering**.
+1) Open **Coloring & filtering**.
 2) Pick one:
    - **Categorical obs** (clusters, batch, sample),
    - **Continuous obs** (QC metrics, scores), or
-   - **Gene Expression** (type a gene name into the search box).
+   - **Gene expression** (type a gene name into the search box).
 3) Look for the legend changing on the left.
 
 ```{figure} ../../../_static/screenshots/web_app/field-selectors-three-routes.png
-:alt: Three stacked controls labelled CATEGORICAL OBS holding clusters, CONTINUOUS OBS holding None and GENE EXPRESSION showing the placeholder Search genes, each followed by four small icon buttons, with the mouse pointer pressing the first dropdown.
-:width: 488px
+:alt: The Color by heading with its (i), above the three field selectors stacked in order — Categorical obs holding clusters, Continuous obs holding None, and an empty Gene expression search box — each followed by four small icon buttons, with the pointer pressing the first.
+:width: 504px
 
 The three ways in, in the order they appear. Only one can be active at a time —
 choosing in one clears the other two.
@@ -134,7 +137,7 @@ choosing in one clears the other two.
 Colouring by a gene looks like this:
 
 ```{figure} ../../../_static/screenshots/web_app/window-color-by-gene-ins1.png
-:alt: The whole application window coloured by expression of the gene Ins1 on a dark-purple to yellow Viridis scale, most of the embedding dark and one region bright yellow, with a continuous colour-scale legend open in the sidebar.
+:alt: The whole window coloured by expression of the gene Ins1 on a Viridis scale, dark where the gene is absent and bright in one lobe of the embedding, with the continuous legend in the sidebar.
 :width: 1440px
 
 `Ins1` on the Pancreas sample. Dark means little or no expression, bright means
@@ -144,7 +147,7 @@ which is what you would want a marker gene to do.
 
 ### 4) Keep a snapshot (small multiple)
 
-1) Open **Compare Views** → **Multiview**.
+1) Open **Compare views** → **Views**.
 2) Click **Keep view**.
 3) You should see a new numbered badge/panel.
 
@@ -158,7 +161,7 @@ This is how you compare hypotheses side‑by‑side without losing your current 
 
 If you want a keyboard-first workflow, the UI supports:
 
-- `Alt` + drag for area selection (and other shortcuts; see the in‑app “Keyboard Shortcuts” accordion).
+- `Alt` + drag for area selection (and other shortcuts; see the in‑app “Keyboard shortcuts” accordion).
 
 On a phone or tablet, turn on **Select mode** on the selection bar at the
 bottom of the plot (or in the Highlighting panel) and draw with one finger
@@ -169,8 +172,8 @@ clears the selection without the menu.
 
 Pick one:
 
-- **Save State** (Session accordion) to download a `.cellucid-session` bundle you can reopen later.
-- **Figure Export** to export a publication‑ready figure of the current view(s).
+- **Save** under **Session file** (Session accordion) to download a `.cellucid-session` bundle you can reopen later.
+- **Figure export** to export a publication‑ready figure of the current view(s).
 
 For a bug report, scroll to the sidebar footer and include its exact **Build**
 value. It identifies the web files you exercised and is separate from the

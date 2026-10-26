@@ -8,14 +8,21 @@
 
 ## The short answer (most common choices)
 
-- If you are a **wet-lab scientist** and someone already exported data for you → load the **Prepared** folder in the web app.
-- If you have your own `.h5ad` and no Python → open it with the
-  **H5AD** button in the web app, nothing installed
-  ({doc}`../b_data_loading/03_browser_file_picker_tutorial`).
-- If you are a **computational user with AnnData** → use `cellucid-python` (`show_anndata(...)` or `prepare(...); show(...)`).
-- If you work in **R** → `cellucid_prepare()` writes the same export folder
-  ({doc}`../../r_package/index`).
-- If you need **multi-user labeling/voting** → use **Community Annotation** (GitHub-backed).
+- If you are a **wet-lab scientist** and someone sent you a `.h5ad`, a `.zarr`
+  folder or a `.zarr.zip` (or a Seurat `.rds`, a Loom file, a 10x folder) →
+  open it with **Open…** in the web app (**File…** for a file, **Folder…**
+  for a folder), or drop it on the page; nothing is installed and nothing is
+  uploaded ({doc}`../b_data_loading/03_browser_file_picker_tutorial`).
+- If someone sent you a **link** → paste it into the **Link or server** bar
+  and click **Open** ({doc}`../b_data_loading/14_open_from_link`).
+- If you are a **computational user with AnnData** → use `cellucid-python`
+  (`show_anndata(...)` in a notebook, `cellucid serve` in a terminal, and
+  `prepare(...)` to write a Cellucid-ready AnnData that opens fastest).
+- If you work in **R** → install the `cellucid` R package
+  ({doc}`../../r_package/installation`): `cellucid_view(obj)` shows a Seurat
+  or SingleCellExperiment object in RStudio or Positron, and
+  `cellucid_prepare()` writes the same Cellucid-ready AnnData.
+- If you need **multi-user labeling/voting** → use **Community annotation** (GitHub-backed).
 
 ---
 
@@ -25,20 +32,26 @@
 
 :::{tab-item} Wet‑Lab / New to Coding
 
-1) Do you already have a folder called something like `export/` from a colleague?
-   - Yes → use **Local data → Prepared** in the web app.
-   - No, but you have a `.h5ad` → use **Local data → H5AD**. You
-     do not need Python for this.
-   - No → ask a computational colleague to export one, with `cellucid-python`
-     or with `cellucid_prepare()` in R. Both write the same folder, so it does
-     not matter which they use.
+1) What did your colleague send you?
+   - A `.h5ad` file → use **Open… → File…**. You do not need Python for this.
+   - A folder ending in `.zarr` → use **Open… → Folder…**, or drop the
+     folder on the page.
+   - A `.zarr.zip` → use **Open… → File…**.
+   - A link → paste it into the **Link or server** bar and click **Open**.
+   - Nothing yet → ask a computational colleague for an AnnData file. One
+     written by `cellucid.prepare()` in Python or `cellucid_prepare()` in R
+     opens fastest; both write the same thing, so it does not matter which
+     they use.
 
 2) Do you need to *share* what you did?
-   - Yes → use **Save State** to download a `.cellucid-session` file, then send it.
-   - If you need many people to vote on labels → use **Community Annotation** instead (it’s designed for that).
+   - Yes → use **Save** under **Session file** to download a `.cellucid-session` file, then send it.
+   - If you need many people to vote on labels → use **Community annotation** instead (it’s designed for that).
 
 3) Does the dataset feel too big / slow?
-   - Ask for a “server mode” workflow (your colleague can run a small local server so the browser doesn’t have to load everything eagerly).
+   - Ask for the file written by `prepare()` (a gene-major layout made for
+     reading one gene at a time), or for a “server mode” workflow when the data
+     lives on another machine (your colleague runs a small server there and the
+     browser reads only what each view needs).
 
 :::
 
@@ -47,25 +60,27 @@
 Start here:
 
 ```
-Do you already have a prepared export folder?
-  ├─ Yes → open in the web app (local Prepared or hosted HTTP server)
+Is the AnnData file (.h5ad, .zarr, .zarr.zip) on this computer?
+  ├─ Yes → open it in the web app (Open… → File… / Folder…, or drop it)
   └─ No →
-       Do you have the dataset in Python (AnnData / arrays)?
-         ├─ Yes → use cellucid-python:
-         │        - fastest: show_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")
-         │        - reproducible/sharable: prepare(..., out_dir=...); show(out_dir)
-         └─ No → you need to obtain a usable export or a server endpoint first
+       Is it on the web (GEO, Zenodo, Hugging Face, GitHub, a URL)?
+         ├─ Yes → paste the link into the Link or server bar
+         └─ No → is it in Python (AnnData in memory or on a remote disk)?
+                  ├─ in a notebook → show_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")
+                  └─ on a remote machine → cellucid serve <file> + SSH tunnel
 ```
 
-If the dataset lives in R rather than Python, `cellucid_prepare()` writes the
-same export folder; the viewer reads either one identically
-({doc}`../../r_package/index`).
+For the fastest web experience, write the dataset once with
+`cellucid.prepare("my-dataset.zarr", format="zarr", ...)` in Python or `cellucid_prepare()` in
+R; the viewer reads either one identically ({doc}`../../r_package/index`).
 
 Then decide on sharing:
 
 - One-to-one sharing / reproducibility → `.cellucid-session` bundles
-- A public or intranet catalog on a static host → serve the exports root over
-  HTTP and open it with `?exportsBaseUrl=https://host/exports/`
+- A public or intranet catalog on a static host → publish a folder of AnnData
+  files with a `datasets.json` catalog and open it with
+  `?data=https://host/datasets/`
+  ({doc}`../b_data_loading/02_local_demo_tutorial`)
 - Many-to-many annotation / voting → Community Annotation repo
 
 :::
@@ -79,10 +94,10 @@ Then decide on sharing:
 | You want to… | Recommended workflow | Why | Common gotcha |
 |---|---|---|---|
 | Try Cellucid quickly | Demo dataset | Zero setup | Not your data |
-| Explore your own data locally | Web app: Local data → Prepared, H5AD, or Zarr ZIP | No server needed | Browser memory limits on large direct files and archives |
-| Share a dataset with collaborators | Host the prepared export folder (HTTP) and open it with `?exportsBaseUrl=…` | Everyone opens the same dataset URL | CORS / hosting config; the URL must end in `/` |
+| Explore your own data locally | Web app: Open… → File… (`.h5ad`, `.zarr.zip`) or Folder… | No server needed | Files not written gene-major read more bytes per gene |
+| Share a dataset with collaborators | Host the AnnData file (HTTP) and share its `?data=` link ({doc}`../b_data_loading/14_open_from_link`) | Everyone opens the same dataset URL | CORS / hosting config |
 | Work in notebooks | `cellucid-python` (embedded viewer + hooks) | Tight Python ↔ UI loop | Notebook iframe restrictions (fullscreen/pointer lock) |
-| Prepare an export without Python | `cellucid-r` (`cellucid_prepare()`) | Same export contract, read by the same viewer | Arguments are named differently from `prepare()` |
+| View or prepare a dataset from R | `cellucid-r` (`cellucid_view()`, `cellucid_prepare()`) | A Seurat or SingleCellExperiment object as it is; the same Cellucid-ready AnnData, read by the same viewer | Arguments are named differently from `prepare()` |
 | Compare multiple hypotheses | Multiview snapshots (“Keep view”) | Side-by-side views | Smoke mode is disabled when snapshots exist |
 | Run a multi-user labeling round | Community Annotation | Conflict-free collaboration | Requires GitHub repo + app installation |
 
@@ -90,20 +105,23 @@ Then decide on sharing:
 
 ## Edge cases and “which path wins?”
 
-### “I can load H5AD directly, why export?”
+### “I can load my H5AD directly, why run `prepare()`?”
 
-Direct H5AD/Zarr loading is convenient, but exporting often wins when you need:
+Every AnnData file opens as it is. Writing it again with `prepare()` helps
+when you need:
 
-- fast repeated loads,
-- deterministic sharing (“this exact export corresponds to this paper figure”),
-- server mode / lazy loading patterns.
+- fast gene reads (a gene-major matrix, so one gene is one small read),
+- a stable dataset id, name and citation stored in the file itself
+  (`uns['cellucid']`), so sessions and links keep matching it,
+- defaults (which embedding, which `obs` columns) chosen by the author.
 
 ### “My dataset is huge (millions of cells). What should I do?”
 
 Prefer:
 
-- a prepared export (optimized layout), and/or
-- server mode (so the browser doesn’t need to ingest everything eagerly).
+- an AnnData written by `prepare()` (gene-major, chunked for range reads),
+  and/or
+- server mode when the data lives on a remote machine (the browser reads only what each view needs, over the tunnel).
 
 Also plan for performance from day one:
 
@@ -115,7 +133,7 @@ Also plan for performance from day one:
 
 Choose workflows based on your constraints:
 
-- local prepared folder (no upload) is simplest,
+- a local file opened in the browser (no upload) is simplest,
 - remote hosting requires careful access control,
 - community annotation uses GitHub (be sure your repo is private if needed).
 
@@ -127,17 +145,18 @@ Choose workflows based on your constraints:
 
 **How to confirm**
 
-- If you have a folder with files like `dataset_identity.json` and embedding/field binaries → you likely have a prepared export.
-- If you have a `.h5ad` file → use the browser **H5AD** control, or
+- If you have a `.h5ad` file → use **Open… → File…** in the browser, or
   `cellucid serve` / `show_anndata()` when you work in Python
   ({doc}`../b_data_loading/03_browser_file_picker_tutorial`,
   {doc}`../b_data_loading/04_server_tutorial`).
-- If you have a `.zarr` directory → the browser reads a *packaged* store only,
-  so either package it as one `.zarr.zip` for the **Zarr ZIP** control, or point
-  `cellucid serve` / `show_anndata()` at the directory itself. There is no
-  browser control that accepts a `.zarr` directory
-  ({doc}`../b_data_loading/03_browser_file_picker_tutorial`,
+- If you have a `.zarr` directory → use **Open… → Folder…** in the
+  browser, drop the folder on the page, or point `cellucid serve` / `show_anndata()`
+  at it ({doc}`../b_data_loading/03_browser_file_picker_tutorial`,
   {doc}`../b_data_loading/04_server_tutorial`).
+- If you have a folder holding `datasets.json` → it is a dataset catalog;
+  publish it on a static host and open its address in the **Link or server**
+  bar
+  ({doc}`../b_data_loading/02_local_demo_tutorial`).
 
 ### Symptom: “My colleague sent me a folder but the app can’t load it”
 

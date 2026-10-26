@@ -49,7 +49,7 @@ Use this table as a first pass; then adjust based on your dataset size and what 
 | Put a figure in slides quickly | PNG (300 DPI) | Good defaults, “looks like the viewer”, widely compatible |
 | Submit a figure to a paper and do minor edits | SVG (Hybrid or Full) + optional PNG | SVG keeps text/legend editable; hybrid keeps point appearance sane for large/3D |
 | Edit the layout/labels extensively | SVG (Full or Hybrid) | Vector annotations are easy to tweak; hybrid avoids gigantic point-count SVGs |
-| You have >50k–200k visible points | SVG (Optimized) or Hybrid | Full vector SVG may be huge/slow; optimized/hybrid are practical |
+| You have >50k–200k visible points | SVG with **Optimized vector** or **Hybrid** | Full vector SVG may be huge/slow; optimized/hybrid are practical |
 | You have >200k visible points or 3D shading | Hybrid SVG or PNG | Pure SVG circles cannot reproduce shader-accurate 3D point appearance |
 | Illustrator/Inkscape crashes on the SVG | Hybrid SVG or PNG | Points become rasterized; annotations stay readable; file becomes manageable |
 | You need maximum compatibility, no editability | PNG (150/300/600) | Raster always opens; choose DPI based on target use |
@@ -166,7 +166,9 @@ PNG export produces a high-DPI raster image that is easy to paste into slides, m
 
 - Chromium, Firefox, and Safari/WebKit use the same native single-file and ZIP
   batch contracts.
-- PNG and Hybrid require WebGL2 plus the published camera matrices. If either is
+- PNG and Hybrid require WebGL2 with OffscreenCanvas (the points are drawn in a
+  worker, or on the page where a browser's workers have no WebGL2, as in
+  WebKitGTK and WPE) plus the published camera matrices. If either is
   absent, **Export blocked** names the missing requirement and no file is
   created.
 - Every format additionally requires the **Points** render mode; a volumetric
@@ -190,8 +192,8 @@ Yes: it’s a fast way to confirm the export is not corrupted and that legends/a
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/figure_export/download.png
-:alt: Figure Export Download controls with output format, DPI, and split-view choice.
-:width: 472px
+:alt: The Download group open with the format set to SVG: the SVG point strategy select on its placeholder, shortened to "Choose S…", and Export all views (split-view) with the pointer on its checkbox, above the Export button.
+:width: 532px
 
 Download settings choose output format, resolution, and whether all views are exported.
 ```

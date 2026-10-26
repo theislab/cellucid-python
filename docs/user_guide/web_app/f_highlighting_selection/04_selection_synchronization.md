@@ -41,7 +41,7 @@ Highlighting feels “simple” until you use multi-view snapshots, change filte
 | **Dataset identity** | Global | N/A | Cell indices are meaningful only for a specific dataset ordering. |
 
 :::{important}
-If a session’s dataset fingerprint does not match the currently loaded dataset, dataset-dependent state (including highlights) is intentionally skipped on restore.
+If a session’s dataset fingerprint does not match the currently loaded dataset, the whole restore is rejected: no state, highlights included, is applied.
 :::
 
 ---
@@ -61,7 +61,7 @@ People typically expect:
 - Are still subject to visibility: each panel will only show highlights for cells that are visible in that panel (filters apply per view).
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/share-highlight-across-views.png
-:alt: Two 3D panels of the same dataset side by side with the sidebar collapsed: the left panel at the default close-up camera, the right panel zoomed out and rotated; the cells confirmed by one lasso drawn in the left panel are drawn in the highlight colour in both.
+:alt: Two 3D panels of the same dataset side by side with the sidebar closed, each under a title chip (1 · UMAP 3D · cell_type, 2 · UMAP 3D · cell_type): the left panel at the default close-up camera, the right panel zoomed out and rotated; the cells confirmed by one lasso drawn in the left panel are drawn in the highlight colour in both.
 :width: 1440px
 
 One lasso, drawn once in one panel, shown in two. The panels are looking at the
@@ -86,7 +86,7 @@ embedding does not mark them in the plots under **Analysis**.
 - The preview highlight is global, but rendered per view (visible cells only).
 - The gesture you perform is tied to the specific panel you start it in (especially for lasso).
 
-**Annotation based in multi-view grid**
+**Annotation in multi-view grid**
 - The click or drag is read on the field of the panel you press, not on the focused view's, and selects only the cells that panel shows. View focus stays where it was.
 - So with the focused view colored by a continuous field and another panel by `cell_type`, an `Alt+click` in that other panel selects the clicked cell's `cell_type` category.
 
@@ -135,7 +135,7 @@ Selection tools only select cells that are **not filtered out**. This is intenti
 - it prevents selecting cells you have deliberately excluded,
 - it makes selection consistent across multi-view where each panel may have different filters.
 
-LOD/downsampling is not part of this rule. With Level-of-Detail enabled, a gesture still
+LOD/downsampling is not part of this rule. With Level of detail enabled, a gesture still
 evaluates unfiltered cells the view is not drawing at the current zoom, so a lasso can
 select more cells than you can see ({doc}`01_highlight_mental_model`).
 
@@ -179,7 +179,7 @@ Because page combination is a deterministic set operation, it’s a good way to:
 
 ## Python/Jupyter synchronization (advanced)
 
-Cellucid has a Jupyter bridge via `cellucid-python`. Conceptually, it supports two directions:
+Cellucid has a viewer channel to the program that opened it — `cellucid-python` (`show_anndata()`, in a notebook or not) or the R package's `cellucid_view()`. Conceptually, it supports two directions:
 
 ### Python → UI (commands)
 Examples from `cellucid-python` include:
@@ -192,7 +192,7 @@ These commands identify cells by **cell index**. That means they only make sense
 - indices are aligned with your Python object (AnnData ordering).
 
 ### UI → Python (events / hooks)
-UI interactions POST events to the Python server (`/_cellucid/events`), so hooks like `@viewer.on_hover` can fire. A confirmed selection is posted to `/_cellucid/selection` as binary cell indices (little-endian `uint32`, ascending), so `@viewer.on_selection` receives selections of any size.
+UI interactions are sent to the host on the viewer channel (one WebSocket to the Python or R server, `/_cellucid/ws`), so hooks like `@viewer.on_hover` can fire. A confirmed selection is sent as one binary frame of cell indices (little-endian `uint32`, ascending), so `@viewer.on_selection` receives selections of any size.
 
 Important nuance for selection:
 - In notebooks, the **selection event is emitted when you confirm a selection** (i.e. when it becomes a real highlight group),
@@ -203,9 +203,9 @@ If you are debugging Python synchronization, start from:
 - {doc}`../../python_package/e_jupyter_hooks/14_troubleshooting_hooks`
 
 ### Common failure modes (Python/Jupyter)
-- Wrong `viewerId` (messages routed to the wrong embedded viewer)
+- A viewer page whose `viewerId` / `viewerToken` the server no longer knows (the viewer was stopped): the channel is refused and the viewer says to run the cell again
 - Dataset mismatch (indices don’t refer to the same cells)
-- Server unreachable from the viewer (HTTPS/remote notebooks without Jupyter Server Proxy, or remote/HPC without tunneling)
+- Server unreachable from the viewer (HTTPS/remote notebooks without Jupyter Server Proxy, or remote/HPC without tunneling), or a proxy that does not pass WebSockets: the viewer reports **Viewer disconnected**
 - Viewer startup failed to establish its exact configured web generation
 
 First-line diagnostic:

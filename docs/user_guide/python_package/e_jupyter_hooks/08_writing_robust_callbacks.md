@@ -9,7 +9,8 @@ This page gives battle-tested patterns for writing callbacks that behave well fo
 
 ## Key rule (read this once)
 
-Hook callbacks can run on the server’s request-handling thread.
+Hook callbacks run on the viewer channel's thread, one event at a time, in the
+order the viewer sent them.
 
 Practical meaning:
 - keep callbacks fast and defensive,
@@ -32,9 +33,13 @@ def on_selection(event):
 ```
 
 ```{note}
-Callback exceptions propagate through event delivery. The server logs the
-exception and answers that event request with HTTP 500. Catch only an error
-that the callback can handle completely; otherwise let it surface.
+A callback that raises does not take the channel down: the server logs the
+exception (logger `cellucid.viewer_channel`), the hooks registered after it
+still run for that event, and the next event is delivered. The event itself
+was recorded in `viewer.state` and handed to `wait_for_event(...)` before any
+hook ran, so a failing callback never costs the notebook the event. Catch only
+an error that the callback can handle completely; otherwise let it surface in
+the log.
 ```
 
 ## Practical patterns
@@ -118,22 +123,29 @@ See {doc}`09_viewer_state_and_wait_for_event`.
 
 ## Deep path: threading and AnnData pitfalls
 
-### Backed `.h5ad` and thread safety
+### Your `adata` and thread safety
 
-When you run
-`show_anndata("data.h5ad", dataset_name="My dataset", dataset_id="my-dataset")`,
-AnnData is opened read-only-backed.
-Depending on your stack (h5py/hdf5), concurrent access from multiple threads can be unsafe.
+`show_anndata(...)` does not open your data in Python while the viewer runs:
+the viewer reads the file or folder itself, and an in-memory object is written
+once to a temporary `.h5ad` (`.h5mu` for a MuData). The `adata` your callbacks touch is
+therefore only yours — but callbacks run on the viewer channel's thread, not
+your notebook's, and
+if you opened that object backed (`anndata.read_h5ad(..., backed="r")`),
+concurrent access from several threads can be unsafe depending on your
+h5py/HDF5 stack.
 
 Recommendations:
 - avoid slicing backed AnnData inside hook callbacks,
 - if you must, serialize access with a lock,
 - or copy the needed arrays eagerly.
 
-### Don’t block the server thread
+### Don’t block the channel thread
 
 If your callback blocks for seconds:
-- events can queue up behind it,
+- events queue up behind it (they are delivered one at a time, in order),
+- a callback that waits for a later event of the same viewer
+  (`viewer.wait_for_event(...)`, `viewer.set_data_mapping(...)`) waits until
+  its timeout, because that event is delivered only after the callback returns,
 - the UI may feel “laggy” or “stuck” from the user’s perspective.
 
 Move long work out of the callback (queue pattern above).
@@ -147,25 +159,28 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("cellucid.jupyter").setLevel(logging.INFO)
 logging.getLogger("cellucid.server").setLevel(logging.INFO)
+logging.getLogger("cellucid.viewer_channel").setLevel(logging.INFO)
 ```
 
 If you are debugging deeply, use `DEBUG`.
 
 ## Edge cases checklist
 
-- `event["cells"]` can be empty (user cleared selection).
+- `event["cells"]` holds at least one cell; clearing a selection sends no event.
 - `event["cell"]` can be `None` (not hovering).
 - Use the documented fields for the exact event type and validate their native
   JSON-derived types before analysis.
-- Very large selections can hit the `/_cellucid/events` size limit (see {doc}`07_frontend_to_python_events`).
+- Very large selections arrive whole (a binary frame, 4 bytes a cell); the
+  callback receives a Python list, so a list of millions of ints is itself
+  large (see {doc}`07_frontend_to_python_events`).
 
 ## Troubleshooting
 
 Symptoms and fixes:
 
 - “My callback never runs” → check connectivity; run `viewer.debug_connection()`; see {doc}`14_troubleshooting_hooks`.
-- “My callback request returns HTTP 500” → read the logged callback exception
-  and fix it; the failure is not swallowed.
+- “My callback fails” → read the logged callback exception (logger
+  `cellucid.viewer_channel`) and fix it; the failure is not swallowed.
 - “Notebook becomes sluggish” → your callback is doing too much; move work out of it.
 
 ## Next steps

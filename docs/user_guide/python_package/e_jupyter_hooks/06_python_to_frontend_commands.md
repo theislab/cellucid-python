@@ -3,9 +3,12 @@
 This page documents how your notebook Python code can **control** the embedded Cellucid viewer.
 
 Under the hood:
-- Python injects a small JS snippet into the notebook output.
-- That JS uses `postMessage(...)` to send a command into the iframe.
-- Commands include a per-viewer secret (`viewerToken`) for authentication.
+- the viewer opens one authenticated WebSocket to the data server (the viewer
+  channel, {doc}`05_architecture_viewer_channel`);
+- Python sends each command on it as one JSON text frame, and a command that
+  names cells (`highlight`, `setVisibility`) as one binary frame;
+- a command sent before the viewer has connected waits and is sent, in order,
+  when it connects; nothing is sent twice.
 
 If you’re new, start with the quickstart: {doc}`02_quickstart_minimal_roundtrip`.
 
@@ -14,7 +17,7 @@ If you’re new, start with the quickstart: {doc}`02_quickstart_minimal_roundtri
 **Audience**
 - Wet lab / beginner: use the “Fast path recipes”.
 - Computational users: read “Edge cases” + “Performance”.
-- Developers: read “Message schema” + {doc}`05_architecture_message_routing_http_vs_postmessage`.
+- Developers: read “Message schema” + {doc}`05_architecture_viewer_channel`.
 
 ## Fast path recipes (copy/paste)
 
@@ -49,38 +52,31 @@ viewer.set_visibility([0, 10, 42], visible=False)
 ```
 
 ```{important}
-Most commands require the viewer to be **displayed** and (for best results) **ready**:
+A command sent before the viewer has connected waits in Python and is sent as
+soon as the viewer connects; the viewer applies it once its dataset is open.
+`viewer.send_message(...)` returns `True` when the command went out at once and
+`False` when it is waiting. After `viewer.stop()` it raises `RuntimeError`.
+To act only once the viewer shows the data:
 
 ```python
 viewer.wait_for_ready(timeout=60)
 ```
-
-If you call a command before the viewer is displayed, `send_message` raises
-`RuntimeError` and nothing is sent.
 ```
 
 ## Knowing whether a command applied
 
 Commands are **one-way**. `viewer.set_color_by("CD8A")` returns `None` as soon
-as the message has been handed to the notebook output; it does not wait for the
+as the command is sent (or queued for the viewer); it does not wait for the
 viewer, and its return value says nothing about whether the viewer applied it.
 
 When the viewer rejects a command — an unknown field, an out-of-range index, a
 malformed color — it reports the failure back over the event channel as a
 `command_error` event.
 
-```{note}
-Only the web build that emits `command_error` reports these. Older builds —
-including the one currently published — refuse a command silently, so on those
-the checks below find nothing and a refused command still looks like a
-successful one. See {doc}`07_frontend_to_python_events` for why Python accepts
-the event before the viewer sends it.
-```
-
 Cellucid prints it:
 
 ```text
-[cellucid] viewer.set_color_by(...) did not take effect in the viewer: Jupyter set-color-by field must be exact non-empty text
+[cellucid] viewer.set_color_by(...) did not take effect in the viewer: Jupyter set-color-by command requires exactly one field "CD8A"
 [cellucid] The viewer is unchanged. Handle this in code with @viewer.on_command_error.
 ```
 
@@ -94,9 +90,8 @@ def record(event):
     rejected.append(event)
 ```
 
-Record rather than raise: hooks run on the server request thread, so raising
-there answers the viewer with HTTP 500 and drops the event instead of failing
-your cell.
+Record rather than raise: hooks run on the viewer channel's thread, so raising
+there only logs the error and drops the event instead of failing your cell.
 
 Two limits are worth knowing:
 
@@ -109,15 +104,15 @@ See {doc}`07_frontend_to_python_events` for the exact record.
 
 ## Command catalog (public Python API)
 
-All of these are methods on the `viewer` object returned by `show(...)` or `show_anndata(...)`.
+All of these are methods on the `viewer` object returned by `show_anndata(...)`.
 
 | Python method | Purpose | Frontend message type |
 |---|---|---|
-| `viewer.send_message(message)` | Low-level escape hatch | `message["type"]` |
+| `viewer.send_message(message)` | Low-level escape hatch; returns `True` (sent) or `False` (queued) | `message["type"]` |
 | `viewer.highlight_cells(cell_indices, color="#ff0000")` | Highlight specific cells by index | `"highlight"` |
 | `viewer.clear_highlights()` | Remove highlights | `"clearHighlights"` |
 | `viewer.set_color_by(field)` | Change active color-by field | `"setColorBy"` |
-| `viewer.set_visibility(cells=None, visible=True)` | Hide/show specific cells (or all) | `"setVisibility"` |
+| `viewer.set_visibility(cell_indices=None, visible=True)` | Hide/show specific cells (or all) | `"setVisibility"` |
 | `viewer.reset_view()` | Reset camera | `"resetCamera"` |
 | `viewer.set_data_mapping(**fields)` | Change what the viewer plots and reads, and wait for it to apply | `"setDataMapping"` |
 
@@ -131,26 +126,42 @@ Diagnostics / utilities (also useful for debugging):
 
 ## Message schema (what actually crosses the boundary)
 
-### Important: you usually do **not** include `viewerId`/`viewerToken` yourself
+### Commands carry no credentials
 
-When you call `viewer.send_message({...})`, the embedding layer automatically injects:
-- `viewerId`: routes the message to the correct iframe
-- `viewerToken`: authenticates the command inside the iframe
+The viewer channel is authenticated once, when the viewer opens it, and
+belongs to that one viewer, so a command is only its message-specific fields
+below. `viewer.send_message({...})` refuses a message that names `viewerId`
+or `viewerToken`.
 
-You normally send only the message-specific fields below.
+### Commands that name cells are binary frames
+
+`highlight` and `setVisibility` travel as one binary frame each: a
+little-endian `uint32` header length, the UTF-8 JSON header (padded with
+spaces to a multiple of 4 bytes, so the cells start on a 4-byte boundary and
+the viewer reads them in place), then the cells as little-endian `uint32`,
+strictly ascending. A frame that breaks these rules closes the channel
+(1008), as a malformed event does in the other direction. You give the cells
+as a list of ints or a one-dimensional NumPy integer array, in any order, each
+once; Python sorts them once and writes them straight into the frame.
+
+`viewer.send_message()` takes these commands in the same form as the others,
+with their cells under `"cells"`:
+
+```python
+viewer.send_message({"type": "highlight", "cells": [0, 10, 42], "color": "#ff00ff"})
+```
 
 ### `highlight`
 
+Header, then the cells:
+
 ```json
-{
-  "type": "highlight",
-  "cells": [0, 10, 42],
-  "color": "#ff00ff"
-}
+{ "type": "highlight", "color": "#ff00ff" }
 ```
 
 Notes:
-- `cells` should be a list of 0-based integer indices.
+- `cells` (in `send_message`, or `cell_indices`) are 0-based integer indices,
+  at least one.
 - `color` must be a hex string (`#RRGGBB`); invalid colors are rejected.
 
 ### `clearHighlights`
@@ -171,13 +182,16 @@ Notes:
 
 ### `setVisibility`
 
+Header, then the cells (at least one):
+
 ```json
-{ "type": "setVisibility", "cells": [0, 10, 42], "visible": false }
+{ "type": "setVisibility", "visible": false, "all": false }
 ```
 
 Notes:
-- `"cells": null` targets all cells and is what
-  `viewer.set_visibility(None, visible=...)` emits.
+- `viewer.set_visibility(None, visible=...)` targets every cell: the header
+  says `"all": true` and the frame carries no cells.
+- An empty list is refused; pass `None` for every cell.
 - If you need reproducible filtering, prefer the UI’s filter system; cell-level visibility is best treated as an interactive convenience.
 
 ### `resetCamera`
@@ -207,7 +221,8 @@ this one is answered: the viewer replies with a `data_mapping` event of origin
 
 `viewer.set_data_mapping(**fields)` replaces the named top-level fields of the
 mapping the viewer last reported (`embeddings`, `vectorFields`, `geneNames`,
-and for an AnnData source `knn`, `expression`, `latent`; never `kind`),
+`knn`, `expression`, `log1p`, `highlyVariable`, `latent`; never `kind`, which
+is always `"anndata"`),
 validates the result, sends it, and returns the mapping the viewer reports
 back. It raises `RuntimeError` before sending when the viewer has not reported
 a mapping yet, `TypeError` for an unknown field, `ValueError` for an invalid
@@ -216,12 +231,12 @@ value, `RuntimeError` with the viewer's reason when the viewer refuses it, and
 
 ```python
 viewer.set_data_mapping(
-    embeddings={"1d": None, "2d": {"key": "X_pca", "columns": [0, 1]}, "3d": None},
+    embeddings={
+        "enabled": [{"key": "X_pca", "columns": [0, 1]}],
+        "defaults": {"1d": None, "2d": {"key": "X_pca", "columns": [0, 1]}, "3d": None},
+    },
 )
 ```
-
-A viewer older than this release does not understand this command. It also
-never reports a mapping, so `set_data_mapping()` raises before sending one.
 
 ### `ping` / `debug_snapshot` (internal, used by `viewer.debug_connection()`)
 
@@ -235,8 +250,9 @@ never reports a mapping, so `set_data_mapping()` raises before sending one.
 
 ## Performance notes
 
-- **Huge cell lists** (hundreds of thousands) can be slow because they must cross a notebook boundary.
-  - If you need to highlight “almost everything”, consider highlighting the *small* complement instead.
+- **Huge cell lists** travel as binary frames, 4 bytes a cell: pass a NumPy
+  array (`np.flatnonzero(mask)`) rather than a list for millions of cells, so
+  the cells are checked and written in vectorized passes.
 - **High-frequency commands** (sending a highlight every mousemove) are not recommended; prefer debouncing and batching.
 - If you want to drive many interactions, consider using hooks events to *decide* what to do, but send commands only when needed.
 
@@ -245,7 +261,8 @@ never reports a mapping, so `set_data_mapping()` raises before sending one.
 - **Indexing is positional**: indices refer to row positions, not stable cell IDs.
 - **Out-of-range indices** violate the current command contract; validate
   indices against the dataset cell count before sending them.
-- **Viewer not displayed**: `viewer.send_message(...)` raises `RuntimeError`.
+- **Viewer not displayed yet**: commands wait and are sent when it connects.
+- **Viewer stopped**: `viewer.send_message(...)` raises `RuntimeError`.
 - **Multiple viewers**: make sure you are sending commands to the same `viewer` instance that rendered the iframe you are looking at.
 
 ## Troubleshooting

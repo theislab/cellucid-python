@@ -13,17 +13,18 @@ This is the fastest sanity check that:
 **Audience**
 - Wet lab / beginner: follow the “Copy/paste” cells and focus on “What success looks like”.
 - Computational users: also read “Common pitfalls” and “Troubleshooting”.
-- Developers: jump to {doc}`05_architecture_message_routing_http_vs_postmessage` and {doc}`16_reference`.
+- Developers: jump to {doc}`05_architecture_viewer_channel` and {doc}`16_reference`.
 
 **Time**: ~5–10 minutes
 
 **Prerequisites**
-- A Jupyter environment (classic/JupyterLab/VSCode/Colab)
+- A Jupyter environment (classic Jupyter or JupyterLab; VS Code and Colab are untested, see {doc}`03_supported_environments_matrix`)
 - `pip install cellucid`
-- An `AnnData` object named `adata` (or a path to `.h5ad`/`.zarr`)
+- An `AnnData` object named `adata`, or a path to a file or folder Cellucid reads (`.h5ad`, AnnData Zarr, `.h5mu`, `.loom`, 10x, MatrixMarket, `.rds`)
 
 ```{note}
-If you don’t have an `AnnData` handy, you can still follow this guide using a pre-exported directory and `cellucid.show("./export_dir")`.
+If you have a file written by `cellucid.prepare()`, `show_anndata("my_dataset.h5ad", height=600)`
+opens it under the name and id it declares.
 ```
 
 ## Step 1 — Create and display a viewer
@@ -44,12 +45,12 @@ viewer = show_anndata(
 viewer
 ```
 
-### Option B: show a pre-exported dataset directory
+### Option B: show a Cellucid-ready AnnData file
 
 ```python
-from cellucid import show
+from cellucid import show_anndata
 
-viewer = show("./exports/my_dataset", height=600)
+viewer = show_anndata("my_dataset.h5ad", height=600)  # written by cellucid.prepare()
 viewer
 ```
 
@@ -106,8 +107,8 @@ if cells:
 You should see the selection become highlighted (exact visual style depends on the web app UI).
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/highlighting-selected-page.png
-:alt: The Highlighting panel with one page renamed "Left lobe" carrying 842 cells, the summary "842 cells highlighted", and one group row labelled "Lasso (842 cells) (842)".
-:width: 516px
+:alt: The Highlighting panel with one page renamed "Left lobe" carrying 826 cells, the summary "826 cells highlighted", and one group row labelled "Lasso (826 cells) (826)".
+:width: 532px
 
 Highlighted cells are stored on a named page that can be used by analysis and session workflows.
 ```
@@ -124,8 +125,8 @@ def handle_selection(event):
 ```
 
 ```{important}
-Hook callbacks run when the viewer POSTs an event to the local server.
-In practice, that means callbacks can run in a background server thread.
+Hook callbacks run when the viewer sends an event on its channel to the local
+server, so they run on that channel's background thread, not the notebook's.
 
 - Keep callbacks fast and defensive.
 - If you do heavy work (Scanpy, model inference), consider queueing the work and handling it outside the callback.

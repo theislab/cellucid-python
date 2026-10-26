@@ -20,13 +20,13 @@ This glossary is written to match the app UI language, even when a “technical�
 ## UI map (one screenshot you’ll reuse everywhere)
 
 ```{figure} ../../../_static/screenshots/web_app/window-orientation-map.png
-:alt: The Cellucid window with a scrollable sidebar of collapsible panels down the left and a canvas on the right; the sidebar is scrolled to COLORING AND FILTERING showing a CATEGORICAL OBS dropdown reading clusters, a dashed DISPLAY OPTIONS box containing an outlier slider and an eight-row category legend with colour swatches and cell counts, and an ACTIVE FILTERS (SELECTED VIEW ONLY) block reading Showing all 3,696 points; the canvas holds a three-dimensional point cloud in a light grid box coloured in the same eight colours.
+:alt: The whole application window with the Pancreas sample loaded, the sidebar showing Coloring & filtering with the embedding coloured by clusters, and the eight-row legend beside the matching colours on the canvas.
 :width: 1440px
 
 The vocabulary below maps onto this picture. **Sidebar** on the left,
-**canvas** on the right, **legend** inside the sidebar's dashed *Display
-options* box, and the **count line** at the very bottom of *Coloring &
-Filtering* telling you how many of the dataset's cells are currently drawn.
+**canvas** on the right, **legend** in the sidebar's *Legend* section, and the
+**count line** in the *Filters* section of *Coloring & filtering* telling you
+how many of the dataset's cells are currently drawn.
 ```
 
 ---
@@ -36,8 +36,8 @@ Filtering* telling you how many of the dataset's cells are currently drawn.
 - **Welcome overlay**: the modal shown on every ordinary bundled or catalog
   startup. Its dismissal is not remembered for the next ordinary load.
   **Choose a dataset** opens the data controls; {kbd}`Escape` dismisses it for
-  the current load. Explicit Jupyter, remote-server, and GitHub-served startup
-  links skip it because they already declare a data source.
+  the current load. A startup whose address already names its data (a Python
+  or R viewer, a `cellucid serve` server, or a `?data=` link) skips it.
 - **Suo**: the sample catalog default. It may finish loading behind the welcome
   overlay before you choose another source, and opens in 3D on its default
   embedding.
@@ -52,12 +52,12 @@ Filtering* telling you how many of the dataset's cells are currently drawn.
   every deployment, the version only at a release.
 
 ```{figure} ../../../_static/screenshots/web_app/startup-loaded-build.png
-:alt: Loaded Suo point cloud on a light grid with Community Annotation and Camera Path collapsed and a dated Build line in the sidebar footer.
+:alt: The Suo atlas loaded after the welcome overlay is dismissed, with every sidebar section collapsed so the footer shows, ending in the Version and Build line.
 :width: 1440px
 
-Fresh startup after closing the welcome overlay: Suo is loaded on the light grid,
-**Community Annotation** and **Camera Path** are collapsed, and the footer names
-the build. The capture shows the build it was taken from, not the one you are
+Fresh startup after closing the welcome overlay: Suo is loaded on the light
+**Studio** backdrop; with every section collapsed, the footer at the bottom of
+the sidebar names the version and the build. The capture shows the build it was taken from, not the one you are
 running — read yours off your own footer.
 ```
 
@@ -79,7 +79,7 @@ keyboard and screen-reader behavior.
 
 ## Render mode and maturity tags
 
-- **`Render mode:`**: the dropdown that decides how points are drawn. It has
+- **`Render mode`**: the dropdown that decides how points are drawn. It has
   exactly two options: `Points`, the default, which draws one point per cell;
   and `Volumetric smoke cloud (beta)`, which draws a continuous density cloud,
   coloured by the active field, instead. **“Smoke mode”** in these pages always
@@ -87,7 +87,7 @@ keyboard and screen-reader behavior.
 - **Maturity tag**: a small pill beside a control's label naming how finished
   the currently selected option is. It describes the option you chose, not the
   control it sits next to.
-- **`Beta`**: the only maturity tag in the app. It sits beside `Render mode:`
+- **`Beta`**: the only maturity tag in the app. It sits beside `Render mode`
   and appears only while `Volumetric smoke cloud (beta)` is the selected mode;
   `Points` never wears it, and nothing else in Cellucid is tagged.
 - Its hover text reads
@@ -164,9 +164,10 @@ what alpha means in practice for that mode.
   them, and each dimension has one **default embedding**, which keys `1`, `2`
   and `3` show first.
 - **Data mapping**: which stored arrays the dataset is drawn from — the
-  embeddings that are turned on, the default of each dimension, and read-only
-  the neighbour graph, gene names, expression matrix, latent space and vector
-  fields. Set under **Session › Data mapping**
+  embeddings that are turned on and the default of each dimension; under
+  **Genes** the modality (of a MuData or a multi-assay object), the expression
+  matrix, gene names, values and highly variable genes; the neighbour graph,
+  the latent space and the vector fields. Set under **Session › Data mapping**
   ({doc}`../b_data_loading/13_data_mapping`).
 - **Best guess**: the default embeddings a file without a UMAP opens on, marked
   *guessed* in the Data mapping checklist.
@@ -184,31 +185,56 @@ Every word here appears on a button, a label, or a page in
 {doc}`../b_data_loading/index`. Read the short definition; the linked page owns
 the detail.
 
-**What the Session panel calls things**
+**What the Session panel calls things** (**`Dataset`** comes first; the next
+three sit under **`Open data`**)
 
-- **`Sample datasets:`**: the dropdown listing the catalog Cellucid was
+- **`Dataset`**: the box at the top of the panel that describes the dataset
+  that is open, and only that one: its name, its cells and genes, its format
+  and host (`h5ad file · this computer`), its description, how much has been
+  read for data read in place from a host, and a collapsed **`Details`** list.
+  With nothing open it says "No dataset open"
+  ({doc}`../b_data_loading/01_loading_options_overview`).
+- **`Sample dataset`**: the dropdown listing the catalog Cellucid was
   configured to read. On www.cellucid.com that is the five built-in samples
   ({doc}`../b_data_loading/12_sample_dataset_provenance`); on a copy you host
-  yourself it is whatever catalog you pointed it at.
-- **`Local data:`**: the group of three buttons that read a file or folder off
-  your own computer — **`Prepared`** (a folder), **`H5AD`** (one file), and
-  **`Zarr ZIP`** (one archive). Nothing is uploaded.
-- **`Remote server:`**: a text field for the base address of a running
-  `cellucid serve`, for example `http://localhost:8765` — the origin, with no
-  trailing slash and no `?…` query.
-- **`GitHub data:`**: a text field for the `owner/repo/path` shorthand of a
-  public exports root on GitHub.
+  yourself it is whatever catalog you pointed it at. While a linked catalog
+  that holds several datasets is connected, it lists that catalog's datasets
+  instead and its label reads "Dataset from <host>". A dataset opened from a
+  file, a single-dataset link or a server is not listed there; while one is
+  open the dropdown shows "—".
+- **`File or folder`**: the **`Open…`** button, which reads a file or folder
+  off your own computer. Its menu has **`File…`** (an `.h5ad`, `.zarr.zip`,
+  `.h5mu`, `.loom`, 10x `.h5`, or an R `.rds` / `.rda` / `.RData`) and
+  **`Folder…`** (a `.zarr` store folder, a Cell Ranger `outs/` folder or a
+  MatrixMarket folder): a browser's file dialog picks files or a folder,
+  never both. Dropping a file or folder
+  anywhere on the page does the same. Nothing is uploaded.
+- **`Link or server`**: one address bar with an **`Open`** button (Enter works
+  too). A port (`8765`), `localhost:8765` or `host:port` connects to a running
+  `cellucid serve`; a link or id of data that already lives somewhere (a
+  CELLxGENE dataset, a GEO series `GSE…`, a Zenodo or Figshare record, a
+  Hugging Face, Dropbox, Google Drive or OneDrive link, the `owner/repo/path`
+  shorthand of a public GitHub folder, or a web address of a file, a Zarr
+  store folder or a dataset catalog folder) opens it. While
+  something is connected, one line under the bar reads **`Server`** or
+  **`Link`**, the address and **`Disconnect`**
+  ({doc}`../b_data_loading/14_open_from_link`).
+- **`Session file`**: the **`Save`** and **`Load`** buttons, which download
+  and restore a `.cellucid-session` bundle.
 
 **What the data itself is called**
 
-- **Prepared export / export folder**: the directory `prepare()` (Python) or
-  `cellucid_prepare()` (R) writes — `dataset_identity.json`, compact manifests,
-  and binary payloads. This is the format the viewer reads fastest.
-  See {doc}`../b_data_loading/07_folder_file_format_expectations_high_level_link_to_spec`.
-- **Exports root**: a directory holding a `datasets.json` catalog plus one
-  export folder per dataset. A single export folder is not an exports root.
-- **`datasets.json`**: the catalog file at an exports root, listing the
-  datasets a picker offers.
+- **Cellucid-ready AnnData**: the AnnData `prepare()` (Python) or
+  `cellucid_prepare()` (R) writes — a `.zarr` folder by default, or a
+  `.zarr.zip` or `.h5ad` — with a gene-major expression matrix and its name,
+  citation and defaults in `uns['cellucid']`. Any AnnData opens; this one
+  reads fastest.
+  See {doc}`../b_data_loading/07_file_format_expectations`.
+- **Dataset catalog**: a folder holding a `datasets.json` file plus the AnnData
+  files it lists. Opening the folder's address offers its datasets in the
+  dataset picker.
+- **`datasets.json`**: the catalog file, listing each dataset's id, its file's
+  path inside the folder, and optionally a default session.
 - **Dataset id**: the stable identifier that decides whether two loads are “the
   same dataset” for sessions and annotation.
   See {doc}`../b_data_loading/06_dataset_identity_why_it_matters`.
@@ -218,12 +244,17 @@ the detail.
   vector fields live), and `obsp` (per-cell-pair matrices, where the neighbor
   graph lives).
 - **H5AD**: one AnnData saved as a single HDF5 file (`.h5ad`).
-- **Zarr v2 store**: one AnnData saved as a directory of chunked arrays. The
-  browser reads it only as a packaged **Zarr ZIP**; the Python server and
-  Jupyter read the directory itself.
-- **Read-only backed**: how `cellucid serve` and `show_anndata()` open an
-  `.h5ad` — values are read from disk as requested, so the expression matrix is
-  never held in memory whole.
+- **Zarr store**: one AnnData saved as a directory of chunked arrays (Zarr v2
+  or v3). The browser reads the folder itself (**Open… › Folder…**, or a
+  drop) or zipped as one `.zarr.zip` (**Open… › File…**), a link can name a
+  store folder on a web host, and
+  the Python server and Jupyter serve the directory itself.
+- **Range request**: how the viewer reads an `.h5ad` or Zarr store (and the
+  other HDF5 formats: `.h5mu`, `.loom`, 10x `.h5`), opened in the browser or
+  served by `cellucid serve` and `show_anndata()` — only the bytes a view
+  needs are read, so the expression matrix is never held in memory whole. An
+  R object (`.rds`, `.rda`) or a MatrixMarket folder is read once from start
+  to end instead.
 - **Lazy loading**: gene expression is fetched only when you ask for a gene,
   rather than up front. Which paths are truly lazy is tabulated in
   {doc}`../b_data_loading/01_loading_options_overview`.
@@ -246,15 +277,15 @@ The two legends look nothing alike, and telling them apart at a glance is the
 fastest way to know what kind of field you are looking at:
 
 ```{figure} ../../../_static/screenshots/web_app/legend-categorical-clusters.png
-:alt: A legend with the hint Click a swatch to pick a color, Show All and Hide All buttons, and eight rows each holding a checkbox, a coloured square swatch, a category name, a cell count, a pencil icon and a bin icon.
-:width: 428px
+:alt: The categorical legend for clusters: the Show all and Hide all buttons above eight rows, each holding a checkbox, a colour swatch, a label, a cell count, a rename pencil and a delete bin.
+:width: 488px
 
 **Categorical legend** — checkboxes and swatches.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/legend-continuous-sscore.png
-:alt: A legend headed COLOR SCALE (VIRIDIS) above a purple to yellow gradient bar labelled minus 0.37 and 1.14, a Log color scale toggle reading Off, a Rescale colorbar to slider range toggle reading On, and a FILTERING block with a Live filtering toggle, Min and Max sliders and FILTER and RESET buttons.
-:width: 428px
+:alt: The continuous legend for S_score: the Color scale (Viridis) bar with its two end values, Log color scale off and Rescale to range on, each with its (i), and below a rule the Visible range block with Live filtering on, Minimum and Maximum sliders, and Filter and Reset.
+:width: 488px
 
 **Continuous legend** — a colour bar and Min/Max sliders. A gene uses this one
 too.
@@ -295,11 +326,11 @@ Scope note:
 - **Free-fly**: first-person navigation (immersive; supports pointer lock).
 - **Pointer lock / Capture pointer**: a browser feature that hides the cursor and reports raw mouse movement (needed for FPS-style looking).
 - **Orbit anchor**: a visual compass/anchor indicator shown in orbit mode (optional).
-- **Reset Camera**: returns the camera to a default framing (and can reset related UI controls depending on how you trigger it).
+- **Reset camera**: returns the camera to a default framing (and can reset related UI controls depending on how you trigger it).
 - **Dimension-specific navigation default**: a view showing a 1D or 2D
   embedding starts in Planar; a 3D one in Orbit. A mode chosen for a view is
   remembered for that view in that dimension and takes precedence.
-- **Camera Path**: a collapsed-at-start panel for user-created keyframes. Its
+- **Camera path**: a collapsed-at-start panel for user-created keyframes. Its
   transport appears only after two valid keyframes. Playback is stopped by
   default; explicit **Autoplay** starts a ready path immediately and after a
   successful session restore.
@@ -308,7 +339,7 @@ Scope note:
 
 ## Highlighting and selection terms
 
-- **Highlight mode**: the active interaction tool for selecting points (e.g., lasso).
+- **Tool** (under **Highlighting › Selection**): the active interaction tool for selecting points (e.g., lasso).
 - **Highlight group**: a named set of highlighted cells (used for comparison/analysis).
 - **Highlight page**: a collection of highlight groups (useful when you want multiple “sets” of groups).
 
@@ -321,8 +352,8 @@ Scope note:
 ## Analysis and export terms
 
 - **Analysis**: computations driven by the current dataset state (often highlights/groups).
-- **Figure Export**: export an image/vector figure of the current view(s) suitable for papers.
-- **Save State / Load State**: save/restore a `.cellucid-session` bundle that captures the application state.
+- **Figure export**: export an image/vector figure of the current view(s) suitable for papers.
+- **Save / Load** (under **Session file**): save/restore a `.cellucid-session` bundle that captures the application state.
 
 ---
 
@@ -331,10 +362,10 @@ Scope note:
 - **Global**: one value shared across the entire app/dataset (not specific to a view).
 - **Per view**: stored separately for each view/snapshot.
 - **Session bundle**: a saved `.cellucid-session` file (explicit user action).
-- **Local storage**: persistent browser storage used for small preferences (e.g., theme/background, and the antialiasing preference under the key `cellucid_antialias`).
+- **Local storage**: persistent browser storage used for small preferences (e.g., theme, background, and the antialiasing preference under the key `cellucid_antialias`).
 - **Session storage**: storage that is cleared when the tab closes (used for sensitive tokens like GitHub OAuth in community annotation).
-- **Device preference**: a setting that describes the machine you are viewing on rather than the picture you made. A session bundle captures it, and loading a session never applies it. `Antialiasing (smooth point edges)` is the only one.
-- **Automatic (`auto`)**: a stored preference that is a deferral rather than a value. The antialiasing preference has three states — `auto`, `on`, and `off` — and `auto` is the default, and what an absent key means. Cellucid resolves it from the open dataset's cell count (on below five million cells, off at or above) and decides again every time a dataset is opened. Ticking or unticking the checkbox replaces `auto` with your choice, permanently and in both directions. This is also the second reason a session never replays the setting: a checkbox cannot express `auto`, so restoring a captured tick would turn "let the dataset decide" into a choice you never made.
+- **Device preference**: a setting that describes the machine you are viewing on rather than the picture you made. A session bundle does not record it, and loading a session never changes it. `Antialiasing` is the only one; the theme, by contrast, travels with a session.
+- **Automatic (`auto`)**: a stored preference that is a deferral rather than a value. The antialiasing preference has three states — `auto`, `on`, and `off` — and `auto` is the default, and what an absent key means. Cellucid resolves it from the open dataset's cell count and the view's dimension (on below 5,000,000 cells in a 3D view and below 200,000 in a 1D or 2D view, off at or above) and decides again every time a dataset is opened or the view changes dimension. Ticking or unticking the checkbox replaces `auto` with your choice, permanently and in both directions. This is also the second reason a session does not record the setting: a checkbox cannot express `auto`, so restoring a captured tick would turn "let the dataset decide" into a choice you never made.
 
 See {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored` for what a
 session bundle carries.

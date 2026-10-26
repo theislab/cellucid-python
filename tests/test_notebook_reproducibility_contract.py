@@ -71,8 +71,11 @@ def test_jupyter_pancreas_executes_direct_anndata_diagnostics_before_cleanup() -
     assert "assert adata.n_obs == 2531" in source
     assert 'viewer.set_color_by("clusters")' in source
     assert "viewer.debug_connection(timeout=15)" in source
-    assert 'identity["stats"]["n_cells"]' in source
-    assert 'identity["n_cells"]' not in source
+    # The viewer reads the store itself, so the diagnostics read health and
+    # the store probe.
+    assert 'connection["anndata_store_probes"][DATASET_ID]' in source
+    assert 'health["n_cells"]' in source
+    assert "dataset_identity_probes" not in source
     assert source.index("viewer.debug_connection") < source.index("viewer.stop()")
     assert "web_source_url" not in source
     assert "show(" not in source
@@ -114,7 +117,8 @@ def test_vector_tutorial_uses_current_particle_flow_ui_language() -> None:
     ).read_text(encoding="utf-8")
     lowered = tutorial.lower()
     assert "animated particle flow" in lowered
-    assert "**visualization → vector field overlay**" in lowered
+    assert "**visualization → vector field**" in lowered
+    assert "vector field overlay**" not in lowered
     assert "**show overlay**" in lowered
     assert "**particle density:**" in lowered
     assert "**flow speed:**" in lowered

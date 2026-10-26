@@ -219,7 +219,7 @@ which is the single authority for every analysis CSV schema.
 
 Likely causes:
 - dataset was loaded without gene expression,
-- or the export did not include var/gene expression.
+- or the dataset holds no gene expression matrix.
 
 Fix:
 - load the dataset using a method that includes gene expression (see {doc}`../b_data_loading/index`).
@@ -245,7 +245,7 @@ Fix:
 
 Detailed with one variable (`cell_type`) across two pages. The plot-type choice
 is filtered by the **kind** of the variable, so a categorical field offers **Bar
-Plot**, **Pie / Donut** and **Heatmap** — and nothing else.
+plot**, **Pie / Donut** and **Heatmap** — and nothing else.
 ```
 
 :::{note}
@@ -266,10 +266,10 @@ The full view is where the numbers are:
 :alt: The expanded Detailed modal headed COMPARING: CELL_TYPE with a grouped bar plot top-left whose horizontal axis prints five of the eight category names, an Export row and PLOT OPTIONS column on the right, a SUMMARY STATISTICS table bottom-left, and a STATISTICAL ANALYSIS panel bottom-right holding a chi-squared card reading N/A, with a pointer on the CSV button.
 :width: 1440px
 
-Expanded Detailed. **SUMMARY STATISTICS** is a per-page table — category counts
+Expanded Detailed. **Summary statistics** is a per-page table — category counts
 and percentages for a categorical variable, or Count / Mean / Median / Min / Max
 / Std Dev for a continuous one, and it names every category whether or not the
-axis had room to. **STATISTICAL ANALYSIS** runs the tests below it.
+axis had room to. **Statistical analysis** runs the tests below it.
 ```
 
 :::{note}

@@ -9,42 +9,41 @@ vector values or allocate the particle overlay until you enable it.
 ## Fast path
 
 1. Load the dataset and open **Visualization**.
-2. Set `Render mode:` to `Points`.
-3. Show an embedding the field is bound to: choose its dimension under
-   **Compare Views → Dimension**, and, where the dimension has several
-   embeddings, the embedding under **Embedding** (the UMAP the vectors were
-   computed on).
-4. Find **Vector Field Overlay:**.
-5. If `Vector field:` is already visible, choose a field. This is required when
+2. Set `Render mode` to `Points`.
+3. Show an embedding the field is bound to (the embedding the vectors were
+   computed on): choose it under **Compare views → View N shows** (with a
+   single view, **Shows**), or press `1`, `2` or `3` for its dimension.
+4. Find **Vector field**.
+5. If `Vector field` is already visible, choose a field. This is required when
    the dataset has multiple fields and does not declare a default.
 6. Check `Show overlay`.
 7. Wait for `Loading vector field…`, then for particle preparation to complete.
 
 The settings panel opens after the overlay is enabled. A small `i` button beside
 the heading explains that the animation uses per-cell velocity or drift
-vectors, each exported for one embedding.
+vectors, each bound to one embedding.
 
 ## Availability states
 
 The UI has three deliberate states.
 
-### No **Vector Field Overlay:** block
+### No **Vector field** block
 
 The loaded dataset declares no vector fields for any embedding. There is no
-message for this state, and none is needed: the whole block is simply absent,
-and `Show connectivity edges` is followed straight by **Reset Camera**.
+message for this state, and none is needed: the whole block is simply absent
+from **Visualization**.
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/read-dataset-without-vector-field.png
-:alt: The bottom of the Visualization panel with the Kanemaru developing heart sample loaded: Show connectivity edges is followed straight by Reset Camera, with no Vector Field Overlay block between them.
-:width: 466px
+:alt: The Connectivity block of the Visualization panel with the Kanemaru heart sample loaded, and no Vector field block under it, because the dataset has none.
+:width: 496px
 
 **Kanemaru** — no vector field. Of the five built-in samples only the Pancreas
 sample ships one, so this is what four of the five look like.
 ```
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/read-dataset-with-vector-field.png
-:alt: The same stretch of the Visualization panel with the Pancreas sample loaded: a ringed Vector Field Overlay block with an unchecked Show overlay box sits between Show connectivity edges and Reset Camera.
-:width: 466px
+:alt: The same part of the Visualization panel with the Pancreas sample loaded: the Connectivity block followed by a Vector field block whose Show overlay box is unchecked.
+:width: 496px
 
 **Pancreas** — the same stretch of the same panel, with the block present. This
 is the only difference; if you are looking for the overlay and this block is not
@@ -67,13 +66,13 @@ Read the message beneath the controls:
 - `Available on X_umap, X_umap_3d. Select a vector field before enabling the overlay.`
   means matching fields exist, but none is selected.
 
-Only fields bound to the embedding the view shows appear in `Vector field:`.
+Only fields bound to the embedding the view shows appear in `Vector field`.
 Cellucid does not silently choose the first field. A declared default is selected
 only when that same field is bound to that embedding.
 
 ### Overlay enabled
 
-The status becomes `Available on …`. `Vector field:` and all core/advanced
+The status becomes `Available on …`. `Vector field` and all core/advanced
 controls are visible. Changing the field shows `Loading vector field…`; on
 success the overlay uses the newly selected field.
 
@@ -125,7 +124,7 @@ Loading or replacing a dataset always:
 - hides the settings panel until the new dataset publishes its field inventory.
 
 For the same loaded dataset, a `.cellucid-session` captures `Show overlay`,
-`Vector field:`, every core/advanced slider, `Color scheme:`, and
+`Vector field`, every core/advanced slider, `Color scheme`, and
 `Sync with LOD`. Restore still validates the current field options; the session
 does not contain the vector arrays or dataset. See
 {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.

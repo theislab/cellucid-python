@@ -4,7 +4,7 @@
 **Time:** 20–45 minutes  
 **What you’ll learn:**
 - A practical “what leaves my machine?” model for each loading workflow
-- What Cellucid stores locally (browser memory, cache, `localStorage`, `sessionStorage`, IndexedDB)
+- What Cellucid stores locally (browser memory, cache, `localStorage`, `sessionStorage`, IndexedDB, the origin-private file system)
 - Where privacy surprises happen (session bundles, share links, figure metadata)
 - Safe defaults for sensitive datasets (clinical / proprietary)
 
@@ -15,7 +15,7 @@
 Cellucid is primarily a **client-side web app**: your data is loaded into your browser and rendered locally.
 Cellucid does not upload your dataset’s *contents* anywhere, but:
 
-- some workflows **do fetch data over the network** (remote servers, GitHub-hosted exports),
+- some workflows **do fetch data over the network** (remote servers, datasets opened from a link or a GitHub repository),
 - the public deployment **sends usage analytics to Google**: which features you
   use and how loads go, with your dataset described only by coarse shape
   (cell-count range, dimensions) — never its name, file name or contents (see the
@@ -25,8 +25,9 @@ Cellucid does not upload your dataset’s *contents* anywhere, but:
 
 If you are using sensitive data, the safe workflow is usually:
 
-> self-host or run the app locally + use local prepared exports + avoid
-> GitHub/community features + review exported artifact metadata before sharing.
+> self-host or run the app locally + open local files (any format Cellucid
+> reads) + avoid links and community features + review exported artifact
+> metadata before sharing.
 
 :::{important}
 This page is not legal advice. If you have compliance requirements (HIPAA/GDPR/IRB/corporate policy), use this page to build a concrete checklist for your organization.
@@ -66,7 +67,7 @@ hostnames:
 - `theislab.github.io`
 
 On any other origin — a self-hosted deployment, a `cellucid serve` run, a
-notebook iframe, `localhost`, a file server on your institution’s network — the
+Python or R viewer, `localhost`, a file server on your institution’s network — the
 flag is set to false, is not writable afterwards, and **no analytics script is
 ever fetched**. There is no configuration to get wrong: the decision is made
 from the hostname before anything else runs.
@@ -80,8 +81,8 @@ URL, or an error message — and an event that does not fit is dropped whole.
 ### What is sent
 
 - **One page view per visit**, with the page address reduced to
-  `https://www.cellucid.com/`: the query string — dataset ids, `remote=` and
-  `github=` addresses, `exportsBaseUrl` — is never part of it.
+  `https://www.cellucid.com/`: the query string — dataset ids, `remote=`
+  addresses, `data=` links, `sampleCatalog` — is never part of it.
 - **`app_ready`** — how long startup took (milliseconds and a range such as
   `1-3s`) and whether a dataset opened.
 - **`startup_failure`** — where startup stopped (a fixed phase name), which kind
@@ -90,22 +91,23 @@ URL, or an error message — and an event that does not fit is dropped whole.
 
   | Field | Example content |
   |---|---|
-  | loading method | `local-user-prepared`, `local-user-h5ad`, `remote-connect`, `github-url-param`, … |
-  | source kind | `local-user`, `remote`, `github`, `local-demo`, … |
+  | loading method | `local-user-file`, `local-user-folder`, `remote-connect`, `data-url-param`, … |
+  | source kind | `local-user`, `remote`, `link`, `local-demo`, `jupyter` |
+  | file format it was read as (success only) | `h5ad`, `zarr`, `loom`, `tenx-h5`, `h5mu`, … |
   | outcome and duration | `success`, `3812` ms, `3-10s` |
   | cell and gene count **ranges** | `10k-100k`, `1M-10M` — never the exact counts |
   | obs field count, embedding dimensions | `14`, `2+3` |
   | how its embeddings were chosen, how many it could show and how many it opened with turned on (each a **range**) | `default` or `best_guess`; `1`, `2-3`, `4-9`, `10+` |
   | connectivity / vector field present | yes/no |
-  | writer version of the export | `0.9.2` |
+  | whether the default session its catalog names was applied | `none`, `restored`, `failed`, … |
   | dataset id | **only for the deployment's own public sample datasets** |
   | on failure | a fixed error code and class, and the HTTP status |
 
 - **`feature_used`** — the first use, per page load, of a feature you started
   yourself, from a fixed list (for example `render_mode` / `smoke`,
   `figure_export`, `highlight_tool` / `lasso`, `data_mapping` / `embedding`,
-  `embedding_columns`, `default`, `knn`, `gene_names`, `expression`, `latent` or
-  `vector_fields`, and `dimension` / `2` when a view is switched to a 2D
+  `embedding_columns`, `default`, `knn`, `modality`, `gene_names`, `expression`, `log1p`,
+  `highly_variable`, `latent` or `vector_fields`, and `dimension` / `2` when a view is switched to a 2D
   embedding). The feature's name is a fixed
   identifier the developers assigned; nothing is read from what a control says,
   so category names, page names you typed and the `obsm` or `obsp` keys or
@@ -122,8 +124,8 @@ URL, or an error message — and an event that does not fit is dropped whole.
 **Loading a local file sends no name.** Its values never leave the browser, and
 on the public site only the descriptors in the table do: the loading method,
 outcome, duration, count ranges, dimensions, whether its embeddings were a
-best guess, and writer version. Its name, its id, its `obsm` keys and the text
-of any error stay in the browser.
+best guess, and whether it has a graph or a vector field. Its name, its id,
+its `obsm` keys and the text of any error stay in the browser.
 :::
 
 ### How to avoid it entirely
@@ -132,15 +134,20 @@ Pick any one of these; each is sufficient:
 
 - **Self-host the app.** Serve `index.html` from your own origin. Analytics
   never initialises.
-- **Use the local server or notebook viewer.** `cellucid serve` and the Jupyter
-  embedding are not on the production hostnames.
+- **Use the local server or a Python/R viewer.** `cellucid serve`,
+  `show_anndata()` and `cellucid_view()` serve the app from your own machine,
+  never from a production hostname.
 - **Block it at the network or browser layer** if you must use the public site —
   an ad or tracking blocker refusing Google's script or Cellucid's own
   `assets/js/analytics/` files leaves the app fully working, because analytics
   is loaded as an optional part. Prefer one of the first two all the same,
   because they remove the code path rather than the request.
 
-Naming exports neutrally (`cohort_a` rather than the study name) is a sensible
+Google Analytics keeps two first-party cookies of its own on the production
+hostnames, `_ga` and `_ga_K4774ZWGEQ`, to tell a returning browser from a new
+one. Cellucid itself sets no cookie, and no other origin gets either.
+
+Naming datasets neutrally (`cohort_a` rather than the study name) is a sensible
 habit regardless, since the same string also lands in figure metadata and
 session bundles.
 
@@ -153,13 +160,12 @@ If you only read one thing, read this.
 
 | Workflow | Where the dataset is read from | Does dataset **content** traverse the network? | What reaches analytics on the public site? | Typical privacy risk |
 |---|---|---:|---:|---|
-| **Local demo** (`source=local-demo`) | Hosted demo exports | Yes (demo files are downloaded) | Load descriptors and the public sample's id | Low (public demo), but still trackable traffic |
-| **Local prepared export folder** (directory picker) | Your local disk | No (files read locally) | Coarse shape only — no name or id | Low–medium: only count ranges and dimensions are reported; the folder name can still leak via screenshots and figure metadata |
-| **Local `.h5ad` / `.zarr`** (file picker) | Your local disk | No (files read locally) | Coarse shape only — no name or id | Low–medium: as above, plus large local file access and potential local caching |
+| **Sample datasets** (`source=local-demo`) | The hosted sample catalog | Yes (the parts of the sample files a view needs are downloaded) | Load descriptors and the public sample's id | Low (public samples), but still trackable traffic |
+| **Local file or folder** (file picker or drop: `.h5ad`, Zarr, `.h5mu`, `.loom`, 10x, R objects, MatrixMarket) | Your local disk | No (files read locally) | Coarse shape only — no name or id | Low–medium: only count ranges and dimensions are reported; the file name can still leak via screenshots and figure metadata |
 | **Remote server** (`remote=...`) | A server you connect to (often `127.0.0.1`) | Yes (files or chunks downloaded from that server) | Coarse shape only — never the server address | Depends: can be "local-only" or a true data transfer |
-| **GitHub-hosted exports** (`github=owner/repo/...`) | GitHub raw content | Yes (downloaded from GitHub) | Coarse shape only — never the repository path | High if data is private; also GitHub access logs exist |
-| **Jupyter embedded viewer** | A local Python server + iframe bridge | Yes (browser ↔ local server) | No — the notebook viewer is never on a production hostname | Usually low if truly local, but can be risky if ports are exposed |
-| **Community Annotation** (GitHub sync) | GitHub API + repo contents, through Cellucid's auth proxy | Yes | That the feature was used | You are explicitly publishing annotations/votes to GitHub; treat as public unless repo is private and access-controlled |
+| **Data links** (`data=...`: GitHub, CELLxGENE, GEO, Zenodo, Hugging Face, Figshare, Dropbox, Google Drive, OneDrive, any web address) | The host the link names | Yes (the parts a view needs are downloaded) | Coarse shape only — never the link | High if data is private; the host's access logs exist. A private Google Drive or OneDrive file would be read with your own sign-in, straight from Google or Microsoft ({doc}`../b_data_loading/16_private_drive_onedrive`); until a site's owner registers it with Google and Microsoft, that site says Drive and OneDrive are "not configured on this site yet" |
+| **Python or R viewer** (`show_anndata()`, `cellucid_view()`) | The local server the program started | Yes (browser ↔ that server, plus one WebSocket for commands and events) | No — a viewer is never on a production hostname | Usually low if truly local, but can be risky if ports are exposed |
+| **Community annotation** (GitHub sync) | GitHub API + repo contents, through Cellucid's auth proxy | Yes | That the feature was used | You are explicitly publishing annotations/votes to GitHub; treat as public unless repo is private and access-controlled |
 
 Two nuances that matter:
 
@@ -186,10 +192,15 @@ This data disappears when you reload/close the tab.
 
 ### 2) HTTP cache (browser-managed)
 
-When Cellucid fetches files over HTTP (demo datasets, remote server, GitHub), your browser may cache responses on disk.
+Dataset bytes are fetched with `cache: 'no-store'` (range reads of a file, a
+Zarr store's keys, a served file), so the browser does not write them to its
+HTTP cache. What it may keep on disk is the app's own files, a catalog's
+`datasets.json` and default sessions (revalidated with the host before each
+use), and small provider API answers.
 
 Implication:
-- If you load sensitive data from a remote server, that data may be present in your browser cache until you clear it.
+- The dataset's values are not left in the HTTP cache; catalog files and
+  sessions you opened from a link can be, until you clear it.
 
 ### 3) Explicit browser storage (app-managed)
 
@@ -209,6 +220,8 @@ Contents:
 - viewer background preference
 - which welcome-screen quote was shown last
 - a debug toggle
+- the CELLxGENE Census release last read (so a `cellxgene:` link opens one
+  round trip sooner)
 - Community Annotation: an auto-pull preference, a path→revision index, and —
   the one that matters — a **per-scope annotation session**
 
@@ -227,6 +240,8 @@ So `localStorage` can reveal:
 
 `sessionStorage` is used for **short-lived secrets** and per-tab state, most importantly:
 - GitHub OAuth tokens for Community Annotation
+- Google and Microsoft sign-ins for Google Drive and OneDrive files, on a
+  site configured for them
 
 This is intentional:
 - closing the tab signs you out (token is gone),
@@ -237,24 +252,45 @@ Related: {doc}`../j_community_annotation/index` (token lifetime and storage).
 #### IndexedDB (larger local cache; persists until cleared)
 
 IndexedDB holds larger cached payloads that would be unreasonable to store in
-`localStorage`. Cellucid uses **two** databases:
+`localStorage`. Cellucid keeps one thing there:
 
 - **Community Annotation file cache** — the raw annotation JSON downloaded from
   GitHub, for speed and offline-ish behaviour.
-- **Marker cache** — the results of marker-discovery runs, including the
-  computed statistic arrays. Only results for a prepared export that records
-  its export time (`created_at`) are written here; results for a dataset
-  without one stay in memory for that load.
+
+Marker-discovery results (including the computed statistic arrays) are **not**
+stored there: they are kept in memory for the dataset load they were computed
+on and are gone when the tab closes. An AnnData file records no write time that
+would prove a stored result still matches its values.
 
 Privacy implications:
 - If you use Community Annotation on sensitive repos, cached copies of
   annotation JSON can exist locally until cleared.
-- The marker cache is **derived from your expression data**. It is not the
-  matrix, but a per-gene statistic table for named groups is not a preference
-  either. On a shared machine, clear it along with everything else.
 
-If IndexedDB is unavailable (private browsing, strict policy), the marker cache
-degrades silently — you get no warning, just slower repeat analyses.
+If IndexedDB is unavailable (private browsing, strict policy), Community
+Annotation **Pull** fails and says so, without replacing the annotation view
+on screen; nothing else needs IndexedDB.
+
+#### Origin-private file system (dataset-derived, while a tab holds it)
+
+Two kinds of **dataset-derived** bytes are written to the browser's
+origin-private file system, a disk area only this site can read:
+
+- an R object (`.rds`, `.rda`) or a MatrixMarket folder is read once and
+  converted into an AnnData store there (`cellucid-transcoded/`), so the
+  views can read it in place; reopening the same file in the same tab reads
+  it no second time;
+- a gene index of a large cell-major matrix spills there when it outgrows its
+  memory budget (`cellucid-column-index/`).
+
+Each is held while a tab uses it and removed once no tab holds it: when the
+app next starts, or before another conversion or index is written. A closed
+or crashed tab's copy stays on disk until then. Where the browser has no such
+file system (a Firefox private window), the conversion stays in memory.
+
+Privacy implication:
+- On a shared machine, a converted R object or MatrixMarket folder can stay
+  on disk after its tab closed, until Cellucid is opened again or site data
+  is cleared.
 
 ---
 
@@ -271,6 +307,7 @@ This typically clears:
 - `localStorage`
 - `sessionStorage`
 - IndexedDB
+- the origin-private file system
 - HTTP cache entries for the site
 
 ### Option B (precise): DevTools → Application
@@ -300,21 +337,25 @@ If you use `https://www.cellucid.com`, your browser downloads:
 
 Every JavaScript library the app depends on is served from the app’s own origin;
 none is pulled from a third-party CDN, and the page’s content security policy
-would block one that was. The single third-party script origin permitted is
-Google’s tag manager, and only on the production hostnames — see
-{ref}`analytics`.
+would block one that was. The third-party script origins permitted are
+Google’s tag manager, used only on the production hostnames (see
+{ref}`analytics`), and Google's sign-in and file picker, loaded only when you
+open a Google Drive file.
 
 If you self-host the app, the “app host” changes, but the model is the same.
 
 ### 2) Loading datasets (workflow-dependent)
 
-- **Local folder / local `.h5ad` / local `.zarr`**: dataset content is read from disk, not fetched from the network.
+- **A local file or folder**: dataset content is read from disk, not fetched from the network.
 - **Remote server**: dataset content (or chunks) is downloaded from that server.
-- **GitHub**: dataset content is downloaded from GitHub raw endpoints.
+- **A link**: dataset content is downloaded from the host the link names
+  (GitHub's raw endpoints, CELLxGENE's Census bucket, NCBI GEO, Zenodo,
+  Hugging Face, Figshare, Dropbox, Google Drive, OneDrive, or the web address
+  itself).
 
 ### 3) Optional services (feature-dependent)
 
-- **Community Annotation** does **not** talk to GitHub directly. Sign-in and all
+- **Community annotation** does **not** talk to GitHub directly. Sign-in and all
   repository reads and writes go through a Cellucid-operated authentication
   proxy, which holds the app credentials and relays to the GitHub API. Your
   GitHub token is sent to that proxy on every annotation request — not to
@@ -323,6 +364,17 @@ If you self-host the app, the “app host” changes, but the model is the same.
   deployment from exfiltrating it.
 - **ORCID lookup**: typing into the ORCID field in the annotation identity form
   queries ORCID’s public search endpoint.
+- **Google Drive and OneDrive**: on a site its owner registered with Google
+  and Microsoft, opening a Drive file loads Google's sign-in and file-picker
+  scripts (from `accounts.google.com` and `apis.google.com`), only then; a
+  private Drive file or any OneDrive file asks you to sign in to Google or
+  Microsoft in their own window. The page then reads the file straight from
+  Google or Microsoft with your sign-in. No Cellucid server is involved, and
+  the sign-in stays in the tab's `sessionStorage`
+  ({doc}`../b_data_loading/16_private_drive_onedrive`). A site that is not
+  registered (no client ID in `assets/js/data/sources/provider-config.js`,
+  which is the case in this release) says "not configured on this site yet"
+  and sends nothing.
 
 ### 4) What is not there
 
@@ -339,8 +391,12 @@ Outside the analytics beacon, nothing is sent that you did not initiate.
 Session bundles are designed to be shareable, but that means they can carry *derived* information.
 
 They contain:
-- a dataset fingerprint: source type, dataset id, cell count, variable count, and
-  a **one-way digest** of the cell ordering
+- a dataset fingerprint: dataset id and name, cell count, variable count, the
+  data mapping (which `obsm`, `obsp`, layer and `var` keys are used), and a
+  **one-way digest** of the cell ordering
+- where the dataset was opened from: a sample id, a link's locator, a
+  server's address, or a local file's or folder's **name** (never its path)
+- the keys of the fields and genes the views use
 - field names and category labels
 - highlight page/group names (your labels!)
 - highlight memberships (cell index sets)
@@ -348,7 +404,8 @@ They contain:
 - a creation timestamp
 
 They do **not** contain expression values, coordinates, obs values, your
-identity, any GitHub token, or any path from the author’s machine. The cell
+identity, any sign-in token, or any path from the author’s machine (a local
+file's name, yes). The cell
 ordering appears only as a digest that cannot be turned back into coordinates.
 
 So the residual risk is real but bounded: what you are sharing is *which cells*
@@ -381,7 +438,7 @@ Before sharing figures publicly, skim:
 Share links can encode:
 - dataset selection (`source=...`, `dataset=...`)
 - remote server URLs (`remote=http://...`)
-- GitHub repo paths (`github=owner/repo/...`)
+- data links (`data=gh:owner/repo/...`, a GEO accession, a Zenodo record, a web address)
 - annotation repo references (`annotations=owner/repo`)
 
 This is convenient, but it means URLs can leak information in:
@@ -391,7 +448,7 @@ This is convenient, but it means URLs can leak information in:
 
 If you are privacy-constrained, prefer sharing:
 - a session bundle via an approved channel, or
-- an export folder via approved storage
+- the dataset file via approved storage
 and keep URLs “clean”.
 
 ---
@@ -416,16 +473,18 @@ postures:
   to anyone who can reach the port. On `0.0.0.0`, that is anyone on the network.
   This is deliberate — it is how the browser reads your data — and it is exactly
   why the bind address is the control that matters.
-- **Writing back into your Python session is authenticated.** The two endpoints
-  the browser uses to reach into the notebook — posting interaction events, and
-  delivering a session bundle — require a per-viewer token that is generated
-  fresh in the Python process, never written to disk, and handed to the browser
-  along with the viewer. The server compares it with a constant-time comparison,
-  so a wrong token cannot be discovered by measuring how long the rejection
-  takes, and an unknown viewer is compared against a same-length dummy so the
-  failure path does not reveal the token length either. A rejected event is not
-  delivered to your callbacks at all, and the token is stripped from the payload
-  before your code ever sees it.
+- **Writing back into your Python session is authenticated.** Interaction
+  events and session bundles reach the notebook only over the viewer channel,
+  one WebSocket (`/_cellucid/ws`) that opens with the viewer's id and a
+  per-viewer token generated fresh in the Python process, never written to
+  disk, and handed to the browser in the viewer's address. The server refuses
+  a handshake from a page on another site (`Origin` must be the server's own
+  host, a loopback name or a declared `allowed_hosts` name), and compares the
+  token in constant time, so a wrong token cannot be discovered by measuring
+  how long the rejection takes; an unknown viewer is compared against a
+  same-length dummy so the failure path does not reveal the token length
+  either. A socket that fails the check is closed before any event reaches
+  your callbacks.
 
 The practical reading: a stranger who reaches an exposed port can **read** your
 dataset, but cannot **drive** your notebook.
@@ -465,6 +524,16 @@ Even though tokens are session-only, best practice is:
 - use it on trusted deployments (official `cellucid.com` or your audited self-host)
 - avoid signing in inside embedded/untrusted iframes
 
+### 4) Report a security problem privately
+
+Report a vulnerability to the contact in the
+[security policy](https://github.com/theislab/cellucid/security/policy), not
+in a public issue. The site publishes the same contact for automated tools at
+[www.cellucid.com/.well-known/security.txt](https://www.cellucid.com/.well-known/security.txt)
+(RFC 9116). The plain-language summaries for visitors are the site's
+[privacy policy](https://www.cellucid.com/privacy.html) and
+[terms of use](https://www.cellucid.com/terms.html).
+
 ---
 
 ## Institutional / IRB checklist (copy/paste)
@@ -476,15 +545,18 @@ Use this as a starting point for approvals and internal documentation.
    - This single answer determines whether Google Analytics is active at all —
      see {ref}`analytics`. For most review boards it is the first question.
 2) **Where is dataset content stored?**
-   - local disk only vs remote server vs GitHub
+   - local disk only vs remote server vs a link's host (GitHub, a repository, a cloud drive)
 3) **If the public host is used, what does it report about your data?**
    - No name, id, path or error text: only the loading method, outcome,
-     duration, cell/gene count ranges, field count, dimensions and the export's
-     writer version (a dataset id only for the public sample datasets). See
+     duration, cell/gene count ranges, field count, dimensions and whether it
+     has a graph or a vector field (a dataset id only for the public sample
+     datasets). See
      {ref}`analytics`.
 4) **What local persistence exists?**
    - `localStorage` preferences **and Community Annotation session content**,
-     IndexedDB annotation and marker caches, browser HTTP cache
+     the IndexedDB annotation file cache, converted R objects and MatrixMarket
+     folders in the origin-private file system while a tab holds them,
+     browser HTTP cache (app files, catalogs, sessions)
 5) **If a local server is used, what is its bind address?**
    - `127.0.0.1` (default) vs `0.0.0.0`. Reads are unauthenticated either way.
 6) **What artifacts will be shared?**
@@ -499,18 +571,19 @@ Use this as a starting point for approvals and internal documentation.
 **Likely causes (ordered):**
 1) You are using the hosted app (`cellucid.com`), so the app assets load over the network.
 2) You are on a production hostname, so analytics beacons are being sent — see {ref}`analytics`.
-3) You accidentally connected to a remote/GitHub source (dataset content truly loads over the network).
+3) You accidentally connected to a server or opened a link (dataset content truly loads over the network).
 
 **How to confirm**
 - DevTools → Network:
-  - dataset requests look like `.bin`, `.json`, `.zarr`, etc.
+  - dataset requests are range requests to the file (`.h5ad`, `.zarr.zip`, …),
+    a Zarr store's keys, or `_cellucid/anndata/…` on a server.
   - analytics traffic goes to Google’s tag manager and measurement endpoints.
   - Check `window.cellucidAnalyticsEnabled` in the console: `true` means this
     origin is a production host and is reporting.
 
 **Fix**
 1) If you need “no network after load”, use an offline/self-hosted deployment.
-2) Ensure your source is “local-user” (directory/file picker), not `remote` or `github`.
+2) Ensure your source is “local-user” (**Open…** or a drop), not a server or a link.
 
 ---
 

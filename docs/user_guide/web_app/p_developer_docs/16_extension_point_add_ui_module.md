@@ -108,6 +108,18 @@ Decide whether your UI controls should be persisted by sessions:
 - If your section contains transient state (previews, auth tokens, network state), exclude it:
   - add `data-state-serializer-skip="true"` on the section or a subtree
 
+### Help decision (also early)
+
+A control group explains itself with an info button beside its title, not with
+help text in the panel: a `button.info-btn` whose `aria-controls` names an
+`info-tooltip` element carrying `data-info-tip="<key>"` (see any
+`control-group-header` in `index.html`). Its text is one entry of
+`cellucid/assets/js/app/ui/components/info-tips.js`: a title, a short body and
+at least one link into these docs by page and heading anchor.
+`tests/info-tips-contract.test.mjs` checks every entry and, when this docs tree
+is present, that every linked heading exists, so renaming a docs heading a tip
+links to fails it.
+
 ### Accessibility decision (also early, and cheap here)
 
 The browser suite asserts that **every control in the analysis panels has an
@@ -183,6 +195,24 @@ Rules of the road:
 - no inline styles in `index.html`
 - use utilities + semantic tokens
 - avoid raw hex outside token files
+
+Every screen of the site follows the same design principles (the full list is
+"Site Design Principles" in that README), whether it is a panel, a dialog, a
+standalone page (`404.html`, `privacy.html`, `terms.html`, `accessibility.html`,
+`assets/auth/callback.html`) or a screen shown when the app cannot run:
+- tokens only, in light and dark, in the theme the visitor chose in the app;
+- the brand card's composition (`components/_welcome.css`): wordmark, one calm
+  heading, one short sentence, clear actions, quiet links;
+- tidy and never verbose: say what happened and what to do; technical detail
+  goes under **Details**, to the console and to the notification log;
+  explanations go behind (i) tips and in the documentation;
+- never a dead end, and terminal only when the app itself cannot run;
+- phone widths, a visible keyboard focus, contrast in both themes, and
+  `prefers-reduced-motion`.
+
+Standalone pages load `assets/css/page.css`, a subset of `main.css` (tokens,
+themes, base, the brand card and `layouts/_page.css`);
+`tests/site-pages-design-contract.test.mjs` holds them to it.
 
 If you add new tokens:
 - update `types/design-tokens.d.ts`

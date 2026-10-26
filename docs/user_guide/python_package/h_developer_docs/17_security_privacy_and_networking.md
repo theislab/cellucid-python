@@ -18,14 +18,15 @@ Cellucid Python is primarily designed for:
 
 If you expose a Cellucid server to an untrusted network, you must assume:
 - others can fetch dataset files,
-- others can trigger event endpoints,
+- anyone who learns a viewer's iframe URL (it carries the viewer's token) can
+  open that viewer's channel and trigger your hook callbacks,
 - and you may leak private metadata via URLs/logs.
 
 ---
 
 ## Network surfaces
 
-### 1) Dataset servers (exported + AnnData)
+### 1) The dataset server (`AnnDataServer`)
 
 Binding:
 - default host is `127.0.0.1` (local only)
@@ -54,10 +55,12 @@ Config:
 
 ### 2) Exact viewer-generation delivery
 
-The server may download the viewer UI from:
-- `https://www.cellucid.com`
+At every start, before it binds, the server downloads the viewer UI declared
+by the inventory `cellucid-web-assets.json` from the web source:
+- `https://www.cellucid.com` (default; `--web-source-url` / `web_source_url=`)
 
-It caches the files locally.
+It byte-verifies the files and keeps them locally (`--no-web-ui` /
+`serve_web_ui=False` skips this and serves the data routes only).
 
 Privacy note:
 - the cached assets are UI code, not your dataset
@@ -66,29 +69,31 @@ Privacy note:
 Config:
 - `--web-cache-dir` or `web_cache_dir=`
 
-### 3) Hooks event endpoint
+### 3) The viewer channel
 
-- `POST /_cellucid/events` (JSON events)
-- `POST /_cellucid/selection?viewerId=...&viewerToken=...&source=...`
-  (selections, as binary cell indices; credentials are checked before the
-  body is read, and the body is capped at 512 MiB)
-- used for frontend → Python hooks
+- `GET /_cellucid/ws`, a WebSocket per notebook viewer, carrying Python's
+  commands and the viewer's events (selections and session bundles as binary
+  frames)
 
 Important:
-- events are routed by `viewerId` and delivered only after the registered
-  viewer's exact `viewerToken` is compared with `hmac.compare_digest`. An
-  unknown viewer gets `404`; a missing or wrong token gets `403`.
+- the upgrade passes the `Host` check and an `Origin` check (the server's own
+  host, a loopback name, or a host in `allowed_hosts`); WebSockets are not
+  covered by CORS, so this is the cross-site check;
+- the first frame must name a registered viewer and its exact `viewerToken`,
+  compared with `hmac.compare_digest`; anything else closes the channel
+  (`4401`) before a frame is delivered.
 
 Implication:
 - the token is generated per viewer and embedded in the iframe URL, so anyone
-  who can read that URL — or who can reach a viewer you opened — can trigger
-  your hook callbacks, which run the Python you wrote in your handlers.
+  who can read that URL and reach the server from an accepted origin can open
+  the channel and trigger your hook callbacks, which run the Python you wrote
+  in your handlers.
 
 ### 4) Wire capability endpoint
 
 - `GET /_cellucid/protocol`
-- used by the web build to learn which events this `cellucid` accepts before
-  emitting one
+- used by the web build to find the viewer channel and learn which events this
+  `cellucid` accepts before emitting one
 
 No credentials:
 - the body is the same for every viewer, every dataset and every request — it
@@ -99,16 +104,17 @@ Implication:
 - reaching this route tells someone which `cellucid` protocol generation you
   are running. So does `/_cellucid/health`, which already returns the version.
 
-### 5) Session bundle upload endpoint
+### 5) Session bundles
 
-- `POST /_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
-- used for notebook “no download” session capture
+- arrive on the viewer channel as one binary frame, for notebook “no
+  download” session capture
 
 Guards:
-- requires a pending request registered by Python (`viewerId`, `requestId`)
-- validates a magic header (`CELLUCID_SESSION\\n`)
-- enforces a max upload size (currently 512MB)
-- streams to disk to avoid memory blowups
+- only on an authenticated channel, and only for a request Python registered
+  and is still waiting for (`viewerId`, `requestId`)
+- validates a magic header and the complete bundle structure
+- streams to disk, so memory stays bounded; the temporary directory's free
+  space is the only size bound
 
 Still:
 - do not expose it publicly for sensitive workflows.

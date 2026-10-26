@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import inspect
-import json
 import re
 import subprocess
 import sys
@@ -10,16 +8,13 @@ from pathlib import Path
 import pytest
 
 import cellucid
-from cellucid._server_base import (
+from cellucid._viewer_channel import (
     register_event_callback,
     route_event,
     unregister_event_callback,
 )
-from cellucid.anndata_adapter import AnnDataAdapter
 from cellucid.anndata_server import AnnDataServer
-from cellucid.jupyter import CellucidViewer, HookRegistry
-from cellucid.prepare_data import generate_datasets_manifest
-from cellucid.server import CellucidServer
+from cellucid.jupyter import AnnDataViewer, HookRegistry
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 RETIRED_PATH_LANGUAGE = re.compile(
@@ -38,26 +33,6 @@ CURRENT_TEXT_SUFFIXES = {
     ".yaml",
     ".yml",
 }
-
-
-def _identity(dataset_id: str, name: str = "Dataset") -> dict[str, object]:
-    return {
-        "version": 3,
-        "id": dataset_id,
-        "name": name,
-        "stats": {
-            "n_cells": 3,
-            "n_genes": 2,
-        },
-    }
-
-
-def _write_identity(directory: Path, identity: dict[str, object]) -> None:
-    directory.mkdir()
-    (directory / "dataset_identity.json").write_text(
-        json.dumps(identity),
-        encoding="utf-8",
-    )
 
 
 def test_shipped_python_repository_surfaces_contain_only_current_contract_language() -> None:
@@ -246,16 +221,17 @@ def test_hook_registry_delivers_each_event_once_and_propagates_failure() -> None
         hooks.trigger("selection", {"cells": [1]})
 
 
-def test_send_message_before_display_is_an_explicit_error() -> None:
-    viewer = object.__new__(CellucidViewer)
-    viewer._displayed = False
-    with pytest.raises(RuntimeError, match="display"):
+def test_send_message_after_stop_is_an_explicit_error() -> None:
+    # Before the viewer connects a command waits for it; after the viewer
+    # stopped there is nothing left to wait for.
+    viewer = object.__new__(AnnDataViewer)
+    viewer._message_routing_registered = False
+    with pytest.raises(RuntimeError, match="stopped"):
         viewer.send_message({"type": "ping", "requestId": "request-1"})
 
 
-@pytest.mark.parametrize("server_type", [CellucidServer, AnnDataServer])
-def test_starting_a_running_server_is_an_explicit_error(server_type: type) -> None:
-    server = object.__new__(server_type)
+def test_starting_a_running_server_is_an_explicit_error() -> None:
+    server = object.__new__(AnnDataServer)
     server._running = True
     with pytest.raises(RuntimeError, match="already running"):
         server.start()
@@ -293,51 +269,12 @@ def test_anndata_file_loader_rejects_undeclared_formats_before_reader_dispatch(
         path.mkdir()
         (path / ".zattrs").write_text("{}", encoding="utf-8")
 
-    with pytest.raises(ValueError, match=r"\.h5ad|Zarr"):
-        AnnDataAdapter.from_file(
+    with pytest.raises(ValueError, match=r"\.h5ad|is not a Zarr store"):
+        AnnDataServer(
             path,
+            quiet=True,
+            serve_web_ui=False,
             dataset_name="Exact loader",
             dataset_id="exact-loader",
         )
     assert calls == []
-
-
-def test_dataset_manifest_has_one_required_default_and_no_repair_modes() -> None:
-    parameters = inspect.signature(generate_datasets_manifest).parameters
-    assert "output_filename" not in parameters
-    assert parameters["default_dataset"].default is inspect.Parameter.empty
-
-
-def test_dataset_manifest_rejects_orphan_directories_atomically(
-    tmp_path: Path,
-) -> None:
-    _write_identity(tmp_path / "valid", _identity("valid"))
-    (tmp_path / "orphan").mkdir()
-    manifest_path = tmp_path / "datasets.json"
-    original = b'{"existing":true}\n'
-    manifest_path.write_bytes(original)
-
-    with pytest.raises(ValueError, match="orphan.*dataset_identity"):
-        generate_datasets_manifest(tmp_path, default_dataset="valid")
-    assert manifest_path.read_bytes() == original
-
-
-def test_dataset_manifest_rejects_missing_or_unknown_default(
-    tmp_path: Path,
-) -> None:
-    _write_identity(tmp_path / "valid", _identity("valid"))
-
-    with pytest.raises(ValueError, match="default_dataset.*missing"):
-        generate_datasets_manifest(tmp_path, default_dataset="missing")
-    assert not (tmp_path / "datasets.json").exists()
-
-
-def test_dataset_manifest_rejects_duplicate_dataset_ids(
-    tmp_path: Path,
-) -> None:
-    _write_identity(tmp_path / "first", _identity("duplicate", "First"))
-    _write_identity(tmp_path / "second", _identity("duplicate", "Second"))
-
-    with pytest.raises(ValueError, match="duplicate dataset id"):
-        generate_datasets_manifest(tmp_path, default_dataset="duplicate")
-    assert not (tmp_path / "datasets.json").exists()

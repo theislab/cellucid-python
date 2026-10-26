@@ -2,7 +2,7 @@
 
 **Audience:** everyone (wet lab → power user)  
 **Time:** 10–15 minutes  
-**Goal:** understand what `viewer = show(...)` returns, what it controls, and how to clean it up safely.
+**Goal:** understand what `viewer = show_anndata(...)` returns, what it controls, and how to clean it up safely.
 
 ---
 
@@ -20,39 +20,32 @@ You can think of it like: “a remote control for the web app”.
 
 ---
 
-## Practical path (computational users): there are two viewer types
+## Practical path (computational users): the viewer type
 
-Cellucid has two main notebook viewer classes:
+Cellucid has one notebook viewer class, **`AnnDataViewer`**, which
+`show_anndata(...)` creates and displays. It views an AnnData or MuData
+object, or any file or folder Cellucid reads, by path (`.h5ad`, AnnData or
+MuData Zarr, `.h5mu`, `.loom`, a 10x `.h5` file or Cell Ranger `outs/`
+folder, a MatrixMarket folder, or an R object `.rds`/`.rda`/`.RData`).
+A file written by `prepare(...)` names itself, so it needs no
+`dataset_name`/`dataset_id`:
 
-1) **`CellucidViewer`** (export-first; fastest UI for large datasets)  
-   Use when you already have an export folder created by `prepare(...)`.
+```python
+from cellucid import show_anndata
 
-   ```python
-   from cellucid import show
+viewer = show_anndata(
+    adata,
+    height=650,
+    dataset_name="Example",
+    dataset_id="example",
+)
+viewer.wait_for_ready(timeout=60)
+```
 
-   viewer = show("./my_export", height=650)
-   viewer.wait_for_ready(timeout=60)
-   ```
-
-2) **`AnnDataViewer`** (no-export convenience; great for exploration)  
-   Use when you want to view an AnnData object (or `.h5ad` / `.zarr`) directly.
-
-   ```python
-   from cellucid import show_anndata
-
-   viewer = show_anndata(
-       adata,
-       height=650,
-       dataset_name="Example",
-       dataset_id="example",
-   )
-   viewer.wait_for_ready(timeout=60)
-   ```
-
-Under the hood, both are subclasses of `cellucid.jupyter.BaseViewer`.
+It is one class, `cellucid.jupyter.AnnDataViewer`: it starts the data server, and it holds the notebook embedding, the hooks, the commands and the session capture.
 
 ```{note}
-You can also run Cellucid without notebooks using the CLI (`cellucid serve ...`) or Python (`serve(...)` / `serve_anndata(...)`).
+You can also run Cellucid without notebooks using the CLI (`cellucid serve ...`) or Python (`serve_anndata(...)`).
 In that mode you typically **don’t** have a “viewer object”; you just open the printed URL in a browser.
 ```
 
@@ -61,17 +54,18 @@ In that mode you typically **don’t** have a “viewer object”; you just open
 ## Deep path: what a viewer object actually owns
 
 When you create a viewer, Python starts a **local HTTP server** (by default on `127.0.0.1`):
-- it serves the dataset (export folder or AnnData-backed endpoints),
+- it serves the dataset (the bytes of one file or folder, which the web app
+  reads itself),
 - it serves one exact inventory-verified web generation,
-- it accepts event POSTs from the web app (`/_cellucid/events`, JSON) and
-  selections (`/_cellucid/selection`, binary cell indices),
-- and it can accept “session bundle” uploads (`/_cellucid/session_bundle`) for the no-download workflow.
+- and it accepts the viewer's channel (`/_cellucid/ws`, one WebSocket), on
+  which Python sends commands and the web app sends events, selections and
+  “session bundles” for the no-download workflow.
 
 The viewer object also owns:
-- a **viewer ID** (`viewerId`) and **token** (`viewerToken`) used to route/authenticate messages,
+- a **viewer ID** (`viewerId`) and **token** (`viewerToken`) the viewer page uses to open its channel,
 - a **URL** you can open manually (`viewer.viewer_url`),
 - hook registries for `on_selection`, `on_hover`, `on_click`, `on_ready`,
-  `on_command_error` (only the web build that emits `command_error` sends it),
+  `on_command_error` (a command this notebook sent was refused by the viewer),
   `on_data_mapping`, and `on_message`,
 - a small, thread-safe **latest-event snapshot** (`viewer.state`),
 - lifecycle methods (`viewer.display()`, `viewer.stop()`).
@@ -103,7 +97,7 @@ viewer.display()
 If you are not in Jupyter, `display()` prints a link:
 
 ```text
-Not in Jupyter environment. Open manually: http://127.0.0.1:8765/?jupyter=true&...
+Not in Jupyter environment. Open manually: http://127.0.0.1:8765/?viewer=true&...
 ```
 
 ### 3) Wait for readiness (recommended before automation)
@@ -178,9 +172,12 @@ Use `viewer.state` when you want “pull” style logic. Use hooks when you want
 It is normal to have multiple viewers in one notebook.
 
 - Each viewer gets its own `viewerId`/`viewerToken`.
-- Each viewer starts its own server. With the default `port=None`, the operating
-  system assigns an available port; no sequential range is scanned.
-- Events from the browser include `viewerId` so Python can route them correctly.
+- Each viewer starts its own server. With the default `port=None` it serves on
+  8765 -- the one local port Google sign-in accepts -- or, when another viewer
+  holds it, on the next free port, which it prints (as the R package's
+  `cellucid_view()` does).
+- Each viewer's page opens its own channel and authenticates it with that
+  viewer's `viewerId`/`viewerToken`, so its events reach only its viewer object.
 
 ```{important}
 Selections/highlights are sent as **cell indices** (row positions). If your dataset changes row order, indices refer to different cells.
@@ -227,7 +224,7 @@ Likely causes (ordered):
 
 How to confirm:
 - Run `report = viewer.debug_connection()` and inspect:
-  - `server_health`, `dataset_identity_probes`, `viewer_index_probe`,
+  - `server_health`, `anndata_store_probes`, `viewer_index_probe`,
     `frontend_roundtrip`, and `frontend_debug_snapshot`.
 - In browser devtools console, look for blocked network requests.
 

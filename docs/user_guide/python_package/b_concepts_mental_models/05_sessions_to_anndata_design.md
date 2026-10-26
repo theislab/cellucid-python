@@ -18,11 +18,11 @@ Most users should start there.
 In a notebook, Python can request the current session bundle from the frontend and receive it as a `CellucidSessionBundle` handle.
 
 High-level flow:
-1) Python sends `{"type": "requestSessionBundle", "requestId": ...}` into the viewer iframe (postMessage).
+1) Python sends `{"type": "requestSessionBundle", "requestId": ...}` to the viewer on its channel (`/_cellucid/ws`).
 2) The web app serializes the current session into raw `.cellucid-session` bytes.
-3) The web app uploads those bytes back to the local Python server:
-   - `POST /_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
-4) The server validates + streams the upload to a temp file (bounded memory).
+3) The web app sends those bytes back on the same channel as one binary frame
+   (header `{"type": "session_bundle", "requestId": ...}`, then the bundle).
+4) The server streams the frame to a temp file (bounded memory) and validates it.
 5) The server routes a `type="session_bundle"` event back to Python so `viewer.get_session_bundle()` can return.
 
 Why this matters:
@@ -53,7 +53,7 @@ Plus optional debugging/provenance under:
 ### “Bundle first”: one artifact everywhere
 
 Everything is built around the `.cellucid-session` bundle:
-- web app Save/Load State
+- the web app's **Save** and **Load** buttons (**Session file**)
 - Jupyter no-download capture
 - Python application to AnnData
 
@@ -66,7 +66,8 @@ Benefits:
 
 Even if the session “came from your own browser”, treat it as external input:
 - validate framing (MAGIC header),
-- enforce size limits (including gzip “zip bomb” guards),
+- bound every decompression by the size its chunk declares (no gzip “zip
+  bomb” can inflate past it),
 - bounds-check indices and code arrays,
 - validate each declared chunk's exact metadata, dependency order, byte
   framing, codec, and decoded size before consuming it.
@@ -81,28 +82,33 @@ This is critical for:
 
 ### Frontend → Python events (hooks)
 
-The viewer sends UI events via:
-- `POST /_cellucid/events` (JSON events: ready, hover, click, messages)
-- `POST /_cellucid/selection` (selections, as the selected cell indices in
-  binary: little-endian `uint32`, strictly ascending)
+Everything travels on the viewer channel: one WebSocket the viewer opens to
+`/_cellucid/ws` and authenticates once with its `viewerId` and `viewerToken`
+({doc}`../e_jupyter_hooks/05_architecture_viewer_channel`).
 
-The payload includes `viewerId` so the server can route events to the right viewer object.
+The viewer sends UI events as:
+- JSON text frames (ready, hover, click, data mapping, command errors)
+- binary frames for selections (the selected cell indices as little-endian
+  `uint32`, strictly ascending) and session bundles
+
+The channel belongs to one viewer, so events carry no `viewerId`.
 
 ### Python → frontend commands
 
-Python sends commands via `postMessage` to the iframe. Messages are tagged with:
-- `viewerId`
-- `viewerToken` (used to authenticate messages even when `targetOrigin='*'` is required by notebook proxies)
+Python sends commands as JSON text frames on the same channel, and a command
+that names cells (a highlight, a visibility change) as one binary frame of
+`uint32` cell indices. A command sent before the viewer has connected waits
+and is sent, in order, when it does.
 
-### Session bundle upload
-
-Bundle capture uses a gated endpoint:
-- `POST /_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
+### Session bundle frames
 
 Guardrails:
-- Python registers an expected `(viewerId, requestId)` pair with a TTL.
-- The server accepts exactly one upload for that pair (consumes the pending request).
-- A hard size cap exists to prevent accidental huge uploads.
+- Python registers an expected `(viewerId, requestId)` pair for as long as
+  `get_session_bundle(timeout=...)` waits.
+- The server accepts exactly one bundle for that pair (consumes the pending
+  request); a late one is dropped.
+- The frame is streamed to disk, so the temporary directory's free space is
+  the only size bound; an invalid bundle makes `get_session_bundle()` raise.
 
 ---
 
@@ -110,7 +116,7 @@ Guardrails:
 
 A `.cellucid-session` file is:
 
-1) MAGIC header: `CELLUCID_SESSION\n`  
+1) MAGIC header: `CELLUCID_SESSION/2\n` (session format 2; any other signature is refused)  
 2) `manifestByteLength` (u32 LE)  
 3) `manifest` JSON bytes (UTF‑8)  
 4) repeated chunks:
@@ -118,7 +124,9 @@ A `.cellucid-session` file is:
    - `chunkBytes` (codec applied, often gzip)
 
 The manifest contains:
-- dataset fingerprint
+- dataset fingerprint (id, display name, counts, cell order, data mapping)
+- the dataset source (sample, link, server, or local file name)
+- `requires`: the obs columns and genes the session uses
 - chunk IDs
 - chunk metadata (`kind`, `codec`, size guards)
 
@@ -129,6 +137,7 @@ from cellucid import CellucidSessionBundle
 
 bundle = CellucidSessionBundle("my.cellucid-session")
 bundle.dataset_fingerprint
+bundle.required_fields
 bundle.list_chunk_ids()[:20]
 ```
 
@@ -139,8 +148,11 @@ bundle.list_chunk_ids()[:20]
 ### Cell identity is index-based (today)
 
 Many dataset-dependent chunks align to **row position**:
-- highlight membership lists are indices
-- user-defined codes are arrays aligned to dataset order
+- highlight memberships are cell positions (sorted-delta varints, a bitset or
+  runs, whichever is smallest), or, for a whole category or most of one, a
+  reference to that category's cells checked by count and digest
+- user-defined codes are arrays aligned to dataset order (raw, runs, or packed
+  1, 2 or 4 bits per code)
 
 This is why exact fingerprint rejection exists.
 
@@ -148,8 +160,9 @@ This is why exact fingerprint rejection exists.
 
 The caller must supply `expected_dataset_id`. Python compares it with the
 bundle's `datasetId`, compares `cellCount` with the target AnnData, requires
-every key the `dataMapping` names to exist on it, and compares `varCount` with
-the gene count of the axis that mapping reads. Any mismatch raises `ValueError`
+every key the `dataMapping` names to exist on it, compares `varCount` with
+the gene count of the axis that mapping reads, and requires every obs column and
+gene listed in the manifest's `requires`. Any mismatch raises `ValueError`
 before any mutation is published.
 
 This prevents the worst failure mode:
@@ -157,21 +170,20 @@ This prevents the worst failure mode:
 
 ### `cellOrder` and `dataMapping`: recorded by the viewer, checked here
 
-The manifest fingerprint carries two records beside those four scalars, and both
+The manifest fingerprint carries two records beside those three scalars, and both
 are required. `cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
 16-character lowercase hexadecimal `digest` of the coordinates of that
-embedding. `embedding` is `{"key", "columns"}`: an exported embedding id with
-`columns: null`, or an AnnData `obsm` key with the 0-based columns that were
-read, one per dimension. It exists because the four scalars all
-survive a re-export of the same dataset from re-sorted input, and index-based
+embedding. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
+columns that were read, one per dimension. It exists because the three scalars
+all survive a rewrite of the same dataset from re-sorted input, and index-based
 selections would then silently denote different cells.
 
-`dataMapping` records which stored arrays the session was showing. Its `kind`
-is `"export"` — exactly `kind`, `embeddings` (`enabled`, the embeddings that are turned on, and
-`defaults`, the `1d`/`2d`/`3d` default of each dimension),
-`geneNames` (`"index"` or `"column:<name>"`), and `vectorFields` — or
-`"anndata"`, which adds `knn`, `expression` (`"X"`, `"raw"`, `"layer:<name>"`,
-or null), and `latent`.
+`dataMapping` records which stored arrays the session was showing: `kind`
+(`"anndata"`), `embeddings` (`enabled`, the embeddings that are turned on, and
+`defaults`, the `1d`/`2d`/`3d` default of each dimension), `knn`, `geneNames`
+(`"index"` or `"column:<name>"`), `expression` (`"X"`, `"raw"`,
+`"layer:<name>"`, or null), `log1p`, `highlyVariable`, `latent`, and
+`vectorFields`, plus `modality` for a dataset of several modalities (a MuData).
 
 The two readers check them differently:
 
@@ -191,22 +203,30 @@ direction is expected.
 
 ## Troubleshooting (protocol-level)
 
-### Symptom: “No pending session bundle request”
+### Symptom: “Dropped a session bundle nobody is waiting for” (log)
 
 Meaning:
-- the upload arrived without a matching, currently valid requestId (stale tab, TTL expired, wrong viewerId).
+- the bundle arrived after its `get_session_bundle()` call stopped waiting
+  (its timeout passed).
 
 Fix:
-- request a new bundle again from the *current* viewer instance.
+- request a new bundle again from the *current* viewer instance, with a
+  longer `timeout=`.
 
-### Symptom: “Invalid session bundle MAGIC header”
+### Symptom: “This file is not a Cellucid session file of format 2 …”
 
 Meaning:
-- the upload is not a `.cellucid-session` file (corrupted bytes, wrong endpoint).
+- the bytes the viewer sent on its channel for a `requestSessionBundle` are
+  not a `.cellucid-session` file of the current format (or a file passed to
+  `CellucidSessionBundle(...)` is not one). On the channel, the frame is
+  dropped and `viewer.get_session_bundle()` raises `RuntimeError` ("The viewer
+  did not capture the session bundle: The viewer sent an invalid session
+  bundle: …") instead of waiting for its timeout.
 
 Fix:
-- discard the invalid request, verify the exact authenticated route in browser
-  devtools, and create one current capture request.
+- make sure the viewer page and the Python package are current versions of
+  the same release (reload the viewer after upgrading), then request a new
+  bundle.
 
 ---
 

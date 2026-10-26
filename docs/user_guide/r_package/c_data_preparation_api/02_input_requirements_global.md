@@ -1,168 +1,114 @@
-# Input Requirements (Global)
+# Input requirements (global rules)
 
-**Audience:** computational users (recommended for everyone exporting real data)  
-**Time:** 10–15 minutes  
-**Goal:** prevent subtle exports that “work” but load incorrectly in the viewer.
+**Audience:** everyone preparing data
+**Time:** 10 minutes
+**Goal:** the rules every input of `cellucid_prepare()` shares, so a call succeeds the first time.
 
-This page documents the global rules that apply to *every* input you pass to `cellucid_prepare()`.
+## One cell axis
 
-## Rule 1: cell identity is the row order
+The number of cells is the number of rows of the embeddings. Every per-cell
+input must have exactly that many rows, in the same cell order:
 
-Cellucid’s export format does not store separate cell IDs. Instead:
-
-> Cell `i` is the `i`-th row in every exported array.
-
-This means you must keep a consistent row order across:
-
-- every embedding in `embeddings`
-- `latent_space`
-- `obs`
-- `gene_expression` rows (if provided)
-- `connectivities` rows/cols (if provided)
-- every vector field (if provided)
-
-### Practical strategy (recommended)
-
-If your source data has cell IDs (Seurat/SCE), pick a canonical ordering:
-
-```r
-cell_ids <- colnames(seu)  # Seurat
-# or:
-cell_ids <- colnames(sce)  # SingleCellExperiment
-```
-
-Then reorder everything to match `cell_ids` **explicitly** before exporting.
-
-## Rule 2: required shapes
-
-At least one embedding is required, in `embeddings`:
-
-| Value | Shape | Dimension |
-|---|---|---|
-| a matrix | `(n_cells, 1)`, `(n_cells, 2)`, or `(n_cells, 3)` | its column count |
-| a numeric vector | length `n_cells` | 1D |
-| `cellucid_embedding(values, columns = c(...))` | `(n_cells, width)`, any width | `length(columns)` (1–3) |
-
-And:
-
-| Argument | Shape |
+| Input | Shape |
 |---|---|
-| `latent_space` | `(n_cells, n_latent_dims)` |
-| `obs` | `n_cells` rows |
-| `gene_expression` | `(n_cells, n_genes)` |
-| `var` | `n_genes` rows |
-| `connectivities` | `(n_cells, n_cells)` |
+| each `embeddings` matrix | cells x columns |
+| `obs` | cells x fields |
+| `gene_expression` | cells x genes |
+| `connectivities` | cells x cells |
+| each `vector_fields` array | cells x the column count of its embedding |
 
-```{warning}
-If you pass `gene_expression` in the common “genes × cells” orientation, export will fail (shape mismatch) or silently produce nonsense.
-Always ensure **cells × genes** for Cellucid export.
+`gene_expression` is **always cells x genes**. Seurat and SingleCellExperiment
+store genes x cells, so transpose with `Matrix::t()` first when you pass their
+matrices yourself; with `data =` the object's own orientation is read and
+nothing is transposed by you. The function checks
+the row count but never guesses the orientation: a square matrix in the wrong
+orientation cannot be detected from its shape.
+
+## Cell names
+
+The obs index (the cell names) comes from the row names your inputs carry:
+
+- `rownames(obs)`, when you set them (a data frame's automatic `"1"`, `"2"`, ...
+  row names do not count),
+- `rownames(gene_expression)`,
+- the row names of each embedding matrix.
+
+Where several are set they must be **the same names in the same order**,
+because a different order means the rows describe different cells:
+
+```text
+The row names of gene_expression and obs disagree at row 2 ('q' and 'y'). Every input must list the same cells in the same order.
 ```
 
-## Rule 3: no missing values in embeddings
+With no names at all the cells are named `"0"` to `"n - 1"`, as anndata names
+them. Repeated cell names are made unique the way anndata's
+`obs_names_make_unique()` does it (the second `"AAAC"` becomes `"AAAC-1"`),
+with a message saying what changed.
 
-Embeddings are validated before normalization. `NA`, `NaN`, infinities, and
-nonpositive coordinate ranges reject the complete candidate.
+## Gene names
 
-Recommendation:
-- remove cells with missing embedding coordinates or recompute the embedding
-  from reviewed input.
+The var index comes from `rownames(var)` (when set), else
+`colnames(gene_expression)`; if both are set they must agree. See
+{doc}`05_var_gene_metadata`.
 
-## Rule 4: `obs` columns must be one of four types
+## Numbers
 
-`obs` is a data.frame, and every exported column must be a plain `numeric`
-(exported as continuous) or a plain `factor`, `character`, or `logical`
-(exported as a category). Nothing else is accepted, and nothing is coerced for
-you — a `Date` column, a list column, or a classed numeric such as
-`bit64::integer64` stops the export with
-`Observation field '<key>' must be a native numeric, logical, character, or
-factor vector.`
+Every matrix -- embeddings, expression, vector fields, the graph -- is stored as
+**float32**. Values must be finite (no `NA`, `NaN`, or `Inf`) and within the
+float32 range (magnitude up to about 3.4e38); a larger value would become an
+infinity and is refused. `obs` and `var` columns keep their own types
+({doc}`04_obs_cell_metadata`).
 
-Recommendation:
-- convert the columns you care about before the call (`as.numeric()`,
-  `factor()`, `as.character()`), and drop the rest with `obs_keys`.
+A data frame is accepted in place of a matrix when every column is a plain
+numeric vector. A classed numeric column (for example `units::units` or
+`bit64::integer64`) is refused, because converting it to a matrix drops the
+attribute that says what its numbers mean.
 
-Details: {doc}`04_obs_cell_metadata`
+## Names that become paths
 
-## Rule 5: identifiers name fields, not files
+Every `obs` and `var` column name and every `obsm` key (embedding and vector
+field) becomes a folder or file name in the store, and a `.zarr.zip` may be
+unpacked anywhere. Each must therefore be a portable file name on every
+platform, whichever platform writes it:
 
-Observation keys, gene IDs, and vector-field IDs are recorded exactly in the
-manifests. They are **not** filenames: every payload file is named by an integer
-index, and the manifest is what says which identifier that index belongs to.
+- no `/`, `\`, `<`, `>`, `:`, `"`, `|`, `?`, `*`, or control character;
+- no trailing space or dot (Windows drops them);
+- not a Windows device name (`CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`,
+  `LPT1`-`LPT9`, also with an extension);
+- not `.`, `..`, `.zarray`, `.zattrs`, `.zgroup`, or `.zmetadata`;
+- for a data frame column, not `_index` (AnnData keeps the row names there);
+- different from its neighbours by more than letter case: `"Sex"` and `"sex"`
+  are one folder on macOS and Windows.
 
-So an identifier carries no filename rule at all — no ASCII restriction, no
-length limit, no ban on `/`, spaces, or non-ASCII characters, no
-case-insensitive collision rule, and no Windows device-name rule. What survives
-is what the identity is actually for. Every exported identifier must:
+A name that breaks a rule is refused with the rule and a way to rename it.
 
-1. be a **non-empty string**;
-2. be **distinct within its axis**, so a lookup by identifier resolves exactly
-   one field; and
-3. be **text the viewer can draw exactly as it is stored** — no control
-   characters (`U+0001`-`U+001F`, `U+007F`-`U+009F`), no zero-width characters
-   (`U+200B`, `U+2060`, `U+FEFF`), and no leading or trailing whitespace of any
-   kind, including `U+00A0` NO-BREAK SPACE.
+## Dataset text
 
-Rule 3 is the same rule every category label obeys, because a gene name and a
-category label are drawn in the same legend. `cellucid_prepare()` rejects the
-complete candidate rather than trimming, since trimming would rewrite an
-annotation you did not ask to change. The `cellucid` Python package enforces the
-identical rules.
+`dataset_name`, `dataset_description`, `citation_text`, `citation_url`,
+`source_name`, and `source_url` are shown to readers verbatim. Each must be one
+string free of control characters (U+0001-U+001F, U+007F-U+009F), of the
+zero-width characters U+200B, U+2060, and U+FEFF, and of leading or trailing
+whitespace. Nothing is trimmed for you. `dataset_name` must not be empty;
+`dataset_description` may be `""`. A URL must be an absolute `http://` or
+`https://` address, and is accepted only beside its text: `citation_url` needs
+`citation_text`, `source_url` needs `source_name`.
 
-Rules 1 and 3 are checked on what you actually **export**: `obs_keys` and
-`gene_identifiers` narrow the export and narrow those checks with it. Gene
-uniqueness is not narrowed — every ID in `var` must be distinct, because
-`gene_identifiers` addresses `var` rows by identifier whether or not that row is
-exported.
+`dataset_id` must be a portable identifier: 1-180 ASCII letters, digits, `.`,
+`_`, or `-`, starting with a letter or digit, not ending with `.`, and not a
+Windows device name. Sessions and community annotations are keyed on it, so
+keep it stable across versions of the same dataset.
 
-`dataset_id` is the one identifier that really is a path segment: it names the
-dataset's directory and appears in URLs. It must still be a 1–180-byte portable
-ASCII component — start with a letter or digit, otherwise only letters, digits,
-`.`, `_`, or `-`, not ending with `.`, and not a Windows device name.
+## Output path
 
-Recommendation:
-- choose a stable, versioned `dataset_id` before export.
-- `cellucid-r` aborts the complete candidate on a duplicate or undrawable
-  observation key, embedding id, or vector-field id; it does not rewrite them.
-  Gene names are the one exception: an empty value takes the row name and a
-  repeated name is made unique (`MATR3`, `MATR3-1`), by the rule both writers
-  share — see {doc}`05_var_gene_metadata`.
+- `format = "zarr"`: `out_path` ends in `.zarr` and names a folder.
+- `format = "zarr.zip"`: `out_path` ends in `.zarr.zip` and names a file.
+- `format` has no default, and a path that does not end in its suffix is
+  refused with the path to write instead.
+- If `out_path` exists, the call stops unless `force = TRUE`; even then an
+  existing folder is replaced only if it is a Zarr store (it holds `.zgroup`).
 
-## Quick “preflight” checks (copy/paste)
+## Next
 
-Use this pattern before you export real data.
-
-```r
-stopifnot(is.matrix(latent_space) || is.data.frame(latent_space))
-stopifnot(is.data.frame(obs))
-stopifnot(is.matrix(X_umap_2d) && ncol(X_umap_2d) == 2)
-
-n_cells <- nrow(X_umap_2d)
-stopifnot(nrow(latent_space) == n_cells)
-stopifnot(nrow(obs) == n_cells)
-
-if (!is.null(gene_expression)) {
-  stopifnot(nrow(gene_expression) == n_cells)
-  stopifnot(!is.null(var))
-  stopifnot(nrow(var) == ncol(gene_expression))
-}
-
-if (!is.null(connectivities)) {
-  stopifnot(nrow(connectivities) == n_cells)
-  stopifnot(ncol(connectivities) == n_cells)
-}
-```
-
-If you have cell IDs, add explicit alignment checks:
-
-```r
-stopifnot(!is.null(rownames(X_umap_2d)))
-stopifnot(!is.null(rownames(latent_space)))
-stopifnot(!is.null(rownames(obs)))
-stopifnot(identical(rownames(X_umap_2d), rownames(obs)))
-stopifnot(identical(rownames(latent_space), rownames(obs)))
-```
-
-## Troubleshooting pointers
-
-- Export fails with “n_cells mismatch” → {doc}`11_troubleshooting_prepare_export`
-- Viewer loads but fields look wrong (often a row-order bug) → {doc}`../i_troubleshooting_index/03_export_format_and_validation_issues`
+- {doc}`03_embeddings_and_coordinates`
+- {doc}`11_troubleshooting_prepare`
+- The same topic for Python, `cellucid.prepare()`: {doc}`../../python_package/c_data_preparation_api/02_input_requirements_global`

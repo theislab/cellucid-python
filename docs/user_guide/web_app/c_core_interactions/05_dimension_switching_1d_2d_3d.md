@@ -101,7 +101,7 @@ Sessions keep each view's embedding. See
   3D flies again whenever it shows a 3D embedding.
 
 :::{tip}
-If switching leaves you “lost in space” (empty-looking view), click **Reset Camera**.
+If switching leaves you “lost in space” (empty-looking view), click **Reset camera**.
 :::
 
 ---
@@ -109,31 +109,31 @@ If switching leaves you “lost in space” (empty-looking view), click **Reset 
 ## What switching actually looks like
 
 The three frames below are one session on the Pancreas sample (which publishes
-1D, 2D and 3D embeddings). They were captured with the earlier **Dimension**
-dropdown, which the picker replaced; positions and navigation mode change the
-same way.
+1D, 2D and 3D embeddings), switched with the **Shows** picker under
+**Compare views**.
 
 ```{figure} ../../../_static/screenshots/web_app/window-dimension-3d.png
-:alt: The whole application window with a three-dimensional point cloud inside a light grid box, the sidebar showing a DIMENSION dropdown reading 3D and a MODE dropdown reading Orbit with orbit options beneath it.
+:alt: The whole window showing the Pancreas 3D embedding on the Studio backdrop, with the Navigation Mode select reading Orbit and, under Compare views, the Shows picker reading UMAP · 3D.
 :width: 1440px
 
-**3D**, the Pancreas default (earlier interface). `Dimension: 3D`, `Mode: Orbit`.
+**3D**, the Pancreas default: **Shows** reads *UMAP · 3D* and **Navigation**
+reads `Orbit`.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/window-dimension-2d.png
-:alt: The same window after choosing 2D; the cells now lie on a single plane seen face-on inside the grid box, the DIMENSION dropdown reads 2D, and the MODE dropdown has followed it to Planar with the planar options — KEYBOARD SPEED, ZOOM TO CURSOR, INVERT AXES — beneath it, with the mouse pointer pressing the dimension dropdown.
+:alt: The same window after choosing UMAP · 2D in the Shows picker, with the pointer on it: the cells now lie on a plane seen face-on over a dotted backdrop, and the Navigation Mode select has followed the view to Planar.
 :width: 1440px
 
-**2D** (earlier interface). The coordinates changed — the cells are now
+**2D**. The coordinates changed — the cells are now
 coplanar — and the camera followed. `Mode` moved to `Planar` on its own, so the embedding is seen
 face-on rather than at an angle.
 ```
 
 ```{figure} ../../../_static/screenshots/web_app/window-dimension-1d.png
-:alt: The same window after choosing 1D; the cells are strung along a single straight line of colour segments crossing the grid box, the DIMENSION dropdown reads 1D, and the MODE dropdown reads Planar with the planar options beneath it.
+:alt: The same window after choosing UMAP · 1D in the Shows picker: the cells are spread along one axis, and the Navigation Mode select has followed the view to Planar.
 :width: 1440px
 
-**1D** (earlier interface). Every cell keeps its colour but has only one coordinate, so the whole
+**1D**. Every cell keeps its colour but has only one coordinate, so the whole
 dataset becomes a coloured line — an ordering, not a map. `Mode` is `Planar`
 here too: only a 3D embedding gets Orbit.
 ```
@@ -187,5 +187,5 @@ listed there, the dataset does not carry it (a data preparation issue).
 
 **Fix:**
 
-1) Click **Reset Camera**.
+1) Click **Reset camera**.
 2) Clear filters/outlier thresholds.

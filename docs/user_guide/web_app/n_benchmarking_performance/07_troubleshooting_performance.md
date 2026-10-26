@@ -54,9 +54,9 @@ What to do earlier to avoid this next time.
 
 ### Fix
 1) Reduce **pixels**: keep the window smaller while exploring, and lower
-   `Point size (log):` if points already overlap on screen.
-2) Turn off `Antialiasing (smooth point edges)` under **Visualization → Image
-   quality**. It applies to the next frame, and it is worth most at large point
+   `Point size` if points already overlap on screen.
+2) Turn off `Antialiasing` under **Visualization →
+   Performance**. It applies to the next frame, and it is worth most at large point
    sizes. Check the box first: at 5,000,000 cells or more in 3D, or 200,000 or
    more in a 2D view, it is already clear unless you ticked it yourself.
 3) Fix the **layout**: go back to one view. If you need the comparison, note
@@ -82,12 +82,12 @@ What to do earlier to avoid this next time.
 3) Snapshots are open, so each change is reconciled across more view contexts.
 
 ### How to confirm
-- Turn Live filtering off and click `FILTER` once; if it becomes smooth, you were stuck in a recompute loop.
+- Turn Live filtering off and click `Filter` once; if it becomes smooth, you were stuck in a recompute loop.
 - Disable all but one filter; if performance returns, filter stacking was the multiplier.
 - Clear snapshots and retry.
 
 ### Fix
-1) For continuous fields: **Live filtering off → adjust sliders → click FILTER once**.  
+1) For continuous fields: **Live filtering off → adjust sliders → click Filter once**.  
    See {doc}`../d_fields_coloring_legends/03_color_by_behavior`.
 2) Disable/remove no-op filters (filters that don’t change counts given the other filters).
 3) Tune filters in a single view; snapshot after you stabilize.
@@ -119,20 +119,20 @@ Related docs:
 4) Browser extensions or corporate policies interfere with file APIs or GPU acceleration.
 
 ### How to confirm
-- If it’s a `.h5ad` browser load: check the progress notice, or try the same file via Server Mode, which needs no reorganisation.
+- If it’s a `.h5ad` load: check the progress notice. Opening the same file through Server Mode behaves the same: the server hands the browser the file's bytes and the same reader indexes it.
 - If it’s remote: open Network tab and look for long requests / timeouts.
 - Check Task Manager / Activity Monitor: if memory usage spikes rapidly, you’re hitting a memory cliff.
 
 ### Fix
-1) Prefer **Server Mode** for large `.h5ad` / huge `.zarr`.  
-   See {doc}`../b_data_loading/04_server_tutorial`.
+1) Store a large matrix gene-major: a file written by `prepare()` or `cellucid_prepare()` needs no gene index. For data on another machine, use **Server Mode** over an SSH tunnel.  
+   See {doc}`06_edge_cases_performance` and {doc}`../b_data_loading/04_server_tutorial`.
 2) Move data to a fast local disk (avoid network mounts when possible).
-3) Reduce dataset complexity (fewer fields, fewer categories) or use a lite export.
+3) Reduce dataset complexity (fewer fields, fewer categories) or use a lite version of the dataset.
 4) Try a clean browser profile / private window to rule out extensions.
 
 ### Prevention
-- Treat in-browser `.h5ad` load as “small quick preview only”.
-- For large teams, standardize on a supported loading workflow (server mode or exports).
+- Keep large datasets you open often gene-major (CSC).
+- For large teams, standardize on a supported loading workflow (server mode, or Cellucid-ready AnnData files written by `prepare()`).
 
 Related docs:
 - {doc}`../b_data_loading/03_browser_file_picker_tutorial`
@@ -157,7 +157,7 @@ Related docs:
 3) If gene switching is consistently slow: reduce other multipliers (views, overlays) while exploring expression.
 
 ### Prevention
-- For large datasets: choose a workflow that supports efficient lazy-loading (server mode).
+- For large datasets: keep the data on a local disk or serve it where it lives, and store the expression matrix column-major (CSC).
 
 Related docs:
 - {doc}`../b_data_loading/04_server_tutorial`
@@ -254,8 +254,9 @@ before the first dataset has loaded, so a benchmark run can already replace
 that load.
 
 ### How to confirm
-- Look under the dataset picker. While the app is still starting it reads
-  *“Starting Cellucid — the data controls below open as soon as it is ready.”*
+- Look under the **Open data** heading, above the dataset picker. While the
+  app is still starting it reads *“Starting Cellucid. The controls below open
+  as soon as it is ready.”*
 - If it has changed, the controls are live.
 
 ### Fix
@@ -306,7 +307,7 @@ that load.
 - Enable hardware acceleration in the current stable Chrome, Edge, Firefox, or
   Safari release.
 - Update drivers/OS on the slow machine.
-- Use a lighter export/workflow for weaker machines.
+- Use a lighter dataset version or workflow for weaker machines.
 
 ### Prevention
 - For teams/workshops, publish a minimum supported environment checklist.

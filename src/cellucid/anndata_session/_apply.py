@@ -14,12 +14,21 @@ import copy
 from pathlib import Path
 from typing import Any
 
-from ..data_mapping import mapped_var_count, require_mapping_matches_anndata
+from .._anndata_files import is_mudata
+from .._plural import plural
+from ..data_mapping import (
+    MODALITY_KEY,
+    mapped_var_count,
+    require_mapping_matches_anndata,
+    require_mapping_modality,
+    resolve_gene_names,
+)
 from ..session_bundle import CellucidSessionBundle
 from ..session_bundle import _validate_fingerprint as _validate_bundle_fingerprint
 from ._chunks import _validate_current_chunk_inventory
 from ._fields import _plan_user_defined_fields
 from ._highlights import _plan_highlights
+from ._mudata import MuDataSessionView
 from ._primitives import (
     _require_exact_bool,
     _require_nonempty_string,
@@ -33,8 +42,12 @@ def _validate_fingerprint(
     adata: Any,
     *,
     expected_dataset_id: str,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], Any]:
     """Verify the fingerprint against ``adata`` before anything is applied.
+
+    Returns the fingerprint and what the session is checked and planned
+    against: ``adata`` itself, or for a MuData the cells and the modality its
+    data mapping names, as the viewer showed them (:class:`MuDataSessionView`).
 
     The order is the viewer's: identity and cell count first, then the data
     mapping -- every key it names must exist on ``adata`` -- and then the gene
@@ -48,7 +61,6 @@ def _validate_fingerprint(
         fp = _validate_bundle_fingerprint(fingerprint)
     except ValueError as error:
         raise ValueError(f"session datasetFingerprint is invalid: {error}") from error
-    _require_nonempty_string(fp["sourceType"], label="datasetFingerprint.sourceType")
     dataset_id = _require_nonempty_string(
         fp["datasetId"],
         label="datasetFingerprint.datasetId",
@@ -74,20 +86,51 @@ def _validate_fingerprint(
         raise ValueError("Dataset fingerprint mismatch: " + "; ".join(mismatches))
 
     mapping = fp["dataMapping"]
+    if is_mudata(adata):
+        require_mapping_modality(mapping, [str(name) for name in adata.mod])
+        adata = MuDataSessionView(adata, mapping[MODALITY_KEY])
+        mapping = {key: value for key, value in mapping.items() if key != MODALITY_KEY}
     require_mapping_matches_anndata(adata, mapping)
     expected_var_count = mapped_var_count(adata, mapping)
     if var_count != expected_var_count:
         axis = (
             "adata.raw.n_vars"
-            if mapping["kind"] == "anndata" and mapping["expression"] == "raw"
+            if mapping["expression"] == "raw"
             else "genes on a mapping without expression"
-            if mapping["kind"] == "anndata" and mapping["expression"] is None
+            if mapping["expression"] is None
             else "adata.n_vars"
         )
         raise ValueError(
             f"Dataset fingerprint mismatch: varCount {var_count} != {axis} {expected_var_count}"
         )
-    return copy.deepcopy(fp)
+    return copy.deepcopy(fp), adata
+
+
+def _require_session_fields(adata: Any, requires: Any, mapping: dict[str, Any]) -> None:
+    """Refuse an AnnData that lacks a field the session uses, naming all of them.
+
+    ``requires`` lists the obs columns and the genes -- named under the
+    session's data mapping, as the viewer named them -- that a view shows or
+    filters on or a highlight group is bound to.
+    """
+    if not isinstance(requires, dict) or set(requires) != {"obs", "var"}:
+        raise ValueError("bundle.manifest.requires must have exactly obs and var")
+    obs_keys = set(adata.obs.columns)
+    missing_obs = [key for key in requires["obs"] if key not in obs_keys]
+    missing_var: list[str] = []
+    if requires["var"]:
+        gene_names = set(resolve_gene_names(adata, mapping).names)
+        missing_var = [key for key in requires["var"] if key not in gene_names]
+    if not missing_obs and not missing_var:
+        return
+    parts: list[str] = []
+    if missing_obs:
+        parts.append(f"the obs {plural(len(missing_obs), 'column')} " + ", ".join(repr(key) for key in missing_obs))
+    if missing_var:
+        parts.append(f"the {plural(len(missing_var), 'gene')} " + ", ".join(repr(key) for key in missing_var))
+    raise ValueError(
+        "This session uses " + " and ".join(parts) + ", which this dataset does not have."
+    )
 
 
 def _build_uns(
@@ -148,7 +191,60 @@ def apply_cellucid_session_to_anndata(
     store_uns: bool = True,
     return_summary: bool = False,
 ) -> Any | tuple[Any, ApplySummary]:
-    """Apply a validated session atomically to the exact matching AnnData dataset."""
+    """Apply a validated session atomically to the exact matching AnnData dataset.
+
+    Every check -- dataset identity, shape, the cell-order record's form (its
+    digest is the viewer's to compare), the obs columns and
+    genes the session uses, chunk inventory, bounds, and target-column
+    conflicts -- runs before ``adata`` (or its copy) is changed, so a failed
+    application leaves nothing half-written.
+
+    Parameters
+    ----------
+    bundle : CellucidSessionBundle, str, or Path
+        The session, or the path of a ``.cellucid-session`` file.
+    adata : anndata.AnnData or mudata.MuData
+        The dataset the session was saved on, in the same cell order. For a
+        MuData the session is checked against what the viewer showed -- the
+        cells with every modality placed among them, and the modality its
+        data mapping names -- and the added columns go to the global
+        ``mdata.obs``; ``mdata.uns`` records the session.
+    expected_dataset_id : str
+        Required. The dataset id the session must have been saved on.
+    inplace : bool
+        Change ``adata`` itself instead of a copy. A backed AnnData needs
+        ``inplace=True``.
+    add_highlights : bool
+        Add one boolean ``obs`` column per highlight group.
+    highlights_prefix : str
+        Prefix of each highlight column, followed by the group id.
+    add_user_defined_fields : bool
+        Add the session's user-defined cell fields as ``obs`` columns.
+    user_defined_prefix : str
+        Prefix of each user-defined field column, followed by its key.
+    include_deleted_user_defined_fields : bool
+        Also add user-defined fields that were deleted in the session.
+    store_uns : bool
+        Record the manifest, dataset fingerprint, and added columns in
+        ``adata.uns['cellucid']['session']``.
+    return_summary : bool
+        Also return an ``ApplySummary`` listing the added ``obs`` columns.
+
+    Returns
+    -------
+    anndata.AnnData or tuple of (anndata.AnnData, ApplySummary)
+        The changed AnnData (``adata`` itself when ``inplace=True``), with the
+        summary when ``return_summary=True``.
+
+    Raises
+    ------
+    TypeError
+        An argument of the wrong type, or a malformed bundle.
+    ValueError
+        The session does not match ``adata`` or ``expected_dataset_id``, uses
+        a field ``adata`` lacks, holds an unknown or invalid chunk, or would
+        overwrite an existing ``obs`` column.
+    """
     expected_dataset_id = _require_nonempty_string(
         expected_dataset_id,
         label="expected_dataset_id",
@@ -188,11 +284,12 @@ def apply_cellucid_session_to_anndata(
             "pass an explicitly materialized AnnData object or choose inplace=True"
         )
 
-    fingerprint = _validate_fingerprint(
+    fingerprint, shown = _validate_fingerprint(
         bundle.dataset_fingerprint,
         adata,
         expected_dataset_id=expected_dataset_id,
     )
+    _require_session_fields(shown, bundle.manifest["requires"], fingerprint["dataMapping"])
     raw_chunk_ids = bundle.list_chunk_ids()
     if not isinstance(raw_chunk_ids, list) or any(
         not isinstance(item, str) for item in raw_chunk_ids
@@ -207,8 +304,8 @@ def apply_cellucid_session_to_anndata(
     highlight_plans, highlights_uns, highlight_meta = _plan_highlights(
         bundle,
         chunk_ids,
-        n_obs=int(adata.n_obs),
-        obs_index=adata.obs_names,
+        n_obs=int(shown.n_obs),
+        obs=shown.obs,
         prefix=highlights_prefix,
         existing_columns=existing_columns,
         materialize=add_highlights,
@@ -217,7 +314,7 @@ def apply_cellucid_session_to_anndata(
     field_plans, overlays = _plan_user_defined_fields(
         bundle,
         chunk_ids,
-        adata,
+        shown,
         mapping=fingerprint["dataMapping"],
         prefix=user_defined_prefix,
         existing_columns=existing_columns,

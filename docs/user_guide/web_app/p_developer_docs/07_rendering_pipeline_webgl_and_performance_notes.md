@@ -45,6 +45,9 @@ Hard constraints:
     (RGBA uint8 packed), and alpha/transparency.
   - Notes:
     - Spatial indexing is dimension-aware (binary tree / quadtree / octree), used for picking/LOD.
+      Trees are only built in a worker: a click on a large view whose tree has
+      not landed scans its points (the same exact pick) while the worker builds
+      it, and projectiles start once it is installed.
     - Positions and colors are **two separate vertex streams** — see
       “Point vertex streams” below.
 
@@ -176,12 +179,21 @@ exists a geometry is stored in source order, straight from the published
 arrays with no client copy. The adoption uploads the permutation (4 bytes a
 point), then rewrites the store's positions and the colours of every view
 that draws it in place on the GPU (`GpuPermuter`,
-`high-perf/gpu-permute.js`): the source-order words go up into a transient
+`high-perf/gpu-permute.js`): the source-order words go into a transient
 R32UI texture, one texel a word, and one transform-feedback pass writes each
 stored slot's words, fetched through the order's R32UI permutation texture,
-bit for bit. At 10M 3D points the frame that adopts the order spends about
-25 ms of CPU on it (positions 13, permutation 5, colours 5), once; turning
-LOD on used to block the page for 2.3 s. A kept view's colour store is RGBA8,
+bit for bit. A store still in source order is its own source: its words are
+drawn into the texture on the GPU (one point a word, at its texel, into the
+texture as a colour attachment), so nothing is uploaded from the page; only a
+store in another order, or whose first upload is still pending, uploads its
+words. (An upload from the store bound as `PIXEL_UNPACK_BUFFER` is the
+obvious copy, but Firefox on macOS warns on every one.) At 10M 3D points
+the adoption takes 14–19 ms of CPU, once (it uploaded 120 MB of positions
+and 40 MB of colours: 32–35 ms); turning LOD on used to block the page for
+2.3 s. The tree itself crosses from the worker as typed arrays
+(`encodeSpatialTree`): a structured clone of a 10M-point octree's 38,568
+node objects took 35 ms on the main thread; decoding and installing it takes
+10–11 ms. A kept view's colour store is RGBA8,
 4 bytes a point like the live one, and is written the same way, one word a
 point (its alpha byte is never read: a kept view's alpha is its R8 texture).
 It used to be packed RGB, 3 bytes a point, but Metal needs a 4-byte vertex
@@ -261,7 +273,12 @@ on source order.
     is a fixed blue-noise tile, so a still camera with `Animation speed` 0
     produces identical frames, and `SmokeRenderer.needsContinuousFrames()`
     then lets the viewer stop drawing.
-  - A build requires a clean GL error state, `EXT_color_buffer_float`,
+  - A build reads the GL error state once, after its allocations (each read
+    is a synchronous round trip that waits for every queued command). A
+    rebuild asked for inputs identical to the shown volume's (positions,
+    colours, visibility, outlier quantiles and threshold, grid size, gamma —
+    compared byte for byte against copies kept with the volume) does no work.
+    It requires `EXT_color_buffer_float`,
     `EXT_float_blend`, `MAX_3D_TEXTURE_SIZE` ≥ 128 and `MAX_TEXTURE_SIZE` ≥
     1536. These are checked once per context, up front and without allocating,
     by `detectSmokeSupport()` (`rendering/smoke-cloud/smoke-capabilities.js`,
@@ -278,31 +295,49 @@ on source order.
     context loss. The viewer requires a page reload after context loss.
   - The user notification duration covers the synchronous renderer call,
     including validation and publication. The `[GPU Splat] … submission`
-    console duration starts after preflight and measures command submission.
+    console duration starts after the input checks and measures command
+    submission.
     Neither duration is a GPU-completion measurement.
 
 - **Connectivity edges**
   - Backend: `rendering/connectivity-edge-layer.js` (which edges a pane shows:
     `rendering/connectivity-edge-selection.js`).
-  - The graph stays on the CPU as loaded: `uint32` endpoints in storage order and
-    one `float32` relative strength an edge (the `float64` weights are read once
-    and not kept). Nothing is shuffled or copied.
+  - The graph stays on the CPU as the reader worker built it
+    (`ConnectivityEdges`, `data/connectivity-edges.js`): its edges as 12-byte records
+    already in the draw order below (both endpoints' cells and the `float32`
+    relative strength), every cell's neighbours in one list (8 bytes an edge,
+    also the k-NN tool's adjacency), and the forward offsets — about 20 bytes
+    an edge. Nothing in it is shuffled, copied or ordered on the page.
   - A pane shows the first K of its visible edges — both endpoints pass the
     pane's filters and, with level of detail on, its current level — in one fixed
-    random order: a keyed Feistel bijection of the edge indices, so the order
-    costs no memory and every K-prefix is a uniform sample, the same in every
-    session for the same graph. Selecting costs O(K / visible fraction).
+    random order: a keyed Feistel bijection of the edge indices (each round a
+    table of `sqrt(E)` entries), so every K-prefix is a uniform sample, the same
+    in every session for the same graph.
     K is the edge slider's value: 250,000 (or every edge, if fewer) for a newly
     loaded graph (`CONNECTIVITY_DEFAULT_VISIBLE_TARGET`), the same in every
     pane. A pane added later selects on its first frame.
-  - Only those K edges reach the GPU, one 28-byte instance record each (both
-    endpoints' positions and the strength), so the vertex shader fetches no
-    texture and tests nothing. GPU memory is K × 28 bytes a pane at any graph
-    size; a camera move uploads nothing, a filter or LOD change re-selects and
-    re-gathers K records, and a representation switch only re-gathers.
-  - The visible-edge count for the slider's range is one sequential pass over the
-    edges, run in time-boxed slices after the selection, so a filter change never
-    waits for it.
+  - A selection takes the cheaper of two exact walks: reading the ordered
+    records from the start until K are visible (sequential, O(K / visible
+    fraction)), or ranking only the visible cells' forward edges (the last of
+    each cell's neighbours) and keeping the K smallest ranks (O(cells + visible
+    cells' edges)). On a
+    6.3M-edge graph a legend click with edges shown costs about 2 ms (at most
+    about 10 ms) instead of 14–260 ms.
+  - Only those K edges reach the GPU: their 12-byte records, from which a
+    transform-feedback pass writes one 28-byte instance record each (both
+    endpoints' positions, missing axes 0, and the strength) by copying bits
+    from the pane geometry's position texture (one texel a cell). The draw
+    reads the positions as attributes and tests nothing: on Metal the same
+    vertex arithmetic on texture-fetched positions rasterizes some lines
+    differently, so the draw keeps attribute inputs and every frame matches
+    a CPU gather pixel for pixel. GPU memory is K × 40 bytes a pane plus one
+    position texture a geometry; the CPU never gathers positions; a camera
+    move uploads nothing, a filter or LOD change re-selects, uploads K records
+    and gathers, and a representation switch only gathers.
+  - The visible-edge count for the slider's range is exact at once when the
+    selection ranked the visible cells' edges; otherwise it is counted over the
+    visible cells in time-boxed slices after the selection, so a filter change
+    never waits for it.
 
 - **Highlight tools**
   - Backend: `HighlightTools` (`cellucid/assets/js/rendering/highlight-renderer.js`)
@@ -452,6 +487,13 @@ every view is laid out relative to it by one pure function,
   projection matrix per pane, and is otherwise one frozen object.
   `viewer.getPresentedLayout()` returns it and
   `viewer.onPresentedLayoutChange(listener)` delivers each new one.
+- **Field of view**: set with each presented layout from the presented area's
+  aspect (`rendering/viewer/field-of-view.js`). It is 45° vertically on a
+  landscape or square area; on a portrait one the vertical angle widens so
+  that 45° spans the width. Every pane, the point-size projection factor, the
+  centroids, picking and figure export read that one value, so a camera's
+  distance frames the same data on every screen shape
+  (`tests/browser/camera-framing-aspect.spec.mjs`).
 - **Grid** (`Grid compare` with two or more views): the presented area is split
   into `cols × rows` cells of identical integer framebuffer size, starting at
   the first framebuffer column right of the sidebar. No cell is under the
@@ -471,8 +513,8 @@ mapping between the screen and a view reads these panes: the render loop's
 viewports, scissors and per-pane projections (so frustum culling and LOD see
 the real pane shape), `getViewportInfoAtScreen()` and therefore click/tap
 focus, wheel zoom (which focuses the pane under the cursor), picking (nothing
-outside a pane's presented rectangle can be picked), hover delivery to
-Jupyter, every highlight tool (lasso polygons are clipped to the pane's
+outside a pane's presented rectangle can be picked), hover delivery to a
+Python or R viewer, every highlight tool (lasso polygons are clipped to the pane's
 presented rectangle; proximity and KNN indicators are clipped like the WebGL
 scissor), projectile aiming and the charge ring, centroid labels, view title
 chips, overlays, `getPresentedViewState()` (figure export and its preview),
@@ -577,7 +619,7 @@ preview sends on most pointer moves), any viewer input that changes something (a
 selection gesture, `Alt`, navigation keys outside text fields, releasing a held
 key), and any canvas resize marks the next frame for drawing — hovering or typing
 into a sidebar field draws nothing; held navigation keys, inertia, smooth zoom, a grid fade, smoke mode
-while it animates or is still waiting for its noise volumes, an overlay while it draws something that moves (velocity particles flowing in a presented view, or a spawn table being built for one; with no field for the layout, nothing visible, particles off at this level of detail, or in smoke mode it keeps no frames going), visible highlights in a quality whose highlight style animates (only `full`: its ring pulses and shimmers; every other quality draws a still ring, and a selection there costs nothing while the view is idle), and live projectiles
+while it animates or is still waiting for its noise volumes, an overlay while it draws something that moves (velocity particles flowing in a presented view, or a spawn table being built for one; with no field for the layout, nothing visible, particles off at this level of detail, or in smoke mode it keeps no frames going), visible highlights in a quality whose highlight style animates (only `full`: its ring pulses and shimmers; every other quality draws a still ring, and a selection there costs nothing while the view is idle; a frame the pulse alone asks for is paced by `rendering/ambient-frame-pacing.js`, which measures each drawn frame from its start to the first task after it and holds the next pulse-only frame until the main thread has been free that long; while it pulses, each pane's base layer, everything under the highlights, is kept in a framebuffer of `rendering/pulse-layer-cache.js` and a pulse-only frame draws only the layer over it, pixel for pixel the frame drawn whole; a multisampled frame keeps the scene target's own samples instead, and a pulse-only frame resets and draws again only the samples the rings cover, which the ring pass of the frame before marked in the stencil, `rendering/pulse-sample-mask.js`), and live projectiles
 keep frames drawing, and so does a camera motion still waiting for its
 `camera-settled` event and an adaptive LOD still stepping toward the level its
 camera distance asks for (hysteresis moves one level per drawn frame; the
@@ -612,8 +654,34 @@ changed, each cheap to check:
    rows, a recolour, a kept view's alpha, a draw order's rows) fail
    synchronously or not at all and only check `isContextLost()`
    (`requireLiveContext`); a filter tick at 10M points in four views spent
-   40 of its 75 ms waiting there. Highlight buffers check on the first
-   allocation and when the store grows past the size already verified.
+   40 of its 75 ms waiting there. Highlight buffers check once, after the
+   store is sized, on the first allocation and when it grows past the size
+   already verified. A highlight of many cells (when its colour words, 4
+   bytes a slot of the view's point store, are fewer bytes than its own
+   records, 16 bytes a cell) is drawn from the point store itself: positions
+   from the store, the words written on the GPU from the highlight and
+   visibility bytes, the slots not admitted rejected by the vertex shader;
+   a store sized anew is cleared by the GPU process before the check can
+   answer (160 MB: 42 ms), so this form keeps its word store when it fits. The live and kept views' centroid buffers and the
+   velocity overlay's per-view tables (visibility and spawn table, packed
+   textures) are rewritten in place when the new data fits the storage they
+   hold, with no read; only new storage reads the error queue, once (the
+   velocity overlay reads it for both tables a slice after allocating them,
+   before publishing). A filter change, a category toggle or a kept view's
+   recolour with the velocity overlay on reads nothing; restoring a session
+   of seven views reads once per new table, not four times per view.
+   `gl.isTexture` is a round trip too and is not used to check ownership.
+   An error nobody reads where it happens is read by the next owner that
+   does, so no owner may raise one: a deleted object is never bound again.
+   WebGL keeps a deleted program current (`deleteProgramReleasingUse` in
+   `gl-utils.js` unbinds it first), and Chrome keeps reporting a texture
+   deleted while bound to `TEXTURE_3D` or `TEXTURE_2D_ARRAY` on some units
+   as still bound there; every texture is deleted through
+   `deleteTextureTracked`, and every owner that saves and restores bindings
+   (smoke density and noise builds, the draw-order permute, the edge
+   gather, packed textures) restores through `restorableTexture`, which
+   drops a deleted one. Re-binding it raised INVALID_OPERATION (0x502) that
+   a later dataset switch reported as its own.
 
 A culled frame draws a subsequence of the stored points in storage order, so
 it blends translucent points exactly like an unculled frame, which

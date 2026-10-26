@@ -4,19 +4,22 @@ The data mapping: which stored arrays Cellucid plots and reads.
 A *data mapping* names, for one dataset, the embeddings it can be shown with
 (any number, of any mix of 1D, 2D and 3D: the *enabled* representations), the
 default representation of each dimension, the vector fields bound to those
-embeddings, and -- for an AnnData source -- the neighbour graph, the gene-name
-set, the expression matrix and the latent space. The same JSON shape is written into session fingerprints,
-sent over the Jupyter wire and derived from URLs, so it is defined once, here,
-and mirrored by the web app's ``assets/js/data/data-mapping.js``.
+embeddings, the neighbour graph, the gene-name set, the expression matrix and
+the latent space, each named by its key in one AnnData object. The same JSON
+shape is written into session fingerprints and sent over the Jupyter wire, so
+it is validated once, here, and mirrored by the web app's
+``assets/js/data/data-mapping.js``.
 
-Everything in this module is a pure rule over metadata, with two exceptions
-that read an AnnData object without reading its large arrays:
-:func:`build_anndata_candidates` (shapes and dtypes only) and
-:func:`resolve_gene_names` (one ``var`` column). The rules that must agree
-byte-for-byte between Python, R and JavaScript -- making names unique, ranking
-best-guess embeddings, validating embedding columns, canonical embedding ids,
-and the "nothing to plot" message -- are pinned by the shared conformance
-fixture ``tests/fixtures/data_mapping_conformance.json``.
+This module holds the parts of those rules the Python package applies: the
+DataMapping validation (sessions and the notebook wire), making names unique
+and the note that reports it (``prepare()`` and sessions), the embedding-column
+check and the default UMAP rule (the server and ``prepare()``), the
+vector-field key rule (``prepare()``, the launch defaults and the transition
+drift utilities), and resolving a session's mapping against an AnnData object.
+Everything is a pure rule over metadata, except :func:`describe_obsm` (shapes
+and dtypes only) and :func:`resolve_gene_names` (one ``var`` column). The rules
+that must agree byte-for-byte between Python, R and JavaScript are pinned by
+the shared conformance fixture ``tests/fixtures/data_mapping_conformance.json``.
 
 This module imports only the standard library at import time, because the
 session bundle reader depends on it and must stay light.
@@ -27,10 +30,11 @@ from __future__ import annotations
 import copy
 import math
 import numbers
-import re
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
+
+from ._plural import plural
 
 #: The three dimension slots, in the order every mapping and identity lists them.
 DIMENSION_SLOTS: tuple[str, ...] = ("1d", "2d", "3d")
@@ -40,64 +44,111 @@ DIMENSION_SLOTS: tuple[str, ...] = ("1d", "2d", "3d")
 #: with 0-based columns.
 EmbeddingKeySpec = str | tuple[str, Sequence[int]]
 
-#: The two kinds of data mapping. Exports fix the KNN graph, the expression
-#: matrix and the latent space at ``prepare()`` time, so those groups exist
-#: only on the AnnData kind.
-EXPORT_KIND = "export"
+#: The kind every data mapping declares: Cellucid reads AnnData, and a mapping
+#: names ``obsm``, ``obsp``, layer and ``var`` keys of one AnnData object.
 ANNDATA_KIND = "anndata"
 
-_EXPORT_MAPPING_KEYS = frozenset({"kind", "embeddings", "geneNames", "vectorFields"})
 _ANNDATA_MAPPING_KEYS = frozenset(
-    {"kind", "embeddings", "knn", "geneNames", "expression", "latent", "vectorFields"}
+    {
+        "kind",
+        "embeddings",
+        "knn",
+        "geneNames",
+        "expression",
+        "log1p",
+        "highlyVariable",
+        "latent",
+        "vectorFields",
+    }
 )
+#: The one key a mapping holds only for a dataset of several modalities
+#: (feature spaces over the same cells): which one gene names, expression, its
+#: log1p and the highly variable genes are read from. A mapping of a dataset
+#: with one feature space has no ``modality`` key at all.
+MODALITY_KEY = "modality"
+_LOG1P_ENTRY_KEYS = frozenset({"base"})
 _EMBEDDING_REF_KEYS = frozenset({"key", "columns"})
 _EMBEDDINGS_GROUP_KEYS = frozenset({"enabled", "defaults"})
-_EXPORT_VECTOR_BINDING_KEYS = frozenset({"field", "embedding"})
-_ANNDATA_VECTOR_BINDING_KEYS = frozenset({"key", "embedding"})
+_VECTOR_BINDING_KEYS = frozenset({"key", "embedding"})
 
-#: ``sc.tl.umap()`` writes ``X_umap``; earlier Cellucid releases asked for one
-#: key per dimension. Both are the default rule (design §1.4).
+#: ``X_umap_1d`` .. ``X_umap_3d`` hold one UMAP per dimension count; they are
+#: the default rule first (design §1.4).
 DIMENSIONAL_UMAP_KEYS: tuple[str, ...] = ("X_umap_1d", "X_umap_2d", "X_umap_3d")
-UNSUFFIXED_UMAP_KEY = "X_umap"
 
-#: The AnnData ``obsm`` grammar of a per-dimension UMAP vector field. The three
-#: dimensional embedding keys match it too (``X_umap_2d`` reads as field
-#: ``X_umap``), so test keys with :func:`is_vector_field_key`, which excludes them.
-VECTOR_KEY_PATTERN = re.compile(r"^(?P<field>.+_umap)_(?P<dimension>[123])d$")
+#: The conventional names of one UMAP, in the order the default rule takes
+#: them: Scanpy's (``sc.tl.umap()`` writes ``X_umap``, as does a Seurat
+#: object's ``umap`` reduction), a SingleCellExperiment's (scater's
+#: ``runUMAP()`` names its reducedDim ``UMAP``), then a Seurat object's
+#: weighted-nearest-neighbour and Azimuth reference UMAPs (``wnn.umap``,
+#: ``ref.umap``). An R object's reductions and reducedDims are
+#: ``obsm['X_<name>']`` with the name's case kept.
+UMAP_KEYS: tuple[str, ...] = ("X_umap", "X_UMAP", "X_wnn.umap", "X_ref.umap")
+
+#: The prefix AnnData names a representation with: ``obsm['X_<basis>']`` is the
+#: embedding (or latent space) of basis ``<basis>``, as ``sc.tl.umap()`` writes
+#: ``X_umap``. A key with this prefix is never a vector field.
+EMBEDDING_KEY_PREFIX = "X_"
 
 
-def is_vector_field_key(key: object) -> bool:
-    """Whether an ``obsm`` key declares a UMAP vector field.
+@dataclass(frozen=True)
+class VectorFieldKey:
+    """One ``obsm`` key read as a vector field: ``<field>_<basis>`` on ``X_<basis>``."""
 
-    ``X_umap_1d``, ``X_umap_2d`` and ``X_umap_3d`` are embeddings, not vectors,
-    although they fit the vector grammar.
+    field: str
+    basis: str
+
+    @property
+    def embedding_key(self) -> str:
+        """The ``obsm`` key of the embedding the field is named for."""
+        return EMBEDDING_KEY_PREFIX + self.basis
+
+
+def parse_vector_field_key(key: object, obsm_keys: Collection[str]) -> VectorFieldKey | None:
+    """Read one ``obsm`` key with the vector-field key rule, scVelo's convention.
+
+    ``<field>_<basis>`` is the vector field ``<field>`` on the embedding
+    ``X_<basis>`` (``velocity_umap`` on ``X_umap``, ``velocity_umap_3d`` on
+    ``X_umap_3d``, ``T_fwd_branches`` on ``X_branches``):
+
+    - A key that starts with ``X_`` is never a vector field: AnnData names
+      representations that way.
+    - Otherwise every split of the key at one ``_`` into a non-empty
+      ``<field>`` and a non-empty ``<basis>`` is tried, and the split whose
+      ``X_<basis>`` is in ``obsm_keys`` wins; when several do, the longest
+      basis wins. Matching is exact and case-sensitive.
+    - A key with no such split is an ordinary ``obsm`` array (None).
+
+    The rule reads names only; whether the field is drawn also depends on
+    column counts (the web app's ``defaultVectorBindings``). The web app's
+    ``parseVectorFieldKey`` and cellucid-r apply the same rule, pinned by the
+    shared conformance fixture.
     """
-    return (
-        isinstance(key, str)
-        and key not in DIMENSIONAL_UMAP_KEYS
-        and VECTOR_KEY_PATTERN.fullmatch(key) is not None
-    )
+    if not isinstance(key, str) or key.startswith(EMBEDDING_KEY_PREFIX):
+        return None
+    split = key.find("_")
+    while split != -1:
+        # The first qualifying split from the left has the longest basis.
+        if 0 < split < len(key) - 1:
+            basis = key[split + 1 :]
+            if EMBEDDING_KEY_PREFIX + basis in obsm_keys:
+                return VectorFieldKey(field=key[:split], basis=basis)
+        split = key.find("_", split + 1)
+    return None
+
+
+def vector_field_keys(keys: Iterable[str]) -> dict[str, VectorFieldKey]:
+    """The vector fields among one object's ``obsm`` keys, by key, in input order."""
+    listed = list(keys)
+    obsm_keys = frozenset(listed)
+    found: dict[str, VectorFieldKey] = {}
+    for key in listed:
+        parsed = parse_vector_field_key(key, obsm_keys)
+        if parsed is not None:
+            found[key] = parsed
+    return found
 
 _GENE_NAMES_COLUMN_PREFIX = "column:"
 _LAYER_PREFIX = "layer:"
-
-#: Best-guess tiers, in the order a name is tested against them. A name is
-#: lowercased, and the first tier whose substring it contains decides its rank;
-#: a name that matches none ranks 7. Tier 8 (latent spaces) is tested last so
-#: that, for example, ``X_umap_on_pca`` is still a UMAP. The name keeps its
-#: leading ``x_``: every other needle matches the same names either way, and
-#: stripping it would leave the ``x_emb`` needle unable to match ``X_emb``.
-_BEST_GUESS_TIERS: tuple[tuple[int, tuple[str, ...]], ...] = (
-    (0, ("umap",)),
-    (1, ("tsne", "t-sne", "t_sne")),
-    (2, ("draw_graph", "force")),
-    (3, ("phate",)),
-    (4, ("pacmap", "trimap")),
-    (5, ("spatial",)),
-    (6, ("diffmap",)),
-    (8, ("pca", "scvi", "latent", "harmony", "x_emb")),
-)
-_BEST_GUESS_NO_MATCH_TIER = 7
 
 
 class DataMappingError(ValueError):
@@ -176,13 +227,12 @@ def gene_name_text(value: object) -> str | None:
 def column_gene_names(var: Any, column: str | None) -> UniqueNames:
     """The unique gene names of one ``var`` frame: its index, or one column.
 
-    A column must be one the candidate catalog lists as usable (text,
-    categories or integers); its values are turned into text with
+    A column must hold text, categories or integers; its values are turned into text with
     :func:`gene_name_text`, an empty one takes the row's index name (which
     must be text), and the list is made unique with
-    :func:`make_unique_names`. Every path -- ``prepare()``, the served gene
-    list, the mapping routes and the session reader -- names genes with this
-    one function.
+    :func:`make_unique_names`. ``prepare()`` and the session reader name
+    genes with this one function, the rule the web app's ``geneNameText``
+    and cellucid-r apply too.
     """
     index = var.index.tolist()
     if column is None:
@@ -212,8 +262,7 @@ def make_unique_names(
        skipped while it already exists in the filled list or has already been
        produced.
 
-    A list that is already unique comes back unchanged, so a unique gene axis
-    exports exactly the names it exported before this rule existed.
+    A list that is already unique comes back unchanged.
     """
     if not isinstance(join, str) or not join:
         raise TypeError("join must be a non-empty string.")
@@ -322,7 +371,7 @@ def unique_names_note(
 
 
 # =============================================================================
-# Embedding references, columns and canonical ids (design §1.1, §1.3)
+# Embedding references and columns (design §1.1, §1.3)
 # =============================================================================
 
 
@@ -376,7 +425,7 @@ def validate_embedding_columns(
     if width < dimension:
         raise DataMappingError(
             "too_narrow",
-            f"A {dimension}D embedding needs at least {dimension} columns; "
+            f"A {dimension}D embedding needs at least {dimension} {plural(dimension, 'column')}; "
             f"this array has {width}.",
         )
     if not isinstance(columns, list | tuple):
@@ -384,7 +433,7 @@ def validate_embedding_columns(
     if len(columns) != dimension:
         raise DataMappingError(
             "column_count",
-            f"A {dimension}D embedding reads exactly {dimension} columns; got {len(columns)}.",
+            f"A {dimension}D embedding reads exactly {dimension} {plural(dimension, 'column')}; got {len(columns)}.",
         )
     resolved: list[int] = []
     for column in columns:
@@ -403,24 +452,6 @@ def validate_embedding_columns(
     if len(set(resolved)) != len(resolved):
         raise DataMappingError("column_duplicate", "Each axis needs a different column.")
     return resolved
-
-
-def canonical_embedding_id(key: str, columns: Sequence[int] | None, *, width: int | None) -> str:
-    """Return the id one embedding reference is known by.
-
-    An export item is known by its own id (``columns`` is None). An AnnData
-    ``obsm`` array is known by its key when it is read whole -- its width equals
-    the number of columns and they are ``0 .. d-1`` in order -- and otherwise by
-    ``key[c0,c1]``. Because ``(key, columns)`` is unique, so is the id.
-    """
-    if not isinstance(key, str) or not key:
-        raise ValueError("Embedding key must be a non-empty string.")
-    if columns is None:
-        return key
-    resolved = list(columns)
-    if width is not None and width == len(resolved) and resolved == default_columns(len(resolved)):
-        return key
-    return f"{key}[{','.join(str(column) for column in resolved)}]"
 
 
 # =============================================================================
@@ -452,35 +483,22 @@ def _require_mapping_string(value: object, *, label: str) -> str:
 def validate_embedding_ref(
     value: object,
     *,
-    kind: str,
     dimension: int | None,
     label: str,
 ) -> dict[str, Any]:
     """Validate one ``{key, columns}`` reference and return a canonical copy.
 
-    An export reference names an exported embedding id and carries
-    ``columns: null``, because the columns were fixed at export. An AnnData
-    reference names an ``obsm`` key and always lists its 0-based columns.
+    A reference names an ``obsm`` key and lists its 0-based columns.
     """
     ref = _require_exact_keys(value, _EMBEDDING_REF_KEYS, label=label)
     key = _require_mapping_string(ref["key"], label=f"{label}.key")
     columns = ref["columns"]
-    if kind == EXPORT_KIND:
-        if columns is not None:
-            raise DataMappingError(
-                "columns_not_null",
-                f"{label}.columns must be null: an exported embedding's columns were "
-                "fixed when it was prepared.",
-            )
-        return {"key": key, "columns": None}
-    if kind != ANNDATA_KIND:
-        raise ValueError(f"Unknown data mapping kind {kind!r}.")
     if not isinstance(columns, list):
         raise DataMappingError("columns_not_list", f"{label}.columns must be a list.")
     if dimension is not None and len(columns) != dimension:
         raise DataMappingError(
             "column_count",
-            f"{label}.columns must list exactly {dimension} columns.",
+            f"{label}.columns must list exactly {dimension} {plural(dimension, 'column')}.",
         )
     if not 1 <= len(columns) <= 3:
         raise DataMappingError("column_count", f"{label}.columns must list 1 to 3 columns.")
@@ -510,6 +528,47 @@ def _validate_gene_names(value: object, *, label: str) -> str:
     )
 
 
+def _is_expression_matrix(value: object) -> bool:
+    return isinstance(value, str) and (
+        value in ("X", "raw")
+        or (value.startswith(_LAYER_PREFIX) and len(value) > len(_LAYER_PREFIX))
+    )
+
+
+def _validate_log1p(value: object, *, label: str) -> dict[str, dict[str, Any]]:
+    """Validate the ``log1p`` group (the web app's ``validateLog1p``).
+
+    For each expression matrix holding ``log1p`` values (``X``, ``raw``,
+    ``layer:<name>``), its ``{"base": ...}``: None for the natural logarithm,
+    else a positive number other than 1. A matrix not listed holds its values
+    as stored. The result lists the matrices in code-point order.
+    """
+    if not isinstance(value, dict):
+        raise DataMappingError("log1p", f"{label} must be an object of expression matrices.")
+    result: dict[str, dict[str, Any]] = {}
+    for matrix in sorted(value):
+        if not _is_expression_matrix(matrix):
+            raise DataMappingError(
+                "log1p",
+                f'{label} keys must be expression matrices: "X", "raw" or "layer:<name>".',
+            )
+        entry = _require_exact_keys(value[matrix], _LOG1P_ENTRY_KEYS, label=f"{label}.{matrix}")
+        base = entry["base"]
+        if base is not None and not (
+            isinstance(base, int | float)
+            and not isinstance(base, bool)
+            and math.isfinite(base)
+            and base > 0
+            and base != 1
+        ):
+            raise DataMappingError(
+                "log1p_base",
+                f"{label}.{matrix}.base must be null (base e) or a positive number other than 1.",
+            )
+        result[matrix] = {"base": base}
+    return result
+
+
 def _validate_expression(value: object, *, label: str) -> str | None:
     if value is None:
         return None
@@ -533,14 +592,13 @@ def _optional_mapping_string(value: object, *, label: str) -> str | None:
 def embedding_ref_sort_key(ref: Mapping[str, Any]) -> tuple[Any, ...]:
     """The canonical order of embedding references.
 
-    By ``key`` in code-point order, then ``columns``: an export's ``null``
-    first, then lists compared element by element.
+    By ``key`` in code-point order, then ``columns`` compared element by
+    element.
     """
-    columns = ref["columns"]
-    return (ref["key"], 0 if columns is None else 1, tuple(columns or ()))
+    return (ref["key"], tuple(ref["columns"]))
 
 
-def _validate_embeddings_group(value: object, *, kind: str, label: str) -> dict[str, Any]:
+def _validate_embeddings_group(value: object, *, label: str) -> dict[str, Any]:
     """Validate the ``embeddings`` group: ``{"enabled": [...], "defaults": {...}}``.
 
     ``enabled`` lists every representation the dataset can be shown with: at
@@ -555,7 +613,7 @@ def _validate_embeddings_group(value: object, *, kind: str, label: str) -> dict[
     if not raw_enabled:
         raise DataMappingError("no_embedding", f"{label}.enabled must list at least one embedding.")
     enabled = [
-        validate_embedding_ref(ref, kind=kind, dimension=None, label=f"{label}.enabled[{position}]")
+        validate_embedding_ref(ref, dimension=None, label=f"{label}.enabled[{position}]")
         for position, ref in enumerate(raw_enabled)
     ]
     order = [embedding_ref_sort_key(ref) for ref in enabled]
@@ -576,7 +634,6 @@ def _validate_embeddings_group(value: object, *, kind: str, label: str) -> dict[
             continue
         valid = validate_embedding_ref(
             ref,
-            kind=kind,
             dimension=slot_dimension(slot),
             label=f"{label}.defaults.{slot}",
         )
@@ -591,46 +648,57 @@ def _validate_embeddings_group(value: object, *, kind: str, label: str) -> dict[
     return {"enabled": enabled, "defaults": defaults}
 
 
-def _binding_sort_key(binding: Mapping[str, Any], name_key: str) -> tuple[Any, ...]:
-    embedding = binding["embedding"]
-    columns = embedding["columns"]
-    return (
-        embedding["key"],
-        0 if columns is None else 1,
-        tuple(columns or ()),
-        binding[name_key],
-    )
+def _binding_sort_key(binding: Mapping[str, Any]) -> tuple[Any, ...]:
+    return (*embedding_ref_sort_key(binding["embedding"]), binding["key"])
+
+
+def _validate_modality(value: object, *, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise DataMappingError(
+            "modality",
+            f"{label} must name one of the dataset's modalities; a dataset with one feature "
+            "space has no modality key.",
+        )
+    return value
 
 
 def validate_data_mapping(value: object, *, label: str = "dataMapping") -> dict[str, Any]:
     """Validate one DataMapping and return a canonical deep copy.
 
-    The mapping is a closed shape per ``kind``: an unknown or missing key is a
-    mapping this version does not understand. At least one embedding must be
-    enabled and at least one default named, since a mapping that plots nothing
-    describes no session; every vector binding is bound to an enabled
-    embedding.
+    The mapping is a closed shape: ``kind`` is ``"anndata"``, and an unknown
+    or missing key is a mapping this version does not understand. At least one
+    embedding must be enabled and at least one default named, since a mapping
+    that plots nothing describes no session; every vector binding is bound to
+    an enabled embedding.
 
     ``vectorFields`` must already be in canonical order -- by the bound
-    embedding's ``key``, then its ``columns`` (an export's ``null`` first), then
-    the field id or ``obsm`` key -- and must not repeat a binding.
+    embedding's ``key``, then its ``columns``, then the vector's ``obsm`` key --
+    and must not repeat a binding.
+
+    ``log1p`` names, per expression matrix holding ``log1p`` values, its base
+    (None for e); ``highlyVariable`` the boolean ``var`` column of the mapped
+    expression matrix's genes that marks the highly variable ones, or None.
+
+    ``modality`` is present only for a dataset of several modalities (a
+    non-empty string naming one); ``geneNames``, ``expression``, ``log1p`` and
+    ``highlyVariable`` are then that modality's.
+
+    The canonical key order is ``kind``, ``embeddings``, ``knn``, ``modality``
+    (when present), ``geneNames``, ``expression``, ``log1p``,
+    ``highlyVariable``, ``latent``, ``vectorFields``.
     """
     if not isinstance(value, dict):
         raise DataMappingError("not_object", f"{label} must be an object.")
-    kind = value.get("kind")
-    if kind == EXPORT_KIND:
-        expected = _EXPORT_MAPPING_KEYS
-        binding_keys = _EXPORT_VECTOR_BINDING_KEYS
-        name_key = "field"
-    elif kind == ANNDATA_KIND:
-        expected = _ANNDATA_MAPPING_KEYS
-        binding_keys = _ANNDATA_VECTOR_BINDING_KEYS
-        name_key = "key"
-    else:
-        raise DataMappingError("kind", f"{label}.kind must be \"export\" or \"anndata\".")
-    mapping = _require_exact_keys(value, expected, label=label)
+    if value.get("kind") != ANNDATA_KIND:
+        raise DataMappingError("kind", f"{label}.kind must be \"{ANNDATA_KIND}\".")
+    has_modality = MODALITY_KEY in value
+    mapping = _require_exact_keys(
+        value,
+        _ANNDATA_MAPPING_KEYS | {MODALITY_KEY} if has_modality else _ANNDATA_MAPPING_KEYS,
+        label=label,
+    )
 
-    embeddings = _validate_embeddings_group(mapping["embeddings"], kind=kind, label=f"{label}.embeddings")
+    embeddings = _validate_embeddings_group(mapping["embeddings"], label=f"{label}.embeddings")
 
     raw_bindings = mapping["vectorFields"]
     if not isinstance(raw_bindings, list):
@@ -638,27 +706,23 @@ def validate_data_mapping(value: object, *, label: str = "dataMapping") -> dict[
     bindings: list[dict[str, Any]] = []
     for position, raw in enumerate(raw_bindings):
         binding_label = f"{label}.vectorFields[{position}]"
-        binding = _require_exact_keys(raw, binding_keys, label=binding_label)
+        binding = _require_exact_keys(raw, _VECTOR_BINDING_KEYS, label=binding_label)
         bindings.append(
             {
-                name_key: _require_mapping_string(
-                    binding[name_key],
-                    label=f"{binding_label}.{name_key}",
-                ),
+                "key": _require_mapping_string(binding["key"], label=f"{binding_label}.key"),
                 "embedding": validate_embedding_ref(
                     binding["embedding"],
-                    kind=kind,
                     dimension=None,
                     label=f"{binding_label}.embedding",
                 ),
             }
         )
-    sort_keys = [_binding_sort_key(binding, name_key) for binding in bindings]
+    sort_keys = [_binding_sort_key(binding) for binding in bindings]
     if sort_keys != sorted(sort_keys):
         raise DataMappingError(
             "vector_order",
             f"{label}.vectorFields must be sorted by embedding key, embedding columns, "
-            f"then {name_key}.",
+            "then key.",
         )
     if len(set(sort_keys)) != len(sort_keys):
         raise DataMappingError("vector_duplicate", f"{label}.vectorFields repeats a binding.")
@@ -670,60 +734,74 @@ def validate_data_mapping(value: object, *, label: str = "dataMapping") -> dict[
                 f"{label}.vectorFields[{position}] is bound to an embedding that is not enabled.",
             )
 
-    canonical: dict[str, Any] = {"kind": kind, "embeddings": embeddings}
-    if kind == ANNDATA_KIND:
-        canonical["knn"] = _optional_mapping_string(mapping["knn"], label=f"{label}.knn")
-    canonical["geneNames"] = _validate_gene_names(mapping["geneNames"], label=f"{label}.geneNames")
-    if kind == ANNDATA_KIND:
-        canonical["expression"] = _validate_expression(
-            mapping["expression"],
-            label=f"{label}.expression",
-        )
-        canonical["latent"] = _optional_mapping_string(
-            mapping["latent"],
-            label=f"{label}.latent",
-        )
-    canonical["vectorFields"] = bindings
+    canonical: dict[str, Any] = {
+        "kind": ANNDATA_KIND,
+        "embeddings": embeddings,
+        "knn": _optional_mapping_string(mapping["knn"], label=f"{label}.knn"),
+        **(
+            {"modality": _validate_modality(mapping[MODALITY_KEY], label=f"{label}.modality")}
+            if has_modality
+            else {}
+        ),
+        "geneNames": _validate_gene_names(mapping["geneNames"], label=f"{label}.geneNames"),
+        "expression": _validate_expression(mapping["expression"], label=f"{label}.expression"),
+        "log1p": _validate_log1p(mapping["log1p"], label=f"{label}.log1p"),
+        "highlyVariable": _optional_mapping_string(
+            mapping["highlyVariable"], label=f"{label}.highlyVariable"
+        ),
+        "latent": _optional_mapping_string(mapping["latent"], label=f"{label}.latent"),
+        "vectorFields": bindings,
+    }
     return copy.deepcopy(canonical)
 
 
-def export_data_mapping(identity: Mapping[str, Any], *, gene_name_source: str | None) -> dict[str, Any]:
-    """The data mapping a prepared export is shown with when it opens.
+#: The names a gene-expression modality goes by, lower-cased: MuData's ``rna``,
+#: 10x's ``Gene Expression``, Seurat's ``RNA`` and ``SCT``.
+_GENE_EXPRESSION_MODALITIES = ("rna", "gex", "gene expression", "gene_expression", "sct")
 
-    Every declared embedding is enabled, in canonical order; the defaults are
-    the identity's ``embeddings.defaults``; genes are named by the default
-    gene-name set (``gene_name_source`` is its ``var`` column, None for the
-    index); every declared vector-field file is bound to its embedding. The
-    same rule holds for exports written by the Python and the R package, which
-    declare embeddings identically. Mirrors the web app's
-    ``resolveExportDataMapping``.
+
+def default_modality(names: Sequence[str]) -> str | None:
+    """The modality a dataset opens with, of its modalities in stored order.
+
+    The first whose name is a gene-expression name (``rna``, ``gex``, ``gene
+    expression``, ``gene_expression``, ``sct``, in any case), else the first;
+    None when there are none. The web app's ``defaultModality``.
     """
-    embeddings = identity["embeddings"]
-    defaults = embeddings["defaults"]
-    bindings = [
-        {"field": field, "embedding": {"key": embedding_id, "columns": None}}
-        for field, entry in identity.get("vector_fields", {}).get("fields", {}).items()
-        for embedding_id in entry["files"]
-    ]
-    bindings.sort(key=lambda binding: _binding_sort_key(binding, "field"))
-    return validate_data_mapping(
-        {
-            "kind": EXPORT_KIND,
-            "embeddings": {
-                "enabled": [
-                    {"key": embedding_id, "columns": None}
-                    for embedding_id in sorted(embeddings["items"])
-                ],
-                "defaults": {
-                    slot: ({"key": defaults[slot], "columns": None} if slot in defaults else None)
-                    for slot in DIMENSION_SLOTS
-                },
-            },
-            "geneNames": "index" if gene_name_source is None else f"{_GENE_NAMES_COLUMN_PREFIX}{gene_name_source}",
-            "vectorFields": bindings,
-        },
-        label="Export data mapping",
-    )
+    for name in names:
+        if name.lower() in _GENE_EXPRESSION_MODALITIES:
+            return name
+    return names[0] if names else None
+
+
+def require_mapping_modality(mapping: Mapping[str, Any], modalities: Sequence[str] | None) -> None:
+    """Check a mapping's ``modality`` against the dataset's modalities.
+
+    A dataset of several modalities needs one named, a dataset of one feature
+    space (``modalities`` None) none, and the name must be one of them.
+    Raises :class:`DataMappingError` with code ``modality_missing``,
+    ``modality_unexpected`` or ``modality_unknown``.
+    """
+    named = MODALITY_KEY in mapping
+    if modalities is None:
+        if named:
+            raise DataMappingError(
+                "modality_unexpected",
+                f"This mapping reads the modality {mapping[MODALITY_KEY]!r}, and this dataset "
+                "has one feature space.",
+            )
+        return
+    if not named:
+        raise DataMappingError(
+            "modality_missing",
+            f"This dataset has several modalities ({', '.join(modalities)}); its mapping must "
+            "name the one it reads.",
+        )
+    if mapping[MODALITY_KEY] not in modalities:
+        raise DataMappingError(
+            "modality_unknown",
+            f"This mapping reads the modality {mapping[MODALITY_KEY]!r}, which this dataset "
+            f"does not have ({', '.join(modalities)}).",
+        )
 
 
 def gene_names_column(gene_names: str) -> str | None:
@@ -743,7 +821,7 @@ def expression_layer(expression: str) -> str | None:
 
 
 # =============================================================================
-# Default resolution and the deterministic best guess (design §1.4)
+# The default embedding rule (design §1.4)
 # =============================================================================
 
 
@@ -764,11 +842,12 @@ class ObsmEntry:
 
 
 def default_embedding_slots(entries: Sequence[ObsmEntry]) -> dict[str, dict[str, Any] | None]:
-    """Apply today's default embedding rule and return the filled slots.
+    """Apply the default embedding rule and return the filled slots.
 
     If any of ``X_umap_1d``, ``X_umap_2d`` or ``X_umap_3d`` is present, those
-    keys alone fill their slots, reading columns ``0 .. d-1``. Otherwise a bare
-    ``X_umap`` whose width is 1, 2 or 3 fills the slot of that width. Slots
+    keys alone fill their slots, reading columns ``0 .. d-1``. Otherwise the
+    first of ``UMAP_KEYS`` (``X_umap``, ``X_UMAP``, ``X_wnn.umap``,
+    ``X_ref.umap``) whose width is 1, 2 or 3 fills the slot of that width. Slots
     without a default stay None. Presence is all this rule asks: a present key
     that later fails its load-time check is reported, not skipped, because the
     caller named that array on purpose.
@@ -781,278 +860,94 @@ def default_embedding_slots(entries: Sequence[ObsmEntry]) -> dict[str, dict[str,
             dimension = int(key[len("X_umap_")])
             slots[dimension_slot(dimension)] = {"key": key, "columns": default_columns(dimension)}
         return slots
-    bare = by_key.get(UNSUFFIXED_UMAP_KEY)
-    if bare is not None and bare.width in (1, 2, 3):
-        dimension = bare.width
-        slots[dimension_slot(dimension)] = {
-            "key": UNSUFFIXED_UMAP_KEY,
-            "columns": default_columns(dimension),
-        }
+    for key in UMAP_KEYS:
+        single = by_key.get(key)
+        if single is not None and single.width in (1, 2, 3):
+            dimension = single.width
+            slots[dimension_slot(dimension)] = {"key": key, "columns": default_columns(dimension)}
+            break
     return slots
 
 
-def best_guess_tier(key: str) -> int:
-    """Rank one ``obsm`` key for the best guess; a lower tier is a better guess."""
-    name = key.lower()
-    for tier, needles in _BEST_GUESS_TIERS:
-        if any(needle in name for needle in needles):
-            return tier
-    return _BEST_GUESS_NO_MATCH_TIER
+#: The web app's best-guess ranking of ``obsm`` keys (``bestGuessTier`` in
+#: ``data/data-mapping.js``): the first needle a lower-cased key contains
+#: decides its tier, a lower tier is a better guess, and a key matching none
+#: ranks between ``diffmap`` and the latent spaces.
+_BEST_GUESS_TIERS: tuple[tuple[int, tuple[str, ...]], ...] = (
+    (0, ("umap",)),
+    (1, ("tsne", "t-sne", "t_sne")),
+    (2, ("draw_graph", "force")),
+    (3, ("phate",)),
+    (4, ("pacmap", "trimap")),
+    (5, ("spatial",)),
+    (6, ("diffmap",)),
+    (8, ("pca", "scvi", "latent", "harmony", "x_emb")),
+)
+_BEST_GUESS_NO_MATCH_TIER = 7
 
 
 def best_guess_order(keys: Iterable[str]) -> list[str]:
-    """Order keys by (tier, key in code-point order)."""
-    return sorted(keys, key=lambda key: (best_guess_tier(key), key))
+    """Order ``obsm`` keys for the best guess: by tier, then by code point."""
+
+    def tier(key: str) -> int:
+        name = key.lower()
+        for rank, needles in _BEST_GUESS_TIERS:
+            if any(needle in name for needle in needles):
+                return rank
+        return _BEST_GUESS_NO_MATCH_TIER
+
+    return sorted(keys, key=lambda key: (tier(key), key))
 
 
-@dataclass(frozen=True)
-class EmbeddingGuess:
-    """The outcome of :func:`best_guess_embedding_slots`."""
-
-    slots: dict[str, dict[str, Any] | None]
-    guessed: list[str]
-    rejected: list[tuple[str, str]]
-
-
-LoadCheck = Callable[[str, list[int]], str | None]
-
-
-def best_guess_embedding_slots(
+def enabled_embedding_keys(
     entries: Sequence[ObsmEntry],
     *,
+    named_slots: Mapping[str, str],
     latent_key: str | None,
-    load_check: LoadCheck | None = None,
-) -> EmbeddingGuess:
-    """Fill embedding slots when the default rule filled none.
+) -> frozenset[str]:
+    """The ``obsm`` keys the web app shows an AnnData store with when it opens.
 
-    Candidates are the usable entries, minus vector-field keys
-    (``<field>_umap_<d>d``) and the latent key. For each of 3D, 2D and 1D the
-    slot takes the best-ranked *narrow* candidate (width 1-3) whose width is
-    exactly that dimension. When no narrow candidate fills any slot, only the
-    2D slot is filled, from the best-ranked *wide* candidate (width > 3) read
-    at columns ``[0, 1]``.
-
-    ``load_check(key, columns)`` returns None when the array loads, or the
-    reason it does not. A candidate that fails is recorded in ``rejected`` and
-    the next one is tried, so the guess is deterministic and bounded by the
-    candidate count.
+    The slots are the ones a launch named (``named_slots``, slot to key) over
+    the default rule (:func:`default_embedding_slots`); when a launch names
+    none and the default rule fills none, the best guess fills them: for 3D,
+    2D and 1D the first key of that exact width in :func:`best_guess_order`,
+    else the first wider key in 2D. Every usable array 1 to 3 columns wide is
+    shown beside them. Vector-field keys and the latent key are never guessed
+    or shown beside. This is the web app's ``resolveEmbeddingSlots`` and
+    ``defaultEnabledEmbeddings`` read from metadata alone: the browser also
+    loads each guessed array and passes over one that does not load, which
+    metadata cannot tell.
     """
-    candidates = [
-        entry
+    vector_keys = vector_field_keys(entry.key for entry in entries)
+    candidates = {
+        entry.key: entry.width
         for entry in entries
         if entry.usable
         and entry.width is not None
         and entry.width >= 1
-        and not is_vector_field_key(entry.key)
+        and entry.key not in vector_keys
         and entry.key != latent_key
-    ]
-    width_by_key = {entry.key: entry.width for entry in candidates}
-    rejected: list[tuple[str, str]] = []
-    failed: set[str] = set()
-    slots: dict[str, dict[str, Any] | None] = dict.fromkeys(DIMENSION_SLOTS)
-
-    def try_candidate(key: str, columns: list[int]) -> bool:
-        if key in failed:
-            return False
-        reason = load_check(key, columns) if load_check is not None else None
-        if reason is None:
-            return True
-        failed.add(key)
-        rejected.append((key, reason))
-        return False
-
-    for dimension in (3, 2, 1):
-        for key in best_guess_order(k for k, w in width_by_key.items() if w == dimension):
-            columns = default_columns(dimension)
-            if try_candidate(key, columns):
-                slots[dimension_slot(dimension)] = {"key": key, "columns": columns}
-                break
-
-    if all(ref is None for ref in slots.values()):
-        for key in best_guess_order(k for k, w in width_by_key.items() if (w or 0) > 3):
-            columns = [0, 1]
-            if try_candidate(key, columns):
-                slots["2d"] = {"key": key, "columns": columns}
-                break
-
-    guessed = [f"embeddings.{slot}" for slot in DIMENSION_SLOTS if slots[slot] is not None]
-    return EmbeddingGuess(slots=slots, guessed=guessed, rejected=rejected)
-
-
-def resolve_embedding_slots(
-    entries: Sequence[ObsmEntry],
-    *,
-    latent_key: str | None,
-    load_check: LoadCheck | None = None,
-) -> EmbeddingGuess:
-    """Resolve the initial embedding slots: the default rule, else the best guess.
-
-    When the default rule fills any slot, its slots are the answer and nothing
-    is guessed -- so an object carrying ``X_umap`` or ``X_umap_<d>d`` resolves
-    exactly as it did before the best guess existed. Only when it fills none
-    does :func:`best_guess_embedding_slots` run.
-    """
+    }
     slots = default_embedding_slots(entries)
-    if any(ref is not None for ref in slots.values()):
-        return EmbeddingGuess(slots=slots, guessed=[], rejected=[])
-    return best_guess_embedding_slots(entries, latent_key=latent_key, load_check=load_check)
-
-
-def default_enabled_embeddings(
-    entries: Sequence[ObsmEntry],
-    slots: Mapping[str, Mapping[str, Any] | None],
-    *,
-    latent_key: str | None,
-    rejected: Iterable[str] = (),
-) -> list[dict[str, Any]]:
-    """The representations an AnnData object is shown with when it opens.
-
-    Every filled slot, plus every other usable ``obsm`` array that is 1 to 3
-    columns wide, read at all of its columns -- minus vector-field keys
-    (``<field>_umap_<d>d``), the latent key and the ``rejected`` keys (arrays
-    the best guess found unloadable). A wider array is enabled only when it
-    fills a slot; the user can enable other column selections. Enabling reads
-    nothing: an array is read only when a view shows it. The result is in
-    canonical order (:func:`embedding_ref_sort_key`).
-    """
-    skipped = set(rejected)
-    refs: dict[tuple[Any, ...], dict[str, Any]] = {}
-    for ref in slots.values():
-        if ref is not None:
-            copy_ref = {"key": ref["key"], "columns": list(ref["columns"])}
-            refs[embedding_ref_sort_key(copy_ref)] = copy_ref
-    for entry in entries:
-        if (
-            entry.usable
-            and entry.width in (1, 2, 3)
-            and not is_vector_field_key(entry.key)
-            and entry.key != latent_key
-            and entry.key not in skipped
-        ):
-            assert entry.width is not None
-            ref = {"key": entry.key, "columns": default_columns(entry.width)}
-            refs.setdefault(embedding_ref_sort_key(ref), ref)
-    return [refs[order] for order in sorted(refs)]
-
-
-def default_vector_bindings(
-    keys: Iterable[str],
-    slots: Mapping[str, Mapping[str, Any] | None],
-) -> list[dict[str, Any]]:
-    """Bind ``<field>_umap_<d>d`` keys by today's rule.
-
-    A key binds to the slot-``d`` embedding only when that slot holds
-    ``X_umap_<d>d`` or ``X_umap``: a UMAP vector drawn over another layout would
-    point the wrong way. The result is in canonical binding order.
-    """
-    bindings: list[dict[str, Any]] = []
-    for key in keys:
-        if not is_vector_field_key(key):
-            continue
-        match = VECTOR_KEY_PATTERN.fullmatch(key)
-        assert match is not None
-        slot = dimension_slot(int(match.group("dimension")))
-        ref = slots.get(slot)
-        if ref is None or ref["key"] not in (f"X_umap_{slot}", UNSUFFIXED_UMAP_KEY):
-            continue
-        bindings.append({"key": key, "embedding": {"key": ref["key"], "columns": list(ref["columns"])}})
-    bindings.sort(key=lambda binding: _binding_sort_key(binding, "key"))
-    return bindings
-
-
-def default_expression(
-    *,
-    has_x: bool,
-    has_raw: bool,
-    layers: Sequence[str],
-) -> tuple[str | None, bool]:
-    """Return the default expression source and whether it was guessed.
-
-    ``X`` when it exists. Otherwise ``raw``; otherwise the only layer;
-    otherwise the first layer whose name contains ``norm`` or ``log``, then the
-    remaining layers in code-point order, with ``counts`` and ``raw_counts``
-    last. None when there is nothing to read.
-    """
-    if has_x:
-        return "X", False
-    if has_raw:
-        return "raw", True
-    if not layers:
-        return None, False
-    if len(layers) == 1:
-        return f"{_LAYER_PREFIX}{layers[0]}", True
-
-    def rank(name: str) -> tuple[int, str]:
-        lowered = name.lower()
-        if "norm" in lowered or "log" in lowered:
-            return (0, name)
-        if name in ("counts", "raw_counts"):
-            return (2, name)
-        return (1, name)
-
-    return f"{_LAYER_PREFIX}{min(layers, key=rank)}", True
+    if named_slots:
+        for slot, key in named_slots.items():
+            slots[slot] = {"key": key}
+    elif all(slots[slot] is None for slot in DIMENSION_SLOTS):
+        for dimension in (3, 2, 1):
+            exact = best_guess_order(key for key, width in candidates.items() if width == dimension)
+            if exact:
+                slots[dimension_slot(dimension)] = {"key": exact[0]}
+        if all(slots[slot] is None for slot in DIMENSION_SLOTS):
+            wide = best_guess_order(key for key, width in candidates.items() if width > 3)
+            if wide:
+                slots[dimension_slot(2)] = {"key": wide[0]}
+    shown = {ref["key"] for ref in slots.values() if ref is not None}
+    shown.update(key for key, width in candidates.items() if width <= 3)
+    return frozenset(shown)
 
 
 # =============================================================================
-# The "nothing to plot" message (design §7)
-# =============================================================================
-
-
-def describe_obsm_entry(
-    *,
-    key: str,
-    storage: str,
-    shape: Sequence[int] | None,
-    defect: str | None,
-) -> str:
-    """Describe one ``obsm`` entry the way the "nothing to plot" message lists it."""
-    if storage == "dataframe":
-        text = "table"
-    else:
-        extent = " × ".join(f"{int(size):,}" for size in shape) if shape else "?"
-        text = f"sparse {extent}" if storage in ("csr", "csc") else extent
-    if defect:
-        text = f"{text}, {defect}"
-    return f"{key} ({text})"
-
-
-def obsm_entry_defect(
-    item: Mapping[str, Any],
-    *,
-    latent_key: str | None,
-    rejected: Mapping[str, str],
-) -> str | None:
-    """Say why one described ``obsm`` entry was not plotted, for the message.
-
-    A table or a sparse array already reads as what it is, so only a dense
-    array carries a reason: its listing-time defect, the load-time defect that
-    rejected it, or the role that kept it out of the candidates.
-    """
-    key = item["key"]
-    if key in rejected:
-        return rejected[key]
-    if item["storage"] != "dense":
-        return None
-    if not item["usable"]:
-        return str(item["reason"])
-    if is_vector_field_key(key):
-        return "a vector field"
-    if key == latent_key:
-        return "the latent space"
-    return None
-
-
-def nothing_plottable_message(*, n_obs: int, descriptions: Sequence[str]) -> str:
-    """Return the message shown when no ``obsm`` array can be plotted."""
-    holds = ", ".join(descriptions) if descriptions else "nothing"
-    return (
-        "Cellucid found nothing to plot. It needs an obsm array with one row per "
-        f"cell ({n_obs:,}) and at least one numeric column. obsm holds: {holds}."
-    )
-
-
-# =============================================================================
-# The AnnData candidate catalog (design §1.2) -- metadata only
+# Describing obsm and var -- metadata only
 # =============================================================================
 
 
@@ -1119,7 +1014,7 @@ def describe_obsm(obsm: Any, *, n_obs: int) -> list[dict[str, Any]]:
         elif shape is None or len(shape) not in (1, 2):
             reason = "not a one- or two-dimensional array"
         elif shape[0] != n_obs:
-            reason = f"has {shape[0]:,} rows, the dataset has {n_obs:,} cells"
+            reason = f"has {shape[0]:,} {plural(shape[0], 'row')}, the dataset has {n_obs:,} {plural(n_obs, 'cell')}"
         elif not _numeric_kind(value):
             reason = "not a numeric array"
         elif len(shape) == 2 and shape[1] < 1:
@@ -1151,34 +1046,6 @@ def obsm_entries(described: Sequence[Mapping[str, Any]]) -> list[ObsmEntry]:
     return entries
 
 
-def _describe_obsp(obsp: Any, *, n_obs: int) -> list[dict[str, Any]]:
-    described: list[dict[str, Any]] = []
-    for key in obsp:
-        value = obsp[key]
-        storage = _storage_of(value)
-        shape = _shape_of(value)
-        reason: str | None = None
-        if storage not in ("dense", "csr", "csc"):
-            reason = "not a matrix"
-        elif shape is None or len(shape) != 2 or shape[0] != shape[1]:
-            reason = "not square"
-        elif shape[0] != n_obs:
-            reason = f"has {shape[0]:,} rows, the dataset has {n_obs:,} cells"
-        elif not _numeric_kind(value):
-            reason = "not a numeric matrix"
-        entry: dict[str, Any] = {
-            "key": str(key),
-            "storage": storage,
-            "shape": shape,
-            "dtype": _dtype_name(value),
-            "nnz": int(value.nnz) if storage in ("csr", "csc") and hasattr(value, "nnz") else None,
-            "usable": reason is None,
-            "reason": reason,
-        }
-        described.append(entry)
-    return described
-
-
 def _describe_var_columns(var: Any) -> list[dict[str, Any]]:
     described: list[dict[str, Any]] = []
     for key in var.columns:
@@ -1194,123 +1061,6 @@ def _describe_var_columns(var: Any) -> list[dict[str, Any]]:
     return described
 
 
-def _describe_matrix(value: Any) -> dict[str, Any]:
-    return {"storage": _storage_of(value), "dtype": _dtype_name(value)}
-
-
-def _describe_layers(adata: Any) -> list[dict[str, Any]]:
-    """Every layer with its listing-time verdict, in the file's key order."""
-    n_obs = int(adata.n_obs)
-    n_vars = int(adata.n_vars)
-    layers: list[dict[str, Any]] = []
-    for name in adata.layers:
-        value = adata.layers[name]
-        shape = _shape_of(value)
-        storage = _storage_of(value)
-        reason: str | None = None
-        if storage not in ("dense", "csr", "csc"):
-            reason = "not a matrix"
-        elif shape != [n_obs, n_vars]:
-            reason = f"has shape {' x '.join(str(s) for s in shape or [])}, expected {n_obs} x {n_vars}"
-        elif not _numeric_kind(value):
-            reason = "not a numeric matrix"
-        layers.append(
-            {
-                "key": str(name),
-                "storage": storage,
-                "dtype": _dtype_name(value),
-                "usable": reason is None,
-                "reason": reason,
-            }
-        )
-    return layers
-
-
-def default_expression_for(adata: Any) -> tuple[str | None, bool]:
-    """The default expression source of one AnnData object, from metadata.
-
-    :func:`default_expression` over what the object holds: ``X`` when present;
-    otherwise ``raw``, the only usable layer, or the best-named one, guessed.
-    """
-    return default_expression(
-        has_x=adata.X is not None,
-        has_raw=getattr(adata, "raw", None) is not None,
-        layers=[layer["key"] for layer in _describe_layers(adata) if layer["usable"]],
-    )
-
-
-def build_anndata_candidates(
-    adata: Any,
-    *,
-    latent_key: str | None = None,
-    knn_key: str | None = None,
-) -> dict[str, Any]:
-    """Build the candidate catalog of one AnnData object from metadata alone.
-
-    Shapes, dtypes and storage kinds are read; no array values are. The
-    ``defaults`` entry is the mapping §1.4 resolves from that metadata (the
-    best guess, when it applies, uses listing-time usability only), and
-    ``guessed`` names every group that was guessed rather than defaulted.
-    """
-    n_obs = int(adata.n_obs)
-    n_vars = int(adata.n_vars)
-    obsm = describe_obsm(adata.obsm, n_obs=n_obs)
-    obsp = _describe_obsp(adata.obsp, n_obs=n_obs)
-
-    layers = _describe_layers(adata)
-
-    x_value = adata.X
-    raw = getattr(adata, "raw", None)
-    raw_entry: dict[str, Any] | None = None
-    if raw is not None:
-        raw_entry = {
-            "n_vars": int(raw.n_vars),
-            "X": _describe_matrix(raw.X),
-            "var": {"columns": _describe_var_columns(raw.var)},
-        }
-
-    entries = obsm_entries(obsm)
-    guess = resolve_embedding_slots(entries, latent_key=latent_key)
-    slots = guess.slots
-    guessed: list[str] = list(guess.guessed)
-
-    expression, expression_guessed = default_expression_for(adata)
-    if expression_guessed:
-        guessed.append("expression")
-
-    defaults: dict[str, Any] = {
-        "kind": ANNDATA_KIND,
-        "embeddings": {
-            "enabled": default_enabled_embeddings(
-                entries,
-                slots,
-                latent_key=latent_key,
-                rejected=(key for key, _ in guess.rejected),
-            ),
-            "defaults": slots,
-        },
-        "knn": knn_key,
-        "geneNames": "index",
-        "expression": expression,
-        "latent": latent_key,
-        "vectorFields": default_vector_bindings(
-            (entry.key for entry in entries if entry.usable), slots
-        ),
-    }
-    return {
-        "kind": ANNDATA_KIND,
-        "n_obs": n_obs,
-        "obsm": obsm,
-        "obsp": obsp,
-        "var": {"n_vars": n_vars, "columns": _describe_var_columns(adata.var)},
-        "X": None if x_value is None else _describe_matrix(x_value),
-        "layers": layers,
-        "raw": raw_entry,
-        "defaults": defaults,
-        "guessed": guessed,
-    }
-
-
 # =============================================================================
 # Resolving a mapping against an AnnData object (sessions)
 # =============================================================================
@@ -1319,11 +1069,10 @@ def build_anndata_candidates(
 def mapped_var_axis(adata: Any, mapping: Mapping[str, Any]) -> Any:
     """Return the ``var`` frame the mapping's gene axis lives on.
 
-    ``raw`` has its own gene axis, so an AnnData mapping that reads expression
-    from ``raw`` names its genes from ``raw.var``; everything else, and every
-    export mapping, uses ``var``.
+    ``raw`` has its own gene axis, so a mapping that reads expression from
+    ``raw`` names its genes from ``raw.var``; everything else uses ``var``.
     """
-    if mapping["kind"] == ANNDATA_KIND and mapping["expression"] == "raw":
+    if mapping["expression"] == "raw":
         raw = getattr(adata, "raw", None)
         if raw is None:
             raise ValueError("The data mapping reads expression from raw, and adata.raw is absent.")
@@ -1334,18 +1083,15 @@ def mapped_var_axis(adata: Any, mapping: Mapping[str, Any]) -> Any:
 def mapped_var_count(adata: Any, mapping: Mapping[str, Any]) -> int:
     """Return how many genes the mapping exposes: the size of its gene axis.
 
-    An AnnData mapping without an expression matrix exposes none.
+    A mapping without an expression matrix exposes none.
     """
-    if mapping["kind"] == ANNDATA_KIND:
-        if mapping["expression"] is None:
-            return 0
-        if mapping["expression"] == "raw":
-            raw = getattr(adata, "raw", None)
-            if raw is None:
-                raise ValueError(
-                    "The data mapping reads expression from raw, and adata.raw is absent."
-                )
-            return int(raw.n_vars)
+    if mapping["expression"] is None:
+        return 0
+    if mapping["expression"] == "raw":
+        raw = getattr(adata, "raw", None)
+        if raw is None:
+            raise ValueError("The data mapping reads expression from raw, and adata.raw is absent.")
+        return int(raw.n_vars)
     return int(adata.n_vars)
 
 
@@ -1365,10 +1111,7 @@ def resolve_gene_names(adata: Any, mapping: Mapping[str, Any]) -> UniqueNames:
 
 def mapped_expression_matrix(adata: Any, mapping: Mapping[str, Any]) -> Any:
     """Return the expression matrix a mapping reads, or raise when it has none."""
-    if mapping["kind"] == EXPORT_KIND:
-        source: str | None = "X"
-    else:
-        source = mapping["expression"]
+    source: str | None = mapping["expression"]
     if source is None:
         raise ValueError("The data mapping reads no expression matrix.")
     if source == "X":
@@ -1391,61 +1134,61 @@ def require_mapping_matches_anndata(adata: Any, mapping: Mapping[str, Any]) -> N
     """Require every key an AnnData mapping names to exist on ``adata``.
 
     Checks are metadata only: the keys exist and embedding columns fit the
-    array width. An export mapping names exported embedding ids, which an
-    AnnData object need not carry, so only its gene-name column is checked.
+    array width. An AnnData object has one feature space, so its mapping
+    names no modality.
     """
+    require_mapping_modality(mapping, None)
     problems: list[str] = []
     gene_column = gene_names_column(mapping["geneNames"])
-    if mapping["kind"] == ANNDATA_KIND:
-        n_obs = int(adata.n_obs)
-        described = {item["key"]: item for item in describe_obsm(adata.obsm, n_obs=n_obs)}
-        refs: list[tuple[str, Mapping[str, Any]]] = [
-            (f"embeddings.enabled[{position}]", ref)
-            for position, ref in enumerate(mapping["embeddings"]["enabled"])
-        ]
-        refs.extend(
-            (f"vectorFields embedding of {binding['key']!r}", binding["embedding"])
-            for binding in mapping["vectorFields"]
-        )
-        for label, ref in refs:
-            item = described.get(ref["key"])
-            if item is None:
-                problems.append(f"{label} uses obsm[{ref['key']!r}], which this dataset does not have")
-                continue
-            entry = obsm_entries([item])[0]
-            if not entry.usable or entry.width is None:
-                problems.append(f"{label} uses obsm[{ref['key']!r}], which {item['reason']}")
-                continue
-            try:
-                validate_embedding_columns(
-                    list(ref["columns"]),
-                    dimension=len(ref["columns"]),
-                    width=entry.width,
-                )
-            except DataMappingError as error:
-                problems.append(f"{label} uses obsm[{ref['key']!r}]: {error}")
-        for binding in mapping["vectorFields"]:
-            if binding["key"] not in described:
-                problems.append(
-                    f"vector field obsm[{binding['key']!r}] is not in this dataset"
-                )
-        if mapping["knn"] is not None and mapping["knn"] not in adata.obsp:
-            problems.append(f"knn uses obsp[{mapping['knn']!r}], which this dataset does not have")
-        if mapping["latent"] is not None and mapping["latent"] not in adata.obsm:
-            problems.append(
-                f"latent uses obsm[{mapping['latent']!r}], which this dataset does not have"
+    n_obs = int(adata.n_obs)
+    described = {item["key"]: item for item in describe_obsm(adata.obsm, n_obs=n_obs)}
+    refs: list[tuple[str, Mapping[str, Any]]] = [
+        (f"embeddings.enabled[{position}]", ref)
+        for position, ref in enumerate(mapping["embeddings"]["enabled"])
+    ]
+    refs.extend(
+        (f"vectorFields embedding of {binding['key']!r}", binding["embedding"])
+        for binding in mapping["vectorFields"]
+    )
+    for label, ref in refs:
+        item = described.get(ref["key"])
+        if item is None:
+            problems.append(f"{label} uses obsm[{ref['key']!r}], which this dataset does not have")
+            continue
+        entry = obsm_entries([item])[0]
+        if not entry.usable or entry.width is None:
+            problems.append(f"{label} uses obsm[{ref['key']!r}], which {item['reason']}")
+            continue
+        try:
+            validate_embedding_columns(
+                list(ref["columns"]),
+                dimension=len(ref["columns"]),
+                width=entry.width,
             )
-        expression = mapping["expression"]
-        if expression == "X" and adata.X is None:
-            problems.append("expression uses X, which this dataset does not have")
-        elif expression == "raw" and getattr(adata, "raw", None) is None:
-            problems.append("expression uses raw, which this dataset does not have")
-        elif expression is not None:
-            layer = expression_layer(expression)
-            if layer is not None and layer not in adata.layers:
-                problems.append(
-                    f"expression uses layers[{layer!r}], which this dataset does not have"
-                )
+        except DataMappingError as error:
+            problems.append(f"{label} uses obsm[{ref['key']!r}]: {error}")
+    for binding in mapping["vectorFields"]:
+        if binding["key"] not in described:
+            problems.append(
+                f"vector field obsm[{binding['key']!r}] is not in this dataset"
+            )
+    if mapping["knn"] is not None and mapping["knn"] not in adata.obsp:
+        problems.append(f"knn uses obsp[{mapping['knn']!r}], which this dataset does not have")
+    if mapping["latent"] is not None and mapping["latent"] not in adata.obsm:
+        problems.append(
+            f"latent uses obsm[{mapping['latent']!r}], which this dataset does not have"
+        )
+    expression = mapping["expression"]
+    if expression == "X" and adata.X is None:
+        problems.append("expression uses X, which this dataset does not have")
+    elif expression == "raw" and getattr(adata, "raw", None) is None:
+        problems.append("expression uses raw, which this dataset does not have")
+    elif expression is not None:
+        layer = expression_layer(expression)
+        if layer is not None and layer not in adata.layers:
+            problems.append(
+                f"expression uses layers[{layer!r}], which this dataset does not have"
+            )
     if gene_column is not None:
         try:
             var = mapped_var_axis(adata, mapping)
@@ -1455,7 +1198,30 @@ def require_mapping_matches_anndata(adata: Any, mapping: Mapping[str, Any]) -> N
             problems.append(
                 f"geneNames uses var column {gene_column!r}, which this dataset does not have"
             )
+    for matrix in mapping["log1p"]:
+        if matrix == "X" and adata.X is None:
+            problems.append("log1p names X, which this dataset does not have")
+        elif matrix == "raw" and getattr(adata, "raw", None) is None:
+            problems.append("log1p names raw, which this dataset does not have")
+        elif expression_layer(matrix) is not None and expression_layer(matrix) not in adata.layers:
+            problems.append(
+                f"log1p names layers[{expression_layer(matrix)!r}], which this dataset does not have"
+            )
+    highly_variable = mapping["highlyVariable"]
+    if highly_variable is not None:
+        try:
+            var = mapped_var_axis(adata, mapping)
+        except ValueError:
+            var = None
+        if var is not None and highly_variable not in var.columns:
+            problems.append(
+                f"highlyVariable uses var column {highly_variable!r}, which this dataset does not have"
+            )
+        elif var is not None and str(var[highly_variable].dtype) not in ("bool", "boolean"):
+            problems.append(
+                f"highlyVariable uses var column {highly_variable!r}, which is not a true/false column"
+            )
     if problems:
         raise ValueError(
-            "The session's data mapping does not match this AnnData: " + "; ".join(problems) + "."
+            "The session's data mapping does not match this dataset: " + "; ".join(problems) + "."
         )

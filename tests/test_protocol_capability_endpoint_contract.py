@@ -1,8 +1,9 @@
-"""Both viewer servers publish the wire capabilities this installation accepts.
+"""The viewer server publishes its channel and the capabilities it accepts.
 
-``GET /_cellucid/protocol`` exists so a web build can discover whether the
-notebook driving it accepts an event before it emits one. The route therefore
-has to answer identically from either server, has to answer without credentials
+``GET /_cellucid/protocol`` exists so a web build can find the viewer channel
+and discover whether the notebook driving it accepts an event before it emits
+one. The route therefore
+has to answer without credentials
 exactly as the other read-only ``/_cellucid/*`` routes do, and has to publish
 the declaration :mod:`cellucid.jupyter._wire` validates against rather than a
 copy kept in the server -- a published capability the validator would then
@@ -15,7 +16,6 @@ import http.client
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Any
 
 import anndata as ad
@@ -25,44 +25,8 @@ import pytest
 
 import cellucid.jupyter._wire as wire
 from cellucid.anndata_server import AnnDataServer
-from cellucid.prepare_data import prepare
-from cellucid.server import CellucidServer
 
 PROTOCOL_PATH = "/_cellucid/protocol"
-
-
-@contextmanager
-def _prepared_server(tmp_path: Path) -> Iterator[tuple[str, int]]:
-    output = tmp_path / "generation"
-    embedding = np.array(
-        [[0.0, 0.0], [1.0, 0.25], [0.25, 1.0]],
-        dtype=np.float32,
-    )
-    prepare(
-        latent_space=embedding.copy(),
-        obs=pd.DataFrame({"score": [0.25, 0.5, 0.75]}),
-        embeddings={"X_umap": embedding},
-        out_dir=output,
-        dataset_name="Protocol endpoint contract",
-        dataset_id="protocol-endpoint-contract",
-        obs_categorical_dtype="uint16",
-        centroid_min_points=1,
-    )
-    server = CellucidServer(
-        output,
-        host="127.0.0.1",
-        port=0,
-        open_browser=False,
-        quiet=True,
-        serve_web_ui=False,
-    )
-    server.start_background()
-    assert server._server is not None
-    host, port = server._server.server_address
-    try:
-        yield host, port
-    finally:
-        server.stop()
 
 
 @contextmanager
@@ -96,12 +60,6 @@ def _anndata_server() -> Iterator[tuple[str, int]]:
         server.stop()
 
 
-@contextmanager
-def _both_servers(tmp_path: Path) -> Iterator[dict[str, tuple[str, int]]]:
-    with _prepared_server(tmp_path) as prepared, _anndata_server() as anndata:
-        yield {"exported": prepared, "anndata": anndata}
-
-
 def _request(
     address: tuple[str, int],
     path: str,
@@ -126,15 +84,11 @@ def _request(
         connection.close()
 
 
-@pytest.mark.parametrize("server_kind", ["exported", "anndata"])
-def test_every_viewer_server_publishes_the_declaration_the_validator_reads(
-    tmp_path: Path,
-    server_kind: str,
-) -> None:
+def test_the_server_publishes_the_declaration_the_validator_reads() -> None:
     expected = wire._protocol_capability_document()
-    with _both_servers(tmp_path) as servers:
+    with _anndata_server() as address:
         status, body, content_type, _length = _request(
-            servers[server_kind],
+            address,
             PROTOCOL_PATH,
         )
 
@@ -145,38 +99,22 @@ def test_every_viewer_server_publishes_the_declaration_the_validator_reads(
     assert json.loads(body) == expected
 
 
-def test_both_viewer_servers_publish_one_identical_capability_document(
-    tmp_path: Path,
-) -> None:
-    with _both_servers(tmp_path) as servers:
-        _status, exported_body, _type, _length = _request(
-            servers["exported"],
-            PROTOCOL_PATH,
-        )
-        _status, anndata_body, _type, _length = _request(
-            servers["anndata"],
-            PROTOCOL_PATH,
-        )
-
-    # A viewer asks this route before it knows which server answered, so the
-    # two must not be distinguishable here.
-    assert json.loads(exported_body) == json.loads(anndata_body)
-
-
-@pytest.mark.parametrize("server_kind", ["exported", "anndata"])
-def test_the_capability_document_carries_only_growable_capability_lists(
-    tmp_path: Path,
-    server_kind: str,
-) -> None:
-    with _both_servers(tmp_path) as servers:
-        _status, body, _type, _length = _request(servers[server_kind], PROTOCOL_PATH)
+def test_the_capability_document_carries_only_growable_capability_lists() -> None:
+    with _anndata_server() as address:
+        _status, body, _type, _length = _request(address, PROTOCOL_PATH)
     document: Any = json.loads(body)
 
     # The key set is fixed on purpose. A viewer validates payloads against exact
     # key sets, so a later capability has to arrive inside these lists rather
     # than as a new key, which would break the builds this route exists to
     # protect. There is deliberately no version to compare against either.
-    assert set(document) == {"commands", "events"}
+    # `binaryCommands` is the one key added since: commands that name cells
+    # became binary frames, a form an older viewer cannot read, so an older
+    # viewer refuses this host at once rather than misread its commands.
+    assert set(document) == {"channel", "commands", "binaryCommands", "events"}
+    assert set(document["binaryCommands"]) <= set(document["commands"])
+    # Where the viewer opens its channel, relative to the server's address.
+    assert document.pop("channel") == "_cellucid/ws"
     for key, names in document.items():
         assert isinstance(names, list), key
         assert all(type(name) is str for name in names), key
@@ -185,13 +123,8 @@ def test_the_capability_document_carries_only_growable_capability_lists(
         assert names, key
 
 
-@pytest.mark.parametrize("server_kind", ["exported", "anndata"])
-def test_the_capability_route_answers_without_credentials_like_the_other_reads(
-    tmp_path: Path,
-    server_kind: str,
-) -> None:
-    with _both_servers(tmp_path) as servers:
-        address = servers[server_kind]
+def test_the_capability_route_answers_without_credentials_like_the_other_reads() -> None:
+    with _anndata_server() as address:
         health_status, _body, _type, _length = _request(address, "/_cellucid/health")
         anonymous_status, anonymous_body, _type, _length = _request(address, PROTOCOL_PATH)
         # A token is not part of this route's contract, so offering one must not
@@ -210,13 +143,8 @@ def test_the_capability_route_answers_without_credentials_like_the_other_reads(
     assert json.loads(anonymous_body) == wire._protocol_capability_document()
 
 
-@pytest.mark.parametrize("server_kind", ["exported", "anndata"])
-def test_the_capability_route_describes_its_body_for_head_without_sending_it(
-    tmp_path: Path,
-    server_kind: str,
-) -> None:
-    with _both_servers(tmp_path) as servers:
-        address = servers[server_kind]
+def test_the_capability_route_describes_its_body_for_head_without_sending_it() -> None:
+    with _anndata_server() as address:
         _status, get_body, _type, _length = _request(address, PROTOCOL_PATH)
         head_status, head_body, head_type, head_length = _request(
             address,
@@ -230,7 +158,6 @@ def test_the_capability_route_describes_its_body_for_head_without_sending_it(
     assert head_length == str(len(get_body))
 
 
-@pytest.mark.parametrize("server_kind", ["exported", "anndata"])
 @pytest.mark.parametrize(
     ("method", "path"),
     [
@@ -244,17 +171,16 @@ def test_the_capability_route_describes_its_body_for_head_without_sending_it(
     ],
 )
 def test_only_the_exact_capability_route_is_answered(
-    tmp_path: Path,
-    server_kind: str,
     method: str,
     path: str,
 ) -> None:
-    with _both_servers(tmp_path) as servers:
+    with _anndata_server() as address:
         status, body, _type, _length = _request(
-            servers[server_kind],
+            address,
             path,
             method=method,
         )
 
-    assert status == 404, (server_kind, method, path, status, body)
+    # This server takes no POST at all; every other near miss is not a route.
+    assert status == (405 if method == "POST" else 404), (method, path, status, body)
     assert b"events" not in body

@@ -69,12 +69,24 @@ def _require_exact_keys(
     return value
 
 
+#: What the viewer refuses in a field name (``StateValidator.validateFieldKey``
+#: in ``app/utils/state-validator.js``): control characters and zero-width
+#: characters. A ``:`` is allowed -- ATAC feature names use it.
+_FIELD_KEY_CONTROL = re.compile("[\u0000-\u001f\u007f-\u009f]")
+_FIELD_KEY_INVISIBLE = re.compile("[\u200b\u2060\ufeff]")
+
+
 def _require_field_key(value: Any, *, label: str) -> str:
+    """A field name as the viewer accepts one when a field is named or renamed."""
     key = _require_nonempty_string(value, label=label)
     if key.strip() != key:
         raise ValueError(f"{label} cannot have leading or trailing whitespace")
-    if ":" in key:
-        raise ValueError(f"{label} cannot contain ':'")
+    for pattern, what in ((_FIELD_KEY_CONTROL, "control"), (_FIELD_KEY_INVISIBLE, "zero-width")):
+        found = pattern.search(key)
+        if found is not None:
+            raise ValueError(
+                f"{label} cannot contain the {what} character U+{ord(found.group(0)):04X}"
+            )
     return key
 
 

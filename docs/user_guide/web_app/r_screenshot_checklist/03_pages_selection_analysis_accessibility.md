@@ -1,5 +1,12 @@
 # Screenshot coverage audit — sections F, H, O
 
+:::{important}
+Audited before Cellucid 0.9.5, which reads AnnData only. The capture
+instructions use the current controls, fixtures and sample catalog; where a
+record says what a page or an image showed at audit time (the **Prepared**
+button, a prepared export), that is history. {doc}`index` maps the old names.
+:::
+
 Scope: `user_guide/web_app/f_highlighting_selection/`,
 `user_guide/web_app/h_analysis/`,
 `user_guide/web_app/o_accessibility_privacy_security/`.
@@ -40,7 +47,7 @@ Read-only pass; the only file written is this one.
    IDs (`ENSG00000158488.16`, `ENSG00000017483.16`). No published sample dataset
    contains a single `ENSG` name any more — `suo`, `garcia`, `he`, `kanemaru` publish
    HGNC symbols and `pancreas` publishes MGI symbols (verified against
-   `cellucid-datasets/exports-v3/*/var_manifest.json`; ENSG count = 0 in all five).
+   each sample's gene list in the sample catalog at audit time (prepared, before 0.9.5); ENSG count = 0 in all five).
    Both shots predate the gene-symbol switch.
 3. **{doc}`/user_guide/web_app/h_analysis/06_analysis_mode_differential_expression_de` has no figure at all** — confirmed,
    the file contains zero `{figure}` directives. DE is the flagship statistical feature,
@@ -261,7 +268,7 @@ point).
    `highlighting_selection/zero-visible-highlighted.png`, `:width: 246px`.
 3. *KNN with no neighbour graph* — this **cannot be reproduced on any sample dataset**:
    `suo`, `pancreas`, `garcia`, `he`, `kanemaru` all ship a `connectivity/` directory.
-   Use the local fixture `cellucid/tests/browser/fixtures/exports/current-ui-prepared`
+   Use the local fixture `cellucid/tests/browser/fixtures/catalog/current-ui.h5ad`
    (120 cells, no `connectivity/`). Select KNN drag, `Alt+click` a cell, capture the
    resulting notification toast plus `#highlight-mode-description`. Crop to the
    sidebar column plus the toast.
@@ -292,7 +299,7 @@ element five times and stack them into a single labelled composite:
 | `That gesture ended outside the view…` | Lasso, `Alt+drag`, release the mouse over the sidebar | pancreas |
 | `That cell has no value on that panel's field…` | Annotation based on a field with a missing-code sentinel, `Alt+click` a sentinel cell | he |
 | `That gesture did not change the selection.` | Lasso the identical polygon twice with `Alt` | pancreas |
-| `Color by a field first…` | Annotation based with colour-by set to None | pancreas |
+| `Color by a field first…` (Selection (i) open) | Annotation based with colour-by set to None | pancreas |
 
 Crop each to `#highlight-mode-description` (plus the `Step N:` line above it where
 present, since the doc says the readout distinguishes the two cases). Assemble into one
@@ -553,20 +560,14 @@ pages: `Beta` (annotation-selected on `cell_type = Beta`) and `Alpha`.
    (the latter holds `Rest of Beta`). The page's prose already claims those exact
    group labels; this is the shot that proves it. Cursor on the open `Page B:` select.
    `analysis/de-page-selection.png`, `:width: 246px`.
-2. *Method + performance* — same panel scrolled to `Statistical method:` (Wilcoxon /
-   t-test, each with its description line) and `Performance Settings` **expanded**
-   (batch size, memory budget, network parallelism, compute parallelism). The page
-   devotes a whole section to these four controls and never shows them. Cursor on the
-   Performance Settings disclosure.
-   `analysis/de-performance-settings.png`, `:width: 246px`.
-3. *Running* — captured mid-run: the run button reading `Running...` and the progress
-   tracker on phase 1 of 2, `Loading & Computing` (phase names are literal, from
-   `de-analysis-ui.js:343`). Crop `#analysis-panel-differential`. Cursor on the
-   disabled run button. Pair it with a phase-2 `Multiple Testing Correction` variant if
-   the run is long enough to catch — on pancreas it may not be, in which case use
-   **suo** with `Rest of <page>` and accept the longer runtime.
-   `analysis/de-running.png`, `:width: 246px`.
-4. *The volcano, expanded* — `.analysis-modal-content` after `⤢ Expand`:
+2. *Running* — captured mid-run: the run button reading `Running…` and, under it, the
+   running box (`Differential expression`, what the run covers, `Testing genes: x of y
+   genes`, a progress bar and **Cancel**; step names are literal, from
+   `stats/multi-variable-analysis.js`). Crop `#analysis-panel-differential`. Cursor on
+   **Cancel**. `analysis/de-running.png`, `:width: 246px`. Then click **Cancel** and
+   capture the calm cancelled state (`Differential expression cancelled`, `Cancelled
+   after …`, **Run again**): `analysis/de-cancelled.png`, `:width: 246px`.
+3. *The volcano, expanded* — `.analysis-modal-content` after `⤢ Expand`:
    `.analysis-modal-plot` with the volcano (up/down/not-significant colouring and
    labelled top-N genes), the `PLOT OPTIONS` column with the p-value threshold, the
    |log2FC| slider and the **Use FDR-corrected p-values** checkbox, the `Export:`
@@ -578,7 +579,7 @@ pages: `Beta` (annotation-selected on `cell_type = Beta`) and `Alpha`.
    outside of. A pointer drawn on the slider would either be outside the crop or point
    at a control the caption does not say was touched.
    `analysis/de-volcano-expanded.png`.
-5. *The FDR denominator* — a tight crop of just the `.de-modal-stats` table, at a
+4. *The FDR denominator* — a tight crop of just the `.de-modal-stats` table, at a
    readable width, showing the five rows the page documents in prose:
    `Genes tested (FDR denominator)`, `Not tested (< 10 cells with a value)`,
    `Significant (…)`, `Upregulated`, `Downregulated`. Choose a page pair small enough
@@ -619,7 +620,7 @@ Native 224×623 → 1× DPR. Also at `11_screenshots.md:45`.
 `SIGNATURE GENES` box contains
 `ENSG00000017483.16, ENSG00000019169.11, ENSG00000021826.18, ENSG00000023171.20`.
 No sample dataset publishes Ensembl IDs any more (0 `ENSG` names across all five
-`var_manifest.json` files). The page's own prose uses `CD3E, CD4, IL7R` and `MS4A1`.
+gene lists). The page's own prose uses `CD3E, CD4, IL7R` and `MS4A1`.
 A reader who copies what is on screen gets zero matches — and the page's headline
 warning is precisely "matching is exact, no alias mapping".
 
@@ -627,7 +628,7 @@ It also shows a **single violin** (only `Page 1` selected; `Rest of…` is untic
 "compare across pages" is not demonstrated.
 
 Recapture on **pancreas**: `Signature Genes: Ins1, Ins2, Iapp` (all three present in
-`pancreas/var_manifest.json`), two pages `Beta` and `Rest of Beta` both selected,
+the Pancreas gene list), two pages `Beta` and `Rest of Beta` both selected,
 `Scoring Method: Mean expression`, `Normalization: None`,
 `Visualization: Violin plot` — which yields two clearly separated violins and a
 biologically obvious result. Crop `#analysis-panel-signature`. Cursor on the
@@ -681,8 +682,7 @@ dataset where the "not tested" half is non-zero, so the page's central rule is
 demonstrated rather than asserted:
 `analysis/marker-genes-tested-line.png`.
 
-**notes** — `Use cached results`, `CLUSTERING`, `PERFORMANCE SETTINGS`,
-`DISCOVER MARKERS` all verified as real controls. The two "no markers" messages quoted
+**notes** — The two "no markers" messages quoted
 at lines 165–170 are exact.
 
 **standing defects, reported not fixed here** — Two things the recapture made visible
@@ -724,7 +724,7 @@ the app draws the category name. Everything else on the page is settled.
   on both pages; the toolbar in `components/export.js` emits exactly **PNG**, **SVG**
   and **CSV**, and both captions now say so.
 - ~~The image is **stale**: `ENSG…` gene names.~~ **Done** — recaptured on **pancreas**,
-  whose var manifest publishes MGI symbols (`Aplp1`, `Ins2`, `Gcg`).
+  whose gene list publishes MGI symbols (`Aplp1`, `Ins2`, `Gcg`).
 - ~~The crop cuts the `PLOT OPTIONS` column mid-control.~~ **Unchanged and correct as
   is.** That column scrolls; a crop of `.analysis-modal-content` frames the whole modal,
   and the column is genuinely taller than it. Sizing the modal until the column fits
@@ -866,7 +866,7 @@ docs.
 **needs** —
 1. ~~**REPLACE the shortcuts figure.**~~ **Done.** The old 1440×900 frame gave roughly
    **19%** of its area to the Keyboard Shortcuts panel it was captioned as showing; the
-   rest was the expanded Performance Benchmark panel, a canvas rendering **synthetic
+   rest was the expanded Benchmark panel, a canvas rendering **synthetic
    benchmark data** (`POINTS 4K · FPS 120`, `Data Pattern: Model Surface`) and a stray
    `×` close button. It is now the `accessibility-panel-keyboard-shortcuts` scenario in
    `docs/_tooling/screenshots/scenarios.mjs`: **pancreas**, the six sections that open on
@@ -1038,7 +1038,7 @@ which is what a capture script must target):
   `.analysis-modal-stats-panel` (`SUMMARY STATISTICS`),
   `.analysis-modal-annotations-panel` (`STATISTICAL ANALYSIS`)
 - `.analysis-accordion-copy-btn` → a floating `.accordion-section.analysis-window-panel`
-- DE progress phases, literally: `Loading & Computing` → `Multiple Testing Correction`
+- DE running steps, literally: `Testing genes` → `Applying multiple testing correction`
 
 **Standing capture conditions:** viewport 1440×1000, DPR 2, light theme. Dataset
 **pancreas** for every step (3,696 cells / 3,753 genes → DE and marker discovery finish
@@ -1054,9 +1054,8 @@ prepared by Lifecycle A: **`Beta cells`** and **`Alpha cells`**.
 | 5 | step 4 | Click `⤢ Expand` | Modal: plot + `PLOT OPTIONS` + `SUMMARY STATISTICS` + `STATISTICAL ANALYSIS` (chi-squared / Cramér's V card) + `Export:` row | `.analysis-modal-content` | `⤢ Expand` (pre-click frame) | `detailed-expanded.png` |
 | 6 | — | Open **Correlation**; `X = S_score`, `Y = G2M_score`, `Color by = cell_type`, Pearson | Structured scatter with a real `r`, `n`, trend line — not a null result | `#analysis-panel-correlation` | `Correlation method:` select | `correlation-results.png` |
 | 7 | — | Open **Differential Expression**; open the `Page B:` select | Two `<optgroup>`s visible: **Pages** and **Wildcards** (`Rest of Beta cells`) | `#analysis-panel-differential` (top) | the open `Page B:` select | `de-page-selection.png` |
-| 8 | step 7 | Set `Statistical method: Wilcoxon`; expand `Performance Settings` | Batch size / memory budget / network parallelism / compute parallelism all visible | `#analysis-panel-differential` (mid) | the Performance Settings disclosure | `de-performance-settings.png` |
-| 9 | configured | Click `Run Differential Expression`; capture mid-run | Button reads `Running...`; progress on phase 1, `Loading & Computing` | `#analysis-panel-differential` | the disabled run button | `de-running.png` |
-| 10 | phase 1 | Wait for phase advance | Progress reads `Multiple Testing Correction` (use **suo** + `Rest of` if pancreas is too fast to catch) | progress tracker (tight) | none | `de-running-phase2.png` |
+| 9 | configured | Click `Run Differential Expression`; capture mid-run | Button reads `Running…`; the running box reads `Testing genes` with genes done of how many, and **Cancel** | `#analysis-panel-differential` | **Cancel** | `de-running.png` |
+| 10 | step 9 | Click **Cancel** | The box reads `Differential expression cancelled`, `Cancelled after …`, with **Run again**; no result | `#analysis-panel-differential` | **Run again** | `de-cancelled.png` |
 | 11 | run complete | — | Sidebar result: the volcano preview and the `⤢ Expand` button, and nothing else — `Top Differentially Expressed Genes` is drawn only in the modal (`de-analysis-ui.js:28`) | `.analysis-preview-container` ∪ `.analysis-expand-btn` | the `⤢ Expand` button | `de-sidebar-result.png` |
 | 12 | step 11 | Click `⤢ Expand` | Full modal: volcano with labelled top-N genes, threshold controls, FDR checkbox, `Export: PNG SVG CSV`, summary table, ranked table with Top 5/10/20/100/All | `.analysis-modal-content` | the `\|log2FC\|` threshold slider | `de-volcano-expanded.png` |
 | 13 | step 12 | Drag `\|log2FC\|` from 0.5 to 3 | A/B pair: populated volcano → nearly empty volcano | `.analysis-modal-plot` ×2, identical bounds | the slider (B frame) | `volcano-threshold-a.png` / `-b.png` |

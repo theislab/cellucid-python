@@ -1,330 +1,95 @@
 # Seurat Recipe
 
-**Audience:** Seurat users (wet lab + computational)  
-**Time:** 20–45 minutes (depends on dataset size)  
-**What you’ll do:** extract data from a Seurat object → export → open in the Cellucid web app
-
-This recipe exports a Seurat object using `cellucid::cellucid_prepare()`.
+**Audience:** Seurat users (wet lab + computational)
+**Time:** 5 minutes
+**What you'll do:** view a Seurat object in the Cellucid viewer from R, then
+write it as a Cellucid-ready AnnData (or MuData) to share.
 
 ```{note}
-`cellucid-r` does not depend on Seurat. This page shows how to *extract* the needed inputs from Seurat.
+`cellucid` reads Seurat objects natively: pass the object as `data`.
+`SeuratObject` must be installed (it is when Seurat is); `cellucid` itself does
+not depend on it.
 ```
 
 ## Prerequisites
 
-- A Seurat object `seu`
-  - must have a UMAP (or other) reduction you want to visualize
-  - should have a latent space (PCA is typical)
-- R packages:
-  - `cellucid`
-  - `Seurat`
-  - `Matrix` (recommended)
+- A Seurat object `seu` (Seurat 3 or later; SeuratObject 4 or 5) with at least
+  one reduction to plot (UMAP is typical).
+- R packages: `cellucid`, `SeuratObject`.
 
-## Step 0 — Decide what you want to export
-
-Before writing code, decide:
-
-1) Which embedding?
-   - 2D UMAP (most common)
-   - 3D UMAP (if you computed 3 components)
-2) Which latent space?
-   - PCA is typical
-3) Which metadata columns (`obs`) matter?
-   - clusters, sample, batch, QC metrics, scores…
-4) Do you need gene expression?
-   - exporting all genes can be huge; consider a gene panel
-5) Do you need a connectivity graph?
-   - Seurat stores graphs; exporting them is optional
-
-If you don’t know yet:
-- start with embeddings + a handful of obs columns + a small gene panel
-
-## Step 1 — Load packages and the Seurat object
+## View it, then write it
 
 ```r
 library(cellucid)
-library(Seurat)
-library(Matrix)
 
-# Example:
 # seu <- readRDS("my_seurat_object.rds")
-```
 
-## Step 2 — Choose a stable cell order
+viewer <- cellucid_view(seu)          # the RStudio / Positron Viewer pane, else the browser
+cellucid_stop(viewer)
 
-Cellucid uses row order as cell identity, so we pick a canonical order and reuse it everywhere.
-
-```r
-cells <- colnames(seu)
-stopifnot(length(cells) > 0)
-```
-
-## Step 3 — Extract embeddings (UMAP 2D / 3D)
-
-### 2D UMAP
-
-```r
-umap <- Embeddings(seu, reduction = "umap")
-umap2 <- umap[, 1:2, drop = FALSE]
-umap2 <- umap2[cells, , drop = FALSE]
-```
-
-### Optional: 3D UMAP
-
-Only do this if you actually computed a 3D UMAP (e.g., `RunUMAP(..., n.components = 3)`).
-
-```r
-# umap3 <- umap[, 1:3, drop = FALSE]
-# umap3 <- umap3[cells, , drop = FALSE]
-```
-
-## Step 4 — Extract a latent space (PCA is typical)
-
-```r
-pca <- Embeddings(seu, reduction = "pca")
-pca <- pca[cells, , drop = FALSE]
-latent_space <- pca
-```
-
-```{note}
-If you don’t have PCA, you can use the embedding as latent space (less ideal, but valid):
-`latent_space <- umap2`
-```
-
-## Step 5 — Build `obs` (cell metadata)
-
-Seurat metadata lives in `seu@meta.data` (rows = cells).
-
-```r
-obs_all <- seu@meta.data
-obs_all <- obs_all[cells, , drop = FALSE]
-```
-
-### Optional: select only a subset of obs columns
-
-Exporting dozens/hundreds of columns is allowed, but can be noisy in the UI.
-
-```r
-obs_keys <- c("seurat_clusters", "orig.ident", "nCount_RNA", "nFeature_RNA")
-obs_keys <- intersect(obs_keys, colnames(obs_all))
-obs <- obs_all[, obs_keys, drop = FALSE]
-```
-
-Make sure key columns are the types you want:
-
-```r
-obs$seurat_clusters <- factor(obs$seurat_clusters)
-```
-
-## Step 6 — (Optional) Export gene expression + `var`
-
-Declare the optional inputs up front so Step 8 can pass them unconditionally. If
-you skip this whole step, they stay `NULL` and no gene expression is exported:
-
-```r
-gene_var <- NULL
-expr_cxg <- NULL
-gene_panel <- NULL
-```
-
-### 6.1 Choose which assay/slot to export
-
-Common Seurat choices:
-- `slot="data"`: log-normalized (often best for visualization)
-- `slot="counts"`: raw counts (can have huge dynamic range)
-
-```r
-assay_name <- DefaultAssay(seu)  # often "RNA"
-expr_gxc <- GetAssayData(seu, assay = assay_name, slot = "data")  # genes x cells
-```
-
-### 6.2 Align cells and transpose to cells × genes
-
-`GetAssayData` returns **genes × cells**. Cellucid expects **cells × genes**.
-
-```r
-expr_gxc <- expr_gxc[, cells, drop = FALSE]
-expr_cxg <- Matrix::t(expr_gxc)
-```
-
-### 6.3 Build `var` (gene metadata)
-
-The simplest `var` is a data.frame with rownames set to the gene IDs you want users to search.
-
-```r
-gene_ids <- rownames(expr_gxc)
-gene_var <- data.frame(symbol = gene_ids, stringsAsFactors = FALSE)
-rownames(gene_var) <- gene_var$symbol
-```
-
-:::{note}
-The variable is called `gene_var`, not `var`, because `var()` is a base R
-function: a script that only *sometimes* defines `var` will silently pass the
-function along when it does not. Name the argument explicitly at the call site
-(`var = gene_var`).
-:::
-
-### 6.4 Optional: export a gene panel instead of all genes
-
-Exporting every gene can be huge. A panel often gives a better experience.
-
-```r
-gene_panel <- c("MS4A1", "CD3D", "NKG7")
-gene_panel <- intersect(gene_panel, rownames(gene_var))
-```
-
-## Step 7 — (Optional) Export connectivities (Seurat graphs)
-
-Seurat graphs often live in `seu@graphs`, for example:
-- `RNA_snn` (shared nearest neighbor graph)
-
-```r
-conn <- NULL
-if ("RNA_snn" %in% names(seu@graphs)) {
-  conn <- seu@graphs$RNA_snn
-  conn <- conn[cells, cells]
-}
-```
-
-```{note}
-`cellucid_prepare()` accepts weighted graphs that are finite, non-negative,
-exactly symmetric in topology and weight, and exactly zero on the diagonal.
-Sparse inputs must not store explicit zeros or duplicate coordinates. Inspect
-the Seurat graph deliberately before this call; Cellucid preserves accepted
-weights and rejects invalid structure instead of symmetrizing, coalescing, or
-binarizing it.
-```
-
-## Step 8 — Run `cellucid_prepare()`
-
-Pick an output directory (best: a fresh folder per export iteration):
-
-```r
-out_dir <- file.path(getwd(), "exports", "seurat_export")
-dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-```
-
-### Recommended “starter” settings
-
-- `force=TRUE` while iterating
-- `obs_continuous_quantization=8` for smaller metadata
-- if exporting expression: `var_quantization=8` and/or `gene_identifiers=gene_panel`
-
-Every Seurat reduction can be exported side by side — `Embeddings(seu, "tsne")`
-under `X_tsne`, two PCA components through `cellucid_embedding(columns = ...)` —
-as long as its rows follow the same `cells` order. When a dimension has more
-than one, add `embedding_defaults = c("2d" = "X_umap")`.
-
-```r
-cellucid_prepare(
-  latent_space = latent_space,
-  obs = obs,
-  embeddings = list(
-    X_umap = cellucid_embedding(umap2, label = "UMAP", source_key = "umap")
-    # X_umap_3d = umap3,  # optional
-    # X_pca = cellucid_embedding(Embeddings(seu, "pca")[cells, ], columns = c(1, 2)),
-  ),
-  obs_categorical_dtype = "uint16",
-  dataset_name = "Seurat Export",
-  dataset_id = "seurat_export",
-  out_dir = out_dir,
-  force = TRUE,
-  compression = 6,
-  obs_continuous_quantization = 8,
-  var = gene_var,
-  gene_expression = expr_cxg,
-  gene_identifiers = gene_panel,
-  var_quantization = if (is.null(expr_cxg)) NULL else 8,
-  connectivities = conn
+store <- cellucid_prepare(
+  "seurat_dataset.zarr", "zarr",
+  data = seu,
+  dataset_id = "seurat-dataset",
+  dataset_name = "My Seurat dataset",
+  latent_key = "X_pca",
+  obs_keys = c("seurat_clusters", "orig.ident", "nCount_RNA")
 )
 ```
 
-## Step 9 — Quick validation
+Open `seurat_dataset.zarr` on a web host, or write `seurat_dataset.zarr.zip`
+with `format = "zarr.zip"` and open it with **Open… › File…**
+({doc}`../d_viewing_loading/01_open_stores_in_cellucid_web_app`).
 
-```r
-list.files(out_dir, recursive = TRUE)
-ident <- jsonlite::read_json(file.path(out_dir, "dataset_identity.json"), simplifyVector = TRUE)
-ident$stats
-```
+## What each part becomes
 
-Confirm:
-- `n_cells` matches your Seurat object
-- `n_genes` matches the exported gene panel (if you used one)
+The mapping is the web app's for the same object saved with `saveRDS()`, so a
+session saved on the `.rds` in the browser applies to the prepared store and to
+`cellucid_view(seu)`.
 
-## Step 10 — Open in the Cellucid web app
+| Seurat | In the store |
+| --- | --- |
+| `seu[[]]` (`meta.data`) | `obs`; factors stay categoricals with their level order; `Idents(seu)` as `active_ident` |
+| every reduction (`Embeddings(seu, "umap")`, …) | `obsm['X_<name>']` (`X_umap`, `X_pca`, `X_tsne`), every column, float32 |
+| the active assay's `data` layer (else `counts`) | `X`, gene-major float32 CSC (one matrix per assay: `counts` beside `data` is not written) |
+| `meta.features` (Assay5 `meta.data`), `VariableFeatures()` | `var`, with `highly_variable` |
+| `seu@graphs[["<active assay>_snn"]]`, its diagonal removed | `obsp['connectivities']`: the first symmetric graph, `<active assay>_snn`, then any other `_snn` graph, then any other |
+| `seu@misc$cellucid` | the dataset's identity and launch defaults (`uns['cellucid']`) |
+| `project.name` (unless `"SeuratProject"`) | the dataset name when none is given |
+| several assays (RNA, ADT, …) | one modality each: a Cellucid-ready MuData, the active assay first |
 
-Follow: {doc}`../d_viewing_loading/01_open_exports_in_cellucid_web_app`
+Seurat v5 split layers (`counts.1`, `data.ctrl`, after `split()`) are joined on
+a copy; your object is not changed. `scale.data` is not read: it is dense, holds
+only the variable genes, and is derived from `data`. Layers kept on disk by
+BPCells are read into memory block by block.
 
-**What success looks like**
-- The web app loads points quickly.
-- You can color by your `obs` fields.
-- If you exported gene expression, you can search genes and color by them.
+## Choices and variants
 
----
+- **Name the dataset once, in the object.**
+  `seu@misc$cellucid <- list(id = "pbmc-v1", name = "PBMC", citation = list(text = "…", url = "https://…"), defaults = list(embedding2d = "X_umap", latentKey = "X_pca"))`;
+  `cellucid_prepare()` and `cellucid_view()` then need no `dataset_id` or
+  `dataset_name`.
+- **Replace one part.** Any argument replaces what the object holds:
+  `obs = seu[[c("seurat_clusters", "orig.ident")]]` stores only those columns;
+  `embeddings = list(X_umap = Embeddings(seu, "umap"))` only that embedding.
+- **One assay of several.** `modalities = "RNA"` writes a plain AnnData;
+  `modalities = c("SCT", "ADT")` chooses and orders the modalities, and
+  `modality = "ADT"` opens the viewer on one. See
+  {doc}`../d_viewing_loading/07_multimodal_assays`.
+- **Only some genes.** `gene_identifiers = c("CD3E", "MS4A1", …)` (one assay).
+- **A 3D UMAP.** `RunUMAP(seu, dims = 1:30, n.components = 3, reduction.name = "umap3d")`
+  is stored as `X_umap3d`.
 
-## Edge cases and common gotchas
+## Troubleshooting
 
-### “My metadata columns turned into categories”
-
-A plain `numeric` column is continuous; a `factor`, `character`, or `logical`
-column is a category. Coerce the columns you care about with `as.numeric()` or
-`factor()`. Any other type — a `Date`, a list column, a classed numeric — is not
-reclassified but **rejected**, with
-`Observation field '<key>' must be a native numeric, logical, character, or
-factor vector.`
-See: {doc}`../c_data_preparation_api/04_obs_cell_metadata`
-
-### “I exported and got a gigantic folder”
-
-You probably exported too many genes for your cell count.
-Use:
-- `gene_identifiers` (gene panels)
-- `var_quantization=8`
-- `compression=6`
-
-### “My UMAP is missing / Embeddings(...) errors”
-
-Check which reductions exist:
-
-```r
-Reductions(seu)
-```
-
-### “Cell order mismatch”
-
-Always reorder:
-- embeddings
-- metadata
-- expression columns/rows
-- connectivity matrix
-
-using the same `cells` vector.
-
----
-
-## Troubleshooting (symptom → fix)
-
-### Symptom: export fails with shape mismatches
-
-Most common causes:
-- expression orientation is wrong (genes × cells vs cells × genes)
-- you subset a matrix but not the others
-
-Confirm:
-- `dim(expr_cxg)` is `(n_cells, n_genes)`
-- `nrow(obs) == nrow(umap2) == nrow(latent_space)`
-
-Fix:
-- reorder/transpose explicitly (Steps 2–6)
-
-### Symptom: web app loads but fields look wrong
-
-Likely cause:
-- row order mismatch (the export “worked” but you exported misaligned inputs)
-
-Fix:
-- rebuild using a single `cells <- colnames(seu)` ordering and reorder everything.
-
-More:
-- export-time troubleshooting: {doc}`../c_data_preparation_api/11_troubleshooting_prepare_export`
-- loading-time troubleshooting: {doc}`../i_troubleshooting_index/04_web_app_loading_issues`
+- *"This Seurat holds no embedding (no reductions)"* — run `seu <- Seurat::RunUMAP(seu, dims = 1:30)`
+  first, or pass `embeddings = list(X_umap = coordinates)`.
+- *"This Seurat object was made by Seurat 2.x"* — `seu <- SeuratObject::UpdateSeuratObject(seu)`.
+- *"This Seurat object has Seurat v5 assays … which SeuratObject 4.x cannot read"* —
+  `install.packages("SeuratObject")`.
+- *"dataset_id and dataset_name are required"* — pass both, or set
+  `seu@misc$cellucid`.
+- A message *"From the Seurat object: … not read"* names each part left out and
+  why (a metadata column of a type AnnData does not store, a reduction that does
+  not cover every cell, a graph that is not symmetric).
+- More: {doc}`../c_data_preparation_api/11_troubleshooting_prepare`.

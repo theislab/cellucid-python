@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlparse
 
-from ._contracts import _protected_export_directories
+from ._contracts import _protected_directories
 from ._server_base import (
     CELLUCID_WEB_URL,
     WEB_ASSET_INVENTORY_FILENAME,
@@ -150,7 +150,7 @@ def _protected_cache_directories() -> frozenset[Path]:
     ``cellucid/__init__.py`` deliberately keeps free of numpy, pandas, scipy,
     and tqdm.
     """
-    return _protected_export_directories()
+    return _protected_directories()
 
 
 def _require_dedicated_cache_dir(value: str | Path) -> Path:
@@ -414,22 +414,60 @@ def verify_web_ui_cache(
         return inventory
 
 
+def _file_version(path: Path) -> tuple[int, int, int] | None:
+    """One file's identity: size, modification time and inode (None when absent)."""
+    try:
+        status = path.stat()
+    except FileNotFoundError:
+        return None
+    return (status.st_size, status.st_mtime_ns, status.st_ino)
+
+
+#: The inventory each cache directory was last read with, keyed by the
+#: versions of the files it is checked from, and every asset whose bytes were
+#: verified, keyed by the file version they were verified at.
+_INVENTORY_MEMO: dict[Path, tuple[tuple[Any, ...], dict[str, WebAsset]]] = {}
+_VERIFIED_ASSETS: dict[tuple[Path, str], tuple[tuple[int, int, int], str]] = {}
+
+
 def read_cached_web_asset(
     cache_dir: str | Path,
     asset_path: str,
 ) -> tuple[bytes, str] | None:
-    """Read and verify one inventory-declared object without network access."""
+    """Read and verify one inventory-declared object without network access.
+
+    The inventory is read and checked once per version of its files, and an
+    asset's bytes are hashed once per version of the asset's file; a page
+    loading hundreds of modules then costs one read each. (Re-reading the
+    inventory and hashing every asset on every request, under one lock, cost
+    30 ms per asset: seconds before a viewer's first frame.) A changed or
+    replaced file has another version, and is checked again.
+    """
     resolved = _require_cache_dir(cache_dir)
     normalized_path = _require_asset_path(asset_path)
+    versions = tuple(
+        _file_version(resolved / name)
+        for name in (WEB_ASSET_INVENTORY_FILENAME, "index.html", _WEB_CACHE_SOURCE_FILENAME)
+    )
     with _CACHE_LOCK:
-        inventory = _load_cached_inventory(resolved)
-        asset_by_path = {asset.path: asset for asset in inventory.assets}
-        asset = asset_by_path.get(normalized_path)
-        if asset is None:
-            return None
-        data = (resolved / normalized_path).read_bytes()
+        memo = _INVENTORY_MEMO.get(resolved)
+        if memo is None or memo[0] != versions:
+            inventory = _load_cached_inventory(resolved)
+            memo = (versions, {asset.path: asset for asset in inventory.assets})
+            _INVENTORY_MEMO[resolved] = memo
+    asset = memo[1].get(normalized_path)
+    if asset is None:
+        return None
+    with (resolved / normalized_path).open("rb") as file:
+        status = os.fstat(file.fileno())
+        data = file.read()
+    version = (status.st_size, status.st_mtime_ns, status.st_ino)
+    key = (resolved, normalized_path)
+    if _VERIFIED_ASSETS.get(key) != (version, asset.sha256):
         _verify_asset_bytes(asset, data)
-        return data, asset.content_type
+        with _CACHE_LOCK:
+            _VERIFIED_ASSETS[key] = (version, asset.sha256)
+    return data, asset.content_type
 
 
 def _fetch_web_response(
@@ -612,7 +650,10 @@ def _activate_staged_generation(stage: Path, cache_dir: Path) -> None:
 
 
 def get_web_cache_dir() -> Path:
-    """Return the exact current web cache directory."""
+    """Return the default web cache directory (it may not exist yet).
+
+    Pass ``web_cache_dir=`` to a viewer or server to use another directory.
+    """
     return _web_cache_dir()
 
 
@@ -624,6 +665,16 @@ def clear_web_cache(*, cache_dir: str | Path | None = None) -> Path:
     directory, the home directory, and the directory holding every home are
     refused before anything is inspected or removed, whether they are named
     directly, through ``~``, or through a symbolic link.
+
+    Parameters
+    ----------
+    cache_dir : str or Path, optional
+        The cache directory to remove; :func:`get_web_cache_dir` when None.
+
+    Returns
+    -------
+    Path
+        The absolute path of the directory removed (or already absent).
     """
     resolved = _require_cache_dir(cache_dir)
     with _CACHE_LOCK:

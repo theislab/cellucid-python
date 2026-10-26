@@ -21,34 +21,39 @@ This is the “bridge” between exploratory visualization and reproducible anal
 **Prerequisites**
 - A notebook environment
 - `pip install cellucid`
-- An `AnnData` (or an export folder from `prepare(...)`)
+- An `AnnData` (or a Cellucid-ready AnnData file from `prepare(...)`)
 
 ---
 
 ## The mental model (one page)
 
-There are two communication channels:
+Both directions travel on one channel, a WebSocket the viewer opens to the
+local server (`/_cellucid/ws`):
 
 ### Viewer → Python (events/hooks)
 
-The viewer sends HTTP POSTs to the local server:
-- `POST /_cellucid/events` (JSON events)
-- `POST /_cellucid/selection` (selections, as binary cell indices)
+The viewer sends events on the channel: JSON text frames, and selections as
+binary cell indices.
 
 Events include:
 - `ready`
 - `selection`
 - `hover`
 - `click`
+- `command_error` (a command from Python the viewer refused)
+- `data_mapping` (what the viewer plots and reads)
 
-`message` is not one of them. It is a hook that receives every event in that
-list and nothing else — there is no custom or app-specific event type. An
+and the replies `pong`, `debug_snapshot` and `session_bundle` to
+`debug_connection()` and `get_session_bundle()`.
+
+`message` is not one of them. It is a hook that receives every event the
+viewer sends and nothing else — there is no custom or app-specific event type. An
 inbound event whose `type` this `cellucid` does not declare is rejected before
 any hook runs, so a viewer cannot invent one.
 
 ### Python → Viewer (commands)
 
-Python sends `postMessage(...)` commands into the iframe, for example:
+Python sends commands on the channel, for example:
 - highlight selected cells
 - set color-by field
 - reset camera
@@ -138,8 +143,12 @@ Best practice: treat `adata` as immutable after opening the viewer, or recreate 
 
 ### Pattern C — Validate callback input and surface failures
 
-Unhandled callback exceptions are logged and make the event request return
-HTTP 500. Validate the exact input, and do not suppress analysis failures:
+Hooks run on the viewer channel's thread, not in your cell. An exception a hook
+raises is logged (logger `cellucid.viewer_channel`, "A viewer event hook
+failed") and the channel stays open. The event itself is not lost: it is
+recorded in `viewer.state` and handed to `wait_for_event(...)` before any hook
+runs, and the other hooks still run for it. Validate the exact input, and
+record failures where your notebook can see them:
 
 ```python
 @viewer.on_selection
@@ -148,7 +157,7 @@ def _validated_handler(event):
     if type(cells) is not list or any(type(index) is not int for index in cells):
         raise TypeError("selection cells must be a list of native integers")
     if cells:
-        # ... do analysis; any failure propagates to event delivery ...
+        # ... do analysis; an exception here is logged, not raised in a cell ...
         print(f"Analyzing {len(cells)} cells")
 ```
 
@@ -169,7 +178,7 @@ This is helpful when:
 
 ## Python → viewer commands (what you can do)
 
-These convenience methods send commands into the iframe:
+These convenience methods send commands to the viewer on its channel:
 
 ```python
 viewer.highlight_cells([1, 2, 3], color="#ff0000")
@@ -186,7 +195,7 @@ viewer.send_message({"type": "highlight", "cells": [1, 2, 3], "color": "#ff0000"
 ```
 
 ```{note}
-The viewer must be displayed before messages can be delivered. The `show(...)` / `show_anndata(...)` helpers display automatically in notebook contexts.
+A message sent before the viewer is displayed waits and is delivered, in order, once the viewer connects; `send_message` returns `False` while it waits and `True` when it was sent at once. The `show_anndata(...)` helper displays automatically in notebook contexts.
 ```
 
 ---
@@ -195,7 +204,10 @@ The viewer must be displayed before messages can be delivered. The `show(...)` /
 
 ### Multiple viewers in one notebook
 
-Each viewer has its own `viewerId` token, and events are routed to the correct Python object.
+Each viewer has its own viewer id and token (`viewerId`, `viewerToken` in its
+address) and its own channel, so events reach the right Python object. Each
+also has its own server: the first on port 8765, the next on the next free
+port.
 
 Best practices:
 - keep a variable name per viewer (`viewer_a`, `viewer_b`)
@@ -224,7 +236,8 @@ Treat hover as “streaming telemetry”:
 Likely causes:
 - viewer never reached `ready`
 - browser cannot reach the kernel-side server port (remote kernel without proxy/tunnel)
-- a proxy/corporate environment strips requests
+- a proxy between the page and the server does not pass WebSockets (the
+  viewer channel, `/_cellucid/ws`)
 
 How to confirm:
 ```python

@@ -41,7 +41,7 @@ Quick mode summarizes **highlight pages**.
 
 By default, Quick uses **Dynamic** mode:
 - it always summarizes the currently active highlight page,
-- switching pages in Highlighted Cells updates Quick automatically.
+- switching pages in **Highlighting** updates Quick automatically.
 
 ### Manual mode: “combine pages intentionally”
 
@@ -120,7 +120,7 @@ other.
 Goal: “Tell me what this group of cells looks like in 2 minutes.”
 
 1) Create or select a highlight page
-   - Go to Highlighted Cells.
+   - Go to **Highlighting**.
    - If needed, add a page and put a selection into it.
 2) Open **Analysis → Quick**
    - You should immediately see a header like “\<PageName\>: X cells”.
@@ -172,7 +172,7 @@ upstream rather than looking for a setting.
 - **Empty page** (0 cells) → header shows 0 cells; sections are empty.
 - **No categorical obs fields** → Composition has nothing to choose.
 - **No continuous obs fields** → Statistics has nothing to choose.
-- **Huge number of categories** → only top categories are shown; use Detailed + Bar Plot for full distribution.
+- **Huge number of categories** → only top categories are shown; use Detailed + Bar plot for full distribution.
 - **Very small pages** (< 20–50 cells) → mean/std are unstable; interpret cautiously.
 
 ---
@@ -185,7 +185,7 @@ Likely causes:
 - no highlight pages exist yet.
 
 How to confirm:
-- open Highlighted Cells and check if page tabs exist.
+- open **Highlighting** and check if page tabs exist.
 
 Fix:
 - create a page and add cells to it (see {doc}`../f_highlighting_selection/index`).
@@ -196,10 +196,10 @@ Likely causes:
 - Quick is in **Dynamic** mode and a different page is active than you think.
 
 How to confirm:
-- open Quick’s **Page Selection** collapsible at the bottom and check the mode indicator.
+- open Quick’s **Page selection** disclosure at the bottom and read the page named beside its title (`Dynamic` follows the active page).
 
 Fix:
-- switch to **Manual** mode and explicitly pick the page(s) to summarize.
+- click the page(s) to summarize: choosing a page leaves Dynamic for a manual selection.
 
 ### Symptom: “Composition/Statistics says ‘No … fields selected’”
 
@@ -211,7 +211,7 @@ Fix:
 ## Interface reference
 
 ```{figure} ../../../_static/screenshots/analysis/quick-insights.png
-:alt: The Quick panel headed "Page 1: 262 cells" with a Composition section showing one stacked bar per field with the top categories named beneath it, and a Statistics section with a Field / Mean / Median / Std table listing S_score and G2M_score.
+:alt: The Quick panel for Page 1, 262 cells: a Composition section with a bar for clusters_coarse and one for clusters, each a single Ngn3 low EP segment named beneath at 100.0%, a Statistics section with the mean, median and standard deviation of S_score and G2M_score, and the collapsed Page selection.
 :width: 488px
 
 Quick opens with no configuration at all. **Composition** draws one stacked bar
@@ -230,7 +230,7 @@ you need a distribution rather than a summary, that is
 Before any page has cells, the panel says so rather than showing an empty table:
 
 ```{figure} ../../../_static/screenshots/analysis/analysis-empty-no-pages.png
-:alt: The Quick panel reading "Page 1: 0 cells" with a Composition section stating "No composition data available." and a Statistics section stating "No statistics data available."
+:alt: The Quick panel before any cells were confirmed into a page: it reports Page 1 with 0 cells and has no composition or statistics to show.
 :width: 488px
 
 The no-pages state. `Page 1: 0 cells` is the diagnosis: the page exists but

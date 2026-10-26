@@ -9,7 +9,7 @@ This documentation is intentionally written for **two audiences at once**:
 
 If you only read one idea, read this: community annotation is **offline-first** and **scope-based** (dataset + repo + branch + user), and GitHub is just the shared synchronization layer.
 
-- The **Community Annotation** accordion starts collapsed. Open it only when
+- The **Community annotation** accordion starts collapsed. Open it only when
   you want to connect or work with an annotation repository.
 - Each person writes only their own file (conflict-free collaboration).
 - The merged consensus view is compiled in the browser during **Pull** (no “compiled” artifact is required in the repo).
@@ -37,9 +37,9 @@ available locally:
 - You can annotate while offline (local saves still work), but you cannot **Pull** or **Publish** until you are online again.
 :::
 
-```{figure} ../../../_static/screenshots/community_annotation/disconnected-panel.png
-:alt: Community Annotation panel before an annotation repository is connected.
-:width: 246px
+```{figure} ../../../_static/screenshots/community_annotation/lifecycle-01-disconnected.png
+:alt: The Community annotation panel before any repository is connected: Repository with its (i), the line Not connected. and a Connect repo button, with the pointer on that button.
+:width: 504px
 
 The Community Annotation entry point reports that no repository is connected and offers the explicit Connect repo action.
 ```
@@ -57,11 +57,11 @@ If you’re in a hurry, follow the path that matches your role.
 You are contributing labels, votes, and comments. You do **not** manage the repository settings.
 
 1) Open Cellucid and load the dataset.
-2) Open **Community Annotation** in the left sidebar.
+2) Open **Community annotation** in the left sidebar.
 3) Click **Connect repo**.
 4) In the four-step wizard, use **Continue with GitHub**, install/authorize the
    app if needed, select a repository, and choose **Connect**.
-5) In **Sync (pull / publish)**, click **Pull latest**.
+5) In **Sync**, click **Pull latest**.
 6) Pick a 🗳️-marked categorical column (e.g. `leiden`).
 7) Click a category (cluster) to open the voting modal.
 8) Vote, comment, and add suggestions; then **Publish** so others can see your work.
@@ -73,12 +73,12 @@ Next: read {doc}`01_annotator_guide` for the full workflow, edge cases, and trou
 
 You are running an annotation round: you create/configure the GitHub repo, decide what is annotatable, tune consensus rules, and optionally moderate merges.
 
-1) Confirm the dataset id is stable (`dataset_identity.json["id"]`).
+1) Confirm the dataset id is stable (`uns['cellucid']['id']` in the dataset file).
 2) Create an annotation repo (recommended: start from the `cellucid-annotation` template).
 3) Edit `annotations/config.json` to include your dataset id and fields to annotate.
 4) Install the Cellucid GitHub App on the repo owner and ensure the repo is selected.
 5) In Cellucid, connect to the repo and **Pull latest**.
-6) Enable the annotatable columns under **MANAGE ANNOTATION**.
+6) Enable the annotatable columns under **Annotated columns**.
 7) During the round, periodically Pull, resolve duplicates (optional merges), and communicate decisions.
 8) At the end, close fields, Pull one last time, and export a consensus snapshot.
 
@@ -123,7 +123,7 @@ Button-by-button explanation of the Community Annotation UI, plus large troubles
 
 This section defines terms you will see across all pages. (Computational readers: many of these map directly to files and scopes.)
 
-- **Dataset id**: a stable identifier for the dataset (from `dataset_identity.json["id"]`). Changing it makes annotation “disappear” because it’s treated as a different dataset.
+- **Dataset id**: a stable identifier for the dataset (from `uns['cellucid']['id']` in the dataset file). Changing it makes annotation “disappear” because it’s treated as a different dataset.
 - **Annotatable column / field**: a categorical `obs` column the author enables for voting (e.g. `leiden`, `cluster`, `cell_type_coarse`).
 - **Category**: one value/level inside a categorical column (e.g. Leiden cluster `"7"`). You vote per category.
 - **Suggestion**: a proposed label for a category (e.g. “CD4 T cell”).
@@ -156,7 +156,7 @@ If your role cannot be determined (e.g., GitHub API access issue), Cellucid may 
 
 Community annotation is per **dataset**, per **categorical obs column**, per **category**:
 
-- **Dataset**: identified by `dataset_identity.json["id"]` (see the Author Guide for why this must be stable).
+- **Dataset**: identified by its dataset id, `uns['cellucid']['id']` in the file (see the Author Guide for why this must be stable).
 - **Annotatable column**: a categorical obs field (e.g. `leiden`, `cluster`, `cell_type_coarse`) that the author enables for annotation.
 - **Category**: one category/level within that column (e.g. Leiden cluster `"7"`). Each category gets its own vote/suggestion “bucket”.
 
@@ -236,7 +236,7 @@ Use this as a first-stop map. Each row links to the page where the full troubles
 
 | Symptom | Most likely cause | First thing to try | Deep dive |
 |---|---|---|---|
-| Repo doesn’t appear at **Select an annotation repository** | GitHub App not installed / repo not selected | **Add repo**, then **Reload** | {doc}`03_ui_reference` |
+| Repo doesn’t appear at **Choose repository** | GitHub App not installed / repo not selected | **Add repo**, then **Reload** | {doc}`03_ui_reference` |
 | “Dataset mismatch” / can’t Pull | Dataset id missing in `annotations/config.json` | Ask an author to connect + Publish config | {doc}`02_author_guide` |
 | You voted, but others don’t see it | You didn’t Publish, or PR not merged | Publish (or check PR merge) → others Pull | {doc}`01_annotator_guide` |
 | Everything is disabled | Column is closed 🗳️🏁, or you’re signed out | Check column badge → re-sign-in → Pull | {doc}`01_annotator_guide` |

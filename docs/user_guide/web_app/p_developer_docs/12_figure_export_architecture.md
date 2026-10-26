@@ -1,6 +1,6 @@
 # Figure export architecture
 
-This page documents the Cellucid **Figure Export** subsystem: how SVG/PNG export reproduces the current view (WYSIWYG), how large datasets are handled safely, and where to add new export renderers.
+This page documents the Cellucid **Figure export** subsystem: how SVG/PNG export reproduces the current view (WYSIWYG), how large datasets are handled safely, and where to add new export renderers.
 
 ## At a glance
 
@@ -70,14 +70,53 @@ PNG export uses Canvas2D for composition, but rasterizes points via WebGL2:
 - this preserves shader-accurate appearance (e.g. 3D sphere shading)
 - avoids maintaining two independent point renderers
 
-The point passes draw on WebGL2 contexts the export keeps for the page's
-lifetime (`webgl-point-rasterizer.js`): one per antialiasing setting, plus one
-for each pass that overlaps another. A pass leases a canvas and returns it
-with `releaseWebglRasterCanvas` once its pixels are copied; the canvas shrinks
-to one pixel and its context stays for the next pass. Creating and losing a
-context per pass cost a context and a shader compile every time, and made
-WebKitGTK/WPE abort the page on a GL call made without a current context
-during the teardown.
+Every per-cell pass and every encode runs in the export worker
+(`utils/figure-export-worker.js`, reached through
+`utils/figure-export-worker-client.js`), never on the page's main thread:
+
+- the point passes draw on OffscreenCanvas WebGL2 contexts the worker keeps for
+  the page's lifetime (`webgl-point-rasterizer.js`), one per antialiasing
+  setting; a pass returns its frame with `transferToImageBitmap()` and the
+  canvas shrinks to one pixel. Creating and losing a context per pass cost a
+  context and a shader compile every time, and made WebKitGTK/WPE abort the
+  page on a GL call made without a current context during the teardown;
+- the page copies each frame onto the plot's device pixels, then hands the
+  composed canvas's pixels to the worker as an ImageData whose buffer is
+  transferred (`pagePixels` in `figure-export-worker-client.js`; never an
+  ImageBitmap of a page canvas, which Linux WebKit encoded without the
+  canvas's pixels), where `OffscreenCanvas.convertToBlob` encodes it (the encoder
+  `toBlob` uses, so the bytes are the same) and the metadata chunks are added;
+- axis bounds and the vector strategies' circle markup are computed there too;
+  the markup returns as one Blob, so the SVG is assembled from Blob parts and
+  never exists as one string.
+
+Each rendered file opens a worker session: a typed array is copied to the
+worker once per session, and closing the session releases it. An export that is
+cancelled rejects its pending requests at once; the worker's late answers are
+discarded.
+
+### Where the point pass is drawn
+
+The point passes (`spriteZoomLimit`, `rasterizePoints`) need a WebGL2 context
+on an OffscreenCanvas, and not every browser offers one in a worker:
+
+- WebKitGTK and WPE (GNOME Web/Epiphany, and Playwright's Linux WebKit) have no
+  WebGL in workers: [WebKit bug 209809](https://bugs.webkit.org/show_bug.cgi?id=209809).
+- Safari 16.4–16.6, and 17.0–17.1 on macOS Ventura, returned no WebGL context
+  to an OffscreenCanvas in a worker while the same context worked on the page:
+  [WebKit bug 253431](https://bugs.webkit.org/show_bug.cgi?id=253431),
+  [WebKit bug 183720](https://bugs.webkit.org/show_bug.cgi?id=183720).
+
+So before the first point pass the client asks the worker once whether it can
+create such a context (`webgl2`, answered by `webgl2RasterAvailable()`), and
+keeps the answer for the page's lifetime. Where the worker can, every pass is
+drawn there. Where it cannot, the client runs the same handler
+(`createFigureExportWorkerHandler`) on the page for the point passes only; the
+bounds, the vector markup and every encode stay in the worker. There is one
+rasterizer and no setting: the placement follows the measured capability.
+`setFigureExportWorkerWebgl2(false)` states the answer for tests, and
+`CELLUCID_FIGURE_EXPORT_POINT_PASS=page` runs a browser suite with every
+point pass on the page.
 
 The PNG exporter also embeds metadata via UTF-8 PNG `iTXt` chunks:
 - `Software`, `Website`, `Creation Time`, `Dataset`, `Dataset ID`, `Color Field`,

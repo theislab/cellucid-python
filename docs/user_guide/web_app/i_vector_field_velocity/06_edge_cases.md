@@ -12,9 +12,9 @@ Each entry below follows: **what you see → why → how to confirm → what to 
 
 ### 1) No vector fields at all
 
-- **What you see:** the **Vector Field Overlay** block is missing from the sidebar.
+- **What you see:** the **Vector field** block is missing from the sidebar.
 - **Why:** your dataset contains no vector field metadata / no detectable vector arrays.
-- **Confirm:** no “Vector Field Overlay:” section appears under **Visualization**.
+- **Confirm:** no “Vector field” section appears under **Visualization**.
 - **What to do:** add/export vector fields (usually in Python) and reload the dataset.
 
 ### 2) Vector fields exist, but not for the embedding this view shows
@@ -24,12 +24,12 @@ Each entry below follows: **what you see → why → how to confirm → what to 
 - **Confirm:** the hint names the embeddings that have a field; show one of them and watch the toggle enable.
 - **What to do:** show a named embedding, or export the vector field for the embedding you want.
 
-### 3) You have a vector field, but it’s in a different basis than Cellucid expects
+### 3) You have a vector field, but its key does not name the embedding it belongs to
 
-- **What you see:** an AnnData file opens with no field bound, even though you computed velocity/drift (for example `velocity_tsne` for a t-SNE).
-- **Why:** only the *default* binding reads the key, and it is UMAP-oriented: `<field>_umap_<d>d` is bound to the UMAP of dimension `d`. A field in another basis is never bound by default.
-- **Confirm:** open **Session › Data mapping › Vector fields** and check whether your `obsm` array is listed but unchecked. For an export, look at `vector_fields.fields` in `dataset_identity.json`: every binding it has is listed there by embedding id.
-- **What to do:** bind it yourself under **Session › Data mapping › Vector fields** (AnnData), or export it bound to the embedding it was computed on, for example `prepare(..., vector_fields={"velocity": {"X_tsne": velocity_tsne}})`.
+- **What you see:** an AnnData file opens with no field bound, even though you computed velocity/drift.
+- **Why:** only the *default* binding reads the key, and it follows scVelo's convention: `<field>_<basis>` is bound to the embedding `X_<basis>`, for any basis (`velocity_umap` to `X_umap`, `velocity_tsne` to `X_tsne`, `velocity_branches` to `X_branches`), and only when both arrays have the same number of columns. A key with no matching `X_<basis>` in the file (`velocity_umap_2d` beside a bare `X_umap` and no `X_umap_2d`, or `velocity_tsne` with the t-SNE stored as `tsne`), or a vector of another width, is not bound by default.
+- **Confirm:** open **Session › Data mapping › Vector fields** and check whether your `obsm` array is listed but unchecked. `adata.obsm.keys()` in Python lists every array the file holds.
+- **What to do:** rename the array after its embedding (`velocity_umap` for `X_umap`, scVelo's own name), or bind it yourself under **Session › Data mapping › Vector fields**. `prepare(..., vector_fields=...)` stores each field under that name for you.
 
 ### 4) All-zero vectors (nothing draws at all)
 
@@ -39,8 +39,8 @@ Each entry below follows: **what you see → why → how to confirm → what to 
   position is pushed off-clip. With every magnitude at exactly zero, every
   particle is discarded on every frame.
 - **Confirm:** in Python, `np.linalg.norm(vectors, axis=1).max()` is 0 (or below `1e-5`).
-- **What to do:** fix the data. Raising `Flow speed:`, `Particle size:` or
-  `Opacity:` cannot bring back a particle whose point size was set to zero, so
+- **What to do:** fix the data. Raising `Flow speed`, `Particle size` or
+  `Opacity` cannot bring back a particle whose point size was set to zero, so
   none of the visual controls will help. This is the extreme case of the
   under-representation of slow cells described in
   {doc}`01_what_vector_fields_are_user_facing`.
@@ -52,8 +52,8 @@ Each entry below follows: **what you see → why → how to confirm → what to 
   preprocessing mistake such as scaling down too aggressively). The per-frame
   step is proportional to the raw magnitude, and the slowest cells fall under
   the discard floor.
-- **Confirm:** inspect the distribution of `np.linalg.norm(vectors, axis=1)`; raising `Flow speed:` should visibly change the motion.
-- **What to do:** raise `Flow speed:` — it is a display gain and this is exactly
+- **Confirm:** inspect the distribution of `np.linalg.norm(vectors, axis=1)`; raising `Flow speed` should visibly change the motion.
+- **What to do:** raise `Flow speed` — it is a display gain and this is exactly
   what it is for. If you also need the sparse regions populated, the vectors
   themselves have to be rescaled upstream.
 
@@ -62,20 +62,21 @@ Each entry below follows: **what you see → why → how to confirm → what to 
 - **What you see:** the overlay never enables. `Show overlay` turns itself back
   off and the status line under the overlay settings reads `Failed to load vector field.`
 - **Why:** nothing sanitizes a non-finite value. Both writers and the reader
-  reject the field outright — `cellucid.prepare(...)` refuses it at export, and
-  in the browser the loader throws on the first offending component rather than
-  substituting a number. A silently zeroed cell would be an invisible wrong
+  reject the field outright — `cellucid.prepare(...)` refuses it when writing, and
+  in the browser the reader refuses the field at the first offending value
+  rather than substituting a number. A silently zeroed cell would be an invisible wrong
   answer in a figure.
 - **Confirm:** `np.isfinite(vectors).all()` in Python. In the browser, read the
-  error notification: it names the offending cell index and vector component.
-- **What to do:** clean or recompute the field upstream and re-export. The exact
+  error notification: it names the `obsm` array and the first offending cell
+  (`Vector field 'velocity_umap' cannot be drawn: NaN at cell 17.`).
+- **What to do:** clean or recompute the field upstream and write the file again. The exact
   error strings are listed in {doc}`07_troubleshooting_velocity_overlay`.
 
 ### 7) Magnitudes are huge (units/normalization mismatch)
 
 - **What you see:** particles shoot off rapidly; trails look like streaks unrelated to local structure.
 - **Why:** the vector field was computed in a coordinate system that doesn’t match the embedding scale (or magnitudes were not normalized).
-- **Confirm:** reduce `Flow speed:` to ~0.5×. If it still looks explosive, the raw vectors are likely too large.
+- **Confirm:** reduce `Flow speed` to ~0.5×. If it still looks explosive, the raw vectors are likely too large.
 - **What to do:** verify that vectors are computed in the same embedding coordinate system as the points (and that row order matches).
 
 ### 8) Row order mismatch (the “hardest” failure mode)
@@ -94,7 +95,7 @@ Each entry below follows: **what you see → why → how to confirm → what to 
 - **What you see:** enabling the overlay is slow, or it becomes the main bottleneck.
 - **Why:** even though vectors load lazily, the overlay still needs to simulate and render many particles every frame, and build spawn tables from visible cells.
 - **Confirm:** performance improves immediately when you disable `Show overlay`.
-- **What to do:** use the laptop-safe preset (`Particle density:` 5K–10K, short trails, bloom=0), and consider enabling LOD + `Sync with LOD`.
+- **What to do:** use the laptop-safe preset (`Particle density` 5K–10K, short trails, bloom=0), and consider enabling LOD + `Sync with LOD`.
 
 ### 2) Many views/snapshots visible
 

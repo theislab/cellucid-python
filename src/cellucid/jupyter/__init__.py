@@ -5,7 +5,7 @@ Provides seamless integration with Jupyter notebooks for visualizing
 cellucid datasets directly in notebook cells.
 
 Usage:
-    from cellucid.jupyter import CellucidViewer, show, show_anndata
+    from cellucid.jupyter import show_anndata
 
     # Quick visualization
     viewer = show_anndata(
@@ -23,13 +23,15 @@ Usage:
     def handle_selection(event):
         print(f"Selected {len(event['cells'])} cells")
 
-Communication (bidirectional, works in all environments):
+Communication (bidirectional):
     Python → Frontend:
         - viewer.highlight_cells()
         - viewer.set_color_by()
         - viewer.set_visibility()
         - viewer.clear_highlights()
         - viewer.reset_view()
+        - viewer.set_data_mapping()
+        - viewer.get_session_bundle()
         - viewer.send_message()
 
     Frontend → Python:
@@ -38,39 +40,37 @@ Communication (bidirectional, works in all environments):
         - @viewer.on_click
         - @viewer.on_ready
         - @viewer.on_command_error
+        - @viewer.on_data_mapping
         - @viewer.on_message
 
-    Both directions work in Jupyter, JupyterLab, Google Colab, and VSCode.
-    Frontend → Python uses HTTP POST to the local data server.
+    Both directions travel on one WebSocket the viewer opens to the local
+    data server (``/_cellucid/ws``), so they work wherever the page in the
+    notebook output can reach that server and open a WebSocket to it:
+    classic Jupyter and JupyterLab on the same machine, an SSH-forwarded
+    port, or a proxy that passes WebSockets (jupyter-server-proxy, with
+    ``client_server_url=`` and ``allowed_hosts=``). VS Code's notebook webview
+    and Google Colab's proxy have not been tested.
 
 The module is a package. Its submodules are:
 
 ``_wire``
-    Exact value checks for every message crossing the Python/iframe boundary,
-    standard library only.
+    Exact value checks for every message on the viewer channel.
 ``_hooks``
     :class:`HookRegistry` and :class:`ViewerState`.
-``_base``
-    :class:`BaseViewer`, notebook-context detection, the HTTP event-routing
-    bridge, and interpreter-exit cleanup.
-``_exported`` / ``_anndata``
-    :class:`CellucidViewer` and :func:`show` for a prepared export directory;
-    :class:`AnnDataViewer` and :func:`show_anndata` for an AnnData object.
+``_viewer``
+    :class:`AnnDataViewer` and :func:`show_anndata` for an AnnData file, store
+    or object, notebook-context detection, the viewer-channel bridge, and
+    interpreter-exit cleanup.
 """
 
-from ._anndata import AnnDataViewer, show_anndata
-from ._base import BaseViewer, cleanup_all
-from ._exported import CellucidViewer, show
 from ._hooks import HookCallback, HookRegistry, ViewerState
+from ._viewer import AnnDataViewer, cleanup_all, show_anndata
 
 __all__ = [
     "AnnDataViewer",
-    "BaseViewer",
-    "CellucidViewer",
     "HookCallback",
     "HookRegistry",
     "ViewerState",
     "cleanup_all",
-    "show",
     "show_anndata",
 ]

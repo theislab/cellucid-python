@@ -1,5 +1,12 @@
 # Screenshot coverage audit — sections A, B, G, Q
 
+:::{important}
+Audited before Cellucid 0.9.5, which reads AnnData only. The capture
+instructions use the current controls, fixtures and sample catalog; where a
+record says what a page or an image showed at audit time (the **Prepared**
+button, a prepared export), that is history. {doc}`index` maps the old names.
+:::
+
 Scope: `user_guide/web_app/a_orientation/` (6 pages), `user_guide/web_app/b_data_loading/`
 (13 pages), `user_guide/web_app/g_cross_highlighting/` (empty directory),
 `user_guide/web_app/q_troubleshooting_index/` (1 page).
@@ -100,26 +107,34 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
   "Analysis", `#cinematic-camera-section` "Camera Path", `#figure-export-section`
   "Figure Export", `#shortcuts-section` "Keyboard Shortcuts", `#benchmark-section`
   "Performance Benchmark".
-- Session panel internals: `#dataset-info` (the DATASET/CELLS/GENES/OBS
-  FIELDS/CONNECTIVITY block), `#dataset-select` ("Sample datasets:"),
-  `#user-data-block` ("Local data:" with `#user-data-h5ad-btn` "H5AD",
-  `#user-data-zarr-archive-btn` "Zarr ZIP", `#user-data-browse-btn` "Prepared"),
-  `#remote-server-block` (`#remote-server-url`, `#remote-connect-btn` "Connect"),
-  `#github-repo-block` (`#github-repo-url` placeholder
-  `owner/repo/path/to/exports`, `#github-connect-btn` "Connect"),
-  `#session-state-controls` (`#save-state-btn`, `#load-state-btn`).
+- Session panel internals (redesigned 2026-10-23; the records further down
+  name the earlier ids, translated in {doc}`index`): `#dataset-facts`
+  ("Dataset", with **Share**) holding the Dataset box `#dataset-info`
+  (`data-state` empty/loading/ready: `#dataset-name`, `#dataset-summary` with
+  `#dataset-cells` · `#dataset-genes`, `#dataset-origin`, `#dataset-description`,
+  `#dataset-read`, the collapsed **Details** `#dataset-details`); under
+  "Open data" (`#open-data-controls`) `#dataset-select` ("Sample dataset", or
+  "Dataset from <host>" while a catalog is connected), `#user-data-block`
+  ("File or folder": `#user-data-open-btn` "Open…", its menu
+  `#user-data-open-menu` with `#user-data-file-item` "File…" and
+  `#user-data-folder-item` "Folder…"), `#data-address-block` ("Link or
+  server": `#data-address` placeholder `Link or localhost:8765`,
+  `#data-address-open-btn` "Open", and the connection lines
+  `#remote-disconnect-container` / `#data-link-disconnect-container`);
+  `#session-state-controls` ("Session file": `#save-state-btn` "Save",
+  `#load-state-btn` "Load"); `#data-mapping-controls` ("Data mapping").
 - Other: `#welcome-modal` / `#welcome-demo-btn` ("Choose a dataset"), `#sidebar`,
   `#legend`, `#split-keep-view-btn` ("Keep view"),
   `.highlight-mode-btn[data-mode="lasso"]` ("Lasso"), `#navigation-controls`
   (inside Compare Views), `#web-build-version` (footer build span).
 - Loadable fixtures under `cellucid/tests/browser/fixtures/`:
   `current-ui-smoke.h5ad` (120 cells, 6 genes), `current-ui-smoke.zarr.zip`,
-  `exports/current-ui-prepared/`, `demo-custom-exports/` (three synthetic
+  `catalog/current-ui.h5ad`, `demo-catalog/` (three synthetic
   datasets: `synthetic-cell-types-2d`, `synthetic-development-3d`,
-  `synthetic-trajectory-1d`), and `broken-exports/` (9 deliberately invalid
-  exports: `corrupt-payload`, `mismatched-manifest`, `missing-payload`,
-  `truncated-catalog`, `wrong-format-catalog`, and mixed variants).
-- Catalog sample ids confirmed in `cellucid-datasets/exports-v3/datasets.json`:
+  `synthetic-trajectory-1d`), and `broken-catalogs/` (six deliberately invalid
+  catalogs: `corrupt-file`, `mismatched-id`, `missing-file`,
+  `prepared-catalog`, `truncated-catalog`, `truncated-file`).
+- Catalog sample ids confirmed in the sample catalog at audit time (prepared, before 0.9.5):
   `suo` (default), `garcia`, `he`, `kanemaru`, `pancreas`.
 
 ---
@@ -170,7 +185,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
      anywhere in the docs).
   2. Second, smaller diagram for the "State & persistence" section (line 109):
      three nested boxes labelled **In-memory state** (lost on refresh),
-     **Session bundle** (`.cellucid-session`, explicit Save State),
+     **Session bundle** (`.cellucid-session`, explicit **Save**),
      **localStorage preferences** (theme/background only), with a "refresh"
      arrow showing what survives. Suggested
      `_static/diagrams/persistence-layers.svg`.
@@ -238,8 +253,8 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
     `a_orientation/03`, `a_orientation/04:22`, `b_data_loading/02:196`,
     `b_data_loading/03:81`, {doc}`/user_guide/web_app/d_fields_coloring_legends/06_screenshots`,
     {doc}`/user_guide/python_package/a_landing_pages/01_what_is_cellucid_python`,
-    {doc}`/user_guide/python_package/f_notebooks_tutorials/21_prepare_exports_with_quantization_and_compression`,
-    {doc}`/user_guide/python_package/g_api_reference_coverage/api/export`.
+    {doc}`/user_guide/python_package/f_notebooks_tutorials/21_prepare_a_cellucid_ready_anndata`,
+    {doc}`/user_guide/python_package/g_api_reference_coverage/api/prepare`.
 - **verdict** — SEQUENCE (plus one REPLACE)
 - **needs**
   1. **REPLACE `app-overview-cell-type.png` at line 45.** I opened the image.
@@ -256,7 +271,7 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
      1440x900 at 2x, then composite numbered callout badges (1–6) over the
      regions the tour names in order — 1 Session accordion, 2 Compare Views →
      Navigation, 3 Coloring & Filtering, 4 Compare Views → Multiview / Keep
-     view, 5 Highlighting, 6 Figure Export + Save State — with a matching
+     view, 5 Highlighting, 6 Figure Export + Session file → Save — with a matching
      numbered key in the caption. Cursor: no (callouts replace it). Filename
      `_static/screenshots/web_app/ui-map-annotated.png`. This one image is the
      wet-lab reader's whole orientation; it is currently the weakest asset in the
@@ -363,11 +378,10 @@ Confirmed by reading the source, so `needs` entries below can name real targets:
   1. `_static/diagrams/workflow-decision-tree.svg` — replace the ASCII tree at
      lines 42–51 with a real flowchart, and place it at line 15 so both the
      wet-lab and computational tabs can point at one artefact. Entry question
-     "What do you have?" branching to: **prepared `export/` folder** → Local data
-     → Prepared; **`.h5ad` / `.zarr`** → server mode or Jupyter; **AnnData in a
+     "What do you have?" branching to: **a `.zarr` store folder** → **Open… › Folder…**; **`.h5ad` / `.zarr`** → server mode or Jupyter; **AnnData in a
      notebook** → `show_anndata()`; **nothing yet** → ask a colleague to
      `prepare()`. Then a second tier on sharing: **one-to-one / reproducible** →
-     `.cellucid-session`; **public, no server** → GitHub exports;
+     `.cellucid-session`; **public, no server** → a Zarr folder on GitHub;
      **many-to-many labelling** → Community Annotation. Each leaf should carry
      the page reference it currently links to in prose. The ASCII block is
      invisible to the wet-lab tab (it lives only in the "Computational / Power
@@ -393,7 +407,7 @@ terminal and Jupyter captures:
 | Browser file picker | ``03_browser_file_picker_tutorial`` | no | no | reused generic images only |
 | Server / CLI | ``04_server_tutorial`` | **yes — 3 more** | no | 1 shot, and it shows a different command than the step it sits under |
 | Jupyter | ``05_jupyter_tutorial`` | one (`ssh -L` tunnel) | **yes — 4** | **zero figures on the page** |
-| GitHub custom repo | ``11_custom_dataset_repository`` | one (`cellucid serve ./exports`) | no | **zero figures** |
+| GitHub custom repo | ``11_custom_dataset_repository`` | one (`cellucid serve ./my_dataset.zarr`) | no | **zero figures** |
 
 ## user_guide/web_app/b_data_loading/index.md
 
@@ -406,7 +420,7 @@ terminal and Jupyter captures:
   `09_screenshots.md:13`, `l_sessions_sharing/{index,01_session_mental_model,
   03_save_restore_ux,11_screenshots}.md`,
   {doc}`/user_guide/python_package/b_concepts_mental_models/03_state_persistence_and_scope`,
-  {doc}`/user_guide/python_package/c_data_preparation_api/01_prepare_export_overview`,
+  {doc}`/user_guide/python_package/c_data_preparation_api/01_prepare_overview`,
   {doc}`/user_guide/python_package/g_api_reference_coverage/api/sessions`.
 - **verdict** — OK
 - **needs** — Recapture at 2x only (cross-cutting note 1). The image is the right
@@ -451,46 +465,48 @@ terminal and Jupyter captures:
 
 ## user_guide/web_app/b_data_loading/02_local_demo_tutorial.md
 
-- **explains** — Export a dataset once with `prepare()`, generate
-  `datasets.json` with `generate_datasets_manifest()`, validate locally, then
-  publish the `exports/` root to a public GitHub repo and share a
-  `?github=owner/repo/exports&dataset=id` link; plus the optional local-demo
-  `exportsBaseUrl` route.
+- **explains** — Write each dataset once with `prepare()`, write the catalog's
+  `datasets.json` (schema 2) beside the `.zarr` folders, validate locally, then
+  publish the `catalog/` folder to a public GitHub repo and share a
+  `?data=gh:owner/repo/catalog&dataset=id` link; plus the optional local-demo
+  `sampleCatalog` route.
 - **has** — line 196 `web_app/app-overview-cell-type.png` `:width: 1440px` — the
   8-page reused Suo 3D overview, placed under "Step 3 — Validate Locally (Before
   You Upload)".
 - **verdict** — REPLACE + SEQUENCE
 - **needs**
   1. **REPLACE line 196.** The step is "validate *your PBMC export* by opening it
-     with the **Prepared** picker"; the image shows the bundled Suo sample in a
+     with the **Zarr folder** picker"; the image shows the bundled Suo sample in a
      3D orbit view with no picker interaction and no legend. It proves nothing
-     about the step. Replacement: click `#user-data-browse-btn` **Prepared**,
-     select `cellucid/tests/browser/fixtures/exports/current-ui-prepared/`, and
-     capture the settled result — crop to `#session-section` so the
-     `#dataset-info` rows (DATASET, CELLS, GENES, OBS FIELDS) read out the
-     just-validated export, with the success notification toast in frame if it
-     is still visible. Cursor on `#user-data-browse-btn`.
-     `_static/screenshots/data_loading/validate-prepared-export.png`.
+     about the step. Replacement: click `#user-data-open-btn` **Open…**, then
+     `#user-data-folder-item` **Folder…**, select
+     `cellucid/tests/browser/fixtures/forms-catalog/forms-zarr.zarr/`, and
+     capture the settled result — crop to `#session-section` so the Dataset box
+     (`#dataset-name`, cells · genes, `Zarr v2 folder · this computer`) reads
+     out the just-validated export, with the success notification toast in
+     frame if it is still visible. Cursor on `#user-data-open-btn`.
+     `_static/screenshots/data_loading/validate-zarr-folder.png`.
   2. **SEQUENCE for Step 4 — Publish to GitHub** (line 203), which is where a
      wet-lab reader is most likely to fail and where there is currently no
      visual aid at all:
-     - **The exports root on disk**, so the reader can compare their folder to
+     - **The catalog folder on disk**, so the reader can compare their folder to
        the required layout in the code block at line 58. A file-manager or
-       `tree` terminal capture of `exports/` with `datasets.json` at the root and
-       two dataset folders beside it. Terminal is better — it shows the exact
-       command. `_static/screenshots/data_loading/exports-tree-terminal.png`,
-       cropped to the terminal, command `tree -L 2 exports/` visible with output.
-     - **The GitHub connect form filled in**, cropped to `#github-repo-block`
-       with `#github-repo-url` containing
-       `theislab/cellucid-demo-custom-datasets/exports` and cursor on
-       `#github-connect-btn` ("Connect"). This is the exact field described at
+       `tree` terminal capture of `catalog/` with `datasets.json` at the root and
+       two `.zarr` store folders beside it. Terminal is better — it shows the exact
+       command. `_static/screenshots/data_loading/catalog-tree-terminal.png`,
+       cropped to the terminal, command `tree -L 1 catalog/` visible with output.
+     - **The GitHub connect form filled in**, cropped to `#data-address-block`
+       with `#data-address` containing
+       `theislab/cellucid-demo-custom-datasets/catalog` and cursor on
+       `#data-address-open-btn` ("Open"). This is the exact field described at
        line 234 ("What repo path to enter in Cellucid") and it has no picture.
        `_static/screenshots/data_loading/github-connect-form.png`, ~246px.
      - **The validated dataset list after connecting**, cropped to
-       `#dataset-select` expanded showing the three synthetic entries — proof of
+       `#dataset-select` (labelled "Dataset from <host>") expanded showing the
+       three synthetic entries — proof of
        the "show the validated dataset list" claim at line 244.
        `_static/screenshots/data_loading/github-connected-dataset-list.png`.
-     - **The failure state**, cropped to `#github-repo-block` after connecting to
+     - **The failure state**, cropped to the notification after opening
        a path with no `datasets.json`, showing the exact error surfaced by the
        app. The troubleshooting block at line 295 quotes the message
        `datasets.json not found` — a reader matching their screen to the docs
@@ -504,8 +520,8 @@ terminal and Jupyter captures:
 
 ## user_guide/web_app/b_data_loading/03_browser_file_picker_tutorial.md
 
-- **explains** — The three browser-only loading controls (Prepared folder, H5AD
-  file, Zarr ZIP archive), when each applies, the hard browser-memory limit on
+- **explains** — The three browser-only loading controls (H5AD file, Zarr ZIP,
+  Zarr folder), when each applies, the hard browser-memory limit on
   direct H5AD, minimum `obsm` requirements, and a long symptom list.
 - **has** — two figures, both shared:
   - line 49 `data_loading/data-loading-session-panel.png` `:width: 246px` —
@@ -516,26 +532,26 @@ terminal and Jupyter captures:
 - **needs** — This page has three distinct controls and shows a picture of
   none of them being used. It is the wet-lab reader's most likely first
   self-service path and it needs a per-option sequence:
-  1. **Prepared (Option #3, line 56).** Two frames.
-     (a) Cursor on `#user-data-browse-btn`, cropped to `#user-data-block`, with
-     the button in hover state — the "What you click" instruction at line 68 is
-     one sentence with no picture.
+  1. **Zarr folder.** Two frames.
+     (a) **Open…** (`#user-data-open-btn`) clicked, its menu open, cursor on
+     `#user-data-folder-item` **Folder…**, cropped to `#user-data-block`
+     and `#user-data-open-menu` (scenario `loading-open-menu` does the same
+     with the cursor on **File…**).
      (b) The OS directory chooser open on
-     `cellucid/tests/browser/fixtures/exports/current-ui-prepared/`, cropped to
-     the dialog. The page's own troubleshooting says "The file picker won't let
-     me select a folder" and "The **Prepared** control accepts directories only"
-     (line 168) — showing a *directory* chooser rather than a *file* chooser is
-     the whole point and cannot be conveyed in prose.
-     `_static/screenshots/data_loading/picker-prepared-button.png`,
-     `_static/screenshots/data_loading/picker-prepared-directory-dialog.png`.
-  2. **H5AD (Option #4, line 88).** Cursor on `#user-data-h5ad-btn`; then the
-     loaded result cropped to `#session-section` showing SOURCE `H5AD file`.
+     `cellucid/tests/browser/fixtures/forms-catalog/forms-zarr.zarr/`, cropped to the dialog:
+     showing a *directory* chooser rather than a *file* chooser is the whole
+     point and cannot be conveyed in prose.
+     `_static/screenshots/data_loading/picker-zarr-folder-button.png`,
+     `_static/screenshots/data_loading/picker-zarr-folder-dialog.png`.
+  2. **H5AD (Option #4, line 88).** **Open… › File…** (`#user-data-file-item`);
+     then the loaded result cropped to `#session-section`, the Dataset box
+     reading `h5ad file · this computer`.
      `_static/screenshots/data_loading/picker-h5ad-loaded.png`. Note the existing
      `data_loading/h5ad-current-loaded.png` already shows this state but is
      stranded on the gallery page {doc}`/user_guide/web_app/b_data_loading/09_screenshots` — **move it here** rather
      than capturing a duplicate (see that page's entry).
   3. **Zarr ZIP (Option #5, line 138).** Same treatment with
-     `#user-data-zarr-archive-btn` and
+     **Open… › File…** and
      `cellucid/tests/browser/fixtures/current-ui-smoke.zarr.zip`; the existing
      `data_loading/zarr-zip-loaded.png` should move here.
   4. **The CSR reorganisation progress notice.** A large cell-major `.h5ad`
@@ -563,7 +579,8 @@ terminal and Jupyter captures:
      below originally asked for four more terminal images. They must not be
      taken. `cellucid serve` prints the **absolute** path of the directory it
      resolved (`server/_server.py`, `print_detail("Path", str(self.data_dir))`)
-     and AnnData logs the absolute file path beside it, so an image of these
+     and the direct-AnnData startup prints the file's absolute path the same
+     way (`Path:` under `[1/4] Detecting format`), so an image of these
      commands contains a host path by construction — a neutral prompt does not
      help, and `strings` cannot audit rendered pixels. Two such images shipped
      with a home directory and a pyenv path in them, and two more with a scratch
@@ -672,10 +689,10 @@ terminal and Jupyter captures:
      resulting refusal message. Cursor on `#load-state-btn`.
      `_static/screenshots/data_loading/session-dataset-mismatch.png`.
      This is the one capture that turns an abstract page into a diagnostic one.
-  2. **Where the id is actually visible in the UI.** Crop to `#dataset-info`
-     with the DATASET row legible, ~246px, so a reader can answer "what is my
-     dataset id right now" without opening JSON.
-     `_static/screenshots/data_loading/dataset-info-identity-row.png`.
+  2. ~~**Where the id is actually visible in the UI.**~~ **Dropped:** the
+     Dataset box (`#dataset-info`) shows the dataset's name, never its id, so
+     there is no on-screen id to crop. The page states where the id comes
+     from instead.
 - **notes** — The page is otherwise correctly text-heavy; identity is a concept,
   not a screen. Do not over-illustrate it. The `dataset_id` character rules at
   lines 53–58 (1–180 ASCII, letter/digit first, no trailing `.`, no reserved
@@ -683,13 +700,13 @@ terminal and Jupyter captures:
   `02_local_demo_tutorial.md:141` and `05_jupyter_tutorial.md:260` — verified
   consistent across all three.
 
-## user_guide/web_app/b_data_loading/07_folder_file_format_expectations_high_level_link_to_spec.md
+## user_guide/web_app/b_data_loading/07_file_format_expectations.md
 
-- **explains** — The four things Cellucid can load (prepared folder, GitHub
-  exports root, `.h5ad`, Zarr v2 store), the required and typical files inside a
-  prepared export, the `datasets.json` catalog rules, the minimum `obsm`
-  embedding keys, and the vector-field naming/`vectors/` layout with its identity
-  schema.
+- **explains** — The four things Cellucid can load (`.h5ad`, a Zarr store
+  folder, a zipped Zarr store, a `datasets.json` catalog), what a file says
+  about itself in `uns['cellucid']`, the `datasets.json` catalog rules, the
+  minimum `obsm` embedding keys, and the vector-field naming
+  (`obsm['<field>_<basis>']` beside `obsm['X_<basis>']`).
 - **has** — none.
 - **verdict** — NONE
 - **needs** — n/a.
@@ -697,13 +714,14 @@ terminal and Jupyter captures:
   JSON schemas, both of which are already rendered as code blocks that copy,
   search, and diff — a screenshot of a file tree would be strictly worse. The one
   thing that *could* be visual is the relationship between
-  `dataset_identity.json["vector_fields"]` and the integer-indexed files under
-  `vectors/` (lines 156–190), because the "`<index>` is the vector field's
+  a vector field and the arrays it was stored in (lines 156–190; the prepared
+  format that page described is gone since 0.9.5, and a field is now the `obsm`
+  array `<field>_<basis>`), because the "`<index>` is the vector field's
   position, not its name" rule at line 168 is the most-missed detail here; but a
   small annotated JSON-to-filename mapping diagram would serve better than a
   screenshot, and it is low priority. Everything on this page cross-checks
   against the spec at
-  {doc}`/user_guide/python_package/c_data_preparation_api/09_output_format_specification_exports_directory`
+  {doc}`/user_guide/python_package/c_data_preparation_api/09_cellucid_ready_anndata_specification`
   by reference rather than restatement, which is the right structure.
 
 ## user_guide/web_app/b_data_loading/08_troubleshooting_data_loading.md
@@ -719,8 +737,8 @@ terminal and Jupyter captures:
   the docs quote but never show.** A reader matching their screen against the
   docs needs the rendered form. All crops to the notification/error region only,
   ~600px display width, 2x, no cursor:
-  1. `datasets.json not found` (line 215) — reproduce by connecting
-     `#github-repo-url` to a repo path with no catalog.
+  1. `datasets.json not found` (line 215) — reproduce by opening a repo path
+     with no catalog in `#data-address`.
      `_static/screenshots/data_loading/error-datasets-json-not-found.png`.
      (Shared with ``02_local_demo_tutorial`` item 2d — capture once, use twice.)
   2. "Cellucid found nothing to plot" — reproduce with an H5AD whose `obsm`
@@ -729,16 +747,15 @@ terminal and Jupyter captures:
      `_static/screenshots/data_loading/error-nothing-to-plot.png`.
   3. "Dataset loads, but I see no points (blank canvas)" (line 131) — shared
      with ``a_orientation/02_system_requirements`` item 3.
-  4. **The broken-export refusals.** `cellucid/tests/browser/fixtures/broken-exports/`
-     ships nine deliberately invalid exports (`corrupt-payload`,
-     `mismatched-manifest`, `missing-payload`, `truncated-catalog`,
-     `wrong-format-catalog`, `truncated-payload`, and three `mixed-*` variants).
+  4. **The broken-export refusals.** `cellucid/tests/browser/fixtures/broken-catalogs/`
+     ships six deliberately invalid catalogs (`corrupt-file`, `mismatched-id`,
+     `missing-file`, `prepared-catalog`, `truncated-catalog`, `truncated-file`).
      These are already scripted for the test suite, so capturing their rendered
      error states is nearly free. Pick the three most likely in the wild —
-     `missing-payload`, `mismatched-manifest`, `truncated-catalog` — and show
-     each refusal. `_static/screenshots/data_loading/error-broken-export-<name>.png`.
+     `missing-file`, `mismatched-id`, `truncated-catalog` — and show
+     each refusal. `_static/screenshots/data_loading/error-broken-catalog-<name>.png`.
      This directly serves "make the docs complete": a reader currently has no way
-     to tell a corrupt export from a network failure.
+     to tell a corrupt file from a network failure.
 - **notes** — The DevTools instructions recur here (line 113 "DevTools → Network:
   look for 404/CORS/timeout errors (don't guess)") with the same wet-lab
   accessibility problem flagged under ``02_system_requirements``. One annotated
@@ -816,8 +833,8 @@ terminal and Jupyter captures:
      while **Coloring & Filtering** reports the exact **Showing all 3,696
      points**. That contrast between rounded and exact is a real source of reader
      confusion and is perfectly suited to one capture. Crop a vertical strip
-     containing `#dataset-info` (CELLS 4K, GENES 4K) **and** the
-     `#coloring-filtering-section` count line (Showing all 3,696 points) in the
+     containing the Dataset box's rounded `#dataset-summary` (cells · genes) **and** the
+     `#coloring-filtering-section` count line (Showing all 3,696 cells) in the
      same frame. `_static/screenshots/data_loading/pancreas-counts-rounded-vs-exact.png`.
      No cursor.
   3. The existing velocity figure is appropriate and stays — it is the one
@@ -826,14 +843,14 @@ terminal and Jupyter captures:
   sample in Build 2026-07-27.1"; the app ships `2026-07-27.24`. Cross-cutting
   note 3. Every numeric claim I could check against
   `cellucid-datasets` holds: `pancreas` is present in
-  `cellucid-datasets/exports-v3/datasets.json` with `suo` as `default`, matching
+  the sample catalog at audit time (prepared, before 0.9.5) with `suo` as `default`, matching
   line 7 ("The catalog id is exactly `pancreas`; Suo remains the catalog
   default").
 
 ## user_guide/web_app/b_data_loading/11_custom_dataset_repository.md
 
 - **explains** — How to publish a public prepared-dataset catalog on GitHub: try
-  the reference `theislab/cellucid-demo-custom-datasets/exports` repo, the exact
+  the reference `theislab/cellucid-demo-custom-datasets/catalog` repo, the exact
   `datasets.json` contract and its strict rules, building the dataset
   directories from Python or R, a four-step validation sequence, branch
   addressing, optional GitHub Pages, size discipline, and a fast-diagnosis table.
@@ -844,13 +861,13 @@ terminal and Jupyter captures:
   repository first", line 26) that is five clicks long and has no visual
   anchor. Capture that flow end to end; it doubles as the GitHub-loader
   documentation the whole section lacks. All at 1440x900, 2x:
-  1. **The empty GitHub form.** Crop to `#github-repo-block` showing the
-     placeholder `owner/repo/path/to/exports` and the **Load** button
-     (`#github-connect-btn`). `_static/screenshots/data_loading/github-form-empty.png`,
+  1. **The empty address bar.** Crop to `#data-address-block` showing the
+     placeholder `Link or localhost:8765` and the **Open** button
+     (`#data-address-open-btn`). `_static/screenshots/data_loading/github-form-empty.png`,
      ~246px.
-  2. **The form filled with the exact reference value.**
-     `#github-repo-url` containing `theislab/cellucid-demo-custom-datasets/exports`
-     (the exact string at line 36), cursor on `#github-connect-btn`.
+  2. **The bar filled with the exact reference value.**
+     `#data-address` containing `theislab/cellucid-demo-custom-datasets/catalog`
+     (the exact string at line 36), cursor on `#data-address-open-btn`.
      `_static/screenshots/data_loading/github-form-reference-repo.png`.
      (Same capture as ``02_local_demo_tutorial`` item 2b — take it once.)
   3. **The connected catalog.** `#dataset-select` expanded with all three
@@ -864,24 +881,23 @@ terminal and Jupyter captures:
      frame. `_static/screenshots/data_loading/github-synthetic-development-3d.png`.
   5. **Terminal: the local catalog validation** from "2. Test the complete
      catalog through the local server" (line 226). Plain terminal running
-     `cellucid serve ./exports --no-browser` with the printed
+     `cellucid serve ./my_dataset.zarr --no-browser` with the printed
      `Viewer URL: …/?source=remote` visible. This is the second terminal capture
      the loader paths need and it belongs here, not only on the server page.
-     `_static/screenshots/server/serve-exports-catalog-validation.png`.
+     `_static/screenshots/server/serve-store-validation.png`.
   6. **The raw-catalog check** from step 3 (line 236). Browser tab showing
-     `https://raw.githubusercontent.com/theislab/cellucid-demo-custom-datasets/main/exports/datasets.json`
+     `https://raw.githubusercontent.com/theislab/cellucid-demo-custom-datasets/HEAD/catalog/datasets.json`
      returning the JSON. The page warns the response "must return the JSON file
      itself, not an HTML sign-in page, a Git LFS pointer, or a 404" (line 251) —
      showing the good response makes the three bad ones recognisable by
      contrast. `_static/screenshots/data_loading/raw-catalog-json-response.png`.
 - **notes** — The reference repository, its three dataset ids, and their exact
   contents are corroborated by the fixture copy at
-  `cellucid/tests/browser/fixtures/demo-custom-exports/`, which contains
-  `datasets.json` plus `synthetic-cell-types-2d/`, `synthetic-development-3d/`,
-  and `synthetic-trajectory-1d/` — matching the table at line 48. The
-  `synthetic-cell-types-2d` fixture has `connectivity/`, `obs/` (4 fields),
-  `var/` (8 genes), and `embeddings/0_2d.bin.gz` and `embeddings/1_2d.bin.gz`,
-  consistent with "72 cells, 8 genes, four `obs` fields, two 2D embeddings". Good — the fixtures make every capture in
+  `cellucid/tests/browser/fixtures/demo-catalog/`, which contains
+  `datasets.json` (schema 2) plus `synthetic-cell-types-2d.zarr.zip`,
+  `synthetic-development-3d.zarr.zip` and `synthetic-trajectory-1d.zarr.zip` —
+  the same three datasets as the repository's `catalog/` Zarr folders, matching
+  the table at line 48. Good — the fixtures make every capture in
   this list scriptable offline, without depending on GitHub availability at
   capture time.
 
@@ -901,7 +917,7 @@ terminal and Jupyter captures:
      Crop to `#dataset-select` expanded showing `suo`, `garcia`, `he`,
      `kanemaru`, `pancreas` with their cell counts. Cursor: no.
      `_static/screenshots/data_loading/sample-catalog-five-entries.png`.
-     Verified against `cellucid-datasets/exports-v3/datasets.json`, which lists
+     Verified against the sample catalog at audit time (prepared, before 0.9.5), which lists
      exactly those five with `"default": "suo"`.
   2. Nothing else. The page's substance is a reproducibility argument about
      digests, environments, and what is *not* knowable; there is no screen that

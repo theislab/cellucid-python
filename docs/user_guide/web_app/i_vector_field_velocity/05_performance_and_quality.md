@@ -11,7 +11,7 @@
 
 ## Performance mental model (what actually scales)
 
-The Vector Field Overlay is GPU-intensive for two independent reasons:
+The vector field overlay is GPU-intensive for two independent reasons:
 
 1) **Particles** (simulation + drawing)  
 2) **Trails + post-processing** (full-screen passes, bloom, compositing)
@@ -22,7 +22,7 @@ Understanding which part is limiting you makes performance tuning much faster.
 
 The biggest “knob” is:
 
-- `Particle density:` (15K means 15,000 particles)
+- `Particle density` (15K means 15,000 particles)
 
 More particles:
 
@@ -47,7 +47,7 @@ Bloom involves multiple blur passes. Even with the default “subtle bloom”, i
 - you have many views open
 - particle density and trail persistence are high (more bright pixels → more bloom work)
 
-If you need speed, set `Bloom strength:` to `0.00` first.
+If you need speed, set `Bloom strength` to `0.00` first.
 
 ### 4) `Sync with LOD` only helps below full detail
 
@@ -67,10 +67,10 @@ disposal — is reachable under `Auto` on a 300K-cell dataset as well as on an
 
 To benefit:
 
-1) Enable **Visualization → Renderer settings → Level-of-Detail (LOD)**, and keep
-2) **Vector Field Overlay → Sync with LOD** enabled, and
+1) Enable **Visualization → Performance → Level of detail (LOD)**, and keep
+2) **Vector field → Sync with LOD** enabled, and
 3) pull the camera back — `Auto` coarsens at any dataset size. Lower
-   `Force LOD level:` by a few steps only when you need to go past `Auto`'s
+   `Force LOD level` by a few steps only when you need to go past `Auto`'s
    floor, which the forced slider is deliberately not bounded by.
 
 ---
@@ -81,33 +81,33 @@ These are intentionally conservative. Adjust one knob at a time.
 
 ### Laptop-safe preset
 
-- `Particle density:` 5K–10K
-- `Flow speed:` 2.0×–3.0×
-- `Trail length:` 2.0s–5.0s
-- `Opacity:` 40%–60%
+- `Particle density` 5K–10K
+- `Flow speed` 2.0×–3.0×
+- `Trail length` 2.0s–5.0s
+- `Opacity` 40%–60%
 - Advanced:
-  - `Bloom strength:` 0.00–0.05 (consider 0.00)
-  - `Trail persistence:` 0.900–0.930
-  - `Turbulence:` 0.00–0.20 (lower is more “honest”)
+  - `Bloom strength` 0.00–0.05 (consider 0.00)
+  - `Trail persistence` 0.900–0.930
+  - `Turbulence` 0.00–0.20 (lower is more “honest”)
 
 ### Desktop balanced preset
 
-- `Particle density:` 15K–50K
-- `Flow speed:` 2.0×–4.0×
-- `Trail length:` 5.0s–10.0s
-- `Opacity:` 50%–70%
+- `Particle density` 15K–50K
+- `Flow speed` 2.0×–4.0×
+- `Trail length` 5.0s–10.0s
+- `Opacity` 50%–70%
 - Advanced:
-  - `Bloom strength:` 0.05–0.10
-  - `Trail persistence:` 0.920–0.950
-  - `Turbulence:` 0.10–0.30
+  - `Bloom strength` 0.05–0.10
+  - `Trail persistence` 0.920–0.950
+  - `Turbulence` 0.10–0.30
 
 ### Presentation / cinematic preset (use with scientific caution)
 
-- `Particle density:` 50K–200K
-- `Trail length:` 8.0s–15.0s
+- `Particle density` 50K–200K
+- `Trail length` 8.0s–15.0s
 - Advanced:
-  - `Comet stretch:` 0.8–1.2
-  - `Trail persistence:` 0.950–0.990
+  - `Comet stretch` 0.8–1.2
+  - `Trail persistence` 0.950–0.990
   - modest bloom (avoid going “white hot”)
 
 :::{important}
@@ -120,12 +120,12 @@ If you are preparing publication figures, treat cinematic settings as a separate
 
 When the overlay is slow, do this in order (each step is a large win):
 
-1) Reduce `Particle density:` to **5K**.
-2) Reduce `Trail length:` to **2.0s–3.0s**.
-3) Expand **Advanced Visual Settings → HDR & Bloom** and set `Bloom strength:` to **0.00**.
+1) Reduce `Particle density` to **5K**.
+2) Reduce `Trail length` to **2.0s–3.0s**.
+3) Expand **Advanced visual settings → HDR and bloom** and set `Bloom strength` to **0.00**.
 4) If you have many snapshot views: switch to fewer views (or clear snapshots) and retry.
 5) Shrink the browser window (fewer pixels = faster) and retry.
-6) Enable renderer LOD (**Visualization → Renderer settings → Level-of-Detail (LOD)**), keep `Sync with LOD` enabled, and pull the camera back — `Auto` coarsens at any dataset size. Lower `Force LOD level:` by a few steps when you need a coarser level than `Auto`'s floor.
+6) Enable renderer LOD (**Visualization → Performance → Level of detail (LOD)**), keep `Sync with LOD` enabled, and pull the camera back — `Auto` coarsens at any dataset size. Lower `Force LOD level` by a few steps when you need a coarser level than `Auto`'s floor.
 7) If you previously changed many filters quickly: disable and re-enable the overlay (it rebuilds internal spawn tables).
 
 ---
@@ -136,46 +136,46 @@ When the overlay is slow, do this in order (each step is a large win):
 
 Common causes:
 
-- `Opacity:` too low (or 0%)
-- `Particle size:` too small
-- `Intensity:` too low, or `Exposure:` too low (advanced)
+- `Opacity` too low (or 0%)
+- `Particle size` too small
+- `Intensity` too low, or `Exposure` too low (advanced)
 - dark background + low contrast
 
 Fixes:
 
-1) Raise `Opacity:` to 60%.
-2) Raise `Particle size:` to ~2.0.
-3) If needed: raise `Intensity:` slightly before raising bloom/exposure.
+1) Raise `Opacity` to 60%.
+2) Raise `Particle size` to ~2.0.
+3) If needed: raise `Intensity` slightly before raising bloom/exposure.
 
 ### Too bright / “it looks like glowing fog”
 
 Common causes:
 
-- high `Particle density:` + long `Trail length:`
-- high `Trail persistence:` (advanced)
-- `Bloom strength:` too high (advanced)
-- too-high `Opacity:`
+- high `Particle density` + long `Trail length`
+- high `Trail persistence` (advanced)
+- `Bloom strength` too high (advanced)
+- too-high `Opacity`
 
 Fixes (fastest first):
 
-1) Reduce `Particle density:`.
-2) Reduce `Trail length:`.
-3) Reduce `Bloom strength:` or set it to 0.00.
-4) Reduce `Opacity:`.
+1) Reduce `Particle density`.
+2) Reduce `Trail length`.
+3) Reduce `Bloom strength` or set it to 0.00.
+4) Reduce `Opacity`.
 
 ### Jittery / flickery / hard to interpret
 
 Common causes:
 
 - low FPS (GPU saturated)
-- `Flow speed:` too high (particles leap between frames)
+- `Flow speed` too high (particles leap between frames)
 - very short trails (not enough temporal integration)
 
 Fixes:
 
-1) Reduce `Particle density:` until FPS recovers.
-2) Reduce `Flow speed:` to ~2.0×.
-3) Increase `Trail length:` slightly (but keep density moderate).
+1) Reduce `Particle density` until FPS recovers.
+2) Reduce `Flow speed` to ~2.0×.
+3) Increase `Trail length` slightly (but keep density moderate).
 
 ### Trails smear when you move the camera
 
@@ -183,7 +183,7 @@ Some smear is inevitable because trails integrate over time. Cellucid also compe
 
 If smearing is still too strong:
 
-- reduce `Trail length:` and/or reduce `Trail persistence:`
+- reduce `Trail length` and/or reduce `Trail persistence`
 
 ---
 
@@ -193,14 +193,14 @@ Use this when you want to quickly decide whether you have:
 “wrong settings”, “missing data”, or “GPU/browser issues”.
 
 1) Confirm **Visualization → Render mode:** is `Points`.
-2) Confirm the overlay section exists (**Vector Field Overlay:** is visible).
+2) Confirm the overlay section exists (**Vector field** is visible).
 3) Confirm `Show overlay` is enabled (checkbox stays on).
 4) Confirm the view shows an embedding that has a vector field (if the toggle is disabled, show one of the embeddings the info line names).
 5) Set conservative settings:
-   - `Particle density:` 5K
-   - `Trail length:` 3.0s
-   - `Opacity:` 60%
-   - `Bloom strength:` 0.00
+   - `Particle density` 5K
+   - `Trail length` 3.0s
+   - `Opacity` 60%
+   - `Bloom strength` 0.00
 6) If it is still slow: reduce window size and reduce number of views.
 7) If you see errors/toasts: go to {doc}`07_troubleshooting_velocity_overlay` and match the symptom.
 8) If the entire canvas goes blank or you see “WebGL context lost”: reload the page and consider lowering GPU load (density, trails, bloom, fewer views).

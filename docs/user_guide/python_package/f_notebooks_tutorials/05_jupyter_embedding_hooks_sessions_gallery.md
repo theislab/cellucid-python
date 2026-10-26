@@ -31,16 +31,16 @@ python -m pip install -e . jupyterlab
 jupyter lab docs/user_guide/python_package/f_notebooks_tutorials/jupyter_pancreas.ipynb
 ```
 
-```{figure} ../../../_static/screenshots/jupyter/pancreas-notebook-embed.png
-:alt: JupyterLab showing the checked-in 2,531-cell Pancreas H5AD in the embedded Cellucid viewer, colored by its real clusters field, with the successful ready report below.
+```{figure} ../../../_static/screenshots/jupyter/show-anndata-driven-from-python.png
+:alt: The viewer cellucid.show_anndata() serves, opened at its viewer URL, after Python called viewer.set_color_by("clusters") and viewer.highlight_cells() on the Ductal cells: the Pancreas sample coloured by clusters with the Ductal cells highlighted.
 :width: 1440px
 
-A real JupyterLab session after
-`show_anndata(DATA_PATH, height=650, dataset_name=..., dataset_id=...)`
-loading. The embedded viewer is rendering all 2,531 Pancreas cells, colored by
-the real `clusters` observation field; the output below confirms readiness,
-dimensional mode, and dataset size. The notebook remains above the viewer, so
-Python analysis and browser interaction stay in one reproducible workflow.
+What the notebook's output frame holds: the viewer `show_anndata()` serves for
+the Pancreas sample, here opened at its `viewer.viewer_url` in a browser tab,
+after the notebook ran `viewer.set_color_by("clusters")` and
+`viewer.highlight_cells(...)` on the Ductal cells. The Dataset box reads
+*Zarr v2 folder · Python*: the data comes from the kernel's server, not from
+a website.
 ```
 
 ## Quick troubleshooting if hooks do not fire
@@ -49,26 +49,43 @@ Python analysis and browser interaction stay in one reproducible workflow.
 2. Confirm a selection into a highlight group; moving a lasso without
    confirming it does not emit the selection event used by the example.
 3. Run `viewer.debug_connection()` and check that `server_health.status` is
-   `ok` and that the dataset identity probe matches.
+   `ok` and that the served store answers its probe (`anndata_store_probes`:
+   a `206` range read).
 4. For a remote kernel, expose the server through your notebook deployment or
    an SSH tunnel and pass its exact base URL as `client_server_url=`.
 
-```{figure} ../../../_static/screenshots/jupyter/pancreas-debug-connection.png
-:alt: JupyterLab showing the successful direct-AnnData Pancreas connection report, exact web build, and explicit viewer cleanup cell.
-:width: 1440px
+A healthy report, abridged (the real one also carries the viewer and server
+URLs with the viewer's token, the web cache's absolute path, the browser's
+user agent and timestamps; `<build>` and `<version>` are your web build and
+package version):
 
-The same real notebook after its connection check: the local server is running,
-health is `ok`, the Pancreas dataset identity is verified, the frontend
-round-trip succeeded, and the exact web build is recorded. The final
-`viewer.stop()` cell makes cleanup explicit.
+```text
+{'server_running': True,
+ 'channel_connected': True,
+ 'web_ui': {'cache': {'index_html_build_id': '<build>',
+                      'verified_build_id': '<build>', ...}, ...},
+ 'state': {'ready': {'n_cells': 3696, 'dimensions': 3}, ...},
+ 'server_health': {'status': 'ok', 'type': 'anndata', 'version': '<version>',
+                   'format': 'zarr', 'n_cells': 3696, 'n_genes': 3753},
+ 'anndata_store_probes': {'pancreas': {'head': {'status': 200, ...},
+                                       'range': {'status': 206,
+                                                 'content_range': 'bytes 0-0/19089'}}},
+ 'recent_events': {'count': 2, 'by_type': {'data_mapping': 1, 'ready': 1},
+                   'command_errors': []},
+ 'frontend_roundtrip': {'ok': True, 'pong': {...}},
+ 'frontend_debug_snapshot': {'ok': True, 'snapshot': {'connected': True, ...}},
+ ...}
 ```
 
+The server is running, `server_health.status` is `ok` and names the served
+dataset's size, the store answers a one-byte range read with `206`, the
+frontend round-trip succeeded, and `web_ui` records the exact web build the
+viewer was checked against. A final `viewer.stop()` makes cleanup explicit.
+
 ```{note}
-Screenshot provenance: for this documentation capture only, the notebook used
-the web app from the same checked-out repository at
-`http://127.0.0.1:4173`. The downloadable notebook deliberately keeps the
-normal released-build resolution path while passing the exact checked-in data
-path, dataset name, and stable dataset ID.
+The downloadable notebook keeps the normal released-build resolution path (the
+web app comes from www.cellucid.com, cached) while passing the exact
+checked-in data path, dataset name, and stable dataset ID.
 ```
 
 ```{tip}

@@ -3,29 +3,36 @@
 This tutorial covers the **browser-only** ways to load data into Cellucid.
 
 You will use the Cellucid web UI to pick one of:
-- a **prepared export folder**
-- a **`.h5ad` file** (works, but has hard limits)
-- a portable **`.zarr.zip` or `.zip` archive** containing one Zarr v2 store
+- a **`.h5ad` file**, of any size
+- an **AnnData Zarr store folder** (`.zarr`, Zarr v2 or v3), as `cellucid.prepare()`
+  and `cellucid_prepare()` write it by default
+- a portable **`.zarr.zip` or `.zip` archive** containing one Zarr store (v2 or v3)
 
-If your dataset is large or you want maximum reliability/performance, use **Server Mode** ({doc}`04_server_tutorial`).
+The same buttons open a Seurat or SingleCellExperiment `.rds`, a Loom file, a
+10x Cell Ranger `.h5` or `outs/` folder, a MatrixMarket folder and a MuData
+(`.h5mu`, MuData Zarr): {doc}`17_open_r_objects`, {doc}`18_open_loom_and_10x`
+and {doc}`19_multimodal_mudata` say what each holds.
+
+If your dataset lives on another machine, use **Server Mode** ({doc}`04_server_tutorial`): it hands the file to the same reader in the browser.
 
 ## At A Glance
 
 **Audience**
 - Wet lab / beginner: follow the click-by-click path; you do not need Python.
-- Computational users: pay attention to the `.h5ad` vs `.zarr` limitations and when to pre-export.
+- Computational users: pay attention to how the expression matrix is stored, and when to write a Cellucid-ready AnnData with `prepare()`.
 
 **Time**
-- Prepared folder picker: ~2–5 minutes
-- `.h5ad` / Zarr ZIP picker: ~5–10 minutes
+- ~2–5 minutes
 
 **Prerequisites**
 - A current stable desktop release of Chrome, Edge, Firefox, or Safari with
   WebGL2 and `DecompressionStream('gzip')`
 - A dataset in one of these forms:
-  - exported folder from `prepare()`
   - `.h5ad`
-  - `.zarr.zip` or `.zip` containing one complete AnnData Zarr v2 store
+  - a `.zarr` store folder
+  - `.zarr.zip` or `.zip` containing one complete AnnData Zarr store (v2 or v3)
+  - or any other format of {doc}`07_file_format_expectations` (R objects,
+    Loom, 10x, MatrixMarket, MuData)
 
 **Privacy model**
 - File picker modes load data from your computer into your browser.
@@ -34,14 +41,19 @@ If your dataset is large or you want maximum reliability/performance, use **Serv
 ## Fast Path (Wet Lab Friendly)
 
 1) Open [Cellucid](https://www.cellucid.com/).
-2) Expand **Session** in the left sidebar and find **Local data:**.
-3) Choose the button matching exactly what you have. The three sit together, in
-   this order:
-   - **H5AD** — one current-schema `.h5ad`, of any size
-   - **Zarr ZIP** — one `.zarr.zip` or `.zip` archive
-   - **Prepared** — a folder created by `prepare()`
-   Or drag the file or folder from your file manager and drop it onto the
-   viewer; see {ref}`drop-to-open`.
+2) Expand **Session** in the left sidebar and find **File or folder** under
+   **Open data**.
+3) Click **Open…** and choose what you have:
+   - **File…** — one `.h5ad` (of any size), one `.zarr.zip` / `.zip` archive,
+     one Seurat or SingleCellExperiment `.rds` / `.rda` / `.RData`
+     ({doc}`17_open_r_objects`), or one `.loom`, 10x `.h5` or `.h5mu` file
+     ({doc}`18_open_loom_and_10x`, {doc}`19_multimodal_mudata`)
+   - **Folder…** — one `.zarr` store folder, one Cell Ranger `outs/` folder or
+     one MatrixMarket folder (choose the folder itself)
+   A browser's file dialog picks files *or* a folder, never both, which is why
+   **Open…** asks first. What you pick decides how it is read. Or drag the file
+   or folder from your file manager and drop it anywhere on the page; see
+   {ref}`drop-to-open`.
 4) Wait for the dataset to load.
 5) Confirm success:
    - you see points rendered in the canvas
@@ -50,64 +62,87 @@ If your dataset is large or you want maximum reliability/performance, use **Serv
 If you don’t see points after loading, jump to the troubleshooting section at the end.
 
 ```{figure} ../../../_static/screenshots/data_loading/choose-local-data-control.png
-:alt: Close-up of the Local data controls: an H5AD button and a Zarr ZIP button side by side, a full-width Prepared button beneath them, and a mouse pointer resting on Prepared.
+:alt: Close-up of File or folder: the full-width Open… button with its menu open, showing File… (AnnData, Seurat/SCE .rds/.rda, Loom, 10x .h5, .h5mu) and Folder… (Zarr, 10x outs, MatrixMarket), with the pointer on File….
 :width: 496px
 
-The three local-data controls, with the pointer on **Prepared**. Each one opens
-a different kind of picker, so choosing the wrong button is the most common
-reason a selection is refused: **Prepared** asks for a *folder*, the other two
-ask for a single *file*.
+**Open…** under **File or folder**, with its menu open. **Folder…** asks
+for a *folder*; **File…** asks for a single *file*.
 ```
 
 ```{figure} ../../../_static/screenshots/data_loading/data-loading-session-panel.png
-:alt: The full Session panel: a dataset summary table, a Sample datasets dropdown, the three Local data buttons, a Remote server field with a Connect button, a GitHub data field with a Connect button, and Save State and Load State buttons.
-:width: 524px
+:alt: The Session panel with the Pancreatic endocrinogenesis sample loaded: the Dataset box with its name, cells and genes, format and host, description and a collapsed Details; Open data with the Sample dataset dropdown, the Open… button and the Link or server bar; Save and Load under Session file; and the collapsed Data mapping group.
+:width: 532px
 
-Where the local-data controls sit in the whole Session panel. Every loading path
-has its own labelled group, and **Save State** / **Load State** stay beside them.
+Where **Open…** sits in the whole Session panel. Every loading path has its own
+label under **Open data**, and **Save** / **Load** sit under **Session file**,
+just below.
 ```
 
 :::{important}
 **If you cancel the file chooser, Cellucid says nothing at all.** No error, no
 notification, no spinner — the app simply carries on with whatever was already
-loaded. So “I clicked **Prepared** and nothing happened” almost always means the
-dialog was dismissed rather than confirmed. Click the button again and complete
-the selection.
+loaded. So “I chose **Folder…** and nothing happened” almost always means
+the dialog was dismissed rather than confirmed. Open it again and complete the
+selection.
 :::
 
-## Option #3 — Load a Prepared Export Folder
+**Picking the file that is already open opens it again**, from the start: the
+view returns to what the file says, and what you changed since (a selection,
+a highlight, the coloring) is cleared, so save a session first to keep it
+({doc}`../l_sessions_sharing/03_save_restore_ux`). The same holds for a newer copy of
+the file that states the same dataset id. An `.rds` file or a MatrixMarket
+folder opened again in the same tab reads what was kept the first time
+({doc}`17_open_r_objects`).
+
+## Load a Zarr Store Folder
 
 ### When to use this
-- You (or a collaborator) already ran `cellucid.prepare(...)` in Python.
-- You want the **fastest** and **most reliable** browser experience.
-
-### Why this is recommended
-Exported folders are designed for the viewer:
-- embeddings and obs fields are compact
-- gene expression is stored in a way Cellucid can fetch on demand
-- the browser avoids loading a massive monolithic file
+- You have an AnnData Zarr store folder (`.zarr`), for example the one
+  `cellucid.prepare()` or `cellucid_prepare()` writes by default, or
+  `adata.write_zarr("data.zarr")`.
 
 ### What you click
-Click **Prepared** and select the export directory.
+Click **Open…**, then **Folder…**, and choose the `.zarr` folder itself
+(not a file inside it, and not its parent folder). Your browser may ask you to confirm that the
+site may read the folder's files ("upload" in its wording: nothing leaves your
+computer). Dropping the folder onto the viewer does the same.
 
 ### What success looks like
-- Points appear quickly.
+- Points appear quickly: opening reads the store's metadata, the observation
+  table and the embedding shown first.
 - Field lists are populated.
-- Gene search responds quickly (first gene may take a moment).
+- A gene reads its own chunks when you colour by it.
+
+### Hidden metadata files
+A Zarr v2 store keeps its metadata in files whose names start with a dot
+(`.zgroup`, `.zarray`, `.zattrs`, `.zmetadata`); a Zarr v3 store uses
+`zarr.json`, which is not hidden. The folder dialogs of Chrome, Edge and
+Firefox include hidden files in the selection. **Safari's leaves them out**, so
+a Zarr v2 folder chosen with **Folder…** in Safari arrives without its
+metadata, and Cellucid says so: "This browser left out the folder's hidden
+files … Drag the folder onto the page, or open its .zarr.zip." In Safari:
+
+- **drag the `.zarr` folder** from Finder and drop it anywhere on the page, or
+- open the store as a **`.zarr.zip`** archive (**Open… › File…**), or
+- write it as Zarr v3 (`prepare(..., format="zarr", zarr_format=3)`), whose
+  metadata file is not hidden, or serve it with `cellucid serve`, which every
+  browser reads.
 
 **Vector fields (optional)**
-- If the export includes vector fields (e.g. RNA velocity), you’ll be able to enable the overlay after loading.
-- If the overlay toggle is disabled or the dropdown is empty, it usually means the view shows an embedding the dataset has no vectors for (a vector field is bound to the embedding it was computed on), or they weren’t exported.
+- `obsm` arrays named `<field>_<basis>` (scVelo's convention: `velocity_umap`,
+  `velocity_umap_3d`, `velocity_branches`) are drawn by the velocity overlay
+  over the embedding `X_<basis>` they are named for, when both have the same
+  number of columns; nothing has to be switched on.
 - See {doc}`../i_vector_field_velocity/index`.
 
 ```{figure} ../../../_static/screenshots/web_app/app-overview-cell-type.png
-:alt: Cellucid web app with the sidebar open and a single-cell embedding colored by cell type.
+:alt: The whole Cellucid window with the Pancreas sample coloured by cell_type: the sidebar shows Coloring and filtering with the categorical field selected and its eight-row legend, and the 3D embedding fills the canvas in the matching colours.
 :width: 1440px
 
 A loaded dataset in Cellucid: the sidebar controls the active view while the categorical legend maps directly to the colored points.
 ```
 
-## Option #4 — Load a `.h5ad` File Directly
+## Load a `.h5ad` File Directly
 
 ### When to use this
 - You have a `.h5ad`, of any size, and want to look at it without Python.
@@ -137,25 +172,20 @@ Practical consequences:
 - Memory holds what is shown: positions and the fields and genes in use, four
   bytes per cell each.
 - A very large CSR matrix takes a while to reorganise the first time; the
-  progress notice says how far it is. Server mode reads genes from Python
-  instead and needs no reorganisation.
+  progress notice says how far it is. A column-major (CSC) matrix needs no
+  reorganisation.
 - A browser without private file storage (some private windows) scans the file
   for each gene once a CSR matrix is too large for memory, which is slow; use
-  server mode there.
+  a window with site storage there.
 
-### Server mode, for a file you open often
-Server mode reads genes from Python on request:
+### Server mode, for a file on another machine
+Server mode hands the same file to this reader, from wherever it is stored:
 
 ```bash
 cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-dataset
 ```
 
-Then open the exact **Viewer URL** printed in the terminal. With the default
-port it is:
-
-```text
-http://127.0.0.1:8765/?anndata=true
-```
+Then open the exact **Viewer URL** printed in the terminal.
 
 ### `.h5ad` minimum requirements
 
@@ -172,15 +202,15 @@ counts as one column). Which array each dimension shows is decided like this:
   spatial coordinates, …, and last the first two columns of a wide array such
   as `X_pca`). The guess is marked *guessed* and a notification says what is
   shown.
-- Any other array can be chosen afterwards under **Session › Dataset › Data
-  mapping**, at any columns.
+- Any other array can be chosen afterwards under **Session › Data mapping**,
+  at any columns.
 
-This is the same rule the Python package applies, so one file opens the same
+`cellucid serve` hands a file to this same reader, so one file opens the same
 way in this picker and through `cellucid serve`. See {doc}`13_data_mapping`.
 
 Optional (but highly recommended):
 - `obs` columns for coloring and filtering (numeric columns are read as
-  32-bit floats, exactly as `cellucid.prepare` exports them: an integer above
+  32-bit floats: an integer above
   16,777,216 becomes its nearest 32-bit value, so keep identifier columns as
   strings if their exact values matter)
 - an expression matrix (dense or sparse) for gene coloring: `X`, any layer or
@@ -189,37 +219,37 @@ Optional (but highly recommended):
 - `obsp['connectivities']` if you want connectivity visualization
 
 Optional (if you want the vector field / velocity overlay):
-- Per-cell vectors in `obsm` using the naming convention `<field>_umap_<dim>d` (e.g. `velocity_umap_2d`, `velocity_umap_3d`).
-- The overlay dropdown shows the fields bound to the embedding the view shows: `<field>_umap_<d>d` is bound to `X_umap_<d>d` (or `X_umap`), so it is drawn only while the view shows that UMAP.
-- This picker binds them on its own — there is nothing to switch on. (The
-  Python paths are the opposite: `cellucid serve` and `show_anndata()` bind
-  none unless asked. See {doc}`04_server_tutorial`.) Any other array that fits
-  an embedding (`velocity_pca` on `X_pca`) is bound under **Session › Data
+- Per-cell vectors in `obsm` using scVelo's naming convention `<field>_<basis>` for the embedding `X_<basis>` (e.g. `velocity_umap` for `X_umap`, `velocity_umap_3d` for `X_umap_3d`, `velocity_branches` for `X_branches`), with as many columns as that embedding.
+- The overlay dropdown shows the fields bound to the embedding the view shows: `<field>_<basis>` is bound to `X_<basis>`, so it is drawn only while the view shows that embedding. The dropdown lists it by its `<field>` part (`velocity`).
+- This picker binds them on its own — there is nothing to switch on, and the
+  same holds for a file served by `cellucid serve` or `show_anndata()`. Any other array that fits
+  an embedding (a 2-column `drift` on `X_pca`) is bound under **Session › Data
   mapping › Vector fields**; values are read only when the overlay shows them.
 
-## Option #5 — Load a Zarr ZIP Archive Directly
+## Load a Zarr ZIP Archive Directly
 
 ### When to use this
-- You have a complete AnnData Zarr v2 store packaged as `.zarr.zip` or `.zip`.
+- You have a complete AnnData Zarr store (v2 or v3) packaged as `.zarr.zip` or `.zip`.
 - You want a portable single-file selection in any supported browser.
 
 ### Practical expectations
 - Cellucid validates the ZIP directory and Zarr metadata before adopting the
   dataset.
 - Gene expression is read by Zarr chunk on demand. Decoded chunks of a dense
-  `X` are kept in a cache of up to 256 MiB, so genes that share a chunk
-  column strip decode those chunks once instead of once per gene.
-- Archive entries, decoded chunks, and the active embedding still consume
-  browser memory and are bounded by the documented reader limits.
+  `X` are kept in a cache sized as a share of the memory the browser reports,
+  so genes that share a chunk column strip decode those chunks once instead
+  of once per gene.
+- Decoded chunks and the active embedding consume browser memory; what is
+  kept for reuse is released first when memory runs short.
 
-For an extremely large store, prefer a prepared Cellucid export. Python server
-mode loads `.zarr` eagerly, so use it only when the store fits server memory.
+A store folder needs no zipping: open it with **Open… › Folder…**, or serve it
+with `cellucid serve`, which hands it to the browser key by key.
 
 The archive may contain the Zarr store at its root or inside exactly one root
 directory. It must preserve dotfiles such as `.zgroup`, `.zattrs`, and
 `.zarray`. Vector fields use the same exact `obsm` convention as H5AD:
-`velocity_umap_2d`, `T_fwd_umap_3d`, and other
-`<field>_umap_<dim>d` keys.
+`velocity_umap`, `T_fwd_umap_3d`, and other
+`<field>_<basis>` keys beside their `X_<basis>` embedding.
 
 ## What each refusal looks like on screen
 
@@ -229,7 +259,7 @@ usually the diagnosis. These are the three you are most likely to meet.
 ### You picked something that is not an H5AD
 
 ```{figure} ../../../_static/screenshots/data_loading/fail-h5ad-wrong-file.png
-:alt: A Cellucid notification reading "The selected file is not a valid HDF5/H5AD file. Choose an AnnData .h5ad file or regenerate it with AnnData.", with a dismiss button at its right.
+:alt: A Cellucid notification reading "The selected file is not a valid HDF5 file, so it cannot be an AnnData (.h5ad) file. Save it again with anndata…", with a dismiss button at its right.
 :width: 760px
 
 A CSV renamed to `.h5ad`. Cellucid checks the file's leading bytes, not its
@@ -242,7 +272,7 @@ A file without a UMAP is not refused: it opens on a best guess, and a
 notification says what is shown, for example:
 
 ```text
-This file has no default UMAP (X_umap_1d, X_umap_2d, X_umap_3d or X_umap).
+This file has no default UMAP (X_umap_1d, X_umap_2d, X_umap_3d, X_umap, X_UMAP, X_wnn.umap or X_ref.umap).
 Showing 'X_tsne' as 2D. Change it under Session › Data mapping.
 ```
 
@@ -255,7 +285,8 @@ what `obsm` holds and why each entry was not used:
 ```text
 Cellucid found nothing to plot. It needs an obsm array with one row per cell
 (10,000) and at least one numeric column. obsm holds: X_df (table),
-spatial (10,000 × 2, NaN at cell 17).
+spatial (10,000 × 2, NaN at cell 17). Add a 2-D embedding to obsm (for example
+with sc.tl.umap in Scanpy), then open the data again.
 ```
 
 The list is the useful half: a table, a sparse array, or a dense array with the
@@ -270,8 +301,8 @@ embedding (for example `sc.tl.umap(adata)`), and open the file again.
   `.zgroup`, `.zattrs`, or `.zarray` entries.
 
 ### “The file picker won’t let me select a folder”
-- The **Prepared** control accepts directories only; H5AD and Zarr ZIP accept
-  one file.
+- **Open… › Folder…** accepts folders only; **Open… › File…** accepts one
+  file.
 - In an embedded or managed browser, directory access may be disabled by the
   embedding policy. Open the standalone Cellucid page or choose the explicit
   Python server workflow.
@@ -286,15 +317,16 @@ embedding (for example `sc.tl.umap(adata)`), and open the file again.
 
 ### “Vector field overlay toggle is disabled / dropdown is empty”
 - Your dataset does not contain any vector fields.
-- Vector fields exist but are not named using the expected `*_umap_2d` / `*_umap_3d` convention.
+- Vector fields exist but are not named `<field>_<basis>` after an `X_<basis>` embedding in the file (for example `velocity_umap_2d` beside a bare `X_umap` with no `X_umap_2d`; scVelo's `velocity_umap` binds).
 - You’re in 3D but only 2D vectors exist (or vice versa).
 
 ## Browser and file-selection boundaries
 
-- **Prepared** uses the directory-input capability available in supported
-  current desktop browsers.
-- **H5AD** and **Zarr ZIP** use ordinary single-file inputs and have the same
-  validation contract in Chrome, Edge, Firefox, and Safari.
+- **Folder…** uses the folder-input capability available in supported
+  current desktop browsers; Safari's leaves out hidden files (see
+  [Hidden metadata files](#hidden-metadata-files)).
+- **File…** is an ordinary single-file input, with the same validation
+  contract in Chrome, Edge, Firefox, and Safari.
 - **Permission prompts**: if you deny folder access, Cellucid cannot read files.
 - **Large `.h5ad`**: read from disk as each view needs it; a cell-major matrix is reorganised by gene in the background, with a progress notice.
 - **Zarr ZIP root**: the archive must contain either root metadata at archive
@@ -306,20 +338,19 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 
 ---
 
-### Symptom: “I clicked Prepared, but nothing happens”
+### Symptom: “I chose Folder…, but nothing happens”
 
 **Likely causes (ordered)**
 1) **You dismissed the file chooser.** A cancelled selection is deliberately
    silent — Cellucid shows no error and keeps the dataset you already had.
-2) You denied directory access or a managed-browser policy blocked it.
-3) The UI is open in an embedded context that disallows directory access.
-4) You clicked H5AD or Zarr ZIP instead of **Prepared**.
+2) You denied folder access or a managed-browser policy blocked it.
+3) The UI is open in an embedded context that disallows folder access.
+4) You chose **File…** instead of **Folder…**.
 
 **How to confirm**
-- Click **Prepared** again and complete the selection. If a dataset then loads,
-  cause 1 was it.
-- Open Cellucid as a standalone page and click **Prepared**.
-- Try selecting a different folder (a very small test export).
+- Choose **Open… › Folder…** again and complete the selection. If a
+  dataset then loads, cause 1 was it.
+- Open Cellucid as a standalone page and choose **Folder…**.
 
 **Fix**
 - Allow directory access and use the standalone page.
@@ -338,9 +369,9 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 - Watch the browser tab’s memory usage.
 
 **Fix**
-- Use server mode:
-  `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`.
-- Or export once with `prepare()` and load the export folder.
+- For a cell-major (CSR) matrix, wait for the reorganisation progress notice
+  to finish, or save the matrix column-major (CSC).
+- Or write a Cellucid-ready AnnData once with `prepare()` and open that.
 
 ---
 
@@ -354,7 +385,7 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
   every cell.
 
 **How to confirm**
-- Read the message itself: it ends with `obsm holds: …`, which lists every
+- Read the message itself: its `obsm holds: …` part lists every
   entry with its shape and, for a dense array, the reason it was not used
   (for example `NaN at cell 17`).
 - In Python:
@@ -389,17 +420,18 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 ### Symptom: “Zarr ZIP selected, but it errors immediately”
 
 **Likely causes**
-- The archive does not contain exactly one valid AnnData Zarr v2 store.
+- The archive does not contain exactly one valid AnnData Zarr store.
 - Required `.zgroup`, `.zattrs`, or `.zarray` entries are missing.
 - The ZIP is encrypted, multi-disk, uses an unsupported compression method, or
   exceeds a reader limit.
 
 **Fix**
-- With the supported AnnData version, re-export with
+- With the supported AnnData version, write the store again with
   `adata.write_zarr("data.zarr")`; the resulting store must contain the Zarr
-  v2 root markers `.zgroup` and `.zattrs`.
+  v2 root marker `.zgroup` (stores from anndata before 0.8 have no root
+  `.zattrs` and open as they are).
 - Package the complete store while preserving its dotfiles, then select the
-  resulting `.zarr.zip` or `.zip` file with **Zarr ZIP**.
+  resulting `.zarr.zip` or `.zip` file with **Open… › File…**.
 
 ---
 
@@ -412,7 +444,7 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 - In Python: `print(adata.obs.head())`
 
 **Fix**
-- Save a clean copy of your AnnData (or export via `prepare()`).
+- Save a clean copy of your AnnData (or write one with `prepare()`).
 
 ---
 
@@ -420,13 +452,15 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 
 **Likely causes (ordered)**
 1) The dataset truly has no vector fields.
-2) Vector fields exist, but their keys do not follow the `<field>_umap_<dim>d`
-   default rule, so nothing is bound to them by default.
+2) Vector fields exist, but their keys do not follow the `<field>_<basis>`
+   default rule (no `X_<basis>` in the file matches, as for `velocity_umap_2d`
+   beside a bare `X_umap`), or they do not have as many columns as their
+   embedding, so nothing is bound to them by default.
 3) The view shows an embedding the field is not bound to (for example the 3D
    UMAP while the field is bound to the 2D one).
 
 **How to confirm**
-- In Python, list `obsm` keys and look for entries like `velocity_umap_2d`:
+- In Python, list `obsm` keys and look for entries like `velocity_umap` beside `X_umap`:
 
   ```python
   print(adata.obsm.keys())
@@ -434,9 +468,10 @@ Use this like a checklist. Most issues are diagnosable in < 2 minutes.
 
 **Fix**
 - Bind the array yourself under **Session › Data mapping › Vector fields**, or
-  rename it to follow the `*_umap_2d` / `*_umap_3d` default rule.
+  rename it `<field>_<basis>` after its embedding `X_<basis>` (`velocity_umap`
+  for `X_umap`).
 - Show an embedding the field is bound to; the overlay info line names them.
-- If you’re using exports, re-export with `prepare(..., vector_fields={...})`.
+- Or write the file again with `prepare(..., vector_fields={...})`.
 
 For overlay UI behavior and deeper debugging, see:
 - {doc}`../i_vector_field_velocity/index`
@@ -455,7 +490,8 @@ Your dataset is open. The next thing most people want is to see something in it:
 
 If loading itself is what you still need:
 
-- Format expectations (exports vs `.h5ad` vs `.zarr`): {doc}`07_folder_file_format_expectations_high_level_link_to_spec`
+- Format expectations (`.h5ad`, Zarr, catalogs, `uns['cellucid']`): {doc}`07_file_format_expectations`
 - Full troubleshooting matrix: {doc}`08_troubleshooting_data_loading`
 - If browser-only loading is too slow or unreliable for your dataset → {doc}`04_server_tutorial`
 - If you are working in notebooks and want programmatic interaction → {doc}`05_jupyter_tutorial`
+- Writing a Cellucid-ready file to open here → {doc}`../../python_package/c_data_preparation_api/01_prepare_overview` (Python) or {doc}`../../r_package/c_data_preparation_api/01_cellucid_prepare_overview` (R)

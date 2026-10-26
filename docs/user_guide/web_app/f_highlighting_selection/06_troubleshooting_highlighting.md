@@ -8,9 +8,11 @@ Format: **Symptom → likely causes → how to confirm → fix → prevention**.
 
 These checks solve most “it’s broken” reports in under a minute:
 
-1) **Read the line under the Highlight mode buttons.** A gesture the app
-   consumed but could not turn into a step explains itself there, in words.
-   See **What the app tells you** below before assuming a tool is broken.
+1) **Read the line under the Tool buttons.** A gesture the app
+   consumed but could not turn into a step explains itself there, in words;
+   the tool's own gesture, or what it needs first, is the first line of the
+   Selection (i). See **What the app tells you** below before assuming a tool
+   is broken.
 2) **Filters:** are you filtering out the cells you expect to see?
    - See {doc}`../e_filtering/index`
 3) **Active page:** are you on the highlight page you think you are on?
@@ -26,8 +28,8 @@ These checks solve most “it’s broken” reports in under a minute:
    - On a touch screen there is no `Alt`: is **Select mode** on (its switch, in
      the Highlighting panel or on the selection bar at the bottom of the plot)?
      See {ref}`select-mode`.
-8) **Tool mode:** are you in the tool you think you are in (Lasso vs Proximity vs KNN vs Annotation based)?
-   - **Annotation based** additionally needs a coloured field. With none, the
+8) **Tool mode:** are you in the tool you think you are in (Lasso vs Proximity vs KNN vs Annotation)?
+   - **Annotation** additionally needs a coloured field. With none, the
      panel replaces its `Alt+click` invitation with the sentence that asks for
      one; the other three tools never read the active field.
 9) **Where you released:** did the mouse come up over the plot, or over the
@@ -40,7 +42,7 @@ If these do not resolve it, jump to the symptom that matches what you see.
 
 ## What the app tells you
 
-Selection tools write one short line under the **Highlight mode** buttons in the
+Selection tools write one short line under the **Tool** buttons in the
 **Highlighting** panel. That is the only place these messages appear — they are
 not toasts and there is no message history, because every tool reuses the same
 one-line slot. Repeating a gesture that fails the same way repaints an identical
@@ -54,31 +56,31 @@ Two rules hold for every message in the table below:
   the candidate set you already had, even though the drag preview wiped it
   while you were gesturing. The readout above the message tells you which case
   you are in: `Step N: … current selection` if the gesture interrupted a
-  selection that still stands, or the tool’s ordinary help text if nothing was
-  in progress.
+  selection that still stands, or nothing above it if nothing was in
+  progress.
 
 | What you see | What happened | What to do |
 |---|---|---|
 | “That click did not land on a cell, so there is nothing to select. Zoom in or raise Point size to make cells easier to hit: only the cells the viewer is currently drawing can be clicked.” | `Alt+click` hit no point. Points draw about a pixel wide when zoomed out, so this is ordinary rather than exceptional. | Zoom in or raise **Point size**, then click again. A click hits the dot drawn under the pointer, at the size it is drawn, so a bigger dot is a bigger target. |
 | “That gesture ended outside the view, so nothing was selected.” | You released the mouse somewhere other than the plot. The gesture was abandoned deliberately — see the symptom below. | Repeat the gesture and release over the plot. |
 | “That gesture was interrupted before it ended, by a second finger or by the browser, so nothing was selected.” | Select mode: a second finger landed while a one-finger selection was still being drawn (two fingers always zoom and pan), or the browser took the touch over. | Draw with one finger only, and lift it before pinching or panning. |
-| “That cell has no value on that panel's field, so there is nothing to select.” | Annotation based: the clicked cell is missing a value on the field of the panel you pressed, so the rule resolves to no cells. | Click a cell that has a value, or color that panel by a field that covers it. |
-| “That panel is not colored by a field, so there is nothing to select.” | Annotation based: the panel you pressed is colored by no field, whatever the focused view is colored by. The gesture is read on the panel you press. | Color that panel by a field, or select in a panel that has one. |
+| “That cell has no value on that panel's field, so there is nothing to select.” | Annotation: the clicked cell is missing a value on the field of the panel you pressed, so the rule resolves to no cells. | Click a cell that has a value, or color that panel by a field that covers it. |
+| “That panel is not colored by a field, so there is nothing to select.” | Annotation: the panel you pressed is colored by no field, whatever the focused view is colored by. The gesture is read on the panel you press. | Color that panel by a field, or select in a panel that has one. |
 | “That gesture did not change the selection.” | The gesture resolved to exactly the set you already had. | Nothing is wrong. Draw elsewhere, or change the modifier key. |
-| “Color by a field first (Coloring & filtering), then Alt+click a cell.” | Annotation based is selected but no panel on screen is colored by a field, so no press can select anything. | Choose a categorical or continuous field first. |
+| “Color by a field first (Coloring & filtering), then Alt+click a cell.” (first line of the Selection (i)) | Annotation is selected but no panel on screen is colored by a field, so no press can select anything. | Choose a categorical or continuous field first. |
 
 ```{figure} ../../../_static/screenshots/highlighting_selection/read-missed-click-notice.png
-:alt: A proximity Alt+click on empty space: the pointer is pressed above the embedding where no cell is drawn, and the ringed line in the Highlighting panel adds "That click did not land on a cell, so there is nothing to select. Zoom in or raise Point size to make cells easier to hit: only the cells the viewer is currently drawing can be clicked." under the Proximity drag help text.
+:alt: A proximity Alt+click on empty space: the pointer is pressed above the embedding where no cell is drawn, and the ringed line in the Highlighting panel, under the tool buttons, reads "That click did not land on a cell, so there is nothing to select. Zoom in or raise Point size to make cells easier to hit: only the cells the viewer is currently drawing can be clicked."
 :width: 1440px
 
 Where to look. The pointer was pressed in empty space above the embedding;
-the explanation appears on the left, under the **Highlight mode** buttons. It is
-appended to the mode's usual help text, not shown in its place.
+the explanation appears on the left, under the **Tool** buttons, where a step
+readout would otherwise be.
 ```
 
 Which tools report which:
 
-- **“did not land on a cell”** comes from **Annotation based**, **KNN drag**,
+- **“did not land on a cell”** comes from **Annotation**, **KNN drag**,
   and **Proximity drag** — the tools that need a cell under the pointer to
   begin. Lasso does not need one, so it never reports this. Proximity reports it
   only when it cannot place a centre at all; with a candidate set already
@@ -211,7 +213,7 @@ What removes a selection depends on whether it is still in progress or saved:
 4) Browser/OS intercepts `Alt` in your environment (rare but possible).
 
 ### How to confirm
-- **Look under the Highlight mode buttons first.** If the app consumed the
+- **Look under the Tool buttons first.** If the app consumed the
   gesture and threw it away, it says so there in words. No message at all means
   the gesture never started, which is a different problem — one of the causes
   above.
@@ -238,7 +240,7 @@ What removes a selection depends on whether it is still in progress or saved:
 
 You released the mouse somewhere other than the plot — over the floating
 sidebar, over a notification toast that appeared mid-drag, or outside the
-browser window. The message under the **Highlight mode** buttons reads:
+browser window. The message under the **Tool** buttons reads:
 
 > That gesture ended outside the view, so nothing was selected.
 
@@ -258,8 +260,8 @@ based** selection, not only Lasso.
 - Your existing candidate set, exactly as it was: no step was recorded, no undo
   was spent, and the preview highlight is repainted from it.
 - The readout above the message: `Step N: … current selection` when the gesture
-  interrupted a selection that still stands, or the tool’s ordinary help text
-  when nothing was in progress.
+  interrupted a selection that still stands, or nothing above it when nothing
+  was in progress.
 
 ### Fix
 - Repeat the gesture and make sure the mouse button comes up over the plot.
@@ -282,8 +284,8 @@ based** selection, not only Lasso.
    a centre anyway — and it is not where you expected. See below.
 3) Your radius is too small (tiny drag) or too large (huge drag).
 4) Filters are hiding nearby cells; selection only considers visible cells.
-5) The camera is far out with **Visualization → Renderer settings →
-   Level-of-Detail (LOD)** enabled. The seed `Alt+click` picks the cell under
+5) The camera is far out with **Visualization → Performance →
+   Level of detail (LOD)** enabled. The seed `Alt+click` picks the cell under
    the pointer, and it can only land on a cell the view is actually drawing —
    so a zoomed-out camera can refuse a click over a region that does have
    cells in it. Only the seed click is affected; the drag that follows still
@@ -291,13 +293,13 @@ based** selection, not only Lasso.
 6) You expected screen-space selection; proximity is embedding-space distance.
 
 ### How to confirm
-- Read the line under the **Highlight mode** buttons: a refused click names
+- Read the line under the **Tool** buttons: a refused click names
   itself; a click that places a centre anyway does not.
 - Start by `Alt+click` directly on a clearly visible cell (zoom in).
 - Drag slowly and watch the overlay radius.
 - Temporarily disable filters and try again.
 - If a click is refused only when zoomed out, zoom in and seed again — or turn
-  **Level-of-Detail (LOD)** off for the seed click.
+  **Level of detail (LOD)** off for the seed click.
 
 ### Clicking empty space (what the centre actually is)
 When you `Alt+click` empty space and a candidate set already exists, the centre
@@ -322,7 +324,7 @@ on the selection.
 ## Symptom: “KNN drag says no neighbor graph is available (or does nothing)”
 
 ### Likely causes (ordered)
-1) Your dataset export does not include connectivities/edges.
+1) Your dataset holds no neighbour graph (`obsp`).
 2) Edges exist but are not loaded yet (often loaded when you enable “Show edges”).
 3) You are using a data loading mode that doesn’t provide connectivities.
 
@@ -330,12 +332,12 @@ on the selection.
 - Look for an edges/graph toggle (e.g., “Show edges”) and enable it.
 - If there is an edges overlay, confirm you can see edges.
 - If you cannot enable edges, assume connectivities are missing.
-- If the line under the **Highlight mode** buttons instead reads *“That click
+- If the line under the **Tool** buttons instead reads *“That click
   did not land on a cell…”*, the graph is not the problem: your `Alt+click`
   missed every point. Zoom in and seed the drag again.
 
 ### Fix
-- Re-export your dataset including connectivities (if you control the export pipeline).
+- Write your dataset again including connectivities (`obsp['connectivities']`), if you control how it is written.
 - Use lasso/proximity/annotation-based selection if you cannot load a graph.
 
 ### Prevention
@@ -343,7 +345,7 @@ on the selection.
 
 ---
 
-## Symptom: “Annotation based selection selects nothing / too many / too few cells”
+## Symptom: “Annotation selection selects nothing / too many / too few cells”
 
 ### Likely causes (ordered)
 1) **No panel on screen is colored by a field**, so the tool has nothing to
@@ -359,10 +361,11 @@ on the selection.
 - Confirm the field of the view you click in (its legend; focus that view to see it in the field selector).
 - Temporarily disable filters and repeat the selection.
 - Try a known categorical field with obvious labels (e.g., `cell_type`) to validate semantics.
-- If **nothing at all** is selected, read the line under the **Highlight mode**
-  buttons. Three states are reported there and they mean different things:
-  - *“Color by a field first…”* replaces the usual `Alt+click` invitation
-    whenever no panel on screen is colored by a field. No press can select
+- If **nothing at all** is selected, read the line under the **Tool**
+  buttons and the first line of the Selection (i). Three states are reported
+  and they mean different things:
+  - *“Color by a field first…”* (in the (i)) replaces the usual `Alt+click`
+    line whenever no panel on screen is colored by a field. No press can select
     anything in that state, so there is nothing to debug beyond choosing a
     field.
   - *“That panel is not colored by a field…”* means the panel you pressed has
@@ -374,7 +377,7 @@ on the selection.
 
 ### Fix
 - If the panel is asking for a field, choose a **Categorical obs** or
-  **Continuous obs** entry under **Coloring & Filtering**; `Alt+click` works
+  **Continuous obs** entry under **Coloring & filtering**; `Alt+click` works
   from that moment on.
 - For categorical:
   - use `Alt` to replace,
@@ -486,11 +489,11 @@ on the selection.
 
 ### Fix
 - Load the session on the dataset it was created from.
-- Obtain a fresh current **Save State** bundle if exact-format validation fails.
+- Save a fresh current bundle with **Save** if exact-format validation fails.
 - If you must change the dataset, you must recreate highlights (indices won’t match).
 
 ### Prevention
-- Keep dataset IDs stable and avoid reordering cells between exports if you rely on highlights.
+- Keep dataset IDs stable and avoid reordering cells between versions of a dataset if you rely on highlights.
 - Save “milestone sessions” before heavy editing.
 
 ---
@@ -498,31 +501,33 @@ on the selection.
 ## Symptom: “Python highlight doesn’t show in the UI” (Jupyter integration)
 
 ### Likely causes (ordered)
-1) You are not actually in Jupyter-embedded mode (no Jupyter bridge active).
-2) Viewer ID mismatch (messages go to a different iframe).
+1) The page is not a viewer opened by Python (no viewer channel active).
+2) The viewer channel is not open: the server no longer knows this viewer (it
+   was stopped), or a proxy between the page and the server does not pass
+   WebSockets (`/_cellucid/ws`). The viewer shows a **Viewer stopped** or
+   **Viewer disconnected** notification.
 3) Dataset/index mismatch (Python indices refer to different cells than the viewer).
-4) Browser blocked cross-origin communication (non-loopback origin).
 
 ### How to confirm
-- Confirm you are using the Jupyter workflow (Cellucid opened with Jupyter-specific URL params).
+- Confirm you are using the viewer workflow (Cellucid opened with `?viewer=true&viewerId=…&viewerToken=…` in its address).
 - In Python, print/log the viewer URL and verify it is the one embedded.
 - Try a simple command that is known to be wired (e.g., `set_color_by`) to validate communication.
 - Follow the connection checks in {doc}`../../python_package/e_jupyter_hooks/14_troubleshooting_hooks`.
 
 ### Fix
-- Ensure you are running the server locally/loopback and using the correct viewer URL.
+- Use the viewer URL the server printed (or run the cell that shows it again), and make any proxy in between pass WebSockets.
 - Ensure the dataset order in Python matches the dataset loaded in the viewer.
 
 ### Prevention
 - When using Python control, treat “cell index = identity” and keep ordering stable.
-- Prefer pre-exported datasets for reproducibility.
+- Prefer a dataset file with a stable id (`prepare(dataset_id=...)`) for reproducibility.
 
 ---
 
 ## When to file a bug report
 
 If you believe you hit a real bug (not one of the expected edge cases), include:
-- The exact text of the line under the **Highlight mode** buttons at the moment
+- The exact text of the line under the **Tool** buttons at the moment
   it went wrong — or “no message at all”, which is itself a useful report
 - Browser + OS (and whether you’re on a laptop with integrated GPU)
 - Dataset format and rough size (`n_cells`, `n_genes`, whether connectivities exist)

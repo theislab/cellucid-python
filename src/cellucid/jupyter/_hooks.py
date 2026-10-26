@@ -55,7 +55,8 @@ class HookRegistry:
         Register a callback for an event.
 
         Args:
-            event: Event name ('selection', 'hover', 'click', 'ready', 'message')
+            event: Event name ('selection', 'hover', 'click', 'ready',
+                'command_error', 'data_mapping', 'message')
             callback: Function to call when event fires. Receives event dict.
 
         Returns:
@@ -90,7 +91,7 @@ class HookRegistry:
         Report whether at least one callback is registered for an event.
 
         A caller that reports an event itself when nothing is listening -- as
-        :class:`~cellucid.jupyter.BaseViewer` does for ``command_error`` -- uses
+        :class:`~cellucid.jupyter.AnnDataViewer` does for ``command_error`` -- uses
         this to stand aside once the notebook has taken the event over.
 
         Args:
@@ -115,22 +116,33 @@ class HookRegistry:
 
     def trigger(self, event: str, data: dict[str, Any]):
         """
-        Trigger all callbacks for an event.
+        Run every callback for an event, ``message`` callbacks first.
+
+        One failing callback does not stop the others: each runs, and the
+        failures are raised together afterwards (the one exception itself when
+        only one failed, else an :class:`ExceptionGroup`), for the caller to
+        report. The caller records the event before it triggers, so a failing
+        hook never costs ``viewer.state`` or ``wait_for_event`` the event.
 
         Args:
             event: Event name to trigger
             data: Event data dict passed to callbacks
         """
-        message_callbacks = list(self._callbacks.get("message", ()))
-        for callback in message_callbacks:
-            callback({"event": event, **data})
-
-        if event == "message":
-            return
-
-        event_callbacks = list(self._callbacks.get(event, ()))
-        for callback in event_callbacks:
-            callback(data)
+        failures: list[Exception] = []
+        calls: list[tuple[HookCallback, dict[str, Any]]] = [
+            (callback, {"event": event, **data}) for callback in list(self._callbacks.get("message", ()))
+        ]
+        if event != "message":
+            calls.extend((callback, data) for callback in list(self._callbacks.get(event, ())))
+        for callback, payload in calls:
+            try:
+                callback(payload)
+            except Exception as error:
+                failures.append(error)
+        if len(failures) == 1:
+            raise failures[0]
+        if failures:
+            raise ExceptionGroup(f"{len(failures)} viewer hooks for {event!r} failed", failures)
 
     def on(self, event: str) -> Callable[[HookCallback], HookCallback]:
         """

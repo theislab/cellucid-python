@@ -9,8 +9,9 @@
 - How to debug “bundle capture is stuck” and “apply did nothing”
 
 **Prerequisites:**
-- A viewer running in a notebook (`show(...)` or `show_anndata(...)`)
-- An `AnnData` object you want to annotate (in memory)
+- A viewer running in a notebook (`show_anndata(...)`)
+- An `AnnData` (or `MuData`) object you want to annotate, in the same cell
+  order as the dataset the viewer showed
 
 For deeper design rationale and file-format notes, see {doc}`05_sessions_to_anndata_design`.
 
@@ -154,7 +155,8 @@ UI-only state (camera, panel layout, view geometry) generally stays in the sessi
 Even if the session came from “your own browser”, treat it like external input:
 - bounds checks on indices and code arrays,
 - file framing validation (MAGIC header),
-- size caps to avoid runaway memory usage.
+- every declared size checked against the format's own limits, and every
+  decompression bounded by the size its chunk declares.
 
 ### Dataset match checks (shape + exact ID)
 
@@ -165,28 +167,30 @@ Before applying dataset-dependent chunks, Python checks a lightweight fingerprin
 - `varCount` vs the gene count of the mapped axis (`adata.raw.n_vars` when the
   mapping reads expression from `raw`, `0` when it reads none, `adata.n_vars`
   otherwise)
+- every obs column and gene the session uses (the manifest's `requires`) vs
+  what `adata` holds
 
 Any mismatch raises `ValueError` before Cellucid mutates the target object.
 
 ### The two records: `cellOrder` and `dataMapping`
 
-The current session fingerprint has exactly six required fields:
-the four scalars, `cellOrder`, and `dataMapping`.
+The current session fingerprint (format 2) has exactly six required fields:
+the three scalars (`datasetId`, `cellCount`, `varCount`), the dataset's display
+`name` (or null, informational), `cellOrder`, and `dataMapping`.
 
 `cellOrder` is exactly `embedding`, `dimension` (1, 2, or 3), and a
 16-character lowercase hexadecimal `digest` of the coordinates of that
-embedding. `embedding` is `{"key", "columns"}`: an exported embedding id with
-`columns: null`, or an AnnData `obsm` key with the 0-based columns that were
-read, one per dimension. It ties the session to one cell ordering, which the four
-scalars cannot do: they all survive a re-export of the same dataset from
-re-sorted input.
+embedding. `embedding` is `{"key", "columns"}`: an `obsm` key with the 0-based
+columns that were read, one per dimension. It ties the session to one cell
+ordering, which the scalars cannot do: they all survive a rewrite of the
+same dataset from re-sorted input.
 
-`dataMapping` records which stored arrays the session was showing. Its `kind`
-is `"export"` — exactly `kind`, `embeddings` (`enabled`, the embeddings that are turned on, and
-`defaults`, the `1d`/`2d`/`3d` default of each dimension),
-`geneNames` (`"index"` or `"column:<name>"`), and `vectorFields` — or
-`"anndata"`, which adds `knn`, `expression` (`"X"`, `"raw"`, `"layer:<name>"`,
-or null), and `latent`. A user-defined field copied from a gene is resolved by name
+`dataMapping` records which stored arrays the session was showing: `kind`
+(`"anndata"`), `embeddings` (`enabled`, the embeddings that are turned on, and
+`defaults`, the `1d`/`2d`/`3d` default of each dimension), `knn`, `geneNames`
+(`"index"` or `"column:<name>"`), `expression` (`"X"`, `"raw"`,
+`"layer:<name>"`, or null), `log1p`, `highlyVariable`, `latent`, and
+`vectorFields`, plus `modality` for a MuData. A user-defined field copied from a gene is resolved by name
 on that axis — through the mapping's gene names, made unique with the shared
 rule — and its values are read from the mapping's expression matrix.
 
@@ -286,7 +290,7 @@ to the live object. It does not write those changes into the source H5AD file.
 Likely causes (ordered):
 1) The viewer never reached “ready” (dataset load stuck).
 2) The notebook iframe is not displayed (no frontend to respond).
-3) The browser cannot POST to the server endpoint `/_cellucid/session_bundle` (proxy/mixed content/remote kernel).
+3) The viewer's channel (`/_cellucid/ws`) is not connected (proxy/mixed content/remote kernel).
 
 How to confirm:
 - Run `viewer.debug_connection()` and inspect:
@@ -294,25 +298,24 @@ How to confirm:
   - `frontend_roundtrip`
   - `viewer_index_probe`
   - `frontend_debug_snapshot`
-- In the browser devtools network tab:
-  - look for a POST to
-    `/_cellucid/session_bundle?viewerId=...&viewerToken=...&requestId=...`
+- In the browser devtools network tab, filter `WS`:
+  - the `/_cellucid/ws` connection should show the `requestSessionBundle`
+    command and the binary frame that answers it
 
 Fix:
 - Call `viewer.display()` to ensure the iframe exists.
 - Call `viewer.wait_for_ready(timeout=60)` and only then request a bundle.
 - If remote: use SSH tunneling or `jupyter-server-proxy` (see {doc}`../../web_app/b_data_loading/05_jupyter_tutorial`).
 
-### Symptom: “No pending session bundle request (viewerId/requestId)”
+### Symptom: “Dropped a session bundle nobody is waiting for” (log)
 
-This usually means:
-- the upload arrived late (after the request TTL expired), or
-- the viewer tab is from an old kernel/viewerId, or
-- you copied a URL across environments and the viewerId no longer matches.
+This means the bundle arrived after `get_session_bundle()` stopped waiting
+(its timeout passed). A viewer tab from an old kernel cannot send one at all:
+its channel is refused and the view freezes.
 
 Fix:
-- refresh the viewer (or recreate it),
-- request a new bundle again.
+- request a new bundle again, with a longer `timeout=` for a large session;
+- after a kernel restart, re-run the cell that shows the viewer.
 
 ### Symptom: `apply_to_anndata(...)` raises a dataset mismatch
 
@@ -347,12 +350,14 @@ Fix:
 ### Symptom: “Applying user-defined fields fails or gives weird categories”
 
 Likely causes:
-- the field is not categorical (only categorical is applied today),
-- the categories list is missing,
-- codes contain out-of-range values.
+- a categorical field's categories list is missing,
+- codes contain out-of-range values,
+- a continuous field names a source column or gene `adata` does not hold.
+
+Each of these raises `ValueError` naming the field before anything is changed.
 
 Fix:
-- confirm the field is categorical in the UI,
+- apply to the dataset the session was saved on,
 - correct invalid codes in the source session before applying it.
 
 ## Next steps

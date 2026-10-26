@@ -9,13 +9,13 @@ The browser-based viewer UI. In notebooks, this UI is embedded in an iframe.
 
 ### cellucid-python (Python package)
 The helper package you use from Python/CLI. It can:
-- serve datasets (exported or AnnData-backed),
+- serve datasets (an AnnData store the viewer reads itself),
 - embed the Cellucid UI in notebooks,
 - send commands to the UI and receive events back (hooks),
 - capture session bundles and apply them to AnnData.
 
 ### Viewer / `viewer`
-The Python object returned by `show(...)` or `show_anndata(...)`.
+The Python object returned by `show_anndata(...)`.
 
 It owns:
 - a running background server (`viewer.server_url`)
@@ -25,41 +25,42 @@ It owns:
 
 ### Data server
 A small local HTTP server started by `viewer`. It serves:
-- dataset files (exported mode) or dynamic endpoints (AnnData mode)
+- the AnnData store's bytes, read by the viewer with range requests
 - the exact verified viewer generation
 - special endpoints like:
   - `/_cellucid/health`
   - `/_cellucid/info`
-  - `/_cellucid/events` (viewer → Python hooks)
-  - `/_cellucid/selection` (viewer → Python selections, binary cell indices)
-  - `/_cellucid/session_bundle` (session bundle uploads)
+  - `/_cellucid/protocol` (where the viewer channel is, and what it carries)
+  - `/_cellucid/ws` (the viewer channel, a WebSocket)
+
+### Viewer channel
+The one WebSocket the viewer opens to the data server (`/_cellucid/ws`). Both
+commands and events travel on it. See {doc}`05_architecture_viewer_channel`.
 
 ### Iframe
 An embedded browser frame inside the notebook output. It runs the Cellucid web app UI.
 
 ### Command (Python → viewer)
-A message sent from Python to the iframe using `postMessage`. Examples:
+A message Python sends to the viewer on the viewer channel. Examples:
 - highlight cells
 - set color-by
 - reset camera
 
 ### Event (viewer → Python)
-A message sent from the iframe to Python using HTTP POST to `/_cellucid/events`. Examples:
+A message the viewer sends to Python on the viewer channel. Examples:
 - selection
 - hover
 - click
 - ready
 
 ### `viewerId`
-A unique ID used to route events and commands to the correct viewer instance (important when you have multiple viewers in one notebook).
+A unique ID naming one viewer instance (important when you have multiple viewers in one notebook): the viewer says it when it opens its channel, and the server binds the channel to that viewer.
 
 ### `viewerToken`
-A per-viewer secret token used to authenticate `postMessage` commands sent into the iframe.
-
-Why it exists:
-- notebook environments can proxy/transform iframe origins (Colab, VSCode webviews),
-- so the integration does not rely on strict origin allowlisting for `postMessage`,
-- instead it requires the correct token.
+A per-viewer secret token in the iframe's address. The viewer sends it once,
+when it opens its channel, and the server compares it in constant time before
+the channel carries anything. A page without the token cannot open a channel,
+so no other page can send events as the viewer or receive its commands.
 
 ### Origin, CORS, mixed content
 Browser security concepts that explain many failures:
@@ -70,7 +71,7 @@ Browser security concepts that explain many failures:
 See {doc}`13_security_cors_origins_and_mixed_content`.
 
 ### Verified local web generation
-In notebook mode, the Python server can download the viewer UI assets from `https://www.cellucid.com` and serve them from the same origin as the dataset server (cached on disk).
+In notebook mode, the Python server establishes the viewer UI assets declared by `https://www.cellucid.com` (verified, cached on disk) at every viewer start and serves them from the same origin as the dataset server.
 
 This avoids:
 - mixed-content failures (HTTPS notebook embedding HTTP resources),
@@ -95,26 +96,28 @@ Controls:
 │  Browser (notebook frontend)                                         │
 │   └─ iframe runs the Cellucid web app UI                             │
 │                                                                      │
-│  Two communication channels:                                         │
-│   (A) Python → iframe: postMessage (commands)                        │
-│   (B) iframe → Python: HTTP POST /_cellucid/events (events)          │
+│  One viewer channel (WebSocket /_cellucid/ws):                       │
+│   Python → viewer: commands      viewer → Python: events             │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
 If “hooks don’t work”, it’s almost always because one side can’t reach the other:
 - iframe can’t reach the server URL (proxy / mixed content / firewall)
-- Python is sending commands before the iframe is displayed
-- `viewerId` mismatch (stale iframe after kernel restart)
+- a proxy in between does not pass WebSockets (the viewer says so)
+- a stale iframe after a kernel restart (it freezes and says Python stopped)
+
+Commands sent before the iframe is displayed are not lost: they wait in
+Python and arrive, in order, when the viewer connects.
 
 ## Common misconceptions (and the correct model)
 
 ### “Hooks are a Jupyter feature”
-They aren’t. Hooks are just **HTTP POST requests** from the iframe to the server, and `postMessage` commands from Python to the iframe.
+They aren’t. Hooks are messages on one WebSocket between the viewer and the local server, which works in any front end that can show the iframe.
 
 ### “If I can see the viewer, hooks must work”
 Not necessarily:
-- you can see the UI, but the iframe may not be able to reach `/_cellucid/events` (blocked by proxy/ad-blocker),
-- or the dataset loads but event POSTs are blocked.
+- you can see the UI (loaded over HTTP), but a proxy may refuse the WebSocket;
+  the viewer then says it cannot open its channel and names the proxy.
 
 ### “Cell indices are stable cell IDs”
 In the hooks API, indices are **row positions** (0-based). If you reorder/subset the dataset in Python, indices change.
@@ -126,7 +129,7 @@ position produces an event.
 
 ## Next steps
 
-- Architecture deep dive: {doc}`05_architecture_message_routing_http_vs_postmessage`
+- Architecture deep dive: {doc}`05_architecture_viewer_channel`
 - Commands and events:
   - {doc}`06_python_to_frontend_commands`
   - {doc}`07_frontend_to_python_events`

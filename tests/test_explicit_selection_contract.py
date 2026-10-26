@@ -1,16 +1,12 @@
 from __future__ import annotations
 
 import inspect
-import json
-from pathlib import Path
 
 import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
 
-from cellucid.anndata_adapter import AnnDataAdapter
-from cellucid.prepare_data import prepare
 from cellucid.vector_fields import (
     add_transition_drift_to_obsm,
     compute_transition_drift,
@@ -40,43 +36,23 @@ def _adata(*, explicit: bool, generic: bool) -> ad.AnnData:
     return adata
 
 
-def test_an_explicit_declaration_decides_over_the_unsuffixed_key() -> None:
-    # The unsuffixed key alone resolves by its own width.
-    generic_only = AnnDataAdapter(
-        _adata(explicit=False, generic=True),
-        dataset_name="Generic UMAP",
-        dataset_id="generic-umap",
-    )
-    try:
-        generic_identity = generic_only.get_dataset_identity()
-        assert list(generic_identity["embeddings"]["items"]) == ["X_umap"]
-        assert generic_identity["embeddings"]["defaults"] == {"2d": "X_umap"}
-        assert "umap_resolution" not in generic_identity["embeddings"]
-    finally:
-        generic_only.close()
-
-    # Beside a declared key it never joins the set, whatever its width.
-    adapter = AnnDataAdapter(
-        _adata(explicit=True, generic=True),
-        dataset_name="Explicit UMAP",
-        dataset_id="explicit-umap",
-    )
-    identity = adapter.get_dataset_identity()
-    assert list(identity["embeddings"]["items"]) == ["X_umap_2d"]
-    assert identity["embeddings"]["defaults"] == {"2d": "X_umap_2d"}
-    assert "umap_resolution" not in identity["embeddings"]
-
-
-def test_transition_helper_resolves_the_same_key_the_adapter_resolves() -> None:
-    # One rule governs both, so an object cannot be servable and undriftable.
+def test_transition_helper_reads_the_basis_it_is_given() -> None:
+    # The drift is computed over the basis named, and named for it.
     written = add_transition_drift_to_obsm(
         _adata(explicit=False, generic=True),
         np.eye(3, dtype=np.float32),
         normalize_rows=False,
     )
+    assert written == "T_fwd_umap"
+    written = add_transition_drift_to_obsm(
+        _adata(explicit=True, generic=False),
+        np.eye(3, dtype=np.float32),
+        basis="umap_2d",
+        normalize_rows=False,
+    )
     assert written == "T_fwd_umap_2d"
 
-    with pytest.raises(ValueError, match="X_umap_1d.*X_umap_2d.*X_umap_3d"):
+    with pytest.raises(ValueError, match=r"obsm\['X_umap'\]"):
         add_transition_drift_to_obsm(
             _adata(explicit=False, generic=False),
             np.eye(3, dtype=np.float32),
@@ -98,49 +74,3 @@ def test_transition_row_normalization_is_an_explicit_required_choice() -> None:
             _adata(explicit=True, generic=False),
             np.eye(3, dtype=np.float32),
         )
-
-
-def _prepare(
-    out_dir: Path,
-    *,
-    obs_categorical_dtype: object = inspect.Parameter.empty,
-) -> None:
-    kwargs: dict[str, object] = {
-        "latent_space": _embedding(),
-        "obs": pd.DataFrame(
-            {"cluster": pd.Categorical(["A", "B", "A"])},
-            index=["cell-1", "cell-2", "cell-3"],
-        ),
-        "embeddings": {"X_umap_2d": _embedding()},
-        "out_dir": out_dir,
-        "dataset_name": "Categorical dtype",
-        "dataset_id": "categorical-dtype",
-        "centroid_min_points": 1,
-    }
-    if obs_categorical_dtype is not inspect.Parameter.empty:
-        kwargs["obs_categorical_dtype"] = obs_categorical_dtype
-    prepare(**kwargs)
-
-
-def test_prepare_requires_one_exact_categorical_storage_dtype(tmp_path: Path) -> None:
-    parameter = inspect.signature(prepare).parameters["obs_categorical_dtype"]
-    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
-    assert parameter.default is inspect.Parameter.empty
-
-    with pytest.raises(TypeError, match="obs_categorical_dtype"):
-        _prepare(tmp_path / "missing")
-    assert not (tmp_path / "missing").exists()
-
-    with pytest.raises(ValueError, match="obs_categorical_dtype"):
-        _prepare(tmp_path / "automatic", obs_categorical_dtype="auto")
-    assert not (tmp_path / "automatic").exists()
-
-    _prepare(tmp_path / "uint16", obs_categorical_dtype="uint16")
-    manifest = json.loads(
-        (tmp_path / "uint16" / "obs_manifest.json").read_text(encoding="utf-8")
-    )
-    assert manifest["_categoricalFields"][0][3] == "uint16"
-    identity = json.loads(
-        (tmp_path / "uint16" / "dataset_identity.json").read_text(encoding="utf-8")
-    )
-    assert identity["export_settings"]["obs_categorical_dtype"] == "uint16"

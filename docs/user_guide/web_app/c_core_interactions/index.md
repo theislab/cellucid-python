@@ -22,8 +22,8 @@ Everything in this section is in three sidebar accordions: **Visualization**,
 most; it edits the selected view, and it changes shape with the mode you pick:
 
 ```{figure} ../../../_static/screenshots/web_app/navigation-controls-orbit.png
-:alt: A panel headed NAVIGATION with a small circled i button, a MODE dropdown reading Orbit with the mouse pointer pressing it, and a bordered box below holding a KEYBOARD SPEED slider reading 0.40x, a ticked GOOGLE EARTH-STYLE DRAG checkbox and a ticked SHOW ORBIT ANCHOR checkbox.
-:width: 472px
+:alt: The Navigation block with Mode set to Orbit and the pointer pressing the select: a Keyboard speed slider, Google Earth-style drag and Show orbit anchor.
+:width: 488px
 
 The **Navigation** block in Orbit mode, the default for a 3D embedding. The
 `Mode` dropdown is the control this whole section revolves around.

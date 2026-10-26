@@ -35,7 +35,7 @@ How to use this section, expected prerequisites, and how to run the notebooks re
 :link: 02_intermediate_notebooks_computational_workflows
 :link-type: doc
 
-Reproducible exports, scaling workflows, and practical “do this when…” guidance.
+Cellucid-ready AnnData files, scaling workflows, and practical “do this when…” guidance.
 :::
 
 :::{grid-item-card} {octicon}`tools;1.5em;sd-mr-1` Advanced (Expert / Developer)

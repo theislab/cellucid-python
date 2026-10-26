@@ -188,8 +188,7 @@ If the port is taken, `cellucid serve` says so and names the flag to change it.
 ### 3. Serve, inside a terminal that survives
 
 An interactive job dies with its SSH session. Run the server inside `tmux` (or
-`screen`) so a dropped connection does not kill a server that took minutes to
-start:
+`screen`) so a dropped connection does not kill the server:
 
 ```bash
 tmux new -s cellucid
@@ -198,36 +197,28 @@ cellucid serve /path/to/data.h5ad --dataset-name "My dataset" --dataset-id my-da
 # detach with Ctrl-b d, re-attach later with: tmux attach -t cellucid
 ```
 
-Startup reports five numbered steps, and on a large object most of the time is
-spent inside step 2:
+Startup reports four numbered steps. None of them reads an array, so an
+18-million-cell object starts as quickly as a small one:
 
 ```text
-[1/5] Detecting format...
+[1/4] Detecting format...
       Path: /path/to/data.h5ad
-      Format: h5ad
+      Format: AnnData (.h5ad)
       ✓ Format detected
 
-[2/5] Loading AnnData...
-      Mode: read-only backed h5ad
-      Obs columns: classifying 34
-      Embeddings: resolving obsm keys
-      Embeddings: 2D from obsm['X_umap']
-      ✓ File opened
-
-[3/5] Analyzing dataset...
+[2/4] Reading metadata...
       Cells: 18,142,044
       Genes: 5,001
-      Embeddings: 2D
-      Obs fields: 22 categorical, 12 continuous
-      Vector fields: no
-      Connectivity: not served (obsp['connectivities'] is present; pass knn_key='connectivities', or --knn connectivities, to draw it)
-      ✓ Analysis complete
+      obsm: X_umap
+      obs fields: 34
+      obsp: connectivities
+      layers: none
+      ✓ Metadata read
 
-[4/5] Building manifests...
-      Centroids: one per categorical field and embedding
-      ✓ Manifests built
+[3/4] Checking launch choices...
+      ✓ Launch choices checked
 
-[5/5] Starting server...
+[4/4] Starting server...
       ✓ Server ready
 ```
 
@@ -297,22 +288,23 @@ bound how long an unauthenticated port stays open.
 
 ## Large objects on cluster storage
 
-Two things dominate the cost of serving a very large `.h5ad` from shared
-storage, and both are now under your control:
+The browser reads the store in place, with HTTP range requests through the
+tunnel, and the server only serves bytes:
 
-- **The neighbor graph is not read unless you ask for it.** A 50-neighbor graph
-  over 18 million cells is roughly 900 million stored neighbors; deduplicating
-  it into edges, checking it is symmetric, and ordering it takes minutes and
-  several times the graph's own memory. `cellucid serve` does none of that by
-  default. Pass `--knn connectivities` (or `knn_key="connectivities"`) only when you
-  intend to draw the graph. See
-  {doc}`08_anndata_mode_show_anndata_and_serve_anndata`.
-- **Every gene query reads from the shared filesystem.** Serving a backed
-  `.h5ad` over a network filesystem pays that on every request. For repeated
-  sessions, run `prepare()` once into an export directory and serve that
-  instead; a prepared export needs no `--dataset-name` or `--dataset-id`,
-  because it carries its own identity. See
-  {doc}`../c_data_preparation_api/01_prepare_export_overview`.
+- **The server holds no matrix in memory.** For an `.h5ad` or Zarr path it reads
+  metadata at startup and then serves the bytes each view asks for, so the job
+  needs little memory. An in-memory `AnnData` is the exception: it is written
+  once to a temporary `.h5ad` (in the system temporary directory), which needs
+  disk space for the whole object.
+- **The neighbor graph costs nothing until it is drawn.** The viewer reads
+  `obsp['connectivities']` (or the graph `--knn` names) the first time a view
+  draws edges. See {doc}`08_anndata_mode_show_anndata_and_serve_anndata`.
+- **Every read comes from the shared filesystem.** Each gene a view asks for is
+  read from the file on that filesystem. For repeated sessions, run `prepare()`
+  once and serve its output instead: its expression matrix is gene-major, so
+  each gene is one small read, and it needs no `--dataset-name` or
+  `--dataset-id`, because it carries its own identity.
+  See {doc}`../c_data_preparation_api/01_prepare_overview`.
 
 Startup also needs outbound network access to establish the verified web build,
 which some compute nodes do not have. `--no-web-ui` serves the data endpoints
@@ -331,12 +323,13 @@ without it; see
 | It worked yesterday, not today | The job moved to another node | `squeue -u "$USER"` and re-point the tunnel |
 | `Port 12765 is already in use` | Another user or an earlier server holds it on a shared node | Choose another port, or `--port 0` and read the printed one |
 | Startup aborts fetching the web build | The node has no outbound access | `--no-web-ui`, or serve from a node that has it |
-| Startup silent for minutes | A very large object is being read | Watch the five steps; step 2 is the long one |
+| Startup silent for minutes in step 4 | The verified web build is being fetched | Wait, or `--no-web-ui` on a node without outbound access |
+| Startup silent in step 1 after `Browser cannot decode` | The store uses a codec the browser cannot decode, and a decodable copy is being written once | Wait once, or rewrite the store with gzip compression |
 
 ## Related pages
 
 - {doc}`12_remote_servers_ssh_tunneling_and_cloud` -- the general remote recipe
 - {doc}`13_security_privacy_cors_and_networking` -- what a non-loopback bind exposes
 - {doc}`08_anndata_mode_show_anndata_and_serve_anndata` -- the direct-AnnData path in full
-- {doc}`14_performance_scaling_and_lazy_loading` -- where startup time goes
+- {doc}`14_performance_scaling_and_lazy_loading` -- measured startup and read times
 - {doc}`../i_troubleshooting_index/07_hpc_and_remote_access_issues` -- symptom-first triage

@@ -7,57 +7,58 @@ sample.
 ## Panel structure
 
 ```{figure} ../../../_static/screenshots/figure_export/panel-overview.png
-:alt: The Figure Export panel with its four collapsed groups — Framing, Labels and Annotations, Style, Download — above the Export button, with the pointer on Export.
-:width: 516px
+:alt: The Figure export panel with its four collapsed groups, Framing, Labels and annotations, Style and Download, above the Export button, with the pointer on Export.
+:width: 532px
 
-The panel as it opens: one line of purpose, four collapsed groups, and
-**Export**. The groups are mutually exclusive — opening one closes the others —
+The panel as it opens: **Export** with its (i), four collapsed groups, and the
+**Export** button. The groups are mutually exclusive — opening one closes the others —
 so you never see more than one of the captures below on screen at a time.
 ```
 
 ## Preview and framing
 
 ```{figure} ../../../_static/screenshots/figure_export/preview.png
-:alt: Cellucid Figure Export preview for the deterministic 120-cell fixture with framing controls visible.
+:alt: The whole window with Preview on in the Framing group: the sidebar shows the figure as it will be written, beside the live view on the canvas.
 :width: 1440px
 
 Preview exposes the current framing and visual state before any file is written.
 ```
 
 ```{figure} ../../../_static/screenshots/figure_export/framing.png
-:alt: The Figure Export Framing group open, showing the plot size preset with its width and height boxes, the preview toggle with a colourblind-simulation selector and Refresh, and the frame-export crop controls with the aspect readout.
-:width: 472px
+:alt: The Framing group open: Plot size on Screen (half) with its W and H boxes, and Preview with its Show preview checkbox, above the Export button.
+:width: 532px
 
 **Framing.** The width and height boxes are the **plot content** size, not the
 size of the file — see {doc}`04_quality_knobs_and_best_practices` for the
-arithmetic that turns one into the other. `Show preview` has to be on before the
-drag-to-crop frame can be used, which is why the crop hint sits beneath it.
+arithmetic that turns one into the other. **Frame export**, the drag-to-crop
+frame, appears only once `Show preview` is on (see the window capture above).
 ```
 
 ## Labels, style, and output
 
 ```{figure} ../../../_static/screenshots/figure_export/labels-annotations.png
-:alt: The Figure Export Labels and Annotations group with the Title box pre-filled with the dataset name followed by the coloured field and its visible categories, above the annotation checkboxes and the line listing elements that are never exported.
-:width: 472px
+:alt: The Labels and annotations group open: the Title box pre-filled, starting with the dataset name; the Annotations checkboxes Axes, Legend, Reference grid, 3D orientation and Depth sort; the X and Y axis labels; Legend: Right; and Emphasize selection.
+:width: 532px
 
-**Labels & Annotations.** Two things worth noticing: the **Title:** box arrives
-pre-filled from the dataset (see {doc}`05_metadata_and_provenance`), and the
-grey line at the bottom names the on-screen decorations that are deliberately
-never drawn into a figure.
+**Labels and annotations.** The **Title** box arrives pre-filled from the
+dataset (see {doc}`05_metadata_and_provenance`); below it the **Annotations**
+checkboxes, the axis labels, the legend position, and **Emphasize
+selection**.
 ```
 
 ```{figure} ../../../_static/screenshots/figure_export/style.png
-:alt: Figure Export Style controls for background, typography, and text sizes.
-:width: 224px
+:alt: The Style group open: background, font family and the text sizes for the base text, legend, ticks, axis labels, title and centroid labels.
+:width: 532px
 
 Style controls expose background, typography, and text sizing.
 ```
 
 ```{figure} ../../../_static/screenshots/figure_export/download.png
-:alt: The Figure Export Download group open, showing the download format selector, the PNG DPI selector, the SVG point-strategy selector and the export-all-views checkbox, with the pointer on that checkbox.
-:width: 472px
+:alt: The Download group open with the format set to SVG: the SVG point strategy select on its placeholder, shortened to "Choose S…", and Export all views (split-view) with the pointer on its checkbox, above the Export button.
+:width: 532px
 
-**Download.** Output format, resolution, an explicit SVG point strategy, and
+**Download.** Output format, then an explicit SVG point strategy for SVG (or
+the DPI for PNG), and
 whether all views are exported. A single output downloads in its native format;
 a multi-file request downloads once as a ZIP containing the native files.
 ```
@@ -65,7 +66,7 @@ a multi-file request downloads once as a ZIP containing the native files.
 ## When the app refuses
 
 ```{figure} ../../../_static/screenshots/figure_export/read-export-blocked-dialog.png
-:alt: The Export blocked dialog over the app, headed "Export blocked", explaining that Cellucid will not create an export that differs from the active view, listing "Velocity overlay not exported" with its reason, and offering a single Back button.
+:alt: The Export blocked dialog over the app: "Cellucid will not create an export that differs from the active view", Velocity overlay not exported with its reason, and a single Back button.
 :width: 1440px
 
 Pressing **Export** with the velocity overlay running raises this. It is a

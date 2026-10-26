@@ -1,68 +1,98 @@
 """
 AnnData Server for Cellucid
 
-HTTP server that serves AnnData data dynamically in the Cellucid format.
-This allows direct visualization of AnnData files without pre-export.
+Serves one dataset to the Cellucid viewer, which reads it itself.
 
-Supports:
-- h5ad files: Single HDF5 files (backed mode for lazy loading)
-- zarr stores: Directory-based stores materialized by anndata.read_zarr
-- In-memory AnnData objects
+The web app reads every format of the input format registry in the browser
+(``input_formats.json``): AnnData (``.h5ad``, Zarr), MuData (``.h5mu``, MuData
+Zarr), Loom, 10x Cell Ranger ``.h5`` files and ``outs/`` folders, MatrixMarket
+folders, and R objects (``.rds``, ``.rda``/``.RData``, gzipped or not). The
+formats that allow it are read with HTTP range requests -- only the bytes a
+view needs are transferred -- and the single-stream ones (R objects,
+MatrixMarket text) are read once from the start. This server therefore
+computes nothing per request. It serves:
+
+- the data's bytes under ``/_cellucid/anndata/<name>``: a file with exact
+  ``Range``/``206``/``Content-Range``/``HEAD``/``ETag`` answers, sent by the
+  kernel (``sendfile``); a Zarr store folder key by key (404 for an absent
+  key, consolidated metadata built in memory when the store has none); a
+  folder of files (MatrixMarket, ``outs/``) file by file, listed in
+  ``/_cellucid/datasets`` because a browser cannot list a folder;
+- ``/_cellucid/datasets``, which names the dataset (``dataset_id``,
+  ``dataset_name``), where its store is, and the launch choices (embeddings,
+  graph, expression, gene names, latent space, vector field, obs columns,
+  normalization, centroid rule) the viewer applies when it opens the store;
+- the viewer channel (``/_cellucid/ws``, a WebSocket: commands from a
+  notebook to its viewer, events back; :mod:`cellucid._viewer_channel`) and
+  the viewer's web build.
+
+An in-memory AnnData object is written once to a temporary ``.h5ad`` (sparse
+expression matrices column-major, so a gene is one contiguous read) and served
+like a file; the file is removed when the server stops or Python exits. So is a
+store holding an array stored with a codec the browser does not decode (an
+HDF5 filter such as Blosc or Zstandard, a Zarr codec such as bz2): anndata and
+its codec plugins read it once, and the browser reads the copy.
 
 Usage:
     from cellucid.anndata_server import serve_anndata
 
-    # Serve an h5ad file
-    serve_anndata(
-        "/path/to/data.h5ad",
-        dataset_name="Example",
-        dataset_id="example",
-    )
-
-    # Serve a zarr store (must be a directory)
-    serve_anndata(
-        "/path/to/data.zarr",
-        dataset_name="Example",
-        dataset_id="example",
-    )
-
-    # Or an in-memory AnnData
-    serve_anndata(
-        adata,
-        dataset_name="Example",
-        dataset_id="example",
-    )
+    serve_anndata("/path/to/data.h5ad", dataset_name="Example", dataset_id="example")
+    serve_anndata("/path/to/data.zarr", dataset_name="Example", dataset_id="example")
+    serve_anndata(adata, dataset_name="Example", dataset_id="example")
 """
 
 from __future__ import annotations
 
-import json
+import hashlib
 import logging
-import re
+import os
 import threading
+import weakref
 import webbrowser
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from functools import partial
 from http import HTTPStatus
-from http.server import SimpleHTTPRequestHandler
-from pathlib import Path
-from typing import TYPE_CHECKING
+from http.server import BaseHTTPRequestHandler
+from pathlib import Path, PurePosixPath
+from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote, urlparse
 
-from ._compression import deterministic_gzip_compress
+from ._anndata_files import (
+    ANNDATA_KINDS,
+    MUDATA_KINDS,
+    AnnDataStore,
+    browser_undecodable,
+    classify_anndata_path,
+    consolidated_zarr_metadata,
+    is_mudata,
+    read_anndata_contents,
+    read_cellucid_identity,
+    read_into_memory,
+    remove_temporary_h5ad,
+    write_temporary_h5ad,
+    write_temporary_h5mu,
+)
 from ._console import console_print
-from ._contracts import CATEGORICAL_CODE_WIDTHS, _require_dataset_id, _require_dataset_name
+from ._contracts import (
+    _require_dataset_id,
+    _require_dataset_name,
+)
+from ._launch_defaults import launch_defaults
+from ._plural import plural
 from ._server_base import (
     CELLUCID_WEB_URL,
     DEFAULT_HOST,
     DEFAULT_PORT,
     WEB_ASSET_INVENTORY_FILENAME,
+    CellucidThreadingHTTPServer,
     CORSMixin,
     _web_cache_dir,
     bind_host_is_wildcard,
     format_http_origin,
     loopback_origin_for_bind,
     machine_origin,
+    parse_byte_range,
     print_detail,
     print_server_banner,
     print_step,
@@ -70,22 +100,12 @@ from ._server_base import (
     require_allowed_hosts,
     require_server_port,
 )
-from ._server_base import (
-    CellucidHTTPServer as HTTPServer,
-)
-from .anndata_adapter import AnnDataAdapter, _classify_anndata_path
-from .anndata_mapping import (
-    MAPPING_ROUTE_PREFIX,
-    MappingLoadError,
-    MappingNotFound,
-    parse_mapping_route,
-)
-from .connectivity_contract import build_connectivity_manifest
-from .continuous_payload_diagnosis import NonFinitePayloadError
-from .data_mapping import EmbeddingKeySpec, is_vector_field_key
+from ._viewer_channel import CHANNEL_ROUTE, accept_viewer_channel
+from .data_mapping import EmbeddingKeySpec
 
 if TYPE_CHECKING:
     import anndata
+    import mudata
 
 logger = logging.getLogger("cellucid.anndata_server")
 
@@ -93,116 +113,122 @@ logger = logging.getLogger("cellucid.anndata_server")
 #: URL is built, so the loopback form and the network form cannot drift.
 VIEWER_QUERY = "/?anndata=true"
 
+#: The route prefix every byte of the served store is read under.
+ANNDATA_ROUTE_PREFIX = "_cellucid/anndata/"
 
-def _protocol_capability_document() -> dict[str, list[str]]:
+#: How long a kept-alive connection may sit idle before its thread closes it.
+_IDLE_CONNECTION_SECONDS = 120
+
+
+def _protocol_capability_document() -> dict[str, Any]:
     """Return the viewer wire capabilities this installation declares.
 
     The answer is read from :mod:`cellucid.jupyter._wire`, which is the module
     the validator itself reads, so the route cannot publish a capability the
     notebook would then reject. The import is deferred because reaching ``_wire``
-    initializes the whole ``cellucid.jupyter`` package, which pulls in
-    :mod:`cellucid.server`; this package keeps such imports lazy so the CLI
-    starts fast, and one viewer asks this route once.
+    initializes the whole ``cellucid.jupyter`` package; this package keeps
+    such imports lazy so the CLI starts fast, and one viewer asks this route
+    once.
     """
     from .jupyter import _wire
 
     return _wire._protocol_capability_document()
 
 
-_QVALUE_RE = re.compile(r"(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)\Z")
+# =============================================================================
+# HTTP
+# =============================================================================
 
 
-def _accepts_gzip(header_value: str) -> bool:
-    """Return whether an Accept-Encoding value permits the exact gzip coding."""
-    gzip_qualities: list[float] = []
-    wildcard_qualities: list[float] = []
+def _route_name(store: AnnDataStore, dataset_id: str) -> str:
+    """The last route segment: the dataset id with the ending the format is named by.
 
-    for item in header_value.split(","):
-        segments = [segment.strip() for segment in item.split(";")]
-        coding = segments[0].lower()
-        if not coding:
-            continue
-
-        quality = 1.0
-        seen_quality = False
-        valid = True
-        for parameter in segments[1:]:
-            if "=" not in parameter:
-                valid = False
-                break
-            name, value = (part.strip() for part in parameter.split("=", 1))
-            if name.lower() != "q" or seen_quality or not _QVALUE_RE.fullmatch(value):
-                valid = False
-                break
-            quality = float(value)
-            seen_quality = True
-
-        if not valid:
-            continue
-        if coding == "gzip":
-            gzip_qualities.append(quality)
-        elif coding == "*":
-            wildcard_qualities.append(quality)
-
-    if gzip_qualities:
-        return max(gzip_qualities) > 0
-    return bool(wildcard_qualities and max(wildcard_qualities) > 0)
-
-
-class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
+    Named by the dataset id, so the local file name is never published; the
+    ending is the file's own (``.rds.gz``, ``.loom``), a Zarr store folder's
+    ``.zarr``, and none for a folder of files.
     """
-    HTTP handler for serving AnnData data in Cellucid format.
+    if store.layout == "folder":
+        return f"{dataset_id}.zarr" if store.files is None else dataset_id
+    return f"{dataset_id}{store.ending}"
+
+
+@dataclass(frozen=True)
+class _ServedStore:
+    """What the handler serves: the store, its route name, and generated metadata."""
+
+    store: AnnDataStore
+    #: The last route segment (:func:`_route_name`).
+    route_name: str
+    #: (store key, bytes) answered in place of a missing consolidated document.
+    generated_metadata: tuple[str, bytes] | None
+    #: The generated document's validator: a hash of its bytes, computed once.
+    generated_etag: str = ""
+
+
+def _file_etag(status: os.stat_result) -> str:
+    """A strong validator of one file version: its size, modification time and inode.
+
+    A file rewritten in place or replaced by another gets a new one, so a
+    browser that kept bytes of the old version revalidates them and is told
+    they changed (and the viewer, reading with ``If-Range``-free range
+    requests, sees the new tag and refuses to mix versions).
+    """
+    return f'"{status.st_size:x}-{status.st_mtime_ns:x}-{status.st_ino:x}"'
+
+
+def _canonical_store_key(text: str) -> str | None:
+    """One Zarr store key, or None when it is not a plain relative key."""
+    if not text or text.startswith("/") or "\\" in text or "\x00" in text:
+        return None
+    parts = text.split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        return None
+    return text
+
+
+class AnnDataRequestHandler(CORSMixin, BaseHTTPRequestHandler):
+    """
+    HTTP handler of an :class:`AnnDataServer`.
 
     Routes:
-        /dataset_identity.json - Dataset metadata
-        /obs_manifest.json - Cell metadata manifest
-        /var_manifest.json - Gene expression manifest
-        /connectivity_manifest.json - Connectivity manifest
-        /embeddings/{index}_{dim}d.bin - Embedding coordinates
-        /vectors/{fieldIndex}_{embeddingIndex}.bin - Vector field displacement vectors
-        /obs/{field}.values.f32 - Continuous obs field
-        /obs/{field}.codes.{ext} - Categorical obs field codes
-        /obs/{field}.outliers.f32 - Categorical outlier quantiles
-        /var/{gene}.values.f32 - Gene expression values
-        /connectivity/edges.src.bin - Edge sources
-        /connectivity/edges.dst.bin - Edge destinations
-        /connectivity/edges.weights.f64.bin - Edge weights
+        /_cellucid/anndata/<name>[/<key>] - The store's bytes (GET, HEAD, Range)
+        /_cellucid/datasets - The dataset, its store, and its launch choices
         /_cellucid/health - Health check
         /_cellucid/info - Server info
-        /_cellucid/protocol - Viewer wire capabilities this installation accepts
-        /_cellucid/mapping/candidates.json - The served data mapping and every
-            candidate array, from metadata
-        /_cellucid/mapping/... - Further data-mapping routes (see cellucid.anndata_mapping)
-        /_cellucid/events - POST endpoint for frontend events (hooks)
-        /_cellucid/selection - POST endpoint for selections (binary uint32 cell indices)
+        /_cellucid/protocol - The viewer channel, and the commands and events it carries
+        /_cellucid/ws - The viewer channel (a WebSocket)
     """
 
-    allow_caching = False  # Data is dynamic, don't cache
+    # Kept-alive connections: a browser reads a file with many range requests.
+    protocol_version = "HTTP/1.1"
+    timeout = _IDLE_CONNECTION_SECONDS
+    # Store bytes are kept by the browser and revalidated (ETag, 304) before
+    # reuse: a reload of an unchanged file transfers nothing it has.
+    allow_caching = False
+    # Headers and body are separate writes; without TCP_NODELAY the body's
+    # last segment would wait for the client's delayed ACK of the headers.
+    disable_nagle_algorithm = True
 
     def __init__(
         self,
         *args,
-        adapter: AnnDataAdapter,
+        served: _ServedStore,
         server_info: dict,
-        metadata_bodies: dict[str, bytes],
-        payload_lengths: dict[str, int],
+        health: dict,
+        datasets: dict,
         serve_web_ui: bool,
         web_cache_dir: Path,
         allowed_hosts: frozenset[str],
         **kwargs,
     ):
-        self.adapter = adapter
+        self.served = served
         self.server_info = server_info
-        self.metadata_bodies = metadata_bodies
-        self.payload_lengths = payload_lengths
+        self.health = health
+        self.datasets = datasets
         self.serve_web_ui = serve_web_ui
         self.web_cache_dir = web_cache_dir
         # Read by CORSMixin.parse_request, which runs inside super().__init__().
         self.allowed_hosts = allowed_hosts
-        # We serve "virtual" files via explicit route handlers, but still want
-        # the normal BaseHTTPRequestHandler lifecycle (parse_request, etc.).
-        # `directory` is unused because we never call the default file-serving
-        # paths for AnnData mode.
         super().__init__(*args, **kwargs)
 
     def end_headers(self):
@@ -211,391 +237,244 @@ class AnnDataRequestHandler(CORSMixin, SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_HEAD(self):
-        """Handle HEAD requests (for urlExists checks)."""
-        self.do_GET(head_only=True)
+        """Answer GET's headers without its body."""
+        self._handle_read(head_only=True)
 
-    def do_GET(self, head_only: bool = False):
-        """Handle GET requests."""
-        parsed = urlparse(self.path)
-        raw_path = unquote(parsed.path)
+    def do_GET(self):
+        """Answer one route."""
+        self._handle_read(head_only=False)
 
-        if self.serve_web_ui and self.handle_web_asset_get(raw_path, head_only=head_only):
-            return
-        if self.serve_web_ui and (
-            raw_path == f"/{WEB_ASSET_INVENTORY_FILENAME}"
-            or raw_path == "/assets"
-            or raw_path.startswith("/assets/")
-        ):
-            self.send_error_response(404, "Web asset is not declared by the active build")
-            return
-
-        path = raw_path.lstrip("/")
-
-        # HEAD always describes the uncompressed representation so it can be
-        # answered from validated metadata without materializing payload bytes.
-        accept_encoding = self.headers.get("Accept-Encoding", "")
-        supports_gzip = not head_only and _accepts_gzip(accept_encoding)
-
+    def _handle_read(self, *, head_only: bool) -> None:
+        raw_path = unquote(urlparse(self.path).path)
         try:
-            # Root path - redirect to viewer
-            if path == "" or path == "index.html":
-                self.send_error_response(503, "Cellucid viewer UI unavailable")
+            if self.serve_web_ui and self.handle_web_asset_get(raw_path, head_only=head_only):
                 return
-
-            if path in self.metadata_bodies:
-                self._send_preencoded_json(self.metadata_bodies[path], head_only)
+            if self.serve_web_ui and (
+                raw_path == f"/{WEB_ASSET_INVENTORY_FILENAME}"
+                or raw_path == "/assets"
+                or raw_path.startswith("/assets/")
+            ):
+                self.send_error_response(404, "Web asset is not declared by the active build")
+                return
+            path = raw_path.lstrip("/")
+            if path in ("", "index.html"):
+                self.send_error_response(503, "Cellucid viewer UI unavailable")
             elif path == "_cellucid/health":
-                self.send_json(
-                    {
-                        "status": "ok",
-                        "type": "anndata",
-                        "version": self.server_info["version"],
-                        "format": self.server_info["format"],
-                        "is_backed": self.server_info["is_backed"],
-                        "n_cells": self.adapter.n_cells,
-                        "n_genes": self.adapter.n_genes,
-                    },
-                    head_only,
-                )
+                self.send_json(self.health, head_only)
             elif path == "_cellucid/info":
                 self.send_json(self.server_info, head_only)
+            elif path == "_cellucid/datasets":
+                self.send_json(self.datasets, head_only)
             elif path == "_cellucid/protocol":
                 self.send_json(_protocol_capability_document(), head_only)
-            elif path == "connectivity_manifest.json":
-                self.send_error_response(404, "No connectivity data")
-            elif path.startswith(MAPPING_ROUTE_PREFIX):
-                self._handle_mapping(
-                    path[len(MAPPING_ROUTE_PREFIX) :],
-                    head_only,
-                    supports_gzip,
-                )
-            elif head_only and path in self.payload_lengths:
-                self._send_binary_head(self.payload_lengths[path])
-            elif path not in self.payload_lengths:
-                self.send_error_response(404, f"Not found: {path}")
-            elif path.startswith("embeddings/"):
-                self._handle_embedding(path, head_only, supports_gzip)
-            elif path.startswith("obs/"):
-                self._handle_obs(path, head_only, supports_gzip)
-            elif path.startswith("var/"):
-                self._handle_var(path, head_only, supports_gzip)
-            elif path.startswith("connectivity/"):
-                self._handle_connectivity(path, head_only, supports_gzip)
-            elif path.startswith("vectors/"):
-                self._handle_vector_fields(path, head_only, supports_gzip)
+            elif path == CHANNEL_ROUTE:
+                accept_viewer_channel(self)
+            elif path.startswith(ANNDATA_ROUTE_PREFIX):
+                self._handle_store(path[len(ANNDATA_ROUTE_PREFIX) :], head_only=head_only)
             else:
                 self.send_error_response(404, f"Not found: {path}")
-
         except ConnectionError:
-            # The client went away mid-response: a closed tab, or a reload
-            # during a payload big enough to still be streaming. There is no
-            # socket left to answer on, so answering would fault again.
+            # The client went away mid-response: a closed tab, a reload, or a
+            # cancelled read. There is no socket left to answer on.
             self.close_connection = True
-            logger.debug("Client disconnected while receiving %s", path)
+            logger.debug("Client disconnected while receiving %s", raw_path)
         except Exception:
-            logger.exception("Error handling %s", path)
+            logger.exception("Error handling %s", raw_path)
+            self.close_connection = True
             self.send_error_response(500, "Internal server error")
 
-    def _send_preencoded_json(self, body: bytes, head_only: bool) -> None:
-        """Send validated JSON bytes without rebuilding them for HEAD."""
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        if not head_only:
-            self.wfile.write(body)
+    def _handle_store(self, route: str, *, head_only: bool) -> None:
+        store = self.served.store
+        if store.layout != "folder":
+            if route != self.served.route_name:
+                self.send_error_response(404, f"Not found: {ANNDATA_ROUTE_PREFIX}{route}")
+                return
+            self._send_file(store.path, head_only=head_only)
+            return
+        prefix = f"{self.served.route_name}/"
+        key = _canonical_store_key(route[len(prefix) :]) if route.startswith(prefix) else None
+        if key is None:
+            self.send_error_response(404, f"Not found: {ANNDATA_ROUTE_PREFIX}{route}")
+            return
+        generated = self.served.generated_metadata
+        if generated is not None and key == generated[0]:
+            self._send_bytes(generated[1], self.served.generated_etag, head_only=head_only)
+            return
+        path = store.path.joinpath(*PurePosixPath(key).parts)
+        try:
+            resolved = path.resolve(strict=True)
+        except (OSError, RuntimeError):
+            resolved = None
+        # An absent key is a 404, which a Zarr reader reads as "absent" (an
+        # unwritten chunk is its fill value). A key may not leave the store.
+        if resolved is None or not resolved.is_file() or not resolved.is_relative_to(store.path):
+            self.send_error_response(404, f"No key {key!r} in the store")
+            return
+        self._send_file(resolved, head_only=head_only)
 
-    def _send_binary_head(self, content_length: int) -> None:
-        """Send headers for an uncompressed scientific payload."""
-        self.send_response(HTTPStatus.OK)
+    def _range_interval(self, size: int, etag: str) -> tuple[int, int] | None | bool:
+        """The requested interval, None for the whole resource, False when refused.
+
+        A ``Range`` sent with an ``If-Range`` naming another version (a browser
+        cache completing bytes it kept of an older file) is answered with the
+        whole current resource, as HTTP requires, never with a range of a
+        different version.
+        """
+        headers = self._request_headers()
+        values = headers.get_all("Range", [])
+        if len(values) > 1:
+            return False
+        condition = headers.get("If-Range")
+        if values and condition is not None and condition.strip() != etag:
+            return None
+        try:
+            return parse_byte_range(values[0] if values else None, size)
+        except ValueError:
+            return False
+
+    def _not_modified(self, etag: str) -> bool:
+        """Answer 304 when the browser already holds this version (``If-None-Match``)."""
+        condition = self._request_headers().get("If-None-Match")
+        if condition is None:
+            return False
+        tags = {tag.strip().removeprefix("W/") for tag in condition.split(",")}
+        if etag not in tags and "*" not in tags:
+            return False
+        self.send_response(HTTPStatus.NOT_MODIFIED)
+        self.send_header("ETag", etag)
+        self.end_headers()
+        return True
+
+    def _send_head(
+        self,
+        *,
+        size: int,
+        interval: tuple[int, int] | None,
+        etag: str,
+    ) -> int:
+        start, end = interval if interval is not None else (0, size - 1)
+        length = 0 if size == 0 else end - start + 1
+        self.send_response(HTTPStatus.PARTIAL_CONTENT if interval is not None else HTTPStatus.OK)
         self.send_header("Content-Type", "application/octet-stream")
-        self.send_header("Content-Length", str(content_length))
+        self.send_header("Content-Length", str(length))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("ETag", etag)
+        if interval is not None:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
         self.end_headers()
+        return length
 
-    def _handle_mapping(self, path: str, head_only: bool, supports_gzip: bool):
-        """Answer one ``_cellucid/mapping/`` route.
+    def _send_file(self, path: Path, *, head_only: bool) -> None:
+        """Answer one file (or one range of it) with the kernel copying its bytes.
 
-        404 when the route names no catalog entry, 422 with
-        ``{"error", "key", "reason"}`` when the entry is unusable or its values fail the load-time check. A HEAD
-        answers the length without reading the payload wherever the catalog
-        determines it.
+        The body goes from the page cache to the socket with ``sendfile``
+        (``socket.sendfile``; a plain copy loop where the platform has none):
+        no read into Python, no copy per request, nothing held in memory.
         """
-        route = parse_mapping_route(path)
-        if route is None:
-            self.send_error_response(404, f"Not found: {MAPPING_ROUTE_PREFIX}{path}")
-            return
-        mapping = self.adapter.mapping
-        is_json = path.endswith(".json")
         try:
-            if head_only:
-                length = mapping.head_length(route)
-            else:
-                body, content_type = mapping.payload(route)
-        except MappingNotFound as exc:
-            self.send_error_response(404, str(exc))
+            file = open(path, "rb", buffering=0)  # noqa: SIM115 - closed below
+        except OSError:
+            self.send_error_response(404, f"{path.name} is no longer readable")
             return
-        except MappingLoadError as exc:
-            logger.warning("Refused mapping request %s: %s", path, exc)
-            self.send_json_error(422, exc.as_payload())
+        with file:
+            status = os.fstat(file.fileno())
+            size = status.st_size
+            etag = _file_etag(status)
+            if self._not_modified(etag):
+                return
+            interval = self._range_interval(size, etag)
+            if interval is False:
+                self.send_range_not_satisfiable(size)
+                return
+            assert interval is not True
+            length = self._send_head(size=size, interval=interval, etag=etag)
+            if head_only or length == 0:
+                return
+            sent = self.connection.sendfile(file, 0 if interval is None else interval[0], length)
+            if sent != length:
+                # The file shrank after its size was sent: the response
+                # cannot be completed, so the connection is closed.
+                self.close_connection = True
+
+    def _send_bytes(self, body: bytes, etag: str, *, head_only: bool) -> None:
+        if self._not_modified(etag):
             return
-        if head_only:
-            self.send_response(HTTPStatus.OK)
-            self.send_header(
-                "Content-Type", "application/json" if is_json else "application/octet-stream"
-            )
-            self.send_header("Content-Length", str(length))
-            self.end_headers()
+        interval = self._range_interval(len(body), etag)
+        if interval is False:
+            self.send_range_not_satisfiable(len(body))
             return
-        compress = supports_gzip and not is_json
-        self.send_binary(
-            deterministic_gzip_compress(body, compresslevel=6) if compress else body,
-            content_type=content_type,
-            head_only=False,
-            compressed=compress,
-            vary_accept_encoding=not is_json,
-        )
-
-    def _handle_embedding(self, path: str, head_only: bool, supports_gzip: bool):
-        """Handle embeddings/{index}_{dim}d.bin requests."""
-        embedding_id = self.adapter.get_embedding_id_for_payload(path.removeprefix("embeddings/"))
-        if embedding_id is None:
-            self.send_error_response(404, f"Invalid embedding path: {path}")
-            return
-        try:
-            # Compress if client supports gzip (transparent compression for better network perf)
-            compress = supports_gzip
-            data = self.adapter.get_embedding_binary(embedding_id, compress=compress)
-            self.send_binary(
-                data,
-                head_only=head_only,
-                compressed=compress,
-                vary_accept_encoding=True,
-            )
-        except ValueError:
-            self.send_error_response(404, "Embedding data not available")
-
-    def _handle_vector_fields(self, path: str, head_only: bool, supports_gzip: bool):
-        """
-        Handle vector field requests under /vectors/.
-
-        Supported paths:
-        - vectors/{fieldIndex}_{embeddingIndex}.bin
-        """
-        route = self.adapter.get_vector_field_route(path.removeprefix("vectors/"))
-        if route is None:
-            self.send_error_response(404, f"Vector field not found: {path}")
-            return
-        field_id, embedding_id = route
-        try:
-            data = self.adapter.get_vector_field_binary(
-                field_id,
-                embedding_id,
-                compress=supports_gzip,
-            )
-            self.send_binary(
-                data,
-                head_only=head_only,
-                compressed=supports_gzip,
-                vary_accept_encoding=True,
-            )
-        except ValueError as e:
-            self.send_error_response(404, str(e))
-
-    def _handle_obs(self, path: str, head_only: bool, supports_gzip: bool):
-        """
-        Handle obs field requests.
-
-        Supported paths:
-        - obs/{index}.values.f32
-        - obs/{index}.codes.u8, obs/{index}.codes.u16 or obs/{index}.codes.u32
-        - obs/{index}.outliers.f32
-        """
-        # Remove 'obs/' prefix
-        filename = path[4:]
-
-        # Compress if client supports gzip (transparent compression)
-        compress = supports_gzip
-
-        # Parse filename: {index}.{type}.{dtype}
-        # Examples: 0.codes.u8, 3.values.f32, 0.outliers.f32
-        parts = filename.rsplit(".", 2)  # Split from right: [index, type, dtype]
-        if len(parts) < 3:
-            self.send_error_response(404, f"Invalid obs path format: {path}")
-            return
-
-        field_index = parts[0]
-        data_type = parts[1]  # 'values', 'codes', or 'outliers'
-
-        actual_key = self.adapter.get_obs_key_for_payload_index(field_index)
-
-        if actual_key is None:
-            self.send_error_response(404, f"Obs field not found: {field_index}")
-            return
-
-        try:
-            if data_type == "values":
-                # Continuous field values
-                data = self.adapter.get_obs_continuous_values(actual_key, compress=compress)
-                self.send_binary(
-                    data,
-                    head_only=head_only,
-                    compressed=compress,
-                    vary_accept_encoding=True,
-                )
-            elif data_type == "codes":
-                # Categorical codes
-                data, categories, missing = self.adapter.get_obs_categorical_codes(
-                    actual_key, compress=compress
-                )
-                self.send_binary(
-                    data,
-                    head_only=head_only,
-                    compressed=compress,
-                    vary_accept_encoding=True,
-                )
-            elif data_type == "outliers":
-                # Outlier quantiles for categorical field
-                data = self.adapter.get_obs_outlier_quantiles(actual_key, compress=compress)
-                self.send_binary(
-                    data,
-                    head_only=head_only,
-                    compressed=compress,
-                    vary_accept_encoding=True,
-                )
-            else:
-                self.send_error_response(
-                    404, f"Unknown obs data type: {data_type} (expected values, codes, or outliers)"
-                )
-        except NonFinitePayloadError as exc:
-            # The same refusal a gene gets, for the same reason: a continuous
-            # obs column that is not entirely finite has no colour scale either.
-            logger.warning("Refused obs request %s: %s", path, exc)
-            self.send_json_error(422, exc.diagnosis.as_payload())
-        except Exception:
-            logger.exception("Error handling obs request: %s", path)
-            self.send_error_response(500, "Internal server error")
-
-    def _handle_var(self, path: str, head_only: bool, supports_gzip: bool):
-        """
-        Handle var (gene expression) requests.
-
-        Supported paths:
-        - var/{index}.values.f32
-        """
-        # Remove 'var/' prefix
-        filename = path[4:]
-
-        # Compress if client supports gzip (transparent compression)
-        compress = supports_gzip
-
-        # Check format: {index}.values.f32
-        if not filename.endswith(".values.f32"):
-            self.send_error_response(
-                404, f"Invalid var path format: {path} (expected {{index}}.values.f32)"
-            )
-            return
-
-        gene_index = filename[:-11]  # Remove '.values.f32'
-
-        actual_gene = self.adapter.get_gene_id_for_payload_index(gene_index)
-
-        if actual_gene is None:
-            self.send_error_response(404, f"Gene not found: {gene_index}")
-            return
-
-        try:
-            data = self.adapter.get_gene_expression(actual_gene, compress=compress)
-            self.send_binary(
-                data,
-                head_only=head_only,
-                compressed=compress,
-                vary_accept_encoding=True,
-            )
-        except KeyError:
-            self.send_error_response(404, "Gene not found")
-        except NonFinitePayloadError as exc:
-            # 422, not 500. The request was well formed and the server is
-            # working; the gene it names cannot be drawn. Answering "internal
-            # server error" sent every reader looking in the wrong place, and
-            # threw away a message that already named the gene and the reason.
-            logger.warning("Refused var request %s: %s", path, exc)
-            self.send_json_error(422, exc.diagnosis.as_payload())
-        except Exception:
-            logger.exception("Error handling var request: %s", path)
-            self.send_error_response(500, "Internal server error")
-
-    def _handle_connectivity(self, path: str, head_only: bool, supports_gzip: bool):
-        """
-        Handle connectivity edge requests.
-
-        Supported paths:
-        - connectivity/edges.src.bin - Edge source indices
-        - connectivity/edges.dst.bin - Edge destination indices
-        - connectivity/edges.weights.f64.bin - Edge Float64 weights
-        """
-        filename = path.split("/")[-1]
-
-        # Compress if client supports gzip (transparent compression)
-        compress = supports_gzip
-
-        try:
-            (
-                sources_data,
-                dests_data,
-                weights_data,
-                _n_edges,
-                _max_neighbors,
-            ) = self.adapter.get_connectivity_edges(compress=compress)
-
-            if filename == "edges.src.bin":
-                self.send_binary(
-                    sources_data,
-                    head_only=head_only,
-                    compressed=compress,
-                    vary_accept_encoding=True,
-                )
-            elif filename == "edges.dst.bin":
-                self.send_binary(
-                    dests_data,
-                    head_only=head_only,
-                    compressed=compress,
-                    vary_accept_encoding=True,
-                )
-            elif filename == "edges.weights.f64.bin":
-                self.send_binary(
-                    weights_data,
-                    head_only=head_only,
-                    compressed=compress,
-                    vary_accept_encoding=True,
-                )
-            else:
-                self.send_error_response(
-                    404,
-                    "Unknown connectivity file: "
-                    f"{filename} (expected edges.src.bin, edges.dst.bin, "
-                    "or edges.weights.f64.bin)",
-                )
-        except ValueError:
-            self.send_error_response(404, "Connectivity data not available")
-        except Exception:
-            logger.exception("Error handling connectivity request: %s", path)
-            self.send_error_response(500, "Internal server error")
+        assert interval is not True
+        length = self._send_head(size=len(body), interval=interval, etag=etag)
+        if not head_only and length:
+            start = 0 if interval is None else interval[0]
+            self._response_writer().write(body[start : start + length])
 
     def log_message(self, format: str, *args):
-        """Override to use Python logging."""
-        logger.debug("%s - %s", self.address_string(), format % args)
+        """Override to use Python logging (formatted only when it is shown)."""
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("%s - %s", self.address_string(), format % args)
+
+
+# =============================================================================
+# Server
+# =============================================================================
+
+
+def _describe_layout(store: AnnDataStore) -> str:
+    label = str(input_formats_label(store.kind))
+    if store.layout == "zip":
+        return f"{label}, zipped"
+    if store.layout == "folder" and store.zarr_format is not None:
+        return f"{label}, Zarr v{store.zarr_format} folder"
+    if store.files is not None:
+        return f"{label}, a folder of {len(store.files)} {plural(len(store.files), 'file')}"
+    return label
+
+
+def _identity_subject(kind: str) -> str:
+    """Why a dataset of format ``kind`` has no identity unless one is given.
+
+    AnnData and MuData declare theirs in ``uns['cellucid']``; every other
+    format is read by the browser alone, so the server cannot take one from it.
+    """
+    if kind in ANNDATA_KINDS or kind in MUDATA_KINDS:
+        noun = "MuData" if kind in MUDATA_KINDS else "AnnData"
+        return (
+            f"this {noun} declares no Cellucid identity of its own "
+            "(uns['cellucid']['id'] and ['name'])"
+        )
+    return (
+        f"a {input_formats_label(kind)} is read by the browser alone, so the server "
+        "cannot take a Cellucid identity from it"
+    )
+
+
+def input_formats_label(kind: str) -> str:
+    """The registry's label of one format id (``"Loom (.loom)"``)."""
+    from ._anndata_files import input_formats
+
+    for entry in input_formats()["formats"]:
+        if entry["id"] == kind:
+            return str(entry["label"])
+    raise ValueError(f"Unknown input format {kind!r}.")
 
 
 class AnnDataServer:
     """
-    Server for serving AnnData data in Cellucid format.
+    Server that hands one dataset (a file or folder Cellucid reads, or an
+    AnnData or MuData object) to the Cellucid viewer.
+
+    The viewer reads the data itself, with range requests where the format
+    allows them; this server names
+    the dataset, serves the store's bytes, carries the launch choices, and
+    hosts the notebook channel.
 
     Examples
     --------
     Start a blocking server::
 
         AnnDataServer(
-            adata,
+            "/path/to/data.h5ad",
             dataset_name="Example",
             dataset_id="example",
         ).start()
@@ -613,7 +492,7 @@ class AnnDataServer:
 
     def __init__(
         self,
-        data: str | Path | anndata.AnnData,
+        data: str | Path | anndata.AnnData | mudata.MuData,
         port: int = DEFAULT_PORT,
         host: str = DEFAULT_HOST,
         open_browser: bool = False,
@@ -621,30 +500,36 @@ class AnnDataServer:
         *,
         latent_key: str | None = None,
         gene_id_column: str | None = None,
-        normalize_embeddings: bool = True,
-        centroid_outlier_quantile: float = 0.95,
-        centroid_min_points: int = 10,
-        dataset_name: str,
-        dataset_id: str,
+        normalize_embeddings: bool | None = None,
+        centroid_min_points: int | None = None,
+        dataset_name: str | None = None,
+        dataset_id: str | None = None,
         obs_keys: Sequence[str] | None = None,
         embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
         knn_key: str | None = None,
         expression_source: str | None = None,
         vector_field_default: str | None = None,
-        serve_vector_fields: bool = False,
+        modality: str | None = None,
         serve_web_ui: bool = True,
         web_source_url: str = CELLUCID_WEB_URL,
         web_cache_dir: str | Path | None = None,
         allowed_hosts: Sequence[str] | None = None,
     ) -> None:
         """
-        Initialize the server.
+        Check the store and the launch choices; the server binds on ``start``.
 
         Parameters
         ----------
-        data : str, Path, or AnnData
-            Path to h5ad file or AnnData object. A leading ``~`` in a path is
-            expanded to the user's home directory.
+        data : str, Path, AnnData or MuData
+            A file or folder in any format Cellucid reads (``.h5ad``, a zipped
+            Zarr store, a Zarr store folder, ``.h5mu`` or MuData Zarr,
+            ``.loom``, a 10x ``.h5`` file or ``outs/`` folder, a MatrixMarket
+            folder, ``.rds``/``.rda``/``.RData``, gzipped or not), or an
+            AnnData or MuData object. A leading ``~`` in a path is expanded to
+            the user's home directory. A path is served as it is on disk; an
+            object is written once to a temporary ``.h5ad`` or ``.h5mu``
+            (sparse matrices column-major), which is removed when the server
+            stops.
         port : int
             Port to serve on.
         host : str
@@ -654,55 +539,63 @@ class AnnDataServer:
         quiet : bool
             Suppress info messages.
         latent_key : str, optional
-            Explicit key in ``obsm`` for the latent space.
+            ``obsm`` array (a latent space such as scVI or PCA) the viewer's
+            outlier filter measures in, instead of the store's own
+            ``uns['cellucid']['defaults']['latentKey']``. The viewer reads the
+            outlier quantiles the store holds for it, or computes them on first
+            use.
         gene_id_column : str, optional
-            Exact column in ``var`` containing gene identifiers. If None,
-            identifiers come from ``var.index``.
-        normalize_embeddings : bool
-            Whether to normalize embeddings into the viewer coordinate range.
-        centroid_outlier_quantile : float
-            Quantile used when computing categorical centroids.
-        centroid_min_points : int
-            Minimum category size used for centroid computation.
-        dataset_name : str
+            Exact column in ``var`` (``raw.var`` with ``expression_source="raw"``)
+            whose values name the genes. If None, genes are named by the index.
+        normalize_embeddings : bool, optional
+            Whether the viewer scales embeddings into its coordinate range.
+        centroid_min_points : int, optional
+            The fewest cells a category needs to get outlier quantiles (10 when
+            None).
+        dataset_name : str, optional
             Exact non-empty human-readable name without surrounding whitespace
-            or control characters. Unicode is preserved.
-        dataset_id : str
+            or control characters. Unicode is preserved. Defaults to
+            ``uns['cellucid']['name']``; required when the store has none.
+        dataset_id : str, optional
             Portable 1-180 byte ASCII identifier beginning with a letter or
             digit and otherwise using only letters, digits, ``.``, ``_``, or
             ``-``; it cannot end in ``.`` or use a Windows device name.
+            Sessions and community annotations are keyed by it. Defaults to
+            ``uns['cellucid']['id']``; required when the store has none.
         obs_keys : sequence of str, optional
-            Exact ``obs`` columns to serve, in this order. If None, every
-            column is served. Naming the columns leaves out a column Cellucid
-            cannot serve, such as a ``datetime64`` collection date.
+            Exact ``obs`` columns the viewer shows, in this order. If None,
+            every column is shown.
         embedding_keys : mapping, optional
             The embedding of a dimension slot, overriding the default for that
             slot: ``{"2d": "X_tsne"}`` reads the first two columns of
             ``obsm['X_tsne']``, and ``{"2d": ("X_pca", [2, 0])}`` reads the 0-based
             columns named. Slots not named follow the default rule
-            (``X_umap_1d``/``X_umap_2d``/``X_umap_3d``, or a 1- to 3-column
-            ``X_umap``); when no slot resolves, Cellucid makes a deterministic best
-            guess from the other ``obsm`` arrays and reports which one it chose.
+            (``X_umap_1d``/``X_umap_2d``/``X_umap_3d``, else the first 1- to
+            3-column of ``X_umap``, ``X_UMAP``, ``X_wnn.umap`` and
+            ``X_ref.umap``); when no slot resolves, the viewer makes a deterministic
+            best guess from the other ``obsm`` arrays and reports it.
         knn_key : str, optional
-            The ``obsp`` matrix to serve as the neighbour graph, usually
-            ``"connectivities"``. None by default: an edge list costs time and
-            memory proportional to the number of stored neighbours, which on a
-            large object is the single longest part of startup, and most sessions
-            never draw the graph. The named matrix is read and checked before the
-            server binds; one that is not symmetric, such as ``distances``, is
-            refused with that reason, and naming a matrix the object does not carry
-            is an error.
+            The ``obsp`` matrix the viewer draws as the neighbour graph, usually
+            ``"connectivities"``. None follows the viewer's default rule. The
+            graph is read only when a view draws it.
         expression_source : str, optional
             Where gene expression is read: ``"X"``, ``"raw"`` (``raw.X``, with
-            genes named from ``raw.var``), or ``"layer:<name>"``; None (the
-            default) follows the default rule of :class:`~cellucid.AnnDataAdapter`.
+            genes named from ``raw.var``), or ``"layer:<name>"``; None follows
+            the viewer's default rule (``X`` when present, else ``raw`` or a
+            layer, reported as guessed).
         vector_field_default : str, optional
-            Exact field id required when multiple UMAP vector fields exist.
-        serve_vector_fields : bool
-            Whether to read, validate, and serve the ``<field>_umap_<n>d`` vector
-            arrays in ``obsm``. False by default: every declared field is read and
-            checked in full before the server binds, and a session that never
-            turns the overlay on pays nothing for it.
+            The vector field the overlay opens on: ``<field>`` of an obsm
+            array ``<field>_<basis>`` drawn over ``X_<basis>`` (``velocity``
+            for ``velocity_umap``). One of its embeddings must be shown when
+            the store opens (a chosen or default embedding, or a 1-3 column
+            array that is not the latent space).
+        modality : str, optional
+            The modality a multimodal dataset (a MuData, a Seurat object with
+            several assays) opens on, one of its modality names; None opens
+            the default one (the first named as gene expression -- ``rna``,
+            ``gex``, ``gene expression``, ``gene_expression``, ``sct`` -- else
+            the first). Set only
+            for multimodal data.
         serve_web_ui : bool
             Establish and serve the exact current web build.
         web_source_url : str
@@ -716,14 +609,12 @@ class AnnDataServer:
             is matched on any port. Declaring names also applies the ``Host``
             check to a non-loopback bind.
         """
-        dataset_name = _require_dataset_name(
-            dataset_name,
-            label="dataset_name",
+        self.dataset_name: str = ""
+        self.dataset_id: str = ""
+        given_name = (
+            None if dataset_name is None else _require_dataset_name(dataset_name, label="dataset_name")
         )
-        dataset_id = _require_dataset_id(
-            dataset_id,
-            label="dataset_id",
-        )
+        given_id = None if dataset_id is None else _require_dataset_id(dataset_id, label="dataset_id")
         self.port = require_server_port(port)
         self.host = host
         self.allowed_hosts = require_allowed_hosts(allowed_hosts)
@@ -742,342 +633,273 @@ class AnnDataServer:
             if web_cache_dir is not None
             else _web_cache_dir()
         )
-        self._server: HTTPServer | None = None
+        self._server: CellucidThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._running = False
         self._started = False
         self._closed = False
         self._serving = False
         self._background_error: BaseException | None = None
-
-        # Step 1: Detect format
-        format_name: str
-        self.data_format: str
-        if isinstance(data, str | Path):
-            data = Path(data).expanduser()
-            format_name = _classify_anndata_path(data)
-            self.data_source = str(data)
-            self.data_format = format_name
-
-            if not quiet:
-                print_step(1, 5, "Detecting format")
-                print_detail("Path", str(data))
-                print_detail("Format", format_name)
-                print_success("Format detected")
-        else:
-            # In-memory AnnData
-            self.data_source = "in-memory AnnData"
-            self.data_format = "in-memory"
-            if not quiet:
-                print_step(1, 5, "Detecting format")
-                print_detail("Source", "in-memory AnnData")
-                print_success("Format detected")
-
-        # Step 2: Load file
-        if not quiet:
-            print_step(2, 5, "Loading AnnData")
-            mode = "read-only backed h5ad" if self.data_format == "h5ad" else "in-memory"
-            print_detail("Mode", mode)
-
-        if isinstance(data, str | Path):
-            self.adapter = AnnDataAdapter.from_file(
-                data,
-                latent_key=latent_key,
-                gene_id_column=gene_id_column,
-                normalize_embeddings=normalize_embeddings,
-                centroid_outlier_quantile=centroid_outlier_quantile,
-                centroid_min_points=centroid_min_points,
-                dataset_name=dataset_name,
-                dataset_id=dataset_id,
-                obs_keys=obs_keys,
-                embedding_keys=embedding_keys,
-                knn_key=knn_key,
-                expression_source=expression_source,
-                vector_field_default=vector_field_default,
-                serve_vector_fields=serve_vector_fields,
-                quiet=quiet,
-            )
-        else:
-            self.adapter = AnnDataAdapter(
-                data,
-                latent_key=latent_key,
-                gene_id_column=gene_id_column,
-                normalize_embeddings=normalize_embeddings,
-                centroid_outlier_quantile=centroid_outlier_quantile,
-                centroid_min_points=centroid_min_points,
-                dataset_name=dataset_name,
-                dataset_id=dataset_id,
-                obs_keys=obs_keys,
-                embedding_keys=embedding_keys,
-                knn_key=knn_key,
-                expression_source=expression_source,
-                vector_field_default=vector_field_default,
-                serve_vector_fields=serve_vector_fields,
-                quiet=quiet,
-            )
+        self._temporary_file: Path | None = None
+        self._temporary_finalizer: weakref.finalize | None = None
+        #: Whether a taken ``port`` is passed over for the next free one
+        #: (:class:`AnnDataViewer` sets it when no port was given).
+        self.next_free_port = False
+        #: The program serving the viewer, as ``/_cellucid/info`` names it and
+        #: the viewer shows it (the shared protocol's ``runtimes``): "python",
+        #: or "jupyter" for a notebook viewer (:class:`AnnDataViewer` sets it).
+        self.runtime = "python"
 
         try:
-            if not quiet:
-                print_success("File opened")
-
-            # Step 3: Analyze dataset
-            if not quiet:
-                print_step(3, 5, "Analyzing dataset")
-                self._print_dataset_info()
-                print_success("Analysis complete")
-
-            from . import __version__
-
-            self.server_info = {
-                "version": __version__,
-                "type": "anndata",
-                "format": self.data_format,
-                "host": self.host,
-                "port": self.port,
-                "n_cells": self.adapter.n_cells,
-                "n_genes": self.adapter.n_genes,
-                "is_backed": self.adapter.is_backed,
-            }
-            if not quiet:
-                print_step(4, 5, "Building manifests")
-                print_detail("Centroids", "one per categorical field and embedding")
-            (
-                self._identity,
-                self._metadata_bodies,
-                self._payload_lengths,
-            ) = self._build_http_contract()
-            if not quiet:
-                print_success("Manifests built")
+            self._prepare(
+                data,
+                given_id,
+                given_name,
+                latent_key=latent_key,
+                gene_id_column=gene_id_column,
+                normalize_embeddings=normalize_embeddings,
+                centroid_min_points=centroid_min_points,
+                obs_keys=obs_keys,
+                embedding_keys=embedding_keys,
+                knn_key=knn_key,
+                expression_source=expression_source,
+                vector_field_default=vector_field_default,
+                modality=modality,
+            )
         except BaseException:
             self._closed = True
-            try:
-                self.adapter.close()
-            except BaseException:
-                logger.exception(
-                    "Failed to close the AnnData adapter after server construction failed"
-                )
+            self._remove_temporary_file()
             raise
 
-    def _build_http_contract(self) -> tuple[dict, dict[str, bytes], dict[str, int]]:
-        """Build and cross-check every public direct-AnnData route once."""
-        identity = self.adapter.get_dataset_identity()
-        obs_manifest = self.adapter.get_obs_manifest()
-        var_manifest = self.adapter.get_var_manifest()
-        connectivity_manifest = self.adapter.get_connectivity_manifest()
+    def _resolve_identity(
+        self,
+        given_id: str | None,
+        given_name: str | None,
+        declared: tuple[object, object],
+        *,
+        subject: str,
+    ) -> None:
+        """Name the dataset: as given, else as ``uns['cellucid']`` declares it.
 
-        has_connectivity = identity["stats"]["has_connectivity"]
-        n_edges = identity["stats"]["n_edges"]
-        if has_connectivity:
-            if connectivity_manifest is None:
-                raise ValueError("Identity advertises connectivity without a connectivity manifest")
-            expected_connectivity_keys = {
-                "format",
-                "n_cells",
-                "n_edges",
-                "max_neighbors",
-                "index_bytes",
-                "index_dtype",
-                "sourcesPath",
-                "destinationsPath",
-                "weightsPath",
-                "weight_dtype",
-                "weight_bytes",
-                "compression",
-            }
-            if set(connectivity_manifest) != expected_connectivity_keys:
-                raise ValueError("Connectivity manifest does not contain the exact current fields")
-            if n_edges != connectivity_manifest["n_edges"]:
-                raise ValueError("Identity and connectivity manifest disagree on the edge count")
-            expected_connectivity_manifest = build_connectivity_manifest(
-                n_cells=identity["stats"]["n_cells"],
-                n_edges=connectivity_manifest["n_edges"],
-                max_neighbors=connectivity_manifest["max_neighbors"],
-                index_bytes=connectivity_manifest["index_bytes"],
-                index_dtype=connectivity_manifest["index_dtype"],
-                compression=None,
-            )
-            if (
-                list(connectivity_manifest) != list(expected_connectivity_manifest)
-                or connectivity_manifest != expected_connectivity_manifest
-            ):
-                raise ValueError(
-                    "Connectivity manifest does not match the direct weighted edge contract"
-                )
-        elif connectivity_manifest is not None or n_edges is not None:
+        ``subject`` says why no identity was found, in the words of what was
+        handed over (:func:`_identity_subject`).
+        """
+        declared_id, declared_name = declared
+        if given_id is None and declared_id is not None:
+            given_id = _require_dataset_id(declared_id, label="uns['cellucid']['id']")
+        if given_name is None and declared_name is not None:
+            given_name = _require_dataset_name(declared_name, label="uns['cellucid']['name']")
+        missing = [
+            label
+            for label, value in (("dataset_name", given_name), ("dataset_id", given_id))
+            if value is None
+        ]
+        if missing:
             raise ValueError(
-                "Connectivity manifest or edge count exists while connectivity is absent"
+                f"{' and '.join(missing)} {'are' if len(missing) > 1 else 'is'} required: "
+                f"{subject}. Name the dataset, for example dataset_name=\"My study\", "
+                "dataset_id=\"my-study-v1\" (--dataset-name/--dataset-id on the command line)."
             )
+        assert given_id is not None and given_name is not None
+        self.dataset_id = given_id
+        self.dataset_name = given_name
 
-        metadata = {
-            "dataset_identity.json": identity,
-            "obs_manifest.json": obs_manifest,
-            "var_manifest.json": var_manifest,
-            "_cellucid/datasets": {
-                "datasets": [
-                    {
-                        "id": identity["id"],
-                        "path": "/",
-                        "name": identity["name"],
-                    }
-                ]
-            },
-        }
-        if connectivity_manifest is not None:
-            metadata["connectivity_manifest.json"] = connectivity_manifest
-        metadata_bodies = {
-            path: json.dumps(value).encode("utf-8") for path, value in metadata.items()
-        }
-
-        n_cells = identity["stats"]["n_cells"]
-        payload_lengths: dict[str, int] = {}
-
-        def add_payload(path: str, content_length: int) -> None:
-            if not isinstance(path, str) or not path or path.startswith("/"):
-                raise ValueError(f"Invalid direct-AnnData payload path: {path!r}")
-            if path in payload_lengths:
-                raise ValueError(f"Duplicate direct-AnnData payload path: {path!r}")
-            if type(content_length) is not int or content_length < 0:
-                raise ValueError(f"Invalid payload length for {path!r}: {content_length!r}")
-            payload_lengths[path] = content_length
-
-        items = identity["embeddings"]["items"]
-        for item in items.values():
-            add_payload(item["file"], n_cells * item["dimension"] * 4)
-
-        vector_fields = identity.get("vector_fields")
-        if vector_fields is not None:
-            for field in vector_fields["fields"].values():
-                for embedding_id, path in field["files"].items():
-                    add_payload(path, n_cells * items[embedding_id]["dimension"] * 4)
-
-        # Every payload route is the index the manifest entry itself declares, so
-        # the served path set cannot drift from the manifest the browser reads.
-        obs_schemas = obs_manifest["_obsSchemas"]
-        continuous_schema = obs_schemas.get("continuous")
-        if continuous_schema is not None:
-            for field in obs_manifest["_continuousFields"]:
-                add_payload(
-                    continuous_schema["pathPattern"].replace("{index}", str(field[0])),
-                    n_cells * 4,
-                )
-
-        categorical_schema = obs_schemas.get("categorical")
-        if categorical_schema is not None:
-            for field in obs_manifest["_categoricalFields"]:
-                width = CATEGORICAL_CODE_WIDTHS[field[3]]
-                ext = width.extension
-                item_size = width.itemsize
-                add_payload(
-                    categorical_schema["codesPathPattern"]
-                    .replace("{index}", str(field[0]))
-                    .replace("{ext}", ext),
-                    n_cells * item_size,
-                )
-                outlier_pattern = categorical_schema["outlierPathPattern"]
-                if outlier_pattern is not None:
-                    add_payload(
-                        outlier_pattern.replace("{index}", str(field[0])),
-                        n_cells * 4,
-                    )
-
-        var_schema = var_manifest["_varSchema"]
-        for field in var_manifest["fields"]:
-            add_payload(
-                var_schema["pathPattern"].replace("{index}", str(field[0])),
-                n_cells * 4,
+    def _prepare(
+        self,
+        data: str | Path | anndata.AnnData | mudata.MuData,
+        given_id: str | None,
+        given_name: str | None,
+        **choices: Any,
+    ) -> None:
+        quiet = self.quiet
+        if not quiet:
+            print_step(1, 4, "Detecting format")
+        if isinstance(data, str | Path):
+            store = classify_anndata_path(data)
+            if not quiet:
+                print_detail("Path", str(store.path))
+                print_detail("Format", _describe_layout(store))
+            self._resolve_identity(
+                given_id,
+                given_name,
+                read_cellucid_identity(store),
+                subject=_identity_subject(store.kind),
             )
+            undecodable = browser_undecodable(store)
+            if undecodable and store.kind not in ANNDATA_KINDS:
+                raise ValueError(
+                    f"The browser cannot decode some arrays of {store.path.name} "
+                    f"({', '.join(undecodable[:3])}{' and more' if len(undecodable) > 3 else ''}): "
+                    "they are stored with a codec it does not read. Write the file again with "
+                    "gzip compression (or none), or convert it to AnnData and serve that."
+                )
+            if undecodable:
+                # The browser cannot decode these arrays; anndata (with its
+                # codec plugins) can. The store is read once and served as a
+                # temporary .h5ad the browser reads in full.
+                if not quiet:
+                    shown = ", ".join(undecodable[:3])
+                    more = f" and {len(undecodable) - 3} more" if len(undecodable) > 3 else ""
+                    print_detail("Browser cannot decode", f"{shown}{more}")
+                    print_detail("Serving", "a decodable copy, written once to a temporary .h5ad")
+                store = self._serve_temporary(read_into_memory(store))
+        else:
+            import anndata as ad
 
-        if connectivity_manifest is not None:
-            edge_bytes = connectivity_manifest["n_edges"] * connectivity_manifest["index_bytes"]
-            add_payload(connectivity_manifest["sourcesPath"], edge_bytes)
-            add_payload(connectivity_manifest["destinationsPath"], edge_bytes)
-            weight_bytes = connectivity_manifest["n_edges"] * connectivity_manifest["weight_bytes"]
-            add_payload(connectivity_manifest["weightsPath"], weight_bytes)
+            mudata = is_mudata(data)
+            if not mudata and not isinstance(data, ad.AnnData):
+                raise TypeError(
+                    "data must be a path to a file or folder Cellucid reads, or an AnnData "
+                    f"or MuData object; got {type(data).__name__}."
+                )
+            if not quiet:
+                print_detail("Source", f"in-memory {'MuData' if mudata else 'AnnData'}")
+                print_detail(
+                    "Format", f"written once to a temporary {'.h5mu' if mudata else '.h5ad'}"
+                )
+            uns = data.uns  # type: ignore[union-attr]
+            declared = uns.get("cellucid") if hasattr(uns, "get") else None
+            self._resolve_identity(
+                given_id,
+                given_name,
+                (declared.get("id"), declared.get("name")) if isinstance(declared, Mapping) else (None, None),
+                subject=_identity_subject("h5mu" if mudata else "h5ad"),
+            )
+            store = (
+                self._serve_temporary_mudata(data) if mudata else self._serve_temporary(data)
+            )
+        if not quiet:
+            print_success("Format detected")
+        self.store = store
+        self.data_format = store.kind
 
-        return identity, metadata_bodies, payload_lengths
+        if not quiet:
+            print_step(2, 4, "Reading metadata")
+        # None for a format only the browser reads (an R object, a Loom or
+        # Cell Ranger file, a MatrixMarket folder): what it holds is learned
+        # when the browser opens it, and the launch choices are checked then.
+        contents = read_anndata_contents(store)
+        if contents is not None and contents.n_obs <= 0:
+            noun = "MuData" if store.kind in MUDATA_KINDS else "AnnData"
+            raise ValueError(f"{noun} datasets must contain at least one observation")
+        self.contents = contents
+        if not quiet:
+            self._print_contents()
+            print_success("Metadata read")
 
-    def _print_dataset_info(self):
-        """Print information about the loaded dataset."""
-        print_detail("Cells", f"{self.adapter.n_cells:,}")
-        print_detail("Genes", f"{self.adapter.n_genes:,}")
-
-        # Embedding info: which obsm array fills each dimension slot.
-        embeddings = self.adapter.embeddings
-        print_detail(
-            "Embeddings",
-            ", ".join(f"{item.dimension}D {item.id}" for item in embeddings) if embeddings else "none",
+        if not quiet:
+            print_step(3, 4, "Checking launch choices")
+        self.defaults = launch_defaults(contents, **choices)
+        generated = (
+            consolidated_zarr_metadata(store)
+            if store.layout == "folder" and store.files is None
+            else None
+        )
+        if not quiet:
+            for name, value in self.defaults.items():
+                print_detail(name, str(value))
+            if generated is not None:
+                print_detail("Consolidated metadata", f"built in memory ({generated[0]})")
+            print_success("Launch choices checked")
+        self._served = _ServedStore(
+            store,
+            _route_name(store, self.dataset_id),
+            generated,
+            "" if generated is None else f'"{hashlib.sha256(generated[1]).hexdigest()[:32]}"',
         )
 
-        # Count obs field types
-        obs_keys = self.adapter.get_obs_keys()
-        n_categorical = sum(1 for k in obs_keys if self.adapter.get_obs_field_kind(k) == "category")
-        n_continuous = sum(
-            1 for k in obs_keys if self.adapter.get_obs_field_kind(k) == "continuous"
+        from . import __version__
+
+        self.server_info = {
+            "version": __version__,
+            "type": "anndata",
+            "format": store.kind,
+            "host": self.host,
+            "port": self.port,
+            # Null when only the browser can read the data (see above).
+            "n_cells": None if contents is None else contents.n_obs,
+            "n_genes": None if contents is None else contents.n_vars,
+            # The program serving the viewer, which the viewer names: set
+            # from ``runtime`` when the server starts.
+            "runtime": self.runtime,
+        }
+
+    def _serve_temporary(self, adata: anndata.AnnData) -> AnnDataStore:
+        """Write ``adata`` to the temporary ``.h5ad`` this server serves."""
+        path = write_temporary_h5ad(adata, dataset_id=self.dataset_id)
+        self._temporary_file = path
+        # Removed on stop, and when Python exits without a stop.
+        self._temporary_finalizer = weakref.finalize(self, remove_temporary_h5ad, path)
+        return classify_anndata_path(path)
+
+    def _serve_temporary_mudata(self, mdata: Any) -> AnnDataStore:
+        """Write ``mdata`` to the temporary Cellucid-ready ``.h5mu`` this server serves."""
+        path = write_temporary_h5mu(
+            mdata, dataset_id=self.dataset_id, dataset_name=self.dataset_name
         )
-        print_detail("Obs fields", f"{n_categorical} categorical, {n_continuous} continuous")
+        self._temporary_file = path
+        self._temporary_finalizer = weakref.finalize(self, remove_temporary_h5ad, path)
+        return classify_anndata_path(path)
 
-        # Vector fields and connectivity each have three states, not two: served,
-        # held by this object but not asked for, or absent. Printing 'no' for the
-        # middle one would read as missing data.
-        identity = self.adapter.get_dataset_identity()
-        served_fields = identity.get("vector_fields")
-        if served_fields:
-            names = ", ".join(sorted(served_fields["fields"]))
-            vectors_str = f"yes ({names})"
-        elif self._holds_unserved_vector_fields():
-            vectors_str = (
-                "not bound (obsm declares vector fields; pass "
-                "serve_vector_fields=True, or --vector-fields, to bind them, or "
-                "bind one under Session > Data mapping)"
-            )
-        else:
-            vectors_str = "no"
-        print_detail("Vector fields", vectors_str)
-        # Connectivity has three states, not two: a graph that is served, a
-        # graph this object holds but was not asked to serve, and no graph at
-        # all. Printing 'no' for the middle one would read as missing data.
-        if self.adapter.has_connectivity():
-            manifest = self.adapter.get_connectivity_manifest()
-            if manifest is None:
-                raise RuntimeError("Validated connectivity is missing its manifest")
-            conn_str = f"yes ({manifest['n_edges']:,} edges)"
-        elif self._holds_unserved_connectivity():
-            conn_str = (
-                "not served (obsp['connectivities'] is present; pass "
-                "knn_key='connectivities', or --knn connectivities, to draw it)"
-            )
-        else:
-            conn_str = "no"
-        print_detail("Connectivity", conn_str)
+    def _print_contents(self) -> None:
+        contents = self.contents
+        if contents is None:
+            print_detail("Contents", "read by the browser when it opens the data")
+            return
+        print_detail("Cells", f"{contents.n_obs:,}")
+        print_detail("Genes", f"{contents.n_vars:,}")
+        print_detail("obsm", ", ".join(sorted(contents.obsm)) or "none")
+        print_detail("obs fields", f"{len(contents.obs_columns)}")
+        print_detail("obsp", ", ".join(sorted(contents.obsp)) or "none")
+        print_detail("layers", ", ".join(sorted(contents.layers)) or "none")
 
-    def _holds_unserved_vector_fields(self) -> bool:
-        """Report whether obsm declares vector fields this server was not asked for.
+    @property
+    def file_route(self) -> str:
+        """The store's route, relative to the server's base URL."""
+        suffix = "/" if self.store.layout == "folder" else ""
+        return f"{ANNDATA_ROUTE_PREFIX}{self._served.route_name}{suffix}"
 
-        Matching a key name is a scan of the key list, not a read of any array,
-        so naming this state costs nothing that opting out was meant to save.
-        """
-        if self.adapter.serve_vector_fields:
-            return False
-        try:
-            return any(
-                is_vector_field_key(key)
-                for key in self.adapter.adata.obsm
-            )
-        except Exception:
-            return False
+    def _datasets_document(self) -> dict[str, Any]:
+        file: dict[str, Any] = {
+            "url": self.file_route,
+            "kind": self.store.kind,
+            "layout": self.store.layout,
+        }
+        if self.store.layout != "folder":
+            file["size"] = self.store.path.stat().st_size
+        elif self.store.files is not None:
+            # A browser cannot list a folder: its files and their exact sizes.
+            file["files"] = [
+                {"path": name, "size": (self.store.path / name).stat().st_size}
+                for name in self.store.files
+            ]
+        return {
+            "datasets": [
+                {
+                    "id": self.dataset_id,
+                    "name": self.dataset_name,
+                    "anndata": {"file": file, "defaults": dict(self.defaults)},
+                }
+            ]
+        }
 
-    def _holds_unserved_connectivity(self) -> bool:
-        """Report whether a graph exists that this server was not asked to serve.
+    def _health_document(self) -> dict[str, Any]:
+        info = self.server_info
+        return {
+            "status": "ok",
+            "type": "anndata",
+            "version": info["version"],
+            "format": info["format"],
+            "n_cells": info["n_cells"],
+            "n_genes": info["n_genes"],
+        }
 
-        Membership in ``obsp`` is a key lookup, not a read of the matrix, so
-        naming this state costs nothing that opting out was meant to save.
-        """
-        if self.adapter.knn_key is not None:
-            return False
-        try:
-            return "connectivities" in self.adapter.adata.obsp
-        except Exception:
-            return False
+    def _remove_temporary_file(self) -> None:
+        finalizer = self._temporary_finalizer
+        self._temporary_finalizer = None
+        self._temporary_file = None
+        if finalizer is not None:
+            finalizer()
 
     @property
     def url(self) -> str:
@@ -1123,9 +945,8 @@ class AnnDataServer:
         self._started = True
 
         try:
-            # Step 4: Start server
             if not self.quiet:
-                print_step(5, 5, "Starting server")
+                print_step(4, 4, "Starting server")
 
             if self.serve_web_ui:
                 from .web_cache import ensure_web_ui_cached
@@ -1144,20 +965,12 @@ class AnnDataServer:
                 if not self.quiet:
                     print_success("Viewer UI generation established")
 
-            handler = partial(
-                AnnDataRequestHandler,
-                adapter=self.adapter,
-                server_info=self.server_info,
-                metadata_bodies=self._metadata_bodies,
-                payload_lengths=self._payload_lengths,
-                serve_web_ui=self.serve_web_ui,
-                web_cache_dir=self.web_cache_dir,
-                allowed_hosts=self.allowed_hosts,
-            )
-
-            self._server = HTTPServer((self.host, self.port), handler)
+            self._server = self._bind()
             self.port = require_server_port(self._server.server_address[1])
             self.server_info["port"] = self.port
+            self.server_info["runtime"] = self.runtime
+            # The documents name the bound port, so they are built after binding.
+            self._server.RequestHandlerClass = self._handler()
             self._running = True
 
             if not self.quiet:
@@ -1190,6 +1003,37 @@ class AnnDataServer:
         except BaseException:
             self._rollback_failed_start(shutdown=self._thread is not None)
             raise
+
+    def _bind(self) -> CellucidThreadingHTTPServer:
+        """Bind ``port``; with ``next_free_port``, the next free port when it is taken.
+
+        A notebook viewer asks for the default port, the only local origin
+        Google sign-in accepts, and takes the next free one when another
+        viewer holds it (as cellucid-r's ``cellucid_view()`` does), saying so.
+        """
+        import errno
+
+        port = self.port
+        while True:
+            try:
+                return CellucidThreadingHTTPServer((self.host, port), self._handler())
+            except OSError as error:
+                taken = error.errno in (errno.EADDRINUSE, errno.EACCES) or getattr(error, "winerror", None) == 10013
+                if not (self.next_free_port and taken and 0 < port < 65535):
+                    raise
+                port += 1
+
+    def _handler(self) -> Any:
+        return partial(
+            AnnDataRequestHandler,
+            served=self._served,
+            server_info=dict(self.server_info),
+            health=self._health_document(),
+            datasets=self._datasets_document(),
+            serve_web_ui=self.serve_web_ui,
+            web_cache_dir=self.web_cache_dir,
+            allowed_hosts=self.allowed_hosts,
+        )
 
     def _serve_in_background(self) -> None:
         """Run the bound server and retain an exact asynchronous failure."""
@@ -1226,24 +1070,16 @@ class AnnDataServer:
             )
 
     def _finish_serving(self) -> None:
-        """Close the socket and adapter after the serving loop has ended."""
-        failures: list[BaseException] = []
+        """Close the socket and remove a temporary file after serving ended."""
         self._running = False
         server = self._server
         self._server = None
-        if server is not None:
-            try:
-                server.server_close()
-            except BaseException as error:
-                failures.append(error)
-        try:
-            self.adapter.close()
-        except BaseException as error:
-            failures.append(error)
         self._closed = True
-        if failures:
-            details = "; ".join(f"{type(error).__name__}: {error}" for error in failures)
-            raise RuntimeError(f"AnnData server cleanup failed: {details}") from failures[0]
+        try:
+            if server is not None:
+                server.server_close()
+        finally:
+            self._remove_temporary_file()
 
     def _rollback_failed_start(self, *, shutdown: bool) -> None:
         """Rollback acquired resources without replacing the startup exception."""
@@ -1265,10 +1101,7 @@ class AnnDataServer:
         self._server = None
         self._thread = None
         self._serving = False
-        try:
-            self.adapter.close()
-        except BaseException:
-            logger.exception("Failed to close the AnnData adapter after startup failed")
+        self._remove_temporary_file()
         self._closed = True
 
     def start_background(self):
@@ -1276,7 +1109,7 @@ class AnnDataServer:
         self.start(blocking=False)
 
     def stop(self):
-        """Stop the server and cleanup resources."""
+        """Stop the server and remove a temporary file it wrote."""
         self._running = False
         failures: list[BaseException] = []
         server = self._server
@@ -1298,11 +1131,7 @@ class AnnDataServer:
             thread.join()
         self._thread = None
         self._serving = False
-
-        try:
-            self.adapter.close()
-        except BaseException as error:
-            failures.append(error)
+        self._remove_temporary_file()
         self._closed = True
 
         if not self.quiet:
@@ -1329,7 +1158,7 @@ class AnnDataServer:
 
 
 def serve_anndata(
-    data: str | Path | anndata.AnnData,
+    data: str | Path | anndata.AnnData | mudata.MuData,
     port: int = DEFAULT_PORT,
     host: str = DEFAULT_HOST,
     open_browser: bool = True,
@@ -1337,33 +1166,39 @@ def serve_anndata(
     *,
     latent_key: str | None = None,
     gene_id_column: str | None = None,
-    normalize_embeddings: bool = True,
-    centroid_outlier_quantile: float = 0.95,
-    centroid_min_points: int = 10,
-    dataset_name: str,
-    dataset_id: str,
+    normalize_embeddings: bool | None = None,
+    centroid_min_points: int | None = None,
+    dataset_name: str | None = None,
+    dataset_id: str | None = None,
     obs_keys: Sequence[str] | None = None,
     embedding_keys: Mapping[str, EmbeddingKeySpec] | None = None,
     knn_key: str | None = None,
     expression_source: str | None = None,
     vector_field_default: str | None = None,
-    serve_vector_fields: bool = False,
+    modality: str | None = None,
     serve_web_ui: bool = True,
     web_source_url: str = CELLUCID_WEB_URL,
     web_cache_dir: str | Path | None = None,
     allowed_hosts: Sequence[str] | None = None,
 ) -> AnnDataServer:
     """
-    Serve an AnnData object or h5ad file directly.
+    Serve a dataset (a file, a folder, an AnnData or MuData object) to the viewer, which reads it itself.
 
-    This is a convenience function for quickly visualizing AnnData.
-    For production use, consider using prepare instead.
+    The viewer reads the data in place with range requests where the format
+    allows it (only what a view needs is transferred), and once from the
+    start for an R object or a MatrixMarket folder; nothing is converted
+    first.
 
     Parameters
     ----------
-    data : str, Path, or AnnData
-        Path to h5ad file or AnnData object. A leading ``~`` in a path is
-        expanded to the user's home directory.
+    data : str, Path, AnnData or MuData
+        A file or folder in any format Cellucid reads (``.h5ad``, AnnData
+        Zarr folder or ``.zip``, ``.h5mu``, MuData Zarr, ``.loom``, a 10x
+        ``.h5`` file or ``outs/`` folder, a MatrixMarket folder,
+        ``.rds``/``.rda``/``.RData``, gzipped or not), or an AnnData or MuData
+        object. A leading ``~`` in a path is expanded to the user's home
+        directory. An object is written once to a temporary ``.h5ad`` or
+        ``.h5mu``, removed when the server stops.
     port : int
         Port to serve on (default: 8765).
     host : str
@@ -1373,55 +1208,47 @@ def serve_anndata(
     quiet : bool
         Suppress info messages.
     latent_key : str, optional
-        Explicit key in ``obsm`` for the latent space.
+        ``obsm`` array (a latent space such as scVI or PCA) the viewer's outlier
+        filter measures in, instead of the store's own
+        ``uns['cellucid']['defaults']['latentKey']``. The viewer reads the
+        outlier quantiles the store holds for it, or computes them on first use.
     gene_id_column : str, optional
-        Exact column in ``var`` containing gene identifiers. If None,
-        identifiers come from ``var.index``.
-    normalize_embeddings : bool
-        Whether to normalize embeddings into the viewer coordinate range.
-    centroid_outlier_quantile : float
-        Quantile used when computing categorical centroids.
-    centroid_min_points : int
-        Minimum category size used for centroid computation.
-    dataset_name : str
+        Exact column in ``var`` (``raw.var`` with ``expression_source="raw"``)
+        whose values name the genes. If None, genes are named by the index.
+    normalize_embeddings : bool, optional
+        Whether the viewer scales embeddings into its coordinate range.
+    centroid_min_points : int, optional
+        The fewest cells a category needs to get outlier quantiles (10 when
+        None).
+    dataset_name : str, optional
         Exact non-empty human-readable name without surrounding whitespace or
-        control characters. Unicode is preserved.
-    dataset_id : str
+        control characters. Unicode is preserved. Defaults to
+        ``uns['cellucid']['name']``; required when the store has none.
+    dataset_id : str, optional
         Portable 1-180 byte ASCII identifier beginning with a letter or digit
         and otherwise using only letters, digits, ``.``, ``_``, or ``-``; it
-        cannot end in ``.`` or use a Windows device name.
+        cannot end in ``.`` or use a Windows device name. Defaults to
+        ``uns['cellucid']['id']``; required when the store has none.
     obs_keys : sequence of str, optional
-        Exact ``obs`` columns to serve, in this order. If None, every column is
-        served. Naming the columns leaves out a column Cellucid cannot serve,
-        such as a ``datetime64`` collection date.
+        Exact ``obs`` columns the viewer shows, in this order. If None, every
+        column is shown.
     embedding_keys : mapping, optional
         The embedding of a dimension slot, overriding the default for that
         slot: ``{"2d": "X_tsne"}`` reads the first two columns of
         ``obsm['X_tsne']``, and ``{"2d": ("X_pca", [2, 0])}`` reads the 0-based
-        columns named. Slots not named follow the default rule
-        (``X_umap_1d``/``X_umap_2d``/``X_umap_3d``, or a 1- to 3-column
-        ``X_umap``); when no slot resolves, Cellucid makes a deterministic best
-        guess from the other ``obsm`` arrays and reports which one it chose.
+        columns named.
     knn_key : str, optional
-        The ``obsp`` matrix to serve as the neighbour graph, usually
-        ``"connectivities"``. None by default: an edge list costs time and
-        memory proportional to the number of stored neighbours, which on a
-        large object is the single longest part of startup, and most sessions
-        never draw the graph. The named matrix is read and checked before the
-        server binds; one that is not symmetric, such as ``distances``, is
-        refused with that reason, and naming a matrix the object does not carry
-        is an error.
+        The ``obsp`` matrix the viewer draws as the neighbour graph, usually
+        ``"connectivities"``; read only when a view draws it.
     expression_source : str, optional
-        Where gene expression is read: ``"X"``, ``"raw"`` (``raw.X``, with
-        genes named from ``raw.var``), or ``"layer:<name>"``; None (the
-        default) follows the default rule of :class:`~cellucid.AnnDataAdapter`.
+        Where gene expression is read: ``"X"``, ``"raw"`` or
+        ``"layer:<name>"``; None follows the viewer's default rule.
     vector_field_default : str, optional
-        Exact field id required when multiple UMAP vector fields exist.
-    serve_vector_fields : bool
-        Whether to read, validate, and serve the ``<field>_umap_<n>d`` vector arrays
-        in ``obsm``. False by default: every declared field is read and checked in
-        full before the server binds, and a session that never turns the overlay on
-        pays nothing for it.
+        The vector field the overlay opens on: ``<field>`` of an obsm array
+        ``<field>_<basis>`` drawn over ``X_<basis>``, one of whose embeddings
+        is shown when the store opens (as for ``AnnDataServer``).
+    modality : str, optional
+        The modality a multimodal dataset opens on (as for ``AnnDataServer``).
     serve_web_ui : bool
         Establish and serve the exact current web build.
     web_source_url : str
@@ -1437,7 +1264,7 @@ def serve_anndata(
     Returns
     -------
     AnnDataServer
-        The running server instance.
+        The server, after it stops (``start`` blocks until then).
 
     Example
     -------
@@ -1448,7 +1275,7 @@ def serve_anndata(
     ...     dataset_id="example",
     ... )
 
-    >>> # Or with in-memory AnnData
+    >>> # Or an in-memory AnnData
     >>> import anndata as ad
     >>> adata = ad.read_h5ad("data.h5ad")
     >>> serve_anndata(
@@ -1466,7 +1293,6 @@ def serve_anndata(
         latent_key=latent_key,
         gene_id_column=gene_id_column,
         normalize_embeddings=normalize_embeddings,
-        centroid_outlier_quantile=centroid_outlier_quantile,
         centroid_min_points=centroid_min_points,
         dataset_name=dataset_name,
         dataset_id=dataset_id,
@@ -1475,7 +1301,7 @@ def serve_anndata(
         knn_key=knn_key,
         expression_source=expression_source,
         vector_field_default=vector_field_default,
-        serve_vector_fields=serve_vector_fields,
+        modality=modality,
         serve_web_ui=serve_web_ui,
         web_source_url=web_source_url,
         web_cache_dir=web_cache_dir,

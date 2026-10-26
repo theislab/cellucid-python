@@ -27,7 +27,10 @@ def test_docs_start_light_and_only_expose_the_web_app_header_link() -> None:
 
     assert html_context["default_mode"] == "light"
     assert theme_options["navbar_end"] == ["theme-switcher", "navbar-icon-links"]
-    assert theme_options["secondary_sidebar_items"] == ["page-toc"]
+    # Every page has the "On this page" column except the home page, a
+    # landing page laid out at full width with no sidebars.
+    assert theme_options["secondary_sidebar_items"] == {"**": ["page-toc"], "index": []}
+    assert _literal_config("html_sidebars") == {"**": ["sidebar-nav-bs"], "index": []}
     assert "use_edit_page_button" not in theme_options
     # The header link is navigational, so it must use the canonical browser
     # host (`www`), not the bare apex reserved for frozen identifiers.

@@ -48,7 +48,7 @@ If you don’t want to read the full page, do this checklist before exporting a 
 2) **Avoid “rainbow/jet” for quantitative interpretation**  
    Rainbow palettes can create artificial boundaries that look like biology.
 3) **Check colorblind simulation before you export**  
-   In Figure Export, use the **Colorblind preview** dropdown (Normal / Deuteranopia / Protanopia / Tritanopia).  
+   In **Figure export**, use the **Colorblind preview** dropdown (Normal / Deuteranopia / Protanopia / Tritanopia).  
    This catches “red vs green” failure modes quickly.
 4) **Choose a background that preserves contrast**  
    If your points look washed out, switch viewer background or theme (dark vs light) and re-check.
@@ -76,14 +76,17 @@ Related: {doc}`../d_fields_coloring_legends/03_color_by_behavior` (exact behavio
 
 **Edge cases to watch**
 - **All zeros + log scale**: if you turn on log scale for a gene that is zero in most cells, many points can become “None” gray (log undefined at 0). That can look like “missing data”.
-- **Very narrow numeric range**: if everything looks the same color, use “Rescale colorbar to slider range” so small differences are visible.
+- **Very narrow numeric range**: if everything looks the same color, use “Rescale to range” so small differences are visible.
 
 ---
 
 ### Categorical fields (clusters, sample, batch)
 
-Cellucid assigns categorical colours in three stages, and only the first stage
-is colour-vision-deficiency safe. This is the most useful thing to know on this
+A field whose file stores Scanpy's colours for it (`uns['<field>_colors']`)
+opens in those colours, whatever they are; see
+{doc}`../d_fields_coloring_legends/03_color_by_behavior`. Otherwise Cellucid
+assigns categorical colours in three stages, and only the first stage is
+colour-vision-deficiency safe. This is the most useful thing to know on this
 page, so it is worth being precise:
 
 1) **The first 24 categories** come from a hand-tuned palette built from
@@ -125,7 +128,7 @@ Cellucid includes a **preview-only** colorblind simulation in the Figure Export 
 
 Step-by-step:
 
-1) Open the Figure Export panel: {doc}`../k_figure_export/index`
+1) Open the **Figure export** panel: {doc}`../k_figure_export/index`
 2) Click **Preview** (or open the preview section)
 3) Find **Colorblind preview**
 4) Toggle through:
@@ -189,7 +192,7 @@ control label.
 
 | Key | Action |
 |---|---|
-| `?` | Open the in-app “Keyboard Shortcuts” section |
+| `?` | Open the in-app “Keyboard shortcuts” section |
 | `h` | Toggle sidebar visibility |
 | `f` | Toggle fullscreen |
 | `r` | Reset the camera |
@@ -245,19 +248,19 @@ Two focus rules, both deliberate:
   are typing, so those keys still drive the scene behind the overlay.
 
 ```{figure} ../../../_static/screenshots/web_app/keyboard-shortcuts.png
-:alt: The Keyboard Shortcuts panel open in the Cellucid sidebar, listing five groups of shortcuts: the ungrouped global keys R, F, H, 1/2/3, O/P/G and ?; Navigation (Orbit / Planar / Free-fly) with W A S D and Shift; Orbit and Planar only with the zoom keys; Free-fly specific with E/Q and Esc; and Highlighting with Alt+click, Alt+drag, Shift+Alt+click, Ctrl+Alt+click, Esc to cancel a selection in progress, Esc to leave Select mode when nothing is in progress, and X.
-:width: 516px
+:alt: The Keyboard shortcuts panel open in the Cellucid sidebar, listing five groups, each with its (i): General (R, F, H, 1 2 3, O P G and ?), Navigation (W A S D and Shift), Zoom (= ] and - [), Free-fly (E Q and Esc) and Selection (Alt+click, Alt+drag, Shift+Alt+click, Ctrl+Alt+click, Esc to cancel a selection, Esc to leave Select mode, and X to clear highlights).
+:width: 532px
 
 Press `?` to open this panel in the app. It is the authoritative list, and it
-shows **five** groups. The three tables above restate every keyboard row of all
-five: the ungrouped global keys, then Navigation together with the two
-mode-specific groups, then the keyboard rows of Highlighting — `X` and the two
-`Esc` rows, *Cancel selection in progress* and *Leave Select mode when nothing
-is in progress*. The four pointer gestures in that last group
-(`Alt`+click, `Alt`+drag, `Shift`+`Alt`+click and `Ctrl`+`Alt`+click) are
-deliberately not restated here — they need a pointer, which is the subject of
-the next section. (Earlier interface: the `1`/`2`/`3` row now reads *1D, 2D,
-3D embedding · again: next*.)
+shows **five** groups: **General**, **Navigation**, **Zoom**, **Free-fly** and
+**Selection**. The three tables above restate every keyboard row of all five:
+the General keys (the `1`/`2`/`3` row reads *1D, 2D, 3D embedding · again:
+next*), then Navigation together with the Zoom and Free-fly groups, then the
+keyboard rows of Selection — `X` (*Clear highlights*) and the two `Esc` rows,
+*Cancel selection* and *Leave Select mode*. The four pointer gestures in that
+last group (`Alt`+click, `Alt`+drag, `Shift`+`Alt`+click and
+`Ctrl`+`Alt`+click) are deliberately not restated here — they need a pointer,
+which is the subject of the next section.
 ```
 
 ### What keyboard cannot do (yet)
@@ -319,12 +322,22 @@ are safe to rely on:
 - The app respects the operating system's **reduce motion** setting: animated
   transitions are clamped globally, and cinematic camera playback jumps to its
   final camera instead of animating through it.
+- Text contrast meets WCAG AA (4.5:1) in both themes: every text colour token
+  is measured against every text surface (`theme-contrast-contract`), and
+  every line of sidebar copy, the open colormap menu included, is measured as
+  rendered against the surface it sits on, in light and in dark.
+- Opening a dataset announces its progress: the opening step is a polite
+  status region, and notifications are announced the same way.
 
 What is **not** verified, and should not be assumed:
 
-- there is no automated WCAG audit in the test suite,
-- there is no colour-contrast assertion anywhere,
-- and no live region announces data-loading or rendering progress.
+- there is no automated WCAG audit in the test suite, and no formal audit has
+  been made, so Cellucid does not claim WCAG conformance;
+- rendering progress (a long draw or a smoke build) is not announced.
+
+The site's short accessibility statement, with how to report a barrier, is
+[www.cellucid.com/accessibility.html](https://www.cellucid.com/accessibility.html),
+linked as **Accessibility** at the foot of the sidebar.
 
 ---
 
@@ -384,7 +397,7 @@ Related:
 - The color domain is not rescaled to your current slider range.
 
 **Fix**
-- Turn on **Rescale colorbar to slider range** (see {doc}`../d_fields_coloring_legends/03_color_by_behavior`).
+- Turn on **Rescale to range** (see {doc}`../d_fields_coloring_legends/03_color_by_behavior`).
 
 ---
 
@@ -411,7 +424,7 @@ Related:
 
 **Fix**
 - Press `o` (Orbit) or `p` (Planar).
-- Use Reset Camera (see {doc}`../c_core_interactions/02_camera_controls_advanced`).
+- Use Reset camera (see {doc}`../c_core_interactions/02_camera_controls_advanced`).
 - Reduce motion: avoid pointer lock; prefer small, deliberate movements.
 
 ---

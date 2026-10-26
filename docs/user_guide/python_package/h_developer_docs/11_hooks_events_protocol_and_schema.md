@@ -14,77 +14,80 @@ If you only need user-facing usage examples, start with:
 
 ---
 
-## Two channels, two jobs
+## One channel, both directions
 
-### Channel A — Python → frontend (commands)
+Transport: one WebSocket per viewer, which the viewer page opens at
+`<server URL>/_cellucid/ws` ({doc}`../e_jupyter_hooks/05_architecture_viewer_channel`).
 
-Transport:
-- `window.postMessage(...)` into the iframe
+Opening it:
+- `GET /_cellucid/protocol` names the channel; the viewer refuses a server
+  without one and asks for a package upgrade;
+- the upgrade passes the `Host` check (`421`) and the `Origin` check (`403`);
+- the first frame is `{"type": "hello", "viewerId", "viewerToken"}`; the
+  server compares the token in constant time and answers
+  `{"type": "welcome"}`, or closes with `4401`;
+- from then on the socket is that one viewer's, so no frame carries
+  credentials, and a newer channel of the same viewer replaces it (`4409`).
 
-Used for:
-- “do something now” commands (highlight, set color-by, reset camera, request session bundle)
+### Python → frontend (commands)
 
-Authentication:
-- every message includes the exact `viewerToken`; the frontend rejects commands
-  without the matching token
+- one JSON text frame per command, exactly the keys of its type
+  (`_COMMAND_MESSAGE_FIELDS` in `jupyter/_wire.py`), validated and serialized
+  by `_require_frontend_message`
+- a command that names cells (`highlight`, `setVisibility`) is one binary
+  frame instead: a little-endian `uint32` header length, the JSON header
+  (`_BINARY_COMMAND_HEADER_FIELDS`: `{"type": "highlight", "color"}` or
+  `{"type": "setVisibility", "visible", "all"}`) padded with spaces to a
+  multiple of 4 bytes, then the cells as little-endian `uint32`, strictly
+  ascending (none for `setVisibility` with `"all": true`). The cells are
+  checked and sorted once (`_require_cell_indices`, vectorized for a NumPy
+  array) and written straight into the frame; the padding puts them on a
+  4-byte boundary, where the viewer reads them in place
+  (`decodeViewerBinaryCommand` in `data/viewer-protocol.js`), checked as
+  strictly as the server checks a selection
+- sent by `cellucid._viewer_channel.send_viewer_command`: on the open socket,
+  or into the viewer's outbox until it connects, flushed in order on
+  `welcome`; a frame that failed to go out whole stays queued, so nothing is
+  sent twice
+- used for “do something now” commands (highlight, set color-by, reset camera,
+  set the data mapping, request a session bundle)
 
-### Channel B — frontend → Python (events)
+### Frontend → Python (events)
 
-Transport:
-- HTTP `POST` to `/_cellucid/events` on the data server (JSON events)
-- HTTP `POST` to `/_cellucid/selection` on the data server (selections, binary)
+- JSON text frames, at most 1 MiB each, for `hover`, `click`, `ready`, `pong`,
+  `debug_snapshot`, `command_error` and `data_mapping`
+- binary frames for `selection` and `session_bundle`: a little-endian `uint32`
+  header length, a UTF-8 JSON header (`{"type": "selection", "source"}` or
+  `{"type": "session_bundle", "requestId"}`), then the body
+- a selection's body is the selected row indices as little-endian `uint32`,
+  strictly ascending, one or more; the server reads it into one buffer
+  (unmasked in place, no second copy), checks it
+  (`_require_selection_cell_array`), and the viewer's validator decodes it
+  into the `list[int]` its hooks receive
+- a session bundle's body is streamed to a temporary file, validated, and
+  turned into the server-built `session_bundle` event
 
-Used for:
-- “user did something” events (selection, hover, click, ready)
+A selection is binary because a JSON array of indices costs about 8 bytes per
+cell to encode, parse and validate; four bytes per cell, sorted, lets both
+sides check uniqueness in one pass without a hash set.
 
-Routing:
-- a JSON event payload contains `viewerId`, `viewerToken`, and `type`; a
-  selection names `viewerId`, `viewerToken` and `source` in its query
-- the server authenticates the token, then routes to the registered callback
+Delivery:
+- each event is validated (`_require_inbound_jupyter_event`) and handed to the
+  viewer the channel belongs to, on the channel's thread, one at a time and in
+  order;
+- a frame that breaks the rules closes the channel with `1008` before any hook
+  runs; a hook that raises is logged and the channel stays open.
 
-Important security note:
-- unknown viewers return `404`; missing or incorrect viewer credentials return
-  `403`
-
----
-
-## Frontend → Python events: transport and routing
-
-### HTTP endpoints
-
-- `POST /_cellucid/events`
-- body: JSON, at most 1 MiB; a `selection` or `session_bundle` record is
-  refused with HTTP 400, because only their own routes may produce them
-
-- `POST /_cellucid/selection?viewerId=...&viewerToken=...&source=...`
-- body: `application/octet-stream`, the selected row indices as little-endian
-  `uint32`, strictly ascending, one or more (no size cap; the server's memory
-  is the only limit, HTTP 413)
-- the server authenticates before reading the body, checks it
-  (`_require_selection_cell_array` in `jupyter/_wire.py`), and routes one
-  `selection` event whose `cells` field is the body bytes; the viewer's
-  validator decodes them into the `list[int]` its hooks receive
-
-A selection has its own binary route because a JSON array of indices costs
-about 8 bytes per cell to encode, parse and validate, the event endpoint's
-1 MiB limit stops it near 130,000 cells, and a browser `keepalive` request
-(which the event posts do not use) is limited to 64 KiB in total. Four bytes
-per cell, sorted, lets both sides check uniqueness in one pass without a hash
-set.
-
-Server implementation:
-- `cellucid-python/src/cellucid/_server_base.py` (`CORSMixin.handle_event_post`,
-  `CORSMixin.handle_selection_post`)
-
-Routing:
-- server validates `viewerId`, `viewerToken`, and `type`
-- server authenticates the token and calls the registered callback exactly once
-- the viewer updates state and triggers hooks
-
-Python implementation:
-- `cellucid-python/src/cellucid/jupyter/_base.py`
-  - `_register_viewer_for_messages`
-  - `BaseViewer._handle_frontend_message`
+Implementation:
+- `cellucid-python/src/cellucid/_viewer_channel.py` (`accept_viewer_channel`,
+  `send_viewer_command`, `register_event_callback`, `route_event`) over
+  `_websocket.py` (RFC 6455 framing)
+- `cellucid-python/src/cellucid/jupyter/_viewer.py`
+  (`_register_viewer_for_messages`, `AnnDataViewer._handle_frontend_message`)
+- `cellucid/assets/js/data/viewer-channel.js` and `viewer-protocol.js` (web)
+- the shared rules: `cellucid/tests/fixtures/viewer-protocol.json`, kept byte
+  for byte in cellucid-python (`tests/fixtures/viewer_protocol.json`) and
+  cellucid-r, each copy SHA-pinned
 
 ### Event validation in Python
 
@@ -101,36 +104,18 @@ The viewer accepts exactly:
 - the server-generated `session_bundle`
 
 Each type owns one exact required field set. Unknown types, missing fields,
-undeclared fields, routing extras, and invalid values raise before hook
-dispatch. Adding an event therefore requires an explicit coordinated schema
-change in both repositories, **in that order** — see “Adding a new event type”
-below.
-
----
-
-## Python → frontend commands: transport
-
-Python sends commands by:
-
-1) injecting a JS snippet into the notebook output (`IPython.display.Javascript`)
-2) calling `iframe.contentWindow.postMessage(...)`
-3) attaching:
-   - `viewerId`
-   - `viewerToken`
-
-This is implemented in:
-- `cellucid-python/src/cellucid/jupyter/_base.py` (`BaseViewer.send_message`)
-
-The set of public command helpers (Python methods) lives in the viewer class (e.g. `highlight_cells`, `set_color_by`, etc.).
+undeclared fields (a `viewerId` among them) and invalid values raise before
+hook dispatch. Adding an event therefore requires an explicit coordinated
+schema change in both repositories, **in that order** — see “Adding a new
+event type” below.
 
 ---
 
 ## Canonical event schemas (what Python code should expect)
 
-The posted event body must be a native JSON object with exact non-empty `type`,
-`viewerId`, and `viewerToken` routing fields. The transport authenticates and
-removes `viewerToken`; `BaseViewer` then validates the complete type-specific
-record before callbacks receive the routing-free payload.
+Each event is a native JSON object with an exact non-empty `type` and the
+type's fields, and nothing else; `AnnDataViewer` validates the complete record
+before callbacks receive it without `type`.
 
 Below are the expected shapes for core events.
 
@@ -175,7 +160,7 @@ Expected keys:
 ### `session_bundle` (Python-side event)
 
 Meaning:
-- the server received a `.cellucid-session` upload and is reporting status back to Python.
+- the server received a `.cellucid-session` bundle frame and is reporting status back to Python.
 
 Expected keys:
 - `status`: exactly `"ok"`
@@ -185,7 +170,8 @@ Expected keys:
 
 Note:
 - this event is generated by the server, not directly by the frontend;
-- rejected uploads never dispatch an error-shaped event.
+- an invalid bundle never dispatches an error-shaped `session_bundle`: it is
+  reported as a `command_error` naming `requestSessionBundle`.
 
 ### `command_error`
 
@@ -201,9 +187,9 @@ and not with an individual call. Adding a `requestId` to the commands is not a
 compatible change: the viewer validates each command's key set exactly, so a
 new field would make every command fail on an already-deployed web build.
 
-`BaseViewer` prints this event to `sys.stderr` when no `command_error` hook is
+`AnnDataViewer` prints this event to `sys.stderr` when no `command_error` hook is
 registered, because the command methods are one-way — `set_color_by` has
-already returned `None` by the time the rejection arrives on the server thread,
+already returned `None` by the time the rejection arrives on the channel's thread,
 and nothing can make it raise without blocking every command on a browser round
 trip.
 
@@ -274,77 +260,68 @@ If you add a new event type:
    `GET /_cellucid/protocol` naming the type in its `events` list. The gate is
    positive evidence rather than an assumption: a build that emits an event the
    notebook does not accept produces a worse failure than not emitting at all.
-4) Add positive preservation tests and negative missing/undeclared-field tests.
-5) Update docs:
+4) Add the type to the shared `viewer-protocol.json` (the web app's
+   `tests/fixtures/viewer-protocol.json`, copied byte for byte to
+   cellucid-python's `tests/fixtures/viewer_protocol.json` and to cellucid-r,
+   each copy SHA-pinned), and the R package's validator with it.
+5) Add positive preservation tests and negative missing/undeclared-field tests.
+6) Update docs:
    - add the schema to this page,
    - add user-facing examples in {doc}`../e_jupyter_hooks/index` if appropriate.
 
 ### Why the reader ships first
 
 `_require_inbound_jupyter_event` raises `ValueError` on an event type it does
-not know. That exception is not contained inside the browser: the event POST
-handler catches it, logs a traceback to the kernel's stderr, and answers
-`500 Viewer callback failed`, which the browser then reports as a delivery
-failure. A producer that ships ahead of its validator therefore converts a
-silent problem into a louder and less accurate one.
+not know, and the channel treats that as a protocol violation: it closes with
+`1008`, and the viewer freezes and reports it. A producer that ships ahead of
+its validator therefore converts a silent problem into a broken viewer.
 
 The gate in step 3 is the hard part, because the notebook and the web build are
 upgraded independently — the Python package fetches the web UI from
 `https://www.cellucid.com`, so a notebook running an older `cellucid` can be
 driving a newer web build the same day it deploys.
 
-The current handshake carries no capability declaration, and it cannot be
-extended to carry one after the fact: every payload Python sends the viewer is
-validated in the browser against an **exact** key set —
-`getJupyterConfig` (exactly three or four query parameters),
-`requireJupyterHealthPayload` (`status`, `type`, `version`, plus the four
-AnnData fields), `requireJupyterSuccessPayload` (`status`, `delivered`), and
-one `requireExactKeys` call per command. Adding a field to any of them breaks
-every already-deployed web build rather than being ignored by it.
+So the viewer asks before it sends: every new event a build could emit needs
+a channel the notebook answers with what it accepts. That channel is
+{ref}`GET /_cellucid/protocol <python-protocol-capability-endpoint>`, which
+the viewer reads before it opens its WebSocket. Because the route is answered
+from the same declaration the validator reads, “the route lists it” is
+exactly equivalent to “the validator accepts it”. Inferring the capability
+from the health `version` string instead would be a proxy rather than
+evidence, and would depend on release numbering that is decided after the
+code is written.
 
-So a new event that the browser must decide whether to emit needs a channel an
-older build does not read at all. That channel is
-{ref}`GET /_cellucid/protocol <python-protocol-capability-endpoint>`: an older build
-never requests it, and a build that does can fetch it during
-`JupyterBridgeDataSource.initialize()`, which completes before the command
-message listener is installed. Because the route ships in the same release as
-the validator, “the endpoint answers” is exactly equivalent to “the validator
-accepts”. Inferring the capability from the health `version` string instead
-would be a proxy rather than evidence, and would depend on release numbering
-that is decided after the code is written.
-
-The document is two lists and no version number, precisely so that it can never
-be sniffed the way a version would be:
+The document names the channel and holds three lists, and no version number,
+so that it can never be sniffed the way a version would be:
 
 ```json
 {
+  "channel": "_cellucid/ws",
   "commands": ["clearHighlights", "debug_snapshot", "freeze", "highlight",
                "ping", "requestSessionBundle", "resetCamera", "setColorBy",
                "setDataMapping", "setVisibility"],
+  "binaryCommands": ["highlight", "setVisibility"],
   "events": ["click", "command_error", "data_mapping", "debug_snapshot",
              "hover", "pong", "ready", "selection", "session_bundle"]
 }
 ```
 
-`events` is every type `_require_inbound_jupyter_event` accepts, and `commands`
-is every command this installation may send — which is also exactly the set of
+`binaryCommands` names the commands sent as binary frames; a viewer refuses a
+host whose list disagrees with how it reads a command it knows, or that lists
+none at all (a `cellucid` from before binary commands), and asks for an
+upgrade. `events` is every type `_require_inbound_jupyter_event` accepts, and
+`commands` is every command this installation may send — which is also exactly the set of
 names a `command_error` may report as having failed, so a build whose own
 command list has grown ahead of the notebook can avoid naming one the notebook
-would reject. Both grow inside the arrays and the key set stays fixed, because
-the viewer validates payloads against exact key sets and a new key would break
-the very builds this route exists to protect.
+would reject.
 
-The web build fetches this route during `JupyterBridgeDataSource.initialize()`
-and sends `command_error` and `data_mapping` only when the notebook lists them;
-a notebook too old to answer the route (HTTP 404) is treated as accepting
-neither.
+The web build fetches this route during `ViewerHostDataSource.initialize()`
+and sends an event only when the notebook lists its type. A notebook too old
+to name a channel (no `channel` key, or no route at all) is refused at once:
+the viewer asks for a package upgrade instead of opening anything.
 
-The gate covers new event types, not a new wire form for an existing one. When
-`selection` moved from a JSON event to the binary `POST /_cellucid/selection`
-route, the change was a clean break in both repositories: a `cellucid` older
-than the route answers that POST with HTTP 404, which the viewer reports as a
-failed selection delivery, and a current `cellucid` refuses a JSON `selection`
-event with HTTP 400.
+The gate covers new event types, not a new transport: a host without the
+channel is refused with the upgrade message.
 
 ---
 
@@ -363,15 +340,17 @@ Developer guidance:
 
 ### Viewer lifecycle and “stale events”
 
-Events are routed by `viewerId`:
-- if you re-run a cell and create a new viewer, the old viewer may still be alive,
-- ensure you stop old viewers (`viewer.stop()`) to avoid confusion.
+Each viewer has its own channel:
+- if you re-run a cell and create a new viewer, the old viewer may still be
+  alive, with its own page and channel,
+- ensure you stop old viewers (`viewer.stop()`) to avoid confusion; that
+  freezes their pages and closes their channels.
 
 ### Server exposure
 
-If the server is reachable by others on a network, the per-viewer token still
-protects callback dispatch, but the service itself remains an exposed attack
-surface.
+If the server is reachable by others on a network, the per-viewer token and
+the `Origin` check still protect the viewer channel, but the service itself
+remains an exposed attack surface.
 
 Recommendation:
 - do not expose servers publicly; prefer SSH tunnels or trusted internal networks.
@@ -384,7 +363,7 @@ Recommendation:
 
 Likely causes:
 - dataset load failed in the frontend (check browser console),
-- iframe cannot reach server endpoints (proxy/mixed-content),
+- iframe cannot reach the server, or its channel cannot open (proxy/mixed-content),
 - server health endpoint fails.
 
 Fix:
@@ -396,5 +375,5 @@ Cause:
 - indices are positional; you changed row order between “what the UI is showing” and “what Python is indexing”.
 
 Fix:
-- keep the same AnnData row order as the server/export,
+- keep the same AnnData row order as the served dataset,
 - or use stable identifiers and explicit mapping for cross-dataset transfer.

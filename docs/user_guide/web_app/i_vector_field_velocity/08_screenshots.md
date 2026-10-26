@@ -8,7 +8,7 @@ claim that the particle trails validate the underlying velocity model.
 ## Overlay controls
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/overlay-controls.png
-:alt: The real Pancreas dataset in a 2D Planar view with velocity particle flow and the complete core Vector Field Overlay controls visible.
+:alt: The Pancreas sample in 2D with the velocity overlay running over the cells and the Vector field controls open in the sidebar.
 :width: 1440px
 
 The 2D **Planar** capture shows `velocity` with the initial 15K density,
@@ -19,10 +19,10 @@ The 2D **Planar** capture shows `velocity` with the initial 15K density,
 ## Advanced visual settings
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/advanced-settings.png
-:alt: The real Pancreas 2D velocity particle flow with every Advanced Visual Settings group expanded.
+:alt: The 2D velocity overlay with Advanced visual settings open in the sidebar: Particle rendering, Trail settings, HDR and bloom, Color grading and Cinematic effects.
 :width: 1440px
 
-The same real 2D field with **Advanced Visual Settings** expanded. Particle,
+The same real 2D field with **Advanced visual settings** expanded. Particle,
 trail, HDR/bloom, color-grading, and cinematic controls change the rendering,
 not the stored per-cell vectors.
 ```
@@ -30,7 +30,7 @@ not the stored per-cell vectors.
 ## Standard Pancreas velocity
 
 ```{figure} ../../../_static/screenshots/vector_field_velocity/pancreas-velocity-3d.png
-:alt: Cellucid showing the Pancreatic endocrinogenesis (scVelo) sample in its 3D Orbit view, colored by clusters, with the velocity overlay enabled and vector controls visible.
+:alt: The Pancreas sample in its 3D view coloured by clusters with the velocity overlay running, and the Vector field controls open in the sidebar.
 :width: 1440px
 
 The independent 3D `velocity` payload in its declared **3D** / **Orbit**

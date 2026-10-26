@@ -3,11 +3,20 @@
 ``tests/fixtures/data_mapping_conformance.json`` is kept byte-for-byte in
 cellucid-python, cellucid-r and the web app, and each repository pins the same
 SHA-256. The rules it pins -- making names unique, the best-guess ranking, the
-embedding-column checks, canonical embedding ids, the default expression and
-vector bindings, the representations enabled when a dataset opens, the "nothing
-to plot" text, the export mapping, and DataMapping validation -- are
-the ones every reader and writer must apply identically, so a change to any of
-them changes the fixture, the pin, and the other two implementations together.
+embedding-column checks, canonical embedding ids, the default expression, the
+vector-field key rule and the default vector bindings, the representations
+enabled when a dataset opens, the "nothing to plot" text, and DataMapping
+validation -- are the ones every reader and writer must apply identically, so a
+change to any of them changes the fixture, the pin, and the other two
+implementations together.
+
+The Python package runs the sections whose rules it implements: making names
+unique and the note that reports it, the embedding-column check, the
+vector-field key rule (``prepare()``, the launch defaults and the transition
+drift helper name and read vector fields with it), DataMapping validation, the
+modality a multimodal dataset opens with, and the check of a mapping's
+modality against the dataset's.
+The other sections are rules of the web app.
 """
 
 from __future__ import annotations
@@ -25,7 +34,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "data_mapping_conformance.json"
 
 #: The same digest is pinned in cellucid-r (tests/testthat/test-data-mapping-
 #: conformance.R) and in the web app. Update all three together.
-FIXTURE_SHA256 = "dd08f84297c179b37e21a09dd820781cbfa21bf33f063bd79f925ec44a026660"
+FIXTURE_SHA256 = "cfc84c8c332f54824c6d8a438ee0c8ae014852674d7ae6bdc19dff1a8c84089e"
 
 
 def _fixture() -> dict[str, Any]:
@@ -39,7 +48,7 @@ def _cases(section: str) -> list[dict[str, Any]]:
 def test_the_fixture_is_the_pinned_shared_copy() -> None:
     assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest() == FIXTURE_SHA256
     fixture = _fixture()
-    assert fixture["version"] == 2
+    assert fixture["version"] == 6
     assert list(fixture) == [
         "_about",
         "version",
@@ -51,10 +60,12 @@ def test_the_fixture_is_the_pinned_shared_copy() -> None:
         "embeddingColumns",
         "canonicalEmbeddingId",
         "defaultExpression",
+        "vectorFieldKeys",
         "defaultVectorBindings",
         "nothingPlottable",
         "dataMapping",
-        "exportDataMapping",
+        "defaultModality",
+        "mappingModality",
     ]
     assert all(fixture[section] for section in list(fixture)[2:])
 
@@ -82,8 +93,8 @@ def test_make_unique_names(case: dict[str, Any]) -> None:
 )
 def test_make_unique_names_is_anndata_make_index_unique(case: dict[str, Any]) -> None:
     """The rule is anndata's own, once empty names have taken their index name."""
-    pd = pytest.importorskip("pandas")
-    anndata_utils = pytest.importorskip("anndata.utils")
+    import anndata.utils as anndata_utils
+    import pandas as pd
     filled = [
         index_name if name in ("", None) else name
         for name, index_name in zip(
@@ -108,63 +119,6 @@ def test_unique_names_note(case: dict[str, Any]) -> None:
     )
 
 
-@pytest.mark.parametrize("case", _cases("bestGuessTier"), ids=lambda case: case["key"])
-def test_best_guess_tier(case: dict[str, Any]) -> None:
-    assert dm.best_guess_tier(case["key"]) == case["tier"]
-
-
-@pytest.mark.parametrize("case", _cases("embeddingSlots"), ids=lambda case: case["name"])
-def test_embedding_slots(case: dict[str, Any]) -> None:
-    entries = [
-        dm.ObsmEntry(key=entry["key"], width=entry["width"], usable=entry["usable"])
-        for entry in case["obsm"]
-    ]
-    failures = case["loadFailures"]
-    checked: list[tuple[str, list[int]]] = []
-
-    def load_check(key: str, columns: list[int]) -> str | None:
-        checked.append((key, list(columns)))
-        return failures.get(key)
-
-    guess = dm.resolve_embedding_slots(
-        entries,
-        latent_key=case["latentKey"],
-        load_check=load_check,
-    )
-    assert guess.slots == case["expected"]["slots"]
-    assert guess.guessed == case["expected"]["guessed"]
-    assert [list(item) for item in guess.rejected] == case["expected"]["rejected"]
-    # A candidate is load-checked at most once, so the guess is bounded by the
-    # candidate count.
-    assert len({key for key, _ in checked}) == len(checked)
-
-
-@pytest.mark.parametrize("case", _cases("enabledEmbeddings"), ids=lambda case: case["name"])
-def test_enabled_embeddings(case: dict[str, Any]) -> None:
-    entries = [
-        dm.ObsmEntry(key=entry["key"], width=entry["width"], usable=entry["usable"])
-        for entry in case["obsm"]
-    ]
-    failures = case["loadFailures"]
-    guess = dm.resolve_embedding_slots(
-        entries,
-        latent_key=case["latentKey"],
-        load_check=lambda key, columns: failures.get(key),
-    )
-    enabled = dm.default_enabled_embeddings(
-        entries,
-        guess.slots,
-        latent_key=case["latentKey"],
-        rejected=[key for key, _ in guess.rejected],
-    )
-    assert enabled == case["expected"]
-
-
-@pytest.mark.parametrize("case", _cases("exportDataMapping"), ids=lambda case: case["name"])
-def test_export_data_mapping(case: dict[str, Any]) -> None:
-    assert dm.export_data_mapping(case["identity"], gene_name_source=case["geneNameSource"]) == case["expected"]
-
-
 @pytest.mark.parametrize("case", _cases("embeddingColumns"))
 def test_embedding_columns(case: dict[str, Any]) -> None:
     expected = case["expected"]
@@ -183,35 +137,34 @@ def test_embedding_columns(case: dict[str, Any]) -> None:
     )
 
 
-@pytest.mark.parametrize("case", _cases("canonicalEmbeddingId"))
-def test_canonical_embedding_id(case: dict[str, Any]) -> None:
-    assert (
-        dm.canonical_embedding_id(case["key"], case["columns"], width=case["width"])
-        == case["expected"]
+@pytest.mark.parametrize("case", _cases("vectorFieldKeys"), ids=lambda case: case["name"])
+def test_vector_field_keys(case: dict[str, Any]) -> None:
+    found = dm.vector_field_keys(case["keys"])
+    assert [
+        {"key": key, "field": parsed.field, "basis": parsed.basis} for key, parsed in found.items()
+    ] == case["expected"]
+    keys = set(case["keys"])
+    for key in case["keys"]:
+        parsed = dm.parse_vector_field_key(key, keys)
+        if key in found:
+            assert parsed == found[key]
+            assert parsed is not None
+            assert f"{parsed.field}_{parsed.basis}" == key
+            assert parsed.embedding_key == "X_" + parsed.basis
+        else:
+            assert parsed is None
+
+
+def test_vector_field_key_rule_splits_at_any_character() -> None:
+    keys = {"X_umap", "X_\U0001F600"}
+    assert dm.parse_vector_field_key("a\r_umap", keys) == dm.VectorFieldKey("a\r", "umap")
+    assert dm.parse_vector_field_key("a\n b_umap", keys) == dm.VectorFieldKey("a\n b", "umap")
+    assert dm.parse_vector_field_key("\U0001F600_\U0001F600", keys) == dm.VectorFieldKey(
+        "\U0001F600", "\U0001F600"
     )
-
-
-@pytest.mark.parametrize("case", _cases("defaultExpression"))
-def test_default_expression(case: dict[str, Any]) -> None:
-    value, guessed = dm.default_expression(
-        has_x=case["hasX"],
-        has_raw=case["hasRaw"],
-        layers=case["layers"],
-    )
-    assert {"expression": value, "guessed": guessed} == case["expected"]
-
-
-@pytest.mark.parametrize("case", _cases("defaultVectorBindings"))
-def test_default_vector_bindings(case: dict[str, Any]) -> None:
-    assert dm.default_vector_bindings(case["keys"], case["slots"]) == case["expected"]
-
-
-@pytest.mark.parametrize("case", _cases("nothingPlottable"))
-def test_nothing_plottable_message(case: dict[str, Any]) -> None:
-    descriptions = [dm.describe_obsm_entry(**entry) for entry in case["obsm"]]
-    assert dm.nothing_plottable_message(n_obs=case["nObs"], descriptions=descriptions) == case[
-        "expected"
-    ]
+    assert dm.parse_vector_field_key("velocity_umap\n", keys) is None
+    assert dm.parse_vector_field_key("X_umap", keys) is None
+    assert dm.parse_vector_field_key(3, keys) is None
 
 
 @pytest.mark.parametrize("case", _cases("dataMapping"), ids=lambda case: case["name"])
@@ -229,18 +182,53 @@ def test_data_mapping_validation(case: dict[str, Any]) -> None:
     assert list(canonical) == list(expected)
 
 
-def test_the_best_guess_skips_vector_keys_and_the_latent_space_by_role() -> None:
-    entries = [
-        dm.ObsmEntry(key="velocity_umap_2d", width=2, usable=True),
-        dm.ObsmEntry(key="X_scvi", width=2, usable=True),
+@pytest.mark.parametrize("case", _cases("defaultModality"))
+def test_default_modality(case: dict[str, Any]) -> None:
+    assert dm.default_modality(case["names"]) == case["expected"]
+
+
+@pytest.mark.parametrize("case", _cases("mappingModality"), ids=lambda case: case["name"])
+def test_mapping_modality(case: dict[str, Any]) -> None:
+    if case["expected"] is None:
+        dm.require_mapping_modality(case["mapping"], case["modalities"])
+        return
+    with pytest.raises(dm.DataMappingError) as raised:
+        dm.require_mapping_modality(case["mapping"], case["modalities"])
+    assert raised.value.code == case["expected"]["error"]
+
+
+def test_the_embeddings_shown_at_open_follow_the_web_rule_from_metadata() -> None:
+    """``enabled_embedding_keys`` is the web app's ``resolveEmbeddingSlots`` and
+    ``defaultEnabledEmbeddings`` without its load checks."""
+
+    def entries(**widths: int | None) -> list[dm.ObsmEntry]:
+        return [
+            dm.ObsmEntry(key=key, width=width, usable=width is not None)
+            for key, width in widths.items()
+        ]
+
+    # The default rule fills 2D; narrow arrays are shown beside it, a wide one
+    # and vector keys are not.
+    assert dm.enabled_embedding_keys(
+        entries(X_umap=2, X_tsne=3, X_pca=50, velocity_umap=2),
+        named_slots={},
+        latent_key=None,
+    ) == {"X_umap", "X_tsne"}
+    # The latent space is never shown beside.
+    assert dm.enabled_embedding_keys(
+        entries(X_umap=2, X_tsne=2), named_slots={}, latent_key="X_tsne"
+    ) == {"X_umap"}
+    # Nothing narrow: the best guess shows the first wide array, by tier.
+    assert dm.enabled_embedding_keys(
+        entries(X_pca=50, X_draw_graph_fa=8), named_slots={}, latent_key=None
+    ) == {"X_draw_graph_fa"}
+    # A named slot is shown whatever its width.
+    assert dm.enabled_embedding_keys(
+        entries(X_umap=2, X_pca=50), named_slots={"2d": "X_pca"}, latent_key=None
+    ) == {"X_umap", "X_pca"}
+    assert dm.best_guess_order(["X_pca", "X_spatial", "X_other", "X_tsne"]) == [
+        "X_tsne",
+        "X_spatial",
+        "X_other",
+        "X_pca",
     ]
-    guess = dm.resolve_embedding_slots(entries, latent_key="X_scvi")
-    assert guess.slots == {"1d": None, "2d": None, "3d": None}
-    described = [
-        {"key": "velocity_umap_2d", "storage": "dense", "shape": [5, 2], "usable": True, "reason": None},
-        {"key": "X_scvi", "storage": "dense", "shape": [5, 2], "usable": True, "reason": None},
-    ]
-    defects = [
-        dm.obsm_entry_defect(item, latent_key="X_scvi", rejected={}) for item in described
-    ]
-    assert defects == ["a vector field", "the latent space"]

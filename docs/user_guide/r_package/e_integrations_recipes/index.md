@@ -1,18 +1,22 @@
 # Integrations & Recipes
 
-This section is for practical “how do I get my data out of *this* object?” workflows.
+This section is for practical “how do I get my data out of *this* object?”
+workflows.
 
-`cellucid-r` intentionally has minimal dependencies, so it does **not** accept Seurat/SCE objects directly.
-Instead, you extract:
-- embeddings (UMAP 2D/3D)
-- a latent space (often PCA)
-- `obs` (cell metadata)
-- optional gene expression + gene metadata
-- optional connectivities / vector fields
+`cellucid_prepare(data = )` and `cellucid_view()` read Seurat,
+SingleCellExperiment and SummarizedExperiment objects directly (the first two
+recipes). Without an object, `cellucid_prepare()` takes plain R inputs (the
+third recipe):
 
-Then you call `cellucid_prepare()`.
+- the embeddings (UMAP, t-SNE, PCA, …) — each becomes `obsm[<key>]`;
+- the cell metadata, a `data.frame` — `obs`;
+- optionally gene expression, **cells x genes**, and gene metadata — `X`, `var`;
+- optionally a symmetric neighbour graph — `obsp['connectivities']`;
+- optionally vector fields — `obsm['<field>_<basis>']` for an embedding `X_<basis>` (`velocity_umap`).
 
-If you want the deep API docs (shapes, dtypes, file formats), see {doc}`../c_data_preparation_api/index`.
+Then one `cellucid_prepare()` call writes a Cellucid-ready AnnData store.
+
+For every argument in detail, see {doc}`../c_data_preparation_api/index`.
 
 ::::{grid} 1 1 2 2
 :gutter: 3
@@ -21,21 +25,21 @@ If you want the deep API docs (shapes, dtypes, file formats), see {doc}`../c_dat
 :link: 01_seurat_recipe
 :link-type: doc
 
-End-to-end export from a Seurat object (UMAP + PCA + metadata + expression + optional SNN graph).
+View and write a Seurat object: reductions, metadata, assays, the SNN graph.
 :::
 
 :::{grid-item-card} {octicon}`beaker;1.5em;sd-mr-1` SingleCellExperiment Recipe
 :link: 02_singlecellexperiment_recipe
 :link-type: doc
 
-End-to-end export from an SCE object (reducedDims + colData + assays).
+From an SCE object: reducedDims, colData, rowData, and an assay.
 :::
 
 :::{grid-item-card} {octicon}`database;1.5em;sd-mr-1` Raw Matrices + Data Frames
 :link: 03_raw_matrices_and_data_frames_recipe
 :link-type: doc
 
-Minimal-dependency workflow: just matrices/data.frames, no Seurat/SCE required.
+No Seurat or SCE: matrices and data frames only.
 :::
 
 ::::
