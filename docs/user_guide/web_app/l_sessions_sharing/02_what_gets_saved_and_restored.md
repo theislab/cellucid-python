@@ -32,6 +32,12 @@ Saved/restored (typical):
   geometry)
 - Figure Export settings
 - Camera Path settings and keyframes, including an explicitly empty path
+- which cells were open: a session saved on a share of the cells records
+  those cells (compactly), how they were chosen and their digest; loading it
+  opens exactly them, reading the dataset again first if it is open with
+  others. A session saved on every cell opens every cell
+  ({doc}`../b_data_loading/21_subsampled_loading`)
+- columns and gene sets a notebook pushed into the viewer
 
 Not saved/restored (typical):
 - the dataset itself (points, obs, gene expression)
@@ -42,6 +48,8 @@ Not saved/restored (typical):
 - Antialiasing (a property of the machine drawing the view)
 - Benchmarking state
 - ephemeral UI like toasts, in-progress selections, hover state
+- an analysis result marked **Stale · Run** (its cells, settings or
+  highlights changed since it ran): it is saved again once it is run again
 
 If the dataset fingerprint differs, the complete operation is rejected and
 rolled back; see {doc}`07_versioning_compatibility_and_dataset_identity`.

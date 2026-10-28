@@ -247,6 +247,34 @@ Keyboard shortcut:
 If you have multiple highlight pages, “Clear” can feel like it “didn’t work” because you may be looking at a different page. Always confirm the active page tab.
 :::
 
+### Export the highlighted cells (CSV, `.h5ad`)
+Beside **Clear**, while cells are highlighted:
+
+- **CSV** writes the active page's groups for every open cell by obs name,
+  one `true`/`false` column per group (`cellucid_highlight__<group id>`).
+- **.h5ad** writes the highlighted cells as an AnnData subset: their obs names
+  and every obs field (your own fields included; continuous ones as `float32`
+  or `float64`, as Cellucid holds them), each group as a boolean column, the
+  genes, the expression rows of the matrix the data mapping reads, and the
+  embeddings shown, as stored. Its genes are their identifiers (the var
+  index, as `adata.var_names` holds them), with the names Cellucid shows in
+  `var['symbol']` when they differ. A field name an HDF5 file cannot hold (one with
+  `/` in it, or `.`) is written renamed, and Cellucid says which. anndata,
+  Scanpy, h5py, cellucid-python and Cellucid itself read it.
+
+Both list the cells in the dataset's own order (ascending original
+position), whatever order the file stores them in or the viewer opened them
+in: the order `viewer.subset()` (R: `cellucid_subset()`) gives.
+
+Each obs field's **Export** button (beside **Duplicate**) writes that field as
+a CSV of obs names and values; a gene set editor's **Export** writes its sets
+as GMT, genes by identifier. A Cellucid CSV declares each column in its second
+row -- `kind`, then `highlight`, `categorical` or `continuous` -- so labels
+such as `0`, `10` or `True` come back as labels, never as numbers or groups,
+and a cell the file does not list comes back unknown. `cellucid.pull(adata, path)` in Python and `cellucid_pull(object,
+path)` in R read any of these files back onto the object in one call
+({doc}`../../python_package/g_api_reference_coverage/api/round_trip`).
+
 ---
 
 ## Reading the highlighted cell count (“visible” vs “total”)
@@ -331,13 +359,14 @@ Depending on what you’ve used in other tools, you might look for these feature
 - rename highlight groups
 - recolor highlight groups
 - “add selection to an existing group” after confirming
-- export highlighted cell lists directly from the UI
 
 In the current UI, group membership is edited by:
 - rebuilding the candidate set (union/subtract/intersect), then confirming a new group, and optionally removing the old one.
 
-For exporting, the most robust current path is:
-- save a session bundle ({doc}`../l_sessions_sharing/index`) and treat it as the persisted artifact of your highlights.
+To take highlights out of Cellucid, use the **CSV** and **.h5ad** exports
+above, `viewer.pull()` / `cellucid_pull()` from a notebook, or a session
+bundle ({doc}`../l_sessions_sharing/index`), which keeps every page and group
+for Cellucid itself.
 
 ---
 

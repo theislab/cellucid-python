@@ -11,8 +11,12 @@ untouched. :func:`_build_uns` records what was applied under ``adata.uns``.
 from __future__ import annotations
 
 import copy
+import warnings
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 from .._anndata_files import is_mudata
 from .._plural import plural
@@ -26,15 +30,18 @@ from ..data_mapping import (
 from ..session_bundle import CellucidSessionBundle
 from ..session_bundle import _validate_fingerprint as _validate_bundle_fingerprint
 from ._chunks import _validate_current_chunk_inventory
+from ._columns import place_rows, write_columns
 from ._fields import _plan_user_defined_fields
 from ._highlights import _plan_highlights
 from ._mudata import MuDataSessionView
 from ._primitives import (
     _require_exact_bool,
+    _require_exact_keys,
     _require_nonempty_string,
     _require_nonnegative_int,
 )
 from ._records import ApplySummary, _ColumnPlan
+from ._schema import _GENE_SETS_CHUNK_PROFILE
 
 
 def _validate_fingerprint(
@@ -177,6 +184,171 @@ def _build_uns(
     return next_uns
 
 
+@dataclass(frozen=True)
+class _SessionPlan:
+    """A session checked against an object, and the columns it adds."""
+
+    bundle: Any
+    fingerprint: dict[str, Any]
+    plans: list[_ColumnPlan]
+    highlight_meta: Any | None
+    highlights_uns: dict[str, Any] | None
+    overlays: Any | None
+    gene_sets: list[dict[str, Any]]
+
+
+def _plan_session(
+    bundle: Any,
+    adata: Any,
+    *,
+    expected_dataset_id: str,
+    add_highlights: bool,
+    highlights_prefix: str,
+    add_user_defined_fields: bool,
+    user_defined_prefix: str,
+    include_deleted_user_defined_fields: bool,
+    existing_columns: set[str],
+) -> _SessionPlan:
+    """Check a session against ``adata`` and plan its columns, writing nothing.
+
+    ``existing_columns`` are the names a planned column must not take.
+    """
+    if isinstance(bundle, str | Path):
+        bundle = CellucidSessionBundle(bundle)
+    for attribute in (
+        "dataset_fingerprint",
+        "manifest",
+        "list_chunk_ids",
+        "decode_chunk",
+    ):
+        if not hasattr(bundle, attribute):
+            raise TypeError(f"bundle must expose {attribute!r}")
+    if not hasattr(adata, "obs") or not hasattr(adata, "var") or not hasattr(adata, "uns"):
+        raise TypeError("adata must be an AnnData-compatible object")
+    if type(getattr(adata, "isbacked", None)) is not bool:
+        raise TypeError("adata.isbacked must be exactly True or False")
+
+    # An AnnData read from a file in priority order holds its cells in the
+    # stored order; a session names cells in their original order. The
+    # record says so only when it describes these cells (`stored_order`):
+    # one that does not leaves each row its own original position, as the
+    # web app read the file the session was saved on.
+    from ..prepare_data._priority import stored_order_of
+
+    stored = stored_order_of(adata)
+    if stored.notice is not None:
+        warnings.warn(stored.notice, UserWarning, stacklevel=3)
+    if stored.positions is not None:
+        raise ValueError(
+            "adata holds its cells in a Cellucid-ready file's stored order (uns['cellucid']['priority']), "
+            "and a session names cells in their original order. Put them back first: "
+            "adata = cellucid.restore_original_order(adata)."
+        )
+    # Every per-cell chunk names its cells by original position, ascending
+    # (the viewer's rule, whatever order the file or the opening held them
+    # in): every cell, cell i is row i; a subsample, cell i is its kept
+    # row kept[i]. A subsample's session is checked and planned against
+    # those rows of `adata`, then each column is placed at them (the others
+    # unknown).
+    cells = _session_cells(bundle)
+    saved_on = adata
+    if cells is not None:
+        n_obs = int(cells["spec"]["nObs"])
+        if int(adata.n_obs) != n_obs:
+            raise ValueError(
+                f"Dataset fingerprint mismatch: the session was saved on {cells['spec']['k']} of "
+                f"{n_obs} {plural(n_obs, 'cell')}, and adata has {int(adata.n_obs)}"
+            )
+        saved_on = adata[np.asarray(cells["kept"], dtype=np.int64)]
+    fingerprint, shown = _validate_fingerprint(
+        bundle.dataset_fingerprint,
+        saved_on,
+        expected_dataset_id=expected_dataset_id,
+    )
+    _require_session_fields(shown, bundle.manifest["requires"], fingerprint["dataMapping"])
+    raw_chunk_ids = bundle.list_chunk_ids()
+    if not isinstance(raw_chunk_ids, list) or any(
+        not isinstance(item, str) for item in raw_chunk_ids
+    ):
+        raise TypeError("bundle.list_chunk_ids() must return a list of strings")
+    if len(raw_chunk_ids) != len(set(raw_chunk_ids)):
+        raise ValueError("Session bundle contains duplicate chunk ids")
+    inventory = _validate_current_chunk_inventory(bundle, raw_chunk_ids)
+    chunk_ids = inventory.ids
+
+    highlight_plans, highlights_uns, highlight_meta = _plan_highlights(
+        bundle,
+        chunk_ids,
+        n_obs=int(shown.n_obs),
+        obs=shown.obs,
+        prefix=highlights_prefix,
+        existing_columns=existing_columns,
+        materialize=add_highlights,
+        metadata_by_id=inventory.metadata_by_id,
+    )
+    field_plans, overlays = _plan_user_defined_fields(
+        bundle,
+        chunk_ids,
+        shown,
+        mapping=fingerprint["dataMapping"],
+        prefix=user_defined_prefix,
+        existing_columns=existing_columns,
+        materialize=add_user_defined_fields,
+        include_deleted=include_deleted_user_defined_fields,
+        metadata_by_id=inventory.metadata_by_id,
+    )
+    plans = [*highlight_plans, *field_plans]
+    if cells is not None:
+        kept = np.asarray(cells["kept"], dtype=np.int64)
+        plans = [_ColumnPlan(name=plan.name, values=place_rows(plan.values, kept, adata.obs_names),
+                             metadata=plan.metadata) for plan in plans]
+
+    return _SessionPlan(
+        bundle=bundle,
+        fingerprint=fingerprint,
+        plans=plans,
+        highlight_meta=highlight_meta,
+        highlights_uns=highlights_uns,
+        overlays=overlays,
+        gene_sets=_read_gene_sets(bundle, chunk_ids),
+    )
+
+
+def _session_cells(bundle: Any) -> dict[str, Any] | None:
+    """The cells a session was saved on, when a subsample (its kept original
+    rows, the digest checked); None for every cell."""
+    if "cells" not in bundle.manifest:
+        return None
+    from ..session_bundle import _decode_cells
+
+    cells: dict[str, Any] = _decode_cells(bundle.manifest["cells"], bundle.dataset_fingerprint.get("cellCount"))
+    return cells
+
+
+def _read_gene_sets(bundle: Any, chunk_ids: set[str]) -> list[dict[str, Any]]:
+    """The gene sets a notebook pushed, saved with the session (none when it pushed none)."""
+    if _GENE_SETS_CHUNK_PROFILE["id"] not in chunk_ids:
+        return []
+    payload = bundle.decode_chunk(_GENE_SETS_CHUNK_PROFILE["id"])
+    if not isinstance(payload, list):
+        raise TypeError("gene-sets/notebook must be a list of gene sets")
+    sets: list[dict[str, Any]] = []
+    for index, raw in enumerate(payload):
+        entry = _require_exact_keys(raw, {"name", "description", "genes"}, label=f"gene-sets/notebook[{index}]")
+        name = _require_nonempty_string(entry["name"], label=f"gene-sets/notebook[{index}].name")
+        if not isinstance(entry["description"], str):
+            raise TypeError(f"gene-sets/notebook[{index}].description must be a string")
+        genes = entry["genes"]
+        if not isinstance(genes, list):
+            raise TypeError(f"gene-sets/notebook[{index}].genes must be a list")
+        sets.append({
+            "name": name,
+            "description": entry["description"],
+            "genes": [_require_nonempty_string(gene, label=f"gene-sets/notebook[{index}] gene") for gene in genes],
+        })
+    return sets
+
+
 def apply_cellucid_session_to_anndata(
     bundle: CellucidSessionBundle | str | Path,
     adata: Any,
@@ -204,7 +376,12 @@ def apply_cellucid_session_to_anndata(
     bundle : CellucidSessionBundle, str, or Path
         The session, or the path of a ``.cellucid-session`` file.
     adata : anndata.AnnData or mudata.MuData
-        The dataset the session was saved on, in the same cell order. For a
+        The dataset the session was saved on, its cells in their original
+        order: a session names every cell by its original position (its row in
+        the order the cells were given, whatever order a file stores them in or
+        the viewer opened them in). An AnnData read from a Cellucid-ready file in
+        its stored priority order (``obs['cellucid_original_position']``) is
+        refused: :func:`~cellucid.restore_original_order` puts it back. For a
         MuData the session is checked against what the viewer showed -- the
         cells with every modality placed among them, and the modality its
         data mapping names -- and the added columns go to the global
@@ -263,70 +440,28 @@ def apply_cellucid_session_to_anndata(
     if not isinstance(user_defined_prefix, str):
         raise TypeError("user_defined_prefix must be a string")
 
-    if isinstance(bundle, str | Path):
-        bundle = CellucidSessionBundle(bundle)
-    for attribute in (
-        "dataset_fingerprint",
-        "manifest",
-        "list_chunk_ids",
-        "decode_chunk",
-    ):
-        if not hasattr(bundle, attribute):
-            raise TypeError(f"bundle must expose {attribute!r}")
-    if not hasattr(adata, "obs") or not hasattr(adata, "var") or not hasattr(adata, "uns"):
-        raise TypeError("adata must be an AnnData-compatible object")
-    is_backed = getattr(adata, "isbacked", None)
-    if type(is_backed) is not bool:
-        raise TypeError("adata.isbacked must be exactly True or False")
-    if is_backed and not inplace:
+    if getattr(adata, "isbacked", False) is True and not inplace:
         raise ValueError(
             "A backed AnnData target cannot be applied with inplace=False; "
             "pass an explicitly materialized AnnData object or choose inplace=True"
         )
-
-    fingerprint, shown = _validate_fingerprint(
-        bundle.dataset_fingerprint,
+    session = _plan_session(
+        bundle,
         adata,
         expected_dataset_id=expected_dataset_id,
+        add_highlights=add_highlights,
+        highlights_prefix=highlights_prefix,
+        add_user_defined_fields=add_user_defined_fields,
+        user_defined_prefix=user_defined_prefix,
+        include_deleted_user_defined_fields=include_deleted_user_defined_fields,
+        existing_columns=set(adata.obs.columns),
     )
-    _require_session_fields(shown, bundle.manifest["requires"], fingerprint["dataMapping"])
-    raw_chunk_ids = bundle.list_chunk_ids()
-    if not isinstance(raw_chunk_ids, list) or any(
-        not isinstance(item, str) for item in raw_chunk_ids
-    ):
-        raise TypeError("bundle.list_chunk_ids() must return a list of strings")
-    if len(raw_chunk_ids) != len(set(raw_chunk_ids)):
-        raise ValueError("Session bundle contains duplicate chunk ids")
-    inventory = _validate_current_chunk_inventory(bundle, raw_chunk_ids)
-    chunk_ids = inventory.ids
-
-    existing_columns = set(adata.obs.columns)
-    highlight_plans, highlights_uns, highlight_meta = _plan_highlights(
-        bundle,
-        chunk_ids,
-        n_obs=int(shown.n_obs),
-        obs=shown.obs,
-        prefix=highlights_prefix,
-        existing_columns=existing_columns,
-        materialize=add_highlights,
-        metadata_by_id=inventory.metadata_by_id,
-    )
-    field_plans, overlays = _plan_user_defined_fields(
-        bundle,
-        chunk_ids,
-        shown,
-        mapping=fingerprint["dataMapping"],
-        prefix=user_defined_prefix,
-        existing_columns=existing_columns,
-        materialize=add_user_defined_fields,
-        include_deleted=include_deleted_user_defined_fields,
-        metadata_by_id=inventory.metadata_by_id,
-    )
-    plans = [*highlight_plans, *field_plans]
-
-    next_obs = adata.obs.copy(deep=True)
-    for plan in plans:
-        next_obs[plan.name] = plan.values
+    bundle = session.bundle
+    fingerprint = session.fingerprint
+    plans = session.plans
+    highlight_meta = session.highlight_meta
+    highlights_uns = session.highlights_uns
+    overlays = session.overlays
     next_uns = (
         _build_uns(
             adata,
@@ -343,7 +478,7 @@ def apply_cellucid_session_to_anndata(
     )
 
     target = adata if inplace else adata.copy()
-    target.obs = next_obs
+    write_columns(target, plans)
     if next_uns is not None:
         target.uns = next_uns
 

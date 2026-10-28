@@ -72,8 +72,8 @@ cellucid_prepare(
 ```
 
 The default layout is the one to publish: Zarr v2, the expression matrix
-stored gene-major (CSC) in chunks of 65,536 values, every other array in
-chunks of 262,144, byte-shuffled and deflated (the expression values
+stored gene-major (CSC) in chunks of 16,384 values, every array with one row
+per cell in chunks of 65,536 and every other in chunks of 262,144, byte-shuffled and deflated (the expression values
 unshuffled), each chunk its own file, with consolidated metadata.
 [How fast it reads](#how-fast-it-reads) explains why no other layout is faster
 on GitHub. Every argument is described in

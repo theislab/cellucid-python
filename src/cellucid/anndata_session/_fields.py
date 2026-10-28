@@ -1,8 +1,10 @@
 """
 Planning the ``obs`` columns that carry a session's user-defined fields.
 
-A user-defined field is either categorical -- codes plus categories, decoded
-from its own chunk -- or a continuous alias of an existing column. Both are
+A user-defined field is categorical -- codes plus categories, decoded from
+its own chunk --, a continuous alias of an existing column, or a continuous
+field that holds its own values (a column a notebook pushed), decoded from its
+``user-defined/values/<id>`` chunk. Both are
 validated against the field overlay the session declares before a column is
 built, including the operation that produced it, its creation timestamp, and,
 for categoricals, the category list and the overlap strategy that resolved
@@ -19,8 +21,7 @@ persists them.
 from __future__ import annotations
 
 import copy
-from collections.abc import Sequence
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -29,6 +30,7 @@ from scipy import sparse
 from .._plural import plural
 from ..data_mapping import mapped_expression_matrix, resolve_gene_names
 from ..session_codecs import decode_user_defined_codes
+from ._columns import categorical_column, continuous_column
 from ._primitives import (
     _require_category_list,
     _require_exact_bool,
@@ -46,7 +48,9 @@ from ._schema import (
     _CONTINUOUS_FIELD_KEYS,
     _OVERLAP_STRATEGIES,
     _OVERLAY_ROOT_KEYS,
+    _STORED_CONTINUOUS_FIELD_KEYS,
     _USER_DEFINED_CODES_PREFIX,
+    _USER_DEFINED_VALUES_PREFIX,
 )
 
 #: A session's user-defined code arrays: the numpy dtype for each typed-array
@@ -252,12 +256,15 @@ def _plan_user_defined_fields(
     include_deleted: bool,
     metadata_by_id: dict[str, dict[str, Any]],
 ) -> tuple[list[_ColumnPlan], Any | None]:
-    codes_prefix = "user-defined/codes/"
+    codes_prefix = _USER_DEFINED_CODES_PREFIX
     code_chunk_ids = {chunk_id for chunk_id in chunk_ids if chunk_id.startswith(codes_prefix)}
+    value_chunk_ids = {
+        chunk_id for chunk_id in chunk_ids if chunk_id.startswith(_USER_DEFINED_VALUES_PREFIX)
+    }
     if "core/field-overlays" not in chunk_ids:
-        if code_chunk_ids:
+        if code_chunk_ids or value_chunk_ids:
             raise ValueError(
-                "Session contains user-defined code chunks without core/field-overlays"
+                "Session contains user-defined code or value chunks without core/field-overlays"
             )
         return [], None
 
@@ -306,6 +313,7 @@ def _plan_user_defined_fields(
     plans: list[_ColumnPlan] = []
     field_ids: set[str] = set()
     referenced_code_chunks: set[str] = set()
+    referenced_value_chunks: set[str] = set()
     categorical_field_ids: list[str] = []
     n_obs = int(adata.n_obs)
     for index, raw_field in enumerate(fields):
@@ -313,7 +321,14 @@ def _plan_user_defined_fields(
             raise TypeError(f"core/field-overlays.userDefinedFields[{index}] must be an object")
         label = f"core/field-overlays.userDefinedFields[{index}]"
         kind = raw_field.get("kind")
-        expected_keys = _CATEGORY_FIELD_KEYS if kind == "category" else _CONTINUOUS_FIELD_KEYS
+        stored = kind == "continuous" and "valuesType" in raw_field
+        expected_keys = (
+            _CATEGORY_FIELD_KEYS
+            if kind == "category"
+            else _STORED_CONTINUOUS_FIELD_KEYS
+            if stored
+            else _CONTINUOUS_FIELD_KEYS
+        )
         field = _require_exact_keys(raw_field, expected_keys, label=label)
         if kind not in {"category", "continuous"}:
             raise ValueError(f"{label}.kind must be 'category' or 'continuous'")
@@ -339,6 +354,44 @@ def _plan_user_defined_fields(
         should_materialize = materialize and (include_deleted or not is_deleted) and not is_purged
 
         column_name = f"{prefix}{field_key}"
+        if stored:
+            if field["sourceField"] is not None or field["valuesType"] != "Float32Array":
+                raise ValueError(f"{label} stores Float32Array values and has no source")
+            _validate_operation(field["operation"], label=f"{label}.operation")
+            values_length = _require_nonnegative_int(field["valuesLength"], label=f"{label}.valuesLength")
+            if values_length != n_obs:
+                raise ValueError(
+                    f"User-defined field {field_id!r} has valuesLength {values_length}, expected {n_obs}"
+                )
+            value_chunk_id = f"{_USER_DEFINED_VALUES_PREFIX}{field_id}"
+            if is_purged:
+                continue
+            if value_chunk_id not in chunk_ids:
+                raise ValueError(
+                    f"User-defined field {field_id!r} is missing required chunk {value_chunk_id!r}"
+                )
+            value_meta = metadata_by_id[value_chunk_id]
+            if value_meta["label"] != f"User-defined values: {field_key}":
+                raise ValueError(f"{value_chunk_id} label must match user-defined field {field_id!r}")
+            raw_values = bundle.decode_chunk(value_chunk_id)
+            if not isinstance(raw_values, bytes | bytearray | memoryview):
+                raise TypeError(f"{value_chunk_id} must decode to binary bytes")
+            if value_meta["uncompressedBytes"] != len(raw_values) or len(raw_values) != 4 * n_obs:
+                raise ValueError(f"{value_chunk_id} must hold {n_obs} float32 values")
+            referenced_value_chunks.add(value_chunk_id)
+            values = np.frombuffer(bytes(raw_values), dtype="<f4").astype(np.float32)
+            if bool(np.any(np.isinf(values))):
+                raise ValueError(f"{value_chunk_id} must hold finite values or NaN")
+            if should_materialize:
+                _reserve_column(existing_columns, column_name)
+                plans.append(
+                    _ColumnPlan(
+                        name=column_name,
+                        values=continuous_column(values, cells=None, n_obs=n_obs, index=adata.obs_names),
+                        metadata={"kind": "continuous", "field_id": field_id, "source": source, "source_field": None},
+                    )
+                )
+            continue
         if kind == "continuous":
             source_field = _validate_source_field(
                 field["sourceField"],
@@ -431,15 +484,17 @@ def _plan_user_defined_fields(
 
         if should_materialize:
             _reserve_column(existing_columns, column_name)
-            categorical = pd.Categorical.from_codes(
-                cast("Sequence[int]", category_codes),
-                categories=pd.Index(categories),
-                ordered=False,
-            )
             plans.append(
                 _ColumnPlan(
                     name=column_name,
-                    values=pd.Series(categorical, index=adata.obs_names),
+                    values=categorical_column(
+                        category_codes,
+                        categories,
+                        cells=None,
+                        n_obs=n_obs,
+                        missing_code=-1,
+                        index=adata.obs_names,
+                    ),
                     metadata={
                         "kind": "category",
                         "field_id": field_id,
@@ -448,6 +503,11 @@ def _plan_user_defined_fields(
                 )
             )
 
+    if value_chunk_ids != referenced_value_chunks:
+        unexpected = sorted(value_chunk_ids - referenced_value_chunks)
+        raise ValueError(
+            "Session contains undeclared user-defined value chunks: " + ", ".join(unexpected)
+        )
     if code_chunk_ids != referenced_code_chunks:
         unexpected = sorted(code_chunk_ids - referenced_code_chunks)
         raise ValueError(

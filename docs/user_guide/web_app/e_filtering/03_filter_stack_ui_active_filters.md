@@ -45,7 +45,10 @@ It has two parts:
 
 - A **count line**:
   - `Showing all N cells` (no filtering), or
-  - `Showing X of N cells` (some cells hidden)
+  - `Showing X of N cells` (some cells hidden);
+  - on a subsample, N is the open cells of every cell: `Showing all 240 of
+    1,200 cells`, `Showing 120 of 240 of 1,200 cells`
+    ({doc}`../b_data_loading/21_subsampled_loading`)
 - A **filter list** (“stack”):
   - each entry is one active filter in the current view
 

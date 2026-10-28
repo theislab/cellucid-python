@@ -3,10 +3,10 @@
 **Audience:** anyone who found a dataset in a paper's data availability
 section and wants to look at it  
 **Time:** 5 minutes each  
-**What you'll do:** open three kinds of published single-cell data with no
+**What you'll do:** open four kinds of published single-cell data with no
 conversion and nothing installed: a GEO sample's count matrix by its link, a
-Seurat object on Zenodo by its link, and a 10x Cell Ranger output folder from
-your computer  
+Seurat object on Zenodo by its link, a 10x Cell Ranger output folder from
+your computer, and a CELLxGENE atlas of 2.3 million cells  
 **Prerequisites:** a current desktop Chrome, Edge, Firefox or Safari
 
 Each tutorial uses a real public dataset. The numbers it states (cells, what
@@ -142,10 +142,57 @@ once rather than in place ({doc}`17_open_r_objects`).
 
 ---
 
+## 4. A large CELLxGENE atlas: the cells that fit, genes by symbol
+
+The integrated Human Lung Cell Atlas on CZ CELLxGENE is one `.h5ad` of
+21.9 GB: 2,282,447 cells × 55,329 genes, its matrix stored row by row (CSR,
+cell-major), its genes named by Ensembl ids with the symbols in
+`var['feature_name']`. Few laptops can hold all of it, so Cellucid opens what
+fits and says so.
+
+1. Paste this into the **Link or server** bar and click **Open** (or open
+   [this link](https://www.cellucid.com/?data=cellxgene:9f222629-9e39-47d0-b83f-e08d610c7479)):
+
+   ```text
+   cellxgene:9f222629-9e39-47d0-b83f-e08d610c7479
+   ```
+
+2. **Auto-fit.** Opening every cell would not fit this device's memory: the
+   view's own per-cell data and, for a cell-major matrix, the index that
+   makes its genes readable. Cellucid opens a seeded **Blocks** subsample
+   sized to fit, and the notice under **Session › Open data › Cells to open**
+   says how many cells it opened, why ("to fit this device: … in memory, and
+   this device has … for it"), and how far the subsample's categories are
+   from every cell's. Only the parts of the file holding the open cells are
+   read. **Open all cells** reads every cell anyway; the slider opens another
+   share ({doc}`21_subsampled_loading`). How many cells fit depends on the
+   device and the browser, which the notice states.
+3. **Genes by symbol.** The var index holds Ensembl ids, so Cellucid names the
+   genes from the `feature_name` column of symbols beside it (**Session ›
+   Data mapping › Genes** shows the choice as *Guessed*). Search `SFTPC` or
+   `ENSG00000168484`: both find the same gene. The cells are drawn before
+   any gene name is read: the gene list follows the first view, and until it
+   arrives the gene search says *Reading gene names…*.
+4. **The first gene.** A gene of a cell-major matrix is spread over every
+   cell's row, so before reading the first one Cellucid says what it costs —
+   the bytes to read and the time at the speed it measured — with a
+   **Cancel** button. Later genes read only their own entries. A smaller
+   share of the cells costs less: reopen with fewer cells to explore faster.
+
+To give someone the same cells, add the subsample to the link
+(`&cells=10%&sample=blocks&seed=0`), or use **Copy link** under *Cells to
+open*; the Session panel shows the cells' digest so you can confirm you see
+the same ones. In a notebook, `cellucid.subsample_cells()` (Python) and
+`cellucid_subsample_cells()` (R) give the same cells
+({doc}`../../python_package/f_notebooks_tutorials/47_subsampled_views`).
+
+---
+
 ## Related pages
 
 - {doc}`14_open_from_link`: every provider and link form
 - {doc}`17_open_r_objects`: R objects and MatrixMarket folders, what is read
 - {doc}`18_open_loom_and_10x`: Loom files and Cell Ranger output
+- {doc}`21_subsampled_loading`: opening a share of the cells
 - {doc}`../../python_package/f_notebooks_tutorials/25_serve_loom_10x_and_matrixmarket`:
   the same files served from Python

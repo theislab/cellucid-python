@@ -95,8 +95,9 @@ Tradeoffs:
 - Very little setup
 - The viewer reads the file or store itself, in place, with HTTP range
   requests where the format allows it: only the bytes a view needs are
-  transferred, and nothing is converted first. An in-memory AnnData or MuData
-  object is written once to a temporary `.h5ad` or `.h5mu`.
+  transferred, and nothing is converted first. An in-memory AnnData is served
+  with its cells in priority order, each chunk made from the object when the
+  viewer asks for it; a MuData object is written once to a temporary `.h5mu`.
 - Not a deterministic “artifact” you can hand to collaborators
 
 ### Option B — prepare first (fastest viewing; one more step)
@@ -122,8 +123,8 @@ Tradeoffs:
 
 Cellucid-python supports viewing (with `cellucid serve`, `serve_anndata`
 and `show_anndata`) from:
-- **In-memory AnnData or MuData** objects (written once to a temporary
-  `.h5ad` or `.h5mu`)
+- **In-memory AnnData or MuData** objects (an AnnData served in priority
+  order as the viewer reads it, a MuData written once to a temporary `.h5mu`)
 - **`.h5ad`** files and **AnnData Zarr** stores, a folder or zipped (`.zip`)
 - **`.h5mu`** files and **MuData Zarr** stores
 - **`.loom`** files, **10x Cell Ranger `.h5`** files and **`outs/`** folders
@@ -132,25 +133,31 @@ and `show_anndata`) from:
   `.RData`, gzipped or not), which the viewer reads once from the start
 - **Cellucid-ready AnnData or MuData** written by `prepare(...)`
 
-Every path is served as it is on disk; the browser reads it.
+A file `prepare()` wrote, an R object and a MatrixMarket folder are served as
+they are on disk, and the browser reads them. Any other AnnData, MuData, Loom
+or 10x file is served as a store with its cells in priority order, made from
+the file as the browser reads it, so a subsample the viewer opens transfers
+only its cells.
 
 ## Deep path (developer / maintainer)
 
 The architecture is intentionally simple:
 
-- A **local HTTP server** serves the bytes of one dataset (an `.h5ad`, a
+- Python answers the viewer's reads of one dataset's bytes (an `.h5ad`, a
   Zarr store, an `.h5mu`, a Loom or 10x file, a MatrixMarket folder, an R
-  object, ...), which the viewer reads itself, with HTTP range requests where
-  the format allows it.
-- The **viewer UI** is a web app.
-  - In CLI/notebook/server workflows, the Python server establishes the exact
-    complete UI generation declared by the configured source inventory, then
-    serves it from the **same origin** as the dataset.
-- Notebook embedding uses an **iframe**.  
-  This matters because browser security rules differ across Jupyter/VSCode/Colab.
-- Bidirectional communication:
-  - one WebSocket, the viewer channel, which the viewer opens to the local
-    server (`/_cellucid/ws`) and authenticates with its viewer token
+  object, ...); the viewer reads it itself, with range requests where the
+  format allows it.
+- The **viewer UI** is the Cellucid web app.
+  - In a notebook (`show_anndata`) it is a widget: the browser loads the app
+    from `https://www.cellucid.com` into the cell's output, and the app's
+    reads and messages travel to the kernel through the notebook's own
+    connection (a Jupyter comm). No port, no server.
+  - In a browser tab (`cellucid serve`, `serve_anndata`, `AnnDataViewer`) a
+    local HTTP server establishes the exact verified app build and serves it
+    from the **same origin** as the dataset.
+- Bidirectional communication: one channel, the viewer channel (the widget's
+  comm in a notebook, a WebSocket at `/_cellucid/ws` for a browser tab),
+  authenticated with the viewer's token:
   - **Python → frontend**: commands on it (`viewer.send_message(...)` + convenience methods)
   - **Frontend → Python**: events on it (hooks), selections as binary cell indices
 
@@ -165,17 +172,19 @@ If you maintain or extend `cellucid`, the “mental model” to keep in mind is:
 - **Embedding**: an `obsm` array the viewer plots, any number per dimension.
 - **`obs` fields**: per-cell metadata (categorical or continuous).
 - **`var` / gene expression**: per-gene metadata + expression values (optional).
-- **Viewer**: a notebook object that embeds the UI and exposes hooks/commands (`AnnDataViewer`).
+- **Viewer**: the Python object that shows the UI and exposes hooks/commands
+  (`cellucid.Widget` in a notebook, `AnnDataViewer` for a browser tab).
 - **Hooks / events**: selection/hover/click/ready callbacks from the UI back into Python.
 
 ## Edge cases and limitations (high-level)
 
-- **Web UI availability**: every viewer-serving startup establishes the complete
-  exact generation published by the configured web source. Source failure is
-  raised before the server binds.
-- **HTTPS notebooks**: if your notebook is served from `https://...`, your browser may block an `http://127.0.0.1:<port>` iframe (mixed content).
-  Expose the port through an HTTPS proxy and pass its exact base as
-  `client_server_url=`; see {doc}`03_compatibility_matrix_must_be_explicit`.
+- **Web UI availability**: a notebook widget needs the *browser* to reach
+  `https://www.cellucid.com` (or the copy named by `web_source_url=`); a
+  browser-tab server establishes the complete exact build published by the
+  configured web source at startup, and a source failure is raised before the
+  server binds.
+- **Notebooks without widget support** cannot show the viewer; see
+  {doc}`03_compatibility_matrix_must_be_explicit`.
 
 ## Troubleshooting (common misconceptions)
 
@@ -183,21 +192,21 @@ If you maintain or extend `cellucid`, the “mental model” to keep in mind is:
 
 No by default:
 - When you run `cellucid serve ...`, your data is served from your machine (default: `127.0.0.1` only).
-- When you use `show_anndata(...)` in a notebook, the dataset is served locally by a background server.
+- When you use `show_anndata(...)` in a notebook, the viewer reads the dataset
+  from your kernel through the notebook's own connection; nothing is uploaded.
 
-The viewer startup also fetches the declared **viewer UI assets**
-(HTML/JavaScript/CSS and related static files) from its configured source and
-publishes them locally only after complete verification.
+The viewer UI itself (HTML/JavaScript/CSS) comes from `https://www.cellucid.com`:
+loaded by the browser for a notebook widget, or downloaded, verified and
+served locally by a browser-tab server.
 
 ### “I installed `cellucid` but I don’t see anything”
 
 Most common causes:
-- you ran `show_anndata(...)` **outside** a notebook environment;
-  the helper returns a viewer without displaying or printing it, so open
-  `viewer.viewer_url` explicitly,
-- the exact viewer generation could not be established, so viewer construction
-  raised,
-- your notebook is served from HTTPS and blocks HTTP loopback iframes.
+- you ran `show_anndata(...)` **outside** a notebook: it raises and names the
+  browser-tab alternatives (`AnnDataViewer`, `serve_anndata`, `cellucid serve`),
+- the notebook front end does not show widgets (`anywidget` missing where the
+  notebook server runs),
+- the browser cannot load the app from `https://www.cellucid.com`.
 
 Start with:
 - {doc}`../installation`
@@ -207,5 +216,5 @@ Start with:
 ## Next steps
 
 - Install and verify the CLI/notebook prerequisites: {doc}`../installation`
-- Check environment constraints early (VSCode/Colab/HTTPS notebooks): {doc}`03_compatibility_matrix_must_be_explicit`
+- Check environment constraints early (VS Code, Colab, remote notebooks): {doc}`03_compatibility_matrix_must_be_explicit`
 - Get your first view running: {doc}`04_quick_start_3_levels`

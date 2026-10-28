@@ -139,16 +139,21 @@ def _markdown_python_sources() -> Iterator[tuple[str, str]]:
 
 
 def _notebook_python_sources() -> Iterator[tuple[str, str]]:
+    from IPython.core.inputtransformer2 import TransformerManager
+
+    # IPython syntax (``%pip``, also inside an ``if`` block) is valid notebook
+    # code but not Python: IPython's own transformer turns it into the Python
+    # it runs as. A notebook of another kernel (the R tutorials) holds no Python.
+    to_python = TransformerManager()
     for path in _notebook_files():
         notebook = json.loads(path.read_text(encoding="utf-8"))
+        language = notebook.get("metadata", {}).get("kernelspec", {}).get("language", "python")
+        if language.lower() != "python":
+            continue
         for cell_number, cell in enumerate(notebook.get("cells", []), start=1):
             if cell.get("cell_type") != "code":
                 continue
-            source = "".join(cell.get("source", []))
-            # IPython line magics are valid notebook syntax but not Python AST.
-            source = "\n".join(
-                line for line in source.splitlines() if not line.lstrip().startswith("%")
-            )
+            source = to_python.transform_cell("".join(cell.get("source", [])))
             if not source.strip():
                 continue
             yield f"{path.relative_to(REPOSITORY_ROOT)}:cell {cell_number}", source
@@ -262,13 +267,27 @@ def test_runnable_python_examples_match_current_public_signatures() -> None:
             if not isinstance(node, ast.Call):
                 continue
             name = _call_name(node)
-            if name not in signatures:
+            # A method called on a viewer is the viewer's (viewer.pull(adata)
+            # is AnnDataViewer.pull, not cellucid.pull(adata, source)).
+            viewer_method = (
+                isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "viewer"
+                and callable(getattr(cellucid.AnnDataViewer, name, None))
+            )
+            if viewer_method:
+                signature = inspect.signature(getattr(cellucid.AnnDataViewer, name))
+            elif name in signatures:
+                signature = signatures[name]
+            else:
                 continue
-            signature = signatures[name]
             keywords = {keyword.arg for keyword in node.keywords if keyword.arg is not None}
             has_expansion = any(keyword.arg is None for keyword in node.keywords)
             has_starred_args = any(isinstance(argument, ast.Starred) for argument in node.args)
-            unknown = sorted(keywords - set(signature.parameters))
+            takes_any_keyword = any(
+                parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in signature.parameters.values()
+            )
+            unknown = [] if takes_any_keyword else sorted(keywords - set(signature.parameters))
             if unknown:
                 failures.append(f"{location}:{node.lineno}: {name} has removed keywords {unknown}")
             if has_expansion or has_starred_args:
@@ -1102,7 +1121,17 @@ def test_debug_connection_docs_use_only_the_keyed_store_probe_report() -> None:
         path.read_text(encoding="utf-8")
         for path in sorted((DOCS_ROOT / "user_guide" / "python_package").rglob("*.md"))
     )
-    assert python_guide.count("anndata_store_probes") >= 11
+    # A browser-tab viewer (AnnDataViewer) reports its served store under
+    # ``anndata_store_probes``; a notebook widget serves no HTTP and reports
+    # none, so the pages that document a browser-tab report must name it.
+    for relative in (
+        "e_jupyter_hooks/16_reference.md",
+        "e_jupyter_hooks/14_troubleshooting_hooks.md",
+        "h_developer_docs/12_debugging_playbook.md",
+        "b_concepts_mental_models/08_debugging_mental_model_where_to_look.md",
+    ):
+        page = (DOCS_ROOT / "user_guide" / "python_package" / relative).read_text(encoding="utf-8")
+        assert "anndata_store_probes" in page, relative
     assert "dataset_identity_probes" not in python_guide
     assert "dataset_identity_url" not in markdown
     assert "dataset_identity_error" not in markdown
@@ -1473,7 +1502,9 @@ def test_specification_lists_exactly_the_uns_cellucid_keys_the_writer_and_viewer
     text = SPECIFICATION.read_text(encoding="utf-8")
     top = _table_keys(text.split("## 2. `uns['cellucid']`", 1)[1])
     defaults = _table_keys(text.split("### `defaults`", 1)[1])
-    assert top == ["schema", "id", "name", "description", "citation", "source", "defaults", "outlierQuantiles", "session"]
+    assert top == [
+        "schema", "id", "name", "description", "citation", "source", "defaults", "outlierQuantiles", "session", "priority",
+    ]
     assert defaults == [
         "embedding1d",
         "embedding2d",

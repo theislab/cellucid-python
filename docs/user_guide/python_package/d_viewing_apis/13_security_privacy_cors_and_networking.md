@@ -17,15 +17,20 @@ This page documents the security/privacy model of Cellucid viewing workflows, es
 
 ### Your dataset
 
-In the recommended workflows (`cellucid serve`, `serve_anndata`, `show_anndata`):
+In server mode (`cellucid serve`, `serve_anndata`, `AnnDataViewer`):
 - your **dataset bytes are served by your local Python server**,
 - and your **browser downloads the dataset from that local server**.
 
-Cellucid does not “upload your dataset to cellucid.com” as part of this workflow.
+In a notebook (`show_anndata`), there is no server: the app in the widget's
+output reads the dataset's bytes from your kernel through the notebook's own
+connection.
 
-### The verified viewer UI generation
+Cellucid does not “upload your dataset to cellucid.com” in either workflow.
 
-The Python server downloads the **viewer UI assets** from:
+### The viewer UI
+
+A notebook widget's page is the app at `https://www.cellucid.com` (or your
+`web_source_url`), loaded by your browser. A server instead downloads the **viewer UI assets** from:
 
 ```text
 https://www.cellucid.com
@@ -62,7 +67,7 @@ closes that by validating `Host` on every request before routing: only one
 well-formed authority naming `localhost` or a loopback IP literal on the bound
 port is served, and everything else gets `421 Misdirected Request`.
 
-Behind a reverse proxy (`jupyter-server-proxy`, a Colab proxy port), the
+Behind a reverse proxy (a JupyterHub or RStudio Server proxy route), the
 forwarded `Host` is the proxy's, so it must be declared:
 `--allowed-host hub.example.org` or `allowed_hosts=["hub.example.org"]`. One
 bare host name per entry, no port, no scheme, no wildcard. Details:

@@ -170,6 +170,20 @@ field's categories as the file holds them now. A file whose obs was edited
 after it was prepared (categories renamed, cells subset) gets its quantiles
 computed instead, and the console says why.
 
+(outliers-on-a-subsample)=
+### On a subsample
+
+With a share of the cells open ({doc}`../b_data_loading/21_subsampled_loading`),
+**stored** quantiles describe the whole dataset: each cell keeps the quantile
+`prepare()` gave it among every cell of its category, so opening another
+share never changes which cells are outliers, and a category with few open
+cells is filtered as in the whole dataset. **Computed** quantiles can only
+use the open cells: they are an estimate of the whole dataset's, the line
+under the slider says *“Estimated from the open 1,000 cells.”* (its tooltip
+says why), and a category under `centroid_min_points` open cells is not
+measured. When the open cells change, a filter in use gets its quantiles
+again over the cells open now.
+
 A latent space holding a missing value (NaN) or a value beyond float32 cannot
 be measured in: computing stops at that cell, the line under the slider says
 so, and the latent space is marked unusable in Data mapping.

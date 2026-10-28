@@ -164,7 +164,8 @@ If you only read one thing, read this.
 | **Local file or folder** (file picker or drop: `.h5ad`, Zarr, `.h5mu`, `.loom`, 10x, R objects, MatrixMarket) | Your local disk | No (files read locally) | Coarse shape only — no name or id | Low–medium: only count ranges and dimensions are reported; the file name can still leak via screenshots and figure metadata |
 | **Remote server** (`remote=...`) | A server you connect to (often `127.0.0.1`) | Yes (files or chunks downloaded from that server) | Coarse shape only — never the server address | Depends: can be "local-only" or a true data transfer |
 | **Data links** (`data=...`: GitHub, CELLxGENE, GEO, Zenodo, Hugging Face, Figshare, Dropbox, Google Drive, OneDrive, any web address) | The host the link names | Yes (the parts a view needs are downloaded) | Coarse shape only — never the link | High if data is private; the host's access logs exist. A private Google Drive or OneDrive file would be read with your own sign-in, straight from Google or Microsoft ({doc}`../b_data_loading/16_private_drive_onedrive`); until a site's owner registers it with Google and Microsoft, that site says Drive and OneDrive are "not configured on this site yet" |
-| **Python or R viewer** (`show_anndata()`, `cellucid_view()`) | The local server the program started | Yes (browser ↔ that server, plus one WebSocket for commands and events) | No — a viewer is never on a production hostname | Usually low if truly local, but can be risky if ports are exposed |
+| **Notebook widget** (`show_anndata()`, `cellucid_view()` in Jupyter) | The notebook kernel, through the notebook's own connection | Only between your browser and your notebook server (the app's code comes from www.cellucid.com; the data never goes there) | Not covered by this review: the app is www.cellucid.com, framed in the notebook's output | Low: no port is opened; the token never appears in an address |
+| **Python or R browser-tab viewer** (`AnnDataViewer`, `serve_anndata()`, `cellucid_view()` in RStudio) | The local server the program started | Yes (browser ↔ that server, plus one WebSocket for commands and events) | No — a viewer is never on a production hostname | Usually low if truly local, but can be risky if ports are exposed |
 | **Community annotation** (GitHub sync) | GitHub API + repo contents, through Cellucid's auth proxy | Yes | That the feature was used | You are explicitly publishing annotations/votes to GitHub; treat as public unless repo is private and access-controlled |
 
 Two nuances that matter:
@@ -270,27 +271,54 @@ If IndexedDB is unavailable (private browsing, strict policy), Community
 Annotation **Pull** fails and says so, without replacing the annotation view
 on screen; nothing else needs IndexedDB.
 
-#### Origin-private file system (dataset-derived, while a tab holds it)
+#### Origin-private file system (dataset-derived, kept across visits)
 
-Two kinds of **dataset-derived** bytes are written to the browser's
-origin-private file system, a disk area only this site can read:
+Dataset-derived bytes are written to the browser's origin-private file
+system, a disk area only this site can read:
 
-- an R object (`.rds`, `.rda`) or a MatrixMarket folder is read once and
-  converted into an AnnData store there (`cellucid-transcoded/`), so the
-  views can read it in place; reopening the same file in the same tab reads
-  it no second time;
+- a file that cannot be read in parts (an R object, `.rds`/`.rda`, or a
+  MatrixMarket folder) is read whole once and converted into an AnnData
+  store there (`cellucid-transcoded/`), so the views can read it in place;
+- a file whose host serves only whole files is downloaded there as it
+  arrives (`cellucid-transcoded/`, removed once a store converted from it is
+  kept);
 - a gene index of a large cell-major matrix spills there when it outgrows its
-  memory budget (`cellucid-column-index/`).
+  memory budget (`cellucid-column-index/`);
+- the gene index of a matrix stored cell by cell, once built over the open
+  cells, is kept there (`cellucid-transcoded/`, one folder per run of cells:
+  the open cells' file rows, row pointers and expression values or their
+  positions in the file, never the file's name or address), so the same
+  cells of the same file show genes at once later.
 
-Each is held while a tab uses it and removed once no tab holds it: when the
-app next starts, or before another conversion or index is written. A closed
-or crashed tab's copy stays on disk until then. Where the browser has no such
-file system (a Firefox private window), the conversion stays in memory.
+A kept gene index follows its file's identity as a converted store does
+(below); before it is used it is checked against the file's row layout and,
+unless the file's version names its content, against a sample of its values.
+A converted
+store or download of a file whose identity names its version (a
+file on this computer by its name, size and modification time; a linked file
+by its provider's id and the version its host reports; a file a viewer host
+— `cellucid serve`, a notebook, R — serves by the `ETag` it lists the file
+with) is **kept across visits**, so
+the same file opens again without being read: it stays until **Clear** under
+**Session › Open data** (the *Stored* line), until site data is cleared, or
+until the browser needs the room (kept gene indexes first, then the least
+recently opened). One
+known only by its size (a link whose host reports no version) is kept only
+while a tab holds it. Whatever no tab holds and is not kept for later visits is removed when
+the app next starts, or before another conversion is written. Where the
+browser has no such file system (a Firefox or Safari private window), the
+conversion stays in memory and goes with the tab. In an ordinary Safari
+window it is kept like anywhere else.
+
+What is kept is filed under a digest of the file's identity: no address,
+file id, signature or token is written beside it.
 
 Privacy implication:
-- On a shared machine, a converted R object or MatrixMarket folder can stay
-  on disk after its tab closed, until Cellucid is opened again or site data
-  is cleared.
+- On a shared machine, an R object or MatrixMarket folder you opened (from
+  this computer, a link, or a private Google Drive or OneDrive file) stays on
+  disk, readable by this site in this browser profile, until you click
+  **Clear** under **Session › Open data**, clear site data, or the browser
+  removes it for room. Use a private window to keep nothing.
 
 ---
 
@@ -475,9 +503,11 @@ postures:
   why the bind address is the control that matters.
 - **Writing back into your Python session is authenticated.** Interaction
   events and session bundles reach the notebook only over the viewer channel,
-  one WebSocket (`/_cellucid/ws`) that opens with the viewer's id and a
-  per-viewer token generated fresh in the Python process, never written to
-  disk, and handed to the browser in the viewer's address. The server refuses
+  which opens with the viewer's id and a per-viewer token generated fresh in
+  the Python process and never written to disk. A notebook widget hands the
+  token to its page in a message, posted to the app's exact origin; a
+  browser-tab viewer carries it in its address, and its channel is one
+  WebSocket (`/_cellucid/ws`). The server refuses
   a handshake from a page on another site (`Origin` must be the server's own
   host, a loopback name or a declared `allowed_hosts` name), and compares the
   token in constant time, so a wrong token cannot be discovered by measuring
@@ -502,7 +532,8 @@ route runs:
 - everything else gets `421 Misdirected Request`, with a body that never echoes
   the attacker’s value.
 
-Consequence for reverse proxies: a proxy such as `jupyter-server-proxy` forwards
+Consequence for reverse proxies: a proxy in front of a browser-tab server (a
+hub's proxy route) forwards
 the browser’s `Host` unchanged, so the proxied request looks exactly like a
 rebound one and is refused too. That is deliberate — a rebound page is
 same-origin and can forge `X-Forwarded-*` headers, so no header can distinguish
@@ -555,7 +586,8 @@ Use this as a starting point for approvals and internal documentation.
 4) **What local persistence exists?**
    - `localStorage` preferences **and Community Annotation session content**,
      the IndexedDB annotation file cache, converted R objects and MatrixMarket
-     folders in the origin-private file system while a tab holds them,
+     folders and whole-file downloads in the origin-private file system (kept
+     across visits until cleared; Session › Open data › Clear),
      browser HTTP cache (app files, catalogs, sessions)
 5) **If a local server is used, what is its bind address?**
    - `127.0.0.1` (default) vs `0.0.0.0`. Reads are unauthenticated either way.

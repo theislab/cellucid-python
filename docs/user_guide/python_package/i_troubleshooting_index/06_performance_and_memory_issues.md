@@ -28,8 +28,7 @@ except two that are labelled:
 
 | Last line | What is running | What to do |
 | --- | --- | --- |
-| `Serving: a decodable copy, written once to a temporary .h5ad` | The store holds arrays the browser cannot decode (named on the line above); anndata reads it once and writes a copy | Rewrite the store with codecs the browser decodes (gzip or LZF for HDF5) |
-| `Format: written once to a temporary .h5ad` (`.h5mu` for a MuData) | An in-memory object is being written to the temporary file | Serve the file from disk instead |
+| `Format: written once to a temporary .h5mu, in priority order` | An in-memory MuData is being written to the temporary file | Serve the file from disk instead |
 | `[4/4] Starting server...` | The configured viewer generation is being downloaded and verified, every asset, at every server or viewer start | Give the machine fast outbound access to the web source; on a machine without it, serve with `--no-web-ui` |
 
 The transcript is in {doc}`../../web_app/b_data_loading/04_server_tutorial`.
@@ -62,16 +61,27 @@ copies, and verify expression orientation before preparing.
 
 ## Python memory grows while serving an AnnData directly
 
-A server for a path reads no array: it serves the file's bytes from disk, so
-its memory does not grow with the genes a session visits. Memory is spent:
+A server serves a file in priority order (one `prepare()` wrote) as its bytes
+from disk, and anything else as a store in priority order whose chunks it
+makes when they are asked for, from the object or from the file's own arrays
+(and a bounded cache of renumbered genes and chunk entries, 128 MiB). A file's
+array stored in chunks (compressed, or any sparse matrix anndata wrote) is
+decoded once, a source chunk at a time as rows in it are first asked for,
+into a memory-mapped file in the system temporary folder, so rows in priority
+order are taken from it at memory speed: that needs disk space for the
+decoded arrays the viewer reads (removed when the viewer stops), and its
+pages are file cache the system can reclaim, not Python memory. An
+uncompressed array stored in one piece is read where it lies. Memory is spent:
 
-- by your own `adata`, when you pass an in-memory object; it is written once to
-  a temporary `.h5ad` (sparse matrices column-major, uncompressed; a MuData
-  as a Cellucid-ready `.h5mu` written by `prepare()`) and then
-  served from disk, so the temporary file needs disk space for one
-  uncompressed copy;
-- once, at startup, when a store holds arrays the browser cannot decode: the
-  whole store is read with anndata to write a decodable copy.
+- by your own `adata`, when you pass an in-memory object: the store reads its
+  arrays and copies none of them, but a cell-major (CSR) sparse `X` is laid
+  out gene-major once, in the background from the start (a layer when it is
+  first read), into memory-mapped files in the system temporary folder, which
+  need disk space for one uncompressed copy of the matrix and are removed when
+  the viewer stops; a MuData is written to a Cellucid-ready `.h5mu` by
+  `prepare()`;
+- by the obs table and the other small elements (`var`, `uns`, `varm`,
+  `varp`), held in memory in priority order.
 
 Gene values are held by the browser, not by Python.
 

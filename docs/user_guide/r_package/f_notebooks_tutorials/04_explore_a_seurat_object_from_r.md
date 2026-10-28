@@ -103,8 +103,11 @@ FALSE  TRUE
    60    20 
 ```
 
-The viewer shows the object as it was when it was opened: view it again to see
-the new column.
+The viewer shows the object as it was when it was opened; send it the new
+column with `cellucid_push(viewer, pbmc_small$picked, key = "picked")`. Every
+highlight, label and score made in the viewer comes back in one call,
+`pbmc_small <- cellucid_pull(pbmc_small, viewer)`
+({doc}`08_pull_everything_back`).
 
 ## Step 4: stop the viewer
 
@@ -112,8 +115,9 @@ the new column.
 cellucid_stop(viewer)
 ```
 
-This stops its server and frees its port; `cellucid_stop_all()` stops every
-viewer of the session.
+This stops its server and frees its port (in a Jupyter notebook, where the
+viewer is the cell's output and no server runs, it freezes the output);
+`cellucid_stop_all()` stops every viewer of the session.
 
 ## Next
 

@@ -42,7 +42,15 @@ from ._inputs import (
     resolve_obs,
     stored_expression,
 )
-from ._store import WHOLE_CHUNK_ELEMENTS, Elements, _row_chunks, _vector_chunks, _Writer
+from ._priority import without_positions
+from ._store import (
+    WHOLE_CHUNK_ELEMENTS,
+    Elements,
+    _cell_chunks,
+    _row_chunks,
+    _vector_chunks,
+    _Writer,
+)
 
 
 def _modality_error(name: str, error: Exception) -> Exception:
@@ -71,6 +79,9 @@ class Modality:
     #: The stored X, converted when called (CSC float32, or float64 for
     #: integer counts above 2^24; dense stays dense), None without X.
     matrix: Callable[[], sparse.csc_matrix | np.ndarray] | None
+    #: In priority order, the modality's rows of cells below each global
+    #: prefix level (``_priority.CellPriority.modality``); None as given.
+    prefix_levels: np.ndarray | None = None
 
 
 def _unique_names(names: Any, *, what: str, fix: str) -> list[str]:
@@ -167,6 +178,7 @@ def resolve_modality(mdata: Any, name: str) -> Modality:
     update = "rebuild them with mdata.update()"
     try:
         obs_index, obs = resolve_obs(modality.obs, modality.n_obs)
+        obs = without_positions(obs, f"mdata.mod[{name!r}].obs")
         _, var_index, var = resolve_genes(
             sparse.csc_matrix((modality.n_obs, modality.n_vars), dtype=np.float32),
             modality.var,
@@ -232,13 +244,13 @@ class MuDataLayout:
         writer = _Writer(root, kind, zarr_format)
         root.attrs.update({"encoding-type": "MuData", "encoding-version": "0.1.0", "axis": 0})
         writer.uns(root, "uns", self.uns)
-        writer.dataframe(root, "obs", self.obs_index, self.obs, opening_categories=True)
+        writer.dataframe(root, "obs", self.obs_index, self.obs, opening_categories=True, per_cell=True)
         writer.dataframe(root, "var", self.var_index, {})
         obsm = writer.dict_group(root, "obsm")
         for key, values in self.obsm.items():
             writer.array(obsm, key, values, _row_chunks(values.shape))
         for key, mask in self.masks.items():
-            chunks = _row_chunks(mask.shape) if mask.ndim == 2 else _vector_chunks(len(mask), WHOLE_CHUNK_ELEMENTS)
+            chunks = _row_chunks(mask.shape) if mask.ndim == 2 else _cell_chunks(len(mask))
             writer.array(obsm, key, mask, chunks)
         obsp = writer.dict_group(root, "obsp")
         for key, graph in self.obsp.items():
@@ -249,7 +261,9 @@ class MuDataLayout:
             group = writer.dict_group(root, group_key)
             for modality in self.modalities:
                 values = getattr(modality, placement)
-                writer.array(group, modality.name, values, _vector_chunks(len(values), WHOLE_CHUNK_ELEMENTS))
+                # A cell map has one entry per cell; a feature map one per feature.
+                chunks = _cell_chunks(len(values)) if group_key == "obsmap" else _vector_chunks(len(values), WHOLE_CHUNK_ELEMENTS)
+                writer.array(group, modality.name, values, chunks)
         mod = root.create_group("mod")
         mod.attrs["mod-order"] = [modality.name for modality in self.modalities]
         writer.flush()
@@ -266,6 +280,7 @@ class MuDataLayout:
                     obsm=modality.obsm,
                     obsp=modality.obsp,
                     uns={},
+                    prefix_levels=modality.prefix_levels,
                 )
             )
             del x

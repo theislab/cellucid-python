@@ -80,11 +80,13 @@ you are waiting on. The full startup transcript is in
 
 Where the time goes:
 
-- **Step 1** writes a temporary file when it has to: an `.h5ad` (`.h5mu` for a
-  MuData) for an in-memory object, and an `.h5ad` for an AnnData store holding
-  arrays the browser cannot decode (it prints `Browser cannot decode: …` naming
-  them, then `Serving: a decodable copy, written once to a temporary .h5ad`).
-  Any other format holding such arrays is refused with that reason.
+- **Step 1** plans what it serves: an in-memory AnnData, and an AnnData file
+  not in priority order, as a Zarr store in priority order whose chunks are
+  made as the browser asks for them (`Serving: a Zarr store in priority order,
+  made as the browser reads it`; a store holding arrays the browser cannot
+  decode is decoded on the kernel this way too, after `Browser cannot decode: …`
+  names them); it writes a temporary `.h5mu` for an in-memory MuData. Any other
+  format holding such arrays is refused with that reason.
 - **Step 4** downloads and verifies the current viewer build from its
   configured source, at every start, before binding; that is where a machine
   with no outbound access stalls. Serve the data endpoints alone with

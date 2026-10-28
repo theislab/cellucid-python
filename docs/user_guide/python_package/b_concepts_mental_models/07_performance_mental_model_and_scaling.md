@@ -66,9 +66,10 @@ gzip): server startup 0.16 s; obs fields about 90 ms; the 2D and 3D UMAPs
 about 40 ms each; the one-time gene index builds in the background from the
 moment the dataset opens (about 2 s), after which a gene takes a few ms and 100
 genes about 20 ms (a gene asked for at once waits for the index, 1.3 s); the
-neighbor graph 0.65 s when drawn. An in-memory object is written once to a temporary `.h5ad` with
-column-major (CSC) sparse matrices — 0.8 s for the same object — after which
-the first gene took 8 ms and 100 genes 68 ms.
+neighbor graph 0.65 s when drawn. An in-memory object is served in priority
+order, made as the viewer reads it, so a 1 % subsample of a 1,000,000-cell
+object transfers 0.18 MB where it took 2.1–10.6 MB before
+({doc}`../d_viewing_apis/14_performance_scaling_and_lazy_loading`).
 
 Startup reports four numbered steps (`Detecting format`, `Reading metadata`,
 `Checking launch choices`, `Starting server`).
@@ -173,13 +174,15 @@ The viewer reads the data where it is, and the costs follow the storage:
 - a row-major (CSR) matrix costs one gene index, built in the browser on the
   first gene; a column-major (CSC) matrix reads each gene as one contiguous
   range,
-- an in-memory AnnData is written once to a temporary `.h5ad` (sparse
-  matrices CSC, uncompressed) and a MuData to a temporary `.h5mu`, removed when
-  the server stops or Python exits; it needs disk space for one uncompressed
-  copy,
+- an in-memory AnnData, and an AnnData file not in priority order, are served
+  in priority order, each chunk made from the source as the viewer asks, so a
+  subsample sends only its cells; an in-memory cell-major `X` is laid out
+  gene-major once, in the background, into memory-mapped files (disk for one
+  uncompressed copy of the matrix), and a MuData is written to a temporary
+  `.h5mu`, all removed when the server stops or Python exits,
 - a store holding an array the browser cannot decode (an HDF5 filter such as
-  Blosc or Zstandard, a Zarr codec such as bz2) is read once with anndata and
-  served from a decodable temporary `.h5ad`; startup names those arrays.
+  Blosc or Zstandard, a Zarr codec such as bz2) is decoded on the kernel,
+  chunk by chunk as the viewer asks; startup names those arrays.
 
 ---
 
@@ -188,7 +191,7 @@ The viewer reads the data where it is, and the costs follow the storage:
 ### “It’s fast on my laptop but slow on the cluster”
 
 Remote notebooks add complexity:
-- proxy/tunnel overhead,
+- every read crosses the notebook connection (a widget) or a tunnel (a browser tab),
 - weaker CPU per user,
 - shared disks.
 
@@ -248,8 +251,7 @@ Fix:
 Likely causes:
 - the viewer generation is being fetched (every viewer-serving startup
   downloads and verifies the complete generation again),
-- an in-memory object, or a store with arrays the browser cannot decode, is
-  being written to a temporary `.h5ad`.
+- an in-memory MuData is being written to a temporary `.h5mu`.
 
 How to confirm:
 - read the last line printed. Each of the four steps names the phase it is in.

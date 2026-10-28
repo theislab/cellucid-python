@@ -107,8 +107,16 @@ A grid names each panel separately:
 Views: A. Live (Field: cell_type; Filters: total_counts: 500.00 – 12000.00) | B. Endoderm (Field: leiden; Filters: none) • Source: pancreas
 ```
 
+A figure of a subsample ({doc}`../b_data_loading/21_subsampled_loading`) says
+so between the views and the source, with the cells' digest the Session panel
+shows:
+
+```text
+Views: Live (Field: cell_type; Filters: none) • Cells: a subsample, 228,245 of 2,282,447 (uniform, seed 0; cell set 3f2a00c1d2e3f405) • Source: …
+```
+
 Read it as: `Views:` then one `Panel. Label (Field: …; Filters: …)` clause per
-panel joined by ` | `, then the source. `none` means exactly that — no color
+panel joined by ` | `, then (for a subsample) the cells, then the source. `none` means exactly that — no color
 field, or no active filter. A panel's filters are the ones in force in that
 view, including a gene range filter, whether or not the view is the focused
 one; a filter you disabled in Filters hides nothing and is not listed. The SVG `dc:description` is built by the same code,
@@ -124,7 +132,8 @@ so it is identical text for the same export.
   "dataset": {
     "name": "Pancreas", "id": "pancreas", "sourceType": "link",
     "baseUrl": "https://example.org/pancreas", "userPath": null,
-    "source": { "name": null, "url": null, "citation": null }
+    "source": { "name": null, "url": null, "citation": null },
+    "cells": null
   },
   "views": [
     {
@@ -148,6 +157,9 @@ so it is identical text for the same export.
 ```
 
 Notes on reading it:
+- `dataset.cells` is `null` when every cell is open; for a subsample it is
+  `{"open", "of", "method", "digest"}`: the cells shown, the dataset's, how
+  they were chosen, and their cell-set digest.
 - `views` always has one entry per rendered panel, in drawing order.
 - `panel` is the drawn panel letter (`A`, `B`, … `AA`) in a multi-panel export
   and `null` in a single-view export, where no letter is drawn.
@@ -323,11 +335,14 @@ Every dynamic value was traced to the code that produces it:
   `uns['cellucid']['source']`, when it states one, or else the page it was
   opened from: a link's record or share page (a GitHub, Zenodo, Google Drive
   or OneDrive page, for example), a catalog entry's URL, or, for
-  `cellucid serve` and a notebook viewer, the server's route for that dataset
-  (`http://127.0.0.1:<port>/_cellucid/anndata/…`), not a filesystem location.
+  `cellucid serve` and a browser-tab viewer, the server's route for that
+  dataset (`http://127.0.0.1:<port>/_cellucid/anndata/…`), and for a notebook
+  widget the same route under the reserved address the widget answers
+  (`https://host.cellucid.invalid/_cellucid/anndata/…`) — never a filesystem
+  location.
 - There is no access token in any of these: a Google Drive or OneDrive sign-in
-  token is never part of an address, and the viewer token of a notebook viewer
-  never enters the figure.
+  token is never part of an address, and the viewer token of a Python or R
+  viewer never enters the figure.
 - No session identifier, page URL, browser storage, or user-agent string is
   written.
 

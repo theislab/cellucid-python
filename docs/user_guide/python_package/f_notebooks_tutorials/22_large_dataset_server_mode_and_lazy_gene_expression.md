@@ -8,7 +8,8 @@ It explains:
 - which workflow to pick for large datasets
 - what direct-AnnData startup does, as four numbered steps you can read
 - what the browser reads, and when, and what that costs at scale
-- how to make notebook embeds work on HTTPS/remote kernels (JupyterHub/HPC)
+- why a notebook viewer needs nothing on a remote kernel, and how a browser
+  tab reaches one (JupyterHub/HPC)
 - what to do when you hit performance limits (browser/GPU/memory)
 
 ---
@@ -50,7 +51,9 @@ So Cellucid uses an HTTP server that serves:
 
 The server computes nothing. The web app's own HDF5/Zarr
 reader reads the store in place with HTTP range requests, so only the bytes a
-view needs cross the wire.
+view needs cross the wire. A notebook viewer (`show_anndata`, a widget) runs
+no server: the same reads travel through the notebook's own connection to the
+kernel, and are answered the same way.
 
 ### “Lazy gene expression”
 
@@ -171,17 +174,25 @@ Details: {doc}`../d_viewing_apis/14_performance_scaling_and_lazy_loading`.
 
 ## Paths and in-memory objects
 
-When you pass a path, it is served as it is on disk — never copied — and the
-browser reads it in place: an `.h5ad`, a Zarr store folder (v2 or v3), or a
+When you pass a path the browser can read as it is, it is served as it is on
+disk — never copied — and the browser reads it in place: an `.h5ad`, a Zarr store folder (v2 or v3), or a
 zipped Zarr store (`.zip`) — or a MuData, Loom, 10x or MatrixMarket file or
 folder, or an R object, which the browser reads too
-({doc}`25_serve_loom_10x_and_matrixmarket`).
+({doc}`25_serve_loom_10x_and_matrixmarket`). A file whose cells are not in
+priority order (one `prepare()` did not write) is served instead as a store in
+priority order made from the file as the viewer reads it, its compressed
+arrays decoded once into temporary memory-mapped files removed when the server
+stops ({doc}`../d_viewing_apis/08_anndata_mode_show_anndata_and_serve_anndata`).
 
-An in-memory `AnnData` object is written once to a temporary `.h5ad`, with
-sparse matrices (`X`, layers, `raw.X`) column-major (CSC) and uncompressed, and
-that file is removed when the server stops or Python exits. On the same
-562k-cell object, writing it took 0.8 s (925 MB on disk); after that the first
-gene took 8 ms and 100 genes 68 ms, because a CSC matrix needs no gene index.
+An in-memory `AnnData` object is served as a Zarr store with its cells in
+priority order, each chunk made when the viewer asks for it from a copy of the
+object taken once, before the call returns, into memory-mapped files removed
+when the server stops or Python exits (a sparse `X` laid out gene-major in it,
+so a gene is one range; later edits to the object do not show). A
+subsample the viewer opens is then the first rows of every array and the first
+entries of every gene, so only its cells are sent
+({doc}`../d_viewing_apis/14_performance_scaling_and_lazy_loading` has the
+measurements).
 
 ```python
 import anndata
@@ -197,8 +208,8 @@ viewer = show_anndata(
 
 A store holding an array the browser cannot decode (an HDF5 filter such as
 Blosc, Zstandard, szip or scaleoffset; a Zarr codec such as bz2, lzma or zfpy)
-is read once with anndata and its codec plugins and served from a decodable
-temporary `.h5ad`; the terminal names those arrays.
+is decoded on the kernel, chunk by chunk as the viewer asks, through the same
+store; the terminal names those arrays.
 
 ### Which `obsm` array gets drawn
 
@@ -209,33 +220,15 @@ object is drawn as written. Full rules:
 
 ## Remote notebooks (HTTPS / JupyterHub / HPC)
 
-### The problem
+A notebook viewer needs nothing for a remote kernel: `show_anndata(...)` is a
+notebook widget, which reaches the kernel through the notebook's own
+connection, wherever the kernel runs and whether the notebook is HTTP or
+HTTPS. The browser loads the app from `https://www.cellucid.com`; the
+dataset's bytes go from the kernel to the viewer through the widget
+({doc}`../e_jupyter_hooks/03_supported_environments_matrix`).
 
-If your notebook runs at an HTTPS origin (common on JupyterHub), the browser may not be able to load an `http://127.0.0.1:<port>` iframe directly:
-- HTTPS → HTTP is often blocked (mixed content)
-- remote kernels mean the browser’s “localhost” is not the kernel machine
-
-### Configure one browser-reachable URL
-
-Expose the Cellucid port through your notebook deployment or reverse proxy,
-then pass that exact base URL, and name the proxy's host so the server answers
-it (and accepts the viewer channel's WebSocket from its pages):
-
-```python
-viewer = show_anndata(
-    "data.h5ad",
-    dataset_name="My study",
-    dataset_id="my-study-v1",
-    client_server_url="https://notebooks.example.org/user/alice/proxy/8765",
-    allowed_hosts=["notebooks.example.org"],
-)
-```
-
-A notebook viewer serves on port 8765, or on the next free port when another
-viewer holds it (a printed note says which); the proxy route names that port.
-
-`client_server_url` must be an absolute HTTP(S) base URL without a trailing
-slash, query, fragment, or credentials.
+A viewer in a browser tab of its own is the other choice for a remote
+machine: serve it there and forward its port.
 
 ### SSH port forwarding for a browser tab
 
@@ -262,8 +255,8 @@ Be careful with `--host 0.0.0.0`. It exposes the server to your network. Use it 
 A server on an HPC compute node usually cannot be tunnelled to directly; the
 forward terminates on a login node, so the server must listen on every
 interface: `cellucid serve ... --host 0.0.0.0` (or
-`serve_anndata(..., host="0.0.0.0")`; a notebook viewer always binds
-`127.0.0.1`). The address you open stays `http://127.0.0.1:<port>/…`. See
+`serve_anndata(..., host="0.0.0.0")`; an `AnnDataViewer` always binds
+`127.0.0.1`, and a notebook widget binds nothing). The address you open stays `http://127.0.0.1:<port>/…`. See
 {doc}`../d_viewing_apis/17_hpc_slurm_and_compute_node_serving`.
 
 ## Performance and scaling checklist
@@ -318,7 +311,8 @@ Each name must exist in `obs`; the check runs before the server starts.
 Likely causes:
 - the `.h5ad` sits on slow storage
 - a row-major (CSR) matrix: the first gene waits for the gene index
-- remote notebook proxy adding latency
+- a slow link between the browser and a remote kernel (a notebook widget
+  reads through the notebook's connection)
 
 Fix:
 - move data to fast local SSD (if possible)
@@ -330,8 +324,7 @@ Likely causes:
 - the viewer generation is being fetched and verified (`[4/4] Starting server`):
   every start downloads the whole declared web build again and checks every
   file, so a slow link to the configured source slows every start
-- an in-memory object, or a store with arrays the browser cannot decode, is
-  being written to a temporary `.h5ad`
+- an in-memory MuData is being written to a temporary `.h5mu`
 
 How to confirm:
 - read the last line printed; each of the four steps names its phase.
@@ -370,16 +363,21 @@ Fix:
   `embedding_keys={"2d": "<key>"}` (`--embedding-2d <key>` from the terminal),
   then re-save the file if you serve a path rather than an in-memory object.
 
-### Symptom: remote viewer iframe is blank or unreachable
+### Symptom: a browser-tab viewer on a remote machine is blank or unreachable
 
 Likely causes:
-- notebook served over HTTPS and the kernel server is only reachable over HTTP loopback
+- the browser cannot reach the remote server (no tunnel), or the page is
+  reached through a proxy that was not declared
 
 Fix:
-- expose the server through the notebook deployment, and
-- pass that exact base URL as `client_server_url` and its host as
-  `allowed_hosts=[...]`; the proxy must pass WebSockets
-  (`/_cellucid/ws`, the viewer channel).
+- forward the port with SSH (above), or
+- behind a reverse proxy, pass its exact base URL as `client_server_url` and
+  its host as `allowed_hosts=[...]` to `AnnDataViewer` (`--allowed-host` for
+  `cellucid serve`); the proxy must pass WebSockets (`/_cellucid/ws`, the
+  viewer channel).
+
+A notebook viewer (`show_anndata`) needs none of this: it reaches the kernel
+through the notebook's own connection, remote or not.
 
 ### Symptom: “WebGL context lost / blank canvas”
 

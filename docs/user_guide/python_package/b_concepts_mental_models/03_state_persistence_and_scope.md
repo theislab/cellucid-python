@@ -33,7 +33,7 @@ Live state is lost if:
 - the tab crashes,
 - you refresh the page,
 - you close the browser,
-- your notebook output iframe is destroyed.
+- the notebook output that shows the viewer is removed or the notebook reloads.
 
 ### 2) Session bundle (`.cellucid-session`) (durable, shareable)
 
@@ -41,7 +41,8 @@ A session bundle is a single file that captures **a portable snapshot of the app
 
 You can create it:
 - in the web app via **Save** under **Session file** (downloads a file), or
-- in notebooks via `viewer.get_session_bundle()` (no-download capture).
+- in notebooks via `viewer.request_session_bundle()` and, in the next cell,
+  its `result()` (no-download capture).
 
 You can use it to:
 - reopen your work later,
@@ -138,15 +139,18 @@ prepare(
 ```python
 from cellucid import show_anndata
 viewer = show_anndata("pbmc_v1.h5ad")
-viewer.wait_for_ready(timeout=60)
 ```
 
 ### Step 3: save interactive state (when it matters)
 
-In notebooks:
+In notebooks (two cells: the widget hears the viewer between cells):
 
 ```python
-bundle = viewer.get_session_bundle(timeout=60)
+request = viewer.request_session_bundle()
+```
+
+```python
+bundle = request.result()
 bundle.save("./sessions/pbmc_v1_my_findings.cellucid-session")
 ```
 
@@ -213,7 +217,7 @@ Likely causes:
 - you saved a session but did not reload it after refresh.
 
 Fix:
-- save state in the web app (**Save** under **Session file**) or in Python (`viewer.get_session_bundle()`),
+- save state in the web app (**Save** under **Session file**) or in Python (`viewer.request_session_bundle()`),
 - reload the session after reloading the dataset.
 
 ### Symptom: “I loaded a session but nothing changed”

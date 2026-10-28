@@ -22,8 +22,10 @@ cellucid_set_data_mapping(viewer, modality = "ADT")   # a Seurat object with an 
 ```
 
 Cells are given by name, by 1-based position, or as `TRUE`/`FALSE` per cell.
-`cellucid_set_data_mapping()` waits for the viewer to apply the mapping and
-stops with the viewer's reason when it refuses it. An object is served with one
+`cellucid_set_data_mapping()` waits for nothing: it checks the merged mapping
+and sends it (at once, or as soon as the viewer reports its mapping), the
+applied mapping becomes `viewer$data_mapping`, and a refusal arrives as a
+`command_error` (a warning unless a hook handles it). An object is served with one
 matrix per assay (its `data` layer, else `counts`) and no layers, so the
 mapping's `expression` stays `"X"`; change the modality, the graph (`knn`) or
 the embeddings instead. A file given by path may hold layers
@@ -75,19 +77,24 @@ of a second).
 ## The session
 
 ```r
-path <- cellucid_session(viewer, file = "pbmc.cellucid-session")
+request <- cellucid_request_session(viewer)
+path <- cellucid_session_result(request, file = "pbmc.cellucid-session")
 ```
 
-`cellucid_session()` asks the viewer for its whole session — highlights,
-colours, filters, annotations, the camera — and saves the `.cellucid-session`
-file the viewer's **Save session** writes. Open it again in the web app with
-the same dataset, under the same dataset id. It stops with what to do when the
-viewer is not open or does not answer within `timeout` seconds.
+`cellucid_request_session()` asks the viewer for its whole session —
+highlights, colours, filters, annotations, the camera — and
+`cellucid_session_result()` saves the `.cellucid-session` file the viewer's
+**Save session** writes: the one way, in an R console and in a Jupyter
+notebook (there, collect it in a later cell: the viewer answers between
+cells). Open it again in the web app with the same dataset, under the same
+dataset id. `cellucid_session_result()` stops with what to do when the viewer
+is not open or does not answer within `timeout` seconds; the request stays
+open, so it can be collected again.
 
 ## Writing a session back onto the object
 
 ```r
-seu <- cellucid_apply_session(seu, viewer)
+seu <- cellucid_apply_session(seu, cellucid_request_session(viewer))
 # or, from a saved file:
 seu <- cellucid_apply_session(seu, "pbmc.cellucid-session", expected_dataset_id = "seu")
 ```

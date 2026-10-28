@@ -296,37 +296,6 @@ def test_an_installed_package_missing_a_name_is_told_to_upgrade_not_install(
     assert "read_elem" in message
 
 
-def test_an_import_name_is_reported_as_the_name_that_installs_it(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """The one declared dependency whose import name is not its distribution name."""
-    from cellucid.cli import main
-
-    with mock.patch(
-        "cellucid.anndata_server.serve_anndata",
-        side_effect=ModuleNotFoundError(
-            "No module named 'jupyter_server_proxy'",
-            name="jupyter_server_proxy",
-        ),
-    ):
-        status = main(
-            [
-                "serve",
-                str(_zarr_store(tmp_path / "fixture.zarr")),
-                "--quiet",
-                "--dataset-name",
-                "My study",
-                "--dataset-id",
-                "my-study-v1",
-            ]
-        )
-
-    assert status == 1
-    message = _assert_operator_report(capsys.readouterr().err)
-    assert "pip install jupyter-server-proxy" in message
-
-
 def test_a_headless_machine_without_a_browser_is_told_to_use_no_browser(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

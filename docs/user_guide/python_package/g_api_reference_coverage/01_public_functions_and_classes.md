@@ -16,6 +16,7 @@ Public API definition:
 | Category | Symbol | Kind | Primary docs page |
 |---|---|---|---|
 | Data preparation | {func}`~cellucid.prepare` | function | {doc}`api/prepare` |
+| Data preparation | {func}`~cellucid.restore_original_order` | function | {doc}`api/prepare` |
 | Jupyter | {func}`~cellucid.show_anndata` | function | {doc}`api/jupyter` |
 | Jupyter | {class}`~cellucid.AnnDataViewer` | class | {doc}`api/viewers` |
 | Server | {func}`~cellucid.serve_anndata` | function | {doc}`api/server` |
@@ -24,6 +25,7 @@ Public API definition:
 | Web cache | {func}`~cellucid.clear_web_cache` | function | {doc}`api/server` |
 | Sessions | {class}`~cellucid.CellucidSessionBundle` | class | {doc}`api/sessions` |
 | Sessions | {func}`~cellucid.apply_cellucid_session_to_anndata` | function | {doc}`api/sessions` |
+| Subsampling | {func}`~cellucid.subsample_cells` | function | {doc}`api/subsample` |
 | Vector fields | {func}`~cellucid.compute_transition_drift` | function | {doc}`api/vector_fields` |
 | Vector fields | {func}`~cellucid.add_transition_drift_to_obsm` | function | {doc}`api/vector_fields` |
 | Version | `cellucid.__version__` | str | {doc}`api/index` |

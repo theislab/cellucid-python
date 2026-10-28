@@ -30,14 +30,18 @@ it, with nothing converted, for any format of the input format registry
 A file is taken by its name and is then what its first bytes and HDF5 root
 say (an HDF5 root marked `anndata` is an `h5ad`, one marked `mudata` an
 `h5mu`); a folder is a Zarr store by its root metadata (a MuData by its
-root's `encoding-type`), else what its files make it. An in-memory `AnnData`
-is written once to a temporary `.h5ad`, a `MuData` once to a temporary
-Cellucid-ready `.h5mu` (through `prepare`, one modality at a time).
+root's `encoding-type`), else what its files make it. An AnnData file not in
+priority order, and an in-memory `AnnData`, are served as a Zarr store in
+priority order made as the browser reads it (`_served_store.PriorityStore`); a
+`MuData` object is written once to a temporary Cellucid-ready `.h5mu`
+(through `prepare`, one modality at a time).
 
 Implementation:
 - `cellucid-python/src/cellucid/anndata_server.py` (routes, launch choices)
 - `cellucid-python/src/cellucid/_anndata_files.py` (classifying the path,
-  reading AnnData and MuData metadata, the temporary `.h5ad`/`.h5mu`)
+  reading AnnData and MuData metadata, the temporary `.h5mu`)
+- `cellucid-python/src/cellucid/_served_store.py` (the store in priority
+  order: chunks made on request from an object or a file)
 - `cellucid-python/src/cellucid/_viewer_channel.py` and `_websocket.py` (the
   viewer channel)
 
@@ -93,10 +97,11 @@ curl -s http://127.0.0.1:8765/_cellucid/protocol | python -m json.tool
   "channel": "_cellucid/ws",
   "commands": ["clearHighlights", "debug_snapshot", "freeze", "highlight",
                "ping", "requestSessionBundle", "resetCamera", "setColorBy",
-               "setDataMapping", "setVisibility"],
-  "binaryCommands": ["highlight", "setVisibility"],
-  "events": ["click", "command_error", "data_mapping", "debug_snapshot",
-             "hover", "pong", "ready", "selection", "session_bundle"]
+               "setDataMapping", "setField", "setGeneSet", "setVisibility"],
+  "binaryCommands": ["highlight", "setField", "setVisibility"],
+  "events": ["click", "color_by", "command_error", "data_mapping",
+             "debug_snapshot", "hover", "pong", "ready", "result",
+             "result_removed", "results", "selection", "session_bundle"]
 }
 ```
 
@@ -134,12 +139,13 @@ and the viewer's events back
   the server's own host, a loopback name, or a host in `allowed_hosts`;
 - the first frame is `hello` with the viewer's id and token, answered
   `welcome`, or closed with `4401`;
-- commands are JSON text frames, and binary frames for `highlight` and
-  `setVisibility` (uint32 cell indices, read in place by the viewer), queued
+- commands are JSON text frames, and binary frames for `highlight`,
+  `setField` and `setVisibility` (uint32 cell indices, read in place by the
+  viewer; a pushed column's values after them), queued
   in the viewer's outbox until it connects and flushed in order;
 - events are JSON text frames (at most 1 MiB) and binary frames for
-  `selection` (uint32 cell indices, read in place) and `session_bundle`
-  (streamed to a temporary file);
+  `selection` (uint32 cell indices, read in place), `result` (a result's
+  cells and values) and `session_bundle` (streamed to a temporary file);
 - the server pings every 20 s; `viewer.stop()` or the server stopping closes
   the channel with `1001`, a newer channel of the same viewer replaces it with
   `4409`, and a frame that breaks the rules closes it with `1008` (`1002`,
@@ -175,12 +181,14 @@ fourth:
    the dataset identity: `dataset_name`/`dataset_id` as given, else
    `uns['cellucid']['name']`/`['id']` of an AnnData or MuData; data with
    neither is refused (an R object, a Loom, 10x or MatrixMarket dataset always
-   needs both named). An in-memory AnnData, and an AnnData store holding an
-   array whose codec the browser cannot decode, is written once to a temporary
-   `.h5ad` (sparse `X`, layers and `raw.X` column-major, uncompressed); an
-   in-memory MuData to a temporary Cellucid-ready `.h5mu`. Either is removed
-   when the server stops or Python exits. Another format holding an array the
-   browser cannot decode is refused, naming the arrays.
+   needs both named). An in-memory AnnData, and an AnnData file not in
+   priority order (or in it, but holding an array whose codec the browser
+   cannot decode), is planned as a Zarr store in priority order: `obs`, `var`,
+   `uns`, `varm`, `varp` written in memory, every per-cell array's chunks made
+   on request, uncompressed; an in-memory MuData is written to a temporary
+   Cellucid-ready `.h5mu`. Each is released when the server stops or Python
+   exits. Another format holding an array the browser cannot decode is
+   refused, naming the arrays.
 2. `[2/4] Reading metadata` — for an AnnData or MuData, cell and gene counts
    and the names of the stored elements (a MuData's shared cells, its
    modalities, and the default modality's genes); no array is read. Other
@@ -207,7 +215,8 @@ One dataset, its store, and the launch choices that were set:
       "name": "PBMC demo",
       "anndata": {
         "file": {"url": "_cellucid/anndata/pbmc-demo.h5ad", "kind": "h5ad",
-                 "layout": "file", "size": 2799976},
+                 "layout": "file", "size": 2799976,
+                 "etag": "\"2ab9e8-18e27b3d58754f73-18e27b3d58754f73-1a058bb9\""},
         "defaults": {"embedding2d": {"key": "X_umap", "columns": [1, 0]},
                      "knn": "connectivities"}
       }
@@ -219,11 +228,18 @@ One dataset, its store, and the launch choices that were set:
 - `file.url` is relative to the server's base URL (the server cannot know the
   address a browser reaches it by, through a tunnel or a proxy). `kind` is the
   registry's format id (the table above); `layout` is `"file"`, `"zip"` or
-  `"folder"`; `size` is given for a file and absent for a folder.
+  `"folder"`; `size` and `etag` are given for a file and absent for a
+  folder. Both are read from the file when the list is asked for: `etag` is
+  the strong validator its bytes are answered with (below), and the viewer
+  takes it as the file's version -- what it keeps of the file (its byte
+  cache, a kept gene index, a converted store) is filed under it and kept
+  across visits, a rewritten file is a new version, and a response with
+  another `ETag` than the one listed is refused rather than mixed in. A file
+  that is gone is answered `404` (`<name> is no longer readable`).
 - A folder of files (`tenx-outs`, `mtx`) also lists them, because a browser
   cannot list a folder: `"files": [{"path": "GSM1_matrix.mtx.gz", "size":
-  1234}, …]`, every regular file below it with its exact size (hidden files
-  left out). A Zarr store folder lists nothing; its consolidated metadata
+  1234, "etag": "\"4d2-…\""}, …]`, every regular file below it with its
+  exact size and validator (hidden files left out). A Zarr store folder lists nothing; its consolidated metadata
   names its keys.
 - `defaults` holds only the launch choices given at startup. A choice left out
   is taken from the store's own `uns['cellucid']['defaults']`, else the viewer's
@@ -276,7 +292,10 @@ thousands of them:
 
 The browser may keep what it read: store bytes are sent with
 `Cache-Control: no-cache` and a strong `ETag` (the file's size, modification
-time and inode), so a reload revalidates them (`If-None-Match`, answered
+time, status-change time and inode: a file rewritten in place, even with its
+modification time put back, or replaced by a copy moved over it gets a new
+one; only two writes of the same size within the file system's timestamp
+resolution — nanoseconds on APFS, ext4 and NTFS — could share one), so a reload revalidates them (`If-None-Match`, answered
 `304 Not Modified` with no body) instead of downloading them again. A file that
 changed has a new `ETag`: a range asked with `If-Range` naming the old one is
 answered with the whole current file, and the viewer refuses to mix two
@@ -306,8 +325,9 @@ The server establishes the configured exact source generation:
   inventory does not declare is a `404`).
 
 Why this exists:
-- avoids HTTPS→HTTP mixed content in notebooks,
-- avoids cross-origin issues in embedded iframes.
+- the page and the data share one origin, so a browser tab needs no CORS and
+  meets no mixed content (a notebook widget does not use it: its page is the
+  app at `web_source_url`, and its reads go through the widget).
 
 Generation-directory configuration:
 - `--web-cache-dir` or `web_cache_dir=` (see
@@ -331,7 +351,7 @@ request ahead of routing, accepting only one well-formed authority that names
 `localhost` or a loopback IP literal on the bound port, and answering anything
 else with `421 Misdirected Request`.
 
-Behind a reverse proxy such as `jupyter-server-proxy` the forwarded `Host` is
+Behind a reverse proxy (a hub's proxy route) the forwarded `Host` is
 the proxy's own, which is byte-for-byte what a rebound page sends, so the proxy
 must be declared rather than detected:
 `--allowed-host hub.example.org` or `allowed_hosts=["hub.example.org"]`. Entries

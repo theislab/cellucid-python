@@ -52,6 +52,17 @@ JavaScript memory and the GPU — not CPU speed:
   field or gene you colour by.
 - **GPU memory (VRAM)**: about 13 bytes per cell in 2D and 17 in 3D. On
   computers with unified memory (Apple silicon) both come out of the same RAM.
+- **At the largest sizes, count the whole footprint.** With levels of detail
+  on, the browser's own overheads come on top: measured in Chromium on Apple
+  silicon at 100 million cells, the tab and its GPU process held 54 bytes a
+  cell in 3D once drawn (5.4 GB), 78 while the spatial order of its levels
+  of detail was taken in, and 50 after (5.0 GB); 53 in 2D. Cells Cellucid
+  wrote in priority order (or a subsample) draw their levels of detail at
+  once, before that order exists
+  ({doc}`../n_benchmarking_performance/05_benchmark_tools` has every
+  measurement). Opening a dataset larger than the device holds, Cellucid
+  opens a subsample sized to fit (77 bytes a cell against half the device's
+  memory: about 104 million cells on a 16 GB machine).
 - **GPU driver quality**: outdated drivers can cause rendering glitches or failures.
 
 Rule of thumb:
@@ -171,14 +182,20 @@ If you are in this situation, you’ll usually need help from IT:
 
 ## Notebook / iframe embedding notes (pointer lock + fullscreen)
 
-If Cellucid is embedded in an iframe (e.g., in Jupyter):
+If Cellucid is embedded in an iframe (a notebook widget's output, or your own
+`<iframe>` embed):
 
-- **Pointer lock** (“Capture pointer”) may be blocked unless the iframe allows it.
-- **Fullscreen** may be blocked unless the iframe allows it.
+- **Pointer lock** (“Capture pointer”) may be blocked unless every enclosing
+  frame allows it.
+- **Fullscreen** may be blocked unless every enclosing frame allows it. The
+  notebook widget's own frame allows fullscreen, but some notebook front ends
+  (VS Code, Colab) render outputs inside frames of their own that may not.
 
 Symptom: clicking “Capture pointer” does nothing, or fullscreen immediately exits.
 
-Fix: use the standalone web app (not embedded) or adjust iframe permissions.
+Fix: use the standalone web app (not embedded) — for a notebook,
+`cellucid.AnnDataViewer(...)` opens the same viewer in a browser tab — or
+adjust the iframe's permissions.
 
 ---
 

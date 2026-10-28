@@ -362,17 +362,36 @@ Related docs:
 ## Edge case: large cell-major `.h5ad` loaded in-browser (first genes wait)
 
 ### What you see
-- The dataset opens, but the first gene you colour by takes a while; a progress
-  notice reports the reorganisation of the matrix.
+- The dataset opens, but the first gene you colour by takes a while. Its
+  notification says why and what it costs before the read starts, e.g.
+  `Loading gene: SFTPC. X is stored cell by cell, so the first gene reads every
+  cell's entries: 4.7 GB (~57 min at the measured 1.4 MB/s). Later genes read
+  the gene index it builds.`, and has a **Cancel** button. A second notification
+  shows the read itself: `Reading X by gene (stored cell by cell, …): 20 MB of
+  4.7 GB (0%), 1.4 MB/s, ~56 min left`.
 
 ### Why it happens
-A cell-major (CSR) matrix stores each gene spread across the whole file, so it
-is indexed by gene once. From a local file, or a server on the same machine or
-network, the index starts in the background as soon as the file opens; over a
-slower link (as the browser measures it while opening), when the first gene is
-shown. Genes asked for meanwhile are answered by the same pass. Without the
-browser's private file storage (some private windows), a matrix too large for
-memory is scanned for each gene instead.
+A cell-major (CSR) matrix stores each gene spread across the whole file, so
+one gene reads every cell's column indices (and, read ahead, their values),
+and the matrix is indexed by gene once. From a local file, or a server on the
+same machine or network, the index starts in the background as soon as the
+file opens; over a slower link (as the browser measures it while opening),
+when the first gene is shown, reading the indices and only the values of the
+genes asked for. Genes asked for meanwhile are answered by the same pass.
+**Cancel** stops the read when no other gene waits for it; the next gene
+starts it again.
+
+Where the index is kept is decided before it is built: in memory within the
+column-index budget (a share of the device's memory), else in the browser's
+private file storage when the site's storage quota has room for it. When
+neither can hold it, the notification says so up front, with the size it
+needs and what was available (`No gene index of it can be kept (the gene index
+needs 30 GB: more than the 3.0 GB of memory this browser keeps for it, and 20 GB
+of disk storage is left to this site), so every gene reads it again`), and
+each later gene's whole-matrix read is its own progress notification, never a
+silent wait. The Human Lung Cell Atlas's Census copy (2,282,447 cells,
+4,033,400,260 stored values, `cellxgene:9f222629-9e39-47d0-b83f-e08d610c7479`)
+is such a matrix.
 
 ### How to confirm
 - Watch the progress notice, or the `[cellucid:read] … indexed by gene` lines
@@ -380,6 +399,8 @@ memory is scanned for each gene instead.
   the server hands the browser the file's bytes, and the same reader indexes it.
 
 ### Fix
+- Open a subsample of the cells: the index is built over the kept cells only,
+  and sized to fit.
 - Store the matrix gene-major (CSC): a gene is then one contiguous read and no
   index is built. `cellucid.prepare()` writes a Cellucid-ready AnnData that way;
   an in-memory object passed to `show_anndata()` is written that way too.

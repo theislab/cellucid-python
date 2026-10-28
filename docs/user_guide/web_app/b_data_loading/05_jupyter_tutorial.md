@@ -1,22 +1,24 @@
 # Jupyter Integration (Notebook Embedding)
 
-This tutorial shows how to load data into Cellucid **from inside a notebook** (JupyterLab, classic Jupyter, VSCode notebooks, etc.).
+This tutorial shows how to load data into Cellucid **from inside a notebook**
+(JupyterLab, Jupyter Notebook 7, VS Code, Google Colab, marimo, Databricks).
 
 You will learn:
 - how to display an **AnnData or MuData object, an `.h5ad`, a Zarr store, or any
   other file or folder Cellucid reads** with `show_anndata()`
 - how to work with **vector fields** (velocity/drift overlays) in notebooks
 - how the integration works under the hood (so you can debug it)
-- how to drive the viewer from Python (highlight/color/visibility) and react to UI events (hooks)
+- how to drive the viewer from Python (highlight/color/visibility), react to UI
+  events (hooks), and pull what you made in the viewer back onto your AnnData
 
 If you are not in a notebook environment, start with {doc}`04_server_tutorial`.
+From R, see {doc}`../../r_package/d_viewing_loading/08_view_in_jupyter_notebooks`.
 
 :::{tip}
 Prefer to begin from a real, runnable notebook? The
 {doc}`Pancreas Jupyter walkthrough
 <../../python_package/f_notebooks_tutorials/05_jupyter_embedding_hooks_sessions_gallery>`
-links the checked notebook, its exact launch command, and real captures of the
-embedded viewer and connection report.
+links the checked notebook and its exact launch command.
 :::
 
 ## At A Glance
@@ -24,39 +26,28 @@ embedded viewer and connection report.
 **Audience**
 - Wet lab / beginner: copy/paste the “Minimal cells” sections and focus on “What success looks like”.
 - Computational users: focus on how the viewer reads a store in place, dataset
-  sizes, vector fields, and cleanup.
-- Power users: focus on remote/HPC workflows, hooks, and debugging endpoints.
+  sizes, vector fields, and pulling results back.
+- Power users: focus on what happens between cells, hooks, and debugging.
 
 **Time**
 - Minimal working embed: ~5 minutes
 - Full read (hooks + troubleshooting): ~20–30 minutes
 
 **Prerequisites**
-- A Jupyter environment (classic notebook, JupyterLab, or VSCode notebooks)
-- `pip install cellucid`
+- A notebook that shows widgets: JupyterLab (tested by the project), Jupyter
+  Notebook 7, VS Code, Google Colab, marimo or Databricks (expected to work,
+  not tested; see
+  {doc}`../../python_package/e_jupyter_hooks/03_supported_environments_matrix`)
+- `pip install cellucid` (it installs `anywidget`; JupyterLab and Notebook 7
+  need it where the *notebook server* runs, the same environment in most
+  setups)
 
 ```{important}
-**Network requirement (important):** Cellucid serves the viewer UI from one
-verified local generation.
-
-- Each viewer/server startup establishes the complete source generation declared
-  by `cellucid-web-assets.json`, including `index.html`, root browser metadata,
-  and `/assets/*`.
-- In notebooks that step is silent, like the rest of the build: a progress bar
-  appears only when you establish the generation yourself with
-  `viewer.ensure_web_ui_cached()`.
-- Generation identity and every asset byte are verified against the inventory.
-- Notebook embeds load the UI from the exact `client_server_url=` supplied by
-  the caller, or from direct loopback when it is omitted.
-- A source or validation failure stops startup and is reported directly; no
-  stale UI generation or unrelated dataset is substituted.
-
-Configure the generation location with `web_cache_dir=...`.
-Clear the selected generation with `cellucid.clear_web_cache()` or
-`viewer.clear_web_cache()`. Manually establish the source generation with
-`viewer.ensure_web_ui_cached()` (usually not needed). To verify an existing
-generation without network access or mutation, call
-`viewer.ensure_web_ui_cached(force=False)`.
+**Network requirement:** the viewer is the Cellucid web app, which **your
+browser** loads from `https://www.cellucid.com` into the cell's output (or
+from a copy you host, named with `web_source_url=`). The kernel needs no
+network access and opens no port: the app reads your data from the kernel
+through the notebook's own connection, so nothing is uploaded anywhere.
 ```
 
 ## Minimal Cells (Copy/Paste)
@@ -74,8 +65,10 @@ viewer = show_anndata(
     dataset_name="My study",
     dataset_id="my-study-v1",
 )
-viewer  # (optional) display again in some notebook UIs
 ```
+
+In marimo, end the cell with `viewer` (marimo shows the widget a cell
+evaluates to); every other notebook shows it at once.
 
 ### Minimal: show a `.h5ad` file or a Zarr store, read in place
 
@@ -102,135 +95,113 @@ from cellucid import show_anndata
 viewer = show_anndata("pbmc_demo.zarr", height=600)
 ```
 
+### Google Colab
+
+```ipython
+!pip -q install cellucid
+```
+
+then the same `show_anndata(...)` cell. Colab renders anywidgets; no port,
+proxy or `google.colab` call is involved.
+
 ### What success looks like
 
 ```{figure} ../../../_static/screenshots/jupyter/show-anndata-driven-from-python.png
-:alt: The viewer cellucid.show_anndata() serves, opened at its viewer URL, after Python called viewer.set_color_by("clusters") and viewer.highlight_cells() on the Ductal cells: the Pancreas sample coloured by clusters with the Ductal cells highlighted.
+:alt: The Cellucid viewer driven from Python, after viewer.set_color_by("clusters") and viewer.highlight_cells() on the Ductal cells: the Pancreas sample coloured by clusters with the Ductal cells highlighted.
 :width: 1440px
 
-The viewer `show_anndata()` serves, opened at its `viewer.viewer_url` in a
-browser tab: in a notebook the same page sits *inside* the output cell, and
-scrolls with the notebook. Here Python has already coloured it by `clusters`
-and highlighted the Ductal cells; the Dataset box reads *Zarr v2 folder ·
-Python*.
+The viewer after Python called `viewer.set_color_by("clusters")` and
+highlighted the Ductal cells. This capture was taken in a browser tab; in a
+notebook the same app sits *inside* the output cell, and scrolls with the
+notebook.
 ```
 
 Three things confirm the call worked:
 
-1. an interactive viewer appears in the output cell (not a blank area);
-2. `viewer.wait_for_ready(...)` returns rather than timing out;
+1. an interactive viewer appears in the output cell (not an empty area);
+2. in a later cell, `viewer.state.ready` is no longer `None`;
 3. the cell and dimension counts it reports match the data you passed.
 
 ## How It Works (Mental Model)
 
-When you call `show_anndata(...)`, Cellucid does two things:
+When you call `show_anndata(...)`, Cellucid:
 
-1) Starts a **local data server** (usually `127.0.0.1:<some_port>`)
-   - It computes nothing: it serves the store's bytes under
-     `/_cellucid/anndata/<dataset_id>.h5ad` (or `.zarr.zip`, or `.zarr/<key>`
-     for a Zarr store folder, or the file's own ending for another format),
-     and the viewer's own HDF5/Zarr reader reads them in place with HTTP range
-     requests, only what a view needs. An in-memory `AnnData` (`MuData`) is
-     first written once to a temporary `.h5ad` (`.h5mu`), removed when the
-     viewer stops.
-   - The server is intentionally **localhost-bound** in Jupyter mode for safety (it is not meant to be public).
+1) **Checks the dataset and your launch choices.** It reads only metadata (the
+   cell and gene counts and the names of `obs`, `var`, `obsm`, `obsp` and the
+   layers) and checks every option you named against it. An in-memory
+   `AnnData` is served as a store with its cells in priority order, made from
+   it as the viewer reads it (a `MuData` is written once to a temporary
+   `.h5mu`, removed when the viewer stops).
+2) **Shows a widget** (`cellucid.Widget`, an [anywidget](https://anywidget.dev))
+   in the cell's output. The widget frames the app at
+   `https://www.cellucid.com/?viewer=embedded` and hands it, in a message, the
+   viewer's id and token and a private channel.
+3) **Answers the viewer's reads.** The viewer's own HDF5/Zarr reader reads the
+   dataset in place with range requests, only what a view needs; the widget
+   relays each request to the kernel, which answers with the bytes on disk,
+   over the notebook's own connection (a Jupyter comm).
 
-2) Displays an **iframe** in your notebook pointing at the **same server**:
+No server is started and no port is opened, so the same cell works on a
+laptop, on a remote JupyterHub, in VS Code Remote and in Colab.
 
-   - Local notebooks often use direct loopback:
-     ```text
-     http://127.0.0.1:<port>/?viewer=true&viewerId=<id>&viewerToken=<token>
-     ```
-   - For HTTPS/remote notebooks, the caller may expose the selected port
-     through an HTTPS proxy and pass that exact browser base:
-     ```text
-     https://<notebook-origin>/<base>/proxy/<port>/?viewer=true&viewerId=<id>&viewerToken=<token>
-     ```
+### Between cells
 
-The viewer UI and the dataset API share the same origin, so the viewer loads data from relative paths (no mixed-content).
+The kernel handles the widget's messages **between cells**, as for every
+notebook widget:
 
-### Why this matters
+- the viewer loads once the cell that showed it finishes;
+- hooks (`@viewer.on_selection`, …) run, and `viewer.state` updates, whenever
+  the kernel is idle;
+- a call that waits for the viewer's answer (`wait_for_ready()`,
+  `wait_for_event()`, a session request's `result()`) cannot be answered
+  inside the cell that waits, so it raises at once and says what to do instead;
+- commands (`highlight_cells`, `set_color_by`, …) are sent at once, or
+  delivered in order as soon as the viewer connects.
 
-- If your notebook kernel is **local**, `127.0.0.1:<port>` is your laptop and everything “just works”.
-- In **Google Colab**, the kernel runs on a remote VM. Obtain Colab's HTTPS
-  proxy base for a fixed port, pass it as `client_server_url=`, and declare its
-  host name as `allowed_hosts=[...]`.
-- For a **remote/HTTPS Jupyter server** (common on JupyterHub), configure a
-  browser-reachable route, pass its exact base as `client_server_url=`, and
-  declare the route's host name as `allowed_hosts=[...]`.
-- `allowed_hosts=` is required behind any proxy: the proxy forwards the
-  browser's `Host` header unchanged, and Cellucid refuses an authority that does
-  not name it with `421 Misdirected Request`. That refusal is what stops DNS
-  rebinding, and a proxied request carries no signal that distinguishes it from
-  a rebound one, so the proxy has to be declared.
-- Cellucid does not discover Jupyter Server Proxy or call Colab's proxy API.
-- If your kernel is remote but your notebook frontend cannot use a server proxy (e.g. unusual VSCode/webview setups), you may still need SSH port forwarding (see {ref}`remote-hpc`).
+### A browser tab instead
 
-### Debugging endpoints you can open in a browser
-
-Once `viewer` exists:
-
-```python
-print(viewer.server_url)  # e.g. http://127.0.0.1:8765
-print(viewer.viewer_url)  # the embedded viewer URL (usually same as server_url + query params)
-```
-
-Then try:
-- `http://127.0.0.1:<port>/_cellucid/health` (server alive?)
-- `http://127.0.0.1:<port>/_cellucid/datasets` (the dataset id and name,
-  where the store is, and the launch choices you set)
+`cellucid.AnnDataViewer(...)` is the same API for a viewer in a browser tab of
+its own: it starts a local server (port 8765, or the next free one) that
+serves the app and the data, and gives you `viewer.viewer_url`. Use it from a
+plain script or through an SSH tunnel (see {ref}`remote-hpc`).
 
 ## `show_anndata()` (AnnData / `.h5ad` / Zarr store)
 
 `show_anndata()` is the fastest way to get started in an analysis notebook.
 
 It supports:
-- an in-memory `AnnData`, written once to a temporary `.h5ad` (sparse
-  matrices column-major, uncompressed) that is removed when the viewer stops,
-  or an in-memory `MuData`, written once to a temporary `.h5mu`
-- a `.h5ad` file, served as it is on disk
-- a Zarr store folder (Zarr v2 with `.zgroup`, or v3 with `zarr.json`) or a
-  zipped Zarr store (`.zip`, such as `.zarr.zip`), served as it is on disk
-- any other file or folder Cellucid reads (`.h5mu` or MuData Zarr, `.loom`, a
-  10x `.h5` or `outs/` folder, a MatrixMarket folder, an `.rds` / `.rda`),
-  served as it is on disk ({doc}`07_file_format_expectations`)
+- an in-memory `AnnData`, served as a store with its cells in priority order
+  (its arrays copied once, as the viewer starts, into memory-mapped files
+  removed when the viewer stops: the object as it was then, its sparse
+  expression matrices laid out gene-major; each chunk made from that copy when
+  the viewer asks for it), or an in-memory `MuData`, written once to a
+  temporary `.h5mu`
+- a `.h5ad` file or a Zarr store folder (Zarr v2 with `.zgroup`, or v3 with
+  `zarr.json`) or zipped Zarr store (`.zip`, such as `.zarr.zip`): one
+  `prepare()` wrote read as it is on disk, any other served in priority order,
+  read from the file
+- a `.h5mu` or MuData Zarr store, a `.loom` file or a 10x `outs/` folder:
+  one `prepare()` wrote (a MuData) read as it is, any other served in priority
+  order as the browser presents the file itself (a MuData Zarr store for a
+  MuData, or for a 10x matrix of several feature types), read from the file
+- a MatrixMarket folder or an `.rds` / `.rda`, read as it is on disk, once,
+  by the browser ({doc}`07_file_format_expectations`)
 
-Nothing is copied or converted: the viewer reads the store itself, with range
-requests. The one exception is a store holding an array stored with a codec
-the browser cannot decode (an HDF5 filter such as Blosc, Zstandard or szip; a
-Zarr codec such as bz2, lzma or zfpy): it is read once with `anndata` and its
-codec plugins and served as a decodable temporary `.h5ad`.
-
-### Minimal examples
-
-```python
-from cellucid import show_anndata
-
-viewer = show_anndata(
-    adata,
-    dataset_name="My study",
-    dataset_id="my-study-v1",
-)
-viewer.stop()
-
-viewer = show_anndata(
-    "data.h5ad",
-    dataset_name="My study",
-    dataset_id="my-study-v1",
-)
-```
+Nothing is converted ahead: the viewer reads the store itself, with range
+requests, and a subsample it opens (Session › Open data) reads only its cells,
+the first rows of every array in priority order. A store holding an array
+stored with a codec the browser cannot decode (an HDF5 filter such as Blosc,
+Zstandard or szip; a Zarr codec such as bz2, lzma or zfpy) is decoded on the
+kernel, chunk by chunk as the viewer asks.
 
 ### Exact parameters
 
 `show_anndata(...)` has a closed signature. It accepts `data` and `height`,
 followed by these exact keyword-only parameters:
 
-- `client_server_url`: exact browser-reachable base URL for remote notebooks
-- `allowed_hosts`: extra exact `Host` names the data server answers to; required
-  when `client_server_url` points at a reverse proxy. One bare host name per
-  entry — no port, no scheme, no wildcard
-- `web_source_url`: exact origin publishing the web asset inventory
-- `web_cache_dir`: directory where the verified generation is published
+- `web_source_url`: where the browser loads the Cellucid app from
+  (`https://www.cellucid.com` by default; the address of a copy you host,
+  without a trailing slash)
 - `latent_key`: the `obsm` latent space (scVI, PCA) the outlier filter
   measures in; `None` takes the store's own default, else no latent space (the
   filter then waits for one chosen in **Data mapping**)
@@ -269,14 +240,10 @@ followed by these exact keyword-only parameters:
   default modality); see {doc}`19_multimodal_mudata`
 
 Every option you name is checked against the store's metadata before the
-server starts — a key that does not exist raises at once — and passed to the
+widget is shown — a key that does not exist raises at once — and passed to the
 viewer as a launch default. An option left at `None` is taken from the store's
 own `uns['cellucid']['defaults']`, else from the viewer's default rule (see
 {doc}`13_data_mapping`).
-
-The convenience function does not accept `port`. Use
-`AnnDataViewer(..., port=<fixed port>)` when a tunnel or proxy requires a fixed
-port.
 
 ```{tip}
 Use the same exact `dataset_id` whenever you reopen the same dataset generation.
@@ -285,39 +252,15 @@ Use the same exact `dataset_id` whenever you reopen the same dataset generation.
 ```python
 from cellucid import show_anndata
 
-# In-memory AnnData
-# viewer = show_anndata(
-#     adata,
-#     height=600,
-#     dataset_name="My study",
-#     dataset_id="my-study-v1",
-# )
-
-# An .h5ad file, read in place
-# viewer = show_anndata(
-#     "/path/to/data.h5ad",
-#     height=600,
-#     dataset_name="My study",
-#     dataset_id="my-study-v1",
-# )
-
-# A Zarr store folder (or a zipped Zarr store), read in place
-# viewer = show_anndata(
-#     "/path/to/data.zarr",
-#     height=600,
-#     dataset_name="My study",
-#     dataset_id="my-study-v1",
-# )
-
 # With options
-# viewer = show_anndata(
-#     "data.h5ad",
-#     height=700,
-#     latent_key="X_pca",
-#     gene_id_column="gene_symbols",
-#     dataset_name="PBMC demo",
-#     dataset_id="pbmc-demo",
-# )
+viewer = show_anndata(
+    "data.h5ad",
+    height=700,
+    latent_key="X_pca",
+    gene_id_column="gene_symbols",
+    dataset_name="PBMC demo",
+    dataset_id="pbmc-demo",
+)
 ```
 
 ### Which `obsm` key becomes the embedding
@@ -343,7 +286,7 @@ viewer = show_anndata(
 )
 ```
 
-Naming a matrix the store does not have raises before the server starts:
+Naming a matrix the store does not have raises before the viewer is shown:
 
 ```text
 knn_key names obsp['connectivities'], which this store does not have. obsp holds: []. Compute the neighbour graph with sc.pp.neighbors(adata), or leave knn_key unset.
@@ -353,25 +296,6 @@ A graph is checked when it is read: it must be symmetric, so the `distances`
 matrix `sc.pp.neighbors()` also writes is refused. Any other `obsp` graph can be
 chosen later under **Session › Data mapping › Neighbour graph**
 ({doc}`13_data_mapping`).
-
-### What the constructor does
-
-A notebook viewer suppresses server output, so the four-step report a terminal
-prints — `[1/4] Detecting format` through `[4/4] Starting server` (see
-{doc}`04_server_tutorial`) — never appears in a cell. The constructor does the
-same work, in this order:
-
-1. **Format** — the path is classified by the input format registry (an
-   `.h5ad` file, a Zarr store folder, a zipped Zarr store, an `.h5mu`, …); an
-   in-memory `AnnData` is written once to a temporary `.h5ad` (a `MuData` to an
-   `.h5mu`), as is a store with an array the browser cannot decode.
-2. **Metadata** — the cell and gene counts and the names of `obs`, `var`,
-   `obsm`, `obsp` and the layers are read; no array is read.
-3. **Launch choices** — every option you named is checked against those names.
-4. **Viewer generation and bind** — the configured web generation is
-   established and the port is bound.
-
-Everything else happens in the browser, as each view needs it.
 
 (vector-fields)=
 ## Vector Fields in Notebooks (Velocity/Drift Overlay)
@@ -460,11 +384,10 @@ viewer = show_anndata(
 
 ### Verify that the viewer bound the vector fields
 
-After `viewer = show_anndata(...)`, the data mapping the viewer reports lists
-every bound field:
+Once the viewer shows the data, the data mapping it reports lists every bound
+field. In a later cell:
 
 ```python
-viewer.wait_for_event("data_mapping")
 print(viewer.data_mapping["vectorFields"])
 ```
 
@@ -491,10 +414,14 @@ viewer.set_visibility([0, 10, 42], visible=False)
 
 # Reset camera
 viewer.reset_view()
+
+# Show a column you computed as a field, and a gene set
+viewer.push(adata.obs["leiden"], key="leiden_notebook")
+viewer.push_gene_set("T cell markers", ["CD3E", "CD3D", "CD2"])
 ```
 
 ```{important}
-Cell indices refer to the **row order** Cellucid is serving.
+Cell indices refer to the **row order** of the dataset Cellucid shows.
 
 - For a viewer constructed directly from `adata`, this is the current
   `adata` row order.
@@ -507,17 +434,20 @@ The *data mapping* says which stored arrays the viewer plots and reads: the
 embedding of each dimension slot, the bound vector fields, and for an AnnData
 source the neighbour graph, the gene names, the expression matrix and the
 latent space. The viewer reports it after the dataset loads, and
-`viewer.data_mapping` holds the latest report:
+`viewer.data_mapping` holds the latest report (read it in a later cell):
 
 ```python
-viewer.wait_for_event("data_mapping")
 viewer.data_mapping["embeddings"]
 # {'1d': None, '2d': {'key': 'X_umap', 'columns': [0, 1]}, '3d': None}
 viewer.data_mapping_origin   # "default", "best_guess", "session", "user" or "notebook"
 ```
 
+To change it, name the arrays at launch (`embedding_keys=`, `knn_key=`,
+`expression_source=`, …) or use **Session › Data mapping** in the viewer.
 `viewer.set_data_mapping(...)` replaces the top-level fields you name, checks
-the result before sending it, and waits until the viewer has applied it:
+the result and sends it without waiting -- at once, or, in a cell run before
+the viewer reported its mapping, as soon as it does -- in a notebook widget
+and a browser-tab viewer alike:
 
 ```python
 viewer.set_data_mapping(
@@ -528,14 +458,11 @@ viewer.set_data_mapping(
 )
 ```
 
-A field this kind of mapping does not have raises `TypeError`, an invalid
-value raises `ValueError`, and a mapping the viewer refuses — an array that
-fails its load-time check, for example — raises `RuntimeError` with the
-viewer's reason. The viewer reads `GET /_cellucid/protocol` when it connects
-and reports mappings (and refused commands) only to a `cellucid` that lists
-those events there, as this release does. A viewer older than this release
-never reports a mapping, so `set_data_mapping()` raises because there is
-nothing to change yet.
+A field this kind of mapping does not have raises `TypeError` and an invalid
+value raises `ValueError`; the applied mapping is `viewer.data_mapping` in a
+later cell, and a mapping the viewer refuses — an array that fails its
+load-time check, for example — arrives as a `command_error` with the
+viewer's reason.
 
 ## Reacting to the UI (Hooks: Viewer → Python)
 
@@ -550,6 +477,8 @@ Supported hooks:
   viewer)
 - `@viewer.on_data_mapping` (the viewer resolved or changed which arrays it plots)
 - `@viewer.on_message` (raw debugging)
+
+Hooks run when the kernel is idle (between cells).
 
 ### Minimal: print selections
 
@@ -580,30 +509,54 @@ def debug(event):
 
 For more about hooks, see {doc}`../../python_package/e_jupyter_hooks/index`.
 
-## Pulling State into Python (No-Download Sessions)
+## Pulling Results into Python
 
-Hooks are great when you want reactive code. For “pull-style” workflows, Cellucid also exposes:
+Hooks are great when you want reactive code. For “pull-style” workflows, read
+what the viewer holds in a later cell.
+
+### Everything you made, in one call
+
+Every highlight group, label field, cluster, score and gene set you made in
+the viewer is sent to Python as you make it. One call writes them all onto
+your AnnData:
+
+```python
+summary = viewer.pull(adata)
+summary.columns        # obs columns written: cellucid_highlight__<id>, your labels, scores
+adata.uns["cellucid"]["gene_sets"]
+```
+
+Related: `viewer.selection` (the last selection, with obs names),
+`viewer.subset(adata, "my group")` (a highlight group as a new AnnData),
+`viewer.gene_sets()`. Full reference:
+{doc}`../../python_package/g_api_reference_coverage/api/round_trip`.
 
 ### `viewer.state` (live snapshot)
 
 `viewer.state` is a small, thread-safe snapshot of the latest events:
 
 ```python
-viewer.wait_for_ready(timeout=60)
+print(viewer.state.ready)      # the ready event (or None before the data opened)
 print(viewer.state.selection)  # last selection event (or None)
 print(viewer.state.hover)      # last hover event (or None)
 print(viewer.state.click)      # last click event (or None)
 ```
 
-### Session bundle (durable saved state → AnnData)
+### Session bundle (durable saved state)
 
-In Jupyter, you can request the current `.cellucid-session` **as a Python object**:
+In a notebook, ask for the current `.cellucid-session` in one cell:
 
 ```python
-viewer.wait_for_ready(timeout=60)
-bundle = viewer.get_session_bundle(timeout=60)
+request = viewer.request_session_bundle()
+```
 
-# Apply to AnnData (adds obs/var columns; stores metadata in adata.uns["cellucid"])
+and collect it as a Python object in the next:
+
+```python
+bundle = request.result()
+bundle.save("my-study.cellucid-session")
+
+# Apply to AnnData (adds obs columns; stores metadata in adata.uns["cellucid"])
 adata2 = bundle.apply_to_anndata(
     adata,
     expected_dataset_id="my-study-v1",
@@ -611,92 +564,43 @@ adata2 = bundle.apply_to_anndata(
 )
 ```
 
-Convenience one-liner:
-
-```python
-adata2 = viewer.apply_session_to_anndata(adata, inplace=False)
-```
-
 ```{important}
-Session application is currently **index-based** (cell identity is the row position).
+Session application names cells by **original position** (each cell's row in
+the order the dataset's cells were given, whatever order a file stores them in).
 
-Only apply a session to an `AnnData` whose row order matches the dataset that produced the session.
+Only apply a session to the `AnnData` that produced it, in that original order
+(a Cellucid-ready file read with anndata: `cellucid.restore_original_order(adata)` first).
 ```
 
 ### Debugging: `viewer.debug_connection()`
 
-If hooks/session capture seem “stuck”, run:
+If hooks or results seem “stuck”, run in a new cell:
 
 ```python
 report = viewer.debug_connection()
 report
 ```
 
-This checks server endpoints (`/_cellucid/health`, `/_cellucid/info`,
-`/_cellucid/datasets`), probes the served AnnData store with a `HEAD` and a
-one-byte range request (`anndata_store_probes`), performs a
-ping/pong roundtrip, and reports recent accepted-event counts.
-It also includes a frontend “debug snapshot” (the iframe’s `location.href`, origin, and user agent), which is useful in proxied notebook environments.
-
-An abridged healthy report (the real one also carries the viewer and server
-URLs with the viewer's token, the web cache's absolute path, the browser's
-user agent and timestamps; `<version>` is your package version):
-
-```text
-{'server_running': True,
- 'channel_connected': True,
- 'server_health': {'status': 'ok', 'type': 'anndata', 'version': '<version>',
-                   'format': 'zarr', 'n_cells': 3696, 'n_genes': 3753},
- 'anndata_store_probes': {'pancreas': {'head': {'status': 200, ...},
-                                       'range': {'status': 206,
-                                                 'content_range': 'bytes 0-0/19089'}}},
- 'recent_events': {'count': 2, 'by_type': {'data_mapping': 1, 'ready': 1},
-                   'command_errors': []},
- 'frontend_roundtrip': {'ok': True, 'pong': {...}},
- 'frontend_debug_snapshot': {'ok': True, 'snapshot': {'connected': True, ...}},
- ...}
-```
+It waits for nothing and reports where the browser loads the app from
+(`web_source_url`), which outputs are connected (`connected_outputs`),
+whether the viewer opened its channel (`channel_connected`), the dataset it
+serves, the viewer's `ready` state, and the recent events by type with the
+commands the viewer refused (`recent_events["command_errors"]`).
 
 `viewer.debug_connection()` returns a dictionary; it prints nothing by itself.
-Read it top to bottom: `server_health` proves the server is alive,
-`anndata_store_probes` proves it is serving the dataset you think it is, and
-`frontend_roundtrip` proves the browser can talk back to Python. A hook problem
-that survives all three is a proxy or extension problem, not a Cellucid one.
-
-:::{note}
-`debug_connection()` is a diagnostic, and it degrades rather than raising. Any
-probe that fails is recorded as a `*_error` string beside the others instead of
-stopping the report, so read the keys rather than assuming an exception would
-have told you.
-:::
 
 ## Cleanup (Do This If You Re-run Cells Often)
 
-Each viewer starts a local server in the background.
-
-- If you create many viewers and never stop them, you can accumulate background servers.
-- A viewer without `port=` takes 8765, or the next free port when another
-  viewer holds it (a printed note says so); repeated cells can therefore leave
-  several servers on 8765, 8766, …. Google sign-in (Google Drive data,
-  community annotation) works only on port 8765.
-
-### Recommended pattern
+Each viewer holds its dataset (for an in-memory object, the store it serves
+and the files a cell-major `X` was laid out in) until it is stopped.
 
 ```python
-viewer = show_anndata(
-    adata,
-    dataset_name="My study",
-    dataset_id="my-study-v1",
-)
-try:
-    viewer.wait_for_ready(timeout=60)
-finally:
-    viewer.stop()  # stop server + cleanup
+viewer.stop()  # freeze the output on its last view; release what it served
 ```
 
 ```{note}
-`viewer.stop()` requests an exact freeze, stops the server, unregisters hooks,
-and reports any freeze or shutdown failure. After a successful stop, the last
+`viewer.stop()` requests an exact freeze, stops answering the viewer,
+unregisters hooks, and reports any failure. After a successful stop, the last
 frame remains visible but is non-interactive.
 ```
 
@@ -708,24 +612,18 @@ from cellucid.jupyter import cleanup_all
 cleanup_all()
 ```
 
-```python
-# Stop a single viewer
-# viewer.stop()
-
-# Or stop all viewers created in this session
-# from cellucid.jupyter import cleanup_all
-# cleanup_all()
-```
-
 (remote-hpc)=
-## Remote / HPC Notebooks (SSH Tunneling Guide)
+## Remote / HPC Notebooks
 
-If your kernel runs on a remote machine (HPC/JupyterHub/cloud VM) but your browser is on your laptop, you must ensure the browser can reach the remote kernel’s Cellucid server.
+A notebook whose kernel runs elsewhere (a JupyterHub, a notebook on an HPC
+compute node, VS Code Remote-SSH, Colab, a cloud VM) needs **nothing extra**:
+`show_anndata()` reaches the kernel through the notebook's own connection,
+whichever way your browser reaches the notebook.
 
-The robust solution is SSH local port forwarding:
+You need SSH forwarding only for a **browser-tab** viewer (`AnnDataViewer`,
+`serve_anndata`, `cellucid serve`) started on a remote machine:
 
-1) Pick a port you will use for the Cellucid data server (example: `8765`).
-2) Start the viewer with that port in the notebook:
+1) Start the viewer with a fixed port:
 
    ```python
    from cellucid import AnnDataViewer
@@ -733,61 +631,31 @@ The robust solution is SSH local port forwarding:
    viewer = AnnDataViewer(
        "data.h5ad",
        port=8765,
-       height=600,
        dataset_name="My study",
        dataset_id="my-study-v1",
    )
    print(viewer.viewer_url)
    ```
 
-3) On your laptop, create an SSH tunnel that forwards that same local port to the remote machine:
+2) On your laptop, forward that port to the remote machine:
 
    ```bash
    ssh -N -L 8765:127.0.0.1:8765 <user>@<remote-host>
    ```
 
 Now, when your browser loads `http://127.0.0.1:8765/?viewer=true&...`,
-it hits your laptop’s `127.0.0.1:8765`, which SSH forwards to the remote kernel’s Cellucid server.
+it hits your laptop’s `127.0.0.1:8765`, which SSH forwards to the remote server.
 
 ```{important}
-If you do **not** set a fixed port on `AnnDataViewer`, Cellucid takes 8765, or
-the next free port when another viewer holds it. A tunnel forwards one fixed
-port, so name it with `port=`: a viewer given a port uses that port or fails.
+Without `port=`, `AnnDataViewer` takes 8765, or the next free port when another
+viewer holds it. A tunnel forwards one fixed port, so name it with `port=`: a
+viewer given a port uses that port or fails.
 ```
 
-### Common remote variants
-
-- **You already SSH-tunnel your Jupyter server**: you can forward *both* ports in one command (example ports shown):
-
-  ```bash
-  ssh -N \\
-    -L 8888:127.0.0.1:8888 \\
-    -L 8765:127.0.0.1:8765 \\
-    <user>@<remote-host>
-  ```
-
-- **VSCode Remote / Remote-SSH**: use VSCode port forwarding for the Cellucid port as well (the viewer still needs it on `localhost`).
-- **JupyterHub**: you typically still need a localhost-reachable port; prefer using a fixed port and ask your admin if extra forwarding is needed.
-
-### Kernel on an HPC compute node (two-hop forward)
-
-The tunnel above assumes your `ssh` reaches the machine running the kernel. On
-many clusters it does not: only the login node accepts SSH, and your kernel runs
-on a compute node inside a job. A kernel there has exactly the same two-hop
-problem as `cellucid serve`, and the same shape of solution — the forward is
-opened *by the login node*, which then connects onward to the compute node:
-
-```bash
-ssh -N -L 8765:compute-node:8765 you@login-node
-```
-
-The forward target `compute-node:8765` is resolved by the login node, so the
-second connection arrives at the compute node from another machine. A server
-bound to `127.0.0.1` refuses it: loopback accepts its own machine only. That is
-what the wildcard bind is for, and `AnnDataViewer` does not offer one — it
-always binds loopback, for safety in notebooks. So on a compute node, start a
-server from the kernel instead of an embedded viewer, and open it in its own
-browser tab:
+On an HPC compute node reached only through a login node, the forward is
+opened *by the login node* (`ssh -N -L 8765:compute-node:8765 you@login-node`),
+so the server must accept a connection from another machine; `AnnDataViewer`
+always binds loopback, so start a server from the kernel instead:
 
 ```python
 from cellucid import serve_anndata
@@ -802,83 +670,57 @@ serve_anndata(
 )
 ```
 
-The address you open stays `http://127.0.0.1:8765/?anndata=true`: the tunnel's
-near end is on your own machine, whatever the server bound to.
-
-The full recipe, including `ProxyJump` for clusters that *do* admit SSH to the
-compute node, is in
+The address you open stays `http://127.0.0.1:8765/?anndata=true`. The full
+recipe is in
 {doc}`../../python_package/d_viewing_apis/12_remote_servers_ssh_tunneling_and_cloud`.
 
 ## Common Edge Cases
 
-- **No source access at startup**: viewer/server startup establishes the current
-  source generation and therefore fails directly if the configured source is
-  unreachable. `viewer.ensure_web_ui_cached(force=False)` can verify a
-  previously established generation without network access, but it does not
-  change startup into an offline substitution path.
-- **Notebook blocks iframes** (security policy): you may need to open `viewer.viewer_url` in a new browser tab.
-- **Socket allocation failure**: the operating system can reject a new listener
-  when process or network resource limits are exhausted.
-- **Corporate proxies**: can block cross-origin requests or drop the viewer's WebSocket (hooks and commands); the viewer then says it cannot open its channel.
-- **Huge in-memory `AnnData`**: the object is written once to a temporary
-  `.h5ad`, which needs disk space about the size of the object. Pass the path
-  of a saved `.h5ad` or Zarr store instead, and it is read in place.
+- **The browser cannot reach `https://www.cellucid.com`** (offline laptop,
+  blocked address): the output says the app did not load. Host a copy of the
+  app and pass `web_source_url=`.
+- **The notebook does not show widgets**: install `anywidget` where the
+  notebook server runs, or use a front end that shows widgets.
+- **Showing one widget twice** (ending another cell with `viewer`): the newest
+  output takes the viewer over; the older one says it was opened elsewhere.
+- **Kernel restarts**: the output keeps its last view and says the notebook
+  stopped it. Re-run the cell.
+- **Huge in-memory `AnnData`**: its arrays are copied once into memory-mapped
+  files (disk for one uncompressed copy of them, never a second copy in
+  memory; a sparse `X` laid out gene-major), so later edits to the object do
+  not show. Open a subsample (Session › Open data) to read only
+  some of the cells.
 
 (troubleshooting)=
-## Troubleshooting (Massive)
+## Troubleshooting
 
-This section is intentionally redundant and explicit: it is designed for “I need to fix this now”.
-
-### Symptom: “The viewer doesn’t appear (blank output cell)”
+### Symptom: “The viewer doesn’t appear (empty output cell)”
 
 **Likely causes (ordered)**
-1) You are not actually running in a Jupyter environment (e.g. plain Python script).
-2) The notebook blocks iframes (security policy).
-3) The exact viewer generation could not be established from its configured source.
-
-**How to confirm**
-- Print the viewer URL:
-
-  ```python
-  print(viewer.viewer_url)
-  ```
-
-- Open that URL in a normal browser tab.
+1) The notebook front end does not show widgets (`anywidget` missing where
+   the notebook server runs).
+2) You are not in a notebook: `show_anndata()` raises and names the
+   browser-tab alternatives.
+3) In marimo, the widget is not the cell's output.
 
 **Fix**
-- Ensure you are using Jupyter/JupyterLab/VSCode notebooks.
-- Confirm the kernel/runtime can reach the configured viewer source at startup.
-- Correct the reported inventory/object verification error or pass a writable
-  `web_cache_dir`.
-- If iframes are blocked, open the URL manually in a new tab.
+- Install `anywidget` in the notebook server's environment and reload the page.
+- In marimo, end the cell with `viewer`.
+- Outside a notebook, use `AnnDataViewer(...)` or `cellucid serve`.
 
-### Symptom: “The viewer loads, but it says it cannot connect / everything is empty”
+### Symptom: “The output says the app did not load”
 
-**Likely causes**
-- The local data server is not reachable from your browser.
-  - common in remote/HPC notebooks without tunneling
-  - also happens if you used a port that is blocked locally
+**Likely cause:** the browser cannot load `https://www.cellucid.com`.
 
-**How to confirm**
-- Open `viewer.server_url + "/_cellucid/health"` in a browser.
-- Check that you get JSON back (status ok).
+**Fix:** allow it, or host a copy of the app and pass `web_source_url=`.
 
-**Fix**
-- Local notebook: restart the kernel and re-run, then try again.
-- Remote/HPC: follow {ref}`remote-hpc` (set a fixed port + SSH forward it).
+### Symptom: “A call raised: … a notebook widget hears the viewer only between cells”
 
-### Symptom: “Port already in use / the port is different”
-
-**Likely causes**
-- Old viewers still running from earlier cells.
-- Some other process is using the explicit port you requested.
-
-**Fix**
-- Call `viewer.stop()` when done.
-- Or run `cleanup_all()`.
-- Restart the kernel if needed.
-- If you need a stable AnnData port, construct
-  `AnnDataViewer(..., port=..., dataset_name=..., dataset_id=...)`.
+`wait_for_ready()`, `wait_for_event()` and a session request's `result()`
+wait for the viewer's answer, which cannot arrive while the cell runs. Read
+`viewer.state` or `viewer.results` in a later cell, register a hook, or for a
+session collect `request.result()` (or
+`viewer.apply_session_to_anndata(adata, request)`) in the next cell.
 
 ### Symptom: “The viewer says Cellucid found nothing to plot”
 
@@ -906,10 +748,9 @@ This section is intentionally redundant and explicit: it is designed for “I ne
   it, or the store's `uns['cellucid']['defaults']` names no graph.
 - The graph was refused when it was read (not symmetric, such as `distances`).
 
-**How to confirm**
+**How to confirm** (in a later cell)
 
 ```python
-viewer.wait_for_event("data_mapping")
 print(viewer.data_mapping["knn"])
 ```
 
@@ -922,11 +763,11 @@ print(viewer.data_mapping["knn"])
 ### Symptom: “The cell runs for a long time before the viewer appears”
 
 **Likely causes**
-- You passed an in-memory `AnnData`, and it is being written to a temporary
-  `.h5ad`.
-- The store holds an array stored with a codec the browser cannot decode, and
-  it is being read once and written to a decodable temporary `.h5ad`.
-- The viewer generation is being established from its configured source.
+- You passed an in-memory `MuData`, and it is being written to a temporary
+  `.h5mu`.
+- You passed an in-memory `AnnData` with a large cell-major `X`, and the first
+  gene waits for its gene-major layout (made in the background from the
+  start).
 
 **Fix**
 - Pass the path of a saved `.h5ad` or Zarr store, which is read in place.
@@ -939,13 +780,11 @@ print(viewer.data_mapping["knn"])
 - Shape mismatch: vectors are `(n_cells, 2)` but you are viewing in 3D (or vice versa).
 - You have vectors, but they don’t match `adata.n_obs` (filtered/shuffled mismatch).
 
-**How to confirm**
-- Inspect the bound fields the viewer reports:
+**How to confirm** (in a later cell)
 
-  ```python
-  viewer.wait_for_event("data_mapping")
-  print(viewer.data_mapping["vectorFields"])
-  ```
+```python
+print(viewer.data_mapping["vectorFields"])
+```
 
 **Fix**
 - Follow the naming rules in {ref}`vector-fields` (and {doc}`07_file_format_expectations`).
@@ -957,10 +796,6 @@ print(viewer.data_mapping["knn"])
 - Your genes were named from `var_names`, which holds a vocabulary you are not searching in.
 - The names you want are in a different `var` column.
 
-Each gene carries exactly one name — whichever column you select — and Cellucid
-applies no alias mapping, so it is worth selecting the column your readers will
-type.
-
 **Fix**
 - Pass `gene_id_column="..."` to `show_anndata()`.
 - Or write the file with `prepare(var_gene_id_column="...")`, which records it.
@@ -968,8 +803,9 @@ type.
 ### Symptom: “Hooks don’t fire (selection events never reach Python)”
 
 **Likely causes**
-- The viewer's channel (`/_cellucid/ws`, a WebSocket) is blocked by a proxy that does not pass WebSockets; the viewer says it cannot open its channel.
-- The local server is unreachable from the browser.
+- A cell is still running: the widget's events arrive when the kernel is idle.
+- The selection was not confirmed.
+- The output belongs to an older viewer (re-run cells, a kernel restart).
 
 **How to confirm**
 - Register a raw handler:
@@ -980,27 +816,22 @@ type.
       print(event)
   ```
 
-- Check `viewer.debug_connection()["channel_connected"]`.
-- Open browser devtools → Network, filter `WS`, and look at the `/_cellucid/ws` connection: each selection, hover or click adds a frame.
+- Check `viewer.debug_connection()["channel_connected"]` in a new cell.
 
 **Fix**
-- Ensure the data server is reachable (`/_cellucid/health` works).
-- Behind a proxy, make it pass WebSockets (Jupyter Server Proxy does), or use SSH port forwarding.
+- Let the running cell finish; re-run the cell that creates the viewer for a
+  stale output.
 
 ### Symptom: “The first gene takes noticeably longer than the next ones”
 
 **Explanation**
 - The viewer reads a gene from the store itself. For a row-major (CSR) sparse
   matrix it first builds a gene index over the stored entries, once per
-  matrix; every later gene reads only its own entries. With the kernel on the
-  same machine the index starts as soon as the dataset opens, so a gene asked
-  for within the first seconds waits for it; behind a remote JupyterHub (a
-  slower link, as the browser measures it) the index starts with the first
-  gene.
+  matrix; every later gene reads only its own entries.
 
 **Fix**
 - Nothing is needed. To make the first gene as fast as the rest, save the
-  matrix column-major (CSC); an in-memory `AnnData` is written that way
+  matrix column-major (CSC); an in-memory `AnnData` is served that way
   already.
 
 ## Next Steps
@@ -1010,6 +841,6 @@ type.
 - General loading troubleshooting: {doc}`08_troubleshooting_data_loading`
 - Vector field overlay usage: {doc}`../i_vector_field_velocity/index`
 - Hooks deep dive: {doc}`../../python_package/e_jupyter_hooks/index`
-- Runnable Pancreas notebook and verified Jupyter captures:
+- Runnable Pancreas notebook:
   {doc}`../../python_package/f_notebooks_tutorials/05_jupyter_embedding_hooks_sessions_gallery`
 - If you want to share datasets publicly: a dataset catalog on GitHub or a static host ({doc}`02_local_demo_tutorial`)

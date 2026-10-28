@@ -22,7 +22,8 @@ If you are new, start with:
 from cellucid import show_anndata
 ```
 
-- `show_anndata(...) -> AnnDataViewer`, with this closed call surface:
+- `show_anndata(...) -> cellucid.Widget` (a notebook widget; same API as
+  `AnnDataViewer`), with this closed call surface:
 
   ```text
   show_anndata(
@@ -41,34 +42,37 @@ from cellucid import show_anndata
       expression_source=None,
       vector_field_default=None,
       modality=None,
-      client_server_url=None,
       web_source_url="https://www.cellucid.com",
-      web_cache_dir=None,
-      allowed_hosts=None,
   )
   ```
 
   `dataset_name` and `dataset_id` default to `uns['cellucid']['name']` and
   `uns['cellucid']['id']`, and are required when the data declares neither.
   Every launch choice (`latent_key` through `modality`) is optional:
-  each one named is checked against the data's metadata before the server
-  starts and handed to the viewer as a launch default; one left unset is taken
+  each one named is checked against the data's metadata before the viewer is
+  shown and handed to it as a launch default; one left unset is taken
   from `uns['cellucid']['defaults']`, else the viewer's default rule.
   `obs_keys` names the exact `adata.obs` columns the viewer shows; every column
   is shown when it is omitted. `vector_field_default` names the vector field the
-  overlay opens on. The convenience function does not accept `port`; construct
-  `AnnDataViewer` for a fixed port.
+  overlay opens on. `web_source_url` is where the browser loads the app from.
+  The widget opens no port; for a viewer in a browser tab of its own (a
+  script, an SSH tunnel) construct `AnnDataViewer`, which also takes `port`,
+  `client_server_url`, `web_cache_dir` and `allowed_hosts`.
 
 ### Basic properties
 
-- `viewer.server_url` → the underlying data server URL (usually `http://127.0.0.1:<port>`)
-- `viewer.viewer_url` → the iframe URL (includes `viewer=true`, `viewerId`, `viewerToken`, and `anndata=true` for AnnDataViewer)
+- `viewer.state`, `viewer.data_mapping`, `viewer.results`, `viewer.selection`, `viewer.obs_names`
+- `AnnDataViewer` only (a widget has no address and raises `AttributeError`):
+  - `viewer.server_url` → the underlying data server URL (usually `http://127.0.0.1:<port>`)
+  - `viewer.viewer_url` → the browser-tab URL (includes `viewer=true`, `viewerId`, `viewerToken`, and `anndata=true`)
 
 ### Display and lifecycle
 
-- `viewer.display()` → (re)display iframe in a notebook output cell
-- `viewer.stop()` → freeze the displayed view, stop the server, unregister
-  hooks, and report any freeze or shutdown failure
+- `viewer.display()` → show the widget in the cell's output (an
+  `AnnDataViewer` shows a link to its browser tab)
+- `viewer.stop()` → freeze the displayed view, stop answering it (an
+  `AnnDataViewer`: stop its server), unregister hooks, and report any freeze
+  or shutdown failure
 - `cellucid.jupyter.cleanup_all()` → stop all active viewers (also registered via `atexit`)
 
 ### Commands (Python → viewer)
@@ -80,6 +84,17 @@ from cellucid import show_anndata
 - `viewer.set_color_by(field: str)`
 - `viewer.set_visibility(cell_indices: list[int] | None = None, visible: bool = True)`
 - `viewer.reset_view()`
+- `viewer.push(values, key=None)` (a column as a field) and
+  `viewer.push_gene_set(name, genes, description="")`
+
+### Results back (one call)
+
+- `summary = viewer.pull(adata)` → every highlight group, user-defined field,
+  score and gene set the viewer holds, written onto `adata.obs` /
+  `adata.uns['cellucid']['gene_sets']`
+- `viewer.subset(adata, which=None)`, `viewer.gene_sets()`
+- Function-level, also for the web app's exports: `cellucid.pull(adata, source)`
+- Details: {doc}`../g_api_reference_coverage/api/round_trip`
 
 ### Hooks (viewer → Python)
 
@@ -99,7 +114,9 @@ Programmatic registration:
 - `viewer.unregister_hook(event: str, callback) -> bool`
 - `viewer.clear_hooks(event: str | None = None)`
 
-Synchronous “pull” API:
+Synchronous API (a notebook widget hears the viewer only between cells, so
+the waiting calls raise at once in the cell that waits; see
+{doc}`03_supported_environments_matrix`):
 - `viewer.state` (latest event snapshot)
 - `viewer.wait_for_event(event: str, timeout: float | None = 30.0, predicate=None) -> dict`
 - `viewer.wait_for_ready(timeout: float | None = 30.0) -> dict`
@@ -107,30 +124,37 @@ Synchronous “pull” API:
   `viewer.data_mapping_origin`
 
 Data mapping (the viewer reports it because this package lists `data_mapping` in `GET /_cellucid/protocol`):
-- `viewer.set_data_mapping(*, timeout: float | None = 30.0, **fields) -> dict` —
-  replace top-level mapping fields, validate, send `setDataMapping`, and return
-  the mapping the viewer reports back
+- `viewer.set_data_mapping(**fields) -> None` — replace top-level mapping
+  fields, validate, and send `setDataMapping` without waiting (at once, or as
+  soon as the viewer reports a mapping); the viewer's answer becomes
+  `viewer.data_mapping`, a refusal a `command_error`
 
 ### Session bundles (durable state)
 
-- `bundle = viewer.get_session_bundle(timeout: float | None = 60.0)`
+- `request = viewer.request_session_bundle()`, then
+  `bundle = request.result(timeout: float | None = 60.0)` -- the one way, in
+  a notebook widget (in a later cell) and a browser-tab viewer alike
 - `bundle.save("path/to/file.cellucid-session")`
-- `adata2 = viewer.apply_session_to_anndata(adata, inplace=False)`
+- `adata2 = viewer.apply_session_to_anndata(adata, request, inplace=False)`
 - `adata2 = bundle.apply_to_anndata(adata,
   expected_dataset_id="my-study-v1", inplace=False)`
 - Function-level: `cellucid.apply_cellucid_session_to_anndata(...)`
 
 ### Connectivity / cache utilities
 
-- `viewer.debug_connection(timeout=5.0)` → structured connectivity report,
-  including `anndata_store_probes`, keyed by every exact listed dataset id (a
-  `HEAD` and a one-byte `Range` read of the served AnnData store), and `recent_events["command_errors"]`, the most recent
-  commands the viewer rejected
-- `viewer.ensure_web_ui_cached(force=True, show_progress=True)` → establish the
-  complete source UI generation
-- `viewer.ensure_web_ui_cached(force=False, show_progress=True)` → verify the
-  selected existing generation without network access or mutation
-- `viewer.clear_web_cache()` → clear cached viewer UI assets
+- `viewer.debug_connection(timeout=5.0)` → structured connectivity report
+  with `channel_connected` and `recent_events["command_errors"]`, the most
+  recent commands the viewer rejected. A widget's report adds
+  `connected_outputs` and `web_source_url`; an `AnnDataViewer`'s adds its
+  server's probes, including `anndata_store_probes`, keyed by every exact
+  listed dataset id (a `HEAD` and a one-byte `Range` read of the served
+  AnnData store)
+- `AnnDataViewer` only:
+  - `viewer.ensure_web_ui_cached(force=True, show_progress=True)` → establish
+    the complete source UI generation
+  - `viewer.ensure_web_ui_cached(force=False, show_progress=True)` → verify
+    the selected existing generation without network access or mutation
+  - `viewer.clear_web_cache()` → clear cached viewer UI assets
 
 ---
 
@@ -149,7 +173,7 @@ rejected.
 ### `ready`
 
 ```python
-{"n_cells": int, "dimensions": int}
+{"n_cells": int, "n_obs": int, "dimensions": int}  # cells open, cells in the dataset
 ```
 
 ### `selection`
@@ -247,7 +271,7 @@ order, when it does.
 ### `highlight` (binary)
 
 ```python
-{"type": "highlight", "color": "#ff00ff"}  # header; then the cells, at least one
+{"type": "highlight", "color": "#ff00ff", "label": None}  # header; then the cells, at least one
 ```
 
 ### `clearHighlights`
@@ -297,7 +321,10 @@ Answered by a `data_mapping` event of origin `notebook` with the same
 
 ## Server endpoints (debugging + integration)
 
-All of these are served by the Python data server that backs the viewer:
+All of these are served by the Python data server that backs a browser-tab
+viewer (`AnnDataViewer`, `serve_anndata`, `cellucid serve`). A notebook widget
+answers the same requests over the notebook's connection instead, with no
+server:
 
 ### `GET /_cellucid/health`
 
@@ -305,7 +332,7 @@ Returns `status` (`"ok"`), `type` (`"anndata"`), `version`, `format` (the
 input format id, such as `"h5ad"`), `n_cells` and `n_genes` (`null` for a
 format only the browser reads). Used for connectivity probing (and by the
 viewer once, to tell a stopped Python from a proxy that refuses WebSockets);
-it is not used to discover or select a notebook proxy.
+it is not used to discover or select a proxy.
 
 ### `GET /_cellucid/info`
 
@@ -337,9 +364,9 @@ Behavior:
 - the first frame must be `{"type": "hello", "viewerId", "viewerToken"}`; the
   answer is `{"type": "welcome"}`, or close code 4401 for an unknown viewer or
   a wrong token
-- commands: JSON text frames, and binary frames for `highlight` and
-  `setVisibility`; events: JSON text frames (at most 1 MiB each) and binary
-  frames for `selection` and `session_bundle` (uint32 little-endian header
+- commands: JSON text frames, and binary frames for `highlight`, `setField`
+  and `setVisibility`; events: JSON text frames (at most 1 MiB each) and binary
+  frames for `selection`, `result` and `session_bundle` (uint32 little-endian header
   length, JSON header, body)
 - close codes: 1001 the viewer or its server was stopped, 4409 a newer channel of the same
   viewer replaced this one, 1008 a frame broke the protocol
@@ -354,10 +381,10 @@ The server answers no `POST` (405).
 
 | Argument | Meaning | When to use |
 |---|---|---|
-| `web_cache_dir` | Directory for the active verified web generation | Controlled writable location or explicit inspection |
-| `web_source_url` | Exact origin publishing `cellucid-web-assets.json` | Testing or an explicitly operated source |
-| `client_server_url` | Exact browser-facing HTTP(S) server base used in iframe embeds | Remote kernels, custom proxies, unusual notebook frontends |
-| `allowed_hosts` | Extra exact host names the data server answers to (`Host`) and accepts viewer pages from (`Origin`); one bare host name per entry, no port, scheme or wildcard | Required behind a reverse proxy, which forwards the browser's `Host` verbatim |
+| `web_source_url` | Where the app comes from: loaded by the browser for a widget; the exact origin publishing `cellucid-web-assets.json` for a browser-tab server | A copy of the app you host; testing |
+| `web_cache_dir` | `AnnDataViewer`: directory for the active verified web generation | Controlled writable location or explicit inspection |
+| `client_server_url` | `AnnDataViewer`: exact browser-facing HTTP(S) server base | A reverse proxy or tunnel in front of the server |
+| `allowed_hosts` | `AnnDataViewer`, `serve_anndata`: extra exact host names the data server answers to (`Host`) and accepts viewer pages from (`Origin`); one bare host name per entry, no port, scheme or wildcard | Required behind a reverse proxy, which forwards the browser's `Host` verbatim |
 
 ---
 

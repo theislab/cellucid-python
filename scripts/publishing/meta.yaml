@@ -1,5 +1,5 @@
 {% set name = "cellucid" %}
-{% set version = "0.9.5" %}
+{% set version = "0.9.6" %}
 # CELLUCID_VERSION
 
 package:
@@ -32,7 +32,7 @@ requirements:
     - zarr >=3.1.4,<4
     - numcodecs >=0.16.3,<0.17
     - ipython >=7.23
-    - jupyter-server-proxy >=4.1
+    - anywidget >=0.9
 
 test:
   imports:

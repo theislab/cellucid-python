@@ -113,8 +113,9 @@ attributes, so it controls each array's chunks and codec:
   value of more than one byte, the expression values excepted, then
   `Zlib(6)`; Zarr v3: `BloscCodec` (zlib 6, byte shuffle) where v2 shuffles,
   `GzipCodec(6)` otherwise, since `numcodecs.shuffle` is outside the v3
-  specification), chunked by `SLICED_CHUNK_ELEMENTS` (2^16,
-  `X/data` and `X/indices`) or `WHOLE_CHUNK_ELEMENTS` (2^18, everything read
+  specification), chunked by `SLICED_CHUNK_ELEMENTS` (2^14,
+  `X/data` and `X/indices`), `CELL_CHUNK_ELEMENTS` (2^16, every array with one
+  row per cell) or `WHOLE_CHUNK_ELEMENTS` (2^18, everything else read
   whole); 2-D `obsm` arrays in row blocks across all columns; dense `X` in
   tall gene strips;
 - nullable integer and boolean columns: a group of `values` and `mask`

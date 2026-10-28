@@ -11,23 +11,30 @@ Cellucid always needs two things:
 1) the **viewer UI** (HTML/JS) that runs in your browser, and
 2) the **dataset's bytes**: an AnnData file or store the viewer reads itself, with range requests.
 
-`cellucid-python` establishes the exact viewer generation and starts a **local
-HTTP server** that serves both UI and data from the same origin. Open the exact
-**Viewer URL** printed by that server:
+`cellucid-python` brings them together in one of two ways:
 
-```text
-http://127.0.0.1:8765/?anndata=true
-```
+- **In a notebook** (`show_anndata`): a widget in the cell's output frames the
+  app, which the browser loads from `https://www.cellucid.com`, and the app
+  reads the data from the kernel through the notebook's own connection. No
+  port, no server, no URL to open.
+- **In a browser tab** (`cellucid serve`, `serve_anndata`, `AnnDataViewer`):
+  Python establishes the exact viewer generation and starts a **local HTTP
+  server** that serves both UI and data from the same origin. Open the exact
+  **Viewer URL** printed by that server:
 
-The `anndata=true` marker declares the user-served source before the first
-paint, and the UI can load the data without cross-origin issues.
+  ```text
+  http://127.0.0.1:8765/?anndata=true
+  ```
+
+  The `anndata=true` marker declares the user-served source before the first
+  paint, and the UI can load the data without cross-origin issues.
 
 ## At a glance
 
 **Audience**
 - Wet lab / non-technical: use the CLI quickstart and stop at “What success looks like”.
 - Computational: pay attention to data formats (`.h5ad` vs Zarr store vs in-memory, prepared or not).
-- Power users: pay attention to SSH tunnels, HTTPS notebooks, and caching.
+- Power users: pay attention to SSH tunnels, remote kernels, and caching.
 
 **Prerequisites**
 - `pip install cellucid`
@@ -40,12 +47,14 @@ paint, and the UI can load the data without cross-origin issues.
 |---|---|---|---|
 | Open the viewer from the terminal | `cellucid serve …` | a path | terminal |
 | Start a server from a Python script | `serve_anndata(…)` | a path, an `AnnData` or a `MuData` | Python (notebook optional) |
-| Embed the viewer in a notebook | `show_anndata(…)` | a path, an `AnnData` or a `MuData` | Jupyter / JupyterLab (VS Code and Colab untested) |
+| Show the viewer in a notebook cell | `show_anndata(…)` | a path, an `AnnData` or a `MuData` | JupyterLab (tested); Notebook 7, VS Code, Colab, marimo, Databricks (expected, not tested) |
+| A viewer object in a browser tab (script, SSH tunnel) | `AnnDataViewer(…)` | a path, an `AnnData` or a `MuData` | Python |
 
 ### Server mode vs notebook mode
 
 - **Server mode** (`cellucid serve`, `serve_anndata`) is a normal “keep this terminal running” server.
-- **Notebook mode** (`show_anndata`) starts the same kind of server, but also renders an **iframe** in the notebook and gives you a `viewer` object for hooks/commands.
+- **Notebook mode** (`show_anndata`) starts no server: it shows a widget in the cell's output and gives you a `viewer` object for hooks, commands and pulling results back.
+- **Browser-tab viewer** (`AnnDataViewer`) is a server plus the same `viewer` object, for a script or an SSH tunnel.
 
 ## Data inputs
 
@@ -54,7 +63,7 @@ paint, and the UI can load the data without cross-origin issues.
 | Cellucid-ready AnnData | `cellucid.prepare(...)` | `show_anndata("pbmc_cellucid.h5ad")` / `serve_anndata(...)` / `cellucid serve pbmc_cellucid.h5ad` | fastest; names itself; easiest to share and host |
 | `.h5ad` path | AnnData HDF5 file | `show_anndata("…h5ad", dataset_name="My dataset", dataset_id="my-dataset")` / `serve_anndata("…h5ad", dataset_name="My dataset", dataset_id="my-dataset")` / `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset` | convenient + scalable: the viewer reads the file in place, with range requests |
 | Zarr store path (folder or `.zip`) | AnnData Zarr store | `show_anndata("…zarr", dataset_name="My dataset", dataset_id="my-dataset")` / `serve_anndata("…zarr", dataset_name="My dataset", dataset_id="my-dataset")` / `cellucid serve data.zarr --dataset-name "My dataset" --dataset-id my-dataset` | convenient + scalable: read in place, key by key |
-| In-memory `AnnData` | you already loaded it | `show_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")` / `serve_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")` | convenient; written once to a temporary `.h5ad` first |
+| In-memory `AnnData` | you already loaded it | `show_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")` / `serve_anndata(adata, dataset_name="My dataset", dataset_id="my-dataset")` | convenient; served in priority order, made from the object as the viewer reads it |
 | MuData (`.h5mu`, MuData Zarr, or in memory) | `mudata`, or `prepare(data=mdata, ...)` | the same calls; `modality="rna"` (`--modality rna`) picks the modality it opens on | several modalities over the same cells; an object is written once to a temporary `.h5mu` |
 | Loom, 10x `.h5` / `outs/`, MatrixMarket folder, `.rds`/`.rda` | other tools | a path, with `dataset_name`/`dataset_id` (Python reads no identity from these) | no conversion: the browser reads them itself ({doc}`02_loading_routes`) |
 
@@ -68,16 +77,16 @@ a file) or through a Cellucid server, which these APIs start.
 
 ## Common “gotchas” (read once)
 
-- **Large dataset?** Pass a path, which the viewer reads in place; an in-memory
-  object is written once to a temporary `.h5ad` first. A file written by
-  `prepare()` is gene-major, so every gene is one small read
+- **Large dataset?** An in-memory object and any AnnData file are served in
+  priority order, so a subsample sends only its cells; a file written by
+  `prepare()` is served as it is, gene-major, so every gene is one small read
   ({doc}`../c_data_preparation_api/10_performance_and_storage`).
 - **Remote machine?** Don’t bind to `0.0.0.0` unless you mean to. Use an SSH tunnel first: {doc}`12_remote_servers_ssh_tunneling_and_cloud`.
-- **HTTPS notebook?** Direct `http://127.0.0.1:<port>` iframes can be blocked.
-  Expose the port through HTTPS and pass its exact base as
-  `client_server_url=`: {doc}`10_notebook_widget_mode_advanced`.
-- **Viewer source blocked?** Viewer-serving startup stops instead of using a
-  previous generation. See {doc}`09_server_mode_advanced` and
+- **Remote notebook (JupyterHub, VS Code Remote, Colab)?** `show_anndata()`
+  needs no port or proxy: {doc}`10_notebook_widget_mode_advanced`.
+- **Viewer source blocked?** A notebook widget needs the browser to reach
+  `https://www.cellucid.com` (or `web_source_url`); a browser-tab server stops
+  at startup instead of using a previous generation. See {doc}`09_server_mode_advanced` and
   {doc}`15_troubleshooting_viewing`.
 
 ## Next steps

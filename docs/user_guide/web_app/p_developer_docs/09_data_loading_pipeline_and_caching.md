@@ -51,9 +51,9 @@ route is named for the AnnData element it reads:
 | --- | --- |
 | the base itself | the dataset identity (`loadDatasetIdentity`) |
 | `obs` | the obs field list (`loadObsFields`) |
-| `var`, `var/{g}` | the gene list the file opens with, and gene `g` (`loadGeneList`) |
+| `var`, `var/{g}` | the gene list the file opens with, and gene `g` (`loadGeneList`); read after the first view, its gene names guessed first (`guessGeneNames`) |
 | `obsp` | the neighbour graph the file opens with (`loadConnectivitySummary`, `loadEdges`) |
-| `candidates` | the data-mapping candidate catalog (`loadMappingCandidates`) |
+| `candidates` | the data-mapping candidate catalog (`loadMappingCandidates`; `guessMappingGeneNames` once one var axis's gene names are guessed) |
 | `obsm/{i}/{cols}` | `obsm` entry `i` read at some columns (an embedding) |
 | `vectors/{v}/{vcols}/{e}/{ecols}` | a vector field drawn on an embedding |
 | `obsp/{p}` | another neighbour graph |
@@ -464,14 +464,21 @@ Why remote is important:
   `sendfile`), and a Zarr store folder key by key (404 for an absent key,
   consolidated metadata generated in memory when the store has none). Store
   bytes carry `Cache-Control: no-cache` with a strong `ETag` (size,
-  modification time, inode): the browser keeps what it read and revalidates
+  modification time, status-change time, inode; R's: size, modification and
+  status-change time), which `/_cellucid/datasets` also states beside the
+  file's size, read from the file at each request: the version of the file's
+  identity (`served-anndata.js`), so its byte cache, a kept gene index and a
+  converted store last across visits and a rewritten file is a new version,
+  and the byte source refuses an answer with another `ETag` than the one
+  listed. The browser keeps what it read and revalidates
   it on a reload (`304 Not Modified`, nothing sent again), and a range asked
   with `If-Range` naming an older version is answered with the whole current
   file, so kept bytes of a changed file are never mixed with new ones.
 - The browser measures the link to the server like any other (see
-  [Reading AnnData directly](#reading-anndata-directly)): `cellucid serve` or a
-  notebook on the same machine reads like a local file, the same server
-  behind a remote JupyterHub proxy like a file on the internet.
+  [Reading AnnData directly](#reading-anndata-directly)): `cellucid serve` on
+  the same machine reads like a local file, the same server behind a remote
+  proxy like a file on the internet, and a notebook widget at the speed of
+  the notebook's own connection.
 
 Common failure modes:
 - mixed-content blocking (https app trying to fetch non-local http server)
@@ -483,22 +490,35 @@ Common failure modes:
 Code:
 - `cellucid/assets/js/data/viewer-host-source.js` (the source)
 - `cellucid/assets/js/data/viewer-channel.js` and `data/viewer-protocol.js`
-  (the channel and its rules)
+  (the channel and its rules); `data/viewer-embed.js` (the notebook widget's
+  transport)
+- `cellucid/assets/js/app/viewer-host-results.js` (what the person made,
+  published to the host as `result` events) and
+  `app/registries/derived-results.js` (the gene sets and scores the viewer
+  holds besides its fields: pushed sets, the shown analyses' sets and scores)
 - Protocol architecture: {doc}`../../python_package/e_jupyter_hooks/05_architecture_viewer_channel`
 
 Behavior:
-- A host program (Python `show_anndata()` in a notebook or a script, R
-  `cellucid_view()`) serves one dataset and opens the page it serves with
-  `?viewer=true&viewerId=…&viewerToken=…`; the page is the same whether it
-  sits in a notebook output frame or a browser tab. Its `/_cellucid/info`
-  names the program (`runtime`), which the Dataset box shows.
-- The dataset is read like a server's (`served-anndata.js`). Commands from
-  the host and events from the viewer travel on one WebSocket to the same
-  server (`/_cellucid/ws`), authenticated with the viewer id and token: no
-  `postMessage` to a parent window and no polling. The host's pings keep an
-  idle socket open; a dropped socket is reopened once, and one health
-  request then tells a stopped host from a proxy that does not pass
-  WebSockets.
+- A browser-tab viewer (Python `AnnDataViewer`, `serve_anndata()`, R
+  `cellucid_view()` / `cellucid_serve()` outside a notebook) is a page its
+  host serves, opened with `?viewer=true&viewerId=…&viewerToken=…`. Its
+  `/_cellucid/info` names the program (`runtime`), which the Dataset box
+  shows. Commands from the host and events from the viewer travel on one
+  WebSocket to the same server (`/_cellucid/ws`), authenticated with the
+  viewer id and token, with no polling. The host's pings keep an idle socket
+  open; a dropped socket is reopened once, and one health request then tells
+  a stopped host from a proxy that does not pass WebSockets.
+- A notebook widget (Python `show_anndata()` / `cellucid.Widget`, R
+  `cellucid_view()` in IRkernel) frames the app from its web source with
+  `?viewer=embedded`. The widget hands the page its viewer id and token in a
+  message posted to the app's origin only, over a private `MessagePort`
+  (accepted only from the frame's embedder), and every request and the
+  viewer channel then run over that port and the kernel's comm: no server,
+  port or proxy. Above the transport -- the documents, the store reads, the
+  protocol -- everything is the same as in a browser tab.
+- Either way the dataset is read like a server's (`served-anndata.js`), and
+  every cell crossing the channel is an original position (a row of the
+  dataset's `obs`), whatever share of the cells is open.
 
 ---
 
@@ -543,8 +563,25 @@ views are Loom, a 10x `.h5` and a Cell Ranger `outs/` folder, and MuData
 MatrixMarket folders into the origin-private file system (memory where the
 browser has none), holding a block of entries at a time, never the matrix
 (`transcode/entries.js`): a Seurat v5 `scale.data` layer is never stored,
-split layers are joined in one pass, and a matrix that arrives by cell or by
-feature is kept as it arrived. A large gzip stream (1 MiB or more) is
+split layers are joined in one pass, and X is laid out by gene
+(`csc_matrix`, `byFeature`: buckets of consecutive genes of at most 4 M
+entries, dealt in one pass and laid out one at a time), so a gene is one
+contiguous read as in a Cellucid-ready AnnData; the other layers keep the
+form they arrived in. Every per-cell array is written with its cells in
+priority order under seed 0 (`transcode/priority.js`): `obs` with
+`cellucid_original_position`, `obsm`, both axes of `obsp`, every layer's
+rows (`majorInOrder`, bounded like `byFeature`), each gene's rows ascending
+with `varm['cellucid_prefix_counts']`, each modality's rows by their cells'
+priority, and `uns['cellucid']['priority']`, so a subsample of a converted
+file opens as a prefix (the subsampling specification's priority-ordered
+files); an uncompressed R file, whose arrays are read in place and never
+copied, keeps the object's order. The store is kept across visits under the source's identity
+(`transcode/space.js`, `session.js`): the same file opened again opens the
+store without reading the file. The opening says up front that such a file
+cannot be read in parts, how much is read and where it is kept
+(`data/whole-read-notice.js`). A file whose host serves only whole files is
+downloaded into the same storage as it arrives, never into memory, and kept
+(`data/whole-download.js`). A large gzip stream (1 MiB or more) is
 decompressed on a worker of its own (`formats/rds/gunzip-worker.js`), since
 `DecompressionStream` inflates on the thread that calls it; a MatrixMarket
 file's entry lines go to the decode workers in blocks of about 1 MiB and come
@@ -553,8 +590,8 @@ order and collected a block at a time.
 
 | Layer | Code | What it does |
 |---|---|---|
-| Bytes | `formats/io/` | Byte sources (a local `File`, HTTP range requests, memory) and **one byte reader per file**: reads asked for in the same task are planned together, neighbours closer than the merge gap become one request, requests are split at the request size so large reads run in parallel (`concurrency` at once: six per HTTP/1.1 host, the browser's limit), requests waiting for a slot take their neighbours with them when round trips cost more than bytes, metadata is cached in aligned blocks (16 KiB from a web host: an anndata-written `.h5ad` keeps each element's headers within a few KiB beside its data, so larger blocks fetched mostly data; a 1M-cell `.h5ad` opened at 80 ms/2 MB/s in 1.4 s instead of 4.2 s), and a read's `AbortSignal` cancels it. A host that content-codes a file even in a range (`Content-Encoding`, hidden from the page; NCBI does so for GEO's `.rds`) is told by the probe (`probeHttpResource`: the ranged read fails while the whole file answers), and the file is downloaded whole. The merge gap and request size follow **the link as measured** (`link.js`, see below). `inflate.js` decompresses with the browser's native `DecompressionStream`, to an exact or bounded size, feeding it the input in 32 KiB slices so the size bound holds while it decodes (WebKit's decompressor inflates whatever is written to it at once: a chunk written whole expanded a 60 MB bomb past its 1 KiB declared size). `decode-pool.js` decodes chunks on decode workers (`decode-worker.js`, nested in the reader worker, started when a file opens: as many as the cores allow, less one for the reader thread and one for the page, and as many as the `decodeWorkers` memory share holds), small chunks that wait together going to a worker in one message, a background pass's chunks behind every other read's, so a background pass over a matrix leaves the reader thread free; where no worker can be made, chunks are decoded in the reader thread. The same workers take the reader thread's work on decoded values (`runOnDecodeWorker`: a function of a module that depends on nothing else, its arguments transferred, with a context each worker is sent once), as a cell subset's runs of genes. `activity.js` counts what each operation fetched and decoded, and which shared loads it reads for (`keys`: a job joining one adopts the read, `read-activity-log.js`). |
-| Formats | `formats/hdf5/`, `formats/zarr/`, `formats/zip/` (and, for the transcoders, `formats/rds/`: R's serialization, gzip native, bzip2 and xz in JavaScript; `formats/text/`: MatrixMarket) | Cellucid's own HDF5 reader (every superblock, object header, group, attribute and chunk-index version; deflate, shuffle, Fletcher-32 and LZF), Zarr reader (v2 and v3 with sharding; gzip, zlib, Blosc, LZ4 and Zstandard; a picked folder, a ZIP, or a folder on a web host via consolidated metadata) and ZIP reader. Each opens a file as the **array store** of `formats/store.js`: the whole node tree (names, shapes, element types, attributes) is read at open, with a tree level's reads in flight together, so navigation is synchronous; array values are read on demand, fetching only the chunks a selection touches, in parallel, each decoded once (a per-file decoded-chunk cache serves neighbouring reads); of an unfiltered HDF5 chunk (anndata's default sparse `.h5ad`) only the run of bytes a selection needs is fetched (`partialChunks`), so 1,000 cells of a 1M-cell CSR `.h5ad` over 30 ms/5 MB/s read 4.5 MB in 12 s, not 121 MB in 25 s. |
+| Bytes | `formats/io/` | Byte sources (a local `File`, HTTP range requests, memory) and **one byte reader per file**: reads asked for in the same task are planned together, neighbours closer than the merge gap become one request, requests are split at the request size so large reads run in parallel (`concurrency` at once: six per HTTP/1.1 host, the browser's limit), requests waiting for a slot take their neighbours with them when round trips cost more than bytes, metadata is cached in aligned blocks (16 KiB from a web host: an anndata-written `.h5ad` keeps each element's headers within a few KiB beside its data, so larger blocks fetched mostly data; a 1M-cell `.h5ad` opened at 80 ms/2 MB/s in 1.4 s instead of 4.2 s), and a read's `AbortSignal` cancels it. A host that content-codes a file even in a range (`Content-Encoding`, hidden from the page; NCBI does so for GEO's `.rds`) is told by the probe (`probeHttpResource`: the ranged read fails while the whole file answers), and the file is downloaded whole. The merge gap and request size follow **the link as measured** (`link.js`, see below). `inflate.js` decompresses with the browser's native `DecompressionStream`, to an exact or bounded size, feeding it the input in 32 KiB slices so the size bound holds while it decodes (WebKit's decompressor inflates whatever is written to it at once: a chunk written whole expanded a 60 MB bomb past its 1 KiB declared size). `decode-pool.js` decodes chunks on decode workers (`decode-worker.js`, nested in the reader worker: one started when a file opens, the others as chunks need them, up to as many as the cores allow, less one for the reader thread and one for the page, and as many as the `decodeWorkers` memory share holds), small chunks that wait together going to a worker in one message, a background pass's chunks behind every other read's, so a background pass over a matrix leaves the reader thread free; where no worker can be made, chunks are decoded in the reader thread. The same workers take the reader thread's work on decoded values (`runOnDecodeWorker`: a function of a module that depends on nothing else, its arguments transferred, with a context each worker is sent once), as a cell subset's runs of genes. `activity.js` counts what each operation fetched and decoded, and which shared loads it reads for (`keys`: a job joining one adopts the read, `read-activity-log.js`). |
+| Formats | `formats/hdf5/`, `formats/zarr/`, `formats/zip/` (and, for the transcoders, `formats/rds/`: R's serialization, gzip native, bzip2 and xz in JavaScript; `formats/text/`: MatrixMarket) | Cellucid's own HDF5 reader (every superblock, object header, group, attribute and chunk-index version; deflate, shuffle, Fletcher-32 and LZF), Zarr reader (v2 and v3 with sharding; gzip, zlib, Blosc, LZ4 and Zstandard; a picked folder, a ZIP, or a folder on a web host via consolidated metadata) and ZIP reader. Each opens a file as the **array store** of `formats/store.js`: the whole node tree (names, shapes, element types, attributes) is read at open, with a tree level's reads in flight together, so navigation is synchronous; array values are read on demand, fetching only the chunks a selection touches, in parallel, each decoded once (a per-file decoded-chunk cache serves neighbouring reads); of an unfiltered HDF5 chunk (anndata's default sparse `.h5ad`), or a Zarr chunk stored as its values' bytes (no compressor or filter, C order: what `cellucid serve` and `cellucid_serve` answer), only the run of bytes a selection needs is fetched (`partialChunks`; a few columns of some rows of such a chunk read those rows' bytes), so 1,000 cells of a 1M-cell CSR `.h5ad` over 30 ms/5 MB/s read 4.5 MB in 12 s, not 121 MB in 25 s. |
 | AnnData | `data/anndata/` | **One** AnnData reader for both formats: the element rules of the current layout (`elements.js`, `dataframe.js`, `sparse.js`), files from anndata 0.6/0.7 and SeuratDisk presented in the current layout (`older-layouts.js`), slabbed reads with read-ahead and exact conversions (`values.js`), gene columns and cell rows per layout (`matrix-access.js`), and opening plus error explanations (`open.js`, `views/`, `transcode/`). |
 | Worker | `data/anndata-reader-worker.js`, `data/anndata-reader-client.js` | The reader's methods over `postMessage`, results transferred; live `activity` and `transfer` events. |
 
@@ -564,7 +601,7 @@ order and collected a block at a time.
 |---|---|---|
 | CSC | its own entries: indices and values fetched together | indexed by cell once (the index of the transposed matrix) |
 | CSR, over a link as fast as a disk (a local file, the same machine or network) | indexed by gene once in the background, at open, indices and values into a column store (in memory, or on disk when it does not fit); a gene asked for meanwhile is answered from the same pass, and every later one is a copy out of the store | its own entries |
-| CSR, over a slower link | indexed when the first gene is shown, from the **indices** alone; a gene's values are then fetched as the ranges its entries occupy; once the ranges already read and those asked for together would cost as much as every value (a request costs a round trip of the measured link), every value is read once, after which every gene is answered from memory (never more than twice the cheaper choice in hindsight) | its own entries |
+| CSR, over a slower link | indexed when the first gene is shown, from the **indices** alone (kept in memory when they fit the `columnIndex` budget; otherwise a second pass fills a column store, values and all, on disk when the site's storage quota has room); a gene's values are then fetched as the ranges its entries occupy; once the ranges already read and those asked for together would cost as much as every value (a request costs a round trip of the measured link), every value is read once, after which every gene is answered from memory (never more than twice the cheaper choice in hindsight) | its own entries |
 | Dense, chunked in strips of few genes | the chunks of its strip (kept for its neighbours) | the chunks of its row strip |
 | Dense, in one piece or in wide chunks | indexed by gene once, streaming | its row |
 
@@ -582,6 +619,36 @@ first pass's indices for the second in the smallest type that holds a gene
 position (2 bytes for up to 65,536 genes, 103 MB for Suo instead of 207 MB),
 and the values a waiting gene made the first pass read, so no slab is
 decoded twice.
+
+**What the first gene costs, said before it is read.** How a matrix will be
+indexed is decided from its metadata before anything is read
+(`sparseIndexPlan`, the store factory's `plan`; `geneReadCost` in
+`data/anndata/matrix-access.js`, which a subsampled opening weighs too), and
+`AnnDataReader.geneReadPlan(element)` reports it: whether the matrix is
+stored cell by cell, the stored bytes the first gene reads, the index it
+builds and where that is kept (memory, disk, or nowhere, with the reason),
+and the measured rate. The gene's loading notification states it
+(`data/gene-read-plan.js`) and has Cancel: a build asked for by genes stops
+when the last of them withdraws, its queued reads never sent. A matrix no
+store can hold is scanned once per batch of waiting genes, each scan its own
+read activity naming why (`onUnindexedScan`).
+
+**A subsample's genes fill in as its cells are read.** A subsample opens its
+cells in priority order (`subsample-plan.js`), so any run of its first cells
+is a sample of them. Its cell-major matrix is indexed in segments of that
+order (`data/anndata/prefix-column-index.js`): the first about a
+thirty-second of the cells (at least one slab of the index's work), each next
+one as large as all before it, one after another, sharing one memory budget
+(each segment's store placed with what the built ones left,
+`withMemoryBudget`). `AnnDataReader.getMatrixColumn(…, {onPartial})` answers
+a gene after each segment with its values on the cells indexed so far and NaN
+on the rest; the reader worker posts those as `{event: 'partial'}` before the
+reply (`getMatrixColumn`'s `progressive` argument), the client hands them to
+the callers that asked (`onPartial`), and the page draws them as colours only
+(`DataState.showPartialVarField`: the gene is not loaded until it is whole,
+so filters, analyses and sessions never see partial values; Cancel puts the
+colours of the field shown back). `geneReadPlan` says what remains to read
+and when the first colours come (`progressive`).
 
 **Two forms of a gene.** A view colours by a gene's dense column (float32,
 one value per cell), made in the reader worker and transferred, so the page
@@ -693,7 +760,13 @@ its own copy. Every read takes an `AbortSignal`: aborting rejects the caller
 at once and sends the worker `{cancel: id}`, whose reads then stop (a request
 the network has not sent is never sent; a gene index other reads still need
 goes on). A batched gene request is cancelled once every caller in it has
-cancelled. The worker's open reply and its transfer events say how many
+cancelled. The same rule holds below it: **a shared read is cancelled only
+when every reader waiting on it withdrew** (`formats/io/abort.js`). Reads
+merged into one request (neighbouring ranges of a file, a Zarr store's
+chunks), a read two openings of the same file both wait on, and a read the
+page's byte cache hands to another reader each stop for one reader at once
+-- that reader's wait is rejected -- and the request itself is aborted only
+when no reader is left waiting. The worker's open reply and its transfer events say how many
 reads the source answers at once (unbounded for a local file, the link's
 background concurrency for a web host), which the page's download scheduler
 follows for long runs (`setSourceRequestConcurrency`).
@@ -709,6 +782,11 @@ reader (and the request layer of a Zarr folder on a web host) measures its
 link as it reads
 (`formats/io/link.js`): the round trip is the shortest request, the
 bandwidth the fastest delivery seen, over one request or over a busy period.
+Each request is counted half a tick of the clock longer than measured
+(`clockTickMs`: `performance.now()` ticks in whole milliseconds in WebKit's
+and Firefox's workers, 0.1 ms in Chromium's), so the shortest of many lies in
+the middle of where the true one does and a request to a server on the same
+machine, ending on the tick it began on, does not make the round trip 0.
 Until it is measured, a local file is assumed to be a disk and a web host
 nothing. From these:
 
@@ -723,9 +801,13 @@ nothing. From these:
   50 MB/s, the protocol not yet known: over HTTP/2 316 → 186 ms (11.3 →
   4.6 MB; one round trip and the bytes take 151 ms), over HTTP/1.1 688 →
   780 ms (the quickest plan of single-range requests, simulated, takes
-  621 ms: six connections, not bytes, set that floor). The request size carries a round trip's
-  worth for every request in flight (bandwidth × latency × concurrency,
-  never less than the source's prior);
+  621 ms: six connections, not bytes, set that floor). The request size is one round trip's
+  worth of the whole link (bandwidth × latency, never less than the
+  source's prior): the bandwidth measured is shared by every request in
+  flight, so a request that long already keeps the link busy for its own
+  round trip, and a longer one only serialises its bytes on one connection
+  (24 connections at 50 MB/s and 150 ms asked 180 MB requests before; 7.5 MB
+  now);
 - requests waiting for a slot are merged with their waiting neighbours,
   whichever reads asked for them, while their round trips would take longer
   than their bytes and a gap is no wider than the waiting requests' own plan
@@ -741,7 +823,11 @@ nothing. From these:
   a burst completes a whole round trip after the first, so seven completing
   within half a round trip prove multiplexing, and six completing together
   followed by half a round trip of silence, twice, mean HTTP/1.1 (the reader
-  drops to six). On a host proven to multiplex the concurrency keeps doubling
+  drops to six). A request belongs to the burst it began in even when its
+  round trip is timed from later (a read that first asked the page's byte
+  cache, `range-cache.js`): timing those from the host's answer had put
+  every completion outside its burst, so no host was ever taken for
+  HTTP/1.1 this way. On a host proven to multiplex the concurrency keeps doubling
   while the completion rate rises by at least half what doubling could give.
   Until a host is proven to multiplex, reads are split as for six requests
   (`shapingConcurrency`) and their gaps priced under both six and the host's
@@ -753,9 +839,72 @@ nothing. From these:
   measures. Zarr folder on a GitHub-like host (simulated, 80 ms / 50 MB/s):
   open 307 → 203 ms, 57 obs fields 475 → 199 ms, 99 genes 332 → 196 ms;
   `.h5ad` 1,000 cell rows 5.98 → 1.51 s;
-- a chunk B-tree of an `.h5ad` is read leaf by leaf as reads need it, and the
+- a chunk B-tree of an HDF5 file (`.h5ad`, `.h5mu`, `.loom`, a 10x `.h5`) is
+  read leaf by leaf as reads need it, and the
   rest of its leaves follow in the background when they transfer in less
-  than a round trip, so a later gene is one round trip, not two;
+  than a round trip, so a later gene is one round trip, not two. The reads
+  asked for in one task (the genes of one call, the arrays of one sparse
+  gene) wait for the leaves of all of them together (`chunk-index.js`,
+  `indexBurst`), so their chunks go out in one task and the byte reader
+  plans them as one set instead of wave by wave as each read's own leaves
+  land (100 Loom genes over 150 ms / 5 MB/s: 11.1 → 7.8 s for every cell,
+  2.1 → 1.6 s at 1 %). A sharded Zarr v3 array does the same with its shard
+  indexes (`formats/zarr/array.js`): a read asks for every shard index it
+  needs at once and for the inner chunks of all its shards once they are
+  in. A read that
+  goes on where the last one of the same array ended (rows in file order: a
+  cell-major matrix read slab by slab, a subsample's kept rows wave by wave)
+  has the leaves after it read ahead in the background, as many as it
+  needed, asked for as its own leaves land, in the same task as its chunks:
+  a leaf sits among the chunks it indexes, so the next one comes in their
+  request when the gap is worth it, and each next read waits one round
+  trip, for its chunks, not two; a read elsewhere reads nothing ahead. Background work waits for a
+  leaf already being read ahead instead of asking for it again. What an
+  array stores (`storedBytes`, which cost models and progress read before a
+  read) is known without reading a leaf: a leaf's parent holds the key of
+  the leaf's first chunk, its stored size included, so a chunk whose leaf is
+  not read yet counts that size (exact for unfiltered chunks; within a few
+  per cent for gzip ones, whose chunks of one array compress alike), and a
+  chunk whose leaf is read counts its own. The 2.3M-cell lung atlas on
+  CELLxGENE (`X` CSR, 470,000 gzip chunks of `indices`, 235,000 of `data`)
+  read all 12,382 leaves of both, 2 KB each and 850 KB apart, one request
+  each, before its first gene could start: 11,706 requests in the first 10
+  minutes in Chromium; now none. A sharded Zarr v3 array on a web host is
+  answered the same way: the shard indexes in hand count exactly, one more
+  is read, and the other shards' inner chunks count the mean stored size of
+  the indexes in hand (anndata's automatic shards hold about 11.5M values,
+  so a matrix of 4 billion values has some 350 shards: one request, not 350);
+  a folder or ZIP, which knows its shards' sizes, reads every index;
+- **background work is coalesced too**: the reads of a gene index built
+  over a subsample's kept rows (background work the first gene waits for)
+  are merged across their gaps by the same price as any read, and while
+  requests wait for a slot the gaps are priced at twice the measured
+  bandwidth (`LinkMeter.pricingBytesPerMs`): a link measured only while its
+  connections were full of small requests measured its round trips, not its
+  bandwidth, and priced at that no gap would ever pay. On an atlas-shaped
+  file over 150 ms / 50 MB/s (24 connections), 20 % blocks: first gene
+  10.6 → 6.9 s, 1,617 → 1,013 requests (more bytes, fewer round trips);
+- **mirrors**: a public Amazon S3 object (an unsigned URL of a regional S3
+  endpoint: the CELLxGENE Census bucket every CELLxGENE link reads, or any
+  S3 link) is read through every address S3 answers it at
+  (`formats/io/s3.js`: virtual-hosted and path-style, each also on the
+  dual-stack endpoint; one `ETag`, CORS open on each, measured). S3 speaks
+  only HTTP/1.1, and a browser keeps six connections to one host, so a read
+  of many small requests waited on six round trips at a time; spread over
+  four hosts it runs on 24 (`httpByteSource` `mirrors`, and the same for a
+  Zarr folder on S3, `httpStore` `mirrors`). Each request goes to the
+  address with the fewest requests asked of it; a mirror that fails, or
+  answers another status, size or `ETag` than the file's own would, is
+  dropped for the rest of the read; one that stalls or cannot be reached is
+  dropped at its second failure in a row; one that says it is busy (a 503
+  every address of a bucket gives alike) is kept (`formats/io/mirrors.js`,
+  shared by both). Either way the request is asked of the file's own URL at
+  once, so a mirror adds connections and never a failure. The lung
+  atlas's first gene over a link of about 2 MB/s and 0.3–1 s to S3 (Node,
+  six connections a host as a browser keeps): in its first 90 s, 34 → 135 MB
+  with mirrors alone; with both changes, in its first 120 s, 2,500 requests
+  of index nodes (12 MB, none of the matrix) → 940 requests and 200 MB of
+  the matrix, the link's full rate;
 - one `abort` listener per `AbortSignal` (`formats/io/abort.js`), however
   many reads wait on it: thousands of reads under one signal (the rows of a
   large selection) register in constant time each, and an abort still
@@ -973,14 +1122,26 @@ through `fetchOnce` and `withRetries` in `formats/io/byte-source.js`
 APIs). None is left waiting for ever:
 
 - **Transient failures are asked again**, with growing waits
-  (`RETRY_DELAYS_MS`: 250 ms to 8 s, six repeats), or as long as a
+  (`RETRY_DELAYS_MS`: 250 ms to 8 s, six repeats, each stretched by up to a
+  half by a draw from the request's own URL and range, `retryDelayMs` and
+  `spreadOf`: requests a busy host turned away together come back apart,
+  and the same request always waits the same), or as long as a
   `Retry-After` asks (seconds or an HTTP date; a cross-origin page sees it
   only where the host exposes it): HTTP 408, 429 and 5xx (but 501 and 505),
   and a connection that fails or drops. GitHub Pages answers a burst of
   requests with an occasional 503 that carries no CORS headers, which every
   browser reports to the page as a failed connection, so a failed connection
   is transient too.
-- **A stalled request is aborted and asked again at once.** The link's
+- **A host that says it is busy is asked less at once.** Each 429 or 5xx
+  answer halves the requests the link starts at once (from what was
+  running), and each answered request earns back one request per round
+  (`LinkMeter.throttled`, `admitted`: additive increase, multiplicative
+  decrease), for the byte reader and for a Zarr web host's store alike.
+- **A stalled request is aborted and asked again at once**, except one to
+  a notebook's kernel (`formats/io/host-fetch.js`): the kernel answers its
+  requests one after another, and none while a cell runs, so asking again
+  would only queue a copy; its silence is reported ("still waiting") and
+  the request waited for. The link's
   `ResponseClock` (`formats/io/link.js`) applies TCP's retransmission
   timeout (RFC 6298) to the time requests wait for their answers: the timeout
   is the smoothed wait plus four times its variation, never under one second
@@ -994,12 +1155,38 @@ APIs). None is left waiting for ever:
   buffers a range (a proxy, a CDN fetching the object from its origin)
   answers only once it holds all of it. Bodies are read as streams, so a
   body that stops arriving is caught as well as an answer that never comes.
+  The file's head, read beside the probe of its size, seeds the timeout with
+  how long the host took to answer it (and a file whose size its provider
+  gave without a probe, from Zenodo or Hugging Face, from how long the host
+  took to answer the provider's own request, `rememberAnswer`): a host slower than a second to answer
+  (S3's colder storage classes take 1–3 s for a first byte, measured on the
+  CELLxGENE bucket) no longer has every first read taken for stalled and
+  asked twice.
+- **A file that changed between its description and its first read is
+  refused**: the `ETag` or, from a host that sends none, the `Last-Modified`
+  the probe saw (`describeRemoteFile` carries it; a modification time is
+  also the file's version, `modified:<date>`, when it has no `ETag`) must be
+  what every answer says. A dataset catalog drops a file's description when
+  opening it fails because it changed, so opening it again describes it
+  anew.
+- **An answer of other bytes is refused, never read.** Where the host lets
+  the page see `Content-Range` (`cellucid serve`, `cellucid_serve()`, most
+  object stores), a 206 must name exactly the range asked for (another range:
+  `range-ignored`) of a file of the size it was opened at (another size:
+  `changed`); and an answer whose `ETag` differs from the file's, or, from a
+  host that sends no `ETag`, whose `Last-Modified` differs, means the file
+  changed while it was open (`changed`: "open it again to read the new
+  version"), whether the answer came from the file's URL, a redirect or a
+  mirror. A Zarr folder's ranges (a shard's index and inner chunks) are held
+  to the same `Content-Range` check.
 - **A failure that will stay is reported at once** (`worthAskingAgain`).
   The signs that a host will answer later keep the whole schedule: a
-  `Retry-After`, a connection dropped in the middle of a body, a stall. An
-  error status without `Retry-After` that repeats exactly (the same status
-  and `Content-Length`: Zenodo answers a missing record with the same 500
-  every time) is reported after its second answer, and a request that got no
+  `Retry-After`, a status that says the host or its gateway is busy (408,
+  429, 502, 503, 504: S3's `503 SlowDown` has the same body and no
+  `Retry-After` every time), a connection dropped in the middle of a body, a
+  stall. Any other error status without `Retry-After` that repeats exactly
+  (the same status and `Content-Length`: Zenodo answers a missing record
+  with the same 500 every time) is reported after its second answer, and a request that got no
   answer at all (no connection, or a host that does not let this site read
   it) after it was asked once more; the momentary 503 GitHub Pages sends
   without CORS headers is answered on that second request.
@@ -1041,14 +1228,31 @@ Most of the “what do we read?” logic lives in:
 What a dataset generation reads (`loadDatasetGeneration`):
 
 - the **identity**: dataset id, name, description, citation and source (from
-  `uns['cellucid']`), counts, embeddings (`obsm`), vector fields, and whether
-  there is a graph (`obsp`). Its id must be the one that was selected.
+  `uns['cellucid']`), counts (the gene count from the var axis's length, no
+  gene name read), embeddings (`obsm`), vector fields, and whether there is a
+  graph (`obsp`). Its id must be the one that was selected.
 - the **obs inventory**: the `obs` columns, categorical or continuous, and the
   outlier quantile route of each categorical one.
-- the **var inventory** (when the file has genes): the gene names of the chosen
-  gene-name column (`var`).
 - the **graph description** (when the file has a graph in `obsp`): edges are
   read when first shown.
+
+No gene name is read before the first view. The dataset is published with an
+empty var inventory, its gene list pending (`DataState.beginGeneListing`), and
+the data mapping's `geneNames` null (`validateDataMapping`'s
+`pendingGeneNames`; the candidate catalog's default is null until the axis is
+guessed). Right after the first view, `DataState.listPublishedGenes` reads the
+gene list (`var`): the adapter first guesses the gene names of the shown
+matrix's var axis alone (`BaseAnnDataAdapter.guessGeneNames`,
+`inferGeneNameColumn`), then the list is read, checked against the
+identity's gene count and installed with the mapping's gene names; it emits
+`mapping:changed` (`cause: 'genes-listed'`, which reports the mapping to a
+notebook) and `genes:listed`. Another axis is guessed when the data-mapping
+panel first shows it (`DataState.guessGeneNames`). Until the list is
+installed, the gene search, the **Gene names** menu, the analyses that need
+genes and their gene pickers show that names are being read; sessions,
+h5ad exports, mapping changes, view carries and analysis matrices wait for
+it (`whenGenesListed`). The guesses belong to the store: a reading of it with
+other cells keeps them (`GeneNameGuesses`, `AnnDataFileSource.reopenCells`).
 
 Then, on demand: an embedding's positions when a view first shows it, an obs
 column when it is coloured, a gene's values when it is chosen, and a
@@ -1116,6 +1320,184 @@ Examples:
 - A catalog source keeps the `datasets.json` it read and each file's
   description; the reader keeps an open file's node tree and decoded chunks
   (`formats/store.js`).
+- Opening another cell subset of the open file (the subsample control,
+  `app/ui/modules/subsample-control.js`; a
+  session's recorded cells) happens in the same reader worker
+  (`AnnDataFileSource.reopenCells` → `AnnDataReaderClient.reopenCells`, a
+  new adapter on the same client) and reads through the store already open
+  (`anndata-reader-worker.js`, `sourceKey`): its structure, chunk indexes,
+  cached metadata blocks, decoded chunks and measured link stay, and only
+  the cells change, so a new subset costs no request before its own cells'
+  bytes (a CSR gzip `.h5ad` over 80 ms: the 31 requests and 0.8 s of its
+  structure; the lung atlas: its 130 requests and 10–30 s). The bytes are
+  the same when the source names the same version: a local file by its
+  name, size and modification time, a remote file by its identity's key and
+  version (`ETag`, provider revision) or its URL, size and `ETag`; a picked
+  folder (a Zarr store, a Cell Ranger `outs/` or MatrixMarket folder) or a
+  set of files by every file's path and that key, so a file added, removed
+  or rewritten is another source; a Zarr
+  store folder on a web host (a served store, a folder link) by its URL while
+  the validators of its consolidated metadata (`ETag` and `Last-Modified`,
+  each the host names) are the ones it was opened with, asked again with one
+  `HEAD` (`httpStore.unchanged`). That requires the metadata to move with
+  any rewrite of the store: every Zarr writer writes the consolidated
+  metadata again when it writes the store, so its write time
+  (`Last-Modified`), or a tag made from it (`cellucid serve`'s `ETag`: size,
+  times, inode), changes. A host naming only a tag made from the bytes
+  (GitHub's raw files) shows a rewrite only when the metadata's bytes
+  change: one keeping every shape and attribute and changing only values is
+  not seen. Another version, a folder whose host names no validator, or a
+  set of files one of which is known only by its size opens anew. The new reader also takes
+  over (`AnnDataReader.open`'s `carry`) what the open one read that does not
+  depend on the cells — CSR row pointers, a CSC matrix's column pointers —
+  and the gene index of the open cells both share as a prefix: a subsample's
+  cells open in priority order (`subsample-plan.js`, `priorityOrder`), so a
+  larger `uniform` or `blocks` subsample under the same seed begins with the
+  smaller one, and its index (built in segments of that order,
+  `anndata/prefix-column-index.js`) is extended for the new cells only; a
+  smaller one cuts it and reads nothing. A failed or cancelled re-reading
+  reads the cells open before again (carried, so it fetches nothing) and
+  leaves the dataset on screen as it was.
+- **The open cells grown or cut in place** (`app/open-cells-resize.js`).
+  Every reading of the open dataset names its own cells (a cell subset
+  request passed to `reopenCells`; the module-level request of
+  `cell-subset-policy.js` is a link's, for the next opening only): Apply
+  during a progressive opening's step, and the earlier cells read back
+  after a cancelled one, never take or overwrite another's. Before
+  reading, the work under way on the open cells ends on them
+  (`data/open-cells-work.js`: field, gene, embedding and vector field
+  loads, cancellable jobs such as an analysis run or outlier quantiles; a
+  run's result arrives and is marked stale); from then until the commit,
+  work about to start waits and starts on the cells after it (a field
+  picked meanwhile loads on them). When the new opening's first cells are all of the open ones, or its cells
+  are all among their first (`sharedOpenCells`, `anndata-file-source.js`:
+  `reopenCells` answers `resized: {from, to}`), nothing shown is read
+  again: the new adapter does not read the first view's embedding
+  (`initialize({firstView: false})`), the reader keeps every embedding in the
+  frame the cells were first shown in (`EmbeddingPayloads.adoptTransforms`),
+  and the page reads only rows `[from, to)` of what it holds — every
+  resident layout (`loadCoordinateRows`), every loaded obs field and gene
+  (the loaders' `readRows`; `BaseAnnDataAdapter`, "Rows of the open cells").
+  The reader answers `rows` reading only what those rows need where the
+  layout allows: an obs column or embedding's row range, a cell-major
+  matrix's index segments the rows lie in, a priority-ordered file's
+  gene-major `X` between the prefix-count levels around the rows
+  (`_placedColumnRows`, `_prefixEntryRows`). Everything the commit needs
+  (the identity and priority of the new count, the live view's layout, the
+  length of every added row) is checked before it changes anything; an
+  embedding whose added rows hold a value that cannot be drawn is let go,
+  as an opening of those cells refuses it (when it is the one shown, Apply
+  shows the cells as a new reading and a progressive opening stops at the
+  cells open). Then, in one synchronous step, the dimension manager's
+  layouts (`resizeCells`) and every per-cell structure of `DataState`
+  (`state/managers/open-cells.js`, which tabulates each) grow or are cut,
+  and the viewer takes the new live points with the camera kept
+  (`resizeLiveCells`). A failure anywhere before it reads the earlier cells
+  back with their own request. Kept views are retired and made again from
+  their record (the renderer sizes them by the count); a selection under
+  way stays when cells are added and is retired when cells are cut; the
+  neighbour graph, the vector field overlay and outlier quantiles in use
+  are read again on the new cells; analyses mark their results stale. What
+  is derived from the file takes the added cells as opening them would: a
+  user-defined category made from a column (a copy, edits, a consensus)
+  labels them as it labels its other cells of the same source category,
+  and a category or range highlight group takes those in its category or
+  range that are visible; labels and groups made by hand stay as they were.
+  Each per-cell structure is bit for bit what opening at the new count
+  directly holds after the same actions
+  (`tests/open-cells-resize-state.test.mjs`). A dataset read again with
+  other cells gives its newly open cells the same (`cell-subset-carry.js`,
+  `takeInNewCells`): a category or range group keeps its type and rule on
+  both paths. The same step grows a
+  progressive opening (`anndata/progressive-open.js`: a first view sized
+  by one rule for every source, a picked file as a web host -- the
+  measured link (a picked file's is its reads'), the stored bytes of the
+  embedding chunks its cells lie in (`firstViewCost`), their decoding at
+  the rate chunks are measured to decode in the reader (`decodingRate`;
+  before any chunk has been decoded there, the first open cell's chunk is
+  read to measure it when a read costs no round trip worth pricing, a
+  read the first view makes anyway) and the page's measured cost of
+  showing a cell, `data/opening-cost.js`, taken only when it arrives at
+  least twice as soon as every cell; then doubling steps,
+  `cellSubset.growth`). A subsample's cells lie across the whole file, so
+  every step's added cells lie in chunks earlier steps decoded: a
+  subsample's view reads every array decoded a chunk at a time through
+  whole decoded chunks the store keeps (`anndata/decoded-chunks.js`,
+  carried from each opening of the store to the next, let go with the
+  store), within the one decoded-chunk budget the store's own cache shares
+  (`formats/io/decoded-budget.js`: together they never hold more than the
+  `decodedBlocks` share), and a step, or a column read again, copies its
+  rows out of them instead of decoding them again (an
+  HLCA-shaped `.h5ad`, 1 % blocks of 19 cells: the last step decoded 33
+  embedding chunks and 2 of `cluster`, not 84 and 46). Each read of an
+  `obsm` array names the open cells it read and what for in the read
+  activity (`open cells 7,435–20,000 (embedding, cells added)`). Only a
+  `uniform` or `blocks` subsample or a priority-ordered file opened whole
+  is priced at all: the chunks of any other are never looked at. The cost
+  of showing a cell is what the prediction needs: each opening's time from
+  its cells in the page (their GPU stores made next) to the first frame
+  that draws them (`recordFirstFrame`, from `reloadActiveDatasetInPlace`;
+  a frame that drew none of them, or cells replaced first, records
+  nothing). An opening also costs what showing any dataset costs (about
+  25 ms in Chromium, against 9 ns a cell: 10K cells took 27 ms, 5M 70 ms),
+  so the measure is the time a cell adds, the least-squares slope of the
+  records' time against their cells (through the origin while they hold
+  one size, or when the line would give an opening a negative cost), each
+  earlier record counting half as much as the next, so no single slow
+  moment keeps sizing later openings; kept in the browser under
+  `cellucid:opening-cost:v2` as the records' decayed sums. An in-place resize is not recorded: the GPU
+  keeps the cells kept and takes only those added, while every open
+  cell's colours and filters are made again, so its time is neither its
+  added cells' cost on an opening nor its open cells'. A subsample of a file
+  in its own order whose first-view embedding is chunked much coarser than
+  its blocks grows from few chunks instead (`progressive-open.js`,
+  `chunkMajorOrder`, `chunkedPlan`): the same kept cells, taken chunk by
+  chunk in a seeded random chunk order (each chunk's cells in priority
+  order), each step a `chunks` request (`subsample-plan.js`, `chunkStep`)
+  ending at a chunk boundary so each chunk is read once; then one
+  `reordered` reading puts the same cells in priority order, every per-cell
+  array moved with its cell (`DimensionManager.reorderCells`,
+  `DataState.reorderOpenCells`), the frame kept. It is planned only over a
+  measured link (any source's) and when its first view is predicted at least twice as soon
+  as the priority order's (or as every cell's, when that is not
+  progressive), each ordering priced by the embedding chunks its first view
+  touches. The plan is made after the store's structure is read, and
+  opening reads no gene name (the var index is read when the names are first
+  asked for, after the first view), so nothing else is priced as the first
+  view's: a
+  blocks share, whose first cells in priority order lie in few chunks
+  already, keeps priority order; a uniform share of a coarsely chunked file
+  grows from few chunks. A step's cells are recorded with the subsample's
+  specification of their count, which does not give them again
+  (`reproduced: false`), so a session saved during the growth opens exactly
+  them.
+  An analysis's first pass on the first cells of priority order reads those
+  cells' part of each gene the same way (`getMatrixCellSubset`).
+- The page keeps the bytes of remote files its reader workers fetched
+  (`data/byte-range-cache.js`, bounded by its `fetchedRanges` memory share,
+  least recently used ranges dropped first), and every reader worker reaches
+  it through a `MessagePort` posted when the worker starts
+  (`formats/io/range-cache.js`), closed when the reader closes or the page is
+  left (`AnnDataReaderClient`); the cache itself lives as long as the page. A remote file's reads ask the page for the
+  bytes it holds first and fetch only the rest, which the page then keeps,
+  under a key naming the file's bytes exactly (its identity's key and
+  version, or its URL, size and `ETag`; a file known by no validator is not
+  kept). A reader asks the page once a file which ranges it holds of it,
+  adds the ranges it hands the page itself, and asks for a read's bytes only
+  when the read touches them: a read of bytes the page does not hold goes to
+  the host at once (on HLCA, 99 of the first 245 reads had waited a round
+  trip each for a page busy opening the file). A read that touches them
+  waits for the page's answer no longer than one round trip
+  of its link (before the link is measured, no longer than the host is
+  given to answer), since the page answers from its main thread, which a
+  long task may hold; then it fetches, and the late answer is dropped. A
+  cancelled read stops waiting at once, and the request's round trip is
+  timed from when it went to the host. So a dataset opened again in a new worker (a worker the page ended
+  and started again, the same file in another reader) fetches nothing the
+  old one fetched: on an atlas-shaped CSR `.h5ad` over 150 ms / 50 MB/s,
+  re-opening at 10 % after 5 % blocks took 1.1 s and 12 requests before and
+  none now, and its first gene 6.0 s / 81 MB before and 2.7 s / 34 MB now.
+  A read answered in part from the page measures no link.
 
 ### 3) `DataState` field residency (bounded in bytes)
 
@@ -1150,8 +1532,35 @@ result still matches its values, so nothing is written to IndexedDB.
 Code:
 - `cellucid/assets/js/app/analysis/genes-panel/marker-cache.js`
 
+### 6) Origin-private file system (kept across visits)
+
+The reader worker keeps what is costly to read again in the browser's
+origin-private file system: an R object or MatrixMarket folder converted
+once, a file a host serves only whole, and the gene index of a matrix
+stored cell by cell, built over the open cells and found again by a later
+opening of the same cells of the same file (what each run is checked against
+before use, and what that guarantees: {doc}`19_subsampling_specification`,
+*Kept across visits*). Directories,
+manifests, lifetimes and room-making are listed under *Origin-private file
+system (OPFS)* in {doc}`04_configuration_env_vars_and_feature_flags`.
+
+Everything kept is checked as it is read: a converted store and a kept
+download carry a CRC-32 of every 16 KiB page, a kept gene index a CRC-32 of
+each gene's piece (`formats/io/page-checks.js`); damaged bytes fail the read
+as damaged, the copy is removed and the next opening reads the file again.
+Safari's workers have the origin-private file system as Chromium's and
+Firefox's do; only a private window (any engine) has none, and then what is
+converted stays in memory for the tab. **Session › Open data › Stored**
+(`app/ui/modules/kept-stores-line.js`) counts what is kept, with **Clear**.
+
+Code:
+- `cellucid/assets/js/data/anndata/transcode/space.js`
+- `cellucid/assets/js/data/anndata/kept-column-index.js`
+- `cellucid/assets/js/formats/io/page-checks.js`
+- `cellucid/assets/js/app/ui/modules/kept-stores-line.js`
+
 :::{important}
-Layer 4 persists data derived from the user’s dataset (layer 5 lives only in
+Layers 4 and 6 persist data derived from the user’s dataset (layer 5 lives only in
 memory), so it belongs in the privacy model, not just the performance story. Anything you add here that
 outlives a reload must be documented in
 {doc}`../o_accessibility_privacy_security/02_privacy_model`.

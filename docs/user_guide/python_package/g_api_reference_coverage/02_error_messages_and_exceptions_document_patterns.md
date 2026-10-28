@@ -96,11 +96,16 @@ Where documented:
 ### Jupyter viewers and hooks
 
 Document:
-- “viewer does not appear” (notebook context / iframe restrictions)
-- “browser cannot reach localhost” (explicit proxy or tunnel required)
-- “events not arriving” (viewer not ready / its channel cannot open: a proxy
-  that does not pass WebSockets, or a page origin the server refuses)
-- session capture timeouts
+- “viewer does not appear” (not a notebook; no widget support; the browser
+  cannot load the app)
+- “a call raised: the widget hears the viewer only between cells” (a waiting
+  call in the cell that asks)
+- “browser cannot reach localhost” (browser-tab viewers: explicit proxy or
+  tunnel required)
+- “events not arriving” (viewer not ready, a cell still running, or — in a
+  browser tab — a channel that cannot open: a proxy that does not pass
+  WebSockets, or a page origin the server refuses)
+- session capture: asked and collected in the same cell, or timeouts
 
 Where documented:
 - {doc}`api/jupyter`, {doc}`api/viewers`, {doc}`api/sessions`

@@ -48,6 +48,6 @@ chunk with one range request. See
 ## Symptom: the web app is slow to show a gene
 
 Expression is stored gene-major, so one gene is one small range of the store,
-read in chunks of 65,536 values. If a gene still loads slowly from a remote
+read in chunks of 16,384 values. If a gene still loads slowly from a remote
 host, the host is usually the bottleneck; see
 {doc}`../d_viewing_loading/02_host_stores_for_sharing`.

@@ -2,13 +2,24 @@
 
 This page documents how to take UI state captured from the viewer (a `.cellucid-session` bundle) and apply parts of it back onto an `AnnData`.
 
+```{tip}
+To bring results from a **live viewer** onto your AnnData, `viewer.pull(adata)`
+is simpler: one call, no bundle, every highlight, label, score and gene set
+({doc}`../g_api_reference_coverage/api/round_trip`). `cellucid.pull(adata,
+"exports/")` reads a saved `.cellucid-session` together with the web app's
+CSV and GMT exports. This page is about applying a session bundle itself.
+```
+
 The main workflow is:
 
-1. Capture a session bundle (no download): {doc}`10_session_bundles_get_session_bundle`
+1. Capture a session bundle (no download): {doc}`10_session_bundles_request_session_bundle`,
+   or save one from the web app (**Save** under **Session file**)
 2. Apply it to AnnData:
-   - `viewer.apply_session_to_anndata(...)` (one-liner), or
    - `bundle.apply_to_anndata(...)` (explicit bundle object), or
-   - `cellucid.apply_cellucid_session_to_anndata(...)` (function-level control)
+   - `cellucid.apply_cellucid_session_to_anndata(...)` (function-level control), or
+   - `viewer.apply_session_to_anndata(adata, request)` (collect what a
+     request brought and apply it; in a notebook, in a later cell than the
+     request)
 
 ## At a glance
 
@@ -19,20 +30,14 @@ The main workflow is:
 
 ## Quickstart (copy/paste)
 
-### One-liner (recommended)
+### In a notebook (two cells)
 
 ```python
-adata2 = viewer.apply_session_to_anndata(adata, inplace=False)
+request = viewer.request_session_bundle()
 ```
 
-On an `AnnDataViewer` this uses the server's dataset ID (`server.dataset_id`:
-the `dataset_id` you passed, or the data's `uns['cellucid']['id']`) as the
-expected ID.
-
-### Explicit two-step
-
 ```python
-bundle = viewer.get_session_bundle(timeout=60)
+bundle = request.result()
 adata2 = bundle.apply_to_anndata(
     adata,
     expected_dataset_id="my-study-v1",
@@ -40,10 +45,23 @@ adata2 = bundle.apply_to_anndata(
 )
 ```
 
+### Through the viewer
+
+```python
+adata2 = viewer.apply_session_to_anndata(adata, request, inplace=False)
+```
+
+This uses the viewer's dataset ID (the `dataset_id` you passed, or the data's
+`uns['cellucid']['id']`) as the expected ID.
+
 ```{important}
 Session application is currently **index-based**:
 
-The session references cells by **row index** (0-based). Only apply a session to an `AnnData` whose row order matches the dataset that produced the session.
+The session references cells by **original position** (0-based): the row of a
+cell in the order the dataset's cells were given, whatever order a file stores
+them in. Apply a session to an `AnnData` in that order: the object you prepared
+or served, or a Cellucid-ready file read back through
+{func}`~cellucid.restore_original_order`.
 
 Nothing in Python can verify that for you — see
 the `cellOrder` section below.
@@ -216,7 +234,7 @@ This is almost always because:
 - you’re applying the session to a different dataset.
 
 Fix:
-- apply to the exact same AnnData (same row order), and
+- apply to the exact same AnnData, in its original cell order (`cellucid.restore_original_order` for a Cellucid-ready file read with anndata), and
 - pass the exact dataset ID used to create the viewer.
 
 ### Symptom: expected columns weren’t added
@@ -230,5 +248,5 @@ Confirm:
 
 ## Next steps
 
-- Session bundle capture: {doc}`10_session_bundles_get_session_bundle`
+- Session bundle capture: {doc}`10_session_bundles_request_session_bundle`
 - Session ↔ AnnData conceptual bridge: {doc}`../b_concepts_mental_models/05_sessions_to_anndata_bridge`

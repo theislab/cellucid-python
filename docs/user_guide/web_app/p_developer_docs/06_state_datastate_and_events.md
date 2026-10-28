@@ -92,9 +92,12 @@ released, spilled to disk or read again, never what can be opened or shown.
   the same bytes: the gene-column index 3/8 (it spills to disk beyond it),
   positions of layouts no view shows 1/8, inactive fields 1/8, an analysis
   run's default budget 1/8, the AnnData adapter's cache 1/16, a latent space
-  held for outlier quantiles 1/16, decoded chunk blocks 1/16, decode workers
-  1/32 (about 40 MB each while they decode; with the cores they size the
-  pool) and selection undo history 1/32.
+  held for outlier quantiles 1/16, decoded chunk blocks 1/32, bytes of
+  remote files the page keeps for its reader workers 1/32 (another cell
+  subset of the same file, opened in a new worker, fetches none of them
+  again: `data/byte-range-cache.js`), decode workers 1/32 (about 40 MB each
+  while they decode; with the cores they size the pool) and selection undo
+  history 1/32.
 - **A refused allocation** of fewer bytes than the allowance halves the
   allowance of the thread that saw it for every budget read afterwards.
 

@@ -2,13 +2,21 @@
 
 Cellucid’s notebook integration is intentionally **simple and robust**:
 
-- **Python** starts a small **local HTTP server** that serves your dataset.
-- The notebook displays the Cellucid **web app UI** in an **iframe**.
-- The viewer opens **one channel** to that server, a WebSocket at `/_cellucid/ws`, and both directions travel on it:
+- `show_anndata(...)` shows a notebook **widget** (an anywidget) whose output
+  holds the Cellucid **web app**, loaded by the browser from
+  `https://www.cellucid.com`.
+- The widget connects the app to the kernel through the notebook's **own
+  connection** (a Jupyter comm): the viewer reads the dataset's bytes from the
+  kernel over it, and opens **one channel** on it, on which both directions
+  travel:
   1. **Python → viewer**: commands (e.g., highlight, set color-by).
   2. **Viewer → Python**: events (e.g., selection, hover, click).
 
-This design needs no Jupyter extension and no code in the notebook output (the output is a plain iframe), so it works the same in every notebook front end that can show the iframe, as long as the **browser can reach the server URL** the iframe is using (and, behind a proxy, the proxy passes WebSockets).
+No port is opened and no server address is involved, so it works the same in
+every notebook front end that shows widgets — locally, on a remote JupyterHub,
+in VS Code or in Colab. The kernel handles the widget's messages **between
+cells**. A browser-tab viewer ({class}`~cellucid.AnnDataViewer`) has the same
+API, with the channel on a WebSocket to its local server (`/_cellucid/ws`).
 
 ## At a glance
 
@@ -23,7 +31,7 @@ This design needs no Jupyter extension and no code in the notebook output (the o
 
 **Prerequisites**
 - `pip install cellucid`
-- A notebook environment (classic Jupyter or JupyterLab; VS Code and Colab are untested, see {doc}`03_supported_environments_matrix`)
+- A notebook that shows widgets (JupyterLab is tested; Notebook 7, VS Code, Colab, marimo and Databricks are expected to work, see {doc}`03_supported_environments_matrix`)
 - A dataset you can view via `show_anndata(...)`
 
 ## Fast path (what you can do)
@@ -46,15 +54,22 @@ Once you have a `viewer` (from `show_anndata(...)`), you can:
   - `@viewer.on_data_mapping`: the viewer resolved or changed its data mapping
   - `@viewer.on_message`: one envelope stream for all nine current event types
 
-- **Pull durable state (session bundles)**
-  - `bundle = viewer.get_session_bundle()` (no browser download required)
-  - `adata2 = viewer.apply_session_to_anndata(adata)` (apply highlights + user-defined fields back onto AnnData)
+- **Pull results back (one call)**
+  - `viewer.pull(adata)` writes every highlight group, label, cluster, score
+    and gene set the viewer holds onto `adata.obs` / `adata.uns`
+    ({doc}`../g_api_reference_coverage/api/round_trip`)
+  - `viewer.push(adata.obs["leiden"])` and `viewer.push_gene_set(...)` send
+    columns and gene sets the other way
+
+- **Capture durable state (session bundles)**
+  - `request = viewer.request_session_bundle()`, then `bundle = request.result()`
+    in the next cell (no browser download required)
 
 If you want the minimal working loop, start with {doc}`02_quickstart_minimal_roundtrip`.
 
 ## Practical path (how it works, conceptually)
 
-### One viewer = one server + one iframe
+### One viewer = one widget (or one browser tab)
 
 When you run:
 
@@ -68,18 +83,22 @@ viewer = show_anndata(
 ```
 
 Cellucid:
-1. Starts a local server (usually `http://127.0.0.1:<port>`).
-2. Embeds the viewer as an iframe pointing at that same server:
-   - `.../?viewer=true&viewerId=<id>&viewerToken=<token>&anndata=true`
+1. Checks the dataset and the launch choices (an in-memory AnnData is served
+   in priority order, made from it as the viewer reads it).
+2. Shows a widget whose output frames `https://www.cellucid.com/?viewer=embedded`.
+   The page asks the widget for the viewer's id and token and a private
+   channel (a `MessagePort`); the address carries no credentials.
 
-The key idea is **same-origin**: the UI and the dataset endpoints share the same origin, which makes the integration much less fragile (no mixed-content, fewer CORS surprises).
+A browser-tab viewer (`AnnDataViewer`) instead serves the app and the data
+from one local origin and opens
+`http://127.0.0.1:<port>/?viewer=true&viewerId=<id>&viewerToken=<token>&anndata=true`.
 
 ### The viewer channel
 
-When the viewer page loads, it opens a WebSocket to `/_cellucid/ws` on the
-same server and says hello with its `viewerId` and `viewerToken`. The server
-checks the token and answers `welcome`; from then on the socket belongs to
-that one viewer.
+When the viewer page loads, it opens its channel — over the widget in a
+notebook, a WebSocket to `/_cellucid/ws` in a browser tab — and says hello
+with its `viewerId` and `viewerToken`. Python checks the token and answers
+`welcome`; from then on the channel belongs to that one viewer.
 
 - When you call `viewer.highlight_cells(...)`, Python sends the command on the
   channel. A command sent before the viewer has connected waits and is sent,
@@ -94,25 +113,23 @@ See {doc}`05_architecture_viewer_channel` for the frames and the rules.
 
 If you want to trace the implementation:
 
-- Python: `cellucid-python/src/cellucid/jupyter/` (viewer classes + hook registry)
+- Python: `cellucid-python/src/cellucid/jupyter/` (viewer classes + hook
+  registry; `_widget.py` and `static/widget.js` are the notebook widget)
 - Python: `cellucid-python/src/cellucid/_viewer_channel.py` (the channel:
   handshake, command outbox, events, session bundles)
 - Python: `cellucid-python/src/cellucid/_server_base.py` (verified web-generation delivery)
-- Web app: `cellucid/assets/js/data/viewer-channel.js` (the channel) and
+- Web app: `cellucid/assets/js/data/viewer-embed.js` (the embedded page's
+  transport), `data/viewer-channel.js` (the channel) and
   `data/viewer-host-source.js` (ViewerHostDataSource; commands and events)
 - Web app: `cellucid/assets/js/app/main.js` (wires session bundle capture + ready event)
 
-## Important notebook constraint: HTTPS / mixed content
+## Important notebook constraint: between cells
 
-If your notebook is served on **HTTPS** (common on JupyterHub), browsers may block iframes that try to load an **HTTP loopback** server directly.
-
-Cellucid uses exactly the `client_server_url=` argument when one is supplied;
-otherwise it uses the bound server URL. It does not infer or probe a proxy.
-For Jupyter Server Proxy, Colab, or another reverse proxy, obtain the exact
-browser-reachable HTTP(S) base URL and pass it to `show_anndata(...)` or the
-viewer constructor. See
-{doc}`13_security_cors_origins_and_mixed_content` and
-{doc}`03_supported_environments_matrix`.
+The kernel handles a widget's messages between cells. Hooks fire and
+`viewer.state` updates while the kernel is idle; a call that waits for the
+viewer in the cell that asks (`wait_for_ready()`, `wait_for_event()`, a
+session request's `result()`) raises at once and says what to do instead; commands
+(`push()`, `set_data_mapping()`, …) never wait. See {doc}`03_supported_environments_matrix`.
 
 ## Edge cases (high-level)
 
@@ -120,15 +137,15 @@ viewer constructor. See
 - Large selections: sending huge index lists back and forth can be slow.
 - Callbacks run on the viewer channel's thread, not the notebook's: be careful
   with thread-safety when they touch shared objects such as your `adata`.
-- Source-restricted environments: viewer/server startup fails directly when it
-  cannot establish the configured exact UI generation.
+- Restricted networks: the browser must load the app from `web_source_url`
+  (`https://www.cellucid.com` by default); the output says when it cannot.
 
 ## Troubleshooting (jump table)
 
-- Viewer doesn’t load / blank iframe → {doc}`14_troubleshooting_hooks`
+- Viewer doesn’t load / empty output → {doc}`14_troubleshooting_hooks`
 - Events don’t arrive → {doc}`14_troubleshooting_hooks` (“No events arrive”)
 - Commands don’t affect the UI → {doc}`06_python_to_frontend_commands`
-- HTTPS notebook issues → {doc}`13_security_cors_origins_and_mixed_content`
+- Origins and browser security → {doc}`13_security_cors_origins_and_mixed_content`
 
 ## Next steps
 

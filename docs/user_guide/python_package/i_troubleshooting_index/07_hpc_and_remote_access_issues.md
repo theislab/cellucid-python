@@ -119,7 +119,7 @@ browser cannot decode is read once with anndata and written to a temporary
       Path: /scratch/you/atlas.zarr
       Format: AnnData Zarr, Zarr v2 folder
       Browser cannot decode: X/data (bz2), obsm/X_umap (bz2)
-      Serving: a decodable copy, written once to a temporary .h5ad
+      Serving: a Zarr store in priority order, made as the browser reads it
 ```
 
 And `[4/4] Starting server...` downloads and verifies the viewer generation,

@@ -3,14 +3,17 @@
 **Audience:** anyone with a Cell Ranger output, a MatrixMarket folder or a
 Loom file, on this computer or on a cluster
 **Time:** 10 minutes
-**Goal:** view each one with `cellucid serve` (or `show_anndata`) as it is,
-with no conversion to AnnData first
+**Goal:** view each one with `cellucid serve` (or `show_anndata`), with no
+conversion to AnnData first
 
-`cellucid serve` and `show_anndata()` hand a file or folder to the viewer,
-which reads it itself: a Loom file and a 10x `.h5` in place, a MatrixMarket
-matrix once from the start. Python reads only what tells the format apart (a
-folder's file list, a file's first bytes), so serving needs no scanpy. Each needs a cell embedding, because Cellucid
-draws cells at embedding coordinates.
+`cellucid serve` and `show_anndata()` hand a file or folder to the viewer. A
+Loom file and a Cell Ranger `outs/` folder are served as a store with their
+cells in priority order, made from the file on the kernel (h5py) as the
+viewer reads it, holding exactly what the viewer shows from the file itself:
+a subsample the viewer opens transfers only its cells. A MatrixMarket matrix
+is served as it is and read once from the start. Serving needs no scanpy and
+no loompy. Each needs a cell embedding, because Cellucid draws cells at
+embedding coordinates.
 
 The data is 10x Genomics' public 1k PBMC dataset (Cell Ranger 3.0).
 
@@ -39,7 +42,11 @@ cellucid serve outs --dataset-name "PBMC 1k (Cell Ranger outs)" --dataset-id pbm
 
 The browser opens on the 1,222 cells' t-SNE (`X_tsne`), with `X_pca` and the
 clusterings `graphclust` and `kmeans_2_clusters` to `kmeans_10_clusters` as
-fields. The matrix is read in place: one gene at a time, as you show it.
+fields. The terminal says `Serving: a Zarr store in priority order, made as
+the browser reads it`; the matrix is read from the file one gene at a time,
+for the cells open, as you show it. A matrix of several feature types (Gene
+Expression with Antibody Capture) is served as a MuData store, one modality
+per type, as the viewer shows the folder itself.
 
 A dataset that is not a Cellucid-ready AnnData does not name itself, so
 `--dataset-name` and `--dataset-id` are required; the id is what sessions are
@@ -91,8 +98,9 @@ adata.write_loom("pbmc_1k.loom", write_obsm_varm=True)
 cellucid serve pbmc_1k.loom --dataset-name "PBMC 1k (Loom)" --dataset-id pbmc-1k-loom
 ```
 
-The file opens on its UMAP, with `X_pca` and the field `leiden`; the matrix
-is read in place.
+The file opens on its UMAP, with `X_pca` and the field `leiden`; it is served
+in priority order like the `outs/` folder, the matrix read from the file
+(transposed: Loom stores genes by cells) for the cells the viewer opens.
 
 ## From a notebook
 
@@ -110,12 +118,13 @@ AnnData.
 
 ## When something is refused
 
-- `filtered_feature_bc_matrix.h5` served alone has no embedding: serve the
-  `outs/` folder that holds it and `analysis/`.
+- `filtered_feature_bc_matrix.h5` served alone has no embedding, and is
+  refused in step 1 saying so: serve the `outs/` folder that holds it and
+  `analysis/`.
 - A folder with neither a Cell Ranger matrix, a MatrixMarket matrix nor Zarr
   metadata: `Unable to detect format for: <path>`.
-- A Loom or MatrixMarket dataset with no embedding: the viewer names the
-  lines that compute one ({doc}`../../web_app/b_data_loading/08_troubleshooting_data_loading`).
+- A Loom file with no embedding is refused in step 1 with the lines that
+  compute one; a MatrixMarket dataset with none, by the viewer ({doc}`../../web_app/b_data_loading/08_troubleshooting_data_loading`).
 
 ## Next
 

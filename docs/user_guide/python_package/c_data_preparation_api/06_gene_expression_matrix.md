@@ -36,7 +36,7 @@ data stored CSR, over a simulated 80 ms / 50 MB/s link
 
 ## Sizes
 
-`X/data` and `X/indices` are cut into chunks of 65,536 values and deflated —
+`X/data` and `X/indices` are cut into chunks of 16,384 values and deflated —
 the indices after a byte shuffle, the values as they are, which is how real
 expression values compress best; on the dataset above a gene cost 8.6 KB
 stored (2.0 KB of values, 6.6 KB of indices), against 13.1 KB in the CSR

@@ -212,10 +212,34 @@ def _viewer_with_mapping(mapping: dict[str, Any]) -> jupyter.AnnDataViewer:
     return viewer
 
 
-def test_set_data_mapping_needs_a_reported_mapping() -> None:
+def test_set_data_mapping_before_the_viewer_reported_one_goes_when_it_does(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # "Run All": the cell runs before the viewer opened its dataset.
     viewer = serverless_viewer()
-    with pytest.raises(RuntimeError, match="has not reported its data mapping yet"):
-        viewer.set_data_mapping(knn="connectivities")
+    sent: list[dict[str, Any]] = []
+    monkeypatch.setattr(viewer, "send_message", sent.append)
+    assert viewer.set_data_mapping(knn="connectivities") is None
+    assert sent == []
+    viewer._handle_frontend_message(_event(viewer._viewer_id, mapping=copy.deepcopy(ANNDATA_MAPPING)))
+    (command,) = sent
+    assert command["type"] == "setDataMapping"
+    assert command["mapping"] == {**ANNDATA_MAPPING, "knn": "connectivities"}
+
+
+def test_a_waiting_mapping_the_viewer_cannot_take_is_reported_as_a_command_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    viewer = serverless_viewer()
+    errors: list[dict[str, Any]] = []
+    viewer.on_command_error(errors.append)
+    sent: list[dict[str, Any]] = []
+    monkeypatch.setattr(viewer, "send_message", sent.append)
+    viewer.set_data_mapping(expression="layers:x")
+    viewer._handle_frontend_message(_event(viewer._viewer_id, mapping=copy.deepcopy(ANNDATA_MAPPING)))
+    assert sent == []
+    assert [error["command"] for error in errors] == ["setDataMapping"]
+    assert "expression" in errors[0]["reason"]
 
 
 @pytest.mark.parametrize(
@@ -253,104 +277,44 @@ def test_set_data_mapping_validates_before_sending(
     assert sent == []
 
 
-def test_set_data_mapping_sends_the_merged_mapping_and_returns_the_answer(
+def test_set_data_mapping_sends_the_merged_mapping_and_its_answer_is_the_live_mapping(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     viewer = _viewer_with_mapping(ANNDATA_MAPPING)
     sent: list[str] = []
-
-    def answer(message: dict[str, Any]) -> None:
-        sent.append(wire._require_frontend_message(message))
-        viewer._handle_frontend_message(
-            _event(
-                viewer._viewer_id,
-                origin="notebook",
-                requestId=message["requestId"],
-                mapping=message["mapping"],
-            )
-        )
-
-    monkeypatch.setattr(viewer, "send_message", answer)
-    applied = viewer.set_data_mapping(
+    monkeypatch.setattr(viewer, "send_message", lambda message: sent.append(wire._require_frontend_message(message)))
+    returned = viewer.set_data_mapping(
         embeddings={"enabled": [{"key": "X_pca", "columns": [3, 1]}], "defaults": {"1d": None, "2d": {"key": "X_pca", "columns": [3, 1]}, "3d": None}},
         knn="connectivities",
     )
-
+    assert returned is None
     expected = {
         **ANNDATA_MAPPING,
         "embeddings": {"enabled": [{"key": "X_pca", "columns": [3, 1]}], "defaults": {"1d": None, "2d": {"key": "X_pca", "columns": [3, 1]}, "3d": None}},
         "knn": "connectivities",
     }
-    assert applied == expected
-    assert viewer.data_mapping == expected
-    assert viewer.data_mapping_origin == "notebook"
     (serialized,) = sent
     command = json.loads(serialized)
     assert set(command) == {"type", "requestId", "mapping"}
     assert command["type"] == "setDataMapping"
     assert len(command["requestId"]) == 32
     assert command["mapping"] == expected
-
-
-def test_set_data_mapping_ignores_answers_to_other_requests(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    viewer = _viewer_with_mapping(ANNDATA_MAPPING)
-
-    def answer_someone_else(message: dict[str, Any]) -> None:
-        viewer._handle_frontend_message(
-            _event(viewer._viewer_id, origin="notebook", requestId="another-request")
-        )
-        viewer._handle_frontend_message(_event(viewer._viewer_id, origin="user"))
-
-    monkeypatch.setattr(viewer, "send_message", answer_someone_else)
-    with pytest.raises(TimeoutError, match="apply the data mapping"):
-        viewer.set_data_mapping(knn="connectivities", timeout=0.05)
-
-
-def test_set_data_mapping_raises_the_viewer_refusal(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    viewer = _viewer_with_mapping(ANNDATA_MAPPING)
-    viewer.on_command_error(lambda _event: None)
-
-    def refuse(message: dict[str, Any]) -> None:
-        viewer._handle_frontend_message(
-            {
-                "type": "command_error",
-                "command": "setDataMapping",
-                "reason": "obsp['distances'] is not symmetric",
-            }
-        )
-
-    monkeypatch.setattr(viewer, "send_message", refuse)
-    with pytest.raises(RuntimeError, match="did not apply the data mapping: obsp"):
-        viewer.set_data_mapping(knn="distances")
+    # Nothing waited: the answer arrives later (between cells) and is the live mapping.
     assert viewer.data_mapping == ANNDATA_MAPPING
-
-
-def test_an_earlier_refusal_does_not_fail_a_later_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    viewer = _viewer_with_mapping(ANNDATA_MAPPING)
-    viewer.on_command_error(lambda _event: None)
     viewer._handle_frontend_message(
-        {
-            "type": "command_error",
-            "command": "setDataMapping",
-            "reason": "an older refusal",
-        }
+        _event(viewer._viewer_id, origin="notebook", requestId=command["requestId"], mapping=command["mapping"])
     )
+    assert viewer.data_mapping == expected
+    assert viewer.data_mapping_origin == "notebook"
 
-    def answer(message: dict[str, Any]) -> None:
-        viewer._handle_frontend_message(
-            _event(
-                viewer._viewer_id,
-                origin="notebook",
-                requestId=message["requestId"],
-                mapping=message["mapping"],
-            )
-        )
 
-    monkeypatch.setattr(viewer, "send_message", answer)
-    assert viewer.set_data_mapping(latent="X_pca")["latent"] == "X_pca"
+def test_a_refused_mapping_arrives_as_a_command_error() -> None:
+    viewer = _viewer_with_mapping(ANNDATA_MAPPING)
+    errors: list[dict[str, Any]] = []
+    viewer.on_command_error(errors.append)
+    viewer._handle_frontend_message(
+        {"type": "command_error", "command": "setDataMapping", "reason": "obsp['distances'] is not symmetric"}
+    )
+    assert errors[0]["reason"] == "obsp['distances'] is not symmetric"
+    assert viewer.state.command_error["command"] == "setDataMapping"
+    assert viewer.data_mapping == ANNDATA_MAPPING

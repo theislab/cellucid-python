@@ -18,7 +18,7 @@ Cellucid Python is primarily designed for:
 
 If you expose a Cellucid server to an untrusted network, you must assume:
 - others can fetch dataset files,
-- anyone who learns a viewer's iframe URL (it carries the viewer's token) can
+- anyone who learns a browser-tab viewer's URL (it carries the viewer's token) can
   open that viewer's channel and trigger your hook callbacks,
 - and you may leak private metadata via URLs/logs.
 
@@ -45,8 +45,8 @@ Recommendation:
 
 Config:
 - `--allowed-host HOST` (repeatable) or `allowed_hosts=[...]` declares extra
-  exact host names, which is required behind a reverse proxy such as
-  `jupyter-server-proxy` because the proxy forwards the browser's `Host`
+  exact host names, which is required behind a reverse proxy (a hub's proxy
+  route) because the proxy forwards the browser's `Host`
   verbatim and a proxied request is indistinguishable from a rebound one
 - one bare DNS name or IP literal per entry: no port, no scheme, no wildcard;
   matched on any port
@@ -84,10 +84,12 @@ Important:
   (`4401`) before a frame is delivered.
 
 Implication:
-- the token is generated per viewer and embedded in the iframe URL, so anyone
-  who can read that URL and reach the server from an accepted origin can open
-  the channel and trigger your hook callbacks, which run the Python you wrote
-  in your handlers.
+- the token is generated per viewer. A browser-tab viewer carries it in its
+  URL, so anyone who can read that URL and reach the server from an accepted
+  origin can open the channel and trigger your hook callbacks, which run the
+  Python you wrote in your handlers. A notebook widget never puts it in an
+  address, a widget trait or a log: it posts it to the app's exact origin in a
+  message.
 
 ### 4) Wire capability endpoint
 
@@ -176,12 +178,12 @@ If you extend session parsing, keep the “untrusted input” stance.
 
 Likely causes:
 - you are using a non-allowed origin (custom domain),
-- your notebook proxy is rewriting origins,
+- a proxy in front of a browser-tab server is rewriting origins,
 - you are trying to load the viewer from a file:// URL.
 
 Fix:
 - use the server’s `/` URL (same origin),
-- use notebook proxy mechanisms (jupyter-server-proxy),
+- in a notebook, use `show_anndata()` (no server, no CORS),
 - or serve the viewer from an allowed origin.
 
 ### Symptom: “I need to share a server with collaborators”

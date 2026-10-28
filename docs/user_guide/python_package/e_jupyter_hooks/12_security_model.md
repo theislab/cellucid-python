@@ -2,20 +2,42 @@
 
 This page explains the security assumptions behind notebook embedding + hooks, and how to run Cellucid safely in local and shared environments.
 
-If you primarily need HTTPS/mixed-content details, see {doc}`13_security_cors_origins_and_mixed_content`.
+If you primarily need origin and HTTPS details, see {doc}`13_security_cors_origins_and_mixed_content`.
 
 ## Threat model (what Cellucid assumes)
 
 Default assumption for notebook usage:
 - You are running a notebook you trust.
 - The Python kernel and the browser are under your control.
-- The Cellucid server is bound to `127.0.0.1` (localhost) and is not exposed to the network.
 
-Within that model, it’s reasonable to allow the viewer iframe to open one
-authenticated WebSocket to the server (`/_cellucid/ws`), on which Python sends
-commands and the viewer sends events back.
+Within that model, the viewer opens one authenticated channel to Python, on
+which Python sends commands and the viewer sends events back.
 
-## What is “exposed” and to whom?
+## The notebook widget (`show_anndata`)
+
+A notebook widget opens **no port and no server**. Three hops carry
+everything, each authenticated by what carries it:
+
+- **page ⇄ widget**: the widget's front end accepts the page's `ready` only
+  from its own frame and from the app's origin (`web_source_url`), and
+  answers with a private `MessagePort` and the viewer's id and token, posted
+  to that exact origin. The token never appears in an address, a widget trait
+  (which a notebook may save) or a log.
+- **widget ⇄ kernel**: the notebook's own connection (a Jupyter comm), as for
+  every widget; whoever can use your notebook server can use your kernel.
+- **in the kernel**: the same viewer channel rules as below (`hello` with the
+  token, closed field sets, a newer channel replacing an older one).
+
+What leaves the kernel: the dataset's bytes the viewer reads, only to the
+page in the widget's output. The app itself comes from `web_source_url`
+(`https://www.cellucid.com` by default) and runs in your browser; your data is
+not uploaded anywhere. A copy of the app you host can be named with
+`web_source_url=`.
+
+## A browser-tab viewer (`AnnDataViewer`, `serve_anndata`, `cellucid serve`)
+
+Here the viewer reaches Python over HTTP and a WebSocket to a server on this
+machine, bound to `127.0.0.1` unless you choose otherwise.
 
 ### The data server
 
@@ -33,19 +55,19 @@ The Cellucid server exposes the dataset (the bytes of one file or folder under
 It answers `GET` and `HEAD` (and the CORS preflight `OPTIONS`); a `POST` is
 refused (405).
 
-In notebook mode, the server is always bound to `127.0.0.1` (`AnnDataViewer`
-has no `host` argument), so it is reachable only from the same machine; a
-browser elsewhere reaches it through a tunnel or proxy you set up.
+`AnnDataViewer`'s server is always bound to `127.0.0.1` (it has no `host`
+argument), so it is reachable only from the same machine; a browser elsewhere
+reaches it through a tunnel or proxy you set up.
 
 ### The viewer UI assets
 
-In notebook mode, each viewer startup downloads the declared web generation
-from its configured source, verifies it completely, and publishes it locally
+Each browser-tab server startup downloads the declared web generation from
+its configured source, verifies it completely, and publishes it locally
 before the server binds.
 
 Security implications:
 - Your dataset is **not uploaded** to cellucid.com by this mechanism.
-- Every viewer-serving startup needs outbound access to its configured
+- Every browser-tab server startup needs outbound access to its configured
   `web_source_url`; an existing generation directory is not an offline
   substitute.
 
@@ -65,8 +87,6 @@ Security implications:
   one (4409).
 - Every command and event is checked against its exact closed field set; a
   frame that breaks the rules closes the channel (1008) before any hook runs.
-- The notebook output holds no script, only the iframe, so nothing runs in
-  the notebook page itself.
 
 ## High-risk configurations (avoid these unless you know what you’re doing)
 
@@ -81,12 +101,12 @@ If you need remote access, prefer:
 - SSH tunneling, or
 - a properly secured reverse proxy with authentication.
 
-### Running on shared JupyterHub without proxy hardening
+### Shared JupyterHub
 
-On shared infrastructure, ensure:
-- notebook server access is authenticated,
-- ports are not exposed directly,
-- jupyter-server-proxy is configured appropriately (if used).
+On shared infrastructure, ensure notebook server access is authenticated. A
+notebook widget needs no port or proxy route; if you serve a browser-tab
+viewer through a hub's proxy route, declare the hub's host name with
+`allowed_hosts=` and keep the route behind the hub's authentication.
 
 ## Data privacy notes
 
@@ -103,11 +123,12 @@ Treat session bundles as sensitive data:
 
 ## Recommended safe defaults
 
-- Keep the server bound to `127.0.0.1` unless you need remote access.
-- If you need remote access, use SSH port forwarding.
+- In a notebook, use the widget (`show_anndata`): nothing to bind or expose.
+- Keep a browser-tab server bound to `127.0.0.1` unless you need remote
+  access; for remote access, use SSH port forwarding.
 - Do not run untrusted notebooks: their code runs in your kernel, where it can
   read any viewer's token.
-- Clear web UI cache if you suspect stale assets or want to remove cached copies:
+- Clear a browser-tab server's web UI cache if you suspect stale assets or want to remove cached copies:
   - `viewer.clear_web_cache()` or `cellucid.clear_web_cache()`
 
 ## Next steps

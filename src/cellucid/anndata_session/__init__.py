@@ -18,9 +18,26 @@ submodules:
     prepared ``obs`` columns.
 ``_apply``
     Fingerprint validation, ``uns`` recording, and the atomic application.
+``_columns``
+    The ``obs`` columns Cellucid writes (one rule per kind) and the one writer
+    sessions and pulls share.
+``_results``
+    The viewer's results (highlights, fields, scores, gene sets), the web
+    app's exports (obs-column CSV, GMT), and :func:`pull`, the one call that
+    writes them onto an AnnData or MuData.
 """
 
 from ._apply import apply_cellucid_session_to_anndata
 from ._records import ApplySummary
+from ._results import PullSummary, Selection, ViewerResult, pull, read_gmt, write_gmt
 
-__all__ = ["ApplySummary", "apply_cellucid_session_to_anndata"]
+__all__ = [
+    "ApplySummary",
+    "PullSummary",
+    "Selection",
+    "ViewerResult",
+    "apply_cellucid_session_to_anndata",
+    "pull",
+    "read_gmt",
+    "write_gmt",
+]

@@ -14,7 +14,7 @@ Context (so the ecosystem is clear):
 ## Where to start (pick one)
 
 - “I want a minimal working loop (select → highlight)” → {doc}`02_quickstart_minimal_roundtrip`
-- “Does this work in Colab / VSCode / JupyterHub?” → {doc}`03_supported_environments_matrix`
+- “Does this work in Colab / VS Code / JupyterHub?” → {doc}`03_supported_environments_matrix`
 - “I need the mental model and vocabulary” → {doc}`04_glossary_and_mental_model`
 - “I need message + event schemas” → {doc}`16_reference`
 - “Something is broken” → {doc}`14_troubleshooting_hooks`

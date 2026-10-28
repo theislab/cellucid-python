@@ -6,15 +6,18 @@
 
 ---
 
-## The debugging rule: separate “UI problems” from “server problems”
+## The debugging rule: separate “UI problems” from “data and connection problems”
 
 Most Cellucid failures fall into one of these buckets:
 
-1) **The exact viewer generation cannot be established or served**
-2) **The browser can’t reach the Python server** (port/network/tunnel/proxy)
+1) **The viewer UI does not appear** (the notebook does not show widgets, the
+   browser cannot load the app; for a browser tab, the exact viewer generation
+   cannot be established or served)
+2) **The browser can’t reach a browser-tab server** (port/network/tunnel/proxy;
+   a notebook widget has no server to reach)
 3) **The dataset can’t be interpreted** (no plottable embedding, an undecodable array, stale Zarr metadata)
-4) **Hooks/events aren’t being delivered** (the viewer channel is not open, a hook raised, or a different viewer object)
-5) **Session capture/apply fails** (not ready, requestId gating, exact dataset fingerprint mismatch)
+4) **Hooks/events aren’t being delivered** (a cell is still running, the channel is not open, a hook raised, or a different viewer object)
+5) **Session capture/apply fails** (asked and collected in the same cell, not ready, exact dataset fingerprint mismatch)
 
 The fastest way to debug is to test these buckets in order.
 
@@ -22,43 +25,37 @@ The fastest way to debug is to test these buckets in order.
 
 ## Step 0 (do this first): `viewer.debug_connection()`
 
-If you have a `viewer` object, run:
+If you have a `viewer` object, run (in a new cell):
 
 ```python
 report = viewer.debug_connection()
 report
 ```
 
-This returns a structured dict that checks:
-- server probes (`/_cellucid/health`, `/_cellucid/info`, `/_cellucid/datasets`)
-- the served store of every listed dataset, keyed by its exact id
-- whether the verified viewer UI (`/index.html`) is being served
-- whether the viewer's channel (its WebSocket) is connected (`channel_connected`)
-- a Python → frontend roundtrip (ping/pong)
-- a frontend debug snapshot (iframe URL/origin/user agent)
-- recent accepted-event counts grouped by exact event type
+For a notebook widget (what `show_anndata()` returns) it reports, without
+waiting for anything:
+- `web_source_url` — where the browser loads the app from,
+- `displayed` and `connected_outputs` — the outputs whose page reached the kernel,
+- `channel_connected` — whether the viewer opened its channel,
+- `dataset` — the id and format the widget serves,
+- `state` — `ready` (None until the dataset opened) and the last event,
+- `recent_events` — counts by event type; `command_errors` lists the commands
+  the viewer refused (a non-empty list means messaging works and the
+  *argument* was wrong).
 
-### How to read the report (high signal fields)
-
-- `server_health` / `server_health_error`
-  - If this fails: the server isn’t reachable (port/network problem).
-- `anndata_store_probes`
-  - Every listed dataset id maps to its store's URL and the answer to a `HEAD`
-    and a one-byte `Range` read (a readable store answers `206` with
-    `Content-Range`), or to that probe's explicit error.
-- `viewer_index_probe` / `viewer_index_probe_error`
-  - If this fails: the active verified generation is not being served.
-- `frontend_roundtrip`
-  - If `ok=False`: Python→frontend messaging is broken or the iframe isn’t alive.
-- `frontend_debug_snapshot`
-  - Confirms the live iframe URL, origin, server URL, connection state, parent
-    origin, and browser identification.
-- `recent_events`
-  - Confirms which accepted event types reached Python.
-  - `command_errors` lists the commands the viewer refused. A non-empty list
-    means messaging works and the *argument* was wrong.
-- `client_server_url`
-  - This must be the exact HTTP(S) base that the browser can reach.
+For a browser-tab viewer (`AnnDataViewer`) it also probes its server:
+- `server_health` / `server_health_error` — if this fails, the server isn’t
+  reachable (port/network problem),
+- `anndata_store_probes` — every listed dataset id maps to its store's URL and
+  the answer to a `HEAD` and a one-byte `Range` read (a readable store answers
+  `206` with `Content-Range`), or to that probe's explicit error,
+- `viewer_index_probe` / `viewer_index_probe_error` — whether the active
+  verified generation is being served,
+- `frontend_roundtrip` — a ping/pong over the channel; `ok=False` means
+  Python→frontend messaging is broken or the page isn't open,
+- `frontend_debug_snapshot` — the page's URL, origin, server URL and
+  connection state,
+- `client_server_url` — the exact HTTP(S) base the browser must reach.
 
 ```{tip}
 When asking for help, paste the `report` (redacting private paths/dataset names) instead of describing symptoms loosely.
@@ -66,59 +63,72 @@ When asking for help, paste the `report` (redacting private paths/dataset names)
 
 ---
 
-## Step 1: confirm the server is alive (no browser required)
+## Step 1: confirm the viewer UI appears
 
-In Python, check:
+In a notebook, the output shows the widget, which frames the app from
+`web_source_url`:
 
-```python
-print(viewer.server_url)
-```
+- **an empty output, or a note that the notebook cannot show widgets**:
+  install `anywidget` where the notebook *server* runs and reload the page, or
+  use a front end that shows widgets
+  ({doc}`../e_jupyter_hooks/03_supported_environments_matrix`);
+- **“The page at … has not answered as a Cellucid viewer”**: the browser cannot
+  load the app (offline, blocked address); allow it, or host a copy and pass
+  `web_source_url=`.
 
-Then probe the health endpoint:
+A browser-tab viewer serves one exact verified web generation itself; check
+`viewer.server_url + "/index.html"`. Its construction establishes that
+generation before binding the server and raises on failure. See
+{doc}`06_privacy_security_and_offline_vs_online`.
+
+---
+
+## Step 2: confirm a browser-tab server is alive and reachable
+
+Skip this step for a notebook widget: it has no server.
 
 ```python
 import urllib.request, json
 json.loads(urllib.request.urlopen(viewer.server_url + "/_cellucid/health").read())
 ```
 
-Expected:
-- a JSON payload like `{"status": "ok", ...}`
+Expected: a JSON payload like `{"status": "ok", ...}`. If this fails, the
+server may not be running or the port may be in use.
 
-If this fails:
-- the server may not be running,
-- the port may be blocked/in use,
-- you might be on a remote kernel whose loopback isn’t reachable from your browser (see Step 3).
+If the server is alive but the browser cannot reach it, the kernel runs on
+another machine. In a notebook, use `show_anndata()` instead: it needs no
+address. Otherwise:
 
----
+### Option A: SSH port forwarding (robust, works everywhere)
 
-## Step 2: confirm the viewer UI is being served
+1) Start the viewer on a fixed port:
 
-Cellucid notebook/server mode serves one exact verified web generation from the
-Python server.
+   ```python
+   from cellucid import AnnDataViewer
 
-Check:
-- `viewer.server_url + "/index.html"`
+   viewer = AnnDataViewer(
+       "data.h5ad",
+       port=8765,
+       dataset_name="Example",
+       dataset_id="example",
+   )
+   print(viewer.viewer_url)
+   ```
 
-Viewer construction establishes that generation before binding the server and
-raises on failure. If the published generation is removed while a server is
-running, asset requests return an explicit service error. See
-{doc}`06_privacy_security_and_offline_vs_online`.
+2) On your laptop:
 
----
+   ```bash
+   ssh -N -L 8765:127.0.0.1:8765 <user>@<remote-host>
+   ```
 
-## Step 3: confirm the browser can reach the server (remote notebooks)
+Now the browser hits your laptop’s localhost port, which tunnels to the remote
+kernel. Full guide:
+{doc}`../d_viewing_apis/12_remote_servers_ssh_tunneling_and_cloud`.
 
-The most common “it works locally but not on JupyterHub/HPC” issue:
-- the browser cannot reach the kernel’s loopback server (`127.0.0.1:<port>`), or
-- the notebook page is HTTPS and blocks HTTP loopback (mixed content).
+### Option B: a reverse proxy
 
-Fix patterns:
-
-### Option A (recommended): `jupyter-server-proxy`
-
-If installed and enabled, the notebook can proxy the viewer through the
-notebook server origin. Two things must be passed explicitly, because Cellucid
-detects neither:
+If a proxy (a hub's proxy route) carries the server to the browser, two things
+must be passed explicitly, because Cellucid detects neither:
 
 1. `client_server_url=` — the proxy’s browser-reachable base URL.
 2. `allowed_hosts=` — the proxy front end’s own host name.
@@ -153,44 +163,14 @@ Each entry is one bare host name — a DNS name or an IP address, with no port,
 no scheme, no path and no wildcard — and it matches whatever port the proxy
 publishes. Repeat `--allowed-host` (or add list entries) for each additional
 name. An unsupported entry is refused at startup with an explicit message
-rather than quietly ignored.
-
-If this step is missing, every request through the proxy returns
-**421 Misdirected Request** and the server log records
-`Refused a request whose Host header does not name this server`.
-
-### Option B: SSH port forwarding (robust, works everywhere)
-
-If your kernel runs on a remote machine:
-
-1) Start the viewer on a fixed port:
-
-   ```python
-   from cellucid import AnnDataViewer
-
-   viewer = AnnDataViewer(
-       "data.h5ad",
-       port=8765,
-       dataset_name="Example",
-       dataset_id="example",
-       client_server_url="http://127.0.0.1:8765",
-   )
-   print(viewer.viewer_url)
-   ```
-
-2) On your laptop:
-
-   ```bash
-   ssh -N -L 8765:127.0.0.1:8765 <user>@<remote-host>
-   ```
-
-Now the browser hits your laptop’s localhost port, which tunnels to the remote kernel.
-
-See the detailed guide: {doc}`../../web_app/b_data_loading/05_jupyter_tutorial`
+rather than quietly ignored. If this step is missing, every request through
+the proxy returns **421 Misdirected Request** and the server log records
+`Refused a request whose Host header does not name this server`. The proxy
+must also pass WebSockets (the viewer channel).
 
 ---
 
-## Step 4: debug hooks/events (frontend → Python)
+## Step 3: debug hooks/events (frontend → Python)
 
 ### Minimal diagnostic hook
 
@@ -201,23 +181,24 @@ def debug(event):
 ```
 
 If you see nothing when interacting in the UI:
-- the viewer's channel (`/_cellucid/ws`) is not open
+- a cell is still running: a notebook widget's events arrive when the kernel
+  is idle, all at once,
+- the viewer's channel is not open
   (`viewer.debug_connection()["channel_connected"]` is `False`), or
-- you are looking at an iframe of a different viewer object than the one that
-  registered the hooks.
+- you are looking at the output of a different viewer object than the one
+  that registered the hooks.
 
 If a hook of yours raises, the exception is not raised in your cell: hooks run
 on the viewer channel's thread, so it is logged by the `cellucid.viewer_channel`
 logger ("A viewer event hook failed", with the traceback) and the channel stays
 open. The event is recorded in `viewer.state` and handed to
 `wait_for_event(...)` before any hook runs, and every other hook still runs
-for it, so one failing hook costs neither (nor `get_session_bundle()`, which
-waits for its event). The record is logged at
+for it. The record is logged at
 `ERROR` level, which Python writes to stderr even when logging is not
 configured (in a notebook it may land in the kernel's log rather than the
 cell); a handler on that logger collects it where you want it.
 
-### Browser-side confirmation
+### Browser-side confirmation (browser tab)
 
 Open browser devtools → Network, filter `WS`, and select the `/_cellucid/ws`
 connection:
@@ -225,20 +206,13 @@ connection:
   first frames;
 - every selection, hover or click adds a frame.
 
-If there is no connection, or it closed:
-- a proxy in between does not pass WebSockets (the viewer says so),
-- or the server URL is unreachable.
-
-If the connection was closed with code 4401, the iframe is older than the
-kernel (a restart): the viewer froze and says Python stopped.
-
-Mitigation:
-- recreate the viewer,
-- avoid copying stale viewer URLs across sessions.
+If the connection was closed with code 4401, the page is older than the
+kernel (a restart): the viewer froze and says Python stopped. Recreate the
+viewer; do not copy stale viewer URLs across sessions.
 
 ---
 
-## Step 5: debug Python → frontend commands
+## Step 4: debug Python → frontend commands
 
 If you send commands like:
 
@@ -248,58 +222,53 @@ viewer.set_color_by("cell_type")
 ```
 
 and nothing happens:
-- the iframe may not be alive,
-- the notebook output may have been cleared/collapsed,
-- the viewer may not be ready yet.
+- the viewer may not have connected yet (commands wait and are delivered in
+  order once it does),
+- the output may have been cleared, or belong to an older viewer,
+- the viewer may have refused it: check
+  `viewer.debug_connection()["recent_events"]["command_errors"]`.
 
-Use `viewer.debug_connection()` and check:
-- `frontend_roundtrip`
-
-If `frontend_roundtrip.ok` is false:
-- call `viewer.display()` again,
-- or recreate the viewer.
+If nothing is refused and the channel is connected, show the viewer again
+(end a cell with `viewer`) or recreate it.
 
 ---
 
-## Step 6: debug session capture (`get_session_bundle`)
+## Step 5: debug session capture
 
-Common failure modes:
+### In a notebook
 
-### Timeout waiting for bundle
+A widget hears the viewer only between cells: ask in one cell, collect in the
+next.
 
-Likely causes:
-- viewer never reached ready (it reports ready once the notebook's own
+```python
+request = viewer.request_session_bundle()
+```
+
+```python
+bundle = request.result()
+```
+
+If `request.result()` says the bundle has not arrived (in a notebook, only a
+later cell can collect it):
+- the viewer never reached ready (it reports ready once the notebook's own
   dataset is on screen; a different dataset chosen in the viewer before that —
   a file, a sample, **None** — replaces it, and that viewer then never reports
   ready),
-- iframe not displayed,
-- the viewer's channel is not connected, due to proxy/mixed-content issues.
+- the viewer is not shown in any output, or its channel is not connected.
 
-How to confirm:
-- `viewer.debug_connection()` (look at `state.ready`, `frontend_roundtrip`,
-  `frontend_debug_snapshot`, and `recent_events`)
-- browser network tab (filter `WS`) for the `requestSessionBundle` command and
-  the binary frame that answers it on `/_cellucid/ws`
+To bring results onto AnnData you need no bundle: `viewer.pull(adata)`.
 
-Fix:
-- call `viewer.wait_for_ready(timeout=60)` first,
-- ensure the viewer is displayed,
-- fix remote notebook connectivity (Step 3).
+### In a browser tab
 
-### “Dropped a session bundle nobody is waiting for” (log)
-
-Meaning:
-- a bundle arrived after its `get_session_bundle()` call stopped waiting (its
-  timeout passed).
-
-Fix:
-- request again from the current viewer instance, with a longer `timeout=`.
+`viewer.request_session_bundle().result(timeout=60)` waits. A “Dropped a
+session bundle nobody is waiting for” log means the bundle arrived after its
+request was cancelled; request again.
 
 For more: {doc}`05_sessions_to_anndata_bridge`
 
 ---
 
-## Step 7: debug “the dataset looks wrong” (identity + ordering)
+## Step 6: debug “the dataset looks wrong” (identity + ordering)
 
 If selection indices don’t match the cells you expect in Python, the usual culprit is:
 - dataset row order changed,
@@ -315,25 +284,26 @@ See: {doc}`04_dataset_identity_and_reproducibility`
 
 ## Troubleshooting index (symptom → fix)
 
-### Symptom: “Blank viewer area”
+### Symptom: “Empty viewer area”
 
 Likely causes:
-- the configured source generation could not be fetched, verified, or
-  published during viewer construction,
-- mixed-content blocked (HTTPS notebook),
-- server not reachable.
+- the notebook does not show widgets, or the browser cannot load the app
+  (Step 1),
+- a browser-tab server's generation could not be established, or the server
+  is not reachable (Step 2).
 
 Fix:
-- run `viewer.debug_connection()` and follow the first failing probe.
+- run `viewer.debug_connection()` and follow the first failing entry.
 
 ### Symptom: “Viewer loads but hooks don’t work”
 
 Likely causes:
-- the viewer channel (`/_cellucid/ws`) did not open, or closed,
-- an iframe left over from before a kernel restart.
+- a cell is still running (a widget's events arrive between cells),
+- the viewer channel did not open, or closed,
+- an output left over from before a kernel restart.
 
 Fix:
-- check browser Network tab,
+- let the cell finish; check `channel_connected`,
 - recreate the viewer.
 
 ### Symptom: “`apply_cellucid_session_to_anndata(...)` raised an error”

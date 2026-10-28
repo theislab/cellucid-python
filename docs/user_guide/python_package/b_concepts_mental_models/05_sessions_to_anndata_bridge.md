@@ -24,11 +24,17 @@ Cellucid exposes two complementary layers of state in notebooks:
 1) **`viewer.state` (live snapshot; volatile)**  
    A small “latest event” snapshot updated from UI events (ready/selection/hover/click/…).
 
-2) **Session bundle (`.cellucid-session`; durable artifact)**  
+2) **The viewer's results (`viewer.results`, `viewer.pull(adata)`)**  
+   Every highlight group, label, cluster, score and gene set the viewer holds,
+   sent to Python as it is made. One call writes them onto your AnnData.
+
+3) **Session bundle (`.cellucid-session`; durable artifact)**  
    A file-format snapshot of meaningful UI state (highlights, user-defined fields, overlay registries, layout state).
    In notebooks you can request it as a `CellucidSessionBundle` object.
 
-If you want to **reproduce** or **transfer** interactive state, use the **session bundle**.
+If you want your **results as columns**, use `viewer.pull(adata)`. If you want
+to **reproduce** or **transfer** the whole interactive state, use the
+**session bundle**.
 
 ---
 
@@ -38,13 +44,16 @@ If you don’t want to think about file formats:
 
 1) Open your data in Cellucid (in Jupyter).
 2) Create highlights/labels in the viewer (select cells, label groups, etc.).
-3) In Python, run:
+3) In Python, in a new cell, run:
 
    ```python
-   adata2 = viewer.apply_session_to_anndata(adata, inplace=False)
+   summary = viewer.pull(adata)
+   summary.columns
    ```
 
-4) Use `adata2` for downstream analysis (Scanpy plots, marker genes, etc.).
+4) Use `adata` for downstream analysis (Scanpy plots, marker genes, etc.):
+   each highlight group is a `cellucid_highlight__<id>` column, each label
+   field a categorical column ({doc}`../g_api_reference_coverage/api/round_trip`).
 
 This turns interactive choices (highlights/labels) into explicit columns you can store and version.
 
@@ -63,7 +72,6 @@ viewer = show_anndata(
     dataset_name="My study",
     dataset_id="my-study-v1",
 )
-viewer.wait_for_ready(timeout=60)
 ```
 
 ### Step 2: interact in the UI
@@ -76,8 +84,16 @@ In the viewer:
 
 ### Step 3: capture the session bundle into Python (no browser download)
 
+A notebook widget hears the viewer only between cells, so ask in one cell:
+
 ```python
-bundle = viewer.get_session_bundle(timeout=60)
+request = viewer.request_session_bundle()
+```
+
+and collect it in the next:
+
+```python
+bundle = request.result()
 bundle
 ```
 
@@ -101,10 +117,12 @@ adata2 = bundle.apply_to_anndata(
 )
 ```
 
-Or use the one-liner (captures + applies + cleans up the temp bundle file):
+Or let the viewer apply what the request brings (and clean up the temp
+bundle file) -- in a notebook in a later cell, in a browser-tab viewer
+(`AnnDataViewer`) at once:
 
 ```python
-adata2 = viewer.apply_session_to_anndata(adata, inplace=False)
+adata2 = viewer.apply_session_to_anndata(adata, request, inplace=False)
 ```
 
 ---
@@ -200,12 +218,23 @@ an `AnnData` whose row order the caller controls. Enforcing that identity is the
 viewer's job, so a bundle this reader accepts may still be refused by the web
 app. Treat that as normal, not as a bug in either reader.
 
-### Critical constraint: cell identity is index-based (today)
+### Critical constraint: cells are named by original position
 
-Highlights and user-defined codes are aligned to **cell indices** (row positions).
+Highlights and user-defined codes are aligned to each cell's **original
+position**: its row in the order the dataset's cells were given, whatever order
+a file stores them in (a Cellucid-ready file stores them in priority order) or
+the viewer opened them in. A session saved on a subsample names its cells by
+their kept positions, ascending.
 
-Only apply a session to an `AnnData` whose row order matches the dataset that produced the session. Because `cellOrder` is not checked here, nothing in Python
-will warn you if it does not.
+Apply a session to an `AnnData` in that original order: the object you
+prepared or served, or a Cellucid-ready file read back through
+{func}`~cellucid.restore_original_order` (an `AnnData` still in a stored
+priority order -- its `uns['cellucid']['priority']` describes its cells -- is
+refused with that advice; one whose record no longer describes its cells,
+because it was subset, combined or reordered since it was read, is taken row
+by row as it is, with a warning, as the web app reads such a file). Because
+`cellOrder` is not checked here, nothing in Python will warn you if the object
+holds other cells in another order.
 
 Pass the exact ID used to open the viewer as `expected_dataset_id` (see
 {doc}`04_dataset_identity_and_reproducibility`).
@@ -285,36 +314,34 @@ to the live object. It does not write those changes into the source H5AD file.
 
 ## Troubleshooting (large, symptom-based)
 
-### Symptom: `viewer.get_session_bundle()` times out
+### Symptom: `request.result()` raises at once in a notebook
+
+It says a notebook widget hears the viewer only between cells: collect
+`request.result()` in the next cell.
+
+### Symptom: `request.result()` says the bundle has not arrived
 
 Likely causes (ordered):
 1) The viewer never reached “ready” (dataset load stuck).
-2) The notebook iframe is not displayed (no frontend to respond).
-3) The viewer's channel (`/_cellucid/ws`) is not connected (proxy/mixed content/remote kernel).
+2) The viewer is not shown in any output (no frontend to respond).
+3) The viewer's channel is not connected.
 
 How to confirm:
-- Run `viewer.debug_connection()` and inspect:
-  - `state.ready`
-  - `frontend_roundtrip`
-  - `viewer_index_probe`
-  - `frontend_debug_snapshot`
-- In the browser devtools network tab, filter `WS`:
-  - the `/_cellucid/ws` connection should show the `requestSessionBundle`
-    command and the binary frame that answers it
+- Run `viewer.debug_connection()` and inspect `state.ready`,
+  `connected_outputs` and `channel_connected`.
 
 Fix:
-- Call `viewer.display()` to ensure the iframe exists.
-- Call `viewer.wait_for_ready(timeout=60)` and only then request a bundle.
-- If remote: use SSH tunneling or `jupyter-server-proxy` (see {doc}`../../web_app/b_data_loading/05_jupyter_tutorial`).
+- Show the viewer (end a cell with `viewer`), wait until it shows the data,
+  then ask again.
 
 ### Symptom: “Dropped a session bundle nobody is waiting for” (log)
 
-This means the bundle arrived after `get_session_bundle()` stopped waiting
-(its timeout passed). A viewer tab from an old kernel cannot send one at all:
+This means the bundle arrived after its request was cancelled
+(`request.cancel()`, or the viewer stopped). A viewer tab from an old kernel cannot send one at all:
 its channel is refused and the view freezes.
 
 Fix:
-- request a new bundle again, with a longer `timeout=` for a large session;
+- request a new bundle again;
 - after a kernel restart, re-run the cell that shows the viewer.
 
 ### Symptom: `apply_to_anndata(...)` raises a dataset mismatch
@@ -328,7 +355,8 @@ How to confirm:
 - Inspect `bundle.dataset_fingerprint`.
 
 Fix:
-- apply to the matching AnnData version (same row order),
+- apply to the matching AnnData version, in its original order (a
+  Cellucid-ready file read back: `cellucid.restore_original_order(adata)`),
 - and pass the exact dataset ID used when the viewer was created.
 
 ### Symptom: “My highlight groups didn’t become columns”

@@ -1,234 +1,128 @@
 # Compatibility matrix
 
 **Audience:** notebook users, IT-restricted environments, power users  
-**Time:** 10–15 minutes  
+**Time:** 5–10 minutes  
 **Goal:** know what works where (and what to do when it doesn’t)
 
-This page is intentionally explicit because many “it doesn’t work” reports are actually **environment + browser security** issues (HTTPS notebooks, remote kernels, blocked network, etc.).
+Cellucid has two ways to show a dataset from Python, and they have different
+needs:
 
-## At-a-glance matrix
+- **In a notebook cell** — {func}`~cellucid.show_anndata` returns a
+  {class}`~cellucid.jupyter.Widget` (an [anywidget](https://anywidget.dev)).
+  The widget frames the Cellucid app, which the browser loads from
+  `https://www.cellucid.com`, and connects it to the kernel through the
+  notebook's own connection. No port is opened and no proxy is involved.
+- **In a browser tab of its own** — {class}`~cellucid.AnnDataViewer`,
+  {func}`~cellucid.serve_anndata` and `cellucid serve` start a small server on
+  this machine (port 8765 by default) that serves the app and the data. The
+  browser must reach that port: on the same machine, through an SSH tunnel, or
+  through a reverse proxy.
 
-### Environment support (notebook embedding + hooks)
+## Notebook environments
 
-Legend:
-- `OK`: works out of the box in common setups
-- `Setup`: works with setup / common caveats
-- `Untested`: expected to work as described, but not tested by the project
-- `No`: not supported (use browser workflow instead)
+The canonical list, with what “tested” means, is
+{doc}`../e_jupyter_hooks/03_supported_environments_matrix`. In short:
 
-Commands and events travel on one WebSocket the viewer opens to the Cellucid
-server (`/_cellucid/ws`), so they work exactly when the iframe loads and that
-WebSocket opens; the canonical list of what has and has not been tested is
-{doc}`../e_jupyter_hooks/03_supported_environments_matrix`.
+| Environment | `show_anndata()` | Notes |
+|---|---|---|
+| JupyterLab 4 (local or remote, HTTP or HTTPS) | tested | The project's browser suite runs it end to end. |
+| Jupyter Notebook 7 | expected, not tested | Same front end as JupyterLab. |
+| VS Code notebooks (local, Remote-SSH, containers) | expected, not tested | VS Code renders anywidgets; nothing to forward, since no port is used. |
+| Google Colab | expected, not tested | Colab renders anywidgets; `!pip install cellucid` in the runtime. |
+| marimo | expected, not tested | Make the widget the cell's output (end the cell with `viewer`). |
+| Databricks | expected, not tested | |
+| JupyterHub, Binder, cloud notebooks | expected, not tested | No proxy or port setup. |
+| A plain Python script | no notebook | Use {class}`~cellucid.AnnDataViewer`, `serve_anndata()` or `cellucid serve`. |
 
-| Environment | Viewer embeds (iframe) | Python → frontend commands | Frontend → Python hooks/events | Notes |
-|---|---:|---:|---:|---|
-| Classic Jupyter Notebook (local) | OK | OK | OK | Usually simplest; notebook is often `http://localhost`. |
-| JupyterLab (local) | OK | OK | OK | If JupyterLab is served from **HTTPS**, expose the Cellucid port through an HTTPS route and pass that route explicitly. |
-| VSCode notebooks (local) | Untested | Untested | Untested | Works when VS Code's notebook webview loads a loopback iframe. If VSCode runs in Remote/SSH containers, treat it like “remote kernel”. |
-| Google Colab | Untested (Setup) | Untested | Untested | Obtain Colab's HTTPS proxy base, pass it as `client_server_url=`, and declare its host as `allowed_hosts=[...]`; Cellucid does not call the proxy API. Colab's proxy must also pass the `/_cellucid/ws` WebSocket. |
-| JupyterHub / remote notebooks (HTTPS) | Setup | OK | OK | Configure an HTTPS route for the selected port, pass its exact base as `client_server_url=`, and declare the route's host as `allowed_hosts=[...]`. |
+What a notebook needs:
+
+1. **Widget support.** JupyterLab and Notebook 7 need `anywidget` in the
+   environment that runs the *notebook server* (installing `cellucid`
+   installs it in the kernel's environment, the same one in most setups).
+   VS Code, Colab, marimo and Databricks bring their own.
+2. **The browser can load the app** from `web_source_url`
+   (`https://www.cellucid.com` by default). The browser loads it, not the
+   kernel: a compute node without internet is fine, a laptop without internet
+   is not. An institution can host a copy and pass `web_source_url=`.
+
+The widget's messages reach Python **between cells**, as every widget's do:
+hooks fire and `viewer.state` updates while the kernel is idle, and a call that
+waits for the viewer in the same cell (`wait_for_ready()`, `wait_for_event()`,
+a session request's `result()`) raises at once with what to do instead;
+commands such as `push()` and `set_data_mapping()` never wait. Details: {doc}`../e_jupyter_hooks/03_supported_environments_matrix`.
+
+## Browser-tab viewers (scripts, SSH, HPC)
+
+| Situation | Use | What the browser needs |
+|---|---|---|
+| Same machine | `cellucid serve data.h5ad` or `AnnDataViewer(...)` | `http://127.0.0.1:8765` |
+| Remote machine you can SSH to | the same, with a fixed `port=` | `ssh -N -L 8765:127.0.0.1:8765 you@host` |
+| HPC compute node behind a login node | `serve_anndata(..., host="0.0.0.0")` / `cellucid serve --host 0.0.0.0` | `ssh -N -L 8765:compute-node:8765 you@login-node` |
+| Behind a reverse proxy (a hub's proxy route) | `AnnDataViewer(..., client_server_url=..., allowed_hosts=[...])`, `serve_anndata(..., allowed_hosts=[...])` | the proxy must pass WebSockets |
+
+Recipes: {doc}`../d_viewing_apis/12_remote_servers_ssh_tunneling_and_cloud` and
+{doc}`../d_viewing_apis/17_hpc_slurm_and_compute_node_serving`.
 
 ### Network requirements
 
-Cellucid has two different network surfaces:
-- the **viewer UI** (HTML/JS/CSS and other declared static assets) — fetched
-  from the configured web source and established as one verified generation
-  when the Python server starts.
-- your **data** — served from your local/remote Python server (or loaded via browser file picker).
-
-| Feature | Source access required? | Notes |
-|---|---:|---|
-| `cellucid serve data.h5ad` with its viewer | Yes, at startup | The server downloads, stages, byte-verifies, and atomically publishes the complete source generation before binding its HTTP server. |
-| `show_anndata(...)` | Yes, at startup | The notebook viewer uses the same establishment contract. |
-| `cellucid serve ... --no-web-ui` | No | Explicit data-endpoint-only mode; no viewer is served. |
-| Hosted web app (`cellucid.com`) | Yes | The browser loads the website directly. |
-| `ensure_web_ui_cached(force=True)` | Yes | Establishes the complete source generation now. |
-| `ensure_web_ui_cached(force=False)` | No | Verifies an existing generation only; it does not alter normal viewer startup. |
-| Hooks/events after a viewer has started | No additional source request | Commands and events use the viewer channel (`/_cellucid/ws`, a WebSocket) on the Python server. |
-
-## Practical notes per environment
-
-### Classic Jupyter Notebook / JupyterLab (local)
-
-What usually works:
-- `show_anndata(adata, dataset_name="Example", dataset_id="example")` embeds an iframe in the output cell.
-- Hooks and commands work bidirectionally.
-
-Common caveat:
-- If your notebook page is served from **HTTPS** (rare locally but common on managed systems), the browser can block an `http://127.0.0.1:<port>` iframe (“mixed content”).
-
-Fixes:
-- Configure an HTTPS route for the Cellucid port, pass its exact
-  browser-reachable base as `client_server_url=`, and pass the route's host
-  name as `allowed_hosts=["hub.example.org"]`. The Python package already
-  depends on `jupyter-server-proxy`; installation alone does not select or
-  configure a route. The second argument is required because the proxy forwards
-  the browser's `Host` header verbatim and Cellucid refuses an undeclared
-  authority with `421 Misdirected Request`
-  (see {doc}`../b_concepts_mental_models/06_privacy_security_and_offline_vs_online`).
-- Or skip embedding and use the browser workflow (`cellucid serve ...`) and open the URL directly.
-
-### VSCode notebooks
-
-Local VSCode is expected to work like local Jupyter, but the project has not
-tested VS Code's notebook webview: the iframe loads from
-`http://127.0.0.1:<port>`, and whether a given VS Code build lets the webview
-load a loopback iframe decides it. `viewer.debug_connection()` says which part
-fails (`channel_connected`, `frontend_roundtrip`).
-
-Remote VSCode (SSH / containers) is different:
-- Your **kernel** runs remotely.
-- Your **browser/UI** is local.
-- A server bound to `127.0.0.1` on the remote machine is **not** reachable from your local browser unless you forward ports.
-
-Recommended pattern (SSH/remote):
-1) Forward the Cellucid server port to your machine (VSCode “Ports” tab or SSH `-L`).
-2) Pass the exact URL the **browser** should use when you create the viewer:
-   ```python
-   from cellucid import AnnDataViewer
-
-   viewer = AnnDataViewer(
-       adata,
-       port=8765,
-       dataset_name="Example",
-       dataset_id="example",
-       client_server_url="http://127.0.0.1:8765",
-   )
-   ```
-
-### Google Colab
-
-Colab runs the kernel on a remote VM. The project has not tested Colab's
-proxy; Colab's `proxyPort` URL must also carry the `/_cellucid/ws` WebSocket
-upgrade, which is Colab's behaviour, not Cellucid's. The caller must obtain
-Colab's HTTPS proxy base for one fixed port and pass it explicitly:
-
-Typical pattern:
-1) Install in the Colab runtime:
-   ```ipython
-   !pip -q install cellucid
-   ```
-2) Load data in the runtime filesystem (uploaded, mounted Drive, etc.)
-3) Create the viewer on that same fixed port:
-   ```python
-   from urllib.parse import urlparse
-
-   from cellucid import AnnDataViewer
-   from google.colab.output import eval_js
-
-   port = 8765
-   browser_base = eval_js(f"google.colab.kernel.proxyPort({port})")
-   viewer = AnnDataViewer(
-       adata,
-       port=port,
-       dataset_name="Example",
-       dataset_id="example",
-       client_server_url=browser_base,
-       allowed_hosts=[urlparse(browser_base).hostname],
-   )
-   ```
-
-   Colab's proxy also forwards the browser's `Host`, so its host name must be
-   declared exactly as for any other reverse proxy.
-
-Cellucid does not call `google.colab.kernel.proxyPort(...)` itself.
-
-If it fails:
-- Run `viewer.debug_connection()` and look at:
-  - `client_server_url`
-  - `channel_connected`
-  - `server_health`
-  - `anndata_store_probes`
-  - `frontend_roundtrip` and `frontend_debug_snapshot`
-
-## Security / browser constraints (what’s going on under the hood)
-
-The two issues that matter most:
-
-### 1) HTTPS → HTTP mixed content (iframe blocking)
-
-If your notebook UI is served from `https://...`, the browser may refuse to load `http://127.0.0.1:<port>` inside an iframe.
-
-Cellucid does not probe, infer, or select a proxy. It uses the exact
-`client_server_url=` supplied by the caller, or the bound loopback server URL
-when the argument is omitted. A blank iframe, mixed-content error, or failed
-network request means the caller must expose the selected port and pass its
-browser-reachable HTTP(S) base.
-
-### 2) Exact UI generation availability
-
-Cellucid’s Python server:
-
-1. fetches `cellucid-web-assets.json` from the configured source,
-2. downloads every object in that exact inventory into a staging directory,
-3. verifies the complete file set, byte lengths, SHA-256 hashes, MIME types,
-   and build identity, and
-4. atomically publishes the verified generation before starting the server.
-
-If the source or any declared object is unavailable or invalid, startup stops
-and the prior cache remains untouched. Supply a reachable
-`--web-source-url` and a writable `--web-cache-dir`; an older cache is never
-served as a substitute.
+| Feature | Network access needed | Notes |
+|---|---|---|
+| `show_anndata(...)` (notebook widget) | The **browser** loads the app from `web_source_url` | The kernel downloads nothing. |
+| `cellucid serve data.h5ad`, `AnnDataViewer`, `serve_anndata` | Yes, at startup (the **kernel/server** machine) | The server downloads, byte-verifies and publishes the app's exact build before it binds. |
+| `cellucid serve ... --no-web-ui` | No | Data endpoints only; open them from the hosted app. |
+| Hosted web app (`www.cellucid.com`) | Yes | The browser loads the website directly. |
+| Hooks/events after a viewer has started | No further download | They travel on the viewer channel. |
 
 ## Edge cases (things that look like “bugs”)
 
-- **Ad blockers / strict corporate CSP**: can break the hosted web UI fetch or iframe behavior.
-- **Port collisions**: a notebook viewer created without `port=` serves on
-  8765 or, when another viewer holds it, on the next free port, and prints a
-  note (Google sign-in works only on 8765). An explicitly requested busy port
-  fails. `port=0` asks the operating system to allocate one port; use the
-  actual URL reported by the viewer/server object.
-- **Multiple viewers in one notebook**: each viewer's page authenticates its own channel with its `viewerId` and token, so events reach the right viewer. If you re-run cells many times, stop old viewers (`viewer.stop()`) or restart the kernel.
-- **Remote access**: binding `--host 0.0.0.0` exposes your server to the network; do this only if you understand the security implications.
+- **Ad blockers / strict corporate CSP** can stop the browser from loading
+  `https://www.cellucid.com` inside a notebook output; the output says the app
+  did not load. Host a copy and pass `web_source_url=`.
+- **Port collisions** (browser-tab viewers only): `AnnDataViewer` without
+  `port=` takes 8765 or the next free port and prints a note (Google sign-in
+  works only on 8765); an explicit busy port fails; `port=0` asks the
+  operating system for one.
+- **Showing one widget twice**: the newest output takes the viewer over; the
+  older one says it was opened elsewhere.
+- **Kernel restart**: the output keeps its last view and says the notebook
+  stopped it; re-run the cell.
+- **Remote access**: binding `--host 0.0.0.0` exposes a browser-tab server to
+  the network; do this only on a trusted network.
 
 ## Troubleshooting (compatibility)
 
-### Symptom: viewer iframe is blank / white
+### Symptom: the notebook output is empty or says it cannot show widgets
 
 **Likely causes**
-- Browser blocked the iframe (mixed content).
-- The exact viewer generation could not be established from its configured source.
-- The browser can’t reach the data server (remote kernel without port forwarding).
-
-**How to confirm**
-- In Python:
-  ```python
-  report = viewer.debug_connection()
-  report
-  ```
-- In the browser: open DevTools → Console.
+- `anywidget` is not installed where the notebook *server* runs.
+- The notebook front end does not render widgets.
 
 **Fix**
-- Configure an HTTPS proxy route or use port forwarding, then pass that exact
-  browser-reachable base as `client_server_url=`. Behind a proxy, also declare
-  the proxy's host name as `allowed_hosts=[...]`, otherwise every request is
-  refused with `421 Misdirected Request`.
-- Confirm source access with `ensure_web_ui_cached(force=True)` and correct the
-  reported source, inventory, object, or cache-directory failure. A previous
-  generation is intentionally not substituted.
+- `pip install anywidget` in the notebook server's environment and reload the
+  page; or use JupyterLab, Notebook 7, VS Code, Colab, marimo or Databricks.
 
----
+### Symptom: the output says the app did not load
+
+**Likely cause:** the browser cannot reach `https://www.cellucid.com` (network
+policy, offline laptop).
+
+**Fix:** allow the address, or host a copy of the app and pass
+`web_source_url=`.
 
 ### Symptom: hooks don’t fire (`on_selection`, `on_click`, …)
 
 **Likely causes**
-- Viewer isn’t fully loaded yet (wait for `on_ready`).
-- Old viewer is still registered (multiple viewers, stale kernel state).
-- The viewer's channel (`/_cellucid/ws`) could not open (a proxy that does not pass WebSockets; the viewer says so).
+- The viewer has not loaded yet: it loads once the cell that showed it ends.
+- An old viewer is still registered (re-run cells, stale kernel state).
 
-**How to confirm**
-- Add a raw message logger:
-  ```python
-  @viewer.on_message
-  def _log(ev):
-      print(ev)
-  ```
-- Check `viewer.debug_connection()` and confirm `server_health` is OK.
+**How to confirm** (in a new cell):
+
+```python
+viewer.debug_connection()   # channel_connected, connected_outputs, recent_events
+```
 
 **Fix**
 - Restart the kernel, or call `viewer.stop()` on old viewers.
-- Ensure you’re not blocked by remote/HTTPS constraints.
 
 ## Next steps
 

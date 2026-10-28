@@ -11,12 +11,15 @@ and state); there are no S4 classes or methods.
 | Function | What it does | Returns |
 |---|---|---|
 | `cellucid_prepare()` | Writes a Cellucid-ready AnnData (or, for several assays, MuData) store from an R object (`data =`) or from matrices: a `.zarr` folder (`format = "zarr"`) or one `.zarr.zip` file (`format = "zarr.zip"`) | Invisibly, the absolute path of the written store |
+| `cellucid_subsample_cells()` | The cells a Cellucid subsample keeps, the cells the web app opens for the same request and Python's `cellucid.subsample_cells()` gives | An integer vector of 1-based positions |
 | `cellucid_transition_drift()` | Computes the drift of every cell in an embedding's coordinates from a cell-cell transition matrix, a vector field to pass to `cellucid_prepare(vector_fields = )` | A double matrix as wide as the embedding |
 | `cellucid_view()`, `cellucid_serve()` | Open an object or a file in the viewer (Viewer pane or browser), or serve it for a browser elsewhere | The viewer, invisibly |
 | `cellucid_stop()`, `cellucid_stop_all()`, `cellucid_viewers()` | Stop one viewer, every viewer; list the running ones | The viewer; the number stopped; a list |
 | `cellucid_highlight()`, `cellucid_clear_highlights()`, `cellucid_color_by()`, `cellucid_set_visibility()`, `cellucid_reset_camera()`, `cellucid_freeze()`, `cellucid_set_data_mapping()` | Commands to an open viewer | The viewer, invisibly (the applied mapping for `cellucid_set_data_mapping()`) |
-| `cellucid_on()`, `cellucid_off()`, `cellucid_selection()`, `cellucid_wait_ready()`, `cellucid_session()` | Events from the viewer: hooks, the last selection, readiness, the session file | See {doc}`../d_viewing_loading/06_hooks_selection_and_sessions` |
+| `cellucid_on()`, `cellucid_off()`, `cellucid_selection()`, `cellucid_wait_ready()`, `cellucid_request_session()`, `cellucid_session_result()` | Events from the viewer: hooks, the last selection, readiness, the session file | See {doc}`../d_viewing_loading/06_hooks_selection_and_sessions` |
 | `cellucid_apply_session()` | A saved session's highlights and user-defined fields added to the object's cell metadata (Python's `apply_cellucid_session_to_anndata()`) | See {doc}`../d_viewing_loading/06_hooks_selection_and_sessions` |
+| `cellucid_pull()`, `cellucid_results()`, `cellucid_subset()`, `cellucid_gene_sets()` | Everything made in the viewer -- highlight groups, labels and clusters, scores, gene sets -- onto the object's cell metadata in one call, from a viewer or from the web app's exports; the results themselves; the cells of a group or selection; the gene sets (Python's `viewer.pull()`, `cellucid.pull()`, `viewer.subset()`, `viewer.gene_sets()`) | The object with the columns (`list(data, summary)` with `return_summary = TRUE`); a list of results; the subset; a named list |
+| `cellucid_push()`, `cellucid_push_gene_set()`, `cellucid_write_gmt()`, `cellucid_read_gmt()` | A column or a gene set shown in the viewer (Python's `viewer.push()`, `viewer.push_gene_set()`); GMT files (`cellucid.write_gmt()`, `read_gmt()`) | The viewer's result, invisibly; the file's path; a named list |
 | `cellucid_debug_connection()` | Checks what works between R and an open viewer: the server's routes, the store's range reads, a ping and a debug snapshot over the channel | A list, the report |
 | `cellucid_clear_web_cache()` | Removes the cached web app | The folder removed, invisibly |
 
@@ -149,10 +152,35 @@ and dimnames, the computation of Python's `cellucid.compute_transition_drift()`.
 Store it with `vector_fields = list(T_fwd = list(X_umap = drift))`; see
 {doc}`../c_data_preparation_api/08_vector_fields_velocity_displacement`.
 
+## `cellucid_subsample_cells()`
+
+```r
+cellucid_subsample_cells(x, n_cells = NULL, fraction = NULL, method = "uniform", seed = 0,
+  groupby = NULL, allocation = "proportional", min_per_group = 0,
+  block_size = NULL, basis = NULL, columns = c(1, 2), grid_size = 32)
+```
+
+| Argument | Meaning |
+|---|---|
+| `x` | A Seurat object, a SingleCellExperiment or SummarizedExperiment, a `data.frame` of cells, or the cell count |
+| `n_cells`, `fraction` | Exactly one: how many cells, or the share (`n × fraction` rounded half up, exactly, at least 1); every cell or more keeps every cell. One cell is a selection here; the web app opens at least 2 ({ref}`one cell has no coordinate variation to draw <fewest-cells-open>`) |
+| `method` | `"uniform"`, `"blocks"`, `"stratified"` or `"spatial"` |
+| `seed` | A whole number in [0, 2^32 - 1]; the same seed keeps the same cells |
+| `groupby`, `allocation`, `min_per_group` | `"stratified"`: a metadata column name or one value per cell; `"proportional"` or `"balanced"`; a first minimum per category |
+| `block_size` | `"blocks"`: cells per block (the web app shows the one it used) |
+| `basis`, `columns`, `grid_size` | `"spatial"`: a reduction name or a coordinate matrix; one to three columns; boxes per axis |
+
+It returns the kept cells' 1-based positions, ascending (`object[, kept]`
+takes them). The web app, Python and R follow one specification,
+{doc}`../../web_app/p_developer_docs/19_subsampling_specification`, held to one
+shared conformance fixture; the computation is native code, so the cells are
+the same bit for bit. See also
+{doc}`../../web_app/b_data_loading/21_subsampled_loading`.
+
 ## The viewer
 
 ```r
-cellucid_view(data, ..., pane = c("auto", "viewer", "browser", "none"), port = 8765L,
+cellucid_view(data, ..., pane = c("auto", "viewer", "browser", "notebook", "none"), port = 8765L,
               host = "127.0.0.1", allowed_hosts = NULL, serve_web_ui = TRUE,
               web_cache_dir = NULL, web_source_url = "https://www.cellucid.com",
               cache_bytes = 268435456, quiet = FALSE)
@@ -168,6 +196,39 @@ cellucid_serve(data, ..., port = 8765L, host = "127.0.0.1", allowed_hosts = NULL
 {doc}`../d_viewing_loading/05_serve_from_hpc_and_ssh` and
 {doc}`../d_viewing_loading/06_hooks_selection_and_sessions`; `?cellucid_view`
 has every argument.
+
+## The round trip
+
+```r
+object <- cellucid_pull(object, viewer)                 # from an open viewer
+object <- cellucid_pull(object, "~/Downloads/exports")  # from the web app's exports
+cellucid_push(viewer, object$seurat_clusters, key = "clusters")
+cellucid_push_gene_set(viewer, "T cells", c("CD3E", "CD3D"))
+t_cells <- cellucid_subset(object, viewer, "Lasso selection")
+```
+
+`cellucid_pull()` writes, with the same names and rules as cellucid-python's
+`pull()` ({doc}`../../python_package/g_api_reference_coverage/api/round_trip`):
+each highlight group as `cellucid_highlight__<group id>` (`TRUE`/`FALSE`),
+each user-defined categorical field (labels, annotations, clusters) as a
+factor under its name, each continuous field and score as numbers, the
+visible cells as `cellucid_visible` (`visibility = TRUE`), and the gene sets
+under `misc$cellucid$gene_sets` (Seurat), `metadata(x)$cellucid$gene_sets`, or
+the `cellucid` attribute of a data frame. When the viewer opened a
+subsample, a cell it did not open is `NA`. Columns an earlier pull wrote are
+replaced (and removed when their result is gone, `prune = TRUE`); any other
+column of the same name stops the call unless `on_conflict = "replace"` or
+`"suffix"`. Cells are 1-based positions, as everywhere in this package.
+Nothing waits: the viewer sends every result once its dataset opens (and
+whenever its channel opens again) and each change after, and
+`cellucid_pull()`, `cellucid_subset()`, `cellucid_gene_sets()`,
+`cellucid_results()` and `cellucid_selection()` read what it sent, so in a
+Jupyter notebook a lasso drawn and `cellucid_pull()` run in the next cell
+finds the lasso. `cellucid_push()` and `cellucid_push_gene_set()` send at once.
+A session is asked for with `cellucid_request_session()` and collected with
+`cellucid_session_result()` or applied with `cellucid_apply_session(object,
+request)` -- the one way, in a notebook (in a later cell) and outside one.
+See `?cellucid_pull`, `?cellucid_push` and `?cellucid_on`.
 
 ## Messages
 

@@ -47,12 +47,13 @@ always needs both arguments.
 
 The web app reaches a server through its **Link or server** bar (type
 `localhost:8765`, or just the port), or the server opens it: `cellucid serve`
-opens your browser and a notebook embeds the viewer. The viewer reads the
-data itself exactly as it reads a linked file — in place with range requests
-where the format allows it, once from the start for an R object or a
-MatrixMarket folder; the server serves the bytes (an in-memory AnnData is
-first written once to a temporary `.h5ad`, a MuData to a temporary
-Cellucid-ready `.h5mu`).
+opens your browser. In Jupyter, `show_anndata()` starts no server: a widget in
+the cell's output frames the app and hands it the bytes through the notebook's
+own connection. The viewer reads the data itself exactly as it reads a linked
+file — in place with range requests where the format allows it, once from the
+start for an R object or a MatrixMarket folder; Python serves the bytes (an in-memory AnnData,
+and an AnnData file not in priority order, as a store in priority order made as the viewer reads
+it; a MuData written once to a temporary Cellucid-ready `.h5mu`).
 
 ## What you should actually use (recommended defaults)
 
@@ -93,7 +94,10 @@ Details: {doc}`04_cli_cellucid_serve_quickstart`.
 
 ## Edge cases (high-signal)
 
-- Remote notebooks (JupyterHub, cloud) often require a proxy URL (HTTPS) instead of direct `http://127.0.0.1:<port>`: {doc}`10_notebook_widget_mode_advanced`.
+- Remote notebooks (JupyterHub, VS Code Remote, Colab) need nothing extra with
+  `show_anndata()`: {doc}`10_notebook_widget_mode_advanced`. A browser-tab
+  server on a remote machine needs an SSH tunnel:
+  {doc}`12_remote_servers_ssh_tunneling_and_cloud`.
 
 ## Troubleshooting
 

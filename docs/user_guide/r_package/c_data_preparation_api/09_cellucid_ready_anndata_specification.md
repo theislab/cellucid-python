@@ -27,12 +27,14 @@ name.zarr/
   .zgroup  .zattrs  .zmetadata          root group, encoding "anndata" 0.1.0
   X/                                    gene expression (only with gene_expression)
     data/  indices/  indptr/            sparse: csc_matrix
-  obs/                                  dataframe: _index + one element per column
+  obs/                                  dataframe: _index + one element per column,
+                                        cells in priority order, + cellucid_original_position
   var/                                  dataframe: _index + one element per column
   obsm/                                 dict: embeddings and vector fields
   obsp/                                 dict
     connectivities/                     csr_matrix (only with connectivities)
-  varm/  varp/  layers/                 empty dicts
+  varm/                                 dict: cellucid_prefix_counts (sparse X, priority order)
+  varp/  layers/                        empty dicts
   uns/                                  dict
     title                               string
     cellucid/                           dict: the dataset's description
@@ -85,6 +87,7 @@ when the axis it indexes has 2^31 entries.
 | `source` | dict: `name`, and `url` when supplied | when `source_name` is supplied |
 | `defaults` | dict, below | when any default is set |
 | `outlierQuantiles` | dict, below | when `latent_key` is supplied |
+| `priority` | dict: `seed`, `specVersion` (`1`), `nObs` (the cell count it was written for), `levels` | unless `priority_seed = NULL` |
 
 `uns['title']` repeats the name, so tools that read a file's title (CELLxGENE
 files carry one) show it too.
@@ -134,7 +137,7 @@ app follow bit for bit.
 Every array's `.zarray` (Zarr format 2) declares, for `X/indices` for example:
 
 ```json
-{"chunks": [65536], "compressor": {"id": "zlib", "level": 6},
+{"chunks": [16384], "compressor": {"id": "zlib", "level": 6},
  "dimension_separator": ".", "dtype": "<i4", "fill_value": 0,
  "filters": [{"elementsize": 4, "id": "shuffle"}], "order": "C",
  "shape": [450000], "zarr_format": 2}
@@ -144,7 +147,7 @@ and its `zarr.json` (Zarr format 3):
 
 ```json
 {"shape": [450000], "data_type": "int32",
- "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [65536]}},
+ "chunk_grid": {"name": "regular", "configuration": {"chunk_shape": [16384]}},
  "chunk_key_encoding": {"name": "default", "configuration": {"separator": "/"}},
  "fill_value": 0,
  "codecs": [{"name": "bytes", "configuration": {"endian": "little"}},
@@ -187,16 +190,17 @@ reads each array:
 
 | Array | Chunk |
 |---|---|
-| `X/data` and `X/indices` (read one gene's range at a time) | 65,536 values (2^16) |
-| `X/indptr`, every array of `obsp/connectivities`, `obs`/`var` columns and index, `uns` lists (read whole) | 262,144 values (2^18) |
-| `obsm` arrays (read a block of rows, every column) | `[rows, n_columns]`, rows = 262,144 / n_columns (rounded down) |
+| `X/data` and `X/indices` (read one gene's range, or its first values, at a time) | 16,384 values (2^14) |
+| every array with one row per cell: `obs` columns and index, categorical codes, nullable values and masks, the stored outlier quantiles, MuData's masks and cell maps | 65,536 values (2^16) |
+| `obsm` arrays (read a block of rows, every column) | `[rows, n_columns]`, rows = 65,536 / n_columns (rounded down) |
+| `X/indptr`, every array of `obsp/connectivities`, `var` columns and index, categories, `uns` lists (read whole) | 262,144 values (2^18) |
 | dense `X` (read one gene at a time) | `[rows, genes]`, rows = up to 262,144, genes = as many as keep the chunk at 262,144 values (at least 1) |
 
 An array shorter than its chunk size is one chunk of exactly its length; an
 empty array has chunks of 1. For
 example, a 300,000-cell store holds `obsm/X_umap` in chunks of
-`[131072, 2]`, `obsm/X_pca` (50 columns) in chunks of `[5242, 50]`, and a
-`string-array` index of 300,000 names in two chunks of 262,144.
+`[32768, 2]`, `obsm/X_pca` (50 columns) in chunks of `[1310, 50]`, and a
+`string-array` obs index of 300,000 names in five chunks of 65,536.
 
 ## Consolidated metadata
 
@@ -237,6 +241,35 @@ Python opens it with `zarr.storage.ZipStore(path, mode="r")` and
 `anndata.read_zarr()`; the web app opens it as a file or a link
 ({doc}`../d_viewing_loading/01_open_stores_in_cellucid_web_app`).
 
+## Priority order
+
+Unless `priority_seed = NULL`, the cells are stored in **priority order**:
+by ascending `uniform` rank of `cellucid_subsample_cells()` under the seed
+`priority_seed` (default `0`), so every subsample Cellucid opens with that seed
+is the first rows of every array and reads nothing of the cells it leaves out.
+`obs[['cellucid_original_position']]` (uint32) records each row's original
+position, `uns['cellucid']['priority']` the seed, the subsampling
+specification's version, the cell count it was written for (`nObs`) and the
+prefix levels, and beside a sparse `X`
+`varm[['cellucid_prefix_counts']]` each gene's values below each level. Every
+rule — the level sequence (each `floor(previous * 3 / 4)` from the cell count),
+both axes of the graph, the order of a MuData modality's rows — is the shared
+specification's {ref}`priority order <priority-order>`, and the store equals
+Python's element for element (`tests/testthat/test-cross-writer.R`).
+
+A reader of the store (anndataR, zellkonverter, Python's anndata) sees the
+cells in the stored order; `cellucid_restore_original_order()` puts a
+`data.frame`, Seurat object (every assay, reduction, graph, neighbour index
+and its identities) or SingleCellExperiment read from it back in the order
+given. It reads the order from the priority record where those importers keep
+`uns` (`metadata(x)$cellucid$priority`, a Seurat object's
+`misc$cellucid$priority`, a data frame's `"cellucid"` attribute) and verifies
+it as every reader does ({ref}`priority order <priority-order>`, "Verified
+before use"): an object subset, combined or reordered since it was read is
+returned as it is, with a warning. `cellucid_prepare(data = object)` puts an
+object in a verified stored order back in its original order before it
+writes.
+
 ## Writing
 
 The store is written under a temporary hidden name beside `out_path`
@@ -265,11 +298,15 @@ name.zarr/
   obsp/connectivities/                  the shared neighbour graph
   varm/  varp/                          empty
   uns/                                  title and cellucid (as in an AnnData; defaults may name modality)
+                                        (the cells, and each modality's rows, in priority order)
   obsmap/<modality>                     uint32 per cell: its 1-based row in the modality, 0 if not measured
   varmap/<modality>                     uint32 per var row: its 1-based row in the modality, else 0
   mod/                                  attribute mod-order: the modality names in order
     <modality>/                         an AnnData (encoding "anndata"): X, obs (the modality's
-                                        cells), var, empty obsm, obsp, varm, varp, layers, uns
+                                        cells; in priority order, cellucid_original_position:
+                                        each row's original row), var, empty obsm, obsp,
+                                        varm (cellucid_prefix_counts in global levels), varp,
+                                        layers, uns
 ```
 
 The modality order is `modalities`, else the Seurat active assay (or the main

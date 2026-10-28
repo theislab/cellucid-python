@@ -228,6 +228,8 @@ class _MemoryBundle:
                     (
                         "field-overlays",
                         "user-defined-codes",
+                        "user-defined-values",
+                        "gene-sets",
                         "cinematic-camera",
                         "core-state",
                         "dockable-layout",
@@ -280,6 +282,10 @@ def _application_contributor(chunk_id: str) -> str:
         return "figure-export"
     if chunk_id.startswith("user-defined/codes/"):
         return "user-defined-codes"
+    if chunk_id.startswith("user-defined/values/"):
+        return "user-defined-values"
+    if chunk_id == "gene-sets/notebook":
+        return "gene-sets"
     return "unknown-contributor"
 
 
@@ -401,6 +407,29 @@ def _application_chunk_meta(
             "codec": "gzip",
             "label": f"User-defined codes: {field_key}",
             "datasetDependent": True,
+        }
+    elif chunk_id.startswith("user-defined/values/"):
+        field_id = chunk_id.removeprefix("user-defined/values/")
+        field_key = next(
+            (field["key"] for field in chunks["core/field-overlays"]["userDefinedFields"] if field["id"] == field_id),
+            field_id,
+        )
+        base = {
+            "contributorId": "user-defined-values",
+            "priority": "eager",
+            "kind": "binary",
+            "codec": "gzip",
+            "label": f"User-defined values: {field_key}",
+            "datasetDependent": True,
+        }
+    elif chunk_id == "gene-sets/notebook":
+        base = {
+            "contributorId": "gene-sets",
+            "priority": "eager",
+            "kind": "json",
+            "codec": "gzip",
+            "label": "Notebook gene sets",
+            "datasetDependent": False,
         }
     elif chunk_id.startswith("highlights/cells/"):
         group_id = chunk_id.removeprefix("highlights/cells/")
@@ -1599,3 +1628,135 @@ def test_bundle_manifest_length_is_bounded_by_the_file_not_a_fixed_cap(tmp_path:
     path.write_bytes(SESSION_BUNDLE_MAGIC + (64 * 1024 * 1024).to_bytes(4, "little") + b"{")
     with pytest.raises(ValueError, match="more than the session file holds"):
         CellucidSessionBundle(path).decode_chunk("anything")
+
+
+
+def _stored_continuous_field(*, field_id: str = "user_obs_value_1", key: str = "pushed score") -> dict[str, Any]:
+    return {
+        "id": field_id,
+        "source": "obs",
+        "kind": "continuous",
+        "key": key,
+        "isDeleted": False,
+        "isPurged": False,
+        "sourceField": None,
+        "operation": {"type": "notebook-push"},
+        "createdAt": 1,
+        "valuesLength": 3,
+        "valuesType": "Float32Array",
+    }
+
+
+def test_a_pushed_continuous_field_applies_from_its_own_values_chunk() -> None:
+    values = np.array([0.5, np.nan, -2.0], dtype="<f4")
+    bundle = _MemoryBundle(
+        chunks={
+            "core/field-overlays": _field_overlays([_stored_continuous_field()]),
+            "user-defined/values/user_obs_value_1": values.tobytes(),
+        }
+    )
+    applied = apply_cellucid_session_to_anndata(bundle, _adata(), expected_dataset_id="exact")
+    column = applied.obs["pushed score"]
+    assert column.dtype == np.float32
+    np.testing.assert_array_equal(column.to_numpy(), values)
+
+
+@pytest.mark.parametrize(
+    ("chunks", "message"),
+    [
+        ({}, "missing required chunk"),
+        ({"user-defined/values/user_obs_value_1": b"\x00" * 8}, "3 float32 values"),
+        ({"user-defined/values/user_obs_value_1": np.array([1, np.inf, 0], dtype="<f4").tobytes()}, "finite"),
+    ],
+)
+def test_a_pushed_continuous_field_needs_its_whole_finite_values(chunks: dict[str, Any], message: str) -> None:
+    bundle = _MemoryBundle(chunks={"core/field-overlays": _field_overlays([_stored_continuous_field()]), **chunks})
+    adata = _adata()
+    with pytest.raises(ValueError, match=message):
+        apply_cellucid_session_to_anndata(bundle, adata, expected_dataset_id="exact")
+    assert list(adata.obs.columns) == ["score"]
+
+
+def test_an_undeclared_values_chunk_is_refused() -> None:
+    bundle = _MemoryBundle(
+        chunks={"user-defined/values/user_obs_value_9": np.zeros(3, dtype="<f4").tobytes()},
+    )
+    with pytest.raises(ValueError, match="undeclared user-defined value chunks"):
+        apply_cellucid_session_to_anndata(bundle, _adata(), expected_dataset_id="exact")
+
+
+def test_the_notebook_gene_sets_of_a_session_are_read() -> None:
+    from cellucid.anndata_session._apply import _plan_session
+
+    sets = [{"name": "T cells", "description": "From the notebook", "genes": ["CD3E", "CD3D"]}]
+    bundle = _MemoryBundle(chunks={"gene-sets/notebook": sets})
+    plan = _plan_session(
+        bundle,
+        _adata(),
+        expected_dataset_id="exact",
+        add_highlights=True,
+        highlights_prefix="h_",
+        add_user_defined_fields=True,
+        user_defined_prefix="",
+        include_deleted_user_defined_fields=False,
+        existing_columns={"score"},
+    )
+    assert plan.gene_sets == sets
+
+
+def _subsampled_bundle(kept: list[int], *, digest: str | None = None) -> _MemoryBundle:
+    """A session saved on cells ``kept`` of the 3: one lasso of the second
+    cell, one label per cell. A session names its cells by original position,
+    ascending, whatever order the viewer opened them in: cell ``i`` is row
+    ``kept[i]``."""
+    import base64
+
+    from cellucid.subsample import cell_set_digest
+
+    field = {**_categorical_field(key="label"), "codesLength": len(kept)}
+    bundle = _MemoryBundle(
+        chunks={
+            "core/field-overlays": _field_overlays([field]),
+            "user-defined/codes/user_cat_1": _raw_u8_codes([0, 1]),
+            "highlights/meta": {
+                "pages": [{
+                    "id": "page_1", "name": "Page 1", "color": "#2563eb",
+                    "highlightedGroups": [{"id": "highlight_1", "type": "lasso", "label": "Selected",
+                                           "enabled": True, "cellCount": 1}],
+                }],
+                "activePageId": "page_1",
+            },
+            "highlights/cells/highlight_1": _delta_indices([1]),
+        },
+        fingerprint={"datasetId": "exact", "name": None, "cellCount": len(kept), "varCount": 2,
+                     **_mapping_fingerprint_keys()},
+    )
+    gaps = bytearray()
+    previous = -1
+    for position in kept:
+        gaps.append(position - previous - 1)
+        previous = position
+    bundle.manifest["cells"] = {
+        "spec": {"method": "uniform", "nObs": 3, "k": len(kept), "seed": 0},
+        "kept": base64.b64encode(bytes(gaps)).decode(),
+        "digest": digest if digest is not None else cell_set_digest(3, np.asarray(kept, dtype=np.uint32)),
+    }
+    return bundle
+
+
+def test_a_session_saved_on_a_subsample_applies_at_the_original_rows() -> None:
+    applied = apply_cellucid_session_to_anndata(_subsampled_bundle([0, 2]), _adata(), expected_dataset_id="exact")
+    # Session cell 0 is row 0 and session cell 1 is row 2 (kept, ascending).
+    highlight = applied.obs["cellucid_highlight__highlight_1"]
+    assert str(highlight.dtype) == "boolean"
+    assert highlight.tolist() == [False, pd.NA, True]
+    label = applied.obs["label"].astype(object)
+    assert label.where(label.notna(), None).tolist() == ["A", None, "B"]
+    assert applied.uns["cellucid"]["session"]["manifest"]["cells"]["spec"]["k"] == 2
+
+
+def test_a_subsample_session_with_a_wrong_digest_or_dataset_is_refused() -> None:
+    with pytest.raises(ValueError, match="digest"):
+        apply_cellucid_session_to_anndata(_subsampled_bundle([0, 2], digest="0" * 16), _adata(), expected_dataset_id="exact")
+    with pytest.raises(ValueError, match="saved on 2 of 3 cells"):
+        apply_cellucid_session_to_anndata(_subsampled_bundle([0, 2]), _adata()[:2].copy(), expected_dataset_id="exact")

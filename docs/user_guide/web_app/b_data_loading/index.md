@@ -38,7 +38,7 @@ Use this as a decision tree. You can always switch later.
 |---|---|---|---|
 | A Zarr store folder (`.zarr`), for example from `prepare()` | **Open… › Folder…**, or drop the folder | Read key by key from disk, nothing zipped or uploaded | {doc}`03_browser_file_picker_tutorial` |
 | A `.loom`, a 10x Cell Ranger `outs/` folder, or a MuData `.h5mu` | **Open… › File…** (Loom, `.h5mu`) or **Folder…** (`outs/`) | Read in place as it is, no conversion | {doc}`18_open_loom_and_10x` or {doc}`19_multimodal_mudata` |
-| A Seurat or SingleCellExperiment object (`.rds`, `.rda`, `.RData`), or a MatrixMarket folder | **Open… › File…** (R objects) or **Folder…** (MatrixMarket) | Read once into this browser's storage, no R needed | {doc}`17_open_r_objects` |
+| A Seurat or SingleCellExperiment object (`.rds`, `.rda`, `.RData`), or a MatrixMarket folder | **Open… › File…** (R objects) or **Folder…** (MatrixMarket) | Cannot be read in parts: read whole once into this browser's storage and kept for next time, no R needed | {doc}`17_open_r_objects` |
 | A portable `.zarr.zip` or `.zip` | **Open… › File…** | One validated file selection in every supported browser | {doc}`03_browser_file_picker_tutorial` |
 | A `.h5ad` of any size, and no Python | **Open… › File…** | One file selection, nothing installed, nothing uploaded; read from disk as each view needs it | {doc}`03_browser_file_picker_tutorial` |
 | A `.h5ad` on a remote machine, or one you drive from a notebook | Server mode or Jupyter | Python hands the file to the browser, which reads it in place as each view needs it | {doc}`04_server_tutorial` or {doc}`05_jupyter_tutorial` |
@@ -308,12 +308,13 @@ If your dataset includes vector fields (e.g. RNA velocity), enable the overlay a
 | GitHub catalog | Public, dataset-specific share links | No |
 | Self-hosted catalog | A catalog on your own static host or CDN | No — any HTTP server will do |
 | Server mode | Data on a remote machine, or a Zarr store folder | Yes — `cellucid serve` |
-| Jupyter | Interactive analysis workflows | No — the viewer manages a localhost server |
+| Jupyter | Interactive analysis workflows | No — the viewer is a notebook widget; no server, no port |
 
 :::{note}
-Server mode and Jupyter both use HTTP internally. The distinction above is
-whether you start a separate terminal command. Both bind to `127.0.0.1` by
-default; use the documented SSH-tunnel workflow for a remote machine.
+Server mode binds to `127.0.0.1` by default; use the documented SSH-tunnel
+workflow for a remote machine. Jupyter uses no server at all: the widget hands
+the data to the viewer through the notebook's own connection, so a remote
+notebook needs nothing extra.
 :::
 
 ---
@@ -329,6 +330,7 @@ default; use the documented SSH-tunnel workflow for a remote machine.
 14_open_from_link
 16_private_drive_onedrive
 13_data_mapping
+21_subsampled_loading
 17_open_r_objects
 18_open_loom_and_10x
 19_multimodal_mudata

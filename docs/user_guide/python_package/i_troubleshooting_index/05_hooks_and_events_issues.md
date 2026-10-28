@@ -16,9 +16,11 @@ re-run: each viewer has its own channel.
 
 ## Session-bundle request rejected
 
-A session bundle answers exactly one pending `get_session_bundle()` request and
-is single-use; one that arrives after the request stopped waiting is dropped.
-Start a new request (with a longer `timeout=`) instead.
+A session bundle answers exactly one pending request and is single-use; one
+that arrives after the request was cancelled or stopped waiting is dropped.
+Start a new request instead: `request = viewer.request_session_bundle()`, and
+`request.result()` -- in a notebook in the next cell, since the widget hears
+the viewer only between cells.
 
 ## A command returned without changing the viewer
 

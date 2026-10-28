@@ -39,7 +39,9 @@ cellucid-python/
       _console.py
       _launch_defaults.py
       _non_finite.py
+      _plural.py
       data_mapping.py
+      subsample.py
       prepare_data/
         __init__.py
         _prepare.py
@@ -47,15 +49,22 @@ cellucid-python/
         _inputs.py
         _mudata.py
         _outliers.py
+        _priority.py
         _store.py
       input_formats.json
       _anndata_files.py
+      _served_store.py
+      _served_formats.py
       anndata_server.py
       jupyter/
         __init__.py
         _wire.py
         _hooks.py
         _viewer.py
+        _widget.py
+        static/
+          widget.js
+          widget.css
       _server_base.py
       _viewer_channel.py
       _websocket.py
@@ -71,6 +80,8 @@ cellucid-python/
         _fields.py
         _mudata.py
         _apply.py
+        _columns.py
+        _results.py
       vector_fields.py
       web_cache.py
       py.typed
@@ -146,7 +157,12 @@ See: {doc}`10_jupyter_embedding_architecture`
 | What `prepare()` accepts and how it converts inputs | `src/cellucid/prepare_data/_inputs.py` | Keep the rules equal to cellucid-r's; see {doc}`07_prepare_writer_architecture` |
 | Chunks, codecs, encodings of a prepared file | `src/cellucid/prepare_data/_store.py` | Change only with measurements; the web reader and cellucid-r must agree |
 | Launch defaults (`uns['cellucid']['defaults']`, `/_cellucid/datasets`) | `src/cellucid/_launch_defaults.py` | Key names are the web app's `requireAnnDataLaunchDefaults` |
-| Accepted input formats (by `input_formats.json`), temporary `.h5ad`/`.h5mu`, undecodable codecs | `src/cellucid/_anndata_files.py` | Metadata only, never an array; the browser's decodable codec sets must match the web app's HDF5/Zarr reader |
+| Accepted input formats (by `input_formats.json`), temporary `.h5mu`, undecodable codecs | `src/cellucid/_anndata_files.py` | Metadata only, never an array; the browser's decodable codec sets must match the web app's HDF5/Zarr reader |
+| Priority order of a prepared file (`priority_seed`, the record, original positions, prefix counts, `restore_original_order()`, `stored_order()`) | `src/cellucid/prepare_data/_priority.py` | Rule for rule cellucid-r's `R/priority.R`; the web app's `data/anndata/priority-layout.js` verifies what it writes |
+| Which cells a subsample keeps (`subsample_cells()`) | `src/cellucid/subsample.py` | The subsampling specification; the shared conformance fixture pins it in all three repositories |
+| The store in priority order served for an object or a file not in priority order | `src/cellucid/_served_store.py` | Chunks made on request from the source; the arrays `prepare()` writes, chunk for chunk; uncompressed |
+| MuData, Loom and 10x files served in priority order by path | `src/cellucid/_served_formats.py` | Mirrors the web app's layout views (`views/loom.js`, `views/tenx-*.js`) |
+| The notebook widget (`Widget`, `show_anndata()`) | `src/cellucid/jupyter/_widget.py`, `jupyter/static/widget.js` | The page's reads and the viewer channel over the widget's comm; `widget.js` is byte for byte cellucid-r's `inst/widget/widget.js` |
 | HTTP routes for the served data | `src/cellucid/anndata_server.py` | Exact `Range`/`206`/`HEAD`/`ETag` answers; the web app's reader depends on them |
 | The viewer channel (commands, events, session bundles) | `src/cellucid/_viewer_channel.py`, `src/cellucid/jupyter/_wire.py` | Cross-language rules in the web app's `data/viewer-protocol.js`; see {doc}`11_hooks_events_protocol_and_schema` |
 | CORS / origin rules | `src/cellucid/_server_base.py` | Security-sensitive |
@@ -154,6 +170,7 @@ See: {doc}`10_jupyter_embedding_architecture`
 | Notebook embedding issues | `src/cellucid/jupyter/_viewer.py` | Remote notebook environments are tricky |
 | Session bundle parsing | `src/cellucid/session_bundle.py` | Treat bundles as untrusted input |
 | Applying sessions to AnnData | `src/cellucid/anndata_session/_apply.py` | Exact fingerprint validation and output-column collision rejection |
+| Pull, push, subset and gene sets (the round trip) | `src/cellucid/anndata_session/_results.py`, `_columns.py` (the one column writer sessions and pulls share) | Rule for rule cellucid-r's `R/round-trip.R` |
 | Vector field helpers | `src/cellucid/vector_fields.py` | Write keys by the vector-field key rule (`<field>_<basis>` for `X_<basis>`, `cellucid.data_mapping.parse_vector_field_key`) |
 
 ---

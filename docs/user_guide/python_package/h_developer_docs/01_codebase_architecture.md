@@ -46,15 +46,15 @@ Most of the public API lives in `cellucid-python/src/cellucid/`:
 | `src/cellucid/data_mapping.py` | the data-mapping rules (validation, unique names, the default UMAP rule, vector-field keys), mirrored by the web app's `data/data-mapping.js` and pinned by a shared conformance fixture | want to change what the viewer plots and reads |
 | `src/cellucid/_contracts.py` | dataset-id and display-text rules, standard library only | want to change what counts as a valid id or name |
 | `src/cellucid/_non_finite.py` | the counted NaN/Inf/float32-range diagnosis in refusals | want to change how a non-finite input is reported |
-| `src/cellucid/_anndata_files.py` | classifies any file or folder by the input format registry (`input_formats.json`), reads AnnData and MuData metadata (never an array), finds arrays the browser cannot decode, builds missing consolidated Zarr metadata, writes the temporary `.h5ad`/`.h5mu` for an in-memory object | want to change what input is accepted or how it is handed to the browser |
+| `src/cellucid/_anndata_files.py` | classifies any file or folder by the input format registry (`input_formats.json`), reads AnnData and MuData metadata (never an array), finds arrays the browser cannot decode, builds missing consolidated Zarr metadata, writes the temporary `.h5mu` for an in-memory MuData | want to change what input is accepted or how it is handed to the browser |
 | `src/cellucid/anndata_server.py` | the data server: checks launch choices against AnnData/MuData metadata, serves the bytes with exact `Range` answers (`sendfile`), lists a folder of files, publishes `/_cellucid/datasets`, hands `/_cellucid/ws` to the viewer channel | want to add/modify server endpoints |
-| `src/cellucid/jupyter/` | notebook embedding (a plain iframe), commands, hooks/event dispatch, session capture; `_wire.py` checks every message | want to change notebook UX or hooks behavior |
+| `src/cellucid/jupyter/` | the viewer API (`_viewer.py`: commands, hooks/event dispatch, results, session capture; a browser-tab viewer), the notebook widget (`_widget.py` with `static/widget.js`: an anywidget relaying the app's reads and channel over the comm); `_wire.py` checks every message | want to change notebook UX or hooks behavior |
 | `src/cellucid/_viewer_channel.py` | the viewer channel: WebSocket upgrade and `Origin` check, `hello`/`welcome`, the per-viewer registry and command outbox, events, session bundles streamed to disk | want to change how the viewer and Python talk |
 | `src/cellucid/_websocket.py` | RFC 6455 framing over an upgraded HTTP connection (masked, fragmented, in-place unmasking) | want to change the WebSocket layer |
 | `src/cellucid/_server_base.py` | the HTTP server base: CORS, `Host` checks, byte ranges, web-asset serving, `405` for `POST` | want to change security/transport behavior |
 | `src/cellucid/session_bundle.py` | `.cellucid-session` streaming reader | want to parse sessions or add chunk-level tooling |
 | `src/cellucid/session_codecs.py` | session chunk codecs (varint, cell sets, user-defined codes, typed JSON) | want to add/align codecs with the web app |
-| `src/cellucid/anndata_session/` | apply session bundle → AnnData | want to change “sessions to AnnData bridge” semantics |
+| `src/cellucid/anndata_session/` | the round trip: `pull`, results → `obs` columns, GMT, obs-column CSV, and session bundle → AnnData | want to change how results reach AnnData |
 | `src/cellucid/vector_fields.py` | CellRank drift → vector fields | want to add helpers for velocity/drift conventions |
 | `src/cellucid/web_cache.py` | exact inventory-driven viewer generation establishment and verification | want to change source, staging, verification, or atomic publication behavior |
 
@@ -65,8 +65,10 @@ Most of the public API lives in `cellucid-python/src/cellucid/`:
 Every dataset reaches the viewer as the file or folder it is on disk, read as
 it is: the web app's own readers (HDF5, Zarr, R serialization, MatrixMarket
 text) read it directly, from a server route, a link, or a file picked in the
-browser. An in-memory AnnData or MuData object is first written once to a
-temporary `.h5ad` or `.h5mu`. A file written by
+browser. An in-memory AnnData, and an AnnData file not in priority order, are
+served by Python as a Zarr store in priority order made as the viewer reads it
+(`src/cellucid/_served_store.py`); an in-memory MuData is first written once to
+a temporary `.h5mu`. A file written by
 `prepare()` follows the Cellucid-ready AnnData contract
 ({doc}`../c_data_preparation_api/09_cellucid_ready_anndata_specification`):
 gene-major, chunked for range reads, and naming itself in `uns['cellucid']`.
@@ -88,10 +90,12 @@ the launch choices — see
 ### B) AnnData server workflow (nothing converted)
 
 1) Python: `AnnDataServer` classifies the path by the input format registry
-   (`classify_anndata_path`; an in-memory object is written once to a temporary
-   `.h5ad` or `.h5mu`), reads its metadata where it is an AnnData or MuData
-   (other formats are read by the browser alone), and checks the launch choices
-   against it.
+   (`classify_anndata_path`), presents an in-memory AnnData, an AnnData file
+   not in priority order, and a MuData, Loom or 10x file as a Zarr store in
+   priority order made as the browser reads it (`_served_store.py`,
+   `_served_formats.py`; an in-memory MuData is written once to a temporary
+   `.h5mu`), reads its metadata (an R object and a MatrixMarket folder are
+   read by the browser alone), and checks the launch choices against it.
 2) Browser: reads `/_cellucid/datasets`, then opens the store at
    `/_cellucid/anndata/<dataset_id><ending>` (the file's own ending, such as
    `.h5ad`, `.zarr.zip`, `.loom` or `.rds.gz`), `<dataset_id>.zarr/<key>` for a
@@ -103,14 +107,18 @@ the launch choices — see
 
 ### C) Notebook embedding + hooks workflow
 
-1) Python: starts an AnnData server (port 8765, or the next free port when
-   another viewer holds it and no port was given) and creates a `viewerId` and
-   `viewerToken`.
-2) Notebook: renders an iframe at
-   `<server>/?viewer=true&viewerId=…&viewerToken=…&anndata=true` (the server, or
-   the `client_server_url` given for a proxy).
-3) Frontend: the viewer opens its channel (`/_cellucid/ws`) and says hello
-   with its `viewerId` and `viewerToken`.
+1) Python: `show_anndata()` prepares the dataset (an `AnnDataServer` that is
+   never bound), creates a `viewerId` and `viewerToken`, and shows a `Widget`.
+2) Notebook: the widget's output frames `https://www.cellucid.com/?viewer=embedded`
+   and hands the page the id, the token and a `MessagePort`.
+3) Frontend: the viewer reads the data through the port (the widget relays
+   each request to the kernel), opens its channel and says hello with its
+   `viewerId` and `viewerToken`.
+
+A browser-tab viewer (`AnnDataViewer`) instead binds the server (port 8765, or
+the next free port when another viewer holds it and no port was given), and
+the page at `<server>/?viewer=true&viewerId=…&viewerToken=…&anndata=true`
+opens its channel at `/_cellucid/ws`.
 4) Python → frontend: commands on the channel; frontend → Python: events on
    the same channel.
 
@@ -149,11 +157,13 @@ Do not assume:
 - the browser can reach `http://127.0.0.1:<port>` (remote kernels, Colab),
 - mixed-content is allowed (HTTPS notebooks),
 - network access is available (airgapped environments),
-- or that iframes preserve a stable origin.
+- or that the kernel hears the viewer while a cell runs (it does not: a
+  widget's messages arrive between cells).
 
 Notebook constraints drive the existence of:
-- same-origin local viewer generation delivery,
-- the explicit `client_server_url` argument,
+- the notebook widget, which needs no port, address or proxy,
+- for browser-tab viewers, same-origin local viewer generation delivery and
+  the explicit `client_server_url` argument,
 - and the debugging helpers in `viewer.debug_connection()`.
 
 ---

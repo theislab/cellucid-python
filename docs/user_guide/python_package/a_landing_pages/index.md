@@ -57,7 +57,7 @@ Copy/paste: a minimal `show_anndata`, a practical `prepare()` workflow, and an a
 :link: 03_compatibility_matrix_must_be_explicit
 :link-type: doc
 
-Exactly what works (and what doesn’t) across Jupyter, JupyterLab, VSCode notebooks, and Colab.
+Exactly what works (and what doesn’t) across JupyterLab, Notebook 7, VS Code, Colab, marimo and browser tabs.
 :::
 
 ::::

@@ -5244,9 +5244,11 @@ function buildFormatAndViewerScenarios() {
       describes:
         'The Dataset box after a Seurat object saved with saveRDS() was opened: '
         + 'its cells and genes, "R object (.rds) · this computer", the line '
-        + '"Read once into this browser\'s storage for this tab", and Details '
-        + 'open with Read (once, from start to end, nothing uploaded), Kept (the '
-        + 'origin-private file system until the tab closes) and what it holds.',
+        + '"Read whole once (it cannot be read in parts), kept in this browser\'s '
+        + 'storage for next time", and Details open with Read (whole, once, from '
+        + 'start to end, nothing uploaded), Kept (the origin-private file system '
+        + 'until it is cleared), Read in parts (a Cellucid-ready AnnData) and what '
+        + 'it holds.',
       kind: 'file',
       file: 'pancreas.rds',
     }),
@@ -5361,9 +5363,10 @@ function buildFormatAndViewerScenarios() {
       describes:
         'The opening panel centred over the empty viewer while a linked Seurat '
         + '.rds is downloaded: "Opening" and the file\'s address, the step '
-        + '"Downloading the whole file: … does not serve parts of files", a '
-        + 'progress bar part-way, how much has arrived of 9.4 MB with the speed '
-        + 'and time left, and a Cancel button.',
+        + '"Downloading the whole file (9.4 MB): … does not serve parts of '
+        + 'files", a progress bar part-way, how much has arrived with the speed '
+        + 'and time left, the note saying the host serves the file only whole, '
+        + 'how much is downloaded and that it is kept, and a Cancel button.',
       awaitStartup: false,
       query: async () => {
         const file = await formatFixture('pancreas.rds');

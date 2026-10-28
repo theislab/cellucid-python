@@ -49,8 +49,10 @@ If you’re here because “I loaded a session but it looks different”, start 
 5) {doc}`05_share_workflows_links_sessions_data_files` (how to share with humans)
 6) {doc}`10_troubleshooting_sessions` (the big “why did this fail?” map)
 
-From Python: read a session from a notebook viewer
-({doc}`../../python_package/e_jupyter_hooks/10_session_bundles_get_session_bundle`)
+From Python: bring results back with `viewer.pull(adata)`
+({doc}`../../python_package/g_api_reference_coverage/api/round_trip`), read a
+session from a notebook viewer
+({doc}`../../python_package/e_jupyter_hooks/10_session_bundles_request_session_bundle`)
 and apply it back to an AnnData
 ({doc}`../../python_package/e_jupyter_hooks/11_session_bundles_apply_session_to_anndata`).
 

@@ -27,7 +27,7 @@ Most “analysis is broken” reports reduce to one of these.
 5) **Is this a mode that ignores pages?**  
    - Marker Genes (Genes Panel) groups by a categorical obs field, not by highlight pages.
 6) **Is Run disabled, or the result marked Stale?**  
-   - The line above Run says why it cannot run; **Stale · Run** means the form changed since the result was computed.
+   - The line above Run says why it cannot run; **Stale · Run** means the form, or the open cells (a share applied in place, a progressive opening growing), changed since the result was computed. A stale result is not saved, exported or sent to a notebook until it is run again.
 
 If any of these fail, fix them first; most downstream symptoms disappear.
 
@@ -41,7 +41,7 @@ labels a result with chips for what the run decided. None of them is an error.
 | You see | Meaning | What to do |
 | --- | --- | --- |
 | A line above Run (`Choose two pages`, `Add genes to a set`, …) | The form cannot run yet | Do what it says; each mode’s page lists every reason |
-| **Stale · Run** | The options, pages or page contents changed after this result | Press it to run again, or change the form back |
+| **Stale · Run** | The options, pages or page contents, or the open cells (its tooltip gives the counts then and now), changed after this result | Press it to run again, or change the form back |
 | **n skipped** (Marker genes) | Groups under **Min cells per group** were not tested and stayed in the rest | Hover for their names; choose **Pool into one group** or **Test anyway, flagged** under Small groups |
 | **n pooled** (Marker genes) | Small groups were tested together as one | — |
 | **low n** | A group was tested with fewer cells than the minimum | Read its p-values with care |

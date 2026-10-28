@@ -231,7 +231,8 @@ in this order:
    options that were set.
 2. The file's own `uns['cellucid']['defaults']`, when it declares them.
 3. The rule this page describes for that choice (the UMAP, else the best guess;
-   `obsp['connectivities']`; `X`; the var index; no latent space; each
+   `obsp['connectivities']`; `X`; the var index, or its column of symbols
+   when the index holds identifiers; no latent space; each
    `<field>_<basis>` vector field bound to its `X_<basis>`; every obs column).
 
 Every choice can still be changed under **Data mapping** once the file is open.
@@ -299,9 +300,58 @@ becomes `MATR3-1`. The line under the menus says what that changed:
 1 duplicate name was made unique, e.g. 'LYZ' → 'LYZ-1'.
 ```
 
-When the names are Ensembl ids (at least 90% of a sample look like
-`ENSG00000139618`) and the var table has a symbol column, the line says so:
-"Gene names are Ensembl ids; 'gene_symbols' holds symbols."
+A file opens named by its var index, unless the index holds database
+identifiers while a var column holds their symbols, as every CELLxGENE file
+does (Ensembl ids in the index, symbols in the categorical `feature_name`).
+Then that column names the genes, marked **Guessed**, and each gene keeps its
+id: the gene search finds `SFTPC` and `ENSG00000168484` alike, and lists the
+id beside the symbol. The choice is made by content, not by name alone, for
+each matrix's genes on their own (`X` and its layers, `raw.X`, each
+modality):
+
+- the index holds identifiers when at least 90% of an even sample of its
+  names look like one: letters then at least five digits, optionally
+  versioned (`ENSG00000168484`, `ENSMUSG00000064370.1`, `FBgn0000008`,
+  `WBGene00000001`), a RefSeq (`NM_000546`) or UniProt (`P04637`) accession,
+  `HGNC:5`, or a bare number (an Entrez id). A few symbols look like one too
+  (`LINC01128`, `Gm12345`), which is why it takes 90%;
+- only then are var columns read, one at a time: `feature_name`,
+  `gene_symbols`, `gene_symbol`, `symbols`, `symbol`, `gene_name`,
+  `gene_names`, `gene_short_name`, `feature_names`, `genes`, `gene`, `names`,
+  `name` (any letter case) first, the first that holds symbols chosen; else
+  every other text column, the one most like symbols chosen;
+- a column holds symbols when at least half of the genes have a value, at
+  least half of those are distinct (a biotype or a species column is not), at
+  most half look like identifiers, at least 90% are one word starting with a
+  letter and not a genomic interval (`chr1:1000-1050`), and it is not the
+  index again. Integer columns are never symbols;
+- a column that cannot be read is passed over (choosing it says why).
+
+The first view never waits for gene names. A dataset is drawn first, and the
+gene names of the matrix it opens with are read right after: its var index
+and, when that holds identifiers, the columns above. Only that matrix's axis
+is guessed then; another axis (`raw.X`, another modality) is guessed when you
+first choose it under **Expression** or **Modality**. While names are read,
+**Gene names** says **Reading gene names…**, the gene search says the same
+and cannot be typed in, and analyses that need genes open once they are
+read; a session, an export with genes and a change of the data mapping wait
+for them. The var index is never used in their place meanwhile. A var index
+that cannot be read leaves the genes unnamed and says why, in the gene search
+and in **Gene names**, where another name source can still be chosen.
+
+Whatever names them in the viewer, genes leave it by their identifier (the
+var index name, as in `adata.var_names`): the gene the viewer colours by and
+the gene sets a notebook receives, and gene-set GMT files. A gene set pushed
+from a notebook may name genes by identifier or by the name shown
+(identifiers first; a name two genes answer is reported, not guessed).
+
+A file that names its genes itself (`uns['cellucid']['defaults']['geneIdColumn']`,
+`--gene-id-column`) opens on that column for the matrix it opens with; the
+other matrices and modalities keep their own default. Switching **Expression**
+to a matrix on another var axis (to or from `raw.X`) takes that axis's
+default. When you choose the var index and it holds identifiers while the
+dataset found a column of symbols, the line says so:
+"Gene names are identifiers; 'gene_symbols' holds symbols."
 
 **Values** says how the expression matrix chosen above is stored: **As stored
 (not log-transformed)**, **log1p (base e)**, **log1p (base 2)**, **log1p
@@ -478,7 +528,7 @@ opens:
 |---|---|---|
 | Neighbour graph | `connectivities` | `--knn`, else as in the browser |
 | Modality (several only) | the first gene-expression modality (`rna`, `gex`, `gene expression`, `gene_expression`, `sct`), else the first | as in the browser |
-| Gene names | the var index | `--gene-id-column`, else as in the browser |
+| Gene names | the var index, or the var column of symbols when the index holds identifiers (guessed) | `--gene-id-column`, else as in the browser |
 | Expression | `X` | `--expression`, else as in the browser |
 | Values (log1p) | `X`, every layer and a non-integer `raw.X` are `log1p` when `uns['log1p']` exists (its `base`, e when none); else as stored | as in the browser |
 | Highly variable genes | `var['highly_variable']` (`raw.var` for `raw.X`) when it is true/false, else None | as in the browser |
@@ -516,6 +566,7 @@ embedding it shows. Loading the session restores both:
 
 See {doc}`../l_sessions_sharing/02_what_gets_saved_and_restored`.
 
+(embedding-refused)=
 ## When an embedding is refused
 
 Apply, a view's choice and a session all check an embedding's values before it
@@ -533,7 +584,8 @@ offending cell:
 The previous mapping stays in place, the status line shows the reason, and the
 array is listed with that reason, and cannot be turned on, until the dataset is
 opened again. Because a single cell has no coordinate variation, a one-cell
-file cannot be opened.
+file cannot be opened, and a subsample opens at least two cells
+({ref}`fewest-cells-open`).
 
 ## Memory
 

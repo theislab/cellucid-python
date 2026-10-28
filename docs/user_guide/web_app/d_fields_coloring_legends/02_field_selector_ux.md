@@ -32,10 +32,12 @@ If you’re in Grid compare, click a panel first to make it the active view, the
 :alt: The Color by heading with its (i), above the three field selectors stacked in order — Categorical obs holding clusters, Continuous obs holding None, and an empty Gene expression search box — each followed by four small icon buttons, with the pointer pressing the first.
 :width: 504px
 
-The three selectors, in the order they appear. The four small buttons to the
-right of each are **Duplicate**, **Rename**, **Delete** and **Clear**; they are
-greyed out until that selector holds a field, which is why they look inert on
-the two empty rows here.
+The three selectors, in the order they appear. The small buttons to the
+right of each are **Duplicate**, **Rename**, **Delete** and **Clear**, and on
+the two obs rows also **Export** (after **Duplicate**: the field as a CSV of
+obs names and values, {doc}`../f_highlighting_selection/03_highlight_ui`);
+they are greyed out until that selector holds a field, which is why they look
+inert on the two empty rows here.
 ```
 
 :::{tip}
@@ -114,7 +116,10 @@ choosing the result uses it instead of starting a second one. A background
 load that fails stays silent; choosing the gene loads it again and reports the
 error then.
 
-The search covers the gene list in use. Changing the gene names or the
+The search covers the gene list in use. A dataset's gene names are read
+right after its first view is drawn: until then the search shows **Reading
+gene names…** and cannot be typed in (and, if they could not be read, says
+so, with the reason as its tooltip). Changing the gene names or the
 expression matrix under **Session › Data mapping** replaces that list; a gene
 a view is coloured by stays selected when the new list has it (see
 {doc}`../b_data_loading/13_data_mapping`).

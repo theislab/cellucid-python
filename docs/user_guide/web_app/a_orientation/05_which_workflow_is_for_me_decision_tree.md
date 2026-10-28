@@ -96,7 +96,7 @@ Then decide on sharing:
 | Try Cellucid quickly | Demo dataset | Zero setup | Not your data |
 | Explore your own data locally | Web app: Open… → File… (`.h5ad`, `.zarr.zip`) or Folder… | No server needed | Files not written gene-major read more bytes per gene |
 | Share a dataset with collaborators | Host the AnnData file (HTTP) and share its `?data=` link ({doc}`../b_data_loading/14_open_from_link`) | Everyone opens the same dataset URL | CORS / hosting config |
-| Work in notebooks | `cellucid-python` (embedded viewer + hooks) | Tight Python ↔ UI loop | Notebook iframe restrictions (fullscreen/pointer lock) |
+| Work in notebooks | `cellucid-python` or `cellucid-r` (a notebook widget + hooks + pull) | Tight Python/R ↔ UI loop, no port or proxy | Viewer messages reach the kernel between cells; output frames may restrict fullscreen/pointer lock |
 | View or prepare a dataset from R | `cellucid-r` (`cellucid_view()`, `cellucid_prepare()`) | A Seurat or SingleCellExperiment object as it is; the same Cellucid-ready AnnData, read by the same viewer | Arguments are named differently from `prepare()` |
 | Compare multiple hypotheses | Multiview snapshots (“Keep view”) | Side-by-side views | Smoke mode is disabled when snapshots exist |
 | Run a multi-user labeling round | Community Annotation | Conflict-free collaboration | Requires GitHub repo + app installation |

@@ -17,13 +17,17 @@ It is intentionally written for **mixed audiences** and uses “layered” writi
 - serves AnnData, MuData and the other formats the web app reads (Loom, 10x,
   MatrixMarket folders, R objects) over HTTP (`cellucid serve`,
   `cellucid.serve_anndata(...)`)
-- embeds the web app in notebooks (`cellucid.show_anndata(...)`)
+- shows the web app in notebooks as a widget (`cellucid.show_anndata(...)`)
 - enables Python↔frontend bidirectional communication (hooks/events and commands)
+- brings what you make in the viewer back onto your AnnData in one call
+  (`viewer.pull(adata)`, `cellucid.pull(adata, exported_files)`) and pushes
+  columns and gene sets into it (`viewer.push(...)`)
 
 `cellucid-annotation` is a separate repo for community annotation workflows.
 
-`cellucid-r` writes the same Cellucid-ready AnnData from R. These tutorials
-focus on Python servers, notebook embedding, hooks, and Python-side preparation.
+`cellucid-r` does the same from R (`cellucid_view()`, `cellucid_pull()`,
+`cellucid_prepare()`); {doc}`06_cellucid_in_your_pipeline_python_and_r` pairs
+every round-trip notebook here with its R twin.
 
 ## At a glance
 
@@ -33,8 +37,8 @@ focus on Python servers, notebook embedding, hooks, and Python-side preparation.
 
 **Prerequisites**
 - Python 3.11–3.14
-- A Jupyter environment: JupyterLab or the classic notebook (VS Code notebooks
-  and Colab have not been tested by the project; see
+- A notebook that shows widgets: JupyterLab, Jupyter Notebook 7, VS Code,
+  Google Colab, marimo or Databricks (JupyterLab is tested by the project; see
   {doc}`../e_jupyter_hooks/03_supported_environments_matrix`)
 - `pip install cellucid`
 
@@ -54,16 +58,25 @@ This folder contains:
 
 ## The one mental model that explains 90% of issues
 
-When you call `show_anndata(...)` in a notebook, Cellucid does two things:
+When you call `show_anndata(...)` in a notebook, Cellucid:
 
-1) Starts a **local HTTP server** in Python (serving data + viewer UI assets)
-2) Displays an **iframe** in your notebook pointing to that server
+1) checks the dataset (an in-memory AnnData is served in priority order,
+   made as the viewer reads it), and
+2) shows a notebook widget in the cell's output. Your browser loads the
+   Cellucid app from `https://www.cellucid.com` inside it, and the app reads
+   the dataset from the kernel through the notebook's own connection. No port
+   is opened and no server address is involved.
 
-If “nothing shows up”, it’s almost always one of these:
-- the server didn’t start (exception, port conflict)
-- the browser can’t reach the server (remote kernel without proxy/tunnel)
-- the exact viewer generation could not be established from its configured
-  source
+The notebook hands the widget's messages to the kernel **between cells**: the
+viewer appears when the cell finishes, what you make in the viewer reaches the
+kernel while it is idle, and the next cell reads it. If “nothing shows up”,
+it is almost always one of these:
+- the notebook cannot show widgets (JupyterLab or Notebook 7 without
+  `anywidget` where the notebook server runs),
+- the browser cannot load the app from www.cellucid.com (a blocking network:
+  host a copy and pass `web_source_url=`),
+- the code is not running in a notebook (a script: use
+  `cellucid.AnnDataViewer(...)` for a browser tab).
 
 ## Install (minimal)
 
@@ -79,18 +92,12 @@ If you plan to follow the workflows using `AnnData`, install the common ecosyste
 
 ## Network requirement
 
-At every viewer/server startup, the package fetches the exact web generation
-declared by:
-- `https://www.cellucid.com`
-
-It downloads every inventory object to a staging directory, verifies the full
-file set, MIME types, byte lengths, hashes, and build identity, then publishes
-that generation atomically. The local server serves it from the same origin as
-the dataset API. Source or verification failure stops startup; a previous
-generation is not substituted.
-
-For details (generation directory, source configuration, and firewalls), see:
-- {doc}`../../web_app/b_data_loading/05_jupyter_tutorial`
+In a notebook, the **browser** loads the Cellucid app from
+`https://www.cellucid.com` (or the copy you name with `web_source_url=`); the
+kernel needs no internet, and your data never leaves it except to that page.
+A browser-tab viewer (`AnnDataViewer`, `serve_anndata`, `cellucid serve`)
+instead serves a verified copy of the app from this machine; see
+{doc}`../../web_app/b_data_loading/05_jupyter_tutorial`.
 
 ## How to run these tutorials
 
@@ -114,66 +121,54 @@ The notebook resolves its checked-in input from any working directory inside
 the clone. You do not need to edit a data path.
 ```
 
-### Option C — Remote/HPC notebooks
+### Option C — Google Colab, VS Code, remote notebooks
 
-If your kernel runs on a remote machine but your browser is on your laptop, you need a browser-reachable URL for the Python server:
-- Jupyter Server Proxy (recommended in JupyterHub/remote Jupyter)
-- Colab’s proxy URL (obtain it explicitly; not tested by the project)
-- SSH port forwarding (classic HPC)
-
-In every remote case, pass the resulting browser-reachable HTTP(S) base as
-`client_server_url=`, and behind a proxy name its host in `allowed_hosts=`;
-the route must pass WebSockets (the viewer channel). This is covered in:
-- {doc}`22_large_dataset_server_mode_and_lazy_gene_expression`
+Every round-trip notebook ({doc}`06_cellucid_in_your_pipeline_python_and_r`)
+has an "Open in Colab" badge, and runs in VS Code or on a remote JupyterHub
+as it is: the widget needs no port, proxy or tunnel. Outside a clone of this
+repository the notebooks download the Pancreas file once.
 
 ## What success looks like
 
 - {doc}`prepare_pancreas` writes the Cellucid-ready AnnData, reads it back with
   its `uns['cellucid']` identity and gene-major matrix, opens it, then removes
   the temporary file cleanly.
-- {doc}`jupyter_pancreas` reports `n_cells=2531` and `dimensions=2`, renders
-  the real `clusters` field, and materializes the viewer highlight back into
-  AnnData.
-- The final connection report says server health is `ok`, confirms 2,531
-  served cells and a successful frontend round trip, and the cleanup cell
-  removes the session artifact and stops the local viewer server.
+- {doc}`jupyter_pancreas` shows the viewer in the output, renders the real
+  `clusters` field, pulls a viewer highlight back into AnnData with
+  `viewer.pull()`, and its connection report says the channel is connected
+  and the viewer opened all 2,531 cells.
+- The notebooks of {doc}`06_cellucid_in_your_pipeline_python_and_r` bring
+  highlights, labels, scores and gene sets back in one call, and push
+  clusters and gene sets in.
 
 ## Troubleshooting (quick triage)
 
-### 1) Verify the server is alive
+### 1) Ask Cellucid for a structured report
 
-In Python:
-```python
-print(viewer.server_url)
-print(viewer.viewer_url)
-```
-
-Then open in a browser tab:
-- `http://127.0.0.1:<port>/_cellucid/health`
-
-### 2) Ask Cellucid for a structured debug report
+In a new cell:
 
 ```python
 report = viewer.debug_connection()
 report
 ```
 
-This report is designed to answer:
-- “Did the server respond?”
-- “Is the local web generation exact and complete?”
-- “Are frontend→Python events arriving?”
+It waits for nothing and answers:
+- “Did the notebook draw the widget?” (`connected_outputs`)
+- “Did the app load and open its channel?” (`channel_connected`,
+  `web_source_url`)
+- “What did the viewer last say, and which commands did it refuse?”
+  (`state`, `recent_events`)
 
-### 3) Most common fixes (in order)
+### 2) Most common fixes (in order)
 
-1) **Port conflict** → `show_anndata(...)` takes port 8765, or the next free
-   port when another viewer holds it, by itself; with an explicit port
-   (`AnnDataViewer(port=...)`, `serve_anndata(port=...)`, `cellucid serve --port`)
-   choose another one, or `0` for any free port.
-2) **Web generation** → correct the reported source, inventory, object, or
-   destination failure.
-3) **Remote kernel** → expose the port, then pass its exact base as
-   `client_server_url=`.
-4) **Corporate network** → allow access to the configured viewer source.
+1) **No output at all** → install `anywidget` in the notebook server's
+   environment and reload the page.
+2) **An output that stays empty** → the browser cannot load
+   www.cellucid.com; host a copy and pass `web_source_url=`.
+3) **A call raises "waits for the viewer"** → run it in a later cell; the
+   viewer is heard between cells ({doc}`06_cellucid_in_your_pipeline_python_and_r`).
+4) **A plain script** → `cellucid.AnnDataViewer(...)` opens the viewer in a
+   browser tab instead.
 
 ## Next steps
 

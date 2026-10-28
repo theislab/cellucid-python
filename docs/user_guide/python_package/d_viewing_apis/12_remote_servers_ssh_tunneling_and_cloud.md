@@ -200,49 +200,44 @@ Through a tunnel, use the **loopback** Viewer URL: the tunnel's near end is on
 your own laptop, so `127.0.0.1` is the correct host there whatever the server
 bound to.
 
-## Remote notebooks (JupyterHub / cloud notebooks)
+## Remote notebooks (JupyterHub / VS Code Remote / Colab / cloud notebooks)
 
-Notebook embedding can fail for two common reasons:
+In a notebook, use `show_anndata()`: it shows the viewer as a widget in the
+cell's output and reaches the kernel through the notebook's own connection.
+No port, tunnel or proxy is involved, so the same cell works on a laptop, on
+a JupyterHub, in a notebook on an HPC compute node (whatever way you reach
+that notebook), in VS Code Remote and in Colab
+({doc}`10_notebook_widget_mode_advanced`).
 
-1) **HTTPS mixed content**: your notebook is on `https://…` but the viewer server is `http://…`.
-2) **Remote loopback**: the kernel’s `127.0.0.1` is not your browser’s `127.0.0.1`.
+A **browser-tab** viewer started from a remote kernel (`AnnDataViewer`,
+`serve_anndata`) has the usual remote-loopback problem: the kernel's
+`127.0.0.1` is not your browser's. Fixes:
 
-Best fixes:
+- open it through an SSH tunnel to the kernel's machine, with a fixed `port=`
+  (above); or
+- pass a reverse proxy's browser-reachable base as `client_server_url=` and
+  declare its host name as `allowed_hosts=[...]` (a proxy forwards the
+  browser's `Host`, and an undeclared authority is refused with
+  `421 Misdirected Request`); the proxy must pass WebSockets.
 
-- configure a browser-reachable HTTPS route for one fixed Cellucid port, pass
-  its exact base as `client_server_url=`, and declare the route's host name as
-  `allowed_hosts=[...]` (a proxy forwards the browser's `Host`, and an
-  undeclared authority is refused with `421 Misdirected Request`)
-- or open the viewer in a separate tab using an SSH tunnel (works everywhere)
+On an HPC compute node behind a login node, `AnnDataViewer` always binds
+`127.0.0.1` (it takes no `host` argument), so a login-node forward cannot
+reach it. Start a server that accepts the login node's connection instead, and
+open it in its own browser tab:
 
-A kernel running on an HPC compute node has the same two-hop problem as the CLI,
-with one extra constraint: the embedded viewer always binds its data server to
-`127.0.0.1`, and neither `AnnDataViewer` nor `show_anndata` takes a `host`
-argument. So the embedded iframe cannot be reached through a login-node forward.
-Two things do work there:
+```python
+from cellucid import serve_anndata
 
-- forward the **notebook's own** port instead, and reach the viewer through
-  the notebook server's `jupyter-server-proxy` route: pass that route as
-  `client_server_url=` and the host name your browser uses for it as
-  `allowed_hosts=` ({doc}`10_notebook_widget_mode_advanced`); or
-- start a separate server that can accept the login node's connection, and open
-  it in its own browser tab:
-
-  ```python
-  from cellucid import serve_anndata
-
-  serve_anndata(
-      adata,
-      dataset_name="My dataset",
-      dataset_id="my-dataset",
-      host="0.0.0.0",
-      open_browser=False,
-  )
-  ```
+serve_anndata(
+    adata,
+    dataset_name="My dataset",
+    dataset_id="my-dataset",
+    host="0.0.0.0",
+    open_browser=False,
+)
+```
 
 See {doc}`17_hpc_slurm_and_compute_node_serving`.
-
-Deep dive: {doc}`10_notebook_widget_mode_advanced`.
 
 ## Docker / containers (advanced)
 
@@ -281,8 +276,8 @@ Binding to `0.0.0.0` exposes the dataset server to the network that can reach it
 - If the printed Viewer URL will not load, test the same origin's
   `/_cellucid/health` and `/_cellucid/info` endpoints (see
   {doc}`15_troubleshooting_viewing`).
-- If a notebook iframe is blank, mixed-content blocked, or unable to reach
-  loopback, see {doc}`10_notebook_widget_mode_advanced`.
+- If a notebook output stays empty, see {doc}`10_notebook_widget_mode_advanced`
+  (a notebook widget needs no tunnel).
 - For cluster-specific failures -- a refused compute node, a job that moved, a
   port another user holds -- see
   {doc}`../i_troubleshooting_index/07_hpc_and_remote_access_issues`.

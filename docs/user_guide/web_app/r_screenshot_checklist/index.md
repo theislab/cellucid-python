@@ -78,6 +78,22 @@ Viewer panes, VS Code's notebook output, JupyterLab itself, Google's and
 Microsoft's own consent and picker windows, and Safari's folder dialog.
 :::
 
+:::{important}
+**The notebook viewer changed on 2026-10-27.** `show_anndata()` (and R's
+`cellucid_view()` in Jupyter) no longer starts a localhost server or embeds a
+same-origin iframe with a viewer URL: it shows a notebook widget that frames
+`https://www.cellucid.com/?viewer=embedded` and reads the data through the
+notebook's own connection (no port, no `client_server_url`, no
+`allowed_hosts`, no `jupyter-server-proxy`). Wherever a record below
+describes the notebook viewer as an iframe on `127.0.0.1:<port>`, a
+`viewer.viewer_url`, or a `debug_connection()` report with `server_health` /
+`anndata_store_probes`, that describes the browser-tab viewer
+(`AnnDataViewer`) now. `python-viewer-driven-from-python` was captured in a
+browser tab, and a widget's `debug_connection()` reports `connected_outputs`
+and `channel_connected` instead. The notebook captures (the widget in
+JupyterLab, VS Code, Colab) are still to be taken by hand.
+:::
+
 **Start with `{doc}`00_capture_tooling_and_conventions``.** It has the tool, the
 size rule, the contract the Python suite enforces, and every trap found while
 building it. Nothing here is useful until you have read that.

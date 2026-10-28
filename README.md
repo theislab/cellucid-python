@@ -22,6 +22,15 @@ Cellucid is a browser-first viewer for exploring large single-cell datasets in r
 - **Collaboration**: community annotation voting with optional GitHub sync
 - **Publication export**: SVG (vector) and high-DPI PNG figures
 - **Works everywhere**: web app, local/remote server, and Jupyter notebooks
+- **Subsampled reading**: the viewer can open a seeded share of the cells
+  (uniform, storage-aligned blocks, stratified, spatial), reading only the
+  parts of the data that hold them; `cellucid.subsample_cells()` gives exactly
+  the same cells in Python (and `cellucid_subsample_cells()` in R)
+- **Round trip**: `viewer.pull(adata)` writes every highlight, label, score and
+  gene set made in the viewer onto `obs` in one call; `viewer.push(adata.obs["leiden"])`
+  and `viewer.push_gene_set(...)` send yours to the viewer; without a notebook,
+  `cellucid.pull(adata, "exports/")` reads the web app's CSV, GMT, `.h5ad` and
+  session exports
 
 ## Install
 
@@ -70,16 +79,30 @@ show_anndata(
 An `adata` straight out of Scanpy works as written, and so does a `MuData`.
 The viewer reads the data itself, as each view needs it: `cellucid serve`
 hands it any file or folder in place (`.h5ad`, a Zarr store, `.h5mu`, `.loom`,
-a 10x `.h5` or `outs/` folder, a MatrixMarket folder, an `.rds`/`.rda`), and
-an in-memory object is written once to a temporary `.h5ad` (or `.h5mu`).
-Python and the notebook viewer talk over one WebSocket to the local server,
-so hooks and commands work wherever the notebook's browser can reach that
-server: Jupyter and JupyterLab on the same machine, an SSH-forwarded port, or
-a proxy that passes WebSockets (VS Code's notebook webview and Google Colab
-have not been tested).
+a 10x `.h5` or `outs/` folder, a MatrixMarket folder, an `.rds`/`.rda`). An
+in-memory `AnnData`, and an AnnData, MuData, Loom or 10x file `prepare()` did
+not write, are served with their cells in priority order, each chunk made from
+the source as the viewer asks for it, so a subsample opened in the viewer
+transfers only its cells, whatever the source's layout (a `MuData` object is
+written once to a temporary `.h5mu`).
+In a notebook the viewer is a widget (`cellucid.Widget`, an anywidget) that
+reaches the kernel through the notebook's own connection, so hooks, commands
+and the data need no port or proxy: JupyterLab (tested end to end), Notebook
+7, VS Code, Google Colab, marimo and Databricks, local or remote. The browser
+loads the app from www.cellucid.com. `AnnDataViewer` is the same API in a
+browser tab of its own (a script, an SSH tunnel).
+
+Then work in the viewer and, in the next cell, bring it all back:
+`viewer.pull(adata)`. Seven runnable notebooks, each with an R twin and an
+"Open in Colab" badge, walk through the round trip — one line in any notebook,
+pulling highlights, labels and scores back, pushing clusters and gene sets
+in, the web app's exports, re-analysing a selection, subsampled views:
+[Cellucid in your pipeline](https://docs.cellucid.com/en/latest/user_guide/python_package/f_notebooks_tutorials/06_cellucid_in_your_pipeline_python_and_r.html).
 
 To share or host a dataset, write a Cellucid-ready AnnData once. It is still a
-standard AnnData, with the expression matrix gene-major and the dataset's name,
+standard AnnData, with the expression matrix gene-major, the cells in priority
+order (so a subsample is the first rows of every array; `restore_original_order()`
+puts a file read with anndata back in the order given) and the dataset's name,
 citation and launch defaults in `uns['cellucid']`, so the browser reads one
 gene with one round trip and the file names itself (on a 562k-cell dataset
 over a simulated 80 ms link: opened in 0.25 s, the first gene in 0.09 s; see
@@ -116,6 +139,7 @@ open the file in the web app.
 ## Documentation and ecosystem
 
 - [Python package guide](https://docs.cellucid.com/en/latest/user_guide/python_package/index.html)
+  and [notebook tutorials](https://docs.cellucid.com/en/latest/user_guide/python_package/f_notebooks_tutorials/index.html)
 - [Complete Cellucid documentation](https://docs.cellucid.com/en/latest/)
 - [Live web application](https://www.cellucid.com) and
   [web viewer source](https://github.com/theislab/cellucid)

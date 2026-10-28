@@ -5,8 +5,316 @@ All notable changes to Cellucid will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.9.5]
+## [0.9.6]
 <!-- CELLUCID_VERSION -->
+
+Version 0.9.6 is a patch release on 0.9.5. Files prepared, sessions saved and
+dataset catalogs written by 0.9.5 are read as before. The viewer protocol is
+schema 2: use the Python and R packages of this release with the web app of
+this release. The main changes are:
+
+### Highlights
+
+- **Subsampled reading.** Open a seeded share of a dataset's cells; only the
+  parts of the file that hold them are read, and every part of Cellucid
+  (view, filters, analyses, genes, exports, notebooks) works on those cells.
+  The same cells in the web app, Python and R, in a link and in a session.
+- **Files Cellucid writes store their cells in priority order**, so a share
+  of the cells is the first rows of every array.
+- **Datasets too large for the device open fitted, and large ones open
+  progressively**, growing in place; a larger or smaller share is applied in
+  place, reading only the cells added.
+- **One notebook widget for Python and R** (`show_anndata()`, `cellucid.Widget`,
+  R `cellucid_view()` in Jupyter): no port, no proxy.
+- **Round trip in one call**: `viewer.pull(adata)` / `cellucid_pull()` write
+  every highlight, label, score and gene set back onto the object;
+  `push()` / `cellucid_push()` send yours in.
+- **Up to 100 million cells in 3D** on a 16 GB laptop, with levels of detail
+  that are uniform samples of the cells.
+
+### Web app
+
+#### Subsampled reading
+
+- **Cells to open** (Session › Open data): one slider (or a typed share) with
+  the exact count it stands for ("228,245 of 2,282,447 cells"). Below 100 %
+  the method, its seed and what the method needs appear, with **Apply**.
+  Datasets opened next in this tab take the same share; a method a dataset
+  cannot use (a stratifying field or embedding it lacks) opens the same share
+  by the file's default method, and says so.
+- **Four methods, one specification.** `uniform` (every cell equally
+  likely), `blocks` (runs of neighbouring cells aligned to how the file
+  stores them, so parts holding only left-out cells are never read),
+  `stratified` (proportional or the same count per category of a categorical
+  or text field, optional minimum per category) and `spatial` (balanced over
+  a grid on an embedding, keeping sparse regions). Every method is seeded;
+  with `uniform` and `blocks` a smaller share is inside a larger one. The
+  specification is published, with a conformance fixture shared by the web
+  app, Python and R.
+- **The file's default.** A file Cellucid wrote opens a share as `uniform`
+  under the file's own seed (the first rows of every array); any other file
+  as `blocks`, whose block size is set by the file's layout alone (about four
+  chunks of its dominant per-cell array, or 64 KiB of it when it is read byte
+  by byte), so the same file and share always open the same cells. The panel
+  says what `uniform` would cost on such a file ("fetches 45 % of the matrix
+  for these 10 % of the cells") and how far a `blocks` share's categories are
+  from every cell's.
+- **At least two cells.** One cell has no coordinate variation to draw (the
+  rule a one-cell file is refused by): the control does not offer a share of
+  one cell, a link asking for `cells=1` is refused with that reason, and
+  fitting to the device never goes below two.
+- **In a link.** `?data=…&cells=10%&sample=blocks&seed=0` (also `by`,
+  `alloc`, `min`, `embedding`, `grid`, `block`) opens exactly that share,
+  overriding fitting to the device; `cells=100%` opens every cell. Parsed
+  strictly: a malformed value is named and the dataset opens as if none were
+  given. A share chosen in the panel is written to the address as its exact
+  count, method and seed (never one fitted to the device, never the cells),
+  **Copy link** copies one, and the panel shows the cells' digest so two
+  people can confirm they see the same cells.
+- **Sessions keep their cells.** A session saved on a share records the cells
+  (compactly), how they were chosen and their digest; loading it opens
+  exactly those cells, reading the dataset again first when needed. Per-cell
+  session data names cells by original position, so it applies whatever
+  order a file stores its cells in.
+- **Counts say "k of n".** The Dataset box ("228K of 2.3M cells"; Details:
+  the method and seed), the filter line (*Showing 120 of 240 of 1,200
+  cells*), categorical legends, the category builder, the screen-reader
+  status line and the dataset picker all say how many of every cell are open.
+- **Neighbour graphs on a share** keep the edges between open cells; the
+  Dataset box says how much of the open cells' graph that is, and Data
+  mapping offers every graph on the open cells.
+- **A figure of a share says so**: SVG and PNG provenance name the open
+  cells, how they were chosen and their digest.
+
+#### Too large for the device, progressive opening, Apply in place
+
+- **Fitted to the device.** When every cell would not fit this device's
+  memory (77 bytes a cell, as measured with levels of detail on, against half
+  the device's memory; or, for a matrix stored cell by cell, the index that
+  makes its genes readable), a share sized to fit opens by the file's default
+  method, with a notice and **Open all cells**. About 104 million cells fit a
+  16 GB machine.
+- **Progressive opening.** When reading the cells asked for is measured to
+  take more than about a second (the link's speed and latency, the stored
+  bytes of the embedding's parts the first view needs and their decoding, and
+  how long this device took to show cells before), and a first view would
+  arrive at least twice as soon, a first view of fewer cells shows at once and
+  grows in place, doubling, to the cells asked for. Every step is a sample of
+  them. A file stored in parts much coarser than its blocks can grow part by
+  part, each part read once, ending exactly as opening the share directly.
+  The same rule prices a file picked from this computer.
+- **Apply in place.** A larger or smaller `uniform` or `blocks` share under
+  the same seed (and every cell of a file Cellucid wrote) changes the open
+  cells in place: raising reads only the added cells (their positions, their
+  values of every loaded field and gene, the gene index for them alone),
+  lowering reads nothing. Camera, every view's field, filters and settings,
+  highlights, labels, pushed columns, hand-hidden cells and analysis windows
+  stay; highlights and labels made from a column take the new cells as
+  opening them would. Each per-cell structure ends bit for bit what opening
+  at that share directly holds. On the graphics card only the added cells are
+  sent, and lowering cuts the end. Another method or seed reads the dataset
+  again through the parts already open, carrying the same state by original
+  cell position.
+- **Nothing read twice.** Another share of the same file, in the same or a
+  new reader, takes what was already fetched and decoded (within the tab's
+  memory budget); Zarr folders on a web host, picked folders and file sets
+  are reused while their version is unchanged.
+
+#### Reading at the floor
+
+- **A share reads only its cells' parts**, element by element (obs of every
+  encoding, embeddings, vector fields, graphs, `X` as CSR, CSC or dense,
+  layers, `raw`, stored outlier quantiles, MuData modalities): a permanent
+  test holds every element, at every share, to the stored chunks that hold a
+  kept cell, each fetched once. Opening 1 % of CELLxGENE's 2.3M-cell Human
+  Lung Cell Atlas: first view 3.8 MB in 143 requests at 8.2 s (was 20.3 MB in
+  2,645 requests), at the floor computed from the file's layout.
+- **The first view never waits for gene names.** The gene list is read right
+  after it; meanwhile the gene search, **Gene names**, gene-based analyses
+  and their pickers say *Reading gene names…*, and sessions, exports with
+  genes and data-mapping changes wait.
+- **Faster reads over a network**: HDF5 chunk-index nodes no longer read
+  before a gene (the lung atlas read 12,382 of them first); index nodes of
+  one task are read as one burst (all HDF5 formats; 100 Loom genes 11.1 →
+  7.8 s over 150 ms / 5 MB/s); every S3 address of a public bucket is used;
+  neighbouring reads are merged when that saves time; HTTP/1.1 hosts are
+  recognised; sharded Zarr v3 reads all its shard indexes at once, then all
+  inner chunks; uncompressed Zarr chunks are read in part; two columns of a
+  latent space read only the open cells' rows.
+- **Stricter, steadier reads.** A host answering another byte range, a file
+  whose size, `ETag` or modification time changed while open, is reported,
+  never read into what was read before. Busy hosts (429, 502, 503, 504) are
+  waited for with spaced retries and fewer requests at once. A failed gene is
+  read again on the next attempt. A shared read is cancelled only when every
+  reader waiting on it has withdrawn.
+- **Decoders.** Safari reads Zstandard-compressed Zarr about seven times
+  faster (55 → ~395 MB/s); a Blosc frame with the delta flag is now decoded
+  as c-blosc2 writes it (it was misread).
+
+#### Genes on every path
+
+- **Genes by symbol.** A file whose var index holds database identifiers
+  (Ensembl, FlyBase, WormBase, RefSeq, UniProt, Entrez) beside a column of
+  symbols (CELLxGENE's `feature_name`) names its genes by the symbols, marked
+  *Guessed* in Data mapping; the gene search finds both. Genes leave the
+  viewer by identifier (the var index), with the symbol alongside.
+- **The first gene of a cell-major matrix says what it costs** before it is
+  read (bytes and time at the measured speed), with **Cancel**; on a share,
+  its colours fill in as cells are indexed, each step a sample of the open
+  cells. No silent rescans; errors say what failed.
+- **The gene index is kept across visits.** For a matrix stored cell by cell
+  (CSR, or dense row-chunked) the gene index is kept in this browser under
+  the file, the matrix and how the cells were chosen (never the share):
+  opening the same cells again, another day, reads genes at once, and a
+  larger `uniform` or `blocks` share indexes only its new cells. Kept only for
+  a file whose version is known; checked before use against its record, the
+  file's row layout and, unless the version names the content, a fingerprint
+  of the file; each gene's piece carries a CRC-32.
+- **Fixed:** the first gene of a share of a Cell Ranger `.h5`; a text field
+  for stratifying; SingleCellExperiment graph weights (were all 1); a
+  MatrixMarket first gene or cell that looked like a header (`IDH1`,
+  `cell0`).
+
+#### Files that cannot be read in parts
+
+- **Said up front, kept for next time.** An R object, a MatrixMarket folder
+  or any file on a host that serves no parts of files: the opening says it is
+  read whole, how much, and that a Cellucid-ready AnnData is read in parts
+  instead. What it is read into is kept in this browser's storage across
+  visits (for a file with a known version) and opens again in milliseconds,
+  reading nothing; converted stores are written in priority order with a
+  gene-major `X` (a gene of a 50,000-cell Seurat object: 7 ms). **Session ›
+  Open data › Stored** counts what is kept, with **Clear**.
+- **Checked as it is read.** Everything kept carries a CRC-32 of every
+  16 KiB; damaged bytes fail the read as damaged, the copy is removed and the
+  next opening reads the file again.
+- **Safari keeps converted files and gene indexes across visits** like
+  Chromium and Firefox; only private windows keep them in memory for the tab.
+
+#### Rendering at scale
+
+- **Levels of detail are uniform samples.** A level is the first cells of
+  the open cells' priority order (1,000 cells, then a quarter more at each
+  level), so a reduced level shows the cloud's density and mix of categories
+  as all cells do. Cells already in that order (a file Cellucid wrote, a
+  share) draw every level at once (100M 3D: 0.33 s after levels of detail
+  were turned on, was about 29 s); the spatial order culling uses is taken a
+  few million cells a frame, without stopping a frame.
+- **100 million cells in 3D.** Levels of detail at 100M 3D were silently
+  unused (a GPU texture Chromium refused); fixed, with a notice if a GPU ever
+  refuses. Positions and colours live in segments of 16,777,216 points, so
+  no WebGL buffer limits the cell count; an array the browser will not
+  allocate in one piece is made in WebAssembly memory (3D up to 357.9M
+  cells); the velocity overlay's textures are layered. Memory per cell
+  measured at 100M 3D: 54 bytes drawn, about 50 after levels of detail are
+  built (was 65); 150M cells in 2D fit 16 GB.
+- **Keep view and recolouring above 16.7M cells on Chromium** work (a
+  vertex attribute released without a buffer kept stale bindings); released
+  kept views free their GPU memory; GPU errors name the call that failed.
+
+#### Analyses on a share
+
+- **First answers on a sample.** Differential expression, Marker genes, Gene
+  signature, Correlation, Composition, Dot plot, Detailed and Quick Insights
+  show a first pass on a uniform sample of the open cells when a run is
+  predicted to take more than about a second, then refine in place to every
+  cell; the final result is bit for bit a single run, and only it is saved
+  or exported. A first pass reads only its sample's part of each gene where
+  the file allows.
+- **Analyses follow the open cells.** When the open cells change, results are
+  marked **Stale · Run** (its tooltip gives both counts); a stale result is
+  not saved in a session, not exported and withdrawn from notebooks until it
+  is run again. Differential expression and Marker genes no longer kept the
+  earlier cells' groups after an Apply.
+- **Stored outlier quantiles hold on a share** (they describe the whole
+  dataset); quantiles computed on the open cells say they are an estimate.
+- **Sparse statistics.** Differential expression and Marker genes read each
+  gene's stored values, never a dense column (100M cells at 10 %: peak
+  2.4 GB → 0.6 GB).
+- Every analysis is checked against an independent reference on every way
+  cells open (each method, progressive, Apply, sessions, served data) and
+  every format and source.
+
+#### Round trip and exports
+
+- **Viewer protocol schema 2** (shared fixture re-pinned in all three
+  repositories): every cell either side names is an original position; new
+  events `result`, `result_removed`, `results`, `color_by`; new commands
+  `setField`, `setGeneSet`; `ready` carries `n_obs`. Results carry an epoch,
+  so a reloaded page replaces an older page's results.
+- **Exports without a notebook**: the highlighted cells as an obs-name CSV
+  or an `.h5ad` subset (written in the browser; anndata, h5py and Cellucid
+  read it), any obs field as a CSV (**Export** beside **Duplicate**), gene
+  sets as GMT. Exports list cells in the dataset's own order; genes by
+  identifier with symbols beside; DE and marker CSVs name genes by
+  identifier.
+- **From a notebook**: pushed columns and gene sets show as fields and under
+  **From notebook** in Gene signature and Dot plot, and are saved with the
+  session.
+
+### Python
+
+- **`cellucid.subsample_cells()`** gives exactly the cells the viewer opens
+  for a method, size and seed (any count from 1; the viewer opens at least 2).
+- **`prepare()` stores cells in priority order** (`priority_seed=0`;
+  `None` keeps the order given) in `.h5ad`, Zarr v2/v3, `.zarr.zip`, AnnData
+  and MuData: `uns['cellucid']['priority'] = {seed, specVersion, nObs,
+  levels}`, `obs['cellucid_original_position']` and, beside a sparse `X`,
+  `varm['cellucid_prefix_counts']`. Chunks are smaller for shares: per-cell
+  arrays 2^16 values, `X` data and indices 2^14. Preparing an object read
+  from such a file puts it back in its original order first.
+- **`cellucid.restore_original_order()`** puts an AnnData or MuData read from
+  such a file (also a backed one) back in the order its cells were given. A
+  record that no longer describes the cells (a subset, a reordering) is
+  never trusted.
+- **`show_anndata()` returns a notebook widget** (`cellucid.Widget`, an
+  anywidget; `cellucid.Widget(adata)` makes one without showing it). The page
+  and the viewer channel travel over the notebook's own connection: no port,
+  proxy, `client_server_url` or `allowed_hosts`. Tested end to end in
+  JupyterLab. Calls that wait for the viewer raise at once inside the cell
+  that would wait, saying what to do. `anywidget` is a dependency;
+  `jupyter-server-proxy` is no longer one. `AnnDataViewer` is the
+  browser-tab viewer (its unused `height` is gone).
+- **Served in priority order.** `show_anndata()`, `serve_anndata()`,
+  `AnnDataViewer` and `cellucid serve` serve an in-memory AnnData, and any
+  AnnData, MuData, Loom or 10x file `prepare()` did not write, as a Zarr store
+  with the cells in priority order, made chunk by chunk as the viewer asks: a
+  share transfers only its cells (1 % of a 1M-cell object: 0.18 MB, was
+  2.1–10.6 MB). The temporary `.h5ad` is gone. An in-memory object is
+  snapshotted before the call returns (memory-mapped, about 2 s per 100M
+  values), its matrices stored as `prepare()` stores them. Files are served
+  at disk speed (CSR `X` 7 → 109 MB/s). Each served file is listed with a
+  strong `ETag`, so the browser keeps what it read across visits and sees a
+  rewrite.
+- **Round trip.** `viewer.pull(adata)` / `cellucid.pull(adata, viewer or
+  paths)` writes every highlight, label, score and gene set onto `obs` /
+  `uns` in one call (`<NA>` for cells a subsampled viewer did not open), from
+  a live viewer or from the web app's CSV, GMT and session files;
+  `viewer.push()`, `push_gene_set()`, `subset()`, `gene_sets()`, `results`,
+  `selection` (obs names), `write_gmt()` / `read_gmt()`. Pull and subset
+  refuse an object whose cells are in another order or that lacks the
+  viewer's cells.
+- **One session API.** `request = viewer.request_session_bundle()`, then
+  `request.result()` or `viewer.apply_session_to_anndata(adata, request)`.
+  `get_session_bundle()` is removed. Sessions saved on a share apply (cells
+  not open are `<NA>`); `set_data_mapping()` no longer waits or returns.
+- Viewers of a `prepare()` file name cells correctly in Python (obs names in
+  original order); count messages read "1 cell".
+
+### Docs
+
+- **Fourteen runnable round-trip notebooks**, seven Python–R twins with
+  "Open in Colab" badges: show a dataset in any notebook, pull results back,
+  push clusters and gene sets, read the web app's exports, re-analyse an
+  exported `.h5ad`, subsampled views; a gallery page lists them side by side.
+- New pages: **Subsampled loading** (web app) and the **Subsampling
+  specification**; the Cellucid-ready AnnData specification gains **Priority
+  order**; the notebook pages describe the widget; the published-data
+  tutorials open CELLxGENE's 2.3M-cell Human Lung Cell Atlas.
+- Every page was checked against this release's behaviour (served stores,
+  kept stores, sessions, analyses on a share, rendering limits).
+
+## [0.9.5]
 
 Version 0.9.5 is a patch release on 0.9.4 that breaks with every earlier
 release: no export, session file or dataset catalog written for 0.9.4 is read.
@@ -1344,6 +1652,7 @@ declared `0.0.9`. Release 0.9.1 restores one exact version across both systems.
   - Jupyter integration (`show()`, `show_anndata()`)
 - Export functionality for web deployment
 
+[0.9.6]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.6
 [0.9.5]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.5
 [0.9.4]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.4
 [0.9.3]: https://github.com/theislab/cellucid-python/releases/tag/v0.9.3

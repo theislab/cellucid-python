@@ -15,30 +15,30 @@ If you are not in a notebook environment, start with {doc}`04_cli_cellucid_serve
 - Wet lab / non-technical: copy/paste “Minimal cells”, stop at “What success looks like”.
 - Computational: focus on how `show_anndata` reads `.h5ad` and Zarr stores in
   place, and remote notebook caveats.
-- Power users: focus on HTTPS notebooks, proxies, and `viewer.debug_connection()`.
+- Power users: focus on what happens while a cell runs, and `viewer.debug_connection()`.
 
 **Time**
 - Minimal embed: ~5 minutes
 - Full read (edge cases + troubleshooting): ~20–30 minutes
 
 **Prerequisites**
-- `pip install cellucid`
-- A notebook environment: classic Jupyter or JupyterLab. VS Code notebooks and
-  Colab have not been tested by the project
+- `pip install cellucid` (it installs `anywidget`)
+- A notebook that shows widgets: JupyterLab, Jupyter Notebook 7, VS Code,
+  Google Colab, marimo or Databricks
   ({doc}`../e_jupyter_hooks/03_supported_environments_matrix`)
 
-## Read once: exact web-generation startup (network requirement)
+## Read once: where the viewer comes from
 
 ```{important}
-Notebook embeds load the viewer UI from the same local server that serves your dataset.
+`show_anndata(...)` shows a notebook widget (an anywidget) in the cell's
+output. The widget frames the Cellucid app, which **your browser** loads from
+`https://www.cellucid.com` (or the copy you name with `web_source_url=`), and
+connects it to the kernel through the notebook's own connection: the viewer
+reads your dataset from the kernel through the widget, so no port is opened
+and nothing is uploaded anywhere.
 
-At startup Cellucid establishes the complete source generation declared by
-`cellucid-web-assets.json`, including `index.html`, root browser metadata, and
-`/assets/*`. Every declared byte is verified before the server publishes the UI.
-
-Startup requires access to the configured source. It never substitutes a stale
-cached generation after a source failure.
-Configure the generation directory with `web_cache_dir=...`.
+The kernel handles the widget's messages between cells: the viewer loads once
+the cell that showed it finishes.
 ```
 
 ## Minimal cells (copy/paste)
@@ -54,8 +54,10 @@ viewer = show_anndata(
     dataset_name="My study",
     dataset_id="my-study-v1",
 )
-viewer  # (optional) display again in some notebook UIs
 ```
+
+In marimo, make the widget the cell's output (end the cell with `viewer`);
+the other notebooks show it at once.
 
 ### B) Show a file or folder, read by the viewer itself
 
@@ -96,55 +98,42 @@ viewer = show_anndata("pbmc_cellucid.h5ad", height=600)
 
 - You see an interactive viewer *inside the notebook output cell*.
 - You can pan/zoom and select cells.
-- The terminal/kernel stays running (the viewer needs the local server).
+- The kernel stays running (the viewer reads the dataset through it).
 
 ## Path or object (how to choose)
 
 | You pass | Best for | Tradeoffs |
 |---|---|---|
-| a path (`.h5ad`, Zarr store, or any other format Cellucid reads) | large data; files you will reopen | read in place, nothing copied |
-| an in-memory `AnnData` or `MuData` | the object you are analysing now | written once to a temporary `.h5ad` (`.h5mu`), removed when the viewer stops |
+| a path (`.h5ad`, Zarr store, or any other format Cellucid reads) | large data; files you will reopen | read in place, nothing copied (an AnnData file not in priority order is served in priority order, from the file) |
+| an in-memory `AnnData` or `MuData` | the object you are analysing now | an AnnData served in priority order, made from it as the viewer reads it; a MuData written once to a temporary `.h5mu`, removed when the viewer stops |
 | a file written by `prepare()` | the fastest reads; sharing | written once by `prepare()` |
 
 ## How the embed works (so you can debug it)
 
 When you call `show_anndata(...)`, Cellucid:
 
-1) starts a local data server on `http://127.0.0.1:8765` — or, when another
-   viewer or program holds 8765, on the next free port, with a printed note
-   that Google sign-in (Google Drive data, community annotation) works only on
-   8765 — and
-2) renders an iframe pointing at the same server, with query params like:
+1) checks the dataset and the launch choices you passed (an in-memory AnnData
+   is served in priority order, made from it as the viewer reads it; a MuData
+   is written once to a temporary `.h5mu`), and
+2) shows a {class}`~cellucid.jupyter.Widget` whose output frames the app at
+   `https://www.cellucid.com/?viewer=embedded`. The page asks the widget for
+   its credentials and a private channel (a `MessagePort`), then reads the
+   dataset's bytes and opens the viewer channel through it; the widget relays
+   both to the kernel over the notebook's own connection.
 
-```text
-http://127.0.0.1:<port>/?viewer=true&viewerId=<id>&viewerToken=<token>&anndata=true
-```
+No server is started and no port is opened, so the same cell works on a
+laptop, on a remote JupyterHub, in VS Code and in Colab. Details:
+{doc}`10_notebook_widget_mode_advanced` and
+{doc}`../e_jupyter_hooks/05_architecture_viewer_channel`.
 
-`anndata=true` makes the viewer read the dataset from that server itself,
-with range requests where the format allows it.
-
-The viewer then opens its channel, one WebSocket to the same server, on which
-Python's commands and the viewer's events (hooks) travel:
-
-```text
-ws://127.0.0.1:<port>/_cellucid/ws
-```
-
-## HTTPS / remote notebooks: browser reachability
-
-Some notebook environments (JupyterHub, cloud notebooks) serve the notebook over HTTPS or from a remote origin.
-In those cases, a direct `http://127.0.0.1:<port>` iframe may be blocked or unreachable.
-
-For a remote notebook, pass the one browser-reachable base URL explicitly with
-`client_server_url=...`. Cellucid otherwise uses the local server URL exactly.
-
-Deep dive + fixes: {doc}`10_notebook_widget_mode_advanced`.
+A viewer in a browser tab of its own instead (a plain script, an SSH tunnel)
+is {class}`~cellucid.AnnDataViewer`: the same API, served from this machine.
 
 ## Programmatic control (quick preview)
 
 Commands travel on the viewer's channel. One sent before the viewer has
-connected (the cell output is still loading) waits and is delivered, in
-order, the moment it connects:
+connected (the viewer loads once the cell finishes) waits and is delivered,
+in order, the moment it connects:
 
 ```python
 viewer.highlight_cells([0, 1, 2], color="#ff0000")
@@ -163,8 +152,9 @@ When you’re done:
 viewer.stop()
 ```
 
-This stops the server, closes its port, and removes the temporary `.h5ad`
-(`.h5mu`) an in-memory `AnnData` (`MuData`) was written to.
+This freezes the output on its last view, stops answering it, and releases what
+it served: the store of an in-memory `AnnData` with the files its cell-major
+`X` was laid out in, or the temporary `.h5mu` of a `MuData`.
 
 More lifecycle details (ports, multiple viewers): {doc}`11_viewer_lifecycle_cleanup_ports_and_multiple_viewers`.
 
@@ -173,7 +163,7 @@ More lifecycle details (ports, multiple viewers): {doc}`11_viewer_lifecycle_clea
 Start here:
 - {doc}`15_troubleshooting_viewing`
 
-If you’re in a notebook, also run:
+In a notebook, also run (in a new cell):
 
 ```python
 viewer.debug_connection()

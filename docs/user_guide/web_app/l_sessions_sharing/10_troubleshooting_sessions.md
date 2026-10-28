@@ -46,7 +46,7 @@ failed** with the error.
 2. Click **Save** again from the visible Session panel.
 3. Check for a `Failed to save session` notification and the browser Console for `Failed to save state`.
 4. Check whether your browser or organization blocked downloads from the site
-   or embedded Jupyter frame.
+   or the notebook output the viewer is shown in.
 5. Open the same application URL in a normal tab and retry if an embedding
    policy blocks downloads.
 

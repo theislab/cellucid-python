@@ -28,8 +28,8 @@ which ecosystem's tools write the format.
 | Cell Ranger `outs/` folder | any | Cell Ranger 1.2 and later | its `.h5` in place, with `analysis/` projections and clusterings ({doc}`18_open_loom_and_10x`) |
 | MuData `.h5mu` | Python | mudata 0.2 and later | in place, with its modalities ({doc}`19_multimodal_mudata`) |
 | MuData Zarr (a folder or `.zarr.zip`) | Python, R | mudata 0.2 and later, Zarr v2 and v3 | in place, with its modalities ({doc}`19_multimodal_mudata`) |
-| Seurat or SingleCellExperiment object: `.rds`, `.rda`, `.RData`, and their gzipped copies `.rds.gz`, `.rda.gz`, `.RData.gz` (GEO) | R | SeuratObject 3.0 and later (`Assay`, `Assay5`), SingleCellExperiment 1.8 and later, SummarizedExperiment; R serialization 2 and 3, gzip (once or twice), bzip2, xz or none | read once into this browser's storage; an uncompressed file in place ({doc}`17_open_r_objects`) |
-| MatrixMarket folder: `matrix.mtx[.gz]` with its features and barcodes, or a GEO sample's `GSM…_matrix.mtx.gz` with its `GSM…_` lists | any | Cell Ranger 2 and later, STARsolo, kb-python, alevin-fry, GEO uploads | read once into this browser's storage, with the folder's cell tables for the embedding ({doc}`17_open_r_objects`) |
+| Seurat or SingleCellExperiment object: `.rds`, `.rda`, `.RData`, and their gzipped copies `.rds.gz`, `.rda.gz`, `.RData.gz` (GEO) | R | SeuratObject 3.0 and later (`Assay`, `Assay5`), SingleCellExperiment 1.8 and later, SummarizedExperiment; R serialization 2 and 3, gzip (once or twice), bzip2, xz or none | cannot be read in parts: read whole once into this browser's storage and kept for next time; an uncompressed file's arrays in place ({doc}`17_open_r_objects`, {ref}`which-formats-are-read-in-parts`) |
+| MatrixMarket folder: `matrix.mtx[.gz]` with its features and barcodes, or a GEO sample's `GSM…_matrix.mtx.gz` with its `GSM…_` lists | any | Cell Ranger 2 and later, STARsolo, kb-python, alevin-fry, GEO uploads | cannot be read in parts: read whole once into this browser's storage and kept for next time, with the folder's cell tables for the embedding ({doc}`17_open_r_objects`) |
 | A dataset catalog: a folder holding `datasets.json` and the files it lists | any | schema 2 | [below](dataset-catalog-contract) |
 
 The format is decided by the file's content, not only its name: an `.h5`
@@ -191,8 +191,13 @@ The browser reads one H5AD file, one ZIP containing a complete Zarr store
 host (through its consolidated metadata). Server mode and Jupyter accept H5AD paths, Zarr
 store folders (v2 or v3), zipped Zarr stores, an in-memory AnnData object, and
 every other input of [the table above](#what-cellucid-reads). The server serves
-a path as it is on disk, and the browser reads it with the same reader; an
-in-memory AnnData is written once to a temporary H5AD (a MuData to an `.h5mu`).
+a file `prepare()` wrote as it is on disk, and the browser reads it with the
+same reader; an in-memory AnnData, and an AnnData, MuData, Loom or 10x Cell
+Ranger file (or `outs/` folder) not in priority order, are served as a Zarr
+store in priority order made as the browser reads it, holding what the
+browser presents from the file itself (a MuData object is written once to an
+`.h5mu`). R objects and MatrixMarket folders given by path are served as they
+are and read once by the browser.
 
 ### Compression the browser reads
 
@@ -201,15 +206,16 @@ in-memory AnnData is written once to a temporary H5AD (a MuData to an `.h5mu`).
   these (Blosc, Zstandard, LZ4, bitshuffle, bzip2, SZIP, N-bit, scale-offset) is
   refused when it is read, naming the filter; the rest of the file still opens.
 - **Zarr:** uncompressed, gzip, zlib, Blosc (blosclz, LZ4, LZ4HC, zlib,
-  Zstandard; byte and bit shuffle), LZ4, Zstandard (Zarr v3's default), CRC-32C,
-  variable-length strings, and Zarr v3 sharding. An array using another codec
-  (bz2, LZMA, Snappy, ZFP, delta, fixed-scale-offset, …) is refused when it is
-  read, naming the codec.
+  Zstandard; byte and bit shuffle, and the delta flag of a Blosc frame), LZ4,
+  Zstandard (Zarr v3's default), CRC-32C, variable-length strings, and Zarr v3
+  sharding. An array using another codec (bz2, LZMA, Snappy, ZFP, numcodecs'
+  Delta filter, fixed-scale-offset, …), or Blosc's Snappy or a Blosc2 chunk
+  (format version 3 and later), is refused when it is read, naming the codec.
 - **Served from Python:** `cellucid serve`, `serve_anndata()` and
   `show_anndata()` check every array's filters and codecs before they start.
-  A store holding an array the browser cannot decode is read once with
-  anndata (and its codec plugins) and served as a decodable temporary H5AD;
-  the terminal names the arrays.
+  A store holding an array the browser cannot decode is decoded on the
+  kernel, chunk by chunk as the browser asks (h5py or zarr, with their codec
+  plugins); the terminal names the arrays.
 
 ### Minimum requirements (every loading route)
 

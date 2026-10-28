@@ -10,7 +10,9 @@ This implements the same framing format as the web app:
 
 The manifest contains exactly ``createdAt``, ``datasetFingerprint``, ``source``
 (where the dataset can be opened from, or null), ``requires`` (the obs columns
-and genes the session uses) and ordered ``chunks`` metadata. Chunk payloads are either JSON or binary and may be
+and genes the session uses) and ordered ``chunks`` metadata, and ``cells``
+when the session was saved on a subsample (which cells were open; see
+:attr:`CellucidSessionBundle.cells`). Chunk payloads are either JSON or binary and may be
 gzip-compressed.
 """
 
@@ -288,12 +290,59 @@ def _validate_requires(value: Any) -> dict[str, list[str]]:
     return out
 
 
+def _decode_cells(cells: Any, cell_count: Any) -> dict[str, Any]:
+    """The ``cells`` record of a session saved on a subsample, checked and decoded.
+
+    ``{"spec": {...}, "kept": <base64 of the cell-set bytes>, "digest": <16 hex>}``
+    (docs: *Subsampling specification*, "Cell set encoding"). Decoded:
+    ``kept``, the ascending original positions: the session's per-cell state
+    of cell ``i`` is obs row ``kept[i]`` (per-cell chunks name cells by
+    original position, ascending, whatever order the viewer opened them in).
+    """
+    import base64
+    import binascii
+
+    from .subsample import SUBSAMPLE_METHODS, cell_set_digest, decode_cell_set
+
+    if not isinstance(cells, dict) or set(cells) != {"spec", "kept", "digest"}:
+        raise ValueError("Invalid session manifest (cells must have exactly spec, kept and digest)")
+    spec = cells["spec"]
+    if not isinstance(spec, dict) or spec.get("method") not in SUBSAMPLE_METHODS:
+        raise ValueError("Invalid session manifest (cells.spec must name a subsample method)")
+    # Exactly the keys of its method, as the web app's requireSubsampleSpec.
+    method_keys = {"uniform": set(), "blocks": {"blockSize"}, "stratified": {"field", "allocation", "minPerCategory"},
+                   "spatial": {"embedding", "columns", "gridSize"}}[spec["method"]]
+    if set(spec) != {"method", "nObs", "k", "seed"} | method_keys:
+        raise ValueError(f"Invalid session manifest (cells.spec of {spec['method']} must have exactly method, nObs, k, seed"
+                         + "".join(f", {key}" for key in sorted(method_keys)) + ")")
+    n_obs, k = spec.get("nObs"), spec.get("k")
+    if not (isinstance(n_obs, int) and isinstance(k, int) and 1 <= k < n_obs <= 0xFFFFFFFF):
+        raise ValueError("Invalid session manifest (cells.spec must keep 1 <= k < nObs cells)")
+    if k != cell_count:
+        raise ValueError("Invalid session manifest (cells must keep exactly the fingerprint cell count)")
+    if not isinstance(cells["kept"], str) or not isinstance(cells["digest"], str):
+        raise ValueError("Invalid session manifest (cells.kept and cells.digest must be text)")
+    try:
+        raw = base64.b64decode(cells["kept"], validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise ValueError("Invalid session manifest (cells.kept must be base64)") from error
+    kept = decode_cell_set(raw, n_obs)
+    if kept is None or kept.size != k:
+        raise ValueError("Invalid session manifest (cells.kept must list exactly k cells)")
+    if cell_set_digest(n_obs, kept) != cells["digest"]:
+        raise ValueError("Invalid session manifest (cells.digest does not match its cells)")
+    if spec.get("method") == "blocks" and not (isinstance(spec.get("blockSize"), int) and spec["blockSize"] >= 1):
+        raise ValueError("Invalid session manifest (cells.spec must give a blocks subsample its blockSize)")
+    return {"spec": dict(spec), "kept": kept, "digest": cells["digest"]}
+
+
 def _validate_manifest(manifest: Any) -> list[dict[str, Any]]:
     if not isinstance(manifest, dict):
         raise ValueError("Invalid session manifest (expected an object)")
-    if set(manifest) != _MANIFEST_KEYS:
-        root_missing = sorted(_MANIFEST_KEYS - set(manifest))
-        root_unknown = sorted(set(manifest) - _MANIFEST_KEYS)
+    expected = _MANIFEST_KEYS | ({"cells"} if "cells" in manifest else set())
+    if set(manifest) != expected:
+        root_missing = sorted(expected - set(manifest))
+        root_unknown = sorted(set(manifest) - expected)
         root_details: list[str] = []
         if root_missing:
             root_details.append("missing " + ", ".join(root_missing))
@@ -308,6 +357,8 @@ def _validate_manifest(manifest: Any) -> list[dict[str, Any]]:
     _validate_fingerprint(manifest["datasetFingerprint"])
     _validate_source(manifest["source"])
     _validate_requires(manifest["requires"])
+    if "cells" in manifest:
+        _decode_cells(manifest["cells"], manifest["datasetFingerprint"].get("cellCount"))
 
     chunks = manifest["chunks"]
     if not isinstance(chunks, list):
@@ -520,6 +571,22 @@ class CellucidSessionBundle:
         """
         source = self.manifest["source"]
         return None if source is None else dict(source)
+
+    @property
+    def cells(self) -> dict[str, Any] | None:
+        """The subsample the session was saved on, or ``None`` for every cell.
+
+        ``{"spec": {...}, "kept": numpy.ndarray, "digest": str}``: the
+        subsample's specification (``method``, ``nObs``, ``k``, ``seed`` and the
+        method's own keys), the kept cells' original positions (rows of
+        ``obs``, ascending, int64) and their cell-set digest. Every per-cell
+        chunk of such a session is in the positions of these cells: cell ``i``
+        of a chunk is ``obs`` row ``kept[i]``. The same cells are
+        ``cellucid.subsample_cells(...)`` of the specification.
+        """
+        if "cells" not in self.manifest:
+            return None
+        return _decode_cells(self.manifest["cells"], self.dataset_fingerprint.get("cellCount"))
 
     @property
     def required_fields(self) -> dict[str, list[str]]:

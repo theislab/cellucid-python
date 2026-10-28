@@ -54,8 +54,9 @@ cellucid_set_data_mapping(viewer, modality = "ADT")
 cellucid_color_by(viewer, "cell_type")
 ```
 
-`cellucid_set_data_mapping()` returns once the viewer has applied the change
-(it stops with the viewer's reason when the viewer refuses it). Gene search,
+`cellucid_set_data_mapping()` sends the change and waits for nothing (the
+viewer's answer becomes `viewer$data_mapping`; a refusal arrives as a
+`command_error`, a warning unless a hook handles it). Gene search,
 colouring by a feature, marker genes and the dot plot now read the proteins:
 search `CD19-ADT` to see the B cells. `cellucid_stop(viewer)` when you are
 done.

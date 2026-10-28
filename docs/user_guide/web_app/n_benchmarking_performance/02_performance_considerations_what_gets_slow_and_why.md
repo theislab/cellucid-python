@@ -50,9 +50,10 @@ index was built once, in the background from the moment the dataset opened
 (about 2 s: the browser measured the localhost link as fast as a disk), after
 which a gene took a few ms and 100 genes about 20 ms (a gene asked for before
 the index was built waited for it, 1.3 s); 1,000 cell rows took 0.55 s and the
-neighbour graph 0.65 s when first drawn. The same data passed to `show_anndata()` as an
-in-memory object was written to a column-major temporary `.h5ad` in 0.8 s
-(925 MB); its first gene then took 8 ms and 100 genes 68 ms.
+neighbour graph 0.65 s when first drawn. Data passed to `show_anndata()` as an
+in-memory object is served in priority order, so a subsample transfers only its
+cells (measured in
+{doc}`../../python_package/d_viewing_apis/14_performance_scaling_and_lazy_loading`).
 
 Publishing an opened dataset to the viewer is one step the interface cannot
 interleave with anything (state, renderer and every panel move to the new
@@ -123,13 +124,17 @@ High-leverage knobs:
 - **Make the window smaller** while exploring (fewer pixels) — *usually the biggest immediate win*.
 - **Filter down to what you are actually looking at** — hidden points stop costing anything to draw.
 - **Enable Level of detail (LOD)** (points mode) — reduces draw cost when zoomed
-  out, at every dataset size. `Auto` has a floor, and the floor is the coarsest
+  out, at every dataset size. A reduced level draws a uniform random sample of
+  the open cells (their priority order, the order subsamples are taken in), so
+  it shows the same density and the same mix of colours as all cells do, up to
+  sampling noise; full detail draws every cell. `Auto` has a floor, and the floor is the coarsest
   level still holding at least `min(2,000,000, total points ÷ 8)` points: it may
   never reduce a cloud by more than 8×, and it may never take a large one below
-  two million points. The ladder is discrete, so the floor lands on a rung —
-  an 18,142,044-cell dataset stops at 2,418,940 points, a 7.5× reduction. Below
+  two million points. The ladder is discrete — fixed counts, 1,000 cells and a
+  quarter more at each level — so the floor lands on a rung: an
+  18,142,044-cell dataset stops at 2,462,928 points, a 7.4× reduction. Below
   the absolute budget the 8× cap is what binds, so a 200,000-cell dataset still
-  gets nine levels for the camera to move through. That rung is only a *floor*:
+  gets ten levels for the camera to move through. That rung is only a *floor*:
   `Auto` falls to it when you pull back and draws more as you move in. The forced
   level slider is deliberately *not* bounded by either limit, so asking for a
   coarser level explicitly is still honoured.

@@ -187,7 +187,7 @@ def test_opening_an_object_reports_every_phase_of_the_build(capsys) -> None:
 
     for expected in [
         "[1/4] Detecting format",
-        "Format: written once to a temporary .h5ad",
+        "Format: a Zarr store in priority order, made as the browser reads it",
         "[2/4] Reading metadata",
         "obsm: X_umap",
         "[3/4] Checking launch choices",

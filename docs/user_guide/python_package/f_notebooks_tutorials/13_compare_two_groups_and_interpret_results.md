@@ -273,16 +273,19 @@ If you need reproducibility, use:
 
 Likely causes:
 - the viewer never reached “ready”
-- browser cannot reach the kernel-side server port (remote notebook without proxy/tunnel)
-- corporate network/proxy strips requests
+- the kernel was busy: a running cell holds the viewer's messages until it
+  ends (hooks run between cells)
+- the selection was not confirmed
 
-How to confirm:
+How to confirm (in a new cell):
 ```python
 viewer.debug_connection()
 ```
 
 Fix:
-- use Jupyter Server Proxy or SSH port forwarding (see {doc}`22_large_dataset_server_mode_and_lazy_gene_expression`)
+- let the running cell finish, and confirm the selection
+- check `channel_connected` in the report; see
+  {doc}`../e_jupyter_hooks/14_troubleshooting_hooks`
 - verify server health endpoint is reachable
 - for robust patterns, see {doc}`23_programmatic_highlighting_and_selection_callbacks`
 

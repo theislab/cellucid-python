@@ -6,7 +6,7 @@
 
 This page documents the notebook-facing APIs:
 - **Notebook view:** {func}`~cellucid.show_anndata` (an AnnData or MuData object, or any file or folder Cellucid reads: `.h5ad`, a Zarr store, `.h5mu`, `.loom`, a 10x `.h5` or `outs/` folder, a MatrixMarket folder, an `.rds`/`.rda`, or a file written by {func}`~cellucid.prepare`)
-- **Interactive control:** the viewer object ({class}`~cellucid.AnnDataViewer`) supports hooks + Python→frontend commands
+- **Interactive control:** the widget it returns ({class}`~cellucid.jupyter.Widget`) supports hooks + Python→frontend commands
 
 ---
 
@@ -20,7 +20,7 @@ This page documents the notebook-facing APIs:
 **Prerequisites**
 - `pip install cellucid`
 - If you use AnnData: install `anndata` (and typically `numpy`, `scipy`, `pandas`).
-- A notebook environment: classic Jupyter or JupyterLab. VS Code's notebook webview and Google Colab's proxy have not been tested by the project ({doc}`../../e_jupyter_hooks/03_supported_environments_matrix`).
+- A notebook that shows widgets: JupyterLab, Jupyter Notebook 7, VS Code, Google Colab, marimo or Databricks ({doc}`../../e_jupyter_hooks/03_supported_environments_matrix`).
 
 ---
 
@@ -39,9 +39,9 @@ viewer = show_anndata(
 ```
 
 What you should see:
-- A Cellucid viewer embedded in the notebook output, showing your embedding.
-- Progress while the complete configured web generation is fetched, verified,
-  and published for this startup (unless output is quiet).
+- A Cellucid viewer in the notebook output, showing your embedding, once the
+  cell has finished (the viewer reads the data through the kernel between
+  cells).
 
 ### B) “I have a file written by `prepare()`”
 
@@ -58,8 +58,9 @@ viewer = show_anndata("my_study.h5ad")  # it names itself (uns['cellucid'])
 ### 1) Notebook display vs browser tab
 
 Cellucid always runs in a browser context (the viewer UI), but you choose **where it appears**:
-- **Notebook embedding**: viewer appears inline (this page).
-- **Browser tab**: use {func}`~cellucid.serve_anndata` / `cellucid serve …` (see {doc}`server`).
+- **Notebook output**: {func}`~cellucid.show_anndata` (this page), a widget.
+- **Browser tab**: {class}`~cellucid.AnnDataViewer` (the same API), or
+  {func}`~cellucid.serve_anndata` / `cellucid serve …` (see {doc}`server`).
 
 ### 2) Opening what you have, or a prepared file
 
@@ -106,20 +107,30 @@ viewer.set_visibility([1, 2, 3], visible=False)
 viewer.reset_view()
 ```
 
-### 5) Waiting for the viewer to be ready (robust notebooks)
+### 5) Running code once the viewer is ready (robust notebooks)
 
-If you need to run code only after the UI finished loading:
+The viewer loads after the cell that showed it finishes, so register a hook:
 
 ```python
-viewer.wait_for_ready(timeout=30)
+@viewer.on_ready
+def ready(event):
+    print("Viewer ready:", event)
 ```
+
+or read `viewer.state.ready` in a later cell. (`viewer.wait_for_ready()`
+returns at once when it is ready, and raises in a cell that would have to
+wait: the viewer is heard only between cells.)
 
 ### 6) Capturing a `.cellucid-session` bundle without downloading (advanced)
 
-This is the “no browser download” workflow:
+This is the “no browser download” workflow, in two cells: ask, then collect.
 
 ```python
-bundle = viewer.get_session_bundle(timeout=60)
+request = viewer.request_session_bundle()
+```
+
+```python
+bundle = request.result()
 print(bundle.list_chunk_ids())
 ```
 
@@ -129,24 +140,22 @@ See {doc}`sessions` for what a session bundle contains and how to apply it back 
 
 ## Deep path (how notebook embedding works)
 
-### What starts when you call `show_anndata(...)`
+### What happens when you call `show_anndata(...)`
 
-1. A **local HTTP server** ({class}`~cellucid.AnnDataServer`) starts on
-   `127.0.0.1:8765`, or, when another viewer or program holds 8765, on the next
-   free port, with a printed note (Google sign-in works only on 8765).
-   `AnnDataViewer(port=...)` uses the port given or fails.
-2. The exact verified viewer generation is served from that same origin.
-3. The viewer UI opens its channel, one WebSocket to that server
-   (`/_cellucid/ws`), authenticated with its viewer token; commands go to the
-   viewer and interaction events come back on it.
-4. The Python viewer routes those events to your hook callbacks (e.g., `@viewer.on_selection`).
+1. The dataset and the launch choices are checked; an in-memory AnnData is
+   planned as a store in priority order, made as the viewer reads it (a MuData
+   is written once to a temporary `.h5mu`). Nothing binds a port.
+2. A {class}`~cellucid.jupyter.Widget` is shown. Its output frames the
+   Cellucid app, which your browser loads from `web_source_url`
+   (`https://www.cellucid.com` by default).
+3. The app asks the widget for its credentials and a private channel, reads
+   the dataset through it (the kernel answers each request from the dataset)
+   and opens the viewer channel through it: commands go to the viewer and
+   interaction events come back.
+4. The widget routes those events to your hook callbacks (e.g.,
+   `@viewer.on_selection`), between cells.
 
-### Environment caveat: when the browser cannot reach the kernel’s localhost
-
-Some notebook setups run the kernel remotely. In those cases, your browser may not be able to reach `http://127.0.0.1:<port>` directly.
-
-If that happens, pass the exact browser-reachable HTTP(S) base URL as
-`client_server_url=...` when constructing the viewer.
+Architecture: {doc}`../../e_jupyter_hooks/05_architecture_viewer_channel`.
 
 ---
 
@@ -162,7 +171,8 @@ If that happens, pass the exact browser-reachable HTTP(S) base URL as
 
 ### Classes (see dedicated page)
 
-- {class}`~cellucid.AnnDataViewer` is documented on {doc}`viewers`.
+- {class}`~cellucid.jupyter.Widget` and {class}`~cellucid.AnnDataViewer` are
+  documented on {doc}`viewers`.
 
 ---
 
@@ -173,11 +183,12 @@ If that happens, pass the exact browser-reachable HTTP(S) base URL as
   `.h5ad`, a Zarr store, an `.h5mu`, a `.loom` or a 10x file in place with HTTP
   range requests (only what a view needs), and an R object or a MatrixMarket
   folder once from the start.
-- An in-memory AnnData is written once to a temporary `.h5ad` (sparse matrices
-  column-major, uncompressed), and a MuData to a temporary Cellucid-ready
-  `.h5mu`, when the viewer starts; the file is removed when the viewer stops or
-  Python exits. For a large object, passing the path it was read from skips
-  that write.
+- An in-memory AnnData is served as a Zarr store with its cells in priority
+  order, each chunk made from the object when the viewer asks for it, so a
+  subsample transfers only its cells; a cell-major sparse `X` is laid out
+  gene-major once, in the background, into memory-mapped files removed when
+  the viewer stops or Python exits. A MuData is written to a temporary
+  Cellucid-ready `.h5mu` when the viewer starts.
 
 ### “My embedding is not 2D/3D”
 - Cellucid supports 1D/2D/3D embeddings; if the embedding is missing or has an unexpected shape, you’ll see missing plot / errors.
@@ -194,85 +205,67 @@ If that happens, pass the exact browser-reachable HTTP(S) base URL as
 ### Symptom: “Viewer does not appear in the notebook output”
 
 Likely causes:
-- You are not actually running inside a notebook (e.g., plain Python script).
-- The notebook output is blocked (content security policy / iframe blocked).
-
-How to confirm:
-- Print `viewer.viewer_url` and try opening it in a new browser tab.
+- The notebook cannot show widgets: the output shows text (“This output is a
+  Cellucid viewer (a notebook widget)…”) instead.
+- You are not in a notebook (a plain script): `show_anndata()` raises and
+  names the browser-tab alternatives.
 
 Fix:
-- Use a notebook environment (classic Jupyter or JupyterLab; VS Code and Colab are untested).
-- If iframes are blocked, open `viewer.viewer_url` manually.
+- Install `anywidget` where the notebook *server* runs
+  (`pip install anywidget`) and reload the page, or use a notebook that shows
+  widgets ({doc}`../../e_jupyter_hooks/03_supported_environments_matrix`).
+- Outside a notebook use {class}`~cellucid.AnnDataViewer` or `cellucid serve`.
 
 ---
 
-### Symptom: remote notebook iframe is blank or unreachable
+### Symptom: “The output says the page has not answered as a Cellucid viewer”
 
 Likely causes:
-- The browser cannot reach the kernel’s localhost server (remote kernel or strict origin policy).
+- The browser cannot load the app from `web_source_url` (offline, a blocked
+  network), or that address is not a Cellucid build that can be embedded.
 
 Fix:
-- expose the server through your notebook deployment, and
-- pass that exact base URL as `client_server_url`.
+- Check that `https://www.cellucid.com` opens in the same browser, or host a
+  copy and pass `web_source_url=`.
 
 ---
 
-### Symptom: “Port already in use”
+### Symptom: “The output says it is waiting for the notebook kernel”
+
+What’s happening:
+- A cell is still running; the kernel answers the viewer between cells.
 
 Fix:
-- {func}`~cellucid.show_anndata` and `AnnDataViewer()` without `port=` never
-  fail on a taken port: they take the next free one. This error means a port
-  you passed to `AnnDataViewer(port=...)` is taken: pass another, or stop the
-  process using it.
+- Let the cell finish (or interrupt it); the viewer connects at once.
+
+---
+
+### Symptom: “`wait_for_ready()` / `request.result()` raised at once”
+
+What’s happening:
+- A notebook widget hears the viewer only between cells, so a call that waits
+  for the viewer cannot be answered in the cell that waits; the message says
+  what to do instead.
+
+Fix:
+- Use a hook or `viewer.state` in a later cell; for a session bundle,
+  `request = viewer.request_session_bundle()` in one cell and
+  `request.result()` in the next.
 
 ---
 
 ### Symptom: “I registered `@viewer.on_selection` but nothing prints”
 
 Likely causes:
-- The viewer is not ready yet.
+- The viewer is not ready yet (it loads once the cell that showed it ends).
 - You selected nothing (or selection tools differ from expectation).
+- A cell is still running: hooks run when the kernel is idle.
 
 How to confirm:
-- Call `viewer.wait_for_ready()` and then try selecting again.
+- In a new cell, check `viewer.state.ready`.
 
 Fix:
 - Ensure the viewer is loaded, then select cells (lasso/shift-click/etc.).
-
----
-
-### Symptom: “The iframe is blank / white / stuck loading”
-
-Likely causes:
-- Viewer construction raised because the configured generation could not be
-  established.
-- The server isn’t reachable from the browser (remote kernel / HTTPS notebook constraints).
-
-How to confirm:
-- Open `viewer.viewer_url` in a new browser tab (sometimes notebook output hides useful errors).
-
-Fix:
-- Ensure the configured source is reachable at startup and the selected
-  generation directory is writable. A previously published generation is not
-  substituted after source failure.
-- If the browser cannot reach localhost, expose the server and pass its exact
-  browser-reachable base URL as `client_server_url`.
-
----
-
-### Symptom: web-generation startup failure
-
-Likely causes:
-- The configured source generation could not be fetched, verified, or
-  atomically published.
-
-How to confirm:
-- Run `viewer.debug_connection()` and inspect the `web_ui` section.
-
-Fix:
-- Ensure the runtime can reach the configured source at viewer startup.
-- Pass a writable `web_cache_dir` and correct the exact reported source or
-  inventory failure.
 
 ---
 
@@ -280,11 +273,10 @@ Fix:
 
 Likely causes:
 - The field name does not exist in `obs` (or has a different spelling/case).
-- The viewer is not ready yet.
 
 How to confirm:
-- Wait for readiness: `viewer.wait_for_ready()`.
 - Print `adata.obs.columns` and confirm the field exists.
+- Register `@viewer.on_command_error`: a refused command reports why.
 
 Fix:
 - Use the exact field name.
@@ -295,12 +287,11 @@ Fix:
 ### Symptom: “`viewer.highlight_cells(...)` does nothing”
 
 Likely causes:
-- The viewer is not ready yet.
 - Indices are out of range (wrong dataset / wrong cell order).
 
 How to confirm:
-- `viewer.wait_for_ready()`
 - Try highlighting a small index like `[0]`.
+- Register `@viewer.on_command_error`: a refused command reports why.
 
 Fix:
 - Ensure indices correspond to the dataset loaded in the viewer.
@@ -354,12 +345,11 @@ Fix:
   report = viewer.debug_connection()
   report
   ```
-- The report includes:
-  - server health/info probes,
-  - `anndata_store_probes`, keyed by every exact listed dataset id,
-  - detected notebook context (Jupyter/Colab/VSCode),
-  - viewer UI cache status,
-  - recent events and readiness state.
+- For a notebook widget the report includes where the app is loaded from,
+  the connected outputs, whether the channel is open, the readiness state and
+  recent events (it waits for nothing). For a browser-tab `AnnDataViewer` it
+  also probes the server (health, info, every listed store), the web build
+  cache, and pings the viewer over the channel.
 
 ---
 

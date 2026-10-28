@@ -12,9 +12,13 @@ and every chunk is one request and one decode:
   expression matrix, read one gene's range at a time -- are cut into chunks of
   :data:`SLICED_CHUNK_ELEMENTS`, so one gene costs little beyond its own
   values;
-- arrays it reads whole -- obs and var columns, the indexes, embeddings,
-  vector fields and the neighbour graph -- into chunks of
-  :data:`WHOLE_CHUNK_ELEMENTS`, so a whole read is a handful of requests;
+- arrays with one row per cell -- obs columns and index, embeddings, vector
+  fields, the stored outlier quantiles -- into chunks of
+  :data:`CELL_CHUNK_ELEMENTS`, so a subsample (the first rows of a file in
+  priority order) reads little beyond its own cells;
+- arrays it reads whole -- var columns and index, ``X/indptr``, the neighbour
+  graph -- into chunks of :data:`WHOLE_CHUNK_ELEMENTS`, so a whole read is a
+  handful of requests;
 - a two-dimensional array read by rows (an embedding) holds every column of a
   block of rows in one chunk; a dense expression matrix holds a tall strip of
   few genes, since it is read one gene at a time.
@@ -66,12 +70,30 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
+from ._priority import ORIGINAL_POSITION_COLUMN, PREFIX_COUNTS_KEY, prefix_counts
+
 #: Elements per chunk of an array the viewer reads by slices: the data and
-#: indices of the expression matrix, read one gene's range at a time.
-SLICED_CHUNK_ELEMENTS = 2**16
+#: indices of the expression matrix, read one gene's range at a time (or, in
+#: priority order, its first values). Measured on a 1,000,000-cell file in
+#: priority order over 150 ms and 5 MB/s (`.h5ad`): against 2^16, a 1% subsample's
+#: 99 genes fetched 2.4 instead of 8.9 MB (0.68 instead of 1.94 s), and every
+#: cell's 99 genes 8.7 instead of 14.5 MB (1.90 instead of 3.06 s), each gene
+#: dragging fewer of its neighbours; 2^12 fetched less still (0.8 MB) but its
+#: chunk index, 16 times larger, cost the first gene 0.64 MB and a round trip.
+SLICED_CHUNK_ELEMENTS = 2**14
 
 #: Elements per chunk of an array the viewer reads whole.
 WHOLE_CHUNK_ELEMENTS = 2**18
+
+#: Elements per chunk of an array with one row per cell: obs columns, codes and
+#: index, obsm arrays (a chunk of whole rows), MuData's masks and cell maps, the
+#: stored outlier quantiles. A subsample of a file in priority order reads the
+#: first rows of each, the last chunk of them in part: on the 1,000,000-cell
+#: file above, a 1% subsample's embedding fetched 0.21 MB with chunks of 2^16
+#: values against 0.84 MB with 2^18, its obs fields 0.05 against 0.18 MB, its
+#: opening 0.70 against 1.20 MB, and reading every cell cost the same. (Chunks
+#: of 2^14 fetched 0.10 MB of the embedding, a fourth of the files again.)
+CELL_CHUNK_ELEMENTS = 2**16
 
 #: The deflate level of every compressed chunk, zlib's own default. On the
 #: dataset above, level 9 made the expression values 6% and everything else
@@ -134,6 +156,10 @@ class Elements:
     obsm: dict[str, np.ndarray]
     obsp: dict[str, sparse.csr_matrix]
     uns: dict[str, Any]
+    #: The rows below each prefix level, ascending, when the cells are in
+    #: priority order (``_priority``): a sparse ``X`` is then written with
+    #: ``varm['cellucid_prefix_counts']``. None: the cells are as given.
+    prefix_levels: np.ndarray | None = None
 
 
 class StoreContent(Protocol):
@@ -209,11 +235,16 @@ def _vector_chunks(length: int, target: int) -> tuple[int]:
     return (max(1, min(length, target)),)
 
 
+def _cell_chunks(length: int) -> tuple[int]:
+    """A vector with one value per cell (:data:`CELL_CHUNK_ELEMENTS`)."""
+    return _vector_chunks(length, CELL_CHUNK_ELEMENTS)
+
+
 def _row_chunks(shape: tuple[int, int]) -> tuple[int, int]:
-    """Every column of a block of rows: an array read whole, by rows."""
+    """Every column of a block of rows: an array with one row per cell, read by rows."""
     rows, columns = shape
     columns = max(1, columns)
-    return (max(1, min(rows, WHOLE_CHUNK_ELEMENTS // columns)), columns)
+    return (max(1, min(rows, CELL_CHUNK_ELEMENTS // columns)), columns)
 
 
 def _strip_chunks(shape: tuple[int, int]) -> tuple[int, int]:
@@ -442,20 +473,27 @@ class _Writer:
 
     # -- composite elements ---------------------------------------------------
 
-    def uns(self, parent: Any, key: str, value: Any, *, opening: bool = True) -> None:
+    def uns(self, parent: Any, key: str, value: Any, *, opening: bool = True, per_cell: bool = False) -> None:
         """``uns`` and every mapping, list and value in it, laid out as the rest.
 
         A list is an array read whole, chunked and compressed as an obs
         column is; a text or number is a scalar (:meth:`scalar`). Opening
         reads all of ``uns`` except the stored outlier quantiles, an array
-        per categorical obs column read only when outliers are filtered.
+        per categorical obs column read only when outliers are filtered, with
+        one value per cell (``per_cell``: chunked as an obs column is).
         """
         if isinstance(value, Mapping):
             group = self.dict_group(parent, key)
             for name, item in value.items():
-                self.uns(group, name, item, opening=opening and not (key == "cellucid" and name == "outlierQuantiles"))
+                self.uns(
+                    group,
+                    name,
+                    item,
+                    opening=opening and not (key == "cellucid" and name == "outlierQuantiles"),
+                    per_cell=per_cell or (key == "outlierQuantiles" and name == "fields"),
+                )
         elif isinstance(value, np.ndarray):
-            chunks = _vector_chunks(len(value), WHOLE_CHUNK_ELEMENTS)
+            chunks = _cell_chunks(len(value)) if per_cell else _vector_chunks(len(value), WHOLE_CHUNK_ELEMENTS)
             if value.dtype.kind == "O":
                 self.element(parent, key, value, chunks, opening=opening)
             else:
@@ -463,10 +501,14 @@ class _Writer:
         else:
             self.scalar(parent, key, value)
 
-    def column(self, parent: Any, key: str, value: Any, *, opening_categories: bool = False) -> None:
-        """One dataframe column; ``opening_categories``: a categorical's labels are read as the file opens."""
+    def column(
+        self, parent: Any, key: str, value: Any, *, opening_categories: bool = False, per_cell: bool = False
+    ) -> None:
+        """One dataframe column; ``opening_categories``: a categorical's labels are read as the
+        file opens; ``per_cell``: an obs column (:data:`CELL_CHUNK_ELEMENTS`). The original
+        positions of a file in priority order are read as it opens, with the rest."""
         length = len(value)
-        chunks = _vector_chunks(length, WHOLE_CHUNK_ELEMENTS)
+        chunks = _cell_chunks(length) if per_cell else _vector_chunks(length, WHOLE_CHUNK_ELEMENTS)
         if isinstance(value, pd.Categorical):
             group = self.group(
                 parent, key, {**_encoding("categorical", "0.2.0"), "ordered": bool(value.ordered)}
@@ -479,7 +521,7 @@ class _Writer:
             else:
                 self.array(group, "categories", categories, category_chunks, opening=opening_categories)
         elif isinstance(value, np.ndarray) and value.dtype.kind != "O":
-            self.array(parent, key, value, chunks)
+            self.array(parent, key, value, chunks, opening=per_cell and key == ORIGINAL_POSITION_COLUMN)
         else:
             self.element(parent, key, value, chunks)
 
@@ -492,10 +534,12 @@ class _Writer:
         *,
         opening: bool = False,
         opening_categories: bool = False,
+        per_cell: bool = False,
     ) -> None:
         """A dataframe; ``opening``: its index is read when the file opens (the gene
         names); ``opening_categories``: so are its categorical columns' labels (the
-        web app lists every obs field's categories as it opens)."""
+        web app lists every obs field's categories as it opens); ``per_cell``: one row
+        per cell (obs), every column and the index chunked by :data:`CELL_CHUNK_ELEMENTS`."""
         group = self.group(
             parent,
             key,
@@ -505,9 +549,10 @@ class _Writer:
                 "column-order": list(columns),
             },
         )
-        self.element(group, "_index", index, _vector_chunks(len(index), WHOLE_CHUNK_ELEMENTS), opening=opening)
+        index_chunks = _cell_chunks(len(index)) if per_cell else _vector_chunks(len(index), WHOLE_CHUNK_ELEMENTS)
+        self.element(group, "_index", index, index_chunks, opening=opening)
         for name, value in columns.items():
-            self.column(group, name, value, opening_categories=opening_categories)
+            self.column(group, name, value, opening_categories=opening_categories, per_cell=per_cell)
 
     def sparse_pointers(
         self,
@@ -569,14 +614,18 @@ class _Writer:
         x_group = (
             None if x is None or isinstance(x, np.ndarray) else self.sparse_pointers(root, "X", x, opening=True)
         )
-        self.dataframe(root, "obs", elements.obs_index, elements.obs, opening_categories=True)
+        self.dataframe(root, "obs", elements.obs_index, elements.obs, opening_categories=True, per_cell=True)
         obsm = self.dict_group(root, "obsm")
         for key, values in elements.obsm.items():
             self.array(obsm, key, values, _row_chunks(values.shape))
         obsp = self.dict_group(root, "obsp")
         for key, matrix in elements.obsp.items():
             self.sparse_entries(self.sparse_pointers(obsp, key, matrix), matrix, sliced=False)
-        self.dict_group(root, "varm")
+        varm = self.dict_group(root, "varm")
+        if x_group is not None and elements.prefix_levels is not None:
+            # One column per level, each read whole when a subsample opens.
+            counts = prefix_counts(x, elements.prefix_levels)
+            self.array(varm, PREFIX_COUNTS_KEY, counts, (max(1, min(counts.shape[0], WHOLE_CHUNK_ELEMENTS)), 1))
         self.dict_group(root, "varp")
         self.dict_group(root, "layers")
         if isinstance(x, np.ndarray):

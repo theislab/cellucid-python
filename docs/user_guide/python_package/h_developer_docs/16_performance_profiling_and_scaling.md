@@ -65,8 +65,13 @@ What decides the cost:
   on the first gene,
 - storage and latency between the server and the data (network filesystems,
   tunnels),
-- an in-memory object or a store with browser-undecodable codecs, which is
-  written once to a temporary `.h5ad` (`.h5mu` for a MuData) at startup.
+- an in-memory object, or a file not in priority order, served as a store in
+  priority order: its small elements written in memory at startup, every chunk
+  made on request (a store with browser-undecodable codecs is decoded on the
+  kernel so), an object's arrays copied once at startup into memory-mapped
+  files (its snapshot; sparse expression matrices laid out gene-major, stored
+  as `prepare()` stores them); an in-memory MuData written once to a temporary
+  `.h5mu`.
 
 Measured on one Mac over localhost, for a 562k-cell × 8,192-gene `.h5ad` (CSR,
 gzip): startup 0.16 s, obs fields about 90 ms, 2D/3D UMAP about 40 ms each,
@@ -88,8 +93,10 @@ Practical guidance:
 
 Notebook mode adds overhead:
 
-- iframe rendering and notebook layout
-- proxy/tunnel URLs (remote notebooks)
+- notebook layout around the widget's output
+- every read crosses the notebook's connection (the widget relays it to the
+  kernel and coalesces requests that arrive together; while a cell runs, reads
+  wait until it ends)
 - large hook payloads (huge selections)
 
 Guidance:

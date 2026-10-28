@@ -160,6 +160,13 @@ Community annotation is per **dataset**, per **categorical obs column**, per **c
 - **Annotatable column**: a categorical obs field (e.g. `leiden`, `cluster`, `cell_type_coarse`) that the author enables for annotation.
 - **Category**: one category/level within that column (e.g. Leiden cluster `"7"`). Each category gets its own vote/suggestion “bucket”.
 
+Annotations name a column and a category, never a cell, so they do not depend
+on which cells are open or on the order a file stores them in: a subsample
+({doc}`../b_data_loading/21_subsampled_loading`) and a file Cellucid wrote (its
+cells in priority order) read and write the same annotation files as every
+cell does. The consensus column the app derives from them labels the cells
+that are open.
+
 Within each bucket, annotators can:
 
 - propose one or more **suggestions** (candidate labels),

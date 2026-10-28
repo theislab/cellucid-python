@@ -22,8 +22,9 @@ This is the fastest way to prove “Cellucid works” and to start exploring a d
 
 ### Prerequisites
 
-- A notebook environment: Jupyter or JupyterLab (VS Code notebooks and Colab
-  are untested by the project; see {doc}`03_compatibility_matrix_must_be_explicit`)
+- A notebook that shows widgets: JupyterLab (tested), Jupyter Notebook 7,
+  VS Code, Google Colab, marimo or Databricks (expected, not tested by the
+  project; see {doc}`03_compatibility_matrix_must_be_explicit`)
 - An AnnData object with at least one embedding in `obsm` — the `X_umap` that
   `sc.tl.umap()` writes is read as written
 
@@ -108,12 +109,14 @@ viewer.highlight_cells([0, 2], color="#00cc66")
 ### What this does (mental model)
 
 `show_anndata(...)`:
-- starts a small local HTTP server that hands the data to the viewer, which
-  reads it itself with HTTP range requests (an in-memory object is first
-  written once to a temporary `.h5ad`, or `.h5mu` for a MuData),
-- embeds the Cellucid web app as an iframe,
-- carries commands to the viewer and UI events back to Python on one
-  WebSocket the viewer opens to that server (`/_cellucid/ws`).
+- shows a notebook widget whose output holds the Cellucid web app, which the
+  browser loads from `https://www.cellucid.com`,
+- hands the data to the viewer through the notebook's own connection; the
+  viewer reads it itself, with range requests (an in-memory AnnData as a
+  store in priority order made as the viewer reads it, so a subsample reads
+  only its cells; a MuData written once to a temporary `.h5mu`),
+- carries commands to the viewer and UI events back to Python on the same
+  connection. No port is opened and no server is started.
 
 ### What success looks like
 
@@ -123,11 +126,14 @@ viewer.highlight_cells([0, 2], color="#00cc66")
 
 ### Common pitfalls (Level 1)
 
-- **Not in a notebook**: `show_anndata(...)` returns a viewer without
-  displaying or printing it; open `viewer.viewer_url` explicitly.
+- **Not in a notebook**: `show_anndata(...)` raises and names the browser-tab
+  alternatives (`AnnDataViewer`, `serve_anndata`, `cellucid serve`).
 - **Nothing to plot**: the error lists every `obsm` entry and why it was not
   used; compute an embedding or name one with `embedding_keys`.
-- **HTTPS notebooks / remote kernels**: see {doc}`03_compatibility_matrix_must_be_explicit`.
+- **The viewer appears only after the cell ends**: the kernel handles the
+  widget's messages between cells, so put commands and hooks in later cells
+  (commands sent earlier are delivered once it connects).
+- **Which notebooks**: see {doc}`03_compatibility_matrix_must_be_explicit`.
 - **Viewer source unavailable**: viewer-serving startup stops; see
   {doc}`../installation`.
 - **A gene that will not colour**: `show_anndata(...)` starts fine on an object
@@ -322,15 +328,16 @@ report
 ```
 
 Look for:
-- `server_health` / `server_info` (server reachable?)
-- `anndata_store_probes` (does the served store answer a range read under its
-  exact dataset id?)
-- `client_server_url` (is the iframe using the right URL?)
-- `web_ui.cache` (do you have cached UI assets?)
-- `frontend_roundtrip` and `frontend_debug_snapshot` (is the live iframe
-  authenticated and connected to the expected URL?)
+- `connected_outputs` (is the widget shown in an output that reached the kernel?)
+- `channel_connected` (did the viewer open its channel?)
+- `state.ready` (did the dataset open?)
+- `recent_events` (what arrived, and the commands the viewer refused)
+- `web_source_url` (where the browser loads the app from)
 
-### Step 6: Clean up (avoid port leaks)
+A browser-tab viewer (`AnnDataViewer`) reports its server instead
+(`server_health`, `anndata_store_probes`, `frontend_roundtrip`).
+
+### Step 6: Clean up
 
 ```python
 viewer.stop()
@@ -366,11 +373,12 @@ cleanup_all()
   — `NaN` is drawable and renders as the neutral grey meaning "not measured
   here", an infinity has no position on a colour scale.
 - **Category explosions**: categorical fields with very high cardinality can become unusable in the UI; consider grouping or filtering.
-- **Remote kernels**: forward the port and pass its browser-reachable base as
-  `client_server_url=` (see
+- **Remote kernels**: nothing to forward for a notebook widget; a browser-tab
+  viewer needs an SSH tunnel or proxy (see
   {doc}`03_compatibility_matrix_must_be_explicit`).
-- **Viewer-source access**: startup requires the complete exact generation from
-  the configured source (see {doc}`../installation`).
+- **Viewer-source access**: the browser loads the app from
+  `https://www.cellucid.com` (a browser-tab server downloads and verifies it
+  at startup; see {doc}`../installation`).
 
 ## Troubleshooting (quick start)
 
@@ -379,24 +387,20 @@ Organize by symptom. Each entry points to the most likely root causes.
 ### Symptom: “Nothing shows up in my notebook”
 
 **Likely causes**
-- You are not in a notebook environment.
-- The notebook is served from HTTPS and blocks HTTP loopback iframes.
-- The viewer source generation could not be established; in that case the
-  constructor raises before an iframe is displayed.
+- The notebook front end does not show widgets (`anywidget` missing where the
+  notebook server runs); the output then says so.
+- The browser cannot load the app from `https://www.cellucid.com`; the output
+  says it did not load.
 
 **How to confirm**
-- Inspect `viewer.viewer_url`; outside a notebook, call `viewer.display()` to
-  print that URL or open it explicitly.
-- Run:
+- Run, in a new cell:
   ```python
   viewer.debug_connection()
   ```
 
 **Fix**
-- For HTTPS/remote notebooks, expose the port through a proxy/tunnel and pass
-  its exact base as `client_server_url=`.
-- For a source-generation error, restore access to the configured source and
-  correct the exact inventory/object/cache-directory failure reported.
+- `pip install anywidget` where the notebook server runs, and reload the page.
+- Allow `https://www.cellucid.com`, or host a copy and pass `web_source_url=`.
 
 ---
 
@@ -421,7 +425,8 @@ Organize by symptom. Each entry points to the most likely root causes.
 **Likely causes**
 - Viewer is not fully loaded yet (wait for `on_ready`).
 - You have multiple viewers and are listening on the wrong one.
-- Remote/HTTPS constraints prevent the iframe from reaching the server.
+- The cell that registered the hook is still running: the widget's events
+  arrive between cells.
 
 **Fix**
 - Add an `on_message` logger, call `viewer.debug_connection()`, and stop old viewers (`viewer.stop()`).

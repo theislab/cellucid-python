@@ -21,8 +21,11 @@ If you want the “hands-on but explained” tutorials, start with:
 - color by the real `clusters` observation field,
 - highlight cells from Python,
 - summarize confirmed viewer selections in Python,
-- capture a session bundle and apply it to an identity-matched AnnData, and
-- stop the local viewer server cleanly.
+- pull the highlights and fields made in the viewer onto an in-memory
+  AnnData with `viewer.pull()`,
+- ask for a session bundle in one cell, collect it in the next and apply it to
+  an identity-matched AnnData, and
+- stop the viewer cleanly.
 
 From a fresh clone:
 
@@ -32,67 +35,56 @@ jupyter lab docs/user_guide/python_package/f_notebooks_tutorials/jupyter_pancrea
 ```
 
 ```{figure} ../../../_static/screenshots/jupyter/show-anndata-driven-from-python.png
-:alt: The viewer cellucid.show_anndata() serves, opened at its viewer URL, after Python called viewer.set_color_by("clusters") and viewer.highlight_cells() on the Ductal cells: the Pancreas sample coloured by clusters with the Ductal cells highlighted.
+:alt: The Cellucid viewer after Python called viewer.set_color_by("clusters") and viewer.highlight_cells(): the Pancreas sample coloured by clusters with the highlighted cells.
 :width: 1440px
 
-What the notebook's output frame holds: the viewer `show_anndata()` serves for
-the Pancreas sample, here opened at its `viewer.viewer_url` in a browser tab,
-after the notebook ran `viewer.set_color_by("clusters")` and
-`viewer.highlight_cells(...)` on the Ductal cells. The Dataset box reads
-*Zarr v2 folder · Python*: the data comes from the kernel's server, not from
-a website.
+The viewer the notebook drives, captured in a browser tab: the same app the
+notebook's output frames, after Python ran `viewer.set_color_by("clusters")`
+and `viewer.highlight_cells(...)`.
 ```
 
 ## Quick troubleshooting if hooks do not fire
 
-1. Wait for `viewer.wait_for_ready(...)` to return before sending commands.
+1. Run the cells one at a time: the viewer appears when the cell that showed
+   it finishes, and a notebook hands the viewer's messages to the kernel
+   between cells, so hooks run while the kernel is idle.
 2. Confirm a selection into a highlight group; moving a lasso without
    confirming it does not emit the selection event used by the example.
-3. Run `viewer.debug_connection()` and check that `server_health.status` is
-   `ok` and that the served store answers its probe (`anndata_store_probes`:
-   a `206` range read).
-4. For a remote kernel, expose the server through your notebook deployment or
-   an SSH tunnel and pass its exact base URL as `client_server_url=`.
+3. Run `viewer.debug_connection()` in a new cell and check that
+   `connected_outputs` names the output and `channel_connected` is `True`.
+4. No output at all in JupyterLab or Notebook 7: install `anywidget` where the
+   notebook server runs and reload the page
+   ({doc}`../e_jupyter_hooks/03_supported_environments_matrix`).
 
-A healthy report, abridged (the real one also carries the viewer and server
-URLs with the viewer's token, the web cache's absolute path, the browser's
-user agent and timestamps; `<build>` and `<version>` are your web build and
-package version):
+A healthy report, as the notebook prints it:
 
 ```text
-{'server_running': True,
- 'channel_connected': True,
- 'web_ui': {'cache': {'index_html_build_id': '<build>',
-                      'verified_build_id': '<build>', ...}, ...},
- 'state': {'ready': {'n_cells': 3696, 'dimensions': 3}, ...},
- 'server_health': {'status': 'ok', 'type': 'anndata', 'version': '<version>',
-                   'format': 'zarr', 'n_cells': 3696, 'n_genes': 3753},
- 'anndata_store_probes': {'pancreas': {'head': {'status': 200, ...},
-                                       'range': {'status': 206,
-                                                 'content_range': 'bytes 0-0/19089'}}},
- 'recent_events': {'count': 2, 'by_type': {'data_mapping': 1, 'ready': 1},
-                   'command_errors': []},
- 'frontend_roundtrip': {'ok': True, 'pong': {...}},
- 'frontend_debug_snapshot': {'ok': True, 'snapshot': {'connected': True, ...}},
- ...}
+Transport: notebook widget
+App loaded from: https://www.cellucid.com
+Connected outputs: ['<output id>']
+Channel connected: True
+Dataset: {'id': 'pancreas-endocrinogenesis-day15-5', 'format': 'h5ad'}
+Viewer ready: {'n_cells': 2531, 'n_obs': 2531, 'dimensions': 2}
 ```
 
-The server is running, `server_health.status` is `ok` and names the served
-dataset's size, the store answers a one-byte range read with `206`, the
-frontend round-trip succeeded, and `web_ui` records the exact web build the
-viewer was checked against. A final `viewer.stop()` makes cleanup explicit.
+The notebook's output is connected, the viewer's channel is open, the viewer
+reads the checked-in `.h5ad` in place, and it opened all 2,531 cells. A final
+`viewer.stop()` makes cleanup explicit.
 
 ```{note}
-The downloadable notebook keeps the normal released-build resolution path (the
-web app comes from www.cellucid.com, cached) while passing the exact
-checked-in data path, dataset name, and stable dataset ID.
+The notebook loads the app from www.cellucid.com (the default
+`web_source_url`) while passing the exact checked-in data path, dataset name,
+and stable dataset ID.
 ```
 
 ```{tip}
-The fastest plumbing check is `viewer.debug_connection()`. It reports the
-server, exact web generation, dataset identity, message bridge, and forwarded
-frontend errors in one object.
+The fastest plumbing check is `viewer.debug_connection()`. It waits for
+nothing, so it works in any cell, and reports where the app comes from, the
+connected outputs, the channel, what the viewer last sent and the commands it
+refused.
 ```
+
+More notebooks, each with an R twin: {doc}`06_cellucid_in_your_pipeline_python_and_r`.
 
 ```{toctree}
 :maxdepth: 1

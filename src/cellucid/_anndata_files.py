@@ -22,9 +22,9 @@ reads the little a server reports and checks
 before it binds (the cell and gene counts and the names of the stored
 elements -- metadata only, never an array), finds arrays stored with a codec
 the browser's reader does not decode, builds missing consolidated metadata,
-and writes an in-memory AnnData object -- or a store the browser cannot
-decode, read with anndata and its codec plugins -- to a temporary ``.h5ad``
-so it is served exactly like a file.
+and writes an in-memory MuData object to a temporary Cellucid-ready ``.h5mu``
+so it is served exactly like a file. (An AnnData object, and an AnnData file
+not in priority order, are served by :mod:`cellucid._served_store`.)
 """
 
 from __future__ import annotations
@@ -927,73 +927,8 @@ def read_into_memory(store: AnnDataStore) -> anndata.AnnData:
 
 
 # =============================================================================
-# An in-memory AnnData object, as a temporary file
+# An in-memory MuData object, as a temporary file
 # =============================================================================
-
-
-def _column_major(matrix: Any) -> Any:
-    """A sparse matrix in CSC form, so one gene is one contiguous range.
-
-    The browser reads a gene from a CSC matrix with one range request per
-    column; from a CSR matrix it first builds a gene index over every stored
-    entry. Anything else is written as it is.
-    """
-    from scipy import sparse
-
-    if sparse.issparse(matrix) and matrix.format != "csc":
-        return sparse.csc_matrix(matrix)
-    return matrix
-
-
-def write_temporary_h5ad(adata: anndata.AnnData, *, dataset_id: str) -> Path:
-    """Write ``adata`` to a new temporary ``.h5ad`` and return its path.
-
-    The object is not modified. Sparse expression matrices (``X``, every layer,
-    ``raw.X``) are written column-major, uncompressed, so the browser reads one
-    gene as one contiguous range. ``X`` and the layers are converted and
-    written one at a time, so memory beyond the object holds one converted
-    matrix, never all of them. The file lives in its own new temporary
-    folder; the caller removes that folder with :func:`remove_temporary_h5ad`.
-    """
-    import anndata as ad
-
-    if adata.n_obs <= 0:
-        raise ValueError("AnnData datasets must contain at least one observation")
-    if adata.isbacked:
-        # The object as it is now, including what was changed since it was opened.
-        adata = adata.to_memory()
-    folder = Path(tempfile.mkdtemp(prefix="cellucid-anndata-"))
-    path = folder / f"{dataset_id}.h5ad"
-    try:
-        import h5py
-        from anndata.io import write_elem
-
-        snapshot = ad.AnnData(
-            obs=adata.obs,
-            var=adata.var,
-            uns=dict(adata.uns),
-            obsm=dict(adata.obsm),
-            varm=dict(adata.varm),
-            obsp=dict(adata.obsp),
-            varp=dict(adata.varp),
-        )
-        if adata.raw is not None:
-            snapshot.raw = ad.AnnData(
-                X=_column_major(adata.raw.X),
-                var=adata.raw.var,
-                varm=dict(adata.raw.varm),
-            )
-        snapshot.write_h5ad(path)
-        del snapshot
-        with h5py.File(path, "r+") as file:
-            if adata.X is not None:
-                write_elem(file, "X", _column_major(adata.X))
-            for key, value in adata.layers.items():
-                write_elem(file["layers"], key, _column_major(value))
-    except BaseException:
-        shutil.rmtree(folder, ignore_errors=True)
-        raise
-    return path
 
 
 def is_mudata(value: object) -> bool:
@@ -1011,7 +946,7 @@ def write_temporary_h5mu(mdata: Any, *, dataset_id: str, dataset_name: str) -> P
     gene-major and chunked for range reads, one modality at a time, so memory
     beyond the object stays near one converted matrix. The object is not
     modified. The caller removes the file's folder with
-    :func:`remove_temporary_h5ad`.
+    :func:`remove_temporary_file`.
     """
     from .prepare_data import prepare
 
@@ -1025,6 +960,6 @@ def write_temporary_h5mu(mdata: Any, *, dataset_id: str, dataset_name: str) -> P
     return path
 
 
-def remove_temporary_h5ad(path: Path) -> None:
-    """Remove a file :func:`write_temporary_h5ad` wrote, with its folder."""
+def remove_temporary_file(path: Path) -> None:
+    """Remove a file :func:`write_temporary_h5mu` wrote, with its folder."""
     shutil.rmtree(path.parent, ignore_errors=True)

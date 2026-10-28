@@ -4,6 +4,15 @@
 server
 **What you'll do:** serve an object for a browser on your own computer.
 
+```{tip}
+Working in a Jupyter notebook on the cluster (JupyterHub, Open OnDemand, VS
+Code Remote)? Then `cellucid_view(seu)` shows the viewer in the cell's output
+through the notebook's own connection, with no server, port or tunnel
+({doc}`08_view_in_jupyter_notebooks`). In an IRkernel session
+`cellucid_serve()` refuses to start: the R kernel cannot run a server between
+cells. This page is for R in a terminal or RStudio.
+```
+
 ```r
 library(cellucid)
 viewer <- cellucid_serve(seu)

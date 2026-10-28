@@ -10,10 +10,17 @@ registration :class:`cellucid.jupyter.AnnDataViewer` made, answers
   cells (a highlight, a visibility change) a binary frame. A command sent
   while no socket is open waits in the viewer's outbox and is sent, in order,
   the moment one is (:func:`send_viewer_command`); nothing is sent twice.
-- **events** (viewer → Python) are text frames, and a selection or a session
-  bundle a binary frame (``uint32`` little-endian header length, JSON header,
+- **events** (viewer → Python) are text frames, and a selection, a result or a
+  session bundle a binary frame (``uint32`` little-endian header length, JSON header,
   body). Every event is delivered to the viewer's callback on the socket's own
   thread, one at a time and in order.
+
+The same channel also runs over a notebook widget's comm
+(:mod:`cellucid.jupyter._widget`): the widget relays each frame between the
+page it embeds and the kernel, and :func:`serve_viewer_channel` reads it
+through the same :class:`ChannelSocket` interface a WebSocket offers, so
+authentication, ordering, replacement, binary events and session bundles are
+one implementation for both.
 
 A newer ``hello`` for the same viewer (its page reloaded, or it reconnected
 after the network dropped) replaces the open socket, which is closed with
@@ -53,7 +60,6 @@ from ._server_base import CellucidThreadingHTTPServer
 from ._websocket import (
     CLOSE_GOING_AWAY,
     CLOSE_POLICY_VIOLATION,
-    BinaryMessage,
     WebSocket,
     WebSocketClosed,
     WebSocketProtocolError,
@@ -90,6 +96,7 @@ CLOSE_REPLACED = 4409
 BINARY_EVENT_HEADER_FIELDS: dict[str, frozenset[str]] = {
     "selection": frozenset({"type", "source"}),
     "session_bundle": frozenset({"type", "requestId"}),
+    "result": frozenset({"type", "requestId", "epoch", "revision", "kind", "id", "nObs", "meta", "cells", "values"}),
 }
 
 _HELLO_FIELDS = frozenset({"type", "viewerId", "viewerToken"})
@@ -97,6 +104,40 @@ _WELCOME = json.dumps({"type": "welcome"}, separators=(",", ":"))
 
 # Read size for a session bundle streamed to disk.
 _BUNDLE_CHUNK_BYTES = 1024 * 1024
+
+
+class ChannelMessage(Protocol):
+    """One binary frame being read in order, as a stream: a WebSocket message
+    (:class:`cellucid._websocket.BinaryMessage`) or a widget's frame."""
+
+    done: bool
+
+    def readinto(self, buffer: memoryview) -> int: ...
+    def read_exact(self, size: int) -> bytearray: ...
+    def read_rest(self, initial: int = 0) -> bytearray: ...
+    def drain(self) -> None: ...
+
+
+class ChannelSocket(Protocol):
+    """What one viewer channel runs over: the viewer's WebSocket
+    (:class:`cellucid._websocket.WebSocket`), or a notebook widget's comm.
+
+    :meth:`receive` blocks for the next frame and raises
+    :class:`cellucid._websocket.WebSocketClosed` once the socket closed; the
+    send and close methods may be called from any thread.
+    """
+
+    _closed: threading.Event
+
+    @property
+    def closed(self) -> bool: ...
+
+    def receive(self) -> str | ChannelMessage: ...
+    def send_text(self, text: str) -> None: ...
+    def send_binary(self, payload: bytes | bytearray) -> None: ...
+    def ping(self) -> None: ...
+    def close(self, code: int, reason: str = "") -> None: ...
+    def finish(self) -> None: ...
 
 
 class _ViewerNotRegisteredError(LookupError):
@@ -150,7 +191,7 @@ class _Registration:
         # on the open socket or queued, and a new socket is handed every
         # queued command before any later one.
         self.channel_lock = threading.Lock()
-        self.socket: WebSocket | None = None
+        self.socket: ChannelSocket | None = None
         self.outbox: collections.deque[str | bytearray] = collections.deque()
 
 
@@ -244,7 +285,7 @@ def route_event(viewer_id: str, viewer_token: str, event: dict) -> None:
         registration.callback(event)
 
 
-def _send_command(websocket: WebSocket, message: str | bytearray) -> None:
+def _send_command(websocket: ChannelSocket, message: str | bytearray) -> None:
     if isinstance(message, str):
         websocket.send_text(message)
     else:
@@ -318,7 +359,7 @@ def register_session_bundle_request(
 
     ``ttl_seconds`` is how long the request stays answerable; None keeps it
     until it is answered or cancelled, for a caller that waits without a
-    deadline (``get_session_bundle(timeout=None)``).
+    deadline (``request.result(timeout=None)``).
     """
     _require_routing_string(viewer_id, label="viewer_id")
     _require_routing_string(viewer_token, label="viewer_token")
@@ -531,10 +572,12 @@ def accept_viewer_channel(handler: _UpgradeHandler) -> None:
     server = handler._request_server()
     if isinstance(server, CellucidThreadingHTTPServer):
         server.close_with_server(sock, lambda: websocket.close(CLOSE_GOING_AWAY, "The server stopped"))
-    _serve_channel(websocket)
+    serve_viewer_channel(websocket)
 
 
-def _serve_channel(websocket: WebSocket) -> None:
+def serve_viewer_channel(websocket: ChannelSocket) -> None:
+    """Run one viewer channel on ``websocket`` until it ends: its ``hello``,
+    then every event, delivered on this thread in order."""
     registration: _Registration | None = None
     try:
         viewer_id, viewer_token, registration = _authenticate(websocket)
@@ -582,7 +625,7 @@ def _serve_channel(websocket: WebSocket) -> None:
         websocket.finish()
 
 
-def _authenticate(websocket: WebSocket) -> tuple[str, str, _Registration | None]:
+def _authenticate(websocket: ChannelSocket) -> tuple[str, str, _Registration | None]:
     message = websocket.receive()
     if not isinstance(message, str):
         message.drain()
@@ -603,7 +646,7 @@ def _authenticate(websocket: WebSocket) -> tuple[str, str, _Registration | None]
     return viewer_id, viewer_token, registration
 
 
-def _attach(registration: _Registration, websocket: WebSocket) -> None:
+def _attach(registration: _Registration, websocket: ChannelSocket) -> None:
     """Make ``websocket`` the viewer's, flush its outbox, retire the old socket."""
     with registration.channel_lock:
         previous = registration.socket
@@ -618,7 +661,7 @@ def _attach(registration: _Registration, websocket: WebSocket) -> None:
         previous.close(CLOSE_REPLACED, "Replaced by a newer connection of this viewer")
 
 
-def _keep_alive(websocket: WebSocket) -> None:
+def _keep_alive(websocket: ChannelSocket) -> None:
     while not websocket._closed.wait(KEEPALIVE_SECONDS):
         try:
             websocket.ping()
@@ -644,7 +687,7 @@ def _parse_text_event(text: str) -> dict[str, Any]:
 
 
 def _receive_binary_event(
-    message: BinaryMessage, viewer_id: str, viewer_token: str
+    message: ChannelMessage, viewer_id: str, viewer_token: str
 ) -> dict[str, Any] | None:
     """Read one binary event; None when it was received and needs no delivery."""
     header_length = int.from_bytes(message.read_exact(4), "little")
@@ -656,9 +699,13 @@ def _receive_binary_event(
     expected = BINARY_EVENT_HEADER_FIELDS.get(header["type"])
     if expected is None or set(header) != expected:
         raise ViewerProtocolError(
-            "A binary event header must be exactly {type: 'selection', source} or "
-            "{type: 'session_bundle', requestId}"
+            "A binary event header must be exactly {type: 'selection', source}, "
+            "{type: 'session_bundle', requestId} or a result's header"
         )
+    if header["type"] == "result":
+        # Its cells and values, read whole: `_wire._decode_result` checks them
+        # against the header.
+        return {**header, "body": message.read_rest()}
     if header["type"] == "selection":
         # One buffer, sized from the frame and filled in place: the cells are
         # read and unmasked without a second copy.
@@ -668,7 +715,7 @@ def _receive_binary_event(
 
 
 def _receive_session_bundle(
-    message: BinaryMessage, viewer_id: str, viewer_token: str, request_id: object
+    message: ChannelMessage, viewer_id: str, viewer_token: str, request_id: object
 ) -> dict[str, Any] | None:
     """Stream one session bundle to a temporary file and return its event."""
     if type(request_id) is not str:
@@ -733,7 +780,7 @@ def _receive_session_bundle(
     }
 
 
-def _deliver(websocket: WebSocket, viewer_id: str, viewer_token: str, event: dict[str, Any]) -> bool:
+def _deliver(websocket: ChannelSocket, viewer_id: str, viewer_token: str, event: dict[str, Any]) -> bool:
     """Deliver one event; False when the channel must end."""
     try:
         route_event(viewer_id, viewer_token, event)

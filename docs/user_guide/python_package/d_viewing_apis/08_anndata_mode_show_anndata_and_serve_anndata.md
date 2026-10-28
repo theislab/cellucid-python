@@ -27,27 +27,50 @@ once with `prepare()` and open that file here:
 
 The viewer reads the AnnData store itself, in place, with HTTP range requests:
 only the bytes a view needs are transferred, and nothing is converted first.
-The Python server computes nothing per request. It names the dataset, serves
+Python computes nothing per request. It names the dataset, serves
 the store's bytes under `/_cellucid/anndata/<dataset_id>.h5ad` (or
 `.zarr.zip`, or `.zarr/<key>` for a store folder), states the launch choices
-you passed, and hosts the notebook channel and the viewer's web build. The
+you passed, and hosts the viewer channel — over the notebook's own connection
+for `show_anndata()` (no port), over HTTP and a WebSocket for
+`serve_anndata()`, which also serves the viewer's web build. The
 route is named by the dataset id, so the local file name is never published.
 
 - An `.h5ad` file, a Zarr store folder (Zarr v2 with `.zgroup`, or v3 with
-  `zarr.json`), and a zipped Zarr store are served as they are on disk, never
-  copied.
-- An in-memory `AnnData` is written once to a temporary `.h5ad` (sparse `X`,
-  layers, and `raw.X` column-major, uncompressed), which is removed when the
-  server stops or Python exits.
-- An AnnData store holding an array stored with a codec the browser cannot decode (an
-  HDF5 filter other than gzip, shuffle, Fletcher-32, or LZF, such as Blosc,
-  Zstandard, szip, or scaleoffset; a Zarr codec such as bz2, lzma, or zfpy) is
-  read once with `anndata` and its codec plugins and served as a temporary
-  `.h5ad`. The terminal names those arrays
-  (`Browser cannot decode: …`, then
-  `Serving: a decodable copy, written once to a temporary .h5ad`). Any other
-  format (a MuData, Loom, 10x file) holding such an array is refused with a
-  message asking to write it again with gzip compression (or none).
+  `zarr.json`), and a zipped Zarr store written by `prepare()` (cells in
+  priority order) are served as they are on disk, never copied.
+- Any other AnnData file, and an in-memory `AnnData`, are served as a Zarr
+  store with their cells in **priority order** (the layout `prepare()`
+  writes), each chunk made from the source when the viewer asks for it: a
+  subsample the viewer opens is then the first rows of every array and the
+  first entries of every gene, so only its cells are sent, whatever the
+  source's layout. An in-memory object is copied once, before the call
+  returns, into memory-mapped files removed when the server stops or Python
+  exits (its sparse expression matrices laid out gene-major, so a gene is one
+  range: see below); a file is read where it is, its matrices keeping their
+  form (an array stored in chunks -- compressed, or a sparse matrix anndata
+  wrote -- is decoded once into memory-mapped files beside the store as its
+  rows are first read, since rows in priority order lie all over the file;
+  removed when the server stops). Original positions are the ones `prepare()` gives: an object read
+  from a file in priority order, its `uns['cellucid']['priority']` kept and
+  still describing its cells, is put back in its original order first; any
+  other object or file is taken in its own row order, and a
+  `cellucid_original_position` column with no record that describes the
+  cells (a subset, a reordering, a column alone) names nothing and a warning
+  says so -- so selections and labels pulled back land on the same cells.
+- An AnnData store holding an array stored with a codec the browser cannot
+  decode (an HDF5 filter other than gzip, shuffle, Fletcher-32, or LZF, such
+  as Blosc, Zstandard, szip, or scaleoffset; a Zarr codec such as bz2, lzma,
+  or zfpy) is decoded on the kernel through that store, chunk by chunk as the
+  viewer asks. The terminal names those arrays (`Browser cannot decode: …`,
+  then `Serving: a Zarr store in priority order, made as the browser reads
+  it`). A MuData, Loom or 10x file is decoded on the kernel the same way.
+- A MuData file (`.h5mu`, MuData Zarr) not written by `prepare()`, a Loom file
+  and a 10x Cell Ranger `outs/` folder are served in priority order too
+  (`Serving: a Zarr store in priority order, …`; a MuData Zarr store for a
+  MuData and for a 10x matrix of several feature types), holding what the
+  viewer presents from the file itself, so a subsample transfers only its
+  cells. A Loom file with no embedding, and a 10x `.h5` alone, are refused
+  saying what to do.
 
 ## Quick start
 
@@ -299,13 +322,27 @@ index.
 
 ### In-memory `AnnData`
 
-An in-memory object is written once to a temporary `.h5ad` before the server
-binds, with sparse `X`, layers, and `raw.X` column-major (CSC) and
-uncompressed, so one gene is one contiguous read. Your object is not modified.
-The write costs time and disk once: on one Mac, a 562k-cell × 8,192-gene object
-took 0.8 s and 925 MB on disk. The file is removed when the server stops or
-Python exits. If you already have the `.h5ad` on disk, pass its path instead;
-it is served in place.
+An in-memory object is served as a store in priority order, made from it as
+the viewer reads it; your object is not modified. A cell-major (CSR) sparse
+`X` is laid out gene-major once, so one gene is one contiguous read.
+
+The viewer shows the object **as it was when you called** `show_anndata()` /
+`serve_anndata()`: before the call returns, the object's arrays are copied
+once into memory-mapped files in the system temporary folder — every sparse
+expression matrix (`X`, layers, `raw.X`) gene-major in priority order, every
+dense one in priority order, the `obsm`/`obsp` matrices — so what the viewer
+reads is one consistent snapshot. Replacing an element afterwards
+(`adata.X = …`) or changing an array in place
+(`np.log1p(adata.X.data, out=adata.X.data)`) does not show, and never mixes
+into what is served; view the object again to show a change. The copy costs
+a pass over each array (about two seconds per 100 million stored values) and
+the disk space of the arrays, never a second copy in memory; the files are
+removed when the server stops or Python exits, and by the next server when
+the kernel was killed first. The matrices are stored as `prepare()` stores
+them, by the same functions: float32 unless integer counts need float64,
+duplicate coordinates summed in stored order, stored zeros dropped; a value
+that is not finite (NaN, infinity) is refused, saying which matrix. The
+measurements are in {doc}`14_performance_scaling_and_lazy_loading`.
 
 ## Gene IDs, expression source, and repeated names
 

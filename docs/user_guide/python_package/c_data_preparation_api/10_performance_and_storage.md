@@ -51,10 +51,12 @@ every gene in two cell types). Full method and the per-step numbers:
 
 ## Reading in the browser
 
-- One gene is one range of `X/data` and `X/indices` (chunks of 65,536 values),
-  so colouring by a gene costs a few requests whatever the dataset size.
-- Embeddings, `obs` columns and the graph are read whole, in chunks of 262,144
-  values.
+- One gene is one range of `X/data` and `X/indices` (chunks of 16,384 values),
+  so colouring by a gene costs a few requests whatever the dataset size; in
+  priority order a subsample reads only the first values of each gene.
+- Embeddings and `obs` columns are read by rows, in chunks of 65,536 values
+  (the first rows only, for a subsample); the graph is read whole, in chunks
+  of 262,144 values.
 - Centroids are computed by the browser. Outlier quantiles are stored with
   `latent_key` (4 bytes per cell per categorical column, before compression), and the browser
   reads one column's on the outlier slider's first move; without them, the

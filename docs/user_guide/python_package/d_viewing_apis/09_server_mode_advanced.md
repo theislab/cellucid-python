@@ -17,7 +17,10 @@ If you just want “copy/paste and go”, start with {doc}`04_cli_cellucid_serve
 ## The server (`AnnDataServer`)
 
 Every Python entry point — `cellucid serve`, {func}`~cellucid.serve_anndata`,
-{func}`~cellucid.show_anndata` — runs one server class:
+{class}`~cellucid.AnnDataViewer` — runs one server class, and
+{func}`~cellucid.show_anndata`'s notebook widget answers the same routes with
+it, through the widget instead of a socket
+(`AnnDataServer.answer_request`, no port):
 
 
 - hands one dataset to the viewer, which reads it itself — in place with HTTP
@@ -33,9 +36,12 @@ Every Python entry point — `cellucid serve`, {func}`~cellucid.serve_anndata`,
   requests are answered exactly (`206 Partial Content`, `Content-Range`,
   `HEAD`, `ETag`, `Accept-Ranges`). The route is named by the dataset id, so
   the local file name is never published
-- an in-memory `AnnData` is written once to a temporary `.h5ad` (a `MuData` to
-  a temporary Cellucid-ready `.h5mu`) and served the same way; the file is
-  removed when the server stops
+- an in-memory `AnnData`, and an AnnData file whose cells are not in priority
+  order, are served as a Zarr store folder in priority order
+  (`_cellucid/anndata/<id>.zarr/<key>`), each chunk made when it is asked for
+  and answered with the same ranges and validators (`cellucid._served_store`);
+  a `MuData` object is written to a temporary Cellucid-ready `.h5mu` and served
+  as a file, removed when the server stops
 - threaded, with HTTP/1.1 keep-alive, because a browser reads a file with many
   range requests; bytes are sent by the kernel (`sendfile`), and a reload of an
   unchanged file revalidates what the browser kept (`ETag`, `304`) instead of
@@ -176,11 +182,14 @@ The server returns:
 {"status": "ok", "type": "anndata", "version": "<cellucid version>", "format": "h5ad", "n_cells": 4096, "n_genes": 512}
 ```
 
-`format` is the input format id of the served store (`h5ad`, `zarr`, `h5mu`,
-`mudata-zarr`, `loom`, `tenx-h5`, `tenx-outs`, `rds`, `rda`, `mtx`); an
-in-memory `AnnData` reports `h5ad` and an in-memory `MuData` `h5mu`, because
-they are served as temporary files. `n_cells` and `n_genes` are `null` for a
-format only the browser reads (an R object, Loom, 10x, MatrixMarket).
+`format` is the input format id of the store the browser reads: `zarr` for an
+in-memory `AnnData` and for an AnnData, Loom or 10x file served in priority
+order (a store made as the browser reads it), `mudata-zarr` for a MuData file
+served so and for a 10x matrix of several feature types, `h5mu` for an
+in-memory `MuData` (written once to a temporary `.h5mu`), and a file's own id
+(`h5ad`, `zarr`, `h5mu`, `mudata-zarr`) when it is served as it is (one
+`prepare()` wrote), or `rds`, `rda`, `mtx`. `n_cells` and `n_genes` are `null`
+only for a format the browser alone reads (an R object, a MatrixMarket folder).
 `/_cellucid/info` carries `version`, `type`, `format`, `n_cells`, `n_genes`,
 plus `host`, `port`, and `runtime`: the program serving the viewer (`python`,
 or `jupyter` for a notebook viewer), which the viewer names.
@@ -195,14 +204,17 @@ The server lists its one dataset with an `anndata` member naming the store and
 the launch choices you set:
 
 ```json
-{"datasets": [{"id": "pbmc-demo", "name": "PBMC demo", "anndata": {"file": {"url": "_cellucid/anndata/pbmc-demo.h5ad", "kind": "h5ad", "layout": "file", "size": 2799976}, "defaults": {"knn": "connectivities"}}}]}
+{"datasets": [{"id": "pbmc-demo", "name": "PBMC demo", "anndata": {"file": {"url": "_cellucid/anndata/pbmc-demo.h5ad", "kind": "h5ad", "layout": "file", "size": 2799976, "etag": "\"2ab9e8-18e27b3d58754f73-18e27b3d58754f73-1a058bb9\""}, "defaults": {"knn": "connectivities"}}}]}
 ```
 
 `url` is relative to the server's base URL; `kind` is the input format id (as
-`format` above); `layout` is `file`, `zip`, or `folder`; `size` is given for a
-file and absent for a folder, and a folder of files (MatrixMarket, `outs/`)
-lists its `files` with each one's `path` and `size`. `defaults` holds only the
-choices you set.
+`format` above); `layout` is `file`, `zip`, or `folder`; `size` and `etag` are
+given for a file and absent for a folder, and a folder of files (MatrixMarket,
+`outs/`) lists its `files` with each one's `path`, `size` and `etag`. `etag` is
+read from the file at each request -- the strong validator its bytes are
+answered with -- and is the version the viewer keeps what it read of the file
+under (across visits): a file rewritten while it is served is a new version.
+`defaults` holds only the choices you set.
 
 ### Example: which wire capabilities does this `cellucid` accept?
 

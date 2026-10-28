@@ -53,10 +53,13 @@ with the route that converts it: in R, read it with
 
 A file written by `cellucid.prepare()` declares its own name and id, so
 `cellucid serve pbmc_cellucid.h5ad` needs no `--dataset-name`/`--dataset-id`;
-an R object, Loom, 10x or MatrixMarket dataset always needs both. Every path
-is served as it is on disk; the viewer reads it itself, in place with HTTP
-range requests where the format allows it, once from the start for an R object
-or a MatrixMarket folder.
+an R object, Loom, 10x or MatrixMarket dataset always needs both. A file
+`prepare()` wrote is served as it is on disk, and the viewer reads it itself
+with HTTP range requests; any other AnnData, MuData, Loom or 10x file (or
+`outs/` folder) is served as a Zarr store in priority order, made from the file
+as the viewer reads it and holding what the viewer presents from the file
+itself; an R object or a MatrixMarket folder is served as it is and read
+once from the start.
 
 #### Options
 

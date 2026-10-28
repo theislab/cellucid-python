@@ -33,12 +33,13 @@ names itself.
 | Element | Contract |
 |---|---|
 | `X` | The gene expression, cells × genes, **gene-major**: a `csc_matrix` when sparse, a dense array otherwise. `float32`; `float64` only for integer counts above 2^24, which `float32` cannot hold exactly (below). Every stored value finite; a sparse `X` has no stored zeros. Absent when the dataset has no expression. |
-| `obs` | One row per cell. The index (`_index`) holds unique cell names. Text columns whose values repeat or are missing are `categorical` (categories in code-point order, missing = code -1); other text columns are `string-array`; categoricals stay categoricals; numbers stay numbers in their own dtype (no infinities; NaN is missing); booleans stay booleans; integer and boolean columns with missing values are `nullable-integer` / `nullable-boolean`. |
+| `obs` | One row per cell: in {ref}`priority order <priority-order>`, `obs['cellucid_original_position']` (`<u4`) holding each row's original position, or in the order given with `priority_seed=None`. The index (`_index`) holds unique cell names. Text columns whose values repeat or are missing are `categorical` (categories in code-point order, missing = code -1); other text columns are `string-array`; categoricals stay categoricals; numbers stay numbers in their own dtype (no infinities; NaN is missing); booleans stay booleans; integer and boolean columns with missing values are `nullable-integer` / `nullable-boolean`. |
 | `var` | One row per column of `X`. The index holds unique gene names (usually gene ids); a gene-symbol column, when present, is named by `uns['cellucid']['defaults']['geneIdColumn']`. |
 | `obsm/<key>` | Embeddings: dense `float32`, two-dimensional, one row per cell, every column of the input at its own coordinates (the viewer selects columns and normalizes). The latent space for outlier measurement is one of them. |
 | `obsm/<field>_<basis>` | A vector field, dense `float32`, one row per cell and exactly as many columns as the embedding `obsm['X_<basis>']` it is named for (scVelo's naming: `velocity_umap` over `X_umap`, `velocity_branches` over `X_branches`). The viewer reads it as the field `<field>` drawn over that embedding: the vector-field key rule below. |
 | `obsp/connectivities` | The neighbour graph, when present: `csr_matrix`, `float32`, cells × cells, exactly symmetric, finite non-negative weights, zero diagonal, no stored zeros. |
-| `varm`, `varp`, `layers` | Present and empty. |
+| `varm` | Present; empty, except `varm['cellucid_prefix_counts']` beside a sparse `X` of a file in priority order ({ref}`priority order <priority-order>`). |
+| `varp`, `layers` | Present and empty. |
 | `uns['title']` | The dataset name, so tools that read a file's title (every CELLxGENE file carries one) show it too. |
 | `uns['cellucid']` | The dataset's description and launch defaults (§2). |
 
@@ -177,6 +178,7 @@ so a misspelt default never passes unnoticed. The writers always write
 | `defaults` | mapping, below | The launch defaults the dataset opens with. |
 | `outlierQuantiles` | mapping, below | Every categorical obs field's latent outlier quantiles in one latent space. |
 | `session` | mapping | The record {func}`~cellucid.apply_cellucid_session_to_anndata` keeps of a session applied to the file; the viewer never reads it. |
+| `priority` | mapping `{seed, specVersion, nObs, levels}` | The file stores its cells in priority order ({ref}`priority order <priority-order>`): `seed` (integer, 0 to 2^32 − 1) the seed of the ranks, `specVersion` (integer `1`) the version of the {doc}`subsampling specification <../../web_app/p_developer_docs/19_subsampling_specification>` the ranks follow, `nObs` (integer) the cell count the file was written with, `levels` (integer list, ascending, each at least 1: those of `nObs`) the prefix sizes `varm['cellucid_prefix_counts']` counts at. Unlike every other key, a `priority` that does not describe the file's cells is never refused: the file is read as one Cellucid did not write ({ref}`priority order <priority-order>`, "Verified before use"). |
 
 Text is stored as one `string` scalar (the web app also reads a one-element
 list of text as that text) and must be drawable exactly as stored: no control or zero-width
@@ -194,7 +196,7 @@ the viewer's own choice. The names are the web app's
 | `knn` | text (an `obsp` key) | The neighbour graph drawn. (Not written by `prepare()`; the viewer's own rule finds `obsp['connectivities']`.) | — |
 | `modality` | text (a modality: a `mod/<name>` of a Cellucid-ready MuData, §5) | The modality the viewer opens on; `geneIdColumn` then names a column of its `var`. Only a MuData has one. Absent: the first gene-expression modality (`rna`, `gex`, `gene expression`, `gene_expression`, `sct`, any case), else the first in `mod-order`. | `modality` |
 | `expression` | `'X'`, `'raw/X'` or `'layers/<name>'` | The matrix genes are read from. (Not written by `prepare()`, which stores only `X`.) | — |
-| `geneIdColumn` | text (a `var` column) | The column whose values name the genes. | `var_gene_id_column` |
+| `geneIdColumn` | text (a `var` column) | The column whose values name the genes. Absent: the `var` index, unless it holds database identifiers (at least 90% Ensembl-, FlyBase-, WormBase-style accessions or numbers) and a `var` column holds their symbols (by content; `feature_name`, `gene_symbols`, `symbol`, … first), which then names them, the identifiers staying searchable. | `var_gene_id_column` |
 | `latentKey` | text (an `obsm` key) | The latent space the outlier filter measures in (never a 2D/3D layout). | `latent_key` |
 | `vectorFieldDefault` | text (a field id, `<field>` of an `obsm['<field>_<basis>']` key: `velocity`) | The vector field the overlay opens on. | `vector_field_default` |
 | `obsKeys` | list of text | The obs columns the viewer lists, in this order. | `obs_keys` |
@@ -244,7 +246,7 @@ Only categories with at least `minPoints` cells are measured; every other cell
 | `minPoints` | integer (`<i8`) | The fewest cells a category needed: `centroid_min_points`, else 10. |
 | `fields` | mapping | `{<obs column>: <f4 array of n_obs>}`, one array per field, in obs column order. |
 
-Each field is an ordinary `array` element (`<f4`, chunks of 2^18 values,
+Each field is an ordinary `array` element (`<f4`, chunks of 2^16 values, as obs columns,
 byte-shuffled and deflated like every array read whole, §3), so a reader
 reads one field without the others. A field is every obs column the viewer
 shows as categorical — a categorical, a text column, a boolean column or a
@@ -275,6 +277,176 @@ In Python:
                       'fields': {'leiden': array([0.62, 0.15, ..., 0.98], dtype=float32)}}}
 ```
 
+(priority-order)=
+### Priority order
+
+Every cell has a **priority**: its `uniform` rank in the
+{doc}`subsampling specification <../../web_app/p_developer_docs/19_subsampling_specification>`,
+`rank(seed, p)` of its original position `p` under the file's seed. For one
+seed the rank is a bijection of the uint32 positions, so no two cells share
+one. A file in priority order stores its cells by ascending rank: row `r`
+holds the cell of the `r`-th lowest rank. The `uniform` subsample of `k` cells
+under the file's seed is then exactly the first `k` rows of every array with
+one row per cell, and the first values of every gene of `X`, so opening it
+reads one range of each array and never a byte of a cell it left out, at any
+chunk size and compression (at most one chunk is read in part).
+
+Both writers store cells this way by default (`priority_seed=0`;
+`priority_seed=None` stores them as given, with no `priority`, no position
+column and no prefix counts). The contract, which the web app checks as it
+opens the file (`assets/js/data/anndata/priority-layout.js`):
+
+1. **The order.** `uns['cellucid']['priority']['seed']` is `s` and
+   `uns['cellucid']['priority']['nObs']` is `n_obs`, the cell count the file
+   was written with. `obs['cellucid_original_position']` (`<u4` as written;
+   a reader also takes `<i8`) holds each row's original position: a
+   permutation of `0 … n_obs − 1` whose ranks `rank(s, position)` strictly
+   ascend down the rows. So the first `k` rows hold exactly the cells
+   `subsample_cells(n_obs, k, seed=s)` keeps, and the column is a function of
+   `s` and `n_obs` alone: the positions `0 … n_obs − 1` sorted by rank. The
+   web app computes it from the seed (an `n_obs`-element sort, 26 ms for a
+   million cells, instead of a 3 MB read), once per opened store however
+   often its cells are opened again, and checks it against the stored
+   column's first chunk of rows, which it reads with the record (in an
+   `.h5ad`, with the file's first request: the writers place the column with
+   what opening reads).
+2. **Every per-cell element in that order.** `obs` (every column, categorical
+   codes, nullable values and masks, the index), `obsm`, the stored outlier
+   quantiles, the rows of a dense `X`, and **both axes** of `obsp` graphs
+   (row `r`, column `c` is the edge between the cells of rows `r` and `c`; the
+   induced subgraph of a prefix is rows `[0, k)` with columns below `k`).
+   Derived values are computed on the cells as stored: the outlier quantiles'
+   sums run in file row order.
+3. **Gene-major `X`.** Within each gene the row indices ascend (as in every
+   Cellucid-ready `X`), so a gene's values in the first `k` rows are the first
+   ones of its range `X/indptr[g] … X/indptr[g+1]`.
+4. **Prefix counts.** `uns['cellucid']['priority']['levels']` lists the prefix
+   sizes, ascending: from `n_obs`, each level is `floor(previous × 3 / 4)`,
+   down to 1; `n_obs` itself is not a level, and a level the rounding repeats
+   is kept once (2,500,000 cells: 48 levels). Beside a sparse `X`,
+   `varm['cellucid_prefix_counts']` is `n_vars × len(levels)` `<u4`, column
+   `j` each gene's values in rows below `levels[j]`; every column is
+   non-decreasing across levels per gene and at most the gene's value count.
+   It is chunked one column at a time (`[min(n_vars, 2^18), 1]`), so a reader
+   opening a prefix of `k` cells reads the one column of the smallest level
+   `≥ k` once, and each gene's read is the first `counts[g]` values of its
+   range (filtered to rows below `k`); with no level `≥ k` the gene is read
+   whole. A reader checks each count against the gene's range and the rows it
+   read: every counted row below the level, the next value (when there is one)
+   at or past it.
+5. **MuData.** The root `obs` is in priority order. Each modality's rows are
+   ordered by the file rows of the cells they measured (`obsmap` renumbered),
+   so a global prefix of `k` cells is a prefix of every modality: its rows
+   whose `obsmap` entry lies in the first `k`. A modality's
+   `obs['cellucid_original_position']` holds each row's original row in the
+   modality; its `varm['cellucid_prefix_counts']` counts its values in its
+   rows of cells below each global level.
+
+**Verified before use.** The record is a claim about the rows, and anndata
+keeps `uns` as it was when a file is subset, combined or reordered and saved
+again. Every reader therefore verifies it before relying on it, by one rule
+(web app: `readPriorityLayout`; Python: `stored_order`; R: `.stored_order`):
+
+- `seed` is a whole number from 0 to 2^32 − 1 and `specVersion` the version
+  the reader follows;
+- `nObs` is the file's cell count (a cell removed or added changes it);
+- `levels`, when present, are the levels of `nObs` (point 4);
+- the position column, when present, is the seed's order: the web app checks
+  its first chunk of rows (each a position of the file, ranks ascending — a
+  reordered file fails at its first moved row), Python and R, which hold the
+  whole column in memory, check all of it.
+
+A record that verifies is relied on, column or not (a file whose position
+column was dropped still opens in its priority order: the positions are
+computed from the seed). A record that does not verify — or a position
+column with no record beside it — is never refused and never misread: the
+file is read as one Cellucid did not write, each row its own original
+position, with a foreign file's default sampling (`blocks`); the position
+column is then an ordinary field, and the opening says why (a note in
+**Cells to open**). Python and R take such an object the same way, with a
+warning: {func}`~cellucid.restore_original_order` returns it as it is, a
+session applies to its rows as they are (as the web app read the file the
+session was saved on), and `prepare()` writes its rows as given without the
+stale column. The one case the web app's check cannot see is a file whose
+first chunk of rows (65,536 cells) and cell count were kept while later rows
+were reordered; restore the original order before reordering a file's cells.
+
+**Identity.** Everything Cellucid hands back — viewer events and commands,
+sessions, exports, pulls — names cells by original position (and obs name),
+never by file row. The web app maps an open row to its file row (a prefix:
+the same row) and that to its original position (point 1). A saved session
+holds every per-cell chunk by ascending original position and its cell-order
+digest over the cells in that order, so it does not depend on the order a file
+stores its cells in ({doc}`../../web_app/p_developer_docs/10_sessions_persistence_and_serialization`). The viewer does
+not list the position column as a field.
+
+**Reading it elsewhere.** `anndata.read_h5ad` and `anndata.read_zarr` (and
+mudata) give the cells in the stored order, which is as valid an AnnData as
+any. {func}`~cellucid.restore_original_order` (R:
+`cellucid_restore_original_order()`) returns them in the order given, without
+the position column, `priority` and the prefix counts; a backed AnnData
+(`read_h5ad(path, backed="r")`) is read into memory in that order:
+
+```python
+adata = cellucid.restore_original_order(anndata.read_zarr("pbmc.zarr"))
+```
+
+In R the record is where the importers that keep `uns` put it (anndataR,
+zellkonverter): `metadata(sce)$cellucid$priority` of a SingleCellExperiment,
+`misc$cellucid$priority` of a Seurat object, the `"cellucid"` attribute of a
+data frame. A Seurat object is reordered in every part — each assay's layers
+(or matrices), reductions, graphs (both axes), neighbour indices, cell
+metadata and identities.
+
+Preparing an object in a verified stored order again (`prepare(data=adata)`,
+`cellucid_prepare(data = object)`) puts it back in its original order first,
+so every cell keeps its original position whatever `priority_seed` is: with a
+seed the file is in that seed's order, with `priority_seed=None` in the
+original order. A position column with no record that describes the cells is
+not written (with a warning): it names no order.
+
+**Measured.** On the Suo atlas (561,947 cells × 5,103 genes) the priority
+order costs 6.4% of the stored size (186.0 → 197.9 MB of the arrays that
+change): the gene indices of `X` 44.4 → 50.6 MB, the graph's indices
+26.0 → 27.8 MB, the embeddings 0–5%, and the obs columns that were sorted by
+sample (about 1 KB each) about 0.3 MB each, 1.3 → 3.5 MB in all. The level
+factor 3/4 was chosen against halving and 8/7 on Suo and a 1,000,000-cell
+synthetic `X` (2^16-value chunks): a gene's prefix at 1, 5, 10 and 30% of the
+cells read up to the next level fetched at most 1.01× the bytes of its exact
+prefix (halving: up to 1.09×; 8/7: 1.00×), for a table of 0.09–0.27% of `X`
+(halving 0.04–0.11%, 8/7 0.19–0.58%); the one column a subsample reads is
+1.6–4.1 KB stored. Before this layout a subsample's genes were read whole and
+filtered (each gene's whole range, at every subsample size), and a
+cell-block offset table was measured and not chosen: compressed chunks of
+2^16 values hold several genes of a typical atlas, so a block's range still
+fetched its whole chunk (Suo at 1%: 79 of 103 KB a gene), and making it exact
+needed either chunks 16 times smaller (21,334 chunk files for Suo's `X`) or no
+compression (`X` 59 → 350 MB), and a round trip for each gene's table row.
+
+Read with the web app's reader over a simulated link (`scripts/benchmark-anndata`
+steps, HTTP/2; synthetic `.h5ad` files of 2,000 genes written by `prepare()`,
+cells grouped by sample as atlases are): the writer before the priority order
+(cells as given, chunks of 2^16 and 2^18; a subsample by `blocks`) against
+the priority order with its chunks (a `uniform` subsample under the file's
+seed). Every step's bytes summed, and the steps' times:
+
+| Cells, link, share | Before: open / 99 genes / all steps | Priority order: open / 99 genes / all steps |
+|---|---|---|
+| 300,000; 80 ms, 50 MB/s; 1% | 138 ms / 0.36 s / 13.2 MB | 150 ms / 0.22 s / 3.7 MB |
+| 300,000; 150 ms, 5 MB/s; 1% | 345 ms / 2.78 s / 15.0 MB | 338 ms / 0.72 s / 3.4 MB |
+| 1,000,000; 80 ms, 50 MB/s; 1% | 141 ms / 0.45 s / 16.4 MB | 156 ms / 0.24 s / 3.4 MB |
+| 1,000,000; 80 ms, 50 MB/s; 10% | 144 ms / 0.44 s / 20.3 MB | 170 ms / 0.25 s / 4.8 MB |
+| 1,000,000; 150 ms, 5 MB/s; 1% | 299 ms / 3.02 s / 16.4 MB | 359 ms / 0.71 s / 3.4 MB |
+| 1,000,000; 150 ms, 5 MB/s; 10% | 303 ms / 3.02 s / 20.0 MB | 348 ms / 0.78 s / 4.9 MB |
+| 1,000,000; 80 ms, 50 MB/s; every cell | 139 ms / 0.46 s / 27.4 MB | 172 ms / 0.43 s / 26.8 MB |
+| 1,000,000; 150 ms, 5 MB/s; every cell | 332 ms / 3.02 s / 23.6 MB | 370 ms / 1.99 s / 18.9 MB |
+
+Opening reads the same 0.52 MB either way: the original positions are
+computed from the seed, and only the stored column's first chunk is read, with
+the file's first request. What opening costs more (15–60 ms) is the reader's
+own work, ranking every cell. The obs columns that were sorted by sample
+compress to nearly nothing as given and to 0.05–0.7 MB each in priority order.
+
 ---
 
 ## 3. Layout for the browser
@@ -291,9 +463,10 @@ package writes no HDF5.
 
 | Array | Chunk |
 |---|---|
-| `X/data`, `X/indices` (read one gene's range at a time) | 65,536 values (2^16) |
-| `X/indptr`, obs and var columns and indexes, every array of `obsp/connectivities`, `uns` lists (read whole) | 262,144 values (2^18) |
-| `obsm` arrays (read whole, by rows) | `[rows, n_columns]`, rows = 262,144 / n_columns (at least 1) |
+| `X/data`, `X/indices` (read one gene's range, or its first values, at a time) | 16,384 values (2^14) |
+| every array with one row per cell: obs columns and index, categorical codes, nullable values and masks, the stored outlier quantiles, MuData's masks and cell maps | 65,536 values (2^16) |
+| `obsm` arrays (read by rows) | `[rows, n_columns]`, rows = 65,536 / n_columns (at least 1) |
+| `X/indptr`, var columns and index, categories, every array of `obsp/connectivities`, `uns` lists (read whole) | 262,144 values (2^18) |
 | dense `X` (read one gene at a time) | `[rows, genes]`: rows up to 262,144, genes as many as keep the chunk at 262,144 values (at least 1) |
 
 An array shorter than its chunk size is one chunk of exactly its length; an
@@ -438,14 +611,23 @@ What each change bought, and what was measured and not chosen:
   side by side): 99 genes up to a fifth faster over HTTP/1.1, but reading one
   array alone then fetched the other too — 1,000 cells over HTTP/1.1 read
   113 MB instead of 74 and took 6.3 s instead of 4.9. Not chosen.
-- **Chunks of `X`**: 2^15 values doubled the requests of a whole-matrix read
-  (over HTTP/1.1, 41 s instead of 21 s for the two cell types); 2^17 and 2^18
-  cut a folder's whole-matrix reads over HTTP/1.1 (8.5× and 4.1× their bound
-  instead of 17×) but fetched 1.7× and 3× the bytes of 99 genes, which on a
-  slow link costs time (2.3× and 3.9× their bound instead of 1.4×), and made
-  each gene fetch 0.2–0.4 MB. 2^16 is the
-  smallest worst step over HTTP/2 and in every single file; a folder over
-  HTTP/1.1 is not a layout to choose (§4).
+- **Chunks of `X`**: 2^14 values since the priority order (27 October 2026).
+  Measured on a 1,000,000-cell `.h5ad` in priority order over 150 ms and
+  5 MB/s: against 2^16, a 1% subsample's 99 genes fetched 2.4 instead of
+  8.9 MB (0.68 instead of 1.94 s) and every cell's 99 genes 8.7 instead of
+  14.5 MB (1.90 instead of 3.06 s), each gene dragging fewer of its
+  neighbours' values; 2^12 fetched less still (0.8 MB) but its chunk index,
+  16 times larger, cost the first gene 0.64 MB and a round trip. The cost is
+  requests: a whole-matrix read of a `.zarr` folder fetches four times as many
+  files as with 2^16 (before, on Suo: 2^15 doubled them over HTTP/1.1, 41 s
+  instead of 21 s for the two cell types); a single file (`.h5ad`,
+  `.zarr.zip`) reads neighbouring chunks as one range.
+- **Chunks of the per-cell arrays**: 2^16 values (an embedding's rows: 2^16
+  over its width), so a subsample — the first rows in priority order — reads
+  little beyond its cells: on the file above a 1% subsample's 2-D embedding
+  fetched 0.21 MB against 0.84 MB with 2^18, its obs fields 0.05 against
+  0.18 MB, its opening 0.70 against 1.20 MB; reading every cell cost the same.
+  2^14 halved those bytes again (0.10 MB) for four times the files.
 - **Codecs**: on shuffled data deflate level 6 was the smallest of everything
   tried — Zstandard (level 3) 3% larger, Blosc-Zstandard 2%, Blosc-LZ4 30% —
   and the others are decoded in JavaScript rather than natively; no read was

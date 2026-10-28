@@ -28,7 +28,7 @@ import pandas as pd
 import pytest
 import zarr
 
-from cellucid import prepare
+from cellucid import prepare, restore_original_order
 from cellucid.prepare_data._outliers import latent_outlier_quantiles
 
 FIXTURE = Path(__file__).parent / "fixtures" / "latent_outlier_conformance.json"
@@ -107,10 +107,13 @@ def test_prepare_stores_every_categorical_fields_quantiles(tmp_path: Path, name:
             n = 2
         expected = latent_outlier_quantiles(latent, codes, n, 21)
         assert quantiles.tobytes() == expected.tobytes(), key
-    # The nullable boolean's missing values and the small category have none.
-    assert np.isnan(stored["fields"]["flag"][2::3]).all()
-    assert np.isnan(stored["fields"]["rare"][:2]).all()
-    assert not np.isnan(stored["fields"]["rare"][2:]).any()
+    # The nullable boolean's missing values and the small category have none
+    # (the cells by their original positions: the file stores them in
+    # priority order).
+    fields = restore_original_order(adata).uns["cellucid"]["outlierQuantiles"]["fields"]
+    assert np.isnan(fields["flag"][2::3]).all()
+    assert np.isnan(fields["rare"][:2]).all()
+    assert not np.isnan(fields["rare"][2:]).any()
 
 
 def test_each_field_is_its_own_array_read_whole(tmp_path: Path) -> None:

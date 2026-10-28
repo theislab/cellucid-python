@@ -67,24 +67,33 @@ Tradeoffs:
 
 ## The “where does it run?” map
 
-When you use `cellucid-python`, you almost always have three actors:
+When you use `cellucid-python`, you almost always have two actors and one
+connection between them:
 
-1) **Python** (your script / notebook kernel)  
-2) **A local HTTP server** (started by Python, usually on `127.0.0.1:<port>`)  
-3) **The Cellucid web app** (running in your browser or notebook iframe)
+1) **Python** (your script / notebook kernel), which answers the viewer's
+   reads of the dataset's bytes
+2) **The Cellucid web app**, running in your browser: inside a notebook
+   widget's output (`show_anndata`), or in a browser tab of its own
+3) **The connection**: in a notebook, the notebook's own connection (a
+   Jupyter comm, no port); for a browser tab, a local HTTP server started by
+   Python (usually on `127.0.0.1:<port>`)
 
-The key idea: the viewer is a web app, so it loads data by making HTTP requests to a server.
+The key idea: the viewer is a web app, so it reads the data itself, with
+range requests, and Python only hands it bytes.
 
 ```text
-               (the dataset's bytes)
-Python ──starts──────────────────────────▶ Local Cellucid HTTP server
-                                                 │ fetch() (Range)
-                                                 ▼
-Notebook iframe / browser tab  ◀────────────  Cellucid web app UI
-  ▲                                              │
-  └──── one WebSocket, /_cellucid/ws ────────────┘
-        Python → viewer: commands
-        viewer → Python: events (selections as binary cell indices)
+Notebook widget (show_anndata):
+
+Python kernel ◀── the notebook's own connection (comm) ──▶ widget output
+   │  reads (Range) answered                               │ frames the app from
+   │  one viewer channel: commands ⇄ events                ▼ https://www.cellucid.com
+                                                        Cellucid web app
+
+Browser tab (AnnDataViewer, serve_anndata, cellucid serve):
+
+Python ──starts──▶ Local Cellucid HTTP server ◀── fetch() (Range) ── Cellucid web app
+                          ▲                                            (browser tab)
+                          └──── one WebSocket, /_cellucid/ws ──────────┘
 ```
 
 ---
@@ -98,16 +107,19 @@ reads (`.h5ad`, a Zarr store, `.h5mu`, `.loom`, a 10x `.h5` or `outs/`
 folder, a MatrixMarket folder, an `.rds`/`.rda`).
 
 **What happens:**
-1) Python starts an `AnnDataServer`. For AnnData and MuData it reads only the
-   metadata and checks the launch choices you named against it; it serves the
-   bytes as they are on disk (an in-memory object is first written once to a
-   temporary `.h5ad` or `.h5mu`).
-2) The web app's own reader reads the data itself: in place with HTTP range
-   requests where the format allows it (only the bytes a view needs are
-   transferred), once from the start for an R object or a MatrixMarket
-   folder. The server computes nothing per request.
-3) Commands and events travel on the viewer channel, one WebSocket the viewer
-   opens to the same server (`/_cellucid/ws`).
+1) Python prepares the dataset: for AnnData and MuData it reads only the
+   metadata and checks the launch choices you named against it; it answers
+   reads with the bytes as they are on disk, or -- for an in-memory AnnData,
+   and an AnnData file not in priority order -- with the chunks of a store in
+   priority order made as they are asked for (a MuData object is written once
+   to a temporary `.h5mu`). No server is started.
+2) The widget shows the app (loaded by the browser from
+   `https://www.cellucid.com`); the app's own reader reads the data itself
+   through the widget: in place with range requests where the format allows
+   it (only the bytes a view needs are transferred), once from the start for
+   an R object or a MatrixMarket folder. Python computes nothing per request.
+3) Commands and events travel on the viewer channel, over the same
+   connection, handled by the kernel between cells.
 
 **Why this is convenient:** nothing is converted; any AnnData opens.
 
@@ -153,11 +165,12 @@ def handle(event):
 Here is the concrete path:
 
 1) In the web app, a user selects cells (lasso/click/etc.).
-2) The web app sends the selection on its viewer channel (the WebSocket it
-   opened to `/_cellucid/ws` with its `viewerId` and `viewerToken`) as one
+2) The web app sends the selection on its viewer channel (opened with its
+   `viewerId` and `viewerToken`: over the widget in a notebook, a WebSocket to
+   `/_cellucid/ws` in a browser tab) as one
    binary frame: the selected cell indices as little-endian `uint32`,
    ascending (other events, such as hover and click, are JSON text frames).
-3) The Python server hands it to the viewer object the channel belongs to.
+3) Python hands it to the viewer object the channel belongs to.
 4) The viewer object triggers your hook callback.
 
 ```{important}
@@ -167,20 +180,33 @@ This is a common source of “I selected one thing but analyzed another”.
 
 ---
 
-## How “no-download sessions” work (frontend → Python → file)
+## How results come back (frontend → Python)
 
-In notebooks, `viewer.get_session_bundle()` is a *pull* workflow:
+Every result the viewer holds — highlight groups, labels, clusters, scores,
+gene sets — is sent to Python as it is made, so one call in a later cell
+writes them all onto your AnnData:
 
 ```python
-bundle = viewer.get_session_bundle(timeout=60)
+viewer.pull(adata)
+```
+
+A whole session is a *pull* workflow in two cells (a notebook widget hears
+the viewer only between cells):
+
+```python
+request = viewer.request_session_bundle()
+```
+
+```python
+bundle = request.result()
 ```
 
 What happens:
 1) Python sends a `requestSessionBundle` command on the viewer channel.
 2) The web app serializes the current session state into bytes (`.cellucid-session`).
 3) The web app sends those bytes back on the channel as one binary frame.
-4) The server streams the frame to a temporary file and notifies Python.
-5) Python returns a `CellucidSessionBundle(Path(...))`.
+4) Python streams the frame to a temporary file.
+5) `request.result()` returns a `CellucidSessionBundle(Path(...))`.
 
 This is covered in depth in: {doc}`05_sessions_to_anndata_bridge`.
 
@@ -190,15 +216,18 @@ This is covered in depth in: {doc}`05_sessions_to_anndata_bridge`.
 
 ### “Is my data being uploaded to cellucid.com?”
 
-In notebook/server modes, the dataset is served from your Python process. Each
-viewer-serving startup downloads and verifies the configured web generation
-(see {doc}`06_privacy_security_and_offline_vs_online`), but your dataset is not
-uploaded by default.
+No. In notebook and server modes the dataset is read from your Python
+process by the app running in your own browser. In a notebook the browser
+loads the app's code from `https://www.cellucid.com`; a browser-tab server
+downloads and verifies the app's code at startup (see
+{doc}`06_privacy_security_and_offline_vs_online`). Your dataset is not
+uploaded.
 
-### “Why do I see `127.0.0.1:8765` instead of `https://www.cellucid.com`?”
+### “Why does a browser tab show `127.0.0.1:8765` instead of `https://www.cellucid.com`?”
 
-To avoid cross-origin issues, the Python server serves the exact verified
-viewer generation from the same origin as the dataset.
+To avoid cross-origin issues, a browser-tab server serves the exact verified
+viewer generation from the same origin as the dataset. A notebook widget shows
+the app from `https://www.cellucid.com` and reaches the data through the widget.
 
 ### “Why do events contain indices instead of cell IDs?”
 
@@ -209,37 +238,39 @@ Treat index order as part of dataset identity (see {doc}`04_dataset_identity_and
 
 ## Troubleshooting
 
-### Symptom: “The notebook iframe is blank / mixed-content blocked”
+### Symptom: “The notebook output is empty”
 
 Likely causes:
-- Your notebook page is served from HTTPS (JupyterHub, Colab, remote), but the viewer tries to load `http://127.0.0.1:<port>`.
-
-How to confirm:
-- The browser console shows a mixed-content or connection error, and
-  `viewer.viewer_url` is not reachable from the browser.
+- The notebook front end does not show widgets (`anywidget` missing where the
+  notebook server runs).
+- The browser cannot load the app from `https://www.cellucid.com` (the output
+  says so).
 
 Fix options:
-1) Configure an HTTPS route for one fixed Cellucid port, or use SSH port
-   forwarding if the kernel is remote.
-2) Pass that browser-reachable server base as `client_server_url=` when
-   constructing the viewer.
+1) Install `anywidget` where the notebook server runs, and reload the page.
+2) Allow the address, or host a copy of the app and pass `web_source_url=`.
+
+### Symptom: “A browser-tab viewer cannot be reached”
+
+The kernel runs on another machine: forward its port over SSH, or pass a
+reverse proxy's address as `client_server_url=` and its host as
+`allowed_hosts=` ({doc}`../d_viewing_apis/12_remote_servers_ssh_tunneling_and_cloud`).
 
 ### Symptom: “Hooks never fire”
 
 Likely causes:
-- the viewer is not fully loaded,
-- the viewer's channel (`/_cellucid/ws`) could not open (a proxy that does
-  not pass WebSockets; the viewer says so),
-- you registered hooks on a different viewer instance than the one in the iframe.
+- the viewer is not fully loaded, or a cell is still running (a widget's
+  events arrive between cells),
+- you registered hooks on a different viewer instance than the one you see,
+- in a browser tab, the channel (`/_cellucid/ws`) could not open (a proxy
+  that does not pass WebSockets; the viewer says so).
 
 How to confirm:
-- Run `viewer.debug_connection()` (see {doc}`08_debugging_mental_model_where_to_look`).
-- In the browser network tab, filter `WS` and look at the `/_cellucid/ws`
-  connection: its frames show each event as you select cells.
+- Run `viewer.debug_connection()` in a new cell (see {doc}`08_debugging_mental_model_where_to_look`).
 
 Fix:
-- call `viewer.wait_for_ready(timeout=60)` before relying on hooks,
-- ensure the viewer URL you opened matches the `viewer.viewer_url` printed by Python.
+- let the cell finish; check `viewer.state.ready` in a later cell,
+- re-run the cell that creates the viewer, and register hooks on that object.
 
 ---
 

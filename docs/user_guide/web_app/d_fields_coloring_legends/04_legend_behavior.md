@@ -71,6 +71,10 @@ If a category has `0 available` cells, its checkbox and color picker are
 disabled, the row is greyed out, and hovering it shows
 `No cells available in this category after other filters`.
 
+On a subsample the counts are of the open cells, and a line above them says
+so: *Counted on the 240 of 1,200 cells open.*
+({doc}`../b_data_loading/21_subsampled_loading`).
+
 ```{figure} ../../../_static/screenshots/filtering/legend-category-unavailable.png
 :alt: The clusters legend under a narrow S_score range filter: Alpha, Ductal, Ngn3 high EP and Ngn3 low EP stay ticked with small counts, while Beta, Delta, Epsilon and Pre-endocrine are greyed out with disabled checkboxes and read 0 cells.
 :width: 488px

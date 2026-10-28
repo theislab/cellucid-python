@@ -93,6 +93,11 @@ ALLOWLIST: dict[str, tuple[str, str]] = {
         "HOST",
         "One text event frame on the viewer channel; selections and sessions are binary frames.",
     ),
+    "src/cellucid/jupyter/_widget.py:_ANSWER_MESSAGE_BYTES": (
+        "PERF",
+        "how many body bytes one widget message carries to the page; a larger "
+        "body is sent in a message of its own, so nothing is refused",
+    ),
     "src/cellucid/_viewer_channel.py:_BUNDLE_CHUNK_BYTES": (
         "PERF",
         "The read buffer a session bundle streams to disk through; the bundle itself has no bound.",

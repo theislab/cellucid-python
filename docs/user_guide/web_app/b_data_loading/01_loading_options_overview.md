@@ -7,7 +7,7 @@ If you are new, start here. If you already know what you want, jump to the page 
 - {doc}`02_local_demo_tutorial`: publish a dataset catalog on GitHub or any static host, with no server
 - {doc}`03_browser_file_picker_tutorial`: open a file or folder from your computer
 - {doc}`04_server_tutorial`: serve a file from a local or remote Python process
-- {doc}`05_jupyter_tutorial`: embed Cellucid in a notebook and interact programmatically
+- {doc}`05_jupyter_tutorial`: show Cellucid in a notebook cell and interact programmatically
 - {doc}`11_custom_dataset_repository`: publish and validate a public multi-dataset
   repository, starting from a complete reference implementation
 - {doc}`12_sample_dataset_provenance`: what each built-in sample is, what to cite,
@@ -78,9 +78,9 @@ wherever the file is: from your disk, or from a web host with HTTP range
 requests. Nothing is copied into memory up front, so there is no file size
 limit; the only bound is the memory the arrays actually shown need. An R
 object (`.rds`, `.rda`) and a MatrixMarket folder are the exception: they
-cannot be read in place, so they are read once from start to end into this
-browser's storage for the tab, and read from there as views need them
-({doc}`17_open_r_objects`).
+cannot be read in parts, so they are read whole, once, into this browser's
+storage, kept there (for your next visit, when the file has a version), and read from there as views need
+them ([below](which-formats-are-read-in-parts)).
 
 How fast a gene reads depends on how the matrix is stored:
 - A **gene-major (CSC)** or dense matrix reads one gene directly. A
@@ -91,6 +91,59 @@ How fast a gene reads depends on how the matrix is stored:
   built in the background as soon as the file opens; over a slower link, when
   the first gene is shown, so opening downloads only what the first view
   draws.
+
+(which-formats-are-read-in-parts)=
+## Which formats are read in parts
+
+| Format | Read in parts? | How it opens |
+|---|---|---|
+| AnnData `.h5ad`, AnnData Zarr (folder or `.zarr.zip`), MuData (`.h5mu`, Zarr), Loom, 10x `.h5` and `outs/` | Yes | Only what each view needs, from your disk or with HTTP range requests from a host; a matrix stored cell by cell has its gene index kept in this browser once built, so the same cells opened again read genes at once ({doc}`21_subsampled_loading`). Served from Python by path, each is served with its cells in priority order, so a subsample sends only its cells |
+| A Cellucid-ready AnnData (`prepare()` in Python, `cellucid_prepare()` in R) | Yes, fastest | As above, with the matrix stored by gene and chunked for range reads, so one gene is one small read |
+| Seurat or SingleCellExperiment `.rds`, `.rda`, `.RData` (gzip, bzip2, xz; GEO's `.rds.gz`) | No | Read whole, once, from start to end, and kept in this browser's storage; the next opening of the same file (even days later) opens from there in seconds, reading nothing of the file |
+| An uncompressed R file (`saveRDS(compress = FALSE)`) | Its arrays, yes | Its structure is read once and kept; its arrays are read in place |
+| MatrixMarket folder (`matrix.mtx[.gz]` with its lists) | No | As an R object: read whole once, kept |
+| Any file on a host that serves no parts of files (no range requests, or `Content-Encoding` on every answer) | No | Downloaded whole, once, into this browser's storage as it arrives (memory where the page cannot write its storage), and kept: the next opening downloads nothing (for a file with a version; below) |
+| `.h5ad.gz`, zstd-compressed R files (`compress = "zstd"`), h5Seurat | Not opened | The message says how to write a file Cellucid opens |
+
+Before a file is read whole, the opening says so: that the format cannot be
+read in parts, how much will be read, that what is read is kept for next
+time, and that a Cellucid-ready AnnData is read in parts instead. A file is
+known again by what it is and its version: a file on this computer by its
+name, size and modification time; a linked file by the provider's id for it
+(for a plain web address, the address without its signature or token
+parameters) and the version its host reports: an ETag the host lets other
+sites read (`Access-Control-Expose-Headers: ETag`), or the provider's
+revision or checksum (CELLxGENE, Zenodo, Figshare, Hugging Face, GitHub,
+Google Drive, OneDrive, when they state one). A changed file is read again.
+A file a viewer host serves (`cellucid serve`, `serve_anndata()`, a
+notebook widget, R's `cellucid_view()` / `cellucid_serve()`) has a version
+too: the host lists it with the `ETag` its bytes are answered with (made from
+the file's size, modification and change times), so a file rewritten in place
+is a new version. Only a file with a version is kept for later visits. One
+known only by its size is kept for its tab only, and only that tab opens it
+again: a file on a host that reports no readable version, a GEO file whose
+size comes from its series' file list.
+
+What is kept stays until you clear it, or until the browser needs the room:
+when a new file does not fit in the storage the browser grants this site,
+kept gene indexes are removed first (they are the cheapest to make again),
+then the files opened least recently, never one a tab has open.
+**Session › Open data › Stored** says how many files are kept and how much
+they take, and of how many files stored cell by cell (most atlases, every
+CELLxGENE file) the gene index is kept, so the same cells opened again read
+their genes at once ({doc}`21_subsampled_loading`), with **Clear**, which
+removes whatever no open tab uses. In a private window nothing outlives the window:
+Firefox and Safari give the page no storage (WebKit's private browsing has
+neither the origin-private file system nor IndexedDB, measured in Playwright's
+WebKit, whose test windows are private ones), so the file is held in memory
+for the tab; Chrome gives it a small storage held in memory, so a large R object there
+stops with *This browser's storage for this site is full*: open it in a
+normal window.
+
+To share a large R object or MatrixMarket matrix, write it once as a
+Cellucid-ready AnnData: in R, `cellucid::cellucid_prepare(path, data = obj)`;
+in Python, `cellucid.prepare()`. Every viewer then reads only what each view
+needs, with nothing read whole.
 
 ## Vector fields (velocity/drift overlay): what you need for it to appear
 
@@ -125,10 +178,11 @@ Pick the first row that matches you.
 
 ## Every Route Into Cellucid
 
-Every dataset reaches the viewer in one of two ways: **the browser reads it
-itself**, from your computer or from a web address, or **a Cellucid server
-hands it over** (one you start in a terminal, from Python, or that a notebook
-starts for you). Either way, the same browser AnnData reader reads it.
+Every dataset reaches the viewer in one of three ways: **the browser reads it
+itself**, from your computer or from a web address; **a Cellucid server hands
+it over** (one you start in a terminal, from Python or R); or **a notebook
+hands it over** through the widget it shows the viewer in. Every way, the same
+browser AnnData reader reads it.
 
 ### The browser reads it (nothing to install)
 
@@ -141,20 +195,32 @@ starts for you). Either way, the same browser AnnData reader reads it.
 ### A Cellucid server hands it over
 
 The server runs where the data is; the web app connects to it, either because
-the server opened it (`cellucid serve` opens your browser, a notebook embeds
-it) or through the **Link or server** bar under **Open data** (type its
-address, for example `localhost:8765`, or just the port). The server computes
-nothing: it serves the file's bytes as they are on disk, and the browser reads
-them with range requests, exactly as it reads a linked file (Python first
-writes an in-memory AnnData once to a temporary `.h5ad`; R serves an
-in-memory object as a Zarr store built as the browser asks for it).
+the server opened it (`cellucid serve` opens your browser) or through the
+**Link or server** bar under **Open data** (type its
+address, for example `localhost:8765`, or just the port). The browser reads
+the data with range requests, exactly as it reads a linked file: a file
+`prepare()` wrote is served as its bytes on disk; an in-memory object (Python
+or R), and an AnnData file in any other order (Python), are served as a Zarr
+store in priority order built as the browser asks for it, so a subsample
+transfers only its cells.
 
 | Route | Command | Best for |
 |---|---|---|
 | **Terminal** | `cellucid serve data.h5ad` (or `data.zarr`, `data.zarr.zip`, any other format Cellucid reads) | A dataset on a remote machine (over an SSH tunnel) |
 | **Python** | `cellucid.serve_anndata("data.h5ad")` | Scripting server startup |
-| **Jupyter** | `cellucid.show_anndata(adata_or_path)` | Exploring while you analyze |
-| **R** | `cellucid::cellucid_view(obj)` (a Seurat, SingleCellExperiment or SummarizedExperiment object, or a path) | Exploring from an R session ({doc}`../../r_package/index`) |
+| **R** | `cellucid::cellucid_view(obj)` (a Seurat, SingleCellExperiment or SummarizedExperiment object, or a path) in RStudio, Positron or an R console | Exploring from an R session ({doc}`../../r_package/index`) |
+
+### A notebook hands it over
+
+In a Jupyter notebook (JupyterLab, Notebook 7, VS Code, Colab, marimo,
+Databricks), the viewer is a widget in the cell's output: it frames the app
+from www.cellucid.com and hands it the data from the kernel through the
+notebook's own connection. No server, no port, no address to type.
+
+| Route | Command | Best for |
+|---|---|---|
+| **Python** | `cellucid.show_anndata(adata_or_path)` | Exploring while you analyze ({doc}`05_jupyter_tutorial`) |
+| **R** (IRkernel) | `cellucid::cellucid_view(obj)` | The same from R ({doc}`../../r_package/d_viewing_loading/08_view_in_jupyter_notebooks`) |
 
 The dataset's id and name come from the file's `uns['cellucid']`; a file that
 does not state them needs `--dataset-id` and `--dataset-name`
@@ -234,8 +300,8 @@ For the complete verified loading gallery, see {doc}`09_screenshots`.
 
 The browser routes in the table above are the controls in this panel; a
 server started in a terminal or from Python is reached through the **Link or
-server** bar, and a notebook needs no control at all because it supplies the
-address.
+server** bar, and a notebook needs no control at all because its widget
+hands the data over itself.
 ```
 
 ## The Dataset box
@@ -243,26 +309,35 @@ address.
 The **Dataset** box at the top of the **Session** panel describes the dataset
 that is open, and only that one; opening another rewrites all of it.
 
-- **The name**, then one line with its cells and genes.
+- **The name**, then one line with its cells and genes; with a share of the
+  cells open, the cells read "228K of 2.3M" ({doc}`21_subsampled_loading`).
 - **Where it is read from:** the format (`h5ad file`, `Zarr v2 folder`,
   `Zarr v3 ZIP`, `Loom (.loom)`, `R object (.rds)`, …) and the host
   (`theislab.github.io`, `localhost:8765`), `this computer` for a file you
   opened, or the program that opened the viewer (`Python`, `Jupyter`, `R`).
-- **For an R object or a MatrixMarket folder**, one more line: *Read once into
-  this browser's storage for this tab* (or *into memory*, when the browser
-  gives the page no storage, as in a private window), and how many parts of
-  the file were not read.
+- **For an R object or a MatrixMarket folder**, one more line: *Read whole
+  once (it cannot be read in parts), kept in this browser's storage for next
+  time*, or *Opened from this browser's storage, read whole on an earlier
+  open* (or *into memory for this tab*, when the browser gives the page no
+  storage, as in a private window), and how many parts of the file were not
+  read.
 - **The description** the dataset states (`uns['cellucid']['description']`),
   two lines with **More**.
 - **How much has been read**, for data read in place from a host:
   "5.5 MB read in 43 requests", or "Reading… 5.5 MB read in 43 requests" while
-  bytes arrive. Nothing is saved to disk; what was read is released when the
-  dataset closes.
+  bytes arrive. What was read stays in this tab's memory (within its memory
+  budget), so opening another share of the same file fetches nothing twice,
+  and is released with the tab. Only what is listed under
+  {ref}`which-formats-are-read-in-parts` is kept on disk: a file read whole,
+  and the gene index of a matrix stored cell by cell.
 - **Details**, collapsed: the source and citation as links, the file, its
-  format and size, how it is read (and, for a format read once, where it is
-  kept and what was not read), cells, genes, obs fields, the embeddings shown
+  format and size, how it is read (and, for a format read whole, where it is
+  kept, what is read in parts instead and what was not read), cells (with a
+  subsample, "228,245 of 2,282,447 (uniform, seed 0)", and ", fitted to this
+  device" when the device chose the share), genes, obs fields, the embeddings shown
   (of how many `obsm` arrays), the modality of a MuData dataset, layers, raw,
-  the neighbour graph, the latent space and the vector fields. A change in
+  the neighbour graph (with a subsample, once it is read, how much of the
+  open cells' graph it keeps), the latent space and the vector fields. A change in
   **Data mapping** updates them.
 
 While a dataset opens, the box shows a spinner and what is opening. With no

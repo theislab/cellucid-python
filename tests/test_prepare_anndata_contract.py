@@ -27,7 +27,7 @@ import pytest
 import zarr
 from scipy import sparse
 
-from cellucid import prepare
+from cellucid import prepare, restore_original_order
 from cellucid._anndata_files import (
     browser_undecodable,
     classify_anndata_path,
@@ -107,6 +107,12 @@ def _write(
 
 
 def _read(path: Path) -> ad.AnnData:
+    """The written AnnData in the order its cells were given (``restore_original_order``)."""
+    return restore_original_order(_stored(path))
+
+
+def _stored(path: Path) -> ad.AnnData:
+    """The written AnnData as stored: its cells in priority order."""
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         if path.suffix == ".h5ad":
@@ -299,6 +305,7 @@ def test_h5ad_chunks_and_filters(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     # Small chunk targets so the toy arrays span several chunks.
     monkeypatch.setattr(_store, "SLICED_CHUNK_ELEMENTS", 16)
     monkeypatch.setattr(_store, "WHOLE_CHUNK_ELEMENTS", 32)
+    monkeypatch.setattr(_store, "CELL_CHUNK_ELEMENTS", 24)
     path = _write(tmp_path, "data.h5ad", "h5ad", None)
     with h5py.File(path) as file:
         assert dict(file.attrs) == {"encoding-type": "anndata", "encoding-version": "0.1.0"}
@@ -314,10 +321,14 @@ def test_h5ad_chunks_and_filters(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         assert not file["obs/is_doublet"].shuffle
         assert file["X/indptr"].chunks == (N_GENES + 1,)
         assert file["X/indices"].dtype == np.int32
-        assert file["obs/score"].chunks == (32,)
-        # An embedding chunk holds every column of a block of rows.
-        assert file["obsm/X_pca"].chunks == (32 // 6, 6)
-        assert file["obsm/X_umap"].chunks == (16, 2)
+        # Every array with one row per cell in chunks of CELL_CHUNK_ELEMENTS
+        # values; an embedding chunk holds every column of a block of rows.
+        assert file["obs/score"].chunks == (24,)
+        assert file["obs/_index"].chunks == (24,)
+        assert file["obs/cellucid_original_position"].chunks == (24,)
+        assert file["obsm/X_pca"].chunks == (24 // 6, 6)
+        assert file["obsm/X_umap"].chunks == (12, 2)
+        # The rest (var, the graph) in chunks of WHOLE_CHUNK_ELEMENTS.
         assert file["obsp/connectivities/data"].chunks == (32,)
         # File format 1.10 (superblock 3), and every object's header in the
         # metadata block at the start of the file, before any array's values.
@@ -371,8 +382,12 @@ def test_h5ad_opening_reads_lie_before_every_other_value(tmp_path: Path) -> None
             dict(file.attrs)
             file["var/_index"][...]
             file["X/indptr"][...]
+            # Every value of uns but the outlier quantiles: its scalars, and
+            # the priority's levels.
             file["uns"].visititems(
-                lambda name, item: item[()] if isinstance(item, h5py.Dataset) and item.ndim == 0 else None
+                lambda name, item: item[()]
+                if isinstance(item, h5py.Dataset) and "outlierQuantiles" not in name
+                else None
             )
             labels = [
                 f"obs/{key}/categories" for key in file["obs"] if file["obs"][key].attrs["encoding-type"] == "categorical"
@@ -384,7 +399,11 @@ def test_h5ad_opening_reads_lie_before_every_other_value(tmp_path: Path) -> None
             bulk: list[int] = []
 
             def first_chunk(name: str, item: Any) -> None:
-                opened = name in ("var/_index", "X/indptr") or name.endswith("/categories")
+                opened = (
+                    name in ("var/_index", "X/indptr")
+                    or name.endswith("/categories")
+                    or (name.startswith("uns/") and "outlierQuantiles" not in name)
+                )
                 if isinstance(item, h5py.Dataset) and item.chunks is not None and item.id.get_num_chunks() and not opened:
                     bulk.append(item.id.get_chunk_info(0).byte_offset)
 
@@ -491,6 +510,7 @@ _V3_DTYPES = {
     "int16": "<i2",
     "int32": "<i4",
     "int64": "<i8",
+    "uint32": "<u4",
     "float32": "<f4",
     "float64": "<f8",
     "string": "|O",
@@ -686,10 +706,11 @@ def test_a_zarr_v3_chunk_carries_no_time(tmp_path: Path) -> None:
         key = chunk.relative_to(path).as_posix().split("/c/")[0]
         if json.loads((path / key / "zarr.json").read_text())["codecs"][-1]["name"] == "blosc":
             array = root[key]
-            index = int(chunk.name)
+            coords = [int(part) for part in chunk.relative_to(path / key / "c").parts]
             raw = np.zeros(array.chunks, dtype=array.dtype)
-            values = np.asarray(array[index * array.chunks[0] : (index + 1) * array.chunks[0]])
-            raw[: len(values)] = values
+            box = tuple(slice(at * size, (at + 1) * size) for at, size in zip(coords, array.chunks, strict=True))
+            values = np.asarray(array[box])
+            raw[tuple(slice(0, extent) for extent in values.shape)] = values
             _assert_blosc_frame(data, raw.tobytes(), array.dtype.itemsize)
             framed += 1
             continue

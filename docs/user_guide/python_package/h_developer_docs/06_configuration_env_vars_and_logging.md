@@ -68,31 +68,24 @@ remove its current generation.
 
 ### `client_server_url`
 
-Overrides the URL that the **browser** should use to reach the Python server.
-
-This is primarily for remote notebook environments where:
-- the kernel runs on a remote VM,
-- and `http://127.0.0.1:<port>` is not reachable from your browser.
-
-If you have an HTTPS reverse proxy for the server (or a stable tunnel URL),
-pass the exact browser-reachable base URL:
+Overrides the URL that the **browser** should use to reach a browser-tab
+viewer's server ({class}`~cellucid.AnnDataViewer`), for a page opened through
+a reverse proxy or a tunnel whose address differs from the server's own:
 
 ```python
-from cellucid import show_anndata
-viewer = show_anndata(
-    adata,
+from cellucid import AnnDataViewer
+viewer = AnnDataViewer(
+    "data.h5ad",
     dataset_name="Example",
     dataset_id="example",
     client_server_url="https://notebooks.example/proxy/8765",
+    allowed_hosts=["notebooks.example"],
 )
 ```
 
 The value must be an absolute HTTP or HTTPS URL with no credentials, query,
-fragment, trailing slash, or surrounding whitespace.
-
-See details in: {doc}`10_jupyter_embedding_architecture`
-
----
+fragment, trailing slash, or surrounding whitespace. A notebook viewer
+(`show_anndata`, `cellucid.Widget`) has no server address and needs none.
 
 ## Logging
 
@@ -144,18 +137,17 @@ Treat the server as trusted/local unless you have a hard threat model and additi
 
 ## Troubleshooting
 
-### Symptom: “Notebook says mixed content is blocked”
+### Symptom: “A browser-tab viewer cannot be reached (mixed content, remote kernel)”
 
 Cause:
-- the notebook is served over HTTPS,
-- but the viewer tries to load `http://127.0.0.1:<port>`.
+- the page is served over HTTPS, or the kernel runs on another machine,
+- but the viewer's server is `http://127.0.0.1:<port>` on the kernel's machine.
 
 Fix options (ordered):
-1) Route the server through `jupyter-server-proxy` and pass the proxy base as
-   `client_server_url=` and its host as `allowed_hosts=[...]` (Cellucid does
-   not select a proxy itself).
-2) Use a tunnel/reverse proxy and pass its exact base as
-   `client_server_url=`.
+1) In a notebook, use `show_anndata()`: a widget needs no address.
+2) Use an SSH tunnel, or a reverse proxy whose exact base you pass as
+   `client_server_url=` and whose host you pass as `allowed_hosts=[...]`
+   (Cellucid does not select a proxy itself).
 
 See: {doc}`10_jupyter_embedding_architecture`
 

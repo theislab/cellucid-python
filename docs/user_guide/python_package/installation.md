@@ -5,12 +5,12 @@
 **Goal:** install `cellucid`, verify the CLI, and avoid the most common environment pitfalls
 
 :::{note}
-**Active package version: 0.9.5.** Version 0.9.5 is the current PyPI <!-- CELLUCID_VERSION -->
+**Active package version: 0.9.6.** Version 0.9.6 is the current PyPI <!-- CELLUCID_VERSION -->
 release. If the [PyPI package page](https://pypi.org/project/cellucid/) lists
-0.9.5, the normal install and pin commands below retrieve it. Until then, they <!-- CELLUCID_VERSION -->
+0.9.6, the normal install and pin commands below retrieve it. Until then, they <!-- CELLUCID_VERSION -->
 resolve only to versions available from PyPI; install the active source
 straight from the official GitHub repository (see **From the official source
-repository** below) when validating 0.9.5 before publication. <!-- CELLUCID_VERSION -->
+repository** below) when validating 0.9.6 before publication. <!-- CELLUCID_VERSION -->
 :::
 
 ## Requirements
@@ -120,7 +120,7 @@ pip install -U cellucid
 Pin a specific version (recommended for paper pipelines):
 
 ```bash
-pip install "cellucid==0.9.5"  # CELLUCID_VERSION
+pip install "cellucid==0.9.6"  # CELLUCID_VERSION
 ```
 
 ### Core scientific runtime
@@ -150,14 +150,18 @@ Serving an `.h5mu` or MuData Zarr file by path does not.
 ### Additional tools you might need
 
 - **Jupyter notebooks** (recommended for `show_anndata(...)` / hooks):  
-  `pip install jupyterlab` (or `pip install notebook`)
+  `pip install jupyterlab` (or `pip install notebook`). The viewer is a
+  notebook widget: `cellucid` installs `anywidget`, which JupyterLab and
+  Notebook 7 also need in the environment that runs the *notebook server*
+  (the same one in most setups). VS Code, Colab, marimo and Databricks bring
+  their own widget support.
 - **Single-cell analysis stack** (compute embeddings / neighbors / QC):  
   `pip install scanpy` (and whatever your lab uses)
 
-Cellucid already installs `jupyter-server-proxy`. For remote/HTTPS notebooks,
-the Jupyter deployment must configure a route for the selected Cellucid port,
-and the caller must pass that exact browser base as `client_server_url=`.
-Package installation alone does not configure routing.
+A notebook viewer needs no port, proxy or route: it reaches the kernel
+through the notebook's own connection, local or remote, HTTP or HTTPS. The
+browser loads the app from `https://www.cellucid.com`
+({doc}`e_jupyter_hooks/03_supported_environments_matrix`).
 
 ### Verify viewer-source access before a workshop or deployment
 
@@ -208,7 +212,7 @@ python -c "from cellucid import clear_web_cache; print(clear_web_cache())"
 
 - **Multiple Python environments**: “installed but can’t import” usually means you installed into one env and ran Python in another.
 - **Conda + pip mixing**: it can work, but if you hit binary/ABI issues, prefer either “all conda” or “all pip” for core scientific deps.
-- **HTTPS notebook pages**: if your notebook is served over HTTPS, the browser can block `http://127.0.0.1:<port>` iframes (mixed content). See {doc}`a_landing_pages/03_compatibility_matrix_must_be_explicit`.
+- **A notebook that shows no widgets**: the viewer's output shows text instead; install `anywidget` where the notebook server runs. See {doc}`e_jupyter_hooks/03_supported_environments_matrix`.
 - **Blocked viewer source**: startup stops if the configured source inventory or
   any declared asset cannot be fetched and verified. Use `--no-web-ui` only
   when you intentionally want the scientific data endpoints without a viewer.
@@ -286,14 +290,17 @@ python -m pip show cellucid
 
 ---
 
-### Symptom: the embedded viewer is blank in JupyterLab / JupyterHub
+### Symptom: no viewer in the notebook output (JupyterLab / JupyterHub)
 
 **Likely causes**
-- Your notebook is served from HTTPS or a remote origin, so the browser blocks an HTTP loopback iframe.
+- The notebook server's environment has no `anywidget`, so it cannot show the
+  widget: the output shows text instead.
+- The browser cannot load the app from `https://www.cellucid.com`: the output
+  says the page has not answered.
 
 **Fix**
-- Configure a browser-reachable HTTPS route (or an SSH tunnel) for the selected
-  Cellucid port and pass its exact base as `client_server_url=`.
+- `pip install anywidget` in the notebook server's environment and reload the
+  page.
 - Or use the browser workflow instead (`cellucid serve ...`) and open the URL directly.
 
 ---
@@ -301,9 +308,9 @@ python -m pip show cellucid
 ### Symptom: `cellucid serve` stops with “Port 8765 is already in use”
 
 **Likely causes**
-- Another process is using the port (default: 8765). A notebook viewer
-  (`show_anndata`) never stops for this: it takes the next free port and
-  prints a note.
+- Another process is using the port (default: 8765). A browser-tab viewer
+  (`AnnDataViewer`) never stops for this: it takes the next free port and
+  prints a note. A notebook viewer (`show_anndata`) opens no port.
 
 **Fix**
 - Pick a different port:

@@ -31,9 +31,11 @@ Pick the closest match:
 
 ### Mode C: Notebook embedding
 
-- you are in a notebook (classic Jupyter or JupyterLab are tested; VS Code
-  notebooks and Colab have not been tested by the project).
-- you see an iframe (or a blank output where you expected an iframe).
+- you are in a notebook (JupyterLab is tested; Notebook 7, VS Code, Colab,
+  marimo and Databricks are expected to work).
+- `show_anndata()` shows a widget in the cell's output (or an empty output
+  where you expected one). There is no server: Steps 1–4 below apply to the
+  server modes; go to Step 5.
 
 ---
 
@@ -51,8 +53,9 @@ If these fail:
 
 If the port differs, find it in:
 - the CLI banner output, or
-- `viewer.server_url` (notebook; a notebook viewer takes 8765, or the next free
-  port when another viewer holds it, and prints a note), or
+- `viewer.server_url` (`AnnDataViewer`, which takes 8765, or the next free
+  port when another viewer holds it, and prints a note; a notebook widget has
+  no server), or
 - `server.url` (Python).
 
 `/_cellucid/info` also names the dataset's `format` and the `runtime` serving
@@ -140,14 +143,17 @@ If you suspect web-app internal bugs, also consult:
 
 ## Step 5 — Notebook-specific debugging (`viewer.debug_connection()`)
 
-If you have a `viewer` object, run:
+If you have a `viewer` object, run (in a new cell):
 
 ```python
 report = viewer.debug_connection()
 report
 ```
 
-The report includes:
+A notebook widget's report (`transport: "notebook widget"`) includes
+`web_source_url`, `displayed`, `connected_outputs`, `channel_connected`, the
+served `dataset`, `state` (`ready`) and `recent_events` with the commands the
+viewer refused. A browser-tab viewer's (`AnnDataViewer`) includes:
 - server health/info probes,
 - `anndata_store_probes`, keyed by every dataset the server lists, recording
   each store's range-read answer or failure,
@@ -155,7 +161,7 @@ The report includes:
   (`channel_connected`),
 - web UI cache status + build id,
 - a Python→frontend ping/pong roundtrip,
-- a frontend “debug snapshot” (URL/origin/userAgent as seen by the iframe),
+- a frontend “debug snapshot” (URL/origin/userAgent as seen by the page),
 - and recent accepted-event counts grouped by exact event type, with the
   commands the viewer refused (`recent_events["command_errors"]`).
 
@@ -187,16 +193,19 @@ Confirm in browser Network tab (filter `WS`):
 - the `/_cellucid/ws` connection is open (`101`), and frames appear as you
   interact.
 
-If it is not open:
+For a notebook widget there is no WebSocket: check
+`viewer.debug_connection()["channel_connected"]`, and remember its events
+arrive between cells.
+
+If it is not open (browser tab):
 - the page was not opened with the viewer's own URL (`viewer.viewer_url`,
   carrying `viewer=true`, `viewerId` and `viewerToken`),
-- the channel was closed `4401` (a stale iframe of a viewer that was stopped,
+- the channel was closed `4401` (a stale page of a viewer that was stopped,
   garbage-collected or replaced by a new one),
-- iframe may be blocked by proxy/mixed-content issues, or a proxy does not
-  pass WebSockets (the viewer says so).
+- a proxy does not pass WebSockets (the viewer says so).
 
 If it is open and frames flow but a hook does not run:
-- the hook is registered on a different viewer object than the iframe's,
+- the hook is registered on a different viewer object than the page's,
 - a hook raised: the `cellucid.viewer_channel` log says "A viewer event hook
   failed".
 
@@ -210,9 +219,10 @@ Likely causes:
 - binding host incorrectly (`127.0.0.1` vs `0.0.0.0`)
 - missing SSH tunnel
 - corporate firewall
-- HTTPS notebook mixed-content
+- HTTPS page loading an HTTP server (mixed content)
 
 Fix:
+- in a notebook, use `show_anndata()` (no server to reach),
 - prefer SSH tunneling over public binding,
 - or provide a stable reverse proxy and pass its exact base as
   `client_server_url=`.

@@ -23,6 +23,7 @@ import pandas as pd
 
 from .._plural import plural
 from ..session_codecs import cell_set_needs_reference, decode_cell_set
+from ._columns import membership_column
 from ._primitives import (
     _require_category_primitive,
     _require_exact_bool,
@@ -235,12 +236,12 @@ def _plan_highlights(
             column_name = f"{prefix}{group_id}"
             if materialize:
                 _reserve_column(existing_columns, column_name)
-                mask = np.zeros(n_obs, dtype=bool)
-                mask[indices] = True
                 plans.append(
                     _ColumnPlan(
                         name=column_name,
-                        values=pd.Series(mask, index=obs.index, copy=False),
+                        values=membership_column(
+                            n_obs, np.asarray(indices), open_cells=None, index=obs.index
+                        ),
                         metadata={
                             "kind": "highlight",
                             "group_id": group_id,

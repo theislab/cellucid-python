@@ -222,7 +222,7 @@ dataset publishes no gene expression fields…”*.
 |---|---|---|
 | **“Notebook command failed”** — “The notebook &lt;type&gt; command did not run: … The viewer is unchanged; correct the notebook cell and run it again.” | A command sent from Python was rejected by the viewer. Nothing changed, so re-running a corrected cell is safe | {doc}`../b_data_loading/05_jupyter_tutorial` |
 | **“Viewer stopped”** — “The notebook or R session that opened this viewer stopped (its server no longer answers). The last complete view stays as it is.” | The kernel, R session or server went away. What you see is the last good state, not live | {doc}`../b_data_loading/05_jupyter_tutorial` |
-| **“Viewer disconnected”** — “The notebook or R session is running, but this viewer cannot open its channel (…). A proxy between this page and the host must pass WebSockets…” | The viewer channel (one WebSocket, `/_cellucid/ws`) is blocked by a proxy | {doc}`../b_data_loading/05_jupyter_tutorial` |
+| **“Viewer disconnected”** — “The notebook or R session is running, but this viewer cannot open its channel (…). A proxy between this page and the host must pass WebSockets…” | A browser-tab viewer's channel (one WebSocket, `/_cellucid/ws`) is blocked by a proxy (a notebook widget has no WebSocket) | {doc}`../b_data_loading/05_jupyter_tutorial` |
 | **“Viewer opened elsewhere”** | The same viewer was opened in another page; this one stops following the notebook | {doc}`../b_data_loading/05_jupyter_tutorial` |
 | “Selection was saved locally, but Python notification failed…” | The selection is real in the browser; Python was not told | {doc}`../b_data_loading/05_jupyter_tutorial` |
 
@@ -334,7 +334,7 @@ Use this section when Cellucid doesn’t start, your environment blocks required
 1) Use a current stable Chrome, Edge, Firefox, or Safari release.
 2) Confirm WebGL2 works: {doc}`../a_orientation/02_system_requirements`  
 3) Try a private window (rules out extensions and stale cached state).  
-4) If embedded in an iframe/Jupyter, open Cellucid in a standalone tab (iframes can block file access, pointer lock, fullscreen).  
+4) If embedded in an iframe or a notebook output, open Cellucid in a standalone tab (iframes can block file access, pointer lock, fullscreen).  
 
 **Capabilities Cellucid requires, and what happens without them**
 
@@ -351,8 +351,10 @@ Use this section when Cellucid doesn’t start, your environment blocks required
 Cellucid does **not** use the File System Access API's file pickers or
 `SharedArrayBuffer`, so a browser or policy that blocks those is not the cause
 of your problem. Where the browser offers the origin-private file system
-(OPFS), Cellucid keeps a large gene index and the converted copy of an R object
-there; without it they stay in memory. Figure export (PNG and Hybrid SVG) draws
+(OPFS), Cellucid keeps a large gene index, the converted copy of an R object
+or MatrixMarket folder (across visits, until **Clear** under Session › Open
+data) and a file downloaded whole there; without it they stay in memory for
+the tab. Figure export (PNG and Hybrid SVG) draws
 its points on an `OffscreenCanvas`.
 
 **If you’re running locally (developer / power user)**

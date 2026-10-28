@@ -460,8 +460,8 @@ terminal and Jupyter captures:
      before they see what it refers to.
 - **notes** — The page title says "All 14 Options" and the matrix has exactly 14
   rows — verified. A direct `.h5ad` has no size limit
-  (`cellucid/assets/js/data/h5ad-loader.js` reads it from disk on demand in a
-  worker), so rows #4 and #5 are not decided by file size.
+  (the AnnData reader worker, `cellucid/assets/js/data/anndata-reader-worker.js`,
+  reads it from disk on demand), so rows #4 and #5 are not decided by file size.
 
 ## user_guide/web_app/b_data_loading/02_local_demo_tutorial.md
 

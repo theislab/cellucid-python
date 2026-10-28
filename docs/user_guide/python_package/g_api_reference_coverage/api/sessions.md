@@ -70,12 +70,22 @@ The Session panel gathers every loading path under **Open data** and keeps the *
 
 #### B) From a notebook viewer without downloading (advanced)
 
-Use this when you are running Cellucid inside a notebook and want Python to receive the bundle directly:
+Use this when you are running Cellucid inside a notebook and want Python to receive the bundle directly. A notebook widget hears the viewer only between cells, so ask in one cell:
 
 ```python
-viewer.wait_for_ready(timeout=30)
-bundle = viewer.get_session_bundle(timeout=60)
+request = viewer.request_session_bundle()
 ```
+
+and collect it in the next:
+
+```python
+bundle = request.result()
+```
+
+The same two steps work in a browser-tab viewer (`AnnDataViewer`), which
+answers while a cell runs, so there `result(timeout=60)` may follow in the
+same cell. To bring results onto an
+AnnData without a bundle, `viewer.pull(adata)` ({doc}`round_trip`).
 
 ### 2) Inspect what’s inside a bundle
 
@@ -155,6 +165,7 @@ app's sentence: *This file is not a Cellucid session file of format 2 (it does n
 |---|---|
 | `highlights/cells/<groupId>` | byte 0 picks the smallest of: 0 sorted-delta varints, 1 bitset, 2 runs, 3 a bitmask over the cells of the group's category, 4 the whole category (no per-cell bytes) |
 | `user-defined/codes/<fieldId>` | byte 0 picks: 0 raw codes, 1 runs, 2 codes packed 1, 2 or 4 bits each |
+| `user-defined/values/<fieldId>` | the field's values, little-endian float32, one per cell (`NaN`: no value) |
 | `analysis/windows`, `analysis/docked` | typed JSON: settings and results as JSON whose numeric result columns are stored as raw typed arrays |
 
 A category-relative membership (3 or 4) is decoded against
@@ -179,6 +190,8 @@ current inventory is:
 | `highlights-meta` | `highlights/meta` |
 | `highlights-cells` | `highlights/cells/<groupId>` |
 | `user-defined-codes` | `user-defined/codes/<fieldId>` |
+| `user-defined-values` | `user-defined/values/<fieldId>` (a pushed continuous column's float32 values) |
+| `gene-sets` | `gene-sets/notebook` (the gene sets a notebook pushed; only when there are some) |
 | `analysis-windows` | `analysis/windows` |
 | `analysis-docked` | `analysis/docked` |
 | `cinematic-camera` | `cinematic/camera` |
@@ -226,6 +239,13 @@ Any mismatch raises before the target is mutated.
 Highlights and codes are stored as **cell positions** in the dataset (or, for a
 whole category, as that category). If your AnnData row order differs, labels
 will be assigned to the wrong cells.
+
+A session saved on a **subsample** records which cells were open (the
+manifest's `cells`: the specification, the kept rows and their digest). Its
+highlights and fields are in the positions of those cells; applying it checks
+the digest and that `adata` has the dataset's full cell count, and places
+every column at the original rows. A cell that was not open is `<NA>` in a
+highlight column and missing in a field's.
 
 ### Conflicting column names
 
@@ -346,5 +366,6 @@ Fix:
 
 ## See also
 
-- {doc}`jupyter` for capturing a bundle in-notebook (`viewer.get_session_bundle`)
+- {doc}`jupyter` for capturing a bundle in-notebook (`viewer.request_session_bundle`)
+- {doc}`round_trip` for pulling everything (highlights, labels, scores, gene sets) from a viewer or the web app's exports in one call
 - {doc}`../../e_jupyter_hooks/index` for deeper hook/event documentation

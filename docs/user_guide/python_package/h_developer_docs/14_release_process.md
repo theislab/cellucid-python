@@ -6,10 +6,10 @@ the release candidate is reviewed and publication is explicitly authorized.
 
 ## Versioning policy
 
-`cellucid` is currently in beta (`0.9.5`). <!-- CELLUCID_VERSION -->
+`cellucid` is currently in beta (`0.9.6`). <!-- CELLUCID_VERSION -->
 
 - Package versions use three numeric components.
-- Git tags use the exact package version with a `v` prefix, such as `v0.9.5`. <!-- CELLUCID_VERSION -->
+- Git tags use the exact package version with a `v` prefix, such as `v0.9.6`. <!-- CELLUCID_VERSION -->
 - PyPI distributions, citation metadata, documentation, and the downstream
   recipe declare the same version.
 - The normalized source distribution has one reproducible byte stream, and its
@@ -81,13 +81,13 @@ Run the repository validator after all release metadata except the source
 digest is aligned:
 
 ```bash
-python scripts/validate_release.py --tag v0.9.5
+python scripts/validate_release.py --tag v0.9.6
 ```
 
 The command must finish with:
 
 ```text
-Cellucid Python release contract is valid for v0.9.5.
+Cellucid Python release contract is valid for v0.9.6.
 ```
 
 ### 2. Run source and documentation gates
@@ -112,7 +112,7 @@ python -m pip install "build==1.5.0" "twine==6.2.0"
 SOURCE_DATE_EPOCH=315532800 python -m build
 python scripts/normalize_sdist.py dist
 python -c "import hashlib, pathlib; p=next(pathlib.Path('dist').glob('cellucid-*.tar.gz')); print(hashlib.sha256(p.read_bytes()).hexdigest())"
-python scripts/validate_release.py --tag v0.9.5 --sdist dist
+python scripts/validate_release.py --tag v0.9.6 --sdist dist
 python -m twine check --strict dist/*
 ```
 
@@ -137,7 +137,7 @@ For each artifact, verify:
 
 ```bash
 python -m pip check
-python -c "import cellucid; assert cellucid.__version__ == '0.9.5'"
+python -c "import cellucid; assert cellucid.__version__ == '0.9.6'"
 cellucid --version
 cellucid --help
 cellucid serve --help
@@ -160,13 +160,13 @@ Commit and push the reviewed source first. Wait for branch CI and docs checks to
 finish successfully. Then create and push the exact annotated tag:
 
 ```bash
-git tag -a v0.9.5 -m "Cellucid Python 0.9.5"
-git push origin v0.9.5
+git tag -a v0.9.6 -m "Cellucid Python 0.9.6"
+git push origin v0.9.6
 ```
 
 The `Publish to PyPI` workflow:
 
-1. checks out complete Git history, validates `v0.9.5`, and requires the tagged <!-- CELLUCID_VERSION -->
+1. checks out complete Git history, validates `v0.9.6`, and requires the tagged <!-- CELLUCID_VERSION -->
    `GITHUB_SHA` to be an ancestor of the fetched `origin/main`;
 2. runs Ruff, mypy, the complete pytest suite, and a strict documentation build;
 3. builds one wheel and one source distribution;
@@ -187,9 +187,9 @@ After the workflow succeeds, create a clean environment and install from PyPI:
 python -m venv cellucid-release-check
 source cellucid-release-check/bin/activate
 python -m pip install --upgrade pip
-python -m pip install "cellucid==0.9.5"
+python -m pip install "cellucid==0.9.6"
 python -m pip check
-python -c "import cellucid; assert cellucid.__version__ == '0.9.5'"
+python -c "import cellucid; assert cellucid.__version__ == '0.9.6'"
 cellucid --version
 ```
 

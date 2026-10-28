@@ -321,10 +321,15 @@ The message names the object or file and the R line that fixes it
   save the object to open on its own with `saveRDS()`.
 - **"… compressed with zstd"**, **"saved as text"**, **"in R's native binary
   form"**: save it again with `saveRDS(obj, file)` and its defaults.
-- **"This browser's storage has room for …"**: a compressed file is read into
-  the browser's storage first. Free space, or write the object once as a
-  Cellucid-ready AnnData with `cellucid_prepare()` (R) or `cellucid.prepare()`
-  (Python), which is read in place.
+- **"This browser's storage has room for …"** or **"This browser's storage
+  for this site is full …"**: a compressed file is read into
+  the browser's storage first, and the files kept from earlier openings that
+  no tab has open were already removed to make room (least recently opened
+  first). In a private window the storage is small: open it in a normal
+  window. Otherwise close other tabs that have a file read whole open, free
+  space on the disk, or write the object once as a Cellucid-ready AnnData with
+  `cellucid_prepare()` (R) or `cellucid.prepare()` (Python), which is read in
+  place.
 - **"This MatrixMarket matrix is symmetric"** (or complex, or a dense array):
   it is not a count matrix.
 - **"… has no `…_barcodes.tsv.gz` beside it"** (or no features or genes
@@ -492,9 +497,9 @@ The sign-in step sits under the **Link or server** bar and in a notification
   8765."** Google answers only the addresses Cellucid registered, port
   included, for public and private files. Start `cellucid serve` without
   `--port`, or open the file on www.cellucid.com.
-- **"Google Drive works in a notebook viewer only on port 8765."** A notebook
-  viewer serves on 8765 unless another server holds it, and then on the next
-  free port (it prints a note). Stop the server holding 8765 (an earlier
+- **"Google Drive works in a notebook viewer only on port 8765."** A
+  browser-tab viewer from Python (`AnnDataViewer`) serves on 8765 unless
+  another server holds it, and then on the next free port (it prints a note). Stop the server holding 8765 (an earlier
   viewer: `viewer.stop()`; `cellucid serve`) and show the data again, or open
   the file on www.cellucid.com.
 - **"Google Drive works on www.cellucid.com, not on …"** The page is on

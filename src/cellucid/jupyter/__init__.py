@@ -31,7 +31,7 @@ Communication (bidirectional):
         - viewer.clear_highlights()
         - viewer.reset_view()
         - viewer.set_data_mapping()
-        - viewer.get_session_bundle()
+        - viewer.request_session_bundle()
         - viewer.send_message()
 
     Frontend → Python:
@@ -43,13 +43,13 @@ Communication (bidirectional):
         - @viewer.on_data_mapping
         - @viewer.on_message
 
-    Both directions travel on one WebSocket the viewer opens to the local
-    data server (``/_cellucid/ws``), so they work wherever the page in the
-    notebook output can reach that server and open a WebSocket to it:
-    classic Jupyter and JupyterLab on the same machine, an SSH-forwarded
-    port, or a proxy that passes WebSockets (jupyter-server-proxy, with
-    ``client_server_url=`` and ``allowed_hosts=``). VS Code's notebook webview
-    and Google Colab's proxy have not been tested.
+    ``show_anndata()`` returns a :class:`Widget` (an anywidget): both
+    directions, and the data the viewer reads, travel through the notebook's
+    own connection, so it works in JupyterLab, Jupyter Notebook 7, VS Code,
+    Google Colab, marimo and Databricks with no port or proxy. The widget's
+    messages reach Python between cells. :class:`AnnDataViewer` is the same
+    API for a viewer in a browser tab of its own, served by this machine
+    (its page talks back over a WebSocket at ``/_cellucid/ws``).
 
 The module is a package. Its submodules are:
 
@@ -58,19 +58,40 @@ The module is a package. Its submodules are:
 ``_hooks``
     :class:`HookRegistry` and :class:`ViewerState`.
 ``_viewer``
-    :class:`AnnDataViewer` and :func:`show_anndata` for an AnnData file, store
-    or object, notebook-context detection, the viewer-channel bridge, and
-    interpreter-exit cleanup.
+    :class:`AnnDataViewer` (the viewer API, and a browser-tab viewer) and
+    :func:`show_anndata`, notebook-context detection, the viewer-channel
+    bridge, and interpreter-exit cleanup.
+``_widget``
+    :class:`Widget`, the notebook widget, and the viewer channel over its
+    comm. Imported when first used: it needs ``anywidget``.
 """
 
+from typing import TYPE_CHECKING, Any
+
 from ._hooks import HookCallback, HookRegistry, ViewerState
-from ._viewer import AnnDataViewer, cleanup_all, show_anndata
+from ._viewer import AnnDataViewer, SessionBundleRequest, cleanup_all, show_anndata
+
+if TYPE_CHECKING:
+    from ._widget import Widget
+
+
+def __getattr__(name: str) -> Any:
+    # The widget imports anywidget (and ipywidgets): loaded on first use, so
+    # the rest of the package starts without them.
+    if name == "Widget":
+        from ._widget import Widget
+
+        return Widget
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "AnnDataViewer",
     "HookCallback",
     "HookRegistry",
+    "SessionBundleRequest",
     "ViewerState",
+    "Widget",
     "cleanup_all",
     "show_anndata",
 ]

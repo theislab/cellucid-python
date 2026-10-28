@@ -463,6 +463,57 @@ def _exact_dtype(values: np.ndarray) -> type[np.floating[Any]]:
     return np.float32
 
 
+def expression_dtype(values: np.ndarray) -> type[np.floating[Any]]:
+    """The type an expression matrix's values are stored in: float32, or
+    float64 for integer counts above 2^24 (what ``prepare()`` writes, and what
+    a server presents for an object; :func:`stored_expression`)."""
+    return _exact_dtype(values)
+
+
+def require_expression_values(values: np.ndarray, label: str) -> None:
+    """Expression values ``prepare()`` stores: real, finite, within the float32 range."""
+    _require_real(values, label)
+    _require_finite_float32(values, label, positions=False)
+
+
+def _canonical_in_place(matrix: Any) -> None:
+    """Sorted, unique indices and no stored zero, a duplicate coordinate summed
+    in stored order (scipy's own sort orders a coordinate's values by value, and
+    a sum of three or more can then differ in its last bit from the one R's
+    Matrix gives and the browser takes: a stable sort keeps stored order)."""
+    if not matrix.has_sorted_indices and matrix.nnz > 0:
+        lengths = np.diff(matrix.indptr)
+        lines = np.repeat(np.arange(len(lengths), dtype=np.int64), lengths)
+        order = np.lexsort((matrix.indices, lines))
+        matrix.indices = matrix.indices[order]
+        matrix.data = matrix.data[order]
+        matrix.has_sorted_indices = True
+    matrix.sum_duplicates()
+    matrix.eliminate_zeros()
+    matrix.sort_indices()
+
+
+def _in_type(matrix: Any, dtype: Any) -> Any:
+    """``matrix``'s values in ``dtype``; a value nearer zero than the type holds becomes no value."""
+    if matrix.data.dtype == dtype:
+        return matrix
+    stored = matrix.data.astype(dtype)
+    typed = type(matrix)((stored, matrix.indices, matrix.indptr), shape=matrix.shape)
+    if not np.all(stored):
+        typed = type(matrix)((stored, matrix.indices.copy(), matrix.indptr.copy()), shape=matrix.shape)
+        typed.eliminate_zeros()
+    return typed
+
+
+def canonical_block(block: Any, dtype: Any) -> Any:
+    """Rows (CSR) or genes (CSC) of an expression matrix, a copy, as ``prepare()``
+    stores them (:func:`canonical_csc` then :func:`stored_expression`): duplicate
+    coordinates summed, stored zeros dropped, indices sorted, values in ``dtype``."""
+    matrix = block.copy()
+    _canonical_in_place(matrix)
+    return _in_type(matrix, dtype)
+
+
 def canonical_csc(value: Any) -> sparse.csc_matrix:
     """``value`` as a CSC matrix with sorted, unique indices and no stored zero.
 
@@ -476,9 +527,7 @@ def canonical_csc(value: Any) -> sparse.csc_matrix:
     shared = sparse.issparse(value) and value.format == "csc"
     if shared and (not matrix.has_canonical_format or not np.all(matrix.data)):
         matrix = matrix.copy()
-    matrix.sum_duplicates()
-    matrix.eliminate_zeros()
-    matrix.sort_indices()
+    _canonical_in_place(matrix)
     return matrix
 
 
@@ -577,19 +626,12 @@ def stored_expression(expression: sparse.csc_matrix | np.ndarray) -> sparse.csc_
     if values.dtype == dtype:
         return expression
     if isinstance(expression, sparse.csc_matrix):
-        stored = values.astype(dtype)
-        if np.all(stored):
-            # Only the values change type: the new matrix shares the index
-            # arrays (scipy's astype() would copy them too), which may be the
-            # caller's own.
-            return sparse.csc_matrix((stored, expression.indices, expression.indptr), shape=expression.shape)
-        # A value nearer zero than the smallest float32 became zero, and a
-        # stored zero is no value: dropped, on index arrays of its own.
-        matrix = sparse.csc_matrix(
-            (stored, expression.indices.copy(), expression.indptr.copy()), shape=expression.shape
-        )
-        matrix.eliminate_zeros()
-        return matrix
+        # Only the values change type: the new matrix shares the index arrays
+        # (scipy's astype() would copy them too), which may be the caller's
+        # own, unless a value nearer zero than the smallest float32 became
+        # zero, which is no value and is dropped, on index arrays of its own.
+        result: sparse.csc_matrix = _in_type(expression, dtype)
+        return result
     return expression.astype(dtype)
 
 

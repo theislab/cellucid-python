@@ -174,7 +174,8 @@ or a proxy for cell type composition. The tests are exploratory; see
 ## Export (CSV)
 
 `gene_signature_scores.csv`, one line per scored cell and set:
-`page,set,cell_index,score`. `cell_index` is the dataset row (0-based), so the
+`page,set,cell_index,score`. `cell_index` is the cell's row in the whole
+dataset in its original order (0-based, also with a subsample open), so the
 file joins back to `adata.obs`. See {doc}`09_exporting_analysis_results`.
 
 ---

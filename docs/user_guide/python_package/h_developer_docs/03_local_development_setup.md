@@ -19,8 +19,8 @@ Recommended:
 - a fresh virtual environment (`venv`, `conda`, `uv`, etc.)
 
 Optional (only if you work on notebook embedding):
-- JupyterLab or classic notebook (VS Code notebooks and Colab have not been
-  tested by the project; see
+- JupyterLab (the environment the project tests; Notebook 7, VS Code, Colab,
+  marimo and Databricks are expected to work, see
   {doc}`../e_jupyter_hooks/03_supported_environments_matrix`)
 
 ---
@@ -163,7 +163,9 @@ Both modes should open the viewer in a browser automatically (unless `--no-brows
 
 ## Step 6 — Notebook embedding (optional, but common)
 
-Notebook embedding is the “hardest environment” because of proxies, mixed-content, and remote kernels.
+Notebook embedding is a widget (`cellucid.Widget`, `jupyter/_widget.py` and
+`jupyter/static/widget.js`): it needs `anywidget` where the notebook server
+runs, and its messages reach the kernel between cells.
 
 Minimal test:
 
@@ -174,10 +176,9 @@ viewer = show_anndata(
     dataset_name="Development dataset",
     dataset_id="development-dataset",
 )
-viewer  # show the iframe output
 ```
 
-If the iframe is blank or hooks don’t work:
+If the output is empty or hooks don’t work:
 1) run `viewer.debug_connection()`,
 2) follow {doc}`12_debugging_playbook`,
 3) see notebook architecture details in {doc}`10_jupyter_embedding_architecture`.
@@ -186,8 +187,9 @@ If the iframe is blank or hooks don’t work:
 
 ## Offline / airgapped development notes
 
-The Python servers establish the configured exact web generation before
-binding:
+A notebook widget needs no web generation: the browser loads the app from
+`web_source_url`. The Python servers (browser-tab viewers, `cellucid serve`)
+establish the configured exact web generation before binding:
 
 - they fetch and parse `cellucid-web-assets.json`,
 - download every declared object to a staging directory,

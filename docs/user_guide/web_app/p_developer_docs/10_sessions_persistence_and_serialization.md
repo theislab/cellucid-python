@@ -22,8 +22,16 @@ maintainers serving official starting states
   recomputed or re-read on restore.
 - Manifest, chunk profiles, framing, byte lengths, decoded payloads, and the
   complete dataset fingerprint are exact contracts.
-- Row indices are only restored against a dataset whose cell ordering is proven
-  to be the one they were saved on; an unprovable ordering rejects the restore.
+- Every per-cell chunk (highlight memberships, user-defined codes and values)
+  names cells by **original position**, ascending: cell `i` is the open cell
+  with the `i`-th smallest original position (every cell open: position `i`;
+  a subsample: `kept[i]`), whatever order the file stores the cells in (a file
+  in priority order) or the app opened them in (a subsample's priority order).
+  `assets/js/app/session/session-cell-order.js` translates between that order
+  and the open order on capture and restore, so Python and R apply a session to
+  an object in its original order without knowing any layout.
+- Those positions are only restored against a dataset whose cells are proven
+  to be the ones they were saved on; an unprovable ordering rejects the restore.
 - Eager and lazy are internal ordering classes inside one awaited public
   operation.
 - All contributor state commits or registered state rolls back.
@@ -46,7 +54,12 @@ maintainers serving official starting states
   `varint.js`, `cell-set.js` (highlight memberships), `typed-json.js`
   (analysis settings and results)
 - Feature owners:
-  `cellucid/assets/js/app/session/contributors/`
+  `cellucid/assets/js/app/session/contributors/` (among them
+  `user-defined-values.js`, the values of a column a notebook pushed, and
+  `gene-sets.js`, the gene sets a notebook pushed)
+- The cells a session was saved on (the manifest's `cells`) and the order of
+  its per-cell chunks: `cellucid/assets/js/app/session/cell-subset-record.js`,
+  `cellucid/assets/js/app/session/session-cell-order.js`
 - State capture helpers:
   `cellucid/assets/js/app/state-serializer/`
 - UI command boundary:
@@ -65,7 +78,13 @@ The container is:
    payload bytes.
 
 The manifest has exactly `createdAt`, `datasetFingerprint`, `source`,
-`requires`, and `chunks`. `source` (`session/dataset-source-record.js`) is
+`requires`, and `chunks`, plus `cells` for a session saved on a subsample
+(`cell-subset-record.js`: `{spec, kept, digest}` — the subsample's
+specification, the kept original positions as the LEB128 cell-set bytes in
+base64, and their digest, {doc}`19_subsampling_specification`; its `k` must
+equal the fingerprint's `cellCount`). A manifest without `cells` was saved on
+every cell. Loading such a session opens exactly those cells (the dataset is
+read again first when it is open with others) before the restore runs. `source` (`session/dataset-source-record.js`) is
 where the dataset was opened from — a sample, a data link's locator, a server
 address, or a local file's or folder's name (`{kind: 'file', name, dataset}`),
 with the dataset id — or `null` (a Python or R viewer); **Load** reads only the manifest
@@ -262,7 +281,7 @@ written into the manifest at save and re-derived from live state at restore:
 | `varCount` | the dataset's own var fields in `state.varData.fields` | user-defined fields (for example a duplicated gene) are not counted, so a session that added one still matches the freshly loaded dataset |
 | `cellOrder.embedding` | `state.getViewLayoutKey('live')`, named under the data mapping | `{key, columns}`: an `obsm` key with its 0-based columns |
 | `cellOrder.dimension` | `state.getViewDimensionLevel('live')` | exactly 1, 2, or 3 |
-| `cellOrder.digest` | `digestCellOrder(state.positionsArray, cellOrder.dimension)` | 16 lowercase hex characters |
+| `cellOrder.digest` | `digestCellOrder(state.positionsArray, cellOrder.dimension, <rows by ascending original position>)` | 16 lowercase hex characters, the cells folded in original-position order |
 | `dataMapping` | `state.getDataMapping()` | a canonical data mapping |
 
 `getDatasetFingerprint()` throws unless `state.positionsArray` is a
@@ -271,7 +290,12 @@ fingerprint is never produced from a partially published dataset. The digest
 is defined over XYZ triples: a 1D or 2D embedding is held with only its own
 components per cell, and the axes it lacks are folded in as the zero words they
 are, so the digest does not depend on the in-memory layout and every saved
-session and published preset keeps matching.
+session and published preset keeps matching. The cells are folded in
+original-position order (through the cell identity's `openOrder`), so the
+digest does not depend on the order a file stores them in either: a dataset
+written again in priority order keeps the digest of the same cells, and the
+published starting views of the demo samples validate against the rebuilt
+stores unchanged.
 
 ### Why `cellOrder` exists
 

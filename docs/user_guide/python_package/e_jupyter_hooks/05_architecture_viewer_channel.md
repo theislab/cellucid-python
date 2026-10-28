@@ -5,21 +5,60 @@ only want something that works, start with {doc}`02_quickstart_minimal_roundtrip
 
 ## Design goals
 
-1. One transport for both directions, the same in every notebook front end
-   that can show an iframe (classic Notebook, JupyterLab, remote JupyterHub
-   behind `jupyter-server-proxy`; VS Code's notebook webview and Colab's
-   proxy have not been tested by the project, see
-   {doc}`03_supported_environments_matrix`).
-2. No code in the notebook output: the output is a plain iframe, so it works
-   in untrusted notebooks too.
-3. Data and events stay on the machine: the browser talks to the local data
-   server, never to a cloud relay.
-4. Failures are diagnosable (`viewer.debug_connection()`).
+1. One protocol for both directions, over two transports: a notebook widget's
+   comm (what {func}`~cellucid.show_anndata` and
+   {class}`~cellucid.jupyter.Widget` use) and a WebSocket to a local server (a
+   browser-tab {class}`~cellucid.AnnDataViewer`, the R package outside a
+   notebook). Everything above the transport is one implementation.
+2. No port and no proxy in a notebook: the widget reaches the kernel through
+   the notebook's own connection, so a remote kernel, an HTTPS hub, Colab,
+   VS Code and Databricks need no setup.
+3. Data and events stay between the browser and the kernel: never a cloud
+   relay. The app itself is loaded from `https://www.cellucid.com` (or the
+   copy named by `web_source_url`); the dataset never goes there.
+4. Credentials never appear in an address a proxy could log: the widget hands
+   them to the page in a message.
+5. Failures are diagnosable (`viewer.debug_connection()`).
 
-## System diagram
+## System diagram: the notebook widget
 
 ```text
-┌──────────────────────────── Notebook kernel (Python) ────────────────────────┐
+┌──────────────────────────── Notebook kernel (Python or R) ───────────────────┐
+│  cellucid.Widget (anywidget) / cellucid_view() in IRkernel                    │
+│    "fetch" {method, path, Range}  → the dataset's documents and bytes         │
+│       (AnnDataServer.answer_request / the R server's routes, no socket)       │
+│    "open"/"text"/"binary"/"close" → the viewer channel, the same code a       │
+│       WebSocket runs (serve_viewer_channel / .on_ws_open)                     │
+└───────────────────────────────────────────▲──────────────────────────────────┘
+                                            │ the notebook's connection (comm
+                                            │ messages, binary buffers; base64
+                                            │ in IRkernel), between cells
+┌───────────────────────────────────────────▼──────────────────────────────────┐
+│  Widget front end (widget.js, in the cell's output)                          │
+│    <iframe src="https://www.cellucid.com/?viewer=embedded">                  │
+│    accepts "ready" only from that frame and origin, answers "connect"         │
+│    {viewerId, viewerToken} + a MessagePort, posted to that origin only        │
+└───────────────────────────────────────────▲──────────────────────────────────┘
+                                            │ MessagePort (no other window can post to it)
+┌───────────────────────────────────────────▼──────────────────────────────────┐
+│  The Cellucid web app (ViewerHostDataSource, data/viewer-embed.js)            │
+│    viewer channel over a WebSocket-shaped PortSocket                          │
+│    requests to https://host.cellucid.invalid/… answered over the port, in     │
+│    the page and in its reader workers (formats/io/host-fetch.js)              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+The widget's messages name the output they belong to, so one widget shown in
+two outputs is two connections; as with a reloaded page, the newer one takes
+the viewer over and the older one is told so (4409). Requests that arrive
+together go to the kernel as one message, and bodies travel as binary
+buffers. The kernel handles them between cells: see
+{doc}`03_supported_environments_matrix` for what that means while a cell runs.
+
+## System diagram: a browser tab
+
+```text
+┌──────────────────────────── Python or R ─────────────────────────────────────┐
 │  AnnDataViewer ── AnnDataServer (one per viewer)                              │
 │     GET /                         the viewer's web build                      │
 │     GET /_cellucid/datasets       the dataset and its launch choices          │
@@ -29,7 +68,7 @@ only want something that works, start with {doc}`02_quickstart_minimal_roundtrip
 └───────────────────────────────────────────┬──────────────────────────────────┘
                                             │  ws:// (wss:// behind HTTPS)
 ┌───────────────────────────────────────────▼──────────────────────────────────┐
-│  Notebook output: <iframe src="<server>/?viewer=true&viewerId=…&…">          │
+│  Browser tab: <server>/?viewer=true&viewerId=…&viewerToken=…&anndata=true     │
 │  The Cellucid web app (ViewerHostDataSource) opens the channel:            │
 │    → hello {viewerId, viewerToken}      ← welcome                             │
 │    ← commands (text and binary frames) → events (text and binary frames)     │
@@ -37,10 +76,16 @@ only want something that works, start with {doc}`02_quickstart_minimal_roundtrip
 ```
 
 The page reaches the server at the address it was loaded from, path prefix
-included, so a notebook proxy that carries the page carries the channel too.
-The proxy must pass WebSockets; `jupyter-server-proxy` does.
+included, so a proxy that carries the page carries the channel too. The proxy
+must pass WebSockets.
 
 ## Opening the channel
+
+The steps are the same over the widget; there the protocol document is a
+`fetch` answered by the kernel, the socket is a port socket, and the `Host`
+and `Origin` checks of step 2 are the widget's own: it accepts the page's
+`ready` only from its frame and the app's origin, and posts the credentials to
+that origin only.
 
 1. The viewer reads `GET /_cellucid/protocol`:
    `{"channel": "_cellucid/ws", "commands": [...], "binaryCommands": [...], "events": [...]}`.
@@ -75,11 +120,13 @@ The proxy must pass WebSockets; `jupyter-server-proxy` does.
 ## Events (viewer → Python)
 
 - Text frames for `hover`, `click`, `ready`, `pong`, `debug_snapshot`,
-  `command_error`, `data_mapping`: exactly the keys of their type, and no
-  viewer id.
-- Binary frames for `selection` and `session_bundle`: a little-endian uint32
-  header length, a UTF-8 JSON header (`{"type": "selection", "source": …}` or
-  `{"type": "session_bundle", "requestId": …}`), then the body. A selection's
+  `command_error`, `data_mapping`, `color_by`, `result_removed` and
+  `results`: exactly the keys of their type, and no viewer id.
+- Binary frames for `selection`, `result` and `session_bundle`: a
+  little-endian uint32 header length, a UTF-8 JSON header
+  (`{"type": "selection", "source": …}`, a result's header, or
+  `{"type": "session_bundle", "requestId": …}`), then the body. A result's
+  body is its cells and then its values ({doc}`../g_api_reference_coverage/api/round_trip`). A selection's
   body is the cell indices as little-endian uint32, strictly ascending; a
   session bundle's is the `.cellucid-session` file, streamed to a temporary
   file as it arrives.
@@ -118,30 +165,32 @@ The proxy must pass WebSockets; `jupyter-server-proxy` does.
 
 ## Viewer identity and routing
 
-Each viewer has its own `viewerId` and a secret `viewerToken`, both in the
-iframe address. The server keeps a process-wide registry
+Each viewer has its own `viewerId` and a secret `viewerToken`: a widget hands
+them to its page in a message, a browser tab carries them in its address.
+Python keeps a process-wide registry
 `viewerId → (token, callback, outbox, socket)` (`cellucid._viewer_channel`).
-After a kernel restart the registry is empty, so an old iframe's `hello` is
+After a kernel restart the registry is empty, so an old page's `hello` is
 refused (4401) and the old view freezes: run the cell again.
 
-## How the iframe address is chosen
+## A browser tab's address
 
-By default the iframe loads
+A browser-tab viewer's page is
 `http://127.0.0.1:<port>/?viewer=true&viewerId=…&viewerToken=…&anndata=true`
-(`viewer.viewer_url`). When the
-browser cannot reach that address (a remote JupyterHub, an HTTPS notebook that
-blocks loopback HTTP as mixed content), pass the browser-reachable address
-with `client_server_url=` (for `jupyter-server-proxy`:
+(`viewer.viewer_url`). When the browser cannot reach that address directly,
+forward the port over SSH, or pass the browser-reachable address of a reverse
+proxy with `client_server_url=` (such as
 `https://<hub>/user/<name>/proxy/<port>`) and name the proxy's host in
-`allowed_hosts=`. The channel then runs at `wss://<hub>/user/<name>/proxy/<port>/_cellucid/ws`.
+`allowed_hosts=`. The channel then runs at
+`wss://<hub>/user/<name>/proxy/<port>/_cellucid/ws`. A notebook widget needs
+none of this.
 
 ## The web build
 
-The iframe loads the Cellucid web app from the same local server, which
-establishes a verified generation from `web_source_url`
-(`https://www.cellucid.com` by default) before it binds: every file is
-hash-checked on disk and published atomically. Controls:
-`web_cache_dir=`, `viewer.ensure_web_ui_cached(force=True)`,
+A widget's page is the app at `web_source_url` (`https://www.cellucid.com` by
+default), loaded by the browser. A browser tab loads the app from its local
+server, which establishes a verified generation from `web_source_url` before
+it binds: every file is hash-checked on disk and published atomically.
+Controls: `web_cache_dir=`, `viewer.ensure_web_ui_cached(force=True)`,
 `viewer.clear_web_cache()`.
 
 ## Where to look in the code

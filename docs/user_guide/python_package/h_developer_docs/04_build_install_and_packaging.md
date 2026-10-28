@@ -18,9 +18,9 @@ Key sections:
 
 - `[project]`
   - `name = "cellucid"`
-  - `version = "0.9.5"` (beta) <!-- CELLUCID_VERSION -->
+  - `version = "0.9.6"` (beta) <!-- CELLUCID_VERSION -->
   - `requires-python = ">=3.11,<3.15"`
-  - runtime dependencies (`numpy`, `pandas`, `scipy`, `tqdm`, `anndata`, `zarr`, `numcodecs`, `ipython`, `jupyter-server-proxy`)
+  - runtime dependencies (`numpy`, `pandas`, `scipy`, `tqdm`, `anndata`, `zarr`, `numcodecs`, `ipython`, `anywidget`)
 - `[project.optional-dependencies]`
   - `mudata`: `mudata`, for building or reading a MuData (`prepare(data=mdata)`, `.h5mu` and MuData Zarr)
   - `dev`: the `mudata` extra, `pytest`, `pytest-cov`, `ruff`, `mypy`, `pre-commit` (ruff and mypy pinned exactly)

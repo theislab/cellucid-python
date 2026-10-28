@@ -21,8 +21,15 @@ of an `.h5ad` file, a Zarr store folder, a Zarr store zipped into a `.zip`, a
 Loom (`.loom`) or MuData (`.h5mu`) file, a Seurat or SingleCellExperiment
 object (`.rds`, `.rda`, `.RData`), or a dataset catalog folder (one holding
 `datasets.json`). Every file is read in place, except an R object or a GEO
-MatrixMarket sample, which is read once as it downloads
-({doc}`07_file_format_expectations`). Nothing needs a server
+MatrixMarket sample, which cannot be read in parts: it is read whole, once,
+as it downloads, and kept in this browser; when its host reports a version
+(an ETag it lets other sites read, or the provider's revision or checksum),
+opening the same link again on a later visit downloads nothing
+({ref}`which-formats-are-read-in-parts`). A host that serves no parts of
+files gets the same treatment for any format: the file is downloaded whole
+into this browser's storage, said up front with its size, and kept. A
+dataset catalog on such a host is not listed: listing it would download
+every file whole; open each file by its own link instead. Nothing needs a server
 of your own, and only a private Google Drive file or a OneDrive file needs a
 sign-in ({doc}`16_private_drive_onedrive`).
 
@@ -31,7 +38,11 @@ then click **Open** (or press Enter). The page address gains a `?data=`
 parameter naming what you opened in its provider's form (the `?data=` column
 of [What you can paste](#what-you-can-paste): a pasted Google Drive link
 becomes `gdrive:<id>`), also for a link the page was opened with, and never a
-sign-in token or a download address. So copying the address (or using **Share**)
+sign-in token or a download address. With a share of the cells you chose
+open, the address also names how they were chosen (`&cells=228245&sample=blocks&seed=0`;
+never the cells themselves), and a link may name one itself
+(`&cells=10%`), so whoever follows it opens the same cells
+({ref}`in-a-link`). So copying the address (or using **Share**)
 gives others the same view. The same bar connects to a Cellucid server
 ({doc}`04_server_tutorial`): see [The address bar](#the-address-bar).
 
@@ -124,7 +135,7 @@ carries the link (`?data=…`), so it is also what you would share.
 view, measured on 2026-10-22 (the R object and MatrixMarket rows on
 2026-10-24, the Google Drive and OneDrive rows on 2026-10-25); the rest is read only when a view needs it (showing a gene,
 switching an embedding). An R object or a MatrixMarket matrix is read whole,
-once. The tag names the ecosystem whose tools write the file: **Python** for
+once, and kept in this browser: opened again, it reads nothing. The tag names the ecosystem whose tools write the file: **Python** for
 AnnData `.h5ad`, **R** for a Seurat object; a Zarr store, written by either,
 has none. Hosts change: if a link stops
 working, the [link checker](#open-from-link-checking) says which.
@@ -146,6 +157,18 @@ opens the first row.
 | Tabula Sapiens: thymus | Python | 42,729 | 1.6 GB | 26 MB | [Open](https://www.cellucid.com/?data=cellxgene:0ced5e76-6040-47ff-8a72-93847965afc0) |
 | Krasnow Lab Human Lung Cell Atlas, 10x | Python | 65,662 | 569 MB | 12 MB | [Open](https://www.cellucid.com/?data=cellxgene:8c42cfd0-0b0a-46d5-910c-fc833d83c45e) |
 | Pancreas, harmonized across studies | Python | 121,916 | 915 MB | 14 MB | [Open](https://www.cellucid.com/?data=cellxgene:31f657dc-1875-4c4b-a5ca-ce63b3ef3a82) |
+
+A CELLxGENE file lists its genes by Ensembl id, with the symbols in
+`var['feature_name']`: Cellucid names the genes by those symbols and keeps
+each id searchable beside its symbol (see
+[Gene names](13_data_mapping.md)). Its matrix is stored cell by cell (CSR),
+so the first gene reads every cell's entries; its notification says how much
+before it starts, and can be cancelled. For an atlas such as the Human Lung
+Cell Atlas
+([`cellxgene:9f222629-9e39-47d0-b83f-e08d610c7479`](https://www.cellucid.com/?data=cellxgene:9f222629-9e39-47d0-b83f-e08d610c7479):
+2,282,447 cells, 4.0 billion stored values, 21.9 GB) that is several
+gigabytes of indices; a subsample of the cells reads a share of them (see
+{doc}`../n_benchmarking_performance/06_edge_cases_performance`).
 
 ### Zenodo
 
@@ -435,10 +458,15 @@ the browser console as `[cellucid:transfer]`. A request that fails for a moment
 and is made again is said once, in a notification that closes when bytes
 arrive again.
 
-Linked data is read in place, so nothing is saved to disk: what was read stays
-in memory and is released when the dataset closes. Only a file on a host that
-sends whole files is read whole, into memory; nothing is saved to your
-computer unless you export a file.
+Linked data is read in place: what was read stays in memory and is released
+when the dataset closes. What is saved to this browser's storage is the gene
+index of a matrix stored cell by cell (most atlases), built from the open
+cells and kept so the same cells show genes at once next time
+({doc}`21_subsampled_loading`). A file that cannot be read in parts (an R object, a MatrixMarket sample) and any file on a host that
+sends whole files are the exceptions: read whole once into this browser's
+storage and kept there for next time, until **Clear** under **Session › Open
+data** ({ref}`which-formats-are-read-in-parts`). Nothing is saved to your
+Downloads folder unless you export a file.
 
 ```{figure} ../../../_static/screenshots/data_loading/dataset-box-details.png
 :alt: The Dataset box after an .h5ad file was opened from a web address: its name, the cells and genes line, "h5ad file" and the host, how much has been read in how many requests, and Details open, listing File, Format, Size, Read, Cells, Genes, Obs fields, Embeddings and the rest.
@@ -480,7 +508,7 @@ with the kinds of link it opens.
 | Google Drive sends this file only with a Google sign-in for now / Google Drive is not sending this file to this browser without a Google sign-in for now … | Google holds back downloads without a sign-in from a network that made many of them, for a while | **Sign in to Google** and **Select** the file in the picker, or open it again later ({doc}`16_private_drive_onedrive`) |
 | This file is private on Google Drive, or the link is wrong … not configured on this site yet | A private Drive file on a site where Google sign-in is not set up (a copy of the app hosted elsewhere) | Open the link on www.cellucid.com, or download the file and open it with **Open… › File…** |
 | Google Drive is not configured on this site yet / Signing in to Google (Microsoft) is not configured on this site yet | The site has no Google or Microsoft registration: a copy of the app hosted elsewhere | Open the link on www.cellucid.com, or download the file and open it with **Open… › File…** |
-| Google Drive works on a local cellucid serve only on its default port, 8765 … / in a notebook viewer only on port 8765 … / on www.cellucid.com, not on … | Google answers only registered addresses, port included, for public and private files | Start `cellucid serve` without `--port`; for a notebook viewer, stop the server holding 8765 (an earlier viewer, a `cellucid serve`) and show the data again; or use www.cellucid.com |
+| Google Drive works on a local cellucid serve only on its default port, 8765 … / in a notebook viewer only on port 8765 … / on www.cellucid.com, not on … | Google answers only registered addresses, port included, for public and private files | Start `cellucid serve` without `--port`; for a browser-tab viewer from Python (`AnnDataViewer`, which the message calls a notebook viewer), stop the server holding 8765 (an earlier viewer, a `cellucid serve`) and open it again; or use www.cellucid.com |
 | Microsoft sign-in needs https:// … / cannot reach Cellucid inside another site's page … | A plain `http://` page on another computer, or a viewer embedded in another site | Open Cellucid in its own tab, such as www.cellucid.com |
 | Your Google account cannot open this file / Your Microsoft account cannot open this file … | The file is not shared with the account you signed in with | Ask its owner to share it with that account |
 | Your organisation must approve Cellucid … | A work or school account opening a colleague's file, in an organisation that lets only administrators grant `Files.Read.All` | Ask your administrator ({doc}`16_private_drive_onedrive`) |

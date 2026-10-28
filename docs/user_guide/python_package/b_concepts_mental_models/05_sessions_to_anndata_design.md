@@ -2,7 +2,7 @@
 
 **Audience:** developer / power user  
 **Time:** 20–30 minutes  
-**Goal:** understand the protocol and guardrails behind `viewer.get_session_bundle()` and `apply_cellucid_session_to_anndata(...)`.
+**Goal:** understand the protocol and guardrails behind `viewer.request_session_bundle()` and `apply_cellucid_session_to_anndata(...)`.
 
 ```{note}
 This page is a “deep path” companion to {doc}`05_sessions_to_anndata_bridge`.
@@ -18,12 +18,13 @@ Most users should start there.
 In a notebook, Python can request the current session bundle from the frontend and receive it as a `CellucidSessionBundle` handle.
 
 High-level flow:
-1) Python sends `{"type": "requestSessionBundle", "requestId": ...}` to the viewer on its channel (`/_cellucid/ws`).
+1) Python sends `{"type": "requestSessionBundle", "requestId": ...}` to the viewer on its channel (the notebook widget's comm, or `/_cellucid/ws` for a browser tab).
 2) The web app serializes the current session into raw `.cellucid-session` bytes.
 3) The web app sends those bytes back on the same channel as one binary frame
    (header `{"type": "session_bundle", "requestId": ...}`, then the bundle).
-4) The server streams the frame to a temp file (bounded memory) and validates it.
-5) The server routes a `type="session_bundle"` event back to Python so `viewer.get_session_bundle()` can return.
+4) Python streams the frame to a temp file (bounded memory) and validates it.
+5) A `type="session_bundle"` event completes the request, so
+   `request.result()` returns (in a notebook, in a later cell).
 
 Why this matters:
 - Users never have to find/download a file from the browser.
@@ -103,12 +104,12 @@ and is sent, in order, when it does.
 ### Session bundle frames
 
 Guardrails:
-- Python registers an expected `(viewerId, requestId)` pair for as long as
-  `get_session_bundle(timeout=...)` waits.
-- The server accepts exactly one bundle for that pair (consumes the pending
+- Python registers an expected `(viewerId, requestId)` pair until the request
+  is collected or cancelled.
+- Python accepts exactly one bundle for that pair (consumes the pending
   request); a late one is dropped.
 - The frame is streamed to disk, so the temporary directory's free space is
-  the only size bound; an invalid bundle makes `get_session_bundle()` raise.
+  the only size bound; an invalid bundle makes `request.result()` raise.
 
 ---
 
@@ -206,12 +207,11 @@ direction is expected.
 ### Symptom: “Dropped a session bundle nobody is waiting for” (log)
 
 Meaning:
-- the bundle arrived after its `get_session_bundle()` call stopped waiting
-  (its timeout passed).
+- the bundle arrived after its request was cancelled (`request.cancel()`,
+  or the viewer stopped).
 
 Fix:
-- request a new bundle again from the *current* viewer instance, with a
-  longer `timeout=`.
+- request a new bundle again from the *current* viewer instance.
 
 ### Symptom: “This file is not a Cellucid session file of format 2 …”
 
@@ -219,7 +219,7 @@ Meaning:
 - the bytes the viewer sent on its channel for a `requestSessionBundle` are
   not a `.cellucid-session` file of the current format (or a file passed to
   `CellucidSessionBundle(...)` is not one). On the channel, the frame is
-  dropped and `viewer.get_session_bundle()` raises `RuntimeError` ("The viewer
+  dropped and `request.result()` raises `RuntimeError` ("The viewer
   did not capture the session bundle: The viewer sent an invalid session
   bundle: …") instead of waiting for its timeout.
 

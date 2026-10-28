@@ -107,17 +107,20 @@ def on_hover(event):
     # Bad: expensive plotting, model inference, large AnnData slicing
 ```
 
-### Pattern D: prefer `wait_for_event` for deterministic workflows
+### Pattern D: read the latest result in the next cell
 
-If you want a predictable “do X after the next selection” flow, it can be clearer to block:
+If you want a predictable “do X with what I selected” flow, skip the callback:
+select in the viewer, then run a cell that reads it.
 
 ```python
-viewer.wait_for_ready(timeout=60)
-event = viewer.wait_for_event("selection", timeout=None)
-cells = event["cells"]
+selection = viewer.selection      # the last selection, or None
+cells = selection.cells
 ```
 
-This avoids callback threading concerns entirely.
+This avoids callback threading concerns entirely. (`viewer.wait_for_event(...)`
+blocks until the next event instead; it works for a browser-tab viewer, but a
+notebook widget hears the viewer only between cells, so there it raises at
+once.)
 
 See {doc}`09_viewer_state_and_wait_for_event`.
 
@@ -126,8 +129,9 @@ See {doc}`09_viewer_state_and_wait_for_event`.
 ### Your `adata` and thread safety
 
 `show_anndata(...)` does not open your data in Python while the viewer runs:
-the viewer reads the file or folder itself, and an in-memory object is written
-once to a temporary `.h5ad` (`.h5mu` for a MuData). The `adata` your callbacks touch is
+the viewer reads the file or folder itself, and the chunks of an in-memory
+AnnData are made from its arrays when the viewer asks for them (a MuData is
+written once to a temporary `.h5mu`). The `adata` your callbacks touch is
 therefore only yours — but callbacks run on the viewer channel's thread, not
 your notebook's, and
 if you opened that object backed (`anndata.read_h5ad(..., backed="r")`),
@@ -144,7 +148,7 @@ Recommendations:
 If your callback blocks for seconds:
 - events queue up behind it (they are delivered one at a time, in order),
 - a callback that waits for a later event of the same viewer
-  (`viewer.wait_for_event(...)`, `viewer.set_data_mapping(...)`) waits until
+  (`viewer.wait_for_event(...)`, a session request's `result(...)`) waits until
   its timeout, because that event is delivered only after the callback returns,
 - the UI may feel “laggy” or “stuck” from the user’s perspective.
 

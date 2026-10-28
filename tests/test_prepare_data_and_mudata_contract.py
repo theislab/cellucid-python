@@ -37,7 +37,7 @@ import pytest
 import zarr
 from scipy import sparse
 
-from cellucid import prepare
+from cellucid import prepare, restore_original_order
 from cellucid._anndata_files import AnnDataContents
 from cellucid._launch_defaults import launch_defaults
 
@@ -126,7 +126,7 @@ def test_data_takes_every_component_it_holds_and_leaves_out_what_a_cellucid_read
     tmp_path: Path,
 ) -> None:
     adata = _adata()
-    written = ad.read_h5ad(prepare(tmp_path / "data.h5ad", format="h5ad", data=adata))
+    written = restore_original_order(ad.read_h5ad(prepare(tmp_path / "data.h5ad", format="h5ad", data=adata)))
     assert sorted(written.obsm) == ["X_pca", "X_umap", "velocity_umap"]
     assert list(written.obsp) == ["connectivities"]
     assert list(written.layers) == []
@@ -350,6 +350,12 @@ MUDATA_OUTPUTS = [
 
 
 def _read_mudata(path: Path) -> Any:
+    """The written MuData in the order its cells were given (``restore_original_order``)."""
+    return restore_original_order(_stored_mudata(path))
+
+
+def _stored_mudata(path: Path) -> Any:
+    """The written MuData as stored: its cells in priority order."""
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         if path.suffix == ".h5mu":
@@ -656,7 +662,8 @@ def test_the_web_app_reads_the_prepared_mudata_as_mudata_does(
 ) -> None:
     node = _web_reader()
     path = _write_mudata(tmp_path, name, output_format, zarr_format)
-    source = _read_mudata(path)
+    # Opened whole, the web app reads the cells as stored (priority order).
+    source = _stored_mudata(path)
     completed = subprocess.run(
         [node, "--input-type=module", "-e", _WEB_READ, str(WEB_ROOT), str(path), json.dumps(["X_wnn_umap", "rna:X_umap", "prot:X_umap"]), json.dumps(["sample", "rna:leiden", "prot:isotype_ratio"])],
         capture_output=True,
@@ -882,7 +889,7 @@ def test_modalities_writes_the_modalities_named_in_that_order(tmp_path: Path) ->
 def test_one_modality_is_written_as_an_anndata_with_the_roots_cells(tmp_path: Path) -> None:
     mdata = _mudata(prot_cells=50, order=("prot", "rna"))
     path = prepare(tmp_path / "rna.h5ad", format="h5ad", data=mdata, modalities=["rna"])
-    back = ad.read_h5ad(path)
+    back = restore_original_order(ad.read_h5ad(path))
     assert back.obs_names.tolist() == mdata.obs_names.tolist()
     rows = np.asarray(mdata.obsmap["rna"]).astype(np.int64) - 1
     np.testing.assert_array_equal(back.X.toarray(), mdata.mod["rna"].X[rows].toarray())

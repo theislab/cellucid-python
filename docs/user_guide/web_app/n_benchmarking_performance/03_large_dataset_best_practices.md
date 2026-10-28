@@ -31,6 +31,17 @@ Practical (very rough) intuition:
   precisely because the renderer is not the first thing to give way. Run it on
   your own machine before assuming a dataset is too big — the answer is a
   property of your GPU, not of the cell count.
+- **At 100 million cells and above**, turn levels of detail on: each level is
+  a uniform random sample of the cells, so a moving view stays representative.
+  Measured on a 16 GB Apple M1 Pro in Chromium with 100M 3D cells: levels of
+  up to 2.4M cells draw in 17 ms a frame, 86M in 75 ms and all 100M in 85 ms
+  once the spatial order is taken, after a first frame at 22 s. Cells in
+  priority order (a file Cellucid wrote, a subsample) draw their first level
+  0.3 s after levels of detail are turned on; any other file draws them once
+  the spatial index is built (about 30 s at 100M); 150M 2D cells draw a 3.4M
+  level in 53 ms. What runs out first is memory (see
+  {doc}`05_benchmark_tools` for the footprints), which is why a dataset larger
+  than the device holds opens as a subsample sized to fit.
 
 If you hit “WebGL context lost”, jump to {doc}`07_troubleshooting_performance` and {doc}`../a_orientation/02_system_requirements`.
 
@@ -67,10 +78,17 @@ If you only do one thing from this page, do this list in order.
   {doc}`02_performance_considerations_what_gets_slow_and_why`; it applies to the
   next frame either way.
 - `Level of detail (LOD)` starts off. Turn it on whenever the frame is slow while
-  zoomed out — it works at every dataset size. `Auto` draws fewer points the
+  zoomed out — it works at every dataset size. Every reduced level is a uniform
+  random sample of the open cells, so what it shows (density, the mix of
+  categories) is what all cells show. The levels are fixed counts — 1,000
+  cells, then a quarter more at each level, up to every open cell — so a
+  level shows the same cells whatever share you open. A file Cellucid wrote,
+  or a subsample, draws its levels as soon as it opens; any other file draws
+  them once its spatial index is built in the background. `Auto` draws fewer points the
   further back you pull, down to a floor of `min(2,000,000, cells ÷ 8)` points:
   never more than an 8× reduction, and never below two million on a large atlas.
-  If you want fewer than that on weak hardware, set `Force LOD level` yourself:
+  If you want fewer than that on weak hardware, set `Force LOD level` yourself
+  (the slider spans the levels of the cells open):
   the forced level is deliberately not held to that floor. The exact rule, and why the reduction lands where it does, is in
   {doc}`02_performance_considerations_what_gets_slow_and_why`.
 

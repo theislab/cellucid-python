@@ -24,7 +24,7 @@ CURRENT_RUNTIME_REQUIREMENTS = (
     "zarr>=3.1.4,<4",
     "numcodecs>=0.16.3,<0.17",
     "ipython>=7.23",
-    "jupyter-server-proxy>=4.1",
+    "anywidget>=0.9",
 )
 CURRENT_CONDA_HOST_REQUIREMENTS = (
     "python >=3.11,<3.15",
@@ -41,7 +41,7 @@ CURRENT_CONDA_RUNTIME_REQUIREMENTS = (
     "zarr >=3.1.4,<4",
     "numcodecs >=0.16.3,<0.17",
     "ipython >=7.23",
-    "jupyter-server-proxy >=4.1",
+    "anywidget >=0.9",
 )
 HISTORICAL_RELEASE_TAGS = {
     "0.9.2": "v0.9.2",

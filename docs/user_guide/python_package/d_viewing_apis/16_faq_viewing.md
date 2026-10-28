@@ -16,21 +16,28 @@ See:
 ## What’s the difference between `serve_anndata` and `show_anndata`?
 
 - `serve_anndata(...)` / `cellucid serve ...`: starts a server and you use the viewer in a normal browser tab.
-- `show_anndata(...)`: starts a server and embeds the viewer in a notebook output cell (iframe).
+- `show_anndata(...)`: shows the viewer as a widget in a notebook cell's output; no server, no port. The widget is also the object for hooks, commands and `viewer.pull(adata)`.
+- `AnnDataViewer(...)`: the same viewer object for a browser tab of its own (a script, an SSH tunnel); it starts a server.
 
 ## Does Cellucid upload my data to cellucid.com?
 
-In the recommended workflows (server/notebook modes), your data is served by your local Python server and loaded by your browser from that server.
-
-The Python server may download the **viewer UI assets** from `https://www.cellucid.com` (and cache them locally), but that is UI code, not your dataset.
+No. In a notebook, the app (loaded by your browser from
+`https://www.cellucid.com`) reads your data from your kernel through the
+notebook's own connection. In server mode, your data is served by your local
+Python server and loaded by your browser from that server, and the server
+downloads the **viewer UI assets** from `https://www.cellucid.com` (and caches
+them locally). Either way that is UI code, not your dataset.
 
 Security details: {doc}`13_security_privacy_cors_and_networking`.
 
 ## Can I use Cellucid offline?
 
 Not for a startup that serves the viewer UI. `cellucid serve`,
-`serve_anndata(...)` and `show_anndata(...)` establish the configured exact web generation at each
-startup and report source failure instead of substituting a cached generation.
+`serve_anndata(...)` and `AnnDataViewer(...)` establish the configured exact
+web generation at each startup and report source failure instead of
+substituting a cached generation. `show_anndata(...)` needs the browser to
+load the app from `https://www.cellucid.com` (or a copy you host, named with
+`web_source_url=`).
 
 `cellucid serve ... --no-web-ui` is the explicit data-endpoint-only mode and
 does not fetch viewer assets.
@@ -41,27 +48,25 @@ Cache details: {doc}`09_server_mode_advanced`.
 
 `serve_anndata(...)` and `cellucid serve` bind the requested port
 exactly and report an error if it is unavailable. Pass `port=0` or `--port 0`
-to request one operating-system-assigned port. A notebook viewer
-(`show_anndata(...)`, or `AnnDataViewer(...)` without `port=`) takes the next
-free port instead and prints a note: Google sign-in (Google Drive data,
-community annotation) works only on 8765.
+to request one operating-system-assigned port. `AnnDataViewer(...)` without
+`port=` takes the next free port instead and prints a note: Google sign-in
+(Google Drive data, community annotation) works only on 8765. A notebook
+widget (`show_anndata(...)`) uses no port.
 
 Always use the printed Viewer URL.
 
-## Why is a remote notebook iframe blank or unreachable?
+## Does it work in a remote notebook (JupyterHub, VS Code Remote, Colab)?
 
-Usually because:
-- the notebook is served over HTTPS, and/or
-- the kernel/server is remote (JupyterHub/cloud), so `127.0.0.1` is not reachable from your browser.
+Yes, with the same call: `show_anndata()` reaches the kernel through the
+notebook's own connection, so no port, tunnel or proxy is involved. JupyterLab
+is tested by the project; Notebook 7, VS Code, Colab, marimo and Databricks
+are expected to work. Details: {doc}`10_notebook_widget_mode_advanced`.
 
-Fix: expose the Cellucid port through an HTTPS proxy (for example Jupyter
-Server Proxy), pass that exact browser base as `client_server_url=`, and declare
-the proxy's host name as `allowed_hosts=[...]`. Without the second argument the
-proxied requests are refused with `421 Misdirected Request`, because the proxy
-forwards the browser's `Host` and Cellucid answers only authorities that name
-it.
-
-Details: {doc}`10_notebook_widget_mode_advanced`.
+A browser-tab viewer (`AnnDataViewer`, `serve_anndata`) on a remote machine is
+not reachable at the kernel's `127.0.0.1`: use an SSH tunnel, or a reverse
+proxy whose base you pass as `client_server_url=` and whose host you declare as
+`allowed_hosts=[...]` (without it the proxied requests are refused with
+`421 Misdirected Request`). See {doc}`12_remote_servers_ssh_tunneling_and_cloud`.
 
 ## Should I use `.h5ad` or Zarr for large datasets?
 

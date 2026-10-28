@@ -1,22 +1,26 @@
 # R Package Guide
 
-This guide documents the **`cellucid` R package** (repo: `cellucid-r`): how to look at a Seurat, SingleCellExperiment or SummarizedExperiment object in the **Cellucid viewer** from R (`cellucid_view()`, in the RStudio or Positron Viewer pane or a browser, with no Python), and how to write it — or matrices and data frames — as a **Cellucid-ready AnnData** (several assays: a **Cellucid-ready MuData**), a standard Zarr store (a `.zarr` folder or one `.zarr.zip` file) that the **Cellucid web app** opens and Python's `anndata` reads.
+This guide documents the **`cellucid` R package** (repo: `cellucid-r`): how to look at a Seurat, SingleCellExperiment or SummarizedExperiment object in the **Cellucid viewer** from R (`cellucid_view()`, in the RStudio or Positron Viewer pane or a browser with no Python, or in a Jupyter notebook's output), bring what you make there back onto the object (`cellucid_pull()`), and how to write it — or matrices and data frames — as a **Cellucid-ready AnnData** (several assays: a **Cellucid-ready MuData**), a standard Zarr store (a `.zarr` folder or one `.zarr.zip` file) that the **Cellucid web app** opens and Python's `anndata` reads.
 
 ```{note}
 The viewer runs from R: `cellucid_view()` and `cellucid_serve()` serve the
-object from memory, `cellucid_highlight()`, `cellucid_on()` and their siblings
-send commands and receive events over the viewer's channel, and
-`cellucid_apply_session()` writes a saved session back onto the object
-({doc}`d_viewing_loading/index`). There is no Shiny or htmlwidgets integration.
+object from memory (in a Jupyter notebook `cellucid_view()` shows it in the
+cell's output as a notebook widget, with no server), `cellucid_highlight()`,
+`cellucid_on()` and their siblings send commands and receive events over the
+viewer's channel, `cellucid_pull()` writes every highlight, label, score and
+gene set made in the viewer onto the object and `cellucid_push()` sends a
+column into it, and `cellucid_apply_session()` writes a saved session back
+onto the object ({doc}`d_viewing_loading/index`). There is no Shiny or
+htmlwidgets integration.
 
 For the web UI experience after opening a store (filtering, analysis, sessions, community annotation), see {doc}`../web_app/index`.
 ```
 
-:::{admonition} Active package version — 0.9.5
+:::{admonition} Active package version — 0.9.6
 :class: note
 <!-- CELLUCID_VERSION -->
 
-Version **0.9.5** is the active Cellucid for R source and documentation
+Version **0.9.6** is the active Cellucid for R source and documentation
 version and the CRAN submission release. The
 [CRAN package index](https://cran.r-project.org/web/packages/available_packages_by_name.html)
 is authoritative for registry availability. Check an installed environment
@@ -33,6 +37,7 @@ matching CRAN and official-source installation paths.
 - “I want to understand what gets written to disk” → {doc}`b_concepts_mental_models/01_what_is_a_cellucid_ready_anndata`
 - “I want to add vector fields (velocity/drift overlays)” → {doc}`c_data_preparation_api/08_vector_fields_velocity_displacement`
 - “I want a full end-to-end walkthrough” → {doc}`f_notebooks_tutorials/index`
+- “I want what I make in the viewer back in my Seurat or SingleCellExperiment object (and my clusters in the viewer)” → {doc}`f_notebooks_tutorials/08_pull_everything_back` and the other notebooks of {doc}`f_notebooks_tutorials/index` (Jupyter, Colab, RStudio; each with a Python twin)
 - “Something failed” → {doc}`i_troubleshooting_index/index`
 
 ## Chapters (what each folder contains)
@@ -44,7 +49,7 @@ matching CRAN and official-source installation paths.
 :link: installation
 :link-type: doc
 
-Install version 0.9.5 from the source currently available to you, verify the <!-- CELLUCID_VERSION -->
+Install version 0.9.6 from the source currently available to you, verify the <!-- CELLUCID_VERSION -->
 loaded package, and diagnose dependency or environment problems.
 :::
 

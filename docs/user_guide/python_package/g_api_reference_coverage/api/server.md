@@ -63,9 +63,11 @@ serve_anndata("my_study.h5ad")  # a prepared file names itself; blocks until Ctr
   `cellucid serve data.h5ad --dataset-name "My dataset" --dataset-id my-dataset`
 - The viewer reads the data itself — in place, with HTTP range requests, where
   the format allows it, once from the start for an R object or a MatrixMarket
-  folder; the server serves the bytes and computes nothing per request. An
-  in-memory AnnData is first written once to a temporary `.h5ad`, a MuData to
-  a temporary Cellucid-ready `.h5mu`.
+  folder. A file in priority order (`prepare()`'s) is served byte for byte; an
+  in-memory AnnData, and an AnnData file in any other order, are served as a
+  Zarr store in priority order whose chunks are made as they are asked for
+  (`cellucid._served_store`), so a subsample transfers only its cells; a
+  MuData object is first written once to a temporary Cellucid-ready `.h5mu`.
 - Python reads the identity (`uns['cellucid']`) only of an AnnData or MuData,
   so an R object, a Loom, 10x or MatrixMarket dataset always needs
   `--dataset-name` and `--dataset-id`.
@@ -191,13 +193,16 @@ A wildcard bind prints the loopback origin plus the machine's own name; see {doc
   {doc}`../../e_jupyter_hooks/05_architecture_viewer_channel`). The server
   answers no `POST` (405).
 - `/_cellucid/datasets` is
-  `{"datasets": [{"id", "name", "anndata": {"file": {"url", "kind", "layout", "size"}, "defaults": {...}}}]}`.
+  `{"datasets": [{"id", "name", "anndata": {"file": {"url", "kind", "layout", "size", "etag"}, "defaults": {...}}}]}`.
   `url` is the data's route relative to the server's base URL, `kind` is the
   input format registry's id (`h5ad`, `zarr`, `h5mu`, `mudata-zarr`, `loom`,
   `tenx-h5`, `tenx-outs`, `mtx`, `rds`, `rda`), `layout` is `file`, `zip`, or
-  `folder`, `size` is given for a file only, a folder of files (`tenx-outs`,
-  `mtx`) adds `files: [{"path", "size"}, …]` because a browser cannot list a
-  folder, and `defaults` holds only the launch choices you set.
+  `folder`, `size` and `etag` are given for a file only (`etag` is the strong
+  validator its bytes are answered with, read from the file at each request:
+  the version the browser files what it keeps of the file under), a folder of
+  files (`tenx-outs`, `mtx`) adds `files: [{"path", "size", "etag"}, …]`
+  because a browser cannot list a folder, and `defaults` holds only the
+  launch choices you set.
   `/_cellucid/health` is
   `{"status": "ok", "type": "anndata", "version", "format", "n_cells", "n_genes"}`
   (the counts `null` for a format Python does not read: an R object, Loom,
@@ -213,9 +218,9 @@ A wildcard bind prints the loopback origin plus the machine's own name; see {doc
 ### Viewer UI hosting and source requirements
 
 By default, Cellucid establishes and serves the exact verified **viewer UI**
-generation from the same server origin. This avoids:
-- mixed-content issues (HTTPS notebook + HTTP localhost)
-- cross-origin iframe restrictions
+generation from the same server origin. This avoids mixed-content and
+cross-origin issues for the browser tab. (A notebook widget, `show_anndata`,
+uses no server: the browser loads the app from `web_source_url`.)
 
 If the runtime cannot fetch and verify the exact source generation, startup
 raises before binding the server. Use `--web-cache-dir PATH` or the
@@ -237,9 +242,17 @@ server`. Steps 1 to 3 read metadata only, never an array. The transcript is in
 - A store holding an array the browser cannot decode (an HDF5 filter other than
   gzip, shuffle, Fletcher-32, or LZF, such as Blosc, Zstandard, szip, or
   scaleoffset; a Zarr codec such as bz2, lzma, or zfpy) prints
-  `Browser cannot decode:` with the arrays, and is read once with anndata and
-  served from a temporary `.h5ad`. Another format holding such an array is
-  refused with the arrays named.
+  `Browser cannot decode:` with the arrays, and is served through the store in
+  priority order, which decodes each chunk on the kernel as it is asked for
+  (h5py or zarr with their codec plugins). MuData, Loom and 10x files are
+  read on the kernel the same way.
+- A MuData file not written by `prepare()`, a Loom file and a 10x Cell Ranger
+  `outs/` folder print `Serving: a Zarr store in priority order, …` (or `a
+  MuData Zarr store …`): the store holds what the browser presents from the
+  file itself, cells in priority order (`cellucid._served_formats` mirrors the
+  browser's layout views). A Loom file with no embedding, and a 10x `.h5`
+  alone (its projections are in its `outs/` folder), are refused in the
+  browser's words.
 
 ---
 

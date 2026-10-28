@@ -41,7 +41,7 @@ REQUEST_ID = "security-contract-request"
 #: The digest of ``tests/fixtures/viewer_protocol.json``: the web app's
 #: ``tests/fixtures/viewer-protocol.json`` byte for byte. The web app and
 #: cellucid-r pin the same one.
-VIEWER_PROTOCOL_SHA256 = "642c04e1d81b574e72a5d8b3738858b3447175c2c395500d3556c8198279a9e5"
+VIEWER_PROTOCOL_SHA256 = "bf1db1f20d75f72359eea882297e880b9092f7682525f1caa56bdc8148b2b936"
 
 
 def _known_inbound_events(viewer_id: str) -> list[tuple[str, dict[str, object], dict[str, object]]]:
@@ -80,9 +80,66 @@ def _known_inbound_events(viewer_id: str) -> list[tuple[str, dict[str, object], 
             {
                 "type": "ready",
                 "n_cells": 3,
+                "n_obs": 5,
                 "dimensions": 2,
             },
-            {"n_cells": 3, "dimensions": 2},
+            {"n_cells": 3, "n_obs": 5, "dimensions": 2},
+        ),
+        (
+            # Every cell visible: no cells, no values, an empty body.
+            "result",
+            {
+                "type": "result",
+                "requestId": None,
+                "epoch": "0123456789abcdef",
+                "revision": 4,
+                "kind": "visibility",
+                "id": "visible",
+                "nObs": 5,
+                "meta": {},
+                "cells": None,
+                "values": None,
+                "body": bytearray(),
+            },
+            {
+                "requestId": None,
+                "epoch": "0123456789abcdef",
+                "revision": 4,
+                "kind": "visibility",
+                "id": "visible",
+                "nObs": 5,
+                "meta": {},
+                "cells": None,
+                "values": None,
+            },
+        ),
+        (
+            "result_removed",
+            {"type": "result_removed", "epoch": "0123456789abcdef", "revision": 5, "kind": "highlight", "id": "highlight_1"},
+            {"epoch": "0123456789abcdef", "revision": 5, "kind": "highlight", "id": "highlight_1"},
+        ),
+        (
+            "results",
+            {
+                "type": "results",
+                "epoch": "0123456789abcdef",
+                "dataset": "demo",
+                "revision": 5,
+                "nObs": 5,
+                "items": [{"kind": "visibility", "id": "visible", "revision": 4}],
+            },
+            {
+                "epoch": "0123456789abcdef",
+                "dataset": "demo",
+                "revision": 5,
+                "nObs": 5,
+                "items": [{"kind": "visibility", "id": "visible", "revision": 4}],
+            },
+        ),
+        (
+            "color_by",
+            {"type": "color_by", "field": "leiden", "source": "obs", "label": "leiden"},
+            {"field": "leiden", "source": "obs", "label": "leiden"},
         ),
         (
             "pong",
@@ -365,7 +422,7 @@ def test_pending_request_registration_rejects_ttl_coercion_or_repair(
 def test_a_request_without_a_deadline_stays_answerable_until_cancelled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``get_session_bundle(timeout=None)`` waits forever, so its request must too."""
+    """``request.result(timeout=None)`` waits forever, so its request must too."""
     channel.register_event_callback(VIEWER_ID, VIEWER_TOKEN, lambda _event: None)
     channel.register_session_bundle_request(VIEWER_ID, VIEWER_TOKEN, REQUEST_ID, ttl_seconds=None)
     now = time.monotonic()
@@ -409,7 +466,7 @@ def test_pending_request_registration_rejects_wrong_token_and_duplicate() -> Non
 
 def test_a_failing_viewer_hook_never_costs_the_notebook_the_event() -> None:
     # One buggy hook used to drop the event from viewer.state and
-    # wait_for_event, so get_session_bundle() timed out behind it. The event
+    # wait_for_event, so a session request timed out behind it. The event
     # is recorded first; every hook runs; the failure is raised afterwards for
     # the channel to log.
     viewer = serverless_viewer()
@@ -787,6 +844,8 @@ def test_display_failure_rolls_back_started_server_and_viewer_registries(
     class StartedServer:
         def __init__(self, **_kwargs: object):
             self.port = 43123
+            self.dataset_id = "demo"
+            self.server_info = {"n_cells": 3}
             self.stop_calls = 0
             instances.append(self)
 
@@ -1006,7 +1065,7 @@ def test_commands_sent_before_the_viewer_connects_arrive_in_order_once() -> None
         socket_ = _connect(port, viewer)
         assert socket_.receive_json() == {"type": "setColorBy", "field": "leiden"}
         # Commands that name cells are binary frames, their cells ascending.
-        assert socket_.receive_command() == {"type": "highlight", "color": "#00ff00", "cells": [0, 2]}
+        assert socket_.receive_command() == {"type": "highlight", "color": "#00ff00", "label": None, "cells": [0, 2]}
         assert socket_.receive_command() == {"type": "setVisibility", "visible": False, "all": True, "cells": []}
         assert socket_.receive_json() == {"type": "resetCamera"}
         assert viewer.send_message({"type": "clearHighlights"}) is True
@@ -1040,8 +1099,8 @@ def test_events_reach_the_hooks_in_order_and_the_state() -> None:
         for cell in range(50):
             socket_.send_json({"type": "hover", "cell": cell, "position": None})
         socket_.send_json({"type": "click", "cell": 7, "button": 0, "shift": False, "ctrl": True})
-        socket_.send_json({"type": "ready", "n_cells": 2, "dimensions": 2})
-        assert viewer.wait_for_ready(timeout=5) == {"n_cells": 2, "dimensions": 2}
+        socket_.send_json({"type": "ready", "n_cells": 2, "n_obs": 2, "dimensions": 2})
+        assert viewer.wait_for_ready(timeout=5) == {"n_cells": 2, "n_obs": 2, "dimensions": 2}
         assert [event["cell"] for event in hovers] == list(range(50))
         assert clicks == [{"cell": 7, "button": 0, "shift": False, "ctrl": True}]
 
@@ -1049,7 +1108,7 @@ def test_events_reach_the_hooks_in_order_and_the_state() -> None:
 def test_a_fragmented_event_with_a_ping_between_its_frames_is_one_event() -> None:
     with _channel_viewer() as (viewer, port):
         socket_ = _connect(port, viewer)
-        payload = json.dumps({"type": "ready", "n_cells": 2, "dimensions": 3}).encode()
+        payload = json.dumps({"type": "ready", "n_cells": 2, "n_obs": 2, "dimensions": 3}).encode()
         socket_.sock.sendall(
             socket_.frame(TEXT, payload[:7], fin=False)
             + socket_.frame(0x9, b"are you there")
@@ -1058,7 +1117,7 @@ def test_a_fragmented_event_with_a_ping_between_its_frames_is_one_event() -> Non
         )
         opcode, pong = socket_.receive()
         assert (opcode, pong) == (0xA, b"are you there")
-        assert viewer.wait_for_ready(timeout=5) == {"n_cells": 2, "dimensions": 3}
+        assert viewer.wait_for_ready(timeout=5) == {"n_cells": 2, "n_obs": 2, "dimensions": 3}
 
 
 @pytest.mark.parametrize(
@@ -1069,7 +1128,7 @@ def test_a_fragmented_event_with_a_ping_between_its_frames_is_one_event() -> Non
         # An event this installation does not declare.
         ([(TEXT, json.dumps({"type": "zoom", "level": 2}).encode())], 1008),
         # An event that names its viewer: events carry no credentials.
-        ([(TEXT, json.dumps({"type": "ready", "viewerId": "x", "n_cells": 1, "dimensions": 2}).encode())], 1008),
+        ([(TEXT, json.dumps({"type": "ready", "viewerId": "x", "n_cells": 1, "n_obs": 1, "dimensions": 2}).encode())], 1008),
         ([(TEXT, b"{not json")], 1008),
         ([(TEXT, b"\xff\xfe")], 1007),
         ([(TEXT, b"x" * (channel.MAX_EVENT_TEXT_BYTES + 1))], 1009),
@@ -1195,8 +1254,8 @@ def test_a_failing_notebook_hook_keeps_the_channel_open() -> None:
         viewer.register_hook("click", fail)
         socket_ = _connect(port, viewer)
         socket_.send_json({"type": "click", "cell": 1, "button": 0, "shift": False, "ctrl": False})
-        socket_.send_json({"type": "ready", "n_cells": 2, "dimensions": 2})
-        assert viewer.wait_for_ready(timeout=5) == {"n_cells": 2, "dimensions": 2}
+        socket_.send_json({"type": "ready", "n_cells": 2, "n_obs": 2, "dimensions": 2})
+        assert viewer.wait_for_ready(timeout=5) == {"n_cells": 2, "n_obs": 2, "dimensions": 2}
         assert channel.viewer_is_connected(viewer._viewer_id, viewer._viewer_token)
 
 
@@ -1231,14 +1290,14 @@ def test_a_selection_fragmented_across_frames_is_read_as_one_message() -> None:
         assert viewer.state.selection == {"cells": [1, 5, 9], "source": "knn"}
 
 
-def test_get_session_bundle_streams_the_frame_to_a_file_once() -> None:
+def test_a_session_request_streams_the_frame_to_a_file_once() -> None:
     bundle = _empty_session_bundle()
     with _channel_viewer() as (viewer, port):
         viewer._displayed = True
-        viewer.state.ready = {"n_cells": 2, "dimensions": 2}
+        viewer.state.ready = {"n_cells": 2, "n_obs": 2, "dimensions": 2}
         socket_ = _connect(port, viewer)
         result: list[Any] = []
-        worker = threading.Thread(target=lambda: result.append(viewer.get_session_bundle(timeout=10)))
+        worker = threading.Thread(target=lambda: result.append(viewer.request_session_bundle().result(timeout=10)))
         worker.start()
         request = socket_.receive_json()
         assert request["type"] == "requestSessionBundle"
@@ -1256,14 +1315,14 @@ def test_get_session_bundle_streams_the_frame_to_a_file_once() -> None:
 def test_an_invalid_session_bundle_fails_the_wait_at_once_and_leaves_no_file() -> None:
     with _channel_viewer() as (viewer, port):
         viewer._displayed = True
-        viewer.state.ready = {"n_cells": 2, "dimensions": 2}
+        viewer.state.ready = {"n_cells": 2, "n_obs": 2, "dimensions": 2}
         socket_ = _connect(port, viewer)
         before = set(Path(tempfile.gettempdir()).glob("cellucid-session-*"))
         failure: list[BaseException] = []
 
         def capture() -> None:
             try:
-                viewer.get_session_bundle(timeout=10)
+                viewer.request_session_bundle().result(timeout=10)
             except BaseException as error:
                 failure.append(error)
 
@@ -1286,14 +1345,14 @@ def test_an_invalid_session_bundle_fails_the_wait_at_once_and_leaves_no_file() -
 def test_a_session_bundle_cut_off_by_the_network_leaves_no_file() -> None:
     with _channel_viewer() as (viewer, port):
         viewer._displayed = True
-        viewer.state.ready = {"n_cells": 2, "dimensions": 2}
+        viewer.state.ready = {"n_cells": 2, "n_obs": 2, "dimensions": 2}
         socket_ = _connect(port, viewer)
         before = set(Path(tempfile.gettempdir()).glob("cellucid-session-*"))
         failure: list[BaseException] = []
 
         def capture() -> None:
             try:
-                viewer.get_session_bundle(timeout=None)
+                viewer.request_session_bundle().result(timeout=None)
             except BaseException as error:
                 failure.append(error)
 
@@ -1351,10 +1410,10 @@ def test_a_viewer_that_reconnects_during_a_session_request_still_delivers_it() -
     bundle = _empty_session_bundle()
     with _channel_viewer() as (viewer, port):
         viewer._displayed = True
-        viewer.state.ready = {"n_cells": 2, "dimensions": 2}
+        viewer.state.ready = {"n_cells": 2, "n_obs": 2, "dimensions": 2}
         first = _connect(port, viewer)
         result: list[Any] = []
-        worker = threading.Thread(target=lambda: result.append(viewer.get_session_bundle(timeout=10)))
+        worker = threading.Thread(target=lambda: result.append(viewer.request_session_bundle().result(timeout=10)))
         worker.start()
         request = first.receive_json()
         # The network drops before the bundle is sent; the page reconnects and
@@ -1408,11 +1467,18 @@ def test_unmasking_in_place_matches_the_rfc_rule(offset: int, length: int) -> No
 
 def test_the_python_declarations_are_the_shared_viewer_protocol() -> None:
     fixture = json.loads((Path(__file__).parent / "fixtures" / "viewer_protocol.json").read_text())
-    assert fixture["schema"] == 1
+    assert fixture["schema"] == 2
     assert fixture["channel"]["path"] == channel.CHANNEL_ROUTE == wire._CHANNEL_ROUTE
     assert fixture["channel"]["closeCodes"]["unauthorized"] == channel.CLOSE_UNAUTHORIZED
     assert fixture["channel"]["closeCodes"]["replaced"] == channel.CLOSE_REPLACED
     assert wire._protocol_capability_document() == fixture["protocolDocument"]
+    assert {kind: frozenset(keys) for kind, keys in fixture["results"]["kinds"].items()} == wire._RESULT_META_FIELDS
+    assert set(fixture["results"]["highlightTools"]) == wire._HIGHLIGHT_TOOLS
+    assert set(fixture["results"]["origins"]) == wire._RESULT_ORIGINS
+    assert set(fixture["results"]["fieldKinds"]) == wire._FIELD_KINDS
+    assert {name: wire._VALUE_DTYPES[name].itemsize for name in fixture["results"]["valueTypes"]} == (
+        fixture["results"]["valueTypes"]
+    )
     assert {name: frozenset(keys) for name, keys in fixture["commands"].items()} == (
         wire._COMMAND_MESSAGE_FIELDS
     )
@@ -1444,6 +1510,20 @@ def test_the_python_declarations_are_the_shared_viewer_protocol() -> None:
     for example in fixture["examples"]["binaryCommands"]:
         header = example["header"]
         binary_types.add(header["type"])
+        if header["type"] == "setField":
+            # A pushed column: its cells (None: every cell) and its values in
+            # the header's type, from a list or a reversed array alike.
+            dtype = wire._VALUE_DTYPES[header["values"]]
+            message = {key: value for key, value in header.items() if key not in {"cells", "values"}}
+            message["cells"] = None if example["cells"] is None else example["cells"]
+            message["values"] = np.array(example["values"], dtype=dtype)
+            assert bytes(wire._require_frontend_message(message)).hex() == example["hex"]
+            if example["cells"] is not None:
+                message["cells"] = np.array(example["cells"][::-1], dtype=np.int64)
+                message["values"] = np.array(example["values"][::-1], dtype=dtype)
+                # Each value goes with its cell, in any order given.
+                assert bytes(wire._require_frontend_message(message)).hex() == example["hex"]
+            continue
         every = header.get("all") is True
         for cells in (example["cells"], np.array(example["cells"][::-1], dtype=np.int64)):
             message = {key: value for key, value in header.items() if key != "all"}
@@ -1459,6 +1539,10 @@ def test_the_python_declarations_are_the_shared_viewer_protocol() -> None:
         body = frame[4 + header_length :]
         if example["header"]["type"] == "selection":
             assert wire._decode_selection_cells(body) == example["cells"]
+        elif example["header"]["type"] == "result":
+            _kind, payload = wire._require_inbound_jupyter_event({**example["header"], "body": bytearray(body)})
+            assert (None if payload["cells"] is None else payload["cells"].tolist()) == example["cells"]
+            assert (None if payload["values"] is None else payload["values"].tolist()) == example["values"]
         else:
             assert body.decode() == example["bodyText"]
 

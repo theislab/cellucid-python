@@ -179,7 +179,7 @@ Because page combination is a deterministic set operation, it’s a good way to:
 
 ## Python/Jupyter synchronization (advanced)
 
-Cellucid has a viewer channel to the program that opened it — `cellucid-python` (`show_anndata()`, in a notebook or not) or the R package's `cellucid_view()`. Conceptually, it supports two directions:
+Cellucid has a viewer channel to the program that opened it — `cellucid-python` (`show_anndata()` in a notebook, `AnnDataViewer` in a browser tab) or the R package's `cellucid_view()`. Conceptually, it supports two directions:
 
 ### Python → UI (commands)
 Examples from `cellucid-python` include:
@@ -205,12 +205,14 @@ If you are debugging Python synchronization, start from:
 ### Common failure modes (Python/Jupyter)
 - A viewer page whose `viewerId` / `viewerToken` the server no longer knows (the viewer was stopped): the channel is refused and the viewer says to run the cell again
 - Dataset mismatch (indices don’t refer to the same cells)
-- Server unreachable from the viewer (HTTPS/remote notebooks without Jupyter Server Proxy, or remote/HPC without tunneling), or a proxy that does not pass WebSockets: the viewer reports **Viewer disconnected**
-- Viewer startup failed to establish its exact configured web generation
+- A cell still running: a notebook widget's events reach Python between cells
+- A browser-tab viewer whose server the page cannot reach (remote/HPC without tunneling), or a proxy that does not pass WebSockets: the viewer reports **Viewer disconnected**
+- A browser-tab viewer whose startup failed to establish its exact configured web generation
 
 First-line diagnostic:
-- `viewer.debug_connection()` (server probes + ping/pong + frontend debug
-  snapshot + accepted-event counts)
+- `viewer.debug_connection()` in a new cell (channel state + accepted-event
+  counts; a browser-tab viewer adds server probes, a ping/pong and a frontend
+  debug snapshot)
 
 ---
 

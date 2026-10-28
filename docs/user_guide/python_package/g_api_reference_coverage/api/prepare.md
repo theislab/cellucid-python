@@ -5,7 +5,8 @@
 ```
 
 This page documents {func}`~cellucid.prepare`, which writes a **Cellucid-ready
-AnnData**: one standard AnnData (`.h5ad`, `.zarr` folder, or `.zarr.zip`)
+AnnData**, and {func}`~cellucid.restore_original_order`, which reads one back
+in its cells' original order. A Cellucid-ready AnnData is one standard AnnData (`.h5ad`, `.zarr` folder, or `.zarr.zip`)
 laid out for the web app's range reads and naming itself in `uns['cellucid']`.
 Given a MuData it writes a **Cellucid-ready MuData** (`.h5mu`, or MuData Zarr
 as a folder or `.zarr.zip`): each modality a Cellucid-ready AnnData.
@@ -79,6 +80,7 @@ prepare(
     normalize_embeddings=None,
     centroid_min_points=None,
     modality=None,
+    priority_seed=0,
     zarr_format=None,
     force=False,
 ) -> Path
@@ -120,6 +122,7 @@ path to write instead.
 | `dataset_description`, `citation_text`/`citation_url`, `source_name`/`source_url` | `uns['cellucid']['description']`, `['citation']`, `['source']` |
 | `embedding_defaults` … `centroid_min_points`, `modality` | `uns['cellucid']['defaults']` (only the ones given); `modality` (a MuData's) is the modality the viewer opens on |
 | `latent_key` | also `uns['cellucid']['outlierQuantiles']`: every categorical `obs` column's outlier quantiles in that latent space |
+| `priority_seed` | the cells' order: by ascending priority, the subsampling `uniform` rank under this seed (default 0), recorded in `uns['cellucid']['priority']`, each row's original position in `obs['cellucid_original_position']`, each gene's values below each prefix level in `varm['cellucid_prefix_counts']`; `None` stores the cells as given ({ref}`priority-order`) |
 | `zarr_format` | 2 (default) or 3, for `format="zarr"` or `"zarr.zip"`; refused with `"h5ad"` and `"h5mu"` |
 | `force` | replace an existing output of the same kind |
 
@@ -140,6 +143,8 @@ A loaded dataset in Cellucid: the sidebar controls the active view while the cat
 
 ```{eval-rst}
 .. autofunction:: prepare
+
+.. autofunction:: restore_original_order
 ```
 
 ---
@@ -157,6 +162,17 @@ A loaded dataset in Cellucid: the sidebar controls the active view while the cat
   ({doc}`../../c_data_preparation_api/02_input_requirements_global`).
 - **Values.** Embeddings, expression, graph and vectors must be finite and fit
   in float32; `obs`/`var` numbers may hold NaN but not infinities.
+- **Cell order.** The cells are stored in priority order (`priority_seed`), so
+  `anndata.read_h5ad` / `anndata.read_zarr` give them in that order;
+  {func}`~cellucid.restore_original_order` puts them back in the order given.
+  `uns["cellucid"]["priority"]` records the seed and the cell count (`nObs`)
+  it was written for, and is verified before it is used: an object subset,
+  combined or reordered since is taken as cells Cellucid did not write, with a
+  warning (the specification's "Verified before use"). An object in a
+  verified stored order is put back in its original order before it is
+  prepared again, whatever `priority_seed` is.
+  Every result Cellucid hands back (sessions, selections, exports) names
+  cells by their original positions and obs names.
 - **Vector fields** bind to an embedding named `X_<basis>`, with exactly as
   many columns as it, under a key that reads back as that field and embedding
   ({doc}`../../c_data_preparation_api/08_vector_fields_velocity_displacement`).

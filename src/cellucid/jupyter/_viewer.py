@@ -1,12 +1,17 @@
 """
-The notebook viewer: :class:`AnnDataViewer` and :func:`show_anndata`.
+The viewer's Python side: :class:`AnnDataViewer` and :func:`show_anndata`.
 
-:class:`AnnDataViewer` starts a :class:`cellucid.anndata_server.AnnDataServer`,
-which hands the AnnData store to the viewer: the viewer reads it in place with
-range requests (an in-memory object is first written to a temporary ``.h5ad``).
-The class also owns notebook-context detection, the viewer id/token pair, hook
-dispatch, the event log that ``wait_for_event`` reads, session bundle capture,
-iframe HTML generation, the outbound command surface, and shutdown.
+:class:`AnnDataViewer` is the viewer API -- hooks, the event log that
+``wait_for_event`` reads, ``viewer.state``, session bundle capture, the
+outbound commands, shutdown -- and, on its own, a viewer in a browser tab: it
+starts a :class:`cellucid.anndata_server.AnnDataServer` that hands the
+AnnData store to the page (read in place with range requests; an in-memory
+AnnData, or an AnnData, MuData, Loom or 10x file not in priority order, as a
+store in priority order made as the page reads it) and serves the page and its
+WebSocket channel. In a notebook, :func:`show_anndata` returns a
+:class:`cellucid.jupyter.Widget` instead: the same API, shown in the cell's
+output and reached through the notebook's own connection
+(:mod:`cellucid.jupyter._widget`).
 
 The module also owns the bridge to the viewer channel in
 :mod:`cellucid._viewer_channel`: :func:`_register_viewer_for_messages` installs
@@ -32,8 +37,12 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+import pandas as pd
+
 from .._console import console_print
 from .._contracts import _require_dataset_id, _require_dataset_name
+from .._plural import plural
 from .._server_base import (
     CELLUCID_WEB_URL,
     DEFAULT_PORT,
@@ -51,7 +60,16 @@ from .._viewer_channel import (
     unregister_event_callback,
     viewer_is_connected,
 )
-from ..data_mapping import EmbeddingKeySpec
+from ..anndata_session._results import (
+    PullSummary,
+    Selection,
+    ViewerResult,
+    _gene_sets_of,
+    apply_results,
+    field_message,
+    read_obs_names,
+)
+from ..data_mapping import _ANNDATA_MAPPING_KEYS, MODALITY_KEY, EmbeddingKeySpec
 from ._hooks import HookCallback, HookRegistry, ViewerState
 from ._wire import (
     _require_cell_indices,
@@ -66,9 +84,9 @@ from ._wire import (
 if TYPE_CHECKING:
     import anndata
     import mudata
-    import numpy as np
 
     from ..anndata_server import AnnDataServer
+    from ._widget import Widget
 
 logger = logging.getLogger("cellucid.jupyter")
 
@@ -80,7 +98,7 @@ logger = logging.getLogger("cellucid.jupyter")
 _COMMAND_PYTHON_CALLERS: dict[str, str] = {
     "ping": "viewer.debug_connection()",
     "debug_snapshot": "viewer.debug_connection()",
-    "requestSessionBundle": "viewer.get_session_bundle()",
+    "requestSessionBundle": "viewer.request_session_bundle()",
     "highlight": "viewer.highlight_cells(...)",
     "clearHighlights": "viewer.clear_highlights()",
     "setColorBy": "viewer.set_color_by(...)",
@@ -88,6 +106,8 @@ _COMMAND_PYTHON_CALLERS: dict[str, str] = {
     "resetCamera": "viewer.reset_view()",
     "freeze": "viewer.stop()",
     "setDataMapping": "viewer.set_data_mapping(...)",
+    "setField": "viewer.push(...)",
+    "setGeneSet": "viewer.push_gene_set(...)",
 }
 
 # How many recent `command_error` payloads `debug_connection()` reports. The
@@ -151,6 +171,77 @@ class _EventWaiter:
         self.event: str | None = None
         self.payload: dict[str, Any] | None = None
 
+class SessionBundleRequest:
+    """A session bundle the viewer was asked for (:meth:`AnnDataViewer.request_session_bundle`).
+
+    ``done`` says whether the viewer answered; :meth:`result` returns the
+    bundle. A request that is never collected is withdrawn by :meth:`cancel`,
+    or when the viewer stops.
+    """
+
+    def __init__(self, viewer: AnnDataViewer, request_id: str, waiter: _EventWaiter) -> None:
+        self._viewer = viewer
+        self.request_id = request_id
+        self._waiter: _EventWaiter | None = waiter
+        self._bundle: Any = None
+
+    @property
+    def done(self) -> bool:
+        """Whether the viewer answered (with the bundle, or with why it could not)."""
+        return self._bundle is not None or (self._waiter is not None and self._waiter.payload is not None)
+
+    def result(self, timeout: float | None = 60.0):
+        """
+        The bundle, waiting up to ``timeout`` seconds for it (None: forever).
+
+        Returns the :class:`~cellucid.session_bundle.CellucidSessionBundle`
+        (the same one on every call). Raises ``TimeoutError`` when it did not
+        arrive in time, and ``RuntimeError`` when the viewer could not capture
+        it -- or, in a notebook widget, when it has not arrived yet: the
+        viewer answers between cells, so collect it in a later cell.
+        """
+        from ..session_bundle import CellucidSessionBundle
+
+        if self._bundle is not None:
+            return self._bundle
+        waiter = self._waiter
+        if waiter is None:
+            raise RuntimeError("This session bundle request was cancelled.")
+        viewer = self._viewer
+        viewer._await(waiter, timeout, "Timed out waiting for the session bundle")
+        self._finish()
+        assert waiter.payload is not None
+        if waiter.event == "command_error":
+            raise RuntimeError(
+                "The viewer did not capture the session bundle: " + waiter.payload["reason"]
+            )
+        path = waiter.payload.get("path")
+        if not path:
+            raise RuntimeError("Session bundle upload succeeded but no temp path was returned")
+        self._bundle = CellucidSessionBundle(Path(path))
+        return self._bundle
+
+    def cancel(self) -> None:
+        """Withdraw the request; an answer that still arrives is dropped."""
+        if self._waiter is None or self._bundle is not None:
+            return
+        self._finish()
+
+    def _finish(self) -> None:
+        waiter = self._waiter
+        viewer = self._viewer
+        with viewer._event_cv:
+            if waiter in viewer._waiters:
+                viewer._waiters.remove(waiter)
+        if waiter is not None and waiter.payload is None:
+            self._waiter = None
+        if viewer._message_routing_registered:
+            cancel_session_bundle_request(viewer._viewer_id, viewer._viewer_token, self.request_id)
+
+    def __repr__(self) -> str:
+        return f"SessionBundleRequest(done={self.done})"
+
+
 def _probe_served_store(url: str) -> dict[str, Any]:
     """What a served AnnData store answers the probe the viewer opens it with.
 
@@ -197,17 +288,26 @@ def _probe_served_store(url: str) -> dict[str, Any]:
 
 class AnnDataViewer:
     """
-    Interactive viewer for AnnData objects in Jupyter notebooks.
+    Interactive viewer for AnnData objects, in a browser tab of its own.
 
-    The viewer reads the AnnData store itself, in place, with range requests:
-    only what a view needs is read, and nothing is converted first. Supports
-    bidirectional communication via hooks.
+    This machine serves the Cellucid page and the data, and the page talks
+    back over a WebSocket; open :attr:`viewer_url` in a browser (in a
+    notebook, :meth:`display` shows a link to it). The viewer reads the
+    AnnData store itself, in place, with range requests: only what a view
+    needs is read, and nothing is converted first. Supports bidirectional
+    communication via hooks.
 
-    Supports every file and folder Cellucid reads, served as it is on disk
-    (``.h5ad`` and AnnData Zarr, ``.h5mu`` and MuData Zarr, ``.loom``, 10x
-    ``.h5`` and ``outs/``, MatrixMarket folders, ``.rds``/``.rda``/``.RData``,
-    gzipped or not), and in-memory AnnData and MuData objects, written once to
-    a temporary ``.h5ad`` or ``.h5mu`` that is removed when the viewer stops.
+    To show the viewer inside a notebook cell, use :func:`show_anndata` or
+    :class:`cellucid.jupyter.Widget`: the same API, reached through the
+    notebook's own connection.
+
+    Supports every file and folder Cellucid reads (``.h5ad`` and AnnData
+    Zarr, ``.h5mu`` and MuData Zarr, ``.loom``, 10x ``.h5`` and ``outs/``,
+    MatrixMarket folders, ``.rds``/``.rda``/``.RData``, gzipped or not),
+    served as it is on disk -- an AnnData, MuData, Loom or 10x file not in
+    priority order, and an in-memory AnnData, as a store in priority order
+    made as the page reads it -- and in-memory MuData objects, written once to a temporary ``.h5mu``
+    that is removed when the viewer stops.
 
     Example:
         >>> viewer = AnnDataViewer(
@@ -265,7 +365,6 @@ class AnnDataViewer:
         self,
         data: str | Path | anndata.AnnData | mudata.MuData,
         port: int | None = None,
-        height: int = 600,
         auto_open: bool = True,
         *,
         latent_key: str | None = None,
@@ -298,8 +397,8 @@ class AnnDataViewer:
                 viewer holds it, the next free port, said in a printed note
                 (cellucid-r's ``cellucid_view()`` does the same). A port given
                 is used or refused.
-            height: Height of the embedded viewer in pixels.
-            auto_open: Automatically display when created.
+            auto_open: Show where the viewer is when created: a link in a
+                notebook (:meth:`display`), its address on the console.
             latent_key: ``obsm`` array (a latent space such as scVI or PCA)
                 the viewer's outlier filter measures in, instead of the data's
                 own ``uns['cellucid']['defaults']['latentKey']``. The viewer
@@ -349,7 +448,6 @@ class AnnDataViewer:
             dataset_id = _require_dataset_id(dataset_id, label="dataset_id")
         self._init_state(
             port=port,
-            height=height,
             client_server_url=client_server_url,
             web_source_url=web_source_url,
             web_cache_dir=web_cache_dir,
@@ -375,7 +473,7 @@ class AnnDataViewer:
             )
             self._activate()
 
-            if auto_open and self._context["in_jupyter"]:
+            if auto_open:
                 self.display()
         except BaseException:
             self._rollback_failed_construction()
@@ -385,7 +483,6 @@ class AnnDataViewer:
         self,
         *,
         port: int | None,
-        height: int,
         client_server_url: str | None,
         web_source_url: str,
         web_cache_dir: str | Path | None,
@@ -395,7 +492,6 @@ class AnnDataViewer:
         self.port = DEFAULT_PORT if port is None else require_server_port(port)
         self._port_given = port is not None
         self.allowed_hosts = require_allowed_hosts(allowed_hosts)
-        self.height = height
         self._client_server_url = (
             _require_client_server_url(client_server_url) if client_server_url is not None else None
         )
@@ -407,6 +503,10 @@ class AnnDataViewer:
         )
 
         self._server: AnnDataServer | None = None
+        self._init_viewer_state()
+
+    def _init_viewer_state(self) -> None:
+        """Set up what every viewer has, however it is shown: ids, hooks, events."""
         self._viewer_id = secrets.token_hex(8)
         self._viewer_token = secrets.token_hex(16)
         self._context = _detect_jupyter_context()
@@ -429,6 +529,25 @@ class AnnDataViewer:
         self._waiters: list[_EventWaiter] = []
         # Set by stop(): every wait still pending ends at once with this reason.
         self._stopped_reason: str | None = None
+        # Every result the viewer holds in its current epoch (one page's
+        # account of one dataset it opened), by (kind, id) (`results`); the
+        # keys of the epoch's complete set, None until its snapshot ended with
+        # a `results` inventory; and the host dataset that inventory named
+        # (None: the person opened another dataset in the viewer).
+        self._results_epoch: str | None = None
+        self._results: dict[tuple[str, str], ViewerResult] = {}
+        self._results_inventory: set[tuple[str, str]] | None = None
+        self._results_dataset: str | None = None
+        # The id of the dataset this viewer serves, and its cell count when
+        # this process reads it (None: only the browser reads the format),
+        # kept past stop().
+        self._served_dataset_id: str | None = None
+        self._served_cell_count: int | None = None
+        # What waits for the viewer, sent once it can be: columns pushed
+        # before its cell count was known (`ready`), and data-mapping fields
+        # set before it reported its mapping.
+        self._pending_pushes: list[tuple[Any, str]] = []
+        self._pending_mapping_fields: dict[str, Any] = {}
 
     def _start_server(
         self,
@@ -483,6 +602,9 @@ class AnnDataViewer:
                 f"(Google Drive data, community annotation) works only on port {DEFAULT_PORT}."
             )
         self.port = self._server.port
+        self._served_dataset_id = self._server.dataset_id
+        cell_count = self._server.server_info["n_cells"]
+        self._served_cell_count = cell_count if isinstance(cell_count, int) else None
         logger.info(f"Started AnnData server at {self._server.url}")
 
     def _activate(self) -> None:
@@ -755,13 +877,25 @@ class AnnDataViewer:
             raise ViewerProtocolError(str(error)) from error
         # The event is recorded before any hook runs: a hook that raises is the
         # notebook's error (the channel logs it), and must not cost
-        # viewer.state, wait_for_event or get_session_bundle the event.
+        # viewer.state, wait_for_event or a session request the event.
         self._record_event(event, data)
         try:
             self._hooks.trigger(event, data)
         finally:
             if event == "command_error" and not self._hooks.has_callbacks("command_error"):
                 self._report_unhandled_command_error(data)
+        # What waited for this event goes now.
+        if event == "ready":
+            self._send_pending_pushes()
+        elif event == "data_mapping":
+            self._send_pending_mapping()
+
+    def _report_local_command_error(self, command: str, error: Exception) -> None:
+        """A command that waited for the viewer and could not be built once it
+        could: reported as the viewer reports a refused command (a
+        ``command_error``: ``state.command_error``, the hooks, or printed)."""
+        reason = str(error).strip() or type(error).__name__
+        self._handle_frontend_message({"type": "command_error", "command": command, "reason": reason[:240]})
 
     def _report_unhandled_command_error(self, data: dict[str, Any]) -> None:
         """
@@ -814,6 +948,8 @@ class AnnDataViewer:
                 self.state.command_error = data
             elif event == "data_mapping":
                 self.state.data_mapping = data
+            elif event in {"result", "result_removed", "results"}:
+                self._record_result_event(event, data)
 
             self._event_cv.notify_all()
 
@@ -847,6 +983,7 @@ class AnnDataViewer:
         TimeoutError
             No matching event arrived within ``timeout``.
         """
+        self._require_answerable(f"wait_for_event({event!r})")
         waiter = _EventWaiter(
             lambda ev_type, payload: ev_type == event
             and (predicate is None or predicate(payload))
@@ -860,6 +997,14 @@ class AnnDataViewer:
                 self._waiters.remove(waiter)
         assert waiter.payload is not None
         return waiter.payload
+
+    def _require_answerable(self, what: str) -> None:
+        """Refuse, before anything is sent, a call this thread cannot wait for.
+
+        A browser-tab viewer answers on its server's threads, so every thread
+        can wait; a notebook widget overrides this (its answers arrive only
+        between cells).
+        """
 
     def _await(self, waiter: _EventWaiter, timeout: float | None, message: str) -> None:
         """Block until ``waiter`` is handed its event; raise TimeoutError at the
@@ -885,61 +1030,36 @@ class AnnDataViewer:
             return self.state.ready
         return self.wait_for_event("ready", timeout=timeout)
 
-    def get_session_bundle(self, timeout: float | None = 60.0):
+    def request_session_bundle(self) -> SessionBundleRequest:
         """
-        Request the current `.cellucid-session` bundle and return it as an object.
+        Ask the viewer for its current `.cellucid-session` bundle, without waiting.
 
-        This is the "no browser download" workflow: Python asks the viewer for
-        a bundle, the viewer sends its bytes back as a binary frame on the
-        viewer channel, the server streams them to a temporary file, and
-        Python receives a handle to that file.
+        The request is sent at once (or as soon as the viewer connects) and
+        the viewer answers in the background; collect the bundle with the
+        returned request's ``result()``. In a notebook widget the answer
+        arrives once the cell that asked has finished, so collect it in a later
+        cell::
 
-        Parameters
-        ----------
-        timeout
-            Seconds to wait, overall, for the viewer to be ready and the
-            bundle to arrive; None waits forever. The notebook output is
-            displayed first when it was not.
+            request = viewer.request_session_bundle()
+            # next cell
+            bundle = request.result()
+            adata = bundle.apply_to_anndata(adata)
 
         Returns
         -------
-        CellucidSessionBundle
-            The captured bundle (a temporary file; ``bundle.save(dest)``
-            keeps a copy).
-
-        Raises
-        ------
-        TimeoutError
-            The viewer was not ready, or the bundle did not arrive, in time.
-        RuntimeError
-            The viewer reported that it could not capture the bundle.
+        SessionBundleRequest
+            The request; ``request.done`` says whether the answer arrived.
         """
-        from ..session_bundle import CellucidSessionBundle
-
-        if self._context.get("in_jupyter") and not self._displayed:
-            self.display()
-
-        # Ensure the frontend has finished wiring session bundle export.
-        # We treat `timeout` as an overall deadline for ready+upload.
-        deadline = None if timeout is None else (time.monotonic() + float(timeout))
-        if self.state.ready is None:
-            ready_timeout = None if deadline is None else max(0.0, deadline - time.monotonic())
-            self.wait_for_ready(timeout=ready_timeout)
-
-        remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
-        if remaining is not None and remaining <= 0:
-            raise TimeoutError("Timed out before requesting the session bundle (viewer not ready)")
-
         request_id = secrets.token_hex(16)
         register_session_bundle_request(
             self._viewer_id,
             self._viewer_token,
             request_id,
-            ttl_seconds=remaining,
+            ttl_seconds=None,
         )
         # The viewer answers with the bundle, or with a command_error naming
         # the request when it could not make one (or the channel refused
-        # what it sent): either ends the wait.
+        # what it sent): either completes the request.
         waiter = _EventWaiter(
             lambda ev_type, payload: (
                 ev_type == "session_bundle" and payload["requestId"] == request_id
@@ -955,27 +1075,12 @@ class AnnDataViewer:
                     "requestId": request_id,
                 }
             )
-            self._await(waiter, remaining, "Timed out waiting for the session bundle")
-        finally:
+        except BaseException:
             with self._event_cv:
                 self._waiters.remove(waiter)
-            cancel_session_bundle_request(
-                self._viewer_id,
-                self._viewer_token,
-                request_id,
-            )
-        assert waiter.payload is not None
-        if waiter.event == "command_error":
-            raise RuntimeError(
-                "The viewer did not capture the session bundle: " + waiter.payload["reason"]
-            )
-        event = waiter.payload
-
-        path = event.get("path")
-        if not path:
-            raise RuntimeError("Session bundle upload succeeded but no temp path was returned")
-
-        return CellucidSessionBundle(Path(path))
+            cancel_session_bundle_request(self._viewer_id, self._viewer_token, request_id)
+            raise
+        return SessionBundleRequest(self, request_id, waiter)
 
     @property
     def data_mapping(self) -> dict[str, Any] | None:
@@ -998,22 +1103,25 @@ class AnnDataViewer:
             event = self.state.data_mapping
             return None if event is None else str(event["origin"])
 
-    def set_data_mapping(self, *, timeout: float | None = 30.0, **fields: Any) -> dict[str, Any]:
+    def set_data_mapping(self, **fields: Any) -> None:
         """
-        Change what the viewer plots and reads, and wait until it applied it.
+        Change what the viewer plots and reads.
 
         Each keyword replaces one top-level field of the mapping the viewer
-        last reported (:attr:`data_mapping`): ``embeddings``, ``vectorFields``,
+        reports (:attr:`data_mapping`): ``embeddings``, ``vectorFields``,
         ``geneNames``, ``knn``, ``expression``, ``log1p``, ``highlyVariable``
-        and ``latent``. ``kind`` cannot change. The merged mapping is validated
-        before anything is sent, so an unknown field or an invalid value raises
-        here and the viewer is untouched.
+        and ``latent`` (and ``modality`` for a MuData). ``kind`` cannot
+        change.
 
-        The viewer answers with a ``data_mapping`` event of origin
-        ``"notebook"`` naming this request; that event's mapping is returned and
-        becomes :attr:`data_mapping`. If the viewer refuses the mapping -- an
-        array that fails its load-time check, for example -- it reports a
-        ``command_error`` and this raises ``RuntimeError`` with its reason.
+        Nothing is waited for -- a notebook widget hears the viewer only
+        between cells. The merged mapping is validated and sent at once when
+        the viewer has reported its mapping (an invalid value raises here and
+        the viewer is untouched), or as soon as it reports one (after its
+        dataset opens; a cell run before that, "Run All", is fine). The
+        viewer's answer becomes :attr:`data_mapping` (origin ``"notebook"``);
+        a mapping it refuses -- an array that fails its load-time check, for
+        example -- arrives as a ``command_error`` (``state.command_error``,
+        ``@viewer.on_command_error``, printed when no hook handles it).
 
         Example::
 
@@ -1028,63 +1136,414 @@ class AnnDataViewer:
                 },
                 knn="connectivities",
             )
-
-        Until the viewer has reported a mapping (it does once the dataset
-        loads), this raises ``RuntimeError`` before sending anything.
-        ``timeout`` bounds the wait for the viewer's answer in seconds (None
-        waits forever); ``TimeoutError`` is raised when it passes.
+            # a later cell
+            viewer.data_mapping["knn"]
         """
-        current = self.data_mapping
-        if current is None:
-            raise RuntimeError(
-                "The viewer has not reported its data mapping yet. It reports one "
-                "after the dataset loads; wait for it with "
-                "viewer.wait_for_event('data_mapping')."
-            )
         if "kind" in fields:
             raise TypeError("set_data_mapping cannot change the mapping kind.")
-        allowed = set(current) - {"kind"}
+        allowed = (_ANNDATA_MAPPING_KEYS - {"kind"}) | {MODALITY_KEY}
         unknown = sorted(set(fields) - allowed)
         if unknown:
             raise TypeError(
                 f"set_data_mapping got unknown field(s) {unknown}; a data "
                 f"mapping has {sorted(allowed)}."
             )
-        mapping = _require_data_mapping({**current, **fields}, label="data mapping")
+        if not fields:
+            raise TypeError("Name the fields to change, for example expression='layer:counts'.")
+        with self._state_lock:
+            self._pending_mapping_fields.update(copy.deepcopy(fields))
+            reported = self.state.data_mapping is not None
+        if reported:
+            self._send_pending_mapping(raise_errors=True)
 
-        request_id = secrets.token_hex(16)
-        waiter = _EventWaiter(
-            lambda ev_type, payload: (
-                ev_type == "data_mapping" and payload["requestId"] == request_id
-            )
-            or (ev_type == "command_error" and payload["command"] == "setDataMapping")
-        )
-        with self._event_cv:
-            self._waiters.append(waiter)
+    def _send_pending_mapping(self, *, raise_errors: bool = False) -> None:
+        """Send the data-mapping fields set so far, merged into the mapping the
+        viewer last reported. A merged mapping that is invalid raises when the
+        call that set the fields sends it (``raise_errors``), and is reported
+        as a ``command_error`` when it waited for the viewer."""
+        with self._state_lock:
+            fields = self._pending_mapping_fields
+            event = self.state.data_mapping
+            if not fields or event is None:
+                return
+            current = copy.deepcopy(event["mapping"])
+            self._pending_mapping_fields = {}
         try:
-            self.send_message(
-                {
-                    "type": "setDataMapping",
-                    "requestId": request_id,
-                    "mapping": mapping,
-                }
-            )
-            self._await(
-                waiter, timeout, "Timed out waiting for the viewer to apply the data mapping"
-            )
-        finally:
-            with self._event_cv:
-                self._waiters.remove(waiter)
-        assert waiter.payload is not None
-        if waiter.event == "command_error":
-            raise RuntimeError(
-                "The viewer did not apply the data mapping: " + waiter.payload["reason"]
-            )
-        return copy.deepcopy(waiter.payload["mapping"])
+            unknown = sorted(set(fields) - set(current))
+            if unknown:
+                raise TypeError(f"This dataset's data mapping has no field(s) {unknown}")
+            mapping = _require_data_mapping({**current, **fields}, label="data mapping")
+        except (TypeError, ValueError) as error:
+            if raise_errors:
+                raise
+            self._report_local_command_error("setDataMapping", error)
+            return
+        self.send_message({"type": "setDataMapping", "requestId": secrets.token_hex(16), "mapping": mapping})
+
+    # =========================================================================
+    # ROUND TRIP: results back from the viewer, columns and gene sets pushed
+    # =========================================================================
+    #
+    # Everything here answers from what the viewer already sent, never by
+    # asking it: once its dataset opens (and whenever its channel opens
+    # again) the viewer sends every result and the `results` inventory, then
+    # each change as it happens. A notebook widget hears the viewer only
+    # between cells, so a lasso drawn and `viewer.pull(adata)` run in the next
+    # cell reads the lasso; a browser-tab viewer is read the same way.
+
+    def _record_result_event(self, event: str, data: dict[str, Any]) -> None:
+        """Keep the viewer's results current (called holding the event lock).
+
+        An event of another epoch -- a reloaded page, the viewer shown again
+        in another output, another dataset opened in it -- starts afresh: its
+        snapshot follows. Within an epoch a ``result`` replaces an older
+        revision of the same result, a ``result_removed`` drops it, and a
+        ``results`` inventory (a snapshot's end) is the complete set: it
+        drops every result it does not list, and names the dataset.
+        """
+        if data["epoch"] != self._results_epoch:
+            self._results_epoch = data["epoch"]
+            self._results = {}
+            self._results_inventory = None
+            self._results_dataset = None
+        if event == "result":
+            result = ViewerResult.from_event(data)
+            key = (result.kind, result.id)
+            held = self._results.get(key)
+            if held is None or held.revision <= result.revision:
+                self._results[key] = result
+            if self._results_inventory is not None:
+                self._results_inventory.add(key)
+        elif event == "result_removed":
+            key = (str(data["kind"]), str(data["id"]))
+            held = self._results.get(key)
+            if held is not None and held.revision < data["revision"]:
+                del self._results[key]
+                if self._results_inventory is not None:
+                    self._results_inventory.discard(key)
+        else:
+            listed = {(item["kind"], item["id"]) for item in data["items"]}
+            for key in [key for key in self._results if key not in listed]:
+                del self._results[key]
+            self._results_inventory = listed
+            self._results_dataset = data["dataset"]
+
+    @property
+    def results(self) -> list[ViewerResult]:
+        """Every result the viewer holds, as of the last event it sent: highlight
+        groups, user-defined fields (labels, clusters), scores, gene sets, the
+        visible and the open cells.
+
+        Raises ``RuntimeError`` before the viewer has sent them all once (it
+        does when its dataset has opened): run the cell again then; and while
+        the viewer shows a dataset this viewer did not serve (one opened in
+        it instead), whose cells are not this dataset's.
+        """
+        with self._state_lock:
+            inventory = self._results_inventory
+            if inventory is None:
+                raise RuntimeError(
+                    "The viewer has not sent what it holds yet: it does once its dataset has "
+                    "opened. Run this again when the viewer shows the data."
+                )
+            served = self._served_dataset_id
+            if self._results_dataset is None:
+                raise RuntimeError(
+                    f"The viewer shows a dataset this notebook did not open: another one was opened in it. "
+                    f"Open {served!r} in the viewer again (or show the viewer again) to pull from it."
+                )
+            if served is not None and self._results_dataset != served:
+                raise RuntimeError(
+                    f"The viewer's results describe the dataset {self._results_dataset!r}, and this viewer "
+                    f"serves {served!r}: open {served!r} in the viewer again to pull from it."
+                )
+            missing = sorted(f"{kind} {result_id}" for kind, result_id in inventory if (kind, result_id) not in self._results)
+            if missing:
+                raise RuntimeError(
+                    f"The viewer's results arrived incomplete ({', '.join(missing[:3])} missing); "
+                    "reload the viewer's page to have it send them again."
+                )
+            return list(self._results.values())
+
+    def pull(
+        self,
+        adata: Any,
+        *,
+        highlights: bool = True,
+        fields: bool = True,
+        scores: bool = True,
+        visibility: bool = False,
+        gene_sets: bool = True,
+        include_pushed: bool = False,
+        highlight_prefix: str = "cellucid_highlight__",
+        field_prefix: str = "",
+        on_conflict: str = "error",
+        prune: bool = True,
+    ) -> PullSummary:
+        """Write everything made in this viewer onto ``adata``, in place, in one call.
+
+        Every highlight group, user-defined field (labels, annotations,
+        clusters), score and gene set the viewer holds -- see
+        :func:`cellucid.pull` for the columns, their names and dtypes, and
+        every option. ``adata`` is the AnnData or MuData the viewer shows,
+        cells in the same order. Nothing is waited for: the viewer sent its
+        results as they were made, so in a notebook a lasso drawn and this run
+        in the next cell finds the lasso.
+
+        Example::
+
+            summary = viewer.pull(adata)
+            summary.columns          # what was written, by obs column
+            adata.uns["cellucid"]["gene_sets"]
+        """
+        self._require_viewer_order(adata)
+        return apply_results(
+            adata,
+            self.results,
+            highlights=highlights,
+            fields=fields,
+            scores=scores,
+            visibility=visibility,
+            gene_sets=gene_sets,
+            include_pushed=include_pushed,
+            highlight_prefix=highlight_prefix,
+            field_prefix=field_prefix,
+            on_conflict=on_conflict,
+            prune=prune,
+        )
+
+    def _require_viewer_order(self, adata: Any) -> None:
+        """Refuse an object whose rows are not the viewer's cells in order.
+
+        The viewer names a cell by its original position: an object it was
+        given, by the object's own row; a file in a verified priority order,
+        by the original position its record gives the row (:attr:`obs_names`
+        is in that order). An object whose obs names are the same cells in
+        another order -- read from such a file as stored (``anndata.read_zarr``
+        of ``prepare()``'s output), or sorted since -- would take each result
+        in the wrong rows. When this process cannot read the viewer's names
+        (a format only the browser reads), an object in a file's stored order
+        is still told by its priority record.
+        """
+        from ..prepare_data._priority import stored_order_of
+
+        # In a verified stored order (`stored_order`): a record that does not
+        # describe the cells leaves each row its own original position.
+        stored = hasattr(adata, "uns") and hasattr(adata, "obs") and stored_order_of(adata).positions is not None
+        names = self.obs_names
+        given = pd.Index(adata.obs_names)
+        if names is not None and names.is_unique and given.is_unique:
+            if len(given) != len(names) or given.equals(names):
+                return  # in order (a count that differs is refused with the counts)
+            missing = names.get_indexer(given) < 0
+            if missing.any():
+                raise ValueError(
+                    f"{int(missing.sum())} of this object's cells are not cells of the viewer's dataset "
+                    f"(first: {given[missing][0]!r}): pass the object the viewer shows."
+                )
+        elif not stored:
+            return
+        restore = (
+            "Put them back first: adata = cellucid.restore_original_order(adata)."
+            if stored
+            else "Reorder it first: adata = adata[viewer.obs_names].copy()."
+        )
+        raise ValueError(
+            "This object holds the viewer's cells in another order"
+            + (" (a Cellucid-ready file's stored order: uns['cellucid']['priority'])" if stored else "")
+            + ", and the viewer names cells in their original order. "
+            + restore
+        )
+
+    @property
+    def obs_names(self) -> pd.Index | None:
+        """The obs names of the dataset this viewer shows, or None when this
+        process cannot read them (a format other than AnnData or MuData, read
+        only by the browser). Read once, when first asked."""
+        cached = getattr(self, "_obs_names_cache", False)
+        if cached is False:
+            cached = read_obs_names(self.data)
+            self._obs_names_cache = cached
+        return cached
+
+    @property
+    def selection(self) -> Selection | None:
+        """The viewer's last selection (lasso, k-NN, proximity, annotation), or
+        None before the first: its cells as rows of ``obs`` and, when this
+        process has them, their obs names."""
+        with self._state_lock:
+            event = self.state.selection
+        if event is None:
+            return None
+        cells = np.asarray(event["cells"], dtype=np.int64)
+        names = self.obs_names
+        return Selection(cells=cells, obs_names=None if names is None else names[cells], source=str(event["source"]))
+
+    def _cell_positions(self, cells: Any) -> np.ndarray | list[int]:
+        """Cells given by row (ints) or by obs name, as rows of ``obs``."""
+        if isinstance(cells, str | bytes):
+            raise TypeError("cell_indices must list the cells (rows or obs names), not be one string")
+        if isinstance(cells, pd.Index | pd.Series) or (
+            isinstance(cells, list | tuple) and cells and all(isinstance(cell, str) for cell in cells)
+        ) or (isinstance(cells, np.ndarray) and cells.dtype.kind in "OUS"):
+            names = self.obs_names
+            if names is None:
+                raise ValueError(
+                    "This viewer's dataset has no obs names this process can read; name the cells by row."
+                )
+            wanted = pd.Index(cells.index if isinstance(cells, pd.Series) and cells.dtype == bool else cells)
+            if isinstance(cells, pd.Series) and cells.dtype == bool:
+                wanted = cells.index[cells.to_numpy()]
+            positions = names.get_indexer(wanted)
+            if (positions < 0).any():
+                missing = wanted[positions < 0]
+                raise ValueError(
+                    f"{len(missing)} of the cells named are not in this viewer's dataset (first: {missing[0]!r})"
+                )
+            located: np.ndarray = positions.astype(np.int64)
+            return located
+        return _require_cell_indices(cells if isinstance(cells, np.ndarray) or type(cells) is list else list(cells))
+
+    def subset(self, adata: Any, which: str | None = None) -> Any:
+        """The cells of a highlight group, or of the last selection, as a new AnnData.
+
+        Args:
+            adata: The AnnData (or MuData) the viewer shows, cells in its
+                order (an object holding them in another order is refused,
+                as :meth:`pull` refuses it).
+            which: A highlight group, by id (``"highlight_3"``) or by its
+                label; ``"visible"`` for the cells the filters leave visible;
+                None for the last selection.
+
+        Returns:
+            ``adata[cells].copy()`` (``to_memory()`` for a backed AnnData).
+        """
+        self._require_viewer_order(adata)
+        if which is None:
+            selection = self.selection
+            if selection is None:
+                raise RuntimeError("The viewer has sent no selection yet; select cells, or name a highlight group.")
+            cells = selection.cells
+        else:
+            results = self.results
+            if which == "visible":
+                matches = [result for result in results if result.kind == "visibility"]
+            else:
+                matches = [
+                    result for result in results
+                    if result.kind == "highlight" and (result.id == which or result.meta["label"] == which)
+                ]
+            if len(matches) != 1:
+                groups = sorted(
+                    f"{result.id} ({result.meta['label']})" for result in results if result.kind == "highlight"
+                )
+                raise ValueError(
+                    f"{which!r} names {len(matches)} highlight groups; name one by id. The viewer holds: "
+                    + (", ".join(groups) or "no highlight group")
+                )
+            if matches[0].n_obs != int(adata.n_obs):
+                raise ValueError(
+                    f"The viewer shows {matches[0].n_obs} {plural(matches[0].n_obs, 'cell')} and this object has "
+                    f"{int(adata.n_obs)}: pass the object the viewer shows, with its cells in the same order"
+                )
+            found = matches[0].cells
+            cells = np.arange(int(adata.n_obs)) if found is None else np.asarray(found, dtype=np.int64)
+        view = adata[cells]
+        return view.to_memory() if getattr(adata, "isbacked", False) else view.copy()
+
+    def gene_sets(self, *, symbols: bool = False) -> dict[str, list[str]]:
+        """Every gene set the viewer holds: the notebook's, the shown marker genes
+        result's (one per group) and the shown gene signature's, by name (a name
+        used again is ``"name (2)"``, as everywhere in Cellucid).
+
+        Each set's genes are identifiers -- the var index, as
+        ``adata.var_names`` holds them (Ensembl ids for a CELLxGENE dataset)
+        -- or, with ``symbols=True``, the names the viewer shows for them (a
+        symbol column's, such as ``feature_name``).
+        :func:`cellucid.write_gmt` writes them as a GMT file."""
+        if type(symbols) is not bool:
+            raise TypeError("symbols must be exactly True or False")
+        key = "symbols" if symbols else "genes"
+        return {name: list(entry[key]) for _, name, entry in _gene_sets_of(self.results)}
+
+    def push(self, values: Any, key: str | None = None) -> None:
+        """Show a column in the viewer as a field: labels as a categorical, numbers
+        as a continuous field. Pushing the same key again replaces it.
+
+        Args:
+            values: A ``pandas.Series`` -- ``adata.obs["leiden"]``, a score --
+                aligned to the viewer's cells by its index (obs names), or an
+                array or list of one value per cell in ``obs`` order.
+                Categorical, string, object and bool values become a
+                categorical (missing values have no category; a bool's
+                labels are ``"false"`` and ``"true"``); numbers a
+                continuous field (missing: no value).
+            key: The field's name in the viewer; the Series' name when None.
+                A field of that name the notebook did not push is never
+                replaced: the viewer refuses it, and says why as a
+                ``command_error`` (printed unless a hook handles it).
+
+        The column is sent at once (or, for a format only the browser reads,
+        once the viewer has said how many cells it has: a cell run before
+        that, "Run All", is fine); the viewer adds it once its dataset is
+        open, and :attr:`results` lists it from then on (in a notebook, from
+        the next cell). A column the viewer refuses, or that does not fit
+        the dataset once it is known, arrives as a ``command_error``.
+        """
+        name = key if key is not None else getattr(values, "name", None)
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("Name the field: pass key=, or a Series with a name")
+        n_obs = self._dataset_cell_count()
+        if n_obs is None:
+            # Only the browser reads this format: the column goes once the
+            # viewer says how many cells it has (its `ready`).
+            with self._state_lock:
+                self._pending_pushes.append((values, name.strip()))
+            return
+        message = field_message(values, name.strip(), n_obs=n_obs, obs_names=self.obs_names)
+        self.send_message({**message, "requestId": secrets.token_hex(16)})
+
+    def _send_pending_pushes(self) -> None:
+        """Send the columns pushed before the viewer's cell count was known; a
+        column that does not fit the dataset is reported as a
+        ``command_error`` of ``setField``."""
+        with self._state_lock:
+            pending, self._pending_pushes = self._pending_pushes, []
+        n_obs = self._dataset_cell_count()
+        if n_obs is None:
+            return
+        for values, name in pending:
+            try:
+                message = field_message(values, name, n_obs=n_obs, obs_names=self.obs_names)
+            except (TypeError, ValueError) as error:
+                self._report_local_command_error("setField", error)
+                continue
+            self.send_message({**message, "requestId": secrets.token_hex(16)})
+
+    def push_gene_set(self, name: str, genes: Sequence[str], description: str = "") -> None:
+        """Give the viewer a gene set: Gene signature and Dot plot offer it
+        ("From notebook"), and it is saved with the session. A set of the same
+        name the notebook pushed before is replaced. Each gene is kept once, in
+        order. Sent at once, as :meth:`push` is."""
+        if isinstance(genes, str):
+            raise TypeError("genes must list the genes, not be one string")
+        clean = list(dict.fromkeys(str(gene).strip() for gene in genes if str(gene).strip()))
+        self.send_message(
+            {"type": "setGeneSet", "requestId": secrets.token_hex(16), "name": name, "description": description, "genes": clean}
+        )
+
+    def _dataset_cell_count(self) -> int | None:
+        """The cells of the dataset this viewer serves: read by this process,
+        or reported by the viewer (its ``ready``); None before either."""
+        if self._served_cell_count is not None:
+            return int(self._served_cell_count)
+        ready = self.state.ready
+        return None if ready is None else int(ready["n_obs"])
 
     def apply_session_to_anndata(
         self,
         adata: Any,
+        request: SessionBundleRequest,
         *,
         expected_dataset_id: str | None = None,
         inplace: bool = False,
@@ -1099,33 +1558,36 @@ class AnnDataViewer:
         return_summary: bool = False,
     ):
         """
-        Convenience wrapper: capture a session bundle and apply it to an AnnData.
+        Apply the session a :meth:`request_session_bundle` request brought to an AnnData.
 
-        ``timeout`` bounds the wait for the bundle (see
-        :meth:`get_session_bundle`), ``cleanup_bundle`` deletes the captured
-        bundle file afterwards, and ``expected_dataset_id`` defaults to the id
-        this viewer serves. Every other keyword is passed to
+        The one way to get a session, in a notebook widget and a browser-tab
+        viewer alike (cellucid-r's ``cellucid_apply_session(object,
+        request)``): ask, then apply -- in a notebook, in a later cell, since
+        the viewer answers between cells::
+
+            request = viewer.request_session_bundle()
+            # next cell
+            adata = viewer.apply_session_to_anndata(adata, request)
+
+        ``timeout`` bounds the wait for the bundle (``request.result()``; a
+        notebook widget's cell cannot wait, and says so at once when the
+        answer has not arrived), ``cleanup_bundle`` deletes the bundle file
+        afterwards (``request.result().save(...)`` first keeps a copy), and
+        ``expected_dataset_id`` defaults to the id this viewer serves. Every
+        other keyword is passed to
         :func:`~cellucid.apply_cellucid_session_to_anndata`.
-
-        Notes
-        -----
-        - If you want to keep the artifact, call `bundle = viewer.get_session_bundle()`
-          and `bundle.save(...)` before applying.
-        - By default, the temporary bundle file created by the server is deleted
-          after applying.
         """
         if type(cleanup_bundle) is not bool:
             raise TypeError("cleanup_bundle must be exactly True or False")
-        bundle = self.get_session_bundle(timeout=timeout)
+        if not isinstance(request, SessionBundleRequest) or request._viewer is not self:
+            raise TypeError("request must be what this viewer's request_session_bundle() returned")
+        bundle = request.result(timeout=timeout)
         try:
             resolved_dataset_id = expected_dataset_id
             if resolved_dataset_id is None:
-                server = self._server
-                if server is None:
-                    raise RuntimeError(
-                        "The viewer has stopped; pass expected_dataset_id explicitly."
-                    )
-                resolved_dataset_id = server.dataset_id
+                resolved_dataset_id = self._served_dataset_id
+                if resolved_dataset_id is None:
+                    raise RuntimeError("This viewer serves no dataset id; pass expected_dataset_id explicitly.")
             return bundle.apply_to_anndata(
                 adata,
                 expected_dataset_id=resolved_dataset_id,
@@ -1382,9 +1844,15 @@ class AnnDataViewer:
         return f"{base}/?{query}"
 
     def display(self):
-        """Display the viewer in a notebook cell."""
+        """Say where the viewer is: a link to its browser tab in a notebook,
+        its address on the console otherwise.
+
+        This viewer runs in a browser tab of its own (the page and its channel
+        are served by this machine). To show a viewer inside a notebook cell,
+        use :func:`show_anndata` or :class:`cellucid.jupyter.Widget`.
+        """
         if not self._context["in_jupyter"]:
-            console_print(f"Not in Jupyter environment. Open manually: {self.viewer_url}")
+            console_print(f"Open the Cellucid viewer: {self.viewer_url}")
             return
 
         from IPython.display import HTML, display
@@ -1396,26 +1864,8 @@ class AnnDataViewer:
             expected_source_url=self.web_source_url,
         )
 
-        html = self._generate_viewer_html()
-        display(HTML(html))
+        display(HTML(self._repr_html_()))
         self._displayed = True
-
-    def _generate_viewer_html(self) -> str:
-        """The notebook output: one iframe of the viewer.
-
-        The viewer opens its own channel to this server (a WebSocket at
-        ``/_cellucid/ws``), so the output holds no script: it works the same
-        in every notebook front end, trusted or not.
-        """
-        return (
-            f'<div id="cellucid-viewer-{self._viewer_id}" '
-            f'style="width:100%; height:{self.height}px;">'
-            f'<iframe id="cellucid-iframe-{self._viewer_id}" '
-            f'src="{html.escape(self.viewer_url, quote=True)}" '
-            'width="100%" height="100%" frameborder="0" '
-            'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope" '
-            "allowfullscreen></iframe></div>"
-        )
 
     def send_message(self, message: dict) -> bool:
         """
@@ -1454,22 +1904,34 @@ class AnnDataViewer:
     # These methods send commands TO the viewer (opposite direction from hooks),
     # on the same viewer channel the events arrive on.
 
-    def highlight_cells(self, cell_indices: list[int] | np.ndarray, color: str = "#ff0000"):
+    def highlight_cells(
+        self,
+        cell_indices: Any,
+        color: str = "#ff0000",
+        *,
+        label: str | None = None,
+    ):
         """
-        Highlight specific cells in the viewer.
+        Highlight specific cells in the viewer, as one highlight group.
 
         Args:
-            cell_indices: The cells to highlight, by 0-based index, in any
-                order, each once: a list of ints or a one-dimensional NumPy
-                integer array (the fast form for millions of cells, e.g.
-                ``np.flatnonzero(mask)``). They travel as one binary frame.
+            cell_indices: The cells to highlight, in any order, each once: by
+                0-based row of ``obs`` (a list of ints, or a one-dimensional
+                NumPy integer array -- the fast form for millions of cells,
+                e.g. ``np.flatnonzero(mask)``), or by obs name (a list of
+                names, a ``pandas.Index`` such as ``adata.obs_names[mask]``).
+                They travel as one binary frame. When the viewer opened a
+                subsample, the cells it holds are highlighted.
             color: Hex color string (default: red)
+            label: The group's name in the viewer; None names it by its
+                cell count.
 
         Example::
 
             viewer.highlight_cells([100, 200, 300], color="#00ff00")
+            viewer.highlight_cells(adata.obs_names[adata.obs["leiden"] == "3"], label="Leiden 3")
         """
-        cells = _require_cell_indices(cell_indices)
+        cells = self._cell_positions(cell_indices)
         if (
             type(color) is not str
             or len(color) != 7
@@ -1482,6 +1944,7 @@ class AnnDataViewer:
                 "type": "highlight",
                 "cells": cells,
                 "color": color,
+                "label": label,
             }
         )
 
@@ -1512,9 +1975,10 @@ class AnnDataViewer:
         Set visibility of specific cells.
 
         Args:
-            cell_indices: The cells, by 0-based index, in any order, each once
-                and at least one: a list of ints or a one-dimensional NumPy
-                integer array. None for every cell.
+            cell_indices: The cells, in any order, each once and at least
+                one: by 0-based row of ``obs`` (a list of ints or a
+                one-dimensional NumPy integer array) or by obs name. None for
+                every cell.
             visible: Whether cells should be visible
 
         Example::
@@ -1526,7 +1990,7 @@ class AnnDataViewer:
         self.send_message(
             {
                 "type": "setVisibility",
-                "cells": None if cell_indices is None else _require_cell_indices(cell_indices),
+                "cells": None if cell_indices is None else self._cell_positions(cell_indices),
                 "visible": visible,
             }
         )
@@ -1555,7 +2019,11 @@ class AnnDataViewer:
         with self._event_cv:
             self._stopped_reason = "the viewer was stopped"
             self._event_cv.notify_all()
-        if self._message_routing_registered:
+        finalizer = self._routing_finalizer
+        # At interpreter exit the routing finalizer may already have run
+        # (weakref's own exit hook): the registration is gone, and so is the
+        # page's channel, so there is nothing left to tell.
+        if self._message_routing_registered and (finalizer is None or finalizer.alive):
             try:
                 # Only an open page is told to freeze; a page that is not
                 # connected sees its channel close instead.
@@ -1595,10 +2063,11 @@ class AnnDataViewer:
         return f"AnnDataViewer(port={self.port}, status={status})"
 
     def _repr_html_(self) -> str:
-        """HTML representation for Jupyter display."""
-        if self._context["in_jupyter"]:
-            return f'<a href="{self.viewer_url}" target="_blank">Open Cellucid Viewer</a>'
-        return repr(self)
+        """A link that opens the viewer in a browser tab."""
+        return (
+            f'<a href="{html.escape(self.viewer_url, quote=True)}" target="_blank" '
+            'rel="noopener">Open the Cellucid viewer</a>'
+        )
 
 
 def show_anndata(
@@ -1617,18 +2086,27 @@ def show_anndata(
     expression_source: str | None = None,
     vector_field_default: str | None = None,
     modality: str | None = None,
-    client_server_url: str | None = None,
     web_source_url: str = CELLUCID_WEB_URL,
-    web_cache_dir: str | Path | None = None,
-    allowed_hosts: Sequence[str] | None = None,
-) -> AnnDataViewer:
+) -> Widget:
     """
-    Display an AnnData or MuData object, or any file Cellucid reads, in a notebook.
+    Show an AnnData or MuData object, or any file Cellucid reads, in a notebook.
 
-    The viewer reads the data itself, without running prepare first: in
-    place with range requests where the format allows it, once from the start
-    for an R object or a MatrixMarket folder. An in-memory object is written
-    once to a temporary ``.h5ad`` (AnnData) or ``.h5mu`` (MuData).
+    Returns a :class:`cellucid.jupyter.Widget` and shows it in the cell's
+    output: in JupyterLab, Jupyter Notebook 7, VS Code, Google Colab and
+    Databricks it is displayed at once; in marimo, make it the cell's output
+    (the last expression). The widget reaches this kernel through the
+    notebook's own connection, so no port, proxy or server address is
+    involved. The viewer reads the data itself, without running prepare
+    first: in place with range requests where the format allows it, once
+    from the start for an R object or a MatrixMarket folder. An in-memory
+    AnnData, and an AnnData, MuData, Loom or 10x file not in priority order,
+    are served as a Zarr store with their cells in priority order, made as
+    the viewer reads it, so a subsample reads only its cells; a MuData object
+    is written once to a temporary ``.h5mu``.
+
+    To open a viewer in a browser tab of its own instead (a script, an SSH
+    tunnel), use :class:`AnnDataViewer`, or ``serve_anndata`` /
+    ``cellucid serve``.
 
     Args:
         data: AnnData or MuData object, or path to a file or folder Cellucid
@@ -1670,23 +2148,22 @@ def show_anndata(
             ``X_<basis>`` (``velocity`` for ``velocity_umap``).
         modality: The modality a multimodal dataset (a MuData) opens on; None
             opens the default one. Set only for multimodal data.
-        client_server_url: Exact browser-reachable data server base URL.
-        web_source_url: Origin publishing the web asset inventory.
-        web_cache_dir: Directory holding the active verified web build.
-        allowed_hosts: Extra ``Host`` names the data server answers to.
-            Required when ``client_server_url`` points at a reverse proxy such
-            as ``jupyter-server-proxy``: name that proxy's host here.
+        web_source_url: Where the browser loads the Cellucid app the widget shows:
+            ``https://www.cellucid.com`` (the default), or the address of a
+            copy you host. The browser, not the kernel, loads it.
 
     Returns:
-        AnnDataViewer instance for interaction via hooks.
+        The :class:`cellucid.jupyter.Widget`, for hooks and commands.
 
     Supported formats:
         - .h5ad, AnnData Zarr (folder or .zip), .h5mu, MuData Zarr, .loom,
-          10x .h5 files and Cell Ranger outs/ folders, read in place
+          10x .h5 files and Cell Ranger outs/ folders: a file prepare() wrote
+          read in place, any other served in priority order as the viewer
+          reads it
         - MatrixMarket folders (also GEO's GSM..._matrix.mtx.gz naming) and R
           objects (.rds, .rda, .RData, gzipped or not), read once
-        - In-memory AnnData and MuData objects, written once to a temporary
-          .h5ad or .h5mu
+        - In-memory AnnData objects, served in priority order as the viewer
+          reads them; MuData objects, written once to a temporary .h5mu
 
     Example:
         >>> from cellucid import show_anndata
@@ -1701,23 +2178,15 @@ def show_anndata(
         ...     subset = adata[event['cells']]
         ...     sc.pl.violin(subset, 'gene1')
 
-        >>> # With custom options
-        >>> viewer = show_anndata(
-        ...     adata,
-        ...     latent_key="X_pca",
-        ...     dataset_name="Example",
-        ...     dataset_id="example",
-        ...     height=800,
-        ... )
-
     Note:
         To publish a dataset for others, prepare it (or publish the .h5ad or
         Zarr store itself) and share a link; see the data loading guide.
     """
-    return AnnDataViewer(
-        data=data,
+    from ._widget import Widget, show_widget
+
+    widget = Widget(
+        data,
         height=height,
-        auto_open=True,
         latent_key=latent_key,
         gene_id_column=gene_id_column,
         normalize_embeddings=normalize_embeddings,
@@ -1730,11 +2199,14 @@ def show_anndata(
         expression_source=expression_source,
         vector_field_default=vector_field_default,
         modality=modality,
-        client_server_url=client_server_url,
         web_source_url=web_source_url,
-        web_cache_dir=web_cache_dir,
-        allowed_hosts=allowed_hosts,
     )
+    try:
+        show_widget(widget)
+    except BaseException:
+        widget.stop()
+        raise
+    return widget
 
 
 # =============================================================================

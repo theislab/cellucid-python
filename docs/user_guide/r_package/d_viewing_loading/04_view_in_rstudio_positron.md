@@ -20,14 +20,18 @@ viewer <- cellucid_view(pbmc_small)
 `cellucid_view()` takes a Seurat, SingleCellExperiment or SummarizedExperiment
 object, or the path of any file the web app opens (an `.h5ad`, a `.zarr` folder
 or `.zarr.zip`, a MuData, a Loom or 10x `.h5`, an `.rds`). In RStudio and
-Positron it opens in the Viewer pane; elsewhere in your browser. Choose with
-`pane = "viewer"`, `"browser"` or `"none"`.
+Positron it opens in the Viewer pane; in a Jupyter notebook in the cell's
+output ({doc}`08_view_in_jupyter_notebooks`); elsewhere in your browser.
+Choose with `pane = "viewer"`, `"browser"`, `"notebook"` or `"none"`.
 
 The 80 cells of `pbmc_small` appear on their t-SNE, with the PCA and the
 metadata columns (`groups`, `RNA_snn_res.1`, `active_ident`, …) under
 **Color by**, and the 230 genes searchable.
 
 ## What happens
+
+In RStudio, Positron or an R console (in a Jupyter notebook no server starts:
+see {doc}`08_view_in_jupyter_notebooks`):
 
 1. The object is read as `cellucid_prepare(data = pbmc_small)` reads it
    ({doc}`../e_integrations_recipes/01_seurat_recipe`), into the same
@@ -83,6 +87,37 @@ file, because the R package reads no HDF5. Python's `serve_anndata()` and
 `show_anndata()` read that record from an `.h5ad` and `.h5mu` too, and refuse a
 file that names no dataset, so the same file can be kept under two ids: pass
 `dataset_id =` (and `dataset_name =`) to keep its sessions in one place.
+
+## A file given by path
+
+A path is served from disk as it is, and the browser reads the file itself.
+The R package has no HDF5 reader (no `rhdf5` or `hdf5r` among its
+dependencies) and no reader of Zarr chunks, so it cannot put a file's cells
+in **priority order** the way it serves an object, or Python serves a file.
+When the file's cells are not in priority order already (a Zarr store
+`cellucid_prepare()` wrote is; an `.h5ad` or `.h5mu` may be, which R cannot
+tell), `cellucid_view()` and `cellucid_serve()` say so as they start: a
+subsample the viewer opens (Session › *Cells to open*) then reads the
+storage blocks that hold its cells, with the cells around them, as it does
+from a link. For a subsample that reads only its own cells:
+
+- read the file into R and view the object — `Seurat::Read10X_h5()`,
+  `SeuratDisk::LoadLoom()`, `zellkonverter::readH5AD()`,
+  `MuDataSeurat::ReadH5MU()` — which is served in priority order;
+- write it once in priority order with `cellucid_prepare()`, and serve that;
+- or serve the file from Python (`cellucid serve <path>`, `show_anndata()`),
+  which serves `.h5ad`, `.h5mu`, Loom, Cell Ranger `.h5`/`outs/` and AnnData
+  and MuData Zarr stores in priority order, read on the kernel.
+
+An `.rds`, `.rda` or MatrixMarket folder is read whole once by the browser,
+into a store in priority order, and needs none of this.
+
+The viewer is told the file's size and its version — a strong `ETag` made of
+its size, modification time and status-change time, read when the viewer
+asks — and keeps what it reads of the file under that version: its byte
+cache, its gene indexes and an `.rds` converted once last across visits, so
+opening the same file again reads none of it. A file rewritten while it is
+served, in place or replaced, is a new version and is read again.
 
 ## Next
 

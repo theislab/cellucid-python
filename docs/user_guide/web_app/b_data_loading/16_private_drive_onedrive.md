@@ -318,9 +318,10 @@ address, and accepts plain `http://` only for this computer.
 | www.cellucid.com | Yes | Yes |
 | `cellucid serve` on its default port (`http://127.0.0.1:8765`, `http://localhost:8765`) | Yes | Yes |
 | `cellucid serve --port <another port>` | No: Cellucid says to start it without `--port` | Yes |
-| A notebook viewer (`show_anndata`), on 8765 unless another server holds it | On 8765, public files (private files are not tested yet); on another port Cellucid says to free 8765 | Only when the notebook page is on the same host as the viewer (Jupyter at `127.0.0.1`, not tested yet). From `localhost`, VS Code or any other site the browser keeps Microsoft's window from reaching the embedded viewer, and Cellucid says to open Cellucid in its own tab |
+| A browser-tab viewer from Python (`AnnDataViewer`), on 8765 unless another server holds it | On 8765, as `cellucid serve`; on another port Cellucid says to free 8765 | Yes |
+| A notebook widget (`show_anndata`, or `cellucid_view()` in an R notebook): the app at www.cellucid.com, inside the notebook's output | Not tested yet | Not tested yet |
 | Another computer's address (`cellucid serve --host 0.0.0.0`, `http://192.168.…`) | No | No: Cellucid says it needs `https://` or this computer's own address |
-| JupyterHub, Colab, a remote server, any other site | No | No |
+| A browser-tab viewer reached through JupyterHub, a proxy, a remote server, any other site | No | No |
 
 Where a row says no, open the file on www.cellucid.com.
 

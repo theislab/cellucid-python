@@ -521,14 +521,6 @@ def _operating_system_message(error: OSError, args: argparse.Namespace) -> str:
     return str(error)
 
 
-#: Every declared dependency whose import name differs from the name that
-#: installs it. Advising the import name would name a package that does not
-#: exist on PyPI, which is worse than no advice at all.
-_DISTRIBUTION_NAME_BY_IMPORT_NAME: Final = {
-    "jupyter_server_proxy": "jupyter-server-proxy",
-}
-
-
 def _required_python_range() -> str:
     """Return the Python range this installation declares, as it declares it.
 
@@ -580,21 +572,20 @@ def _import_error_message(error: ImportError) -> str:
             f"Cellucid could not read a name it needs from the installed {name!r}"
             f"{location}: {error.msg}. The installed version of that package is not "
             "one this Cellucid can use. Upgrade it in this environment and run the "
-            f"command again: pip install --upgrade {_DISTRIBUTION_NAME_BY_IMPORT_NAME.get(top_level, top_level)}"
+            f"command again: pip install --upgrade {top_level}"
         )
 
     if name != top_level:
         return (
             f"Cellucid needs {name!r}, and the installed {top_level!r} does not "
             f"provide it. Upgrade it in this environment and run the command again: "
-            f"pip install --upgrade {_DISTRIBUTION_NAME_BY_IMPORT_NAME.get(top_level, top_level)}"
+            f"pip install --upgrade {top_level}"
         )
 
-    distribution = _DISTRIBUTION_NAME_BY_IMPORT_NAME.get(name, name)
     return (
         f"Cellucid needs the {name!r} package to read this input and it is not "
         "installed in this environment. Install it and run the command again: "
-        f"pip install {distribution}"
+        f"pip install {name}"
     )
 
 

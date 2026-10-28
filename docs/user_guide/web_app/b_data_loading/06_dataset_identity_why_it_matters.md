@@ -153,15 +153,17 @@ is open; a saved session records its id in its fingerprint.
 
 ### AnnData server / Jupyter
 
-If you have a Python handle, print the viewer URL and/or inspect the server’s `/_cellucid/datasets` endpoint, which names the dataset's `id` and `name`.
+If you have a Python handle, `viewer.debug_connection()["dataset"]` names the
+dataset's `id`; a server's `/_cellucid/datasets` endpoint names its `id` and
+`name`.
 
-Example (server/Jupyter):
+Example (Jupyter):
 
 ```python
 from cellucid import show_anndata
 
 viewer = show_anndata("data.h5ad", dataset_id="pbmc_10k", dataset_name="PBMC 10k")
-print(viewer.viewer_url)
+viewer.debug_connection()["dataset"]   # {'id': 'pbmc_10k', 'format': 'h5ad'}
 ```
 
 ---
@@ -198,10 +200,10 @@ print(viewer.viewer_url)
 **How to confirm**
 - Compare the current dataset id to the saved one:
   - the file: check `uns['cellucid']['id']`
-  - a server: check the `dataset_id` passed to `show_anndata()`,
+  - a server or notebook: check the `dataset_id` passed to `show_anndata()`,
     `serve_anndata()`, or `cellucid serve`, else the store's
-    `uns['cellucid']['id']`; `server_url + "/_cellucid/datasets"` shows the one
-    in use
+    `uns['cellucid']['id']`; a server's `/_cellucid/datasets` (or a notebook
+    viewer's `debug_connection()["dataset"]`) shows the one in use
 
 **Fix**
 - If you intended to keep identity: write the id into the file (`prepare(..., dataset_id=...)`, or `adata.uns["cellucid"]["id"]`), or pass the same `dataset_id=...` to the server.

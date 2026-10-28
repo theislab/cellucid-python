@@ -193,7 +193,8 @@ This affects:
 
 Detailed always exports **one row per cell**, as `detailed-analysis-data.csv`,
 whatever plot is on screen. The plot type changes the picture, never the file:
-columns are `page`, `cell_index` and the variable you selected.
+columns are `page`, `cell_index` (the cell's row in the whole dataset in its
+original order) and the variable you selected.
 
 This *is* the raw per-cell table — you do not need a second workflow to get one.
 Because it is per-cell, a large comparison produces a large file; the size

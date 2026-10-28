@@ -5,7 +5,7 @@ Cellucid is a **web app** (WebGL viewer UI). `cellucid-python` gives you **Pytho
 There are two big “modes”:
 
 - **Server mode** (terminal/browser): `cellucid serve …`, `serve_anndata(…)`
-- **Notebook mode** (Jupyter iframe): `show_anndata(…)`
+- **Notebook mode** (a widget in the cell's output, no server): `show_anndata(…)`
 
 All of them take any file or folder Cellucid reads — AnnData (`.h5ad`, a Zarr
 store folder or `.zip`), MuData (`.h5mu`, MuData Zarr), Loom, a 10x `.h5` file
@@ -13,8 +13,9 @@ or Cell Ranger `outs/` folder, a MatrixMarket folder, an R object
 (`.rds`/`.rda`/`.RData`, gzipped or not) — and `serve_anndata`/`show_anndata`
 also an in-memory `AnnData` or `MuData` ({doc}`02_loading_routes`). The viewer
 reads a file in place, with range requests where the format allows it; an
-in-memory object is written once to a temporary `.h5ad` (`.h5mu` for a MuData)
-first. A file
+in-memory AnnData, and an AnnData file not in priority order, are served in
+priority order, made as the viewer reads them, so a subsample sends only its
+cells (a MuData object is written once to a temporary `.h5mu` first). A file
 written by {func}`~cellucid.prepare` (a Cellucid-ready AnnData) reads fastest
 and names itself, so it needs no `dataset_name`/`dataset_id`.
 
@@ -40,7 +41,8 @@ and names itself, so it needs no `dataset_name`/`dataset_id`.
 - Not sure what to do → {doc}`03_choose_your_workflow_decision_tree`
 - Want a terminal “just show me the viewer” flow → {doc}`04_cli_cellucid_serve_quickstart`
 - Want a scripted Python server (non-notebook) → {doc}`05_python_serve_anndata_quickstart`
-- Want a notebook embed (Jupyter/JupyterLab; VS Code and Colab are untested, see
+- Want the viewer in a notebook cell (JupyterLab is tested; Notebook 7, VS Code,
+  Colab, marimo and Databricks are expected to work, see
   {doc}`../e_jupyter_hooks/03_supported_environments_matrix`) →
   {doc}`06_jupyter_show_anndata_quickstart`
 - Something failed → {doc}`15_troubleshooting_viewing`

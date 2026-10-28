@@ -22,8 +22,10 @@ Use this when you have a `.h5ad`, a Zarr store (folder or `.zip`), any other
 file or folder Cellucid reads ({doc}`02_loading_routes`), or an in-memory
 `AnnData` or `MuData`. The viewer reads the store itself, in place, with range
 requests where the format allows it; the server serves its bytes. An in-memory
-object is written once to a temporary `.h5ad` (`.h5mu` for a MuData), removed
-when the server stops.
+AnnData, and an AnnData, MuData, Loom or 10x file not in priority order, are
+served as a store in priority order made as the viewer reads it, so a
+subsample transfers only its cells; a MuData object is written once to a temporary `.h5mu`, removed when the
+server stops.
 
 ```python
 from cellucid import serve_anndata
@@ -215,9 +217,11 @@ Both rules in full:
 ## Edge cases (high-signal)
 
 - **Remote machine**: prefer an SSH tunnel over binding to `0.0.0.0` (see {doc}`12_remote_servers_ssh_tunneling_and_cloud`).
-- **Huge `AnnData` in memory**: an in-memory object is written once to a
-  temporary `.h5ad` before the server binds; a path is served in place with no
-  copy, so prefer a path when the object is already on disk.
+- **Huge `AnnData` in memory**: its arrays are copied once, before the call
+  returns, into memory-mapped files on disk (never a second copy in memory;
+  about two seconds per 100 million stored values), so later edits to the
+  object do not show; open a subsample in the viewer (Session › Open data) to
+  read only some of the cells.
 - **Gene IDs not found**: set `gene_id_column` if `var.index` is not what you search by.
 
 ## Troubleshooting

@@ -153,18 +153,60 @@ read notifications -- neither is a gene a view started reading before the run
 needed it too, which the run takes as its own read from then on -- and it
 closes with the outcome (`Differential expression: 412 significant genes`).
 
+**First answer on a sample.** Differential expression, Marker genes, Gene
+signature, Correlation, Composition, Dot plot, Detailed and Quick Insights can answer twice: a
+first pass on a uniform random sample of the open cells, then the same run on
+every cell, whose result replaces the first in place. The sample is the first
+cells of the open cells' priority order (the same cells the coarsest levels of
+detail draw; {doc}`../n_benchmarking_performance/02_performance_considerations_what_gets_slow_and_why`),
+and each page or group is taken as its cells in it, so the first pass is an
+unbiased preview of the final answer. A line under the progress box says which
+cells the shown result used:
+`First pass: each group's cells in a uniform sample of 4.2% of the open cells (about 420,000 of 10,000,000) · refining on every cell…`,
+then `Every cell: computed on all cells of its groups (10,000,000 open cells).`
+The final result is exactly what a single run on every cell gives, bit for
+bit; it is the one saved in sessions and exported.
+
+A first pass is taken only when it pays, judged from what earlier runs of the
+same analysis measured on this device. With nothing measured yet, when the
+whole run is predicted to take under a second, or when a first pass would not
+answer at least twice as soon (most of the time goes to work a sample does not
+shorten), the analysis runs once. Reading genes shortens with the sample where
+the file allows: the sample is the first cells, so an analysis that reads its
+groups' cells (Differential expression, Marker genes) reads only those cells'
+part of each gene from a file Cellucid wrote (each gene's values are stored by
+priority order, so the sample's are the first ones) and from a matrix stored
+cell by cell whose index is built in parts (only the parts the sample's cells
+lie in); the final pass then reads the rest. Otherwise the first pass
+takes as many cells as fit in about a second, and never fewer than the square
+root of the number of open cells. A first pass the sample cannot carry (a
+group with fewer than two of its cells in the sample) is skipped. The
+measurements are kept in this browser (they are a convenience, never needed).
+
 **Cancel.** Cancelling stops the job where it is: its gene reads stop in the
 file reader (a remote file stops downloading), and its computations stop in
 the analysis workers (a worker still busy a quarter of a second after the
 cancel is replaced by a fresh one, so nothing keeps running for a cancelled
-job). Nothing of a cancelled run is kept: no partial result is shown, cached
-or exported. A read that something else also waits for, the gene the
-embedding is coloured by, or the same gene another analysis window reads,
-goes on for it.
+job). Nothing of the cancelled pass is kept: no partial result is shown, cached
+or exported. A first pass already on screen stays, and its line says so:
+`… Stopped before every cell; run again for all of them.`; it is not saved in
+sessions or exported as the analysis's result. A read that something else also
+waits for, the gene the embedding is coloured by, or the same gene another
+analysis window reads, goes on for it.
 
 The same happens, without asking, when you close the analysis window or switch
 to another dataset. Changing an option while a run goes does not stop it: the
-result arrives and is marked **Stale · Run** if the form no longer matches it.
+result arrives and is marked **Stale · Run** if the form no longer matches it. So is a result when the
+open cells change (a larger or smaller share applied in place, a large
+dataset's progressive opening growing; {doc}`../b_data_loading/21_subsampled_loading`):
+the window stays, the chip's tooltip says the open cells changed (with the
+counts then and now), and Run computes on the cells open now. A run under
+way when the cells are to change finishes first, on the cells it started
+on (the change waits for it), and its result is then marked stale; a run
+started while they change starts on the new cells. A stale result
+is never passed on as current: it is not saved in a session, its exports
+(CSV, PNG, SVG, GMT) are refused with a note saying why, and its scores and
+gene sets are withdrawn from what a notebook reads until it is run again.
 
 **After a cancel** the box reads `<mode> cancelled` and
 `Cancelled after 12 s. 1,240 of 3,753 genes were done. Nothing was kept.`,

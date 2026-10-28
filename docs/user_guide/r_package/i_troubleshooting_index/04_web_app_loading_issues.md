@@ -89,6 +89,8 @@ copy a cache folder from another machine and pass `web_cache_dir =` with
 
 ## Symptom: the viewer pane or browser answers “Host header does not name this server” (421)
 
+(Not in a Jupyter notebook: there `cellucid_view()` uses no server.)
+
 A proxy (RStudio Server, Posit Workbench) forwards under its own name. Declare
 it: `cellucid_view(seu, allowed_hosts = "rstudio.example.org")`.
 

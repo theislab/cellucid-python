@@ -12,6 +12,8 @@ class _DummyServer:
 
     def __init__(self, **kwargs: object) -> None:
         self.host = kwargs["host"]
+        self.dataset_id = "demo"
+        self.server_info = {"n_cells": 3}
         self.port = int(kwargs["port"] or 8765) + self.port_offset
 
     @property
@@ -44,11 +46,10 @@ def test_jupyter_viewer_port_sync(monkeypatch) -> None:
     try:
         assert viewer.port == 8766
         assert "8766" in viewer.viewer_url
-        html = viewer._generate_viewer_html()
+        html = viewer._repr_html_()
         assert html_module.escape(viewer.viewer_url, quote=True) in html
-        assert 'src="about:blank"' not in html
-        assert "fetch(" not in html
-        assert "iframe.src =" not in html
+        assert "<iframe" not in html
+        assert "<script" not in html
     finally:
         viewer.stop()
 
@@ -69,12 +70,10 @@ def test_jupyter_uses_only_the_explicit_browser_server_url(monkeypatch) -> None:
     )
     try:
         assert viewer.viewer_url.startswith(f"{explicit}/?")
-        html = viewer._generate_viewer_html()
+        html = viewer._repr_html_()
         assert explicit in html
         assert "ignored.example" not in html
         assert "127.0.0.1" not in html
-        assert 'src="about:blank"' not in html
-        assert "fetch(" not in html
     finally:
         viewer.stop()
 

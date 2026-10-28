@@ -1,16 +1,30 @@
 # Security: CORS, origins, and mixed content
 
-This page explains the browser security constraints that most often break notebook embedding:
+## In a notebook: none of this applies
 
-- **Origins**: where the iframe thinks it is running (`scheme://host:port`)
+A notebook widget (`show_anndata()`, R's `cellucid_view()` in Jupyter) frames
+the app from `https://www.cellucid.com` (or your `web_source_url`) and carries
+every read and message over the notebook's own connection. The page never
+contacts the kernel's machine, so there is no loopback address, no mixed
+content, no CORS and no `Origin` check for the kernel to make. The one thing
+the widget checks is that the page's messages come from its own frame and
+from the app's origin ({doc}`12_security_model`).
+
+## Browser-tab viewers
+
+The rest of this page is about a viewer in a browser tab of its own
+({class}`~cellucid.AnnDataViewer`, `serve_anndata`, `cellucid serve`), which
+reaches a server on this machine:
+
+- **Origins**: where the page thinks it is running (`scheme://host:port`)
 - **CORS** and the **`Origin` check**: which pages may read the server's
   routes, and which may open the viewer channel (`/_cellucid/ws`)
-- **Mixed content**: HTTPS notebooks blocking HTTP loopback servers
+- **Mixed content**: an HTTPS page fetching from an HTTP loopback server
 
-If your viewer shows a blank iframe, “Failed to fetch”, or a mixed-content
-error, this is the page to read.
+If such a viewer shows “Failed to fetch” or a mixed-content error, this is
+the page to read.
 
-## Why this matters for hooks
+### Why this matters for hooks
 
 Hooks and commands depend on the viewer being able to open its channel:
 
@@ -46,17 +60,16 @@ Anything else is refused with 403 before the upgrade. The viewer's token is
 checked after that, on the first frame.
 
 ```{note}
-In notebook mode, the exact verified viewer generation is served from the same
-origin as the dataset server,
-so most requests are same-origin and do not rely on CORS at all.
+A browser-tab viewer is served from the same origin as its dataset server, so
+most requests are same-origin and do not rely on CORS at all.
 ```
 
 ## Mixed content (the #1 failure mode)
 
 ### The problem
 
-If your notebook frontend is served over HTTPS (very common on JupyterHub / hosted environments),
-the browser may block an iframe that tries to load or fetch from:
+If a page served over HTTPS (the hosted app, a hub's proxy route) tries to
+fetch from:
 
 ```text
 http://127.0.0.1:<port>
@@ -65,29 +78,25 @@ http://127.0.0.1:<port>
 This is “active mixed content” and browsers treat it as a security risk.
 
 Symptoms:
-- the iframe stays blank,
 - the app UI loads but data fetches fail,
 - browser devtools shows “Mixed Content” or “Blocked” errors,
 - hooks don’t fire (the viewer channel never opens).
 
 ### Cellucid’s solution: serve the UI from the server origin
 
-Cellucid notebook embeds:
-1. establish and serve the verified viewer generation from the same origin as
-   the dataset server, and
-2. use the exact `client_server_url=` supplied by the caller, or the bound
+A browser-tab viewer:
+1. establishes and serves the verified viewer generation from the same origin
+   as the dataset server, and
+2. uses the exact `client_server_url=` supplied by the caller, or the bound
    server URL when that argument is omitted.
 
-### If direct loopback is blocked
-
-This means:
-- the notebook is HTTPS or remote,
-- and the browser cannot load the kernel machine’s HTTP loopback URL.
+### If the browser cannot reach the server
 
 Fix options:
-- expose the Cellucid port through Jupyter Server Proxy or another HTTPS
-  reverse proxy, then pass that exact HTTP(S) base as `client_server_url=`, or
-- use SSH port forwarding and pass the local forwarded base.
+- in a notebook, use `show_anndata()` instead (no address involved);
+- use SSH port forwarding and open the forwarded local address; or
+- expose the Cellucid port through an HTTPS reverse proxy, pass that exact
+  HTTP(S) base as `client_server_url=`, and its host as `allowed_hosts=`.
 
 Cellucid does not probe, infer, or select a proxy URL.
 
@@ -104,7 +113,7 @@ the bound server URL. The viewer channel uses the same address and path,
 
 Extra host names the server answers to (`Host` header) and accepts pages
 from (`Origin` header). Name the proxy's host here when `client_server_url`
-points at a reverse proxy such as `jupyter-server-proxy`.
+points at a reverse proxy (a hub's proxy route).
 
 ### `web_cache_dir`
 
@@ -117,7 +126,7 @@ Use cases:
 
 ## How to debug in practice (recommended checklist)
 
-1. Run in Python:
+1. Run in Python (a browser-tab viewer):
    ```python
    viewer.debug_connection()
    ```
