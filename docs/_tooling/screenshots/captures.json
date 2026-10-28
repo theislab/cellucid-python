@@ -3571,9 +3571,9 @@
       "uses_timeout": false,
       "page_errors": [],
       "sha256": "84caa59a03aceefac5ef6912840ce2e8098af4c1e650312ed60f84c12a3033d7",
-      "web_repository_revision": "6a07b9b7527de8edfc4488b0158b232d7f5440a0-dirty",
+      "web_repository_revision": "c27a875b68bc47ed18029f21bcccf4f4b83d1f16",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-27T13:10:34Z"
+      "captured_at": "2026-10-28T08:16:53Z"
     },
     "loading-open-loom-dataset-box": {
       "id": "loading-open-loom-dataset-box",
@@ -3619,9 +3619,9 @@
       "uses_timeout": false,
       "page_errors": [],
       "sha256": "d394efffac615958a4e3efbb45b28b11a01c42d7a4cab4c34d4a46ff79359555",
-      "web_repository_revision": "6a07b9b7527de8edfc4488b0158b232d7f5440a0-dirty",
+      "web_repository_revision": "c27a875b68bc47ed18029f21bcccf4f4b83d1f16",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-27T13:10:34Z"
+      "captured_at": "2026-10-28T08:16:53Z"
     },
     "loading-open-tenx-outs-window": {
       "id": "loading-open-tenx-outs-window",
@@ -3715,9 +3715,9 @@
       "uses_timeout": true,
       "page_errors": [],
       "sha256": "cbfa8f113e96323fcb67b3b56af02bac99d99a16f8726869cfcfd7d322410a83",
-      "web_repository_revision": "6a07b9b7527de8edfc4488b0158b232d7f5440a0-dirty",
+      "web_repository_revision": "c27a875b68bc47ed18029f21bcccf4f4b83d1f16",
       "browser": "chromium 151.0.7922.34",
-      "captured_at": "2026-10-27T13:10:34Z"
+      "captured_at": "2026-10-28T08:16:53Z"
     },
     "loading-opening-failed": {
       "id": "loading-opening-failed",
