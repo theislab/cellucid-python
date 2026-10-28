@@ -32,3 +32,33 @@ def _mudata_keeps_modality_columns_in_the_modality() -> Iterator[None]:
         return
     with set_options(pull_on_update=False):
         yield
+
+
+@pytest.fixture(autouse=True)
+def _a_scratch_folder_is_removed_with_nothing_mapped(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Fail any test in which a served store removes its scratch folder while
+    a file in it is still memory-mapped.
+
+    Windows removes no mapped file, so there the folder would stay behind;
+    other systems remove it without complaint. Checked when the folder is
+    removed (a store's close swallows its closers' errors, so it is recorded
+    and asserted after the test), it fails on every system where Windows would.
+    """
+    import shutil
+    from pathlib import Path
+
+    from _mapped_files import mapped_files
+
+    from cellucid._served_store import _SCRATCH_PREFIX
+
+    remove = shutil.rmtree
+    still_mapped: list[Path] = []
+
+    def checked(path, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if Path(path).name.startswith(_SCRATCH_PREFIX):
+            still_mapped.extend(mapped_files(Path(path)))
+        return remove(path, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "rmtree", checked)
+    yield
+    assert still_mapped == [], f"removed while still memory-mapped: {still_mapped}"

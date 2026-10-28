@@ -42,7 +42,7 @@ from cellucid._anndata_files import (
     classify_anndata_path,
     read_anndata_contents,
 )
-from cellucid.anndata_server import AnnDataServer, _file_etag
+from cellucid.anndata_server import AnnDataServer, _path_version
 from cellucid.prepare_data._priority import ORIGINAL_POSITION_COLUMN, CellPriority, prefix_levels
 
 FIXTURES = Path(__file__).parent / "fixtures" / "older_anndata"
@@ -422,7 +422,7 @@ def test_a_file_that_changes_on_disk_names_its_new_version(tmp_path: Path) -> No
     with _serving(source) as (_server, host, port):
         first = listed()
         before = _request(host, port, "HEAD", route)[1]["ETag"]
-        assert first["etag"] == before == _file_etag(source.stat())
+        assert first["etag"] == before == _path_version(source)[1]
         assert first["size"] == source.stat().st_size
         assert listed() == first
         with source.open("ab") as file:
@@ -455,6 +455,38 @@ def test_a_file_that_changes_on_disk_names_its_new_version(tmp_path: Path) -> No
         source.unlink()
         status, _, body = _request(host, port, "GET", "/_cellucid/datasets")
         assert (status, body) == (404, b"x.h5ad is no longer readable")
+
+
+def test_the_listed_version_is_read_from_the_open_file_as_its_bytes_are(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The validator the dataset list states and the one the file's bytes are
+    answered with are read the same way, from the file opened: on Windows a
+    path's ``os.stat`` reports the creation time as ``st_ctime`` and an open
+    file's ``os.fstat`` the change time (Python 3.12 on), so a tag read from
+    the path would name another version than the bytes' tag, and the viewer
+    would refuse the file. Here a path's status reports another status-change
+    time, as Windows' does."""
+    source = tmp_path / "x.h5ad"
+    _in_priority_order(_adata()).write_h5ad(source)
+    path_status = Path.stat
+
+    def as_windows(self: Path, *args: object, **kwargs: object) -> os.stat_result:
+        status = path_status(self, *args, **kwargs)  # type: ignore[arg-type]
+        if self.name != source.name:
+            return status
+        fields = list(status)
+        return os.stat_result(fields, {"st_ctime_ns": status.st_ctime_ns - 1, "st_mtime_ns": status.st_mtime_ns,
+                                       "st_atime_ns": status.st_atime_ns})
+
+    with _serving(source) as (_server, host, port):
+        monkeypatch.setattr(Path, "stat", as_windows)
+        assert source.stat().st_ctime_ns != os.stat(source).st_ctime_ns
+        listed = _json(host, port, "/_cellucid/datasets")["datasets"][0]["anndata"]["file"]
+        route = "/_cellucid/anndata/store-contract.h5ad"
+        assert listed["etag"] == _request(host, port, "HEAD", route)[1]["ETag"]
+        assert listed["etag"] == _request(host, port, "GET", route, {"Range": "bytes=0-7"})[1]["ETag"]
+        assert listed["etag"] == _path_version(source)[1]
 
 
 def test_a_browser_reuses_the_bytes_it_kept_of_an_unchanged_file(tmp_path: Path) -> None:
@@ -605,7 +637,7 @@ def test_a_zipped_zarr_store_is_one_file(tmp_path: Path) -> None:
     with _serving(archive) as (_server, host, port):
         file = _json(host, port, "/_cellucid/datasets")["datasets"][0]["anndata"]["file"]
         assert file == {"url": "_cellucid/anndata/store-contract.zarr.zip", "kind": "zarr",
-                        "layout": "zip", "size": archive.stat().st_size, "etag": _file_etag(archive.stat())}
+                        "layout": "zip", "size": archive.stat().st_size, "etag": _path_version(archive)[1]}
         status, _, body = _request(host, port, "GET", "/_cellucid/anndata/store-contract.zarr.zip",
                                    {"Range": "bytes=0-3"})
     assert (status, body) == (206, b"PK\x03\x04")

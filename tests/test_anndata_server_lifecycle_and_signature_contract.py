@@ -19,6 +19,7 @@ from unittest import mock
 import numpy as np
 import pandas as pd
 import pytest
+from _mapped_files import mapped_files
 from anndata import AnnData
 from scipy import sparse
 
@@ -64,6 +65,8 @@ def _held(server: AnnDataServer) -> Path:
 
 
 def _assert_released(server: AnnDataServer, temporary: Path) -> None:
+    # Every mapping let go first: Windows removes no mapped file.
+    assert mapped_files(temporary) == []
     assert not temporary.exists()
     assert server._server is None
     assert server.is_running() is False
@@ -144,6 +147,7 @@ def test_a_file_on_disk_is_read_where_it_is_and_its_decoded_arrays_go_with_the_s
     assert folder is not None
     assert {path.name.split("-")[0] for path in folder.iterdir()} <= {"owner", "source"}
     server.stop()
+    assert mapped_files(folder) == [] and mapped_files(source) == []
     assert not folder.exists()
     assert source.exists()
 
@@ -175,6 +179,7 @@ def test_a_server_python_drops_without_a_stop_removes_its_file() -> None:
     temporary = _held(server)
     del server
     gc.collect()
+    assert mapped_files(temporary) == []
     assert not temporary.exists()
 
 
@@ -196,7 +201,8 @@ def test_a_constructor_that_fails_releases_the_store_it_made() -> None:
     ):
         _server(knn_key="connectivities")
     assert len(made) == 1
-    assert made[0]._folder.folder is not None and not made[0]._folder.folder.exists()
+    assert made[0]._folder.folder is not None and mapped_files(made[0]._folder.folder) == []
+    assert not made[0]._folder.folder.exists()
     assert not made[0]._finalizer.alive
 
 
@@ -333,6 +339,7 @@ def test_background_serve_failure_is_retained_for_wait_and_releases_resources(
         server.wait()
 
     assert raised.value is original
+    assert mapped_files(temporary) == []
     assert not temporary.exists()
     assert server._server is None
     assert server.is_running() is False

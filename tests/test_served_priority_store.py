@@ -22,6 +22,7 @@ from __future__ import annotations
 import http.client
 import json
 import shutil
+import tempfile
 import threading
 import warnings
 from collections.abc import Callable
@@ -33,6 +34,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import zarr
+from _mapped_files import mapped_files
 from scipy import sparse
 from zarr.core.buffer import default_buffer_prototype
 
@@ -664,6 +666,63 @@ def test_a_killed_process_s_scratch_folder_is_removed_by_the_next_store(tmp_path
     assert not mine.exists()
 
 
+def test_every_file_a_store_maps_is_let_go_however_it_ends(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A store maps files: an object's snapshots and gene-major layouts in its
+    scratch folder, a file's arrays decoded there, a file's uncompressed arrays
+    where they lie. Closed, dropped without a close, or failing while it is
+    made, it lets every mapping go before its folder is removed (Windows
+    removes no mapped file, and lets no program replace one), and the source
+    file it read can be replaced."""
+    from cellucid import _served_store
+
+    monkeypatch.setattr(_served_store.tempfile, "tempdir", str(tmp_path))
+    adata = _adata(n=50, m=4)
+
+    def scratch_folders() -> list[Path]:
+        return sorted(tmp_path.glob("cellucid-served-*"))
+
+    # Closed.
+    store = PriorityStore.of_anndata(adata)
+    _read(store)
+    folder = store._folder.folder
+    assert folder is not None and mapped_files(folder) != []
+    store.close()
+    assert mapped_files(tmp_path) == [] and not folder.exists()
+    with pytest.raises(RuntimeError, match="closed"):
+        store.get("X/data/0")
+
+    # Dropped: the store lets go as it is collected, with no close.
+    store = PriorityStore.of_anndata(adata)
+    _read(store)
+    folder = store._folder.folder
+    assert folder is not None and mapped_files(folder) != []
+    del store
+    assert mapped_files(tmp_path) == [] and not folder.exists()
+
+    # A file: its arrays in one piece mapped where they lie, chunked ones decoded.
+    source = tmp_path / "source.h5ad"
+    adata.write_h5ad(source)
+    store = PriorityStore.of_file(classify_anndata_path(source))
+    _read(store)
+    assert mapped_files(source) != []
+    store.close()
+    assert mapped_files(tmp_path) == [] and scratch_folders() == []
+    replacement = tmp_path / "replacement.h5ad"
+    shutil.copy2(source, replacement)
+    replacement.replace(source)
+
+    # Failing while it is made, its layout's files mapped in the frames the error passed through.
+    def fail(*_args: object) -> None:
+        raise RuntimeError("layout failed")
+
+    monkeypatch.setattr(_served_store._GeneMajor, "_finished", fail)
+    with pytest.raises(RuntimeError, match="layout failed") as raised:
+        PriorityStore.of_anndata(adata)
+    # The error is alive (as it is while the store is closed): it holds no mapping.
+    assert raised.value.__traceback__ is not None
+    assert mapped_files(tmp_path) == [] and scratch_folders() == []
+
+
 def test_a_dense_file_matrix_in_whole_row_chunks_is_laid_out_once(tmp_path: Path) -> None:
     """A dense X stored in chunks of whole rows is read once, by blocks of rows,
     into a gene-major layout, and every gene after is a slice of it: the file's
@@ -704,15 +763,24 @@ def test_a_dense_file_matrix_in_whole_row_chunks_is_laid_out_once(tmp_path: Path
 
 
 @pytest.mark.parametrize("stored", ["chunked gzip", "contiguous", "zarr"])
-def test_rows_in_any_order_are_one_take_from_the_decoded_or_mapped_source(tmp_path: Path, stored: str) -> None:
+def test_rows_in_any_order_are_one_take_from_the_decoded_or_mapped_source(
+    tmp_path: Path, stored: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A source array is read by rows in any order (repeats included, and a
     column window of a 2-D one) exactly as numpy indexes it: an uncompressed
     HDF5 array in one piece mapped in place (no copy), any other decoded once
-    into the scratch folder, each source chunk when a read first needs it."""
+    into the scratch folder, each source chunk when a read first needs it.
+    Every mapping -- the source's, the decoded copies' -- is let go on close,
+    so the files can be removed and replaced on every system."""
     import h5py
 
     from cellucid._served_store import _Rows, _Scratch, _Vector
 
+    # h5py names the default driver "windows" on Windows (HDF5's Windows
+    # driver is the sec2 driver there): an array is mapped by what its file's
+    # driver is, not by that name.
+    monkeypatch.setattr(h5py.File, "driver", property(lambda _file: "windows"))
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     rng = np.random.default_rng(3)
     matrix = rng.random((5003, 7)).astype(np.float32)
     vector = rng.integers(0, 1000, 20011).astype(np.int32)
@@ -729,7 +797,7 @@ def test_rows_in_any_order_are_one_take_from_the_decoded_or_mapped_source(tmp_pa
         arrays = (file["m"], file["v"])
     closers: list = []
     layouts: list = []
-    scratch = _Scratch(closers, threading.Event(), layouts, [])
+    scratch = _Scratch(closers, threading.Event(), layouts)
     rows_of_matrix = _Rows(arrays[0], scratch)
     rows_of_vector = _Vector(arrays[1], scratch)
     picks = rng.integers(0, 5003, 3000)
@@ -743,6 +811,11 @@ def test_rows_in_any_order_are_one_take_from_the_decoded_or_mapped_source(tmp_pa
     np.testing.assert_array_equal(rows_of_vector.ranges(starts, ends), want)
     copied = scratch.folder is not None and any(path.name.startswith("source-") for path in scratch.folder.iterdir())
     assert copied == (stored != "contiguous")
+    assert mapped_files(tmp_path) != []
+    scratch.release()
     for close in closers:
         close()
+    assert mapped_files(tmp_path) == []
     assert scratch.folder is None or not scratch.folder.exists()
+    with pytest.raises(RuntimeError, match="closed"):
+        rows_of_matrix.take(picks)

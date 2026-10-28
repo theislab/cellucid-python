@@ -292,9 +292,11 @@ thousands of them:
 
 The browser may keep what it read: store bytes are sent with
 `Cache-Control: no-cache` and a strong `ETag` (the file's size, modification
-time, status-change time and inode: a file rewritten in place, even with its
-modification time put back, or replaced by a copy moved over it gets a new
-one; only two writes of the same size within the file system's timestamp
+time, status-change time and inode, read from the open file — on Windows the
+status-change time is NTFS's change time, read from the file's handle, not
+`st_ctime`, which is the creation time there: a file rewritten in place, even
+with its modification time put back, or replaced by a copy moved over it gets
+a new one; only two writes of the same size within the file system's timestamp
 resolution — nanoseconds on APFS, ext4 and NTFS — could share one), so a reload revalidates them (`If-None-Match`, answered
 `304 Not Modified` with no body) instead of downloading them again. A file that
 changed has a new `ETag`: a range asked with `If-Range` naming the old one is

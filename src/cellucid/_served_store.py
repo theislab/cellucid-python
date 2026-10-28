@@ -91,8 +91,10 @@ import json
 import os
 import secrets
 import shutil
+import sys
 import tempfile
 import threading
+import traceback
 import warnings
 import weakref
 from collections import OrderedDict
@@ -185,6 +187,11 @@ class _Cache:
                     self._bytes -= dropped
         return value
 
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
+            self._bytes = 0
+
 
 def _range_index(starts: np.ndarray, ends: np.ndarray) -> np.ndarray:
     """The positions of ranges ``[starts[i], ends[i])``, one after another."""
@@ -210,6 +217,9 @@ class _Rows:
     chunk first needs it (the chunks a served chunk needs found with numpy,
     under one lock), never a step per row or range. The decoded copy costs
     the disk space of the array as decoded, and is removed with the store.
+    A mapped view (in place, or the decoded copy) is let go when the store
+    closes (:meth:`release`): Windows neither removes nor lets another
+    program replace a file that is mapped.
     """
 
     def __init__(self, array: Any, scratch: _Scratch | None) -> None:
@@ -227,6 +237,8 @@ class _Rows:
         self._ready: np.ndarray | None = None
         #: Every source chunk decoded: rows are taken with no check.
         self._complete = False
+        if scratch is not None and isinstance(self._view, np.memmap):
+            scratch.keep(self)
 
     def _whole(self, rows: np.ndarray) -> np.ndarray:
         """The view of the whole array, every source chunk ``rows`` lie in decoded into it."""
@@ -235,6 +247,8 @@ class _Rows:
         needed = np.unique(rows // self.chunk)
         with self._lock:
             if self._view is None:
+                if self.array is None:
+                    raise RuntimeError("The served store is closed.")
                 if self._scratch is None:
                     raise RuntimeError("A chunked source array is read without the store's scratch folder.")
                 self._view = np.lib.format.open_memmap(
@@ -251,12 +265,13 @@ class _Rows:
             return self._view
 
     def release(self) -> None:
-        """Let the decoded copy go (the store is closing; its folder is removed next)."""
+        """Let the mapped view go, the file it maps closed (the store is closing;
+        its folder is removed next). A row asked after is refused."""
         with self._lock:
-            if self._ready is not None:
-                self._view = None
-                self._ready = None
-                self._complete = False
+            self.array = None
+            self._view = None
+            self._ready = None
+            self._complete = False
 
     def take(self, rows: np.ndarray, columns: slice = slice(None)) -> np.ndarray:
         """Rows ``rows`` (any order, repeats allowed), and ``columns`` of a 2-D array."""
@@ -281,7 +296,11 @@ def _mapped_in_place(array: Any) -> np.ndarray | None:
         return None
     if not isinstance(array, h5py.Dataset) or array.chunks is not None or array.compression is not None:
         return None
-    if array.file.driver not in ("sec2", "stdio") or array.dtype.kind not in "biuf" or array.size == 0:
+    # A file read through the operating system as it lies on disk, named by
+    # its driver's identifier: ``File.driver`` names the default driver
+    # "windows" on Windows (HDF5's Windows driver is the sec2 driver there).
+    driver = array.file.id.get_access_plist().get_driver()
+    if driver not in (h5py.h5fd.SEC2, h5py.h5fd.STDIO) or array.dtype.kind not in "biuf" or array.size == 0:
         return None
     offset = array.id.get_offset()
     if offset is None:
@@ -958,18 +977,27 @@ _SCRATCH_PREFIX = "cellucid-served-"
 
 
 def _process_alive(pid: int) -> bool:
-    """Whether process ``pid`` runs (on this machine), never signalling it."""
+    """Whether process ``pid`` runs (on this machine), never signalling it
+    (``os.kill`` on Windows ends a process, whatever the signal). A process
+    that runs but may not be asked (another user's) counts as running."""
     if pid <= 0:
         return False
-    if os.name == "nt":  # pragma: no cover - Windows only
+    if sys.platform == "win32":  # pragma: no cover - Windows only
         import ctypes
+        from ctypes import wintypes
 
-        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+        kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+        kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        kernel32.CloseHandle.restype = wintypes.BOOL
         handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
         if not handle:
-            return False
+            return ctypes.get_last_error() == 5  # ERROR_ACCESS_DENIED: it runs; no such process otherwise
         try:
-            code = ctypes.c_ulong()
+            code = wintypes.DWORD()
             return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259  # STILL_ACTIVE
         finally:
             kernel32.CloseHandle(handle)
@@ -1000,21 +1028,20 @@ def remove_stale_scratch(temporary: Path | None = None) -> list[Path]:
 
 class _Scratch:
     """The folder a store's layouts and snapshots are written to, made when
-    first needed and removed with the store (after its memory-mapped arrays
-    are let go). It names its process (``owner``), so a later store removes it
-    when that process was killed before closing it (:func:`remove_stale_scratch`)."""
+    first needed and removed with the store, after its memory-mapped arrays
+    are let go (:meth:`release`): Windows removes no file that is mapped. It
+    names its process (``owner``), so a later store removes it when that
+    process was killed before closing it (:func:`remove_stale_scratch`)."""
 
     def __init__(
         self,
         closers: list[Callable[[], None]],
         stop: threading.Event,
         layouts: list[_GeneMajor | _DenseGeneMajor | _Rows],
-        snapshots: list[np.ndarray],
     ) -> None:
         self._closers = closers
         self._stop = stop
         self._layouts = layouts
-        self._snapshots = snapshots
         self._lock = threading.Lock()
         self.folder: Path | None = None
 
@@ -1027,22 +1054,26 @@ class _Scratch:
                 folder = Path(tempfile.mkdtemp(prefix=_SCRATCH_PREFIX))
                 (folder / "owner").write_text(str(os.getpid()))
                 self.folder = folder
-                layouts = self._layouts
-                snapshots = self._snapshots
 
                 def remove() -> None:
-                    for layout in layouts:
-                        layout.release()
-                    snapshots.clear()
+                    self.release()
                     shutil.rmtree(folder, ignore_errors=True)
 
                 self._closers.append(remove)
             return self.folder
 
     def keep(self, layout: _Rows) -> None:
-        """Let ``layout``'s memory-mapped file go before the folder is removed."""
+        """Let ``layout``'s memory-mapped file go when the store closes."""
         with self._lock:
             self._layouts.append(layout)
+
+    def release(self) -> None:
+        """Let every memory-mapped array kept here go (each layout's own lock
+        taken outside this one, which a layout takes inside its own)."""
+        with self._lock:
+            layouts = list(self._layouts)
+        for layout in layouts:
+            layout.release()
 
 
 # =============================================================================
@@ -1072,14 +1103,15 @@ class PriorityStore:
         self._closers: list[Callable[[], None]] = []
         #: Set when the store closes: a layout still running stops at its next step.
         self._stop = threading.Event()
-        #: Matrices laid out into the scratch folder (let go before it is removed).
+        #: Arrays that map a file: matrices laid out into the scratch folder,
+        #: and source arrays mapped in place or decoded there (let go on close).
         self._layouts: list[_GeneMajor | _DenseGeneMajor | _Rows] = []
-        #: Dense arrays copied from an object held in memory (memory-mapped), let go on close.
-        self._snapshots: list[np.ndarray] = []
         #: The folder the layouts write (nothing here refers back to the store,
         #: so dropping the store releases it).
-        self._folder = _Scratch(self._closers, self._stop, self._layouts, self._snapshots)
-        self._finalizer = weakref.finalize(self, PriorityStore._release, self._closers, self._stop)
+        self._folder = _Scratch(self._closers, self._stop, self._layouts)
+        self._finalizer = weakref.finalize(
+            self, PriorityStore._release, self._closers, self._stop, self._folder, self._planned, self._lines
+        )
         self.etag = f'"served-{secrets.token_hex(12)}"'
         self._consolidated: bytes | None = None
         #: The seed of the store's priority order.
@@ -1107,14 +1139,7 @@ class PriorityStore:
         if adata.n_obs <= 0:
             raise ValueError("AnnData datasets must contain at least one observation")
         adata = in_original_order(adata)
-        store = cls()
-        try:
-            store._plan_object(adata)
-            store._settle()
-        except BaseException:
-            store.close()
-            raise
-        return store
+        return cls._built(lambda store: store._plan_object(adata))
 
     @classmethod
     def of_file(cls, source: AnnDataStore) -> PriorityStore:
@@ -1124,14 +1149,7 @@ class PriorityStore:
         served this way because the browser cannot decode one of its codecs)
         keeps its own order; any other is put in priority order.
         """
-        store = cls()
-        try:
-            store._plan_file(store._open(source))
-            store._settle()
-        except BaseException:
-            store.close()
-            raise
-        return store
+        return cls._built(lambda store: store._plan_file(store._open(source)))
 
     @classmethod
     def of_mudata_file(cls, source: AnnDataStore) -> PriorityStore:
@@ -1141,28 +1159,14 @@ class PriorityStore:
         the order of its cells (``prepare()``'s MuData layout): a prefix of
         the cells is a prefix of every modality.
         """
-        store = cls()
-        try:
-            store._plan_mudata_file(store._open(source))
-            store._settle()
-        except BaseException:
-            store.close()
-            raise
-        return store
+        return cls._built(lambda store: store._plan_mudata_file(store._open(source)))
 
     @classmethod
     def of_loom(cls, source: AnnDataStore) -> PriorityStore:
         """The store of a Loom file, presented as the browser presents it (:mod:`cellucid._served_formats`)."""
         from ._served_formats import loom_presented
 
-        store = cls()
-        try:
-            store._plan_presented(loom_presented(store._open(source), source.path.name))
-            store._settle()
-        except BaseException:
-            store.close()
-            raise
-        return store
+        return cls._built(lambda store: store._plan_presented(loom_presented(store._open(source), source.path.name)))
 
     @classmethod
     def of_cell_ranger(cls, source: AnnDataStore) -> PriorityStore:
@@ -1170,8 +1174,7 @@ class PriorityStore:
         (:mod:`cellucid._served_formats`): one AnnData, or a MuData of its feature types."""
         from ._served_formats import cell_ranger_presented, outs_analysis, outs_matrix_file
 
-        store = cls()
-        try:
+        def plan(store: PriorityStore) -> None:
             if source.layout == "folder":
                 found = outs_matrix_file(source.files or ())
                 if found is None:
@@ -1185,8 +1188,22 @@ class PriorityStore:
             else:
                 presented = cell_ranger_presented(store._open(source), source.path.name, analysis=None)
             store._plan_presented(presented)
+
+        return cls._built(plan)
+
+    @classmethod
+    def _built(cls, plan: Callable[[PriorityStore], None]) -> PriorityStore:
+        """A new store planned by ``plan``, or -- when planning fails -- the
+        store closed and the error raised. The frames the error passed through
+        are cleared first: their variables may hold an array mapping a file
+        of the store (a snapshot being copied, a layout being written), which
+        Windows would keep from being removed while the error is alive."""
+        store = cls()
+        try:
+            plan(store)
             store._settle()
-        except BaseException:
+        except BaseException as error:
+            traceback.clear_frames(error.__traceback__)
             store.close()
             raise
         return store
@@ -1679,7 +1696,6 @@ class PriorityStore:
             rows = slice(start, start + step) if order is None else order[start : start + step]
             snapshot[start : start + step] = array[rows]
         snapshot.flush()
-        self._snapshots.append(snapshot)
         return snapshot
 
     def _plan_counts(self, path: str, make: Callable[[], np.ndarray], n_vars: int, levels: np.ndarray) -> None:
@@ -1827,7 +1843,9 @@ class PriorityStore:
         return self._consolidated
 
     def get(self, key: str) -> bytes | None:
-        """One key of the store, or None when it has none."""
+        """One key of the store, or None when it has none (refused once it is closed)."""
+        if self._stop.is_set():
+            raise RuntimeError("The served store is closed.")
         if key == ".zmetadata":
             return self._consolidated_metadata()
         found = self._documents.get(key)
@@ -1862,8 +1880,19 @@ class PriorityStore:
                 yield f"{path}/{'.'.join(str(i) for i in index)}"
 
     @staticmethod
-    def _release(closers: list[Callable[[], None]], stop: threading.Event) -> None:
+    def _release(
+        closers: list[Callable[[], None]], stop: threading.Event, scratch: _Scratch, planned: dict[str, _Planned], lines: _Cache
+    ) -> None:
+        """Close the store: every array that maps a file let go -- the
+        layouts, and the planned arrays and cached lines that hold the rest
+        (a snapshot, a source array) -- before its files are closed and its
+        scratch folder removed. Run on :meth:`close`, or when the store is
+        dropped (its attributes are still alive then, so they are emptied
+        here, not left to be collected after)."""
         stop.set()
+        scratch.release()
+        planned.clear()
+        lines.clear()
         while closers:
             closer = closers.pop()
             with contextlib.suppress(Exception):

@@ -464,8 +464,9 @@ Why remote is important:
   `sendfile`), and a Zarr store folder key by key (404 for an absent key,
   consolidated metadata generated in memory when the store has none). Store
   bytes carry `Cache-Control: no-cache` with a strong `ETag` (size,
-  modification time, status-change time, inode; R's: size, modification and
-  status-change time), which `/_cellucid/datasets` also states beside the
+  modification time, status-change time, inode, read from the open file; R's:
+  size, modification and status-change time — on Windows the creation time,
+  as base R reads no change time there), which `/_cellucid/datasets` also states beside the
   file's size, read from the file at each request: the version of the file's
   identity (`served-anndata.js`), so its byte cache, a kept gene index and a
   converted store last across visits and a rewritten file is a new version,
