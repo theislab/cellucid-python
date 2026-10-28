@@ -42,7 +42,8 @@ from cellucid._anndata_files import (
     classify_anndata_path,
     read_anndata_contents,
 )
-from cellucid.anndata_server import AnnDataServer, _path_version
+from cellucid._file_versions import path_version
+from cellucid.anndata_server import AnnDataServer
 from cellucid.prepare_data._priority import ORIGINAL_POSITION_COLUMN, CellPriority, prefix_levels
 
 FIXTURES = Path(__file__).parent / "fixtures" / "older_anndata"
@@ -422,7 +423,7 @@ def test_a_file_that_changes_on_disk_names_its_new_version(tmp_path: Path) -> No
     with _serving(source) as (_server, host, port):
         first = listed()
         before = _request(host, port, "HEAD", route)[1]["ETag"]
-        assert first["etag"] == before == _path_version(source)[1]
+        assert first["etag"] == before == path_version(source)[1]
         assert first["size"] == source.stat().st_size
         assert listed() == first
         with source.open("ab") as file:
@@ -486,7 +487,7 @@ def test_the_listed_version_is_read_from_the_open_file_as_its_bytes_are(
         route = "/_cellucid/anndata/store-contract.h5ad"
         assert listed["etag"] == _request(host, port, "HEAD", route)[1]["ETag"]
         assert listed["etag"] == _request(host, port, "GET", route, {"Range": "bytes=0-7"})[1]["ETag"]
-        assert listed["etag"] == _path_version(source)[1]
+        assert listed["etag"] == path_version(source)[1]
 
 
 def test_a_browser_reuses_the_bytes_it_kept_of_an_unchanged_file(tmp_path: Path) -> None:
@@ -637,7 +638,7 @@ def test_a_zipped_zarr_store_is_one_file(tmp_path: Path) -> None:
     with _serving(archive) as (_server, host, port):
         file = _json(host, port, "/_cellucid/datasets")["datasets"][0]["anndata"]["file"]
         assert file == {"url": "_cellucid/anndata/store-contract.zarr.zip", "kind": "zarr",
-                        "layout": "zip", "size": archive.stat().st_size, "etag": _path_version(archive)[1]}
+                        "layout": "zip", "size": archive.stat().st_size, "etag": path_version(archive)[1]}
         status, _, body = _request(host, port, "GET", "/_cellucid/anndata/store-contract.zarr.zip",
                                    {"Range": "bytes=0-3"})
     assert (status, body) == (206, b"PK\x03\x04")

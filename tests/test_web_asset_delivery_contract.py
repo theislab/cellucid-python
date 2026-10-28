@@ -1008,3 +1008,31 @@ def test_an_asset_is_verified_once_per_version_not_on_every_request(monkeypatch,
     target.write_bytes(b"x" * len(assets["assets/js/app.js"][0]))
     with pytest.raises(ValueError, match="sha256"):
         web_cache.read_cached_web_asset(cache_dir, "assets/js/app.js")
+
+
+def test_an_asset_rewritten_in_place_with_its_time_put_back_is_checked_again(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Size, modification time and inode survive a rewrite in place whose time
+    is restored; the status-change time does not, so the asset is checked again."""
+    import os
+
+    from cellucid import web_cache
+
+    assets = _asset_payloads("build-1")
+    _install_fetch_fixture(monkeypatch, build_id="build-1", assets=assets)
+    cache_dir = tmp_path / "cache"
+    web_cache.ensure_web_ui_cached(
+        cache_dir=cache_dir, source_url="https://viewer.example", force=True, show_progress=False
+    )
+    good = assets["assets/js/app.js"][0]
+    assert web_cache.read_cached_web_asset(cache_dir, "assets/js/app.js")[0] == good
+    target = cache_dir / "assets" / "js" / "app.js"
+    before = target.stat()
+    with target.open("r+b") as file:
+        file.write(b"x" * len(good))
+    os.utime(target, ns=(before.st_atime_ns, before.st_mtime_ns))
+    after = target.stat()
+    assert (after.st_size, after.st_mtime_ns, after.st_ino) == (before.st_size, before.st_mtime_ns, before.st_ino)
+    with pytest.raises(ValueError, match="sha256"):
+        web_cache.read_cached_web_asset(cache_dir, "assets/js/app.js")

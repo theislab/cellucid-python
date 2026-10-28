@@ -113,8 +113,9 @@ An `.rds`, `.rda` or MatrixMarket folder is read whole once by the browser,
 into a store in priority order, and needs none of this.
 
 The viewer is told the file's size and its version — a strong `ETag` made of
-its size, modification time and status-change time, read when the viewer
-asks — and keeps what it reads of the file under that version: its byte
+its size, modification time, status-change time and identity (inode; on
+Windows NTFS's change time and file index), read from the file opened when
+the viewer asks, as the Python server reads it — and keeps what it reads of the file under that version: its byte
 cache, its gene indexes and an `.rds` converted once last across visits, so
 opening the same file again reads none of it. A file rewritten while it is
 served, in place or replaced, is a new version and is read again.

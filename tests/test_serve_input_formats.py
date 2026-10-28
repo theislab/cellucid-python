@@ -32,7 +32,8 @@ from cellucid._anndata_files import (
     read_anndata_contents,
     read_cellucid_identity,
 )
-from cellucid.anndata_server import AnnDataServer, _path_version
+from cellucid._file_versions import path_version
+from cellucid.anndata_server import AnnDataServer
 from cellucid.cli import _detect_data_format
 
 
@@ -266,7 +267,7 @@ def test_an_r_object_is_served_as_its_bytes_with_ranges_and_null_counts(tmp_path
             "kind": "rds",
             "layout": "file",
             "size": path.stat().st_size,
-            "etag": _path_version(path)[1],
+            "etag": path_version(path)[1],
         }
         health = json.loads(_get(host, port, "/_cellucid/health")[2])
         assert health["format"] == "rds"
@@ -285,7 +286,7 @@ def test_a_matrix_market_folder_lists_its_files_and_serves_each(tmp_path: Path, 
         assert file["url"] == "_cellucid/anndata/served/"
         assert (file["kind"], file["layout"]) == ("mtx", "folder")
         assert file["files"] == [
-            {"path": name, "size": (folder / name).stat().st_size, "etag": _path_version(folder / name)[1]}
+            {"path": name, "size": (folder / name).stat().st_size, "etag": path_version(folder / name)[1]}
             for name in sorted(path.name for path in folder.iterdir())
         ]
         for entry in file["files"]:

@@ -16,6 +16,7 @@ from typing import Any
 from urllib.parse import quote, urlparse
 
 from ._contracts import _protected_directories
+from ._file_versions import file_version, path_version
 from ._server_base import (
     CELLUCID_WEB_URL,
     WEB_ASSET_INVENTORY_FILENAME,
@@ -414,20 +415,19 @@ def verify_web_ui_cache(
         return inventory
 
 
-def _file_version(path: Path) -> tuple[int, int, int] | None:
-    """One file's identity: size, modification time and inode (None when absent)."""
+def _file_version(path: Path) -> str | None:
+    """One file's version (:func:`cellucid._file_versions.path_version`), None when absent."""
     try:
-        status = path.stat()
+        return path_version(path)[1]
     except FileNotFoundError:
         return None
-    return (status.st_size, status.st_mtime_ns, status.st_ino)
 
 
 #: The inventory each cache directory was last read with, keyed by the
 #: versions of the files it is checked from, and every asset whose bytes were
 #: verified, keyed by the file version they were verified at.
 _INVENTORY_MEMO: dict[Path, tuple[tuple[Any, ...], dict[str, WebAsset]]] = {}
-_VERIFIED_ASSETS: dict[tuple[Path, str], tuple[tuple[int, int, int], str]] = {}
+_VERIFIED_ASSETS: dict[tuple[Path, str], tuple[str, str]] = {}
 
 
 def read_cached_web_asset(
@@ -459,9 +459,8 @@ def read_cached_web_asset(
     if asset is None:
         return None
     with (resolved / normalized_path).open("rb") as file:
-        status = os.fstat(file.fileno())
+        version = file_version(file.fileno())[1]
         data = file.read()
-    version = (status.st_size, status.st_mtime_ns, status.st_ino)
     key = (resolved, normalized_path)
     if _VERIFIED_ASSETS.get(key) != (version, asset.sha256):
         _verify_asset_bytes(asset, data)
